@@ -108,7 +108,10 @@ models:
         tests:
           - not_null
           - accepted_values:
-                severity: warn
+                config:
+                  severity: warn
+                  error_if: ">= 26"
+                  warn_if: ">= 1"
                 arguments:
                   values: [0, 1, 2, 3]
 
@@ -117,7 +120,8 @@ models:
         tests:
           - not_null
           - accepted_values:
-                severity: warn
+                config:
+                  severity: warn
                 arguments:
                   values: [0, 1, 2]
 
@@ -629,7 +633,8 @@ models:
           Renamed from release_speed.
         tests:
           - dbt_utils.expression_is_true:
-                severity: warn
+                config:
+                  severity: warn
                 arguments:
                   expression: "is null or (release_speed_mph between 40 and 110)"
 
@@ -639,7 +644,8 @@ models:
           velocity the batter perceives. Renamed from effective_speed.
         tests:
           - dbt_utils.expression_is_true:
-                severity: warn
+                config:
+                  severity: warn
                 arguments:
                   expression: "is null or (effective_speed_mph between 40 and 115)"
 
@@ -689,7 +695,8 @@ models:
           Renamed from release_extension.
         tests:
           - dbt_utils.expression_is_true:
-                severity: warn
+                config:
+                  severity: warn
                 arguments:
                   expression: "is null or (release_extension_ft between 0 and 9)"
 
@@ -1172,7 +1179,8 @@ models:
           definition.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_hard_hit
         description: >
@@ -1180,7 +1188,8 @@ models:
           ball as one with an exit velocity of 95 mph or higher.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_sweet_spot
         description: >
@@ -1188,7 +1197,8 @@ models:
           inclusive. Statcast's launch angle sweet-spot range.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_hard_hit_sweet_spot
         description: >
@@ -1197,7 +1207,8 @@ models:
           Represents combined quality of contact.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: hit_coord_x
         description: >
@@ -1415,7 +1426,8 @@ models:
         description: Infield fielding alignment at the time of the pitch.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
           - accepted_values:
                 arguments:
                   values: ['Standard', 'Infield shade', 'Infield shift', 'Strategic']
@@ -1424,7 +1436,8 @@ models:
         description: Outfield fielding alignment at the time of the pitch.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
           - accepted_values:
                 arguments:
                   values: ['Standard', 'Strategic', 'Extreme outfield shift',
@@ -1437,7 +1450,8 @@ models:
           of second base.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_infield_shade
         description: >
@@ -1446,7 +1460,8 @@ models:
           Legally distinct from a full shift under 2023 MLB rules.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_infield_strategic
         description: >
@@ -1455,7 +1470,8 @@ models:
           infield playing back, rather than a lateral overload.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_infield_non_standard
         description: >
@@ -1465,7 +1481,8 @@ models:
           to the source.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_outfield_extreme_shift
         description: >
@@ -1474,7 +1491,8 @@ models:
           of the field.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_fourth_outfielder
         description: >
@@ -1483,7 +1501,8 @@ models:
           pull-heavy power hitters.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_outfield_strategic
         description: >
@@ -1492,7 +1511,8 @@ models:
           sacrifice fly situation, rather than a lateral overload.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_outfield_non_standard
         description: >
@@ -1501,7 +1521,8 @@ models:
           alignments. Useful as a catch-all if new values are added to the source.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: is_any_shade_or_shift
         description: >
@@ -1513,7 +1534,8 @@ models:
           rather than lateral positional overloading.
         tests:
           - not_null:
-              severity: warn
+              config:
+                severity: warn
 
       - name: catcher_id
         description: MLB Player ID for the catcher. Renamed from fielder_2.
