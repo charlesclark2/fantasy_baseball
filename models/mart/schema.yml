@@ -1,0 +1,1540 @@
+version: 2
+
+models:
+
+  # ============================================================================
+  # mart_pitch_game_context
+  # ============================================================================
+  - name: mart_pitch_game_context
+    description: >
+      Game-level and situational context at the time of each pitch. Covers game
+      identifiers, score state, count/base state, and win/run expectancy.
+      Grain: one row per pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: game_type
+        description: >
+          Game type code. E=Exhibition, S=Spring Training, R=Regular Season,
+          F=Wild Card, D=Division Series, L=LCS, W=World Series.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['E', 'S', 'R', 'F', 'D', 'L', 'W']
+
+      - name: home_team
+        description: Abbreviation of the home team.
+        tests:
+          - not_null
+
+      - name: away_team
+        description: Abbreviation of the away team.
+        tests:
+          - not_null
+
+      - name: inning
+        description: Pre-pitch inning number.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: inning_half
+        description: >
+          Top or bottom half of the inning. Renamed from inning_topbot.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['Top', 'Bot']
+
+      - name: outs_when_up
+        description: Pre-pitch number of outs in the inning.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: [0, 1, 2]
+
+      - name: balls
+        description: Pre-pitch ball count.
+        tests:
+          - not_null
+          - accepted_values:
+                severity: warn
+                arguments:
+                  values: [0, 1, 2, 3]
+
+      - name: strikes
+        description: Pre-pitch strike count.
+        tests:
+          - not_null
+          - accepted_values:
+                severity: warn
+                arguments:
+                  values: [0, 1, 2]
+
+      - name: count_state
+        description: >
+          Derived. Pre-pitch count expressed as a "balls-strikes" string label.
+          e.g. "1-2", "3-0", "0-0". Concatenated from balls and strikes columns.
+        tests:
+          - not_null
+
+      - name: count_leverage
+        description: >
+          Derived. Broad categorization of count advantage at the time of the pitch.
+          full = 3-2 count; hitters = 3 balls (not full); pitchers = 2 strikes
+          (not full); neutral = all other counts.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['full', 'hitters', 'pitchers', 'neutral']
+
+      - name: base_state
+        description: >
+          Derived. Three-character string representing which bases are occupied
+          before the pitch. Characters are positional: index 1 = 1st base,
+          index 2 = 2nd base, index 3 = 3rd base. Occupied = the base number,
+          empty = "-". e.g. "1--" = runner on 1st only, "123" = bases loaded,
+          "---" = bases empty.
+        tests:
+          - not_null
+
+      - name: runner_on_1b
+        description: >
+          Derived. True if a runner occupied 1st base before the pitch.
+          Derived from runner_on_1b_id being non-null.
+        tests:
+          - not_null
+
+      - name: runner_on_2b
+        description: >
+          Derived. True if a runner occupied 2nd base before the pitch.
+          Derived from runner_on_2b_id being non-null.
+        tests:
+          - not_null
+
+      - name: runner_on_3b
+        description: >
+          Derived. True if a runner occupied 3rd base before the pitch.
+          Derived from runner_on_3b_id being non-null.
+        tests:
+          - not_null
+
+      - name: runners_on_base
+        description: >
+          Derived. True if any base was occupied before the pitch. True when any
+          of runner_on_1b, runner_on_2b, or runner_on_3b is true.
+        tests:
+          - not_null
+
+      - name: pre_pitch_home_score
+        description: Home team score before the pitch. Renamed from home_score.
+        tests:
+          - not_null
+
+      - name: pre_pitch_away_score
+        description: Away team score before the pitch. Renamed from away_score.
+        tests:
+          - not_null
+
+      - name: pre_pitch_bat_score
+        description: Batting team score before the pitch. Renamed from bat_score.
+        tests:
+          - not_null
+
+      - name: pre_pitch_fld_score
+        description: Fielding team score before the pitch. Renamed from fld_score.
+        tests:
+          - not_null
+
+      - name: post_pitch_home_score
+        description: Home team score after the pitch. Renamed from post_home_score.
+        tests:
+          - not_null
+
+      - name: post_pitch_away_score
+        description: Away team score after the pitch. Renamed from post_away_score.
+        tests:
+          - not_null
+
+      - name: post_pitch_bat_score
+        description: Batting team score after the pitch. Renamed from post_bat_score.
+        tests:
+          - not_null
+
+      - name: post_pitch_fld_score
+        description: Fielding team score after the pitch. Renamed from post_fld_score.
+        tests:
+          - not_null
+
+      - name: home_score_diff
+        description: >
+          Score differential from the home team's perspective before the pitch.
+          Not present in legacy CSV docs; derived field in Statcast API exports.
+
+      - name: bat_score_diff
+        description: >
+          Score differential from the batting team's perspective before the pitch.
+          Not present in legacy CSV docs; derived field in Statcast API exports.
+
+      - name: pre_pitch_home_win_exp
+        description: >
+          Home team win expectancy before the pitch, expressed as a probability
+          between 0 and 1. Not present in legacy CSV docs; standard Statcast
+          API field. Renamed from home_win_exp.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (pre_pitch_home_win_exp between 0 and 1)"
+
+      - name: pre_pitch_bat_win_exp
+        description: >
+          Batting team win expectancy before the pitch, expressed as a probability
+          between 0 and 1. Not present in legacy CSV docs; standard Statcast
+          API field. Renamed from bat_win_exp.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (pre_pitch_bat_win_exp between 0 and 1)"
+
+      - name: delta_home_win_exp
+        description: >
+          Change in home team win expectancy before and after the plate appearance.
+
+      - name: delta_run_exp
+        description: Change in run expectancy before and after the pitch.
+
+      - name: delta_pitcher_run_exp
+        description: >
+          Run expectancy delta from the pitcher's perspective. Derived as the
+          inverse of delta_run_exp (delta_run_exp * -1). Not present in legacy
+          CSV docs; included in newer Statcast API exports as delta_pitcher_run_exp.
+
+
+  # ============================================================================
+  # mart_pitch_pitcher_profile
+  # ============================================================================
+  - name: mart_pitch_pitcher_profile
+    description: >
+      Pitcher identity and usage context at the time of each pitch. Pitcher name
+      is resolved via a left join to ref_players on pitcher_id. Grain: one row
+      per pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: pitcher_first_name
+        description: >
+          Pitcher's first name resolved from ref_players on pitcher_id.
+          Null if pitcher_id is not present in ref_players.
+
+      - name: pitcher_last_name
+        description: >
+          Pitcher's last name resolved from ref_players on pitcher_id.
+          Null if pitcher_id is not present in ref_players.
+
+      - name: pitcher_name
+        description: >
+          Pitcher's display name (player_name field) resolved from ref_players
+          on pitcher_id. Null if pitcher_id is not present in ref_players.
+
+      - name: pitcher_hand
+        description: Pitcher's throwing hand. L=Left, R=Right. Renamed from p_throws.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['L', 'R']
+
+      - name: pitcher_age
+        description: >
+          Pitcher's age during the season using the current Statcast calculation
+          method. Renamed from age_pit.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (pitcher_age between 15 and 60)"
+
+      - name: pitcher_age_legacy
+        description: >
+          Pitcher's age using the legacy MLB calculation (as of June 30 of the
+          season). Renamed from age_pit_legacy.
+
+      - name: pitcher_times_thru_order
+        description: >
+          How many times the pitcher has been through the batting order in this
+          game at the time of the pitch. Renamed from n_thruorder_pitcher.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (pitcher_times_thru_order between 0 and 10)"
+
+      - name: pitcher_days_since_prev_game
+        description: >
+          Calendar days since the pitcher last appeared in a game.
+          Renamed from pitcher_days_since_prev_game.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or pitcher_days_since_prev_game >= 0"
+
+      - name: pitcher_days_until_next_game
+        description: >
+          Calendar days until the pitcher's next game appearance.
+          Renamed from pitcher_days_until_next_game.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or pitcher_days_until_next_game >= 0"
+
+      - name: pitcher_rest_bucket
+        description: >
+          Derived. Categorization of pitcher rest based on days since previous
+          game. back_to_back = 0–1 days; normal_rest = 2–4 days;
+          extra_rest = 5–7 days; extended_rest = 8+ days;
+          unknown = days_since_prev_game is null.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['back_to_back', 'normal_rest', 'extra_rest',
+                           'extended_rest', 'unknown']
+
+
+  # ============================================================================
+  # mart_pitch_hitter_profile
+  # ============================================================================
+  - name: mart_pitch_hitter_profile
+    description: >
+      Batter identity and at-bat context at the time of each pitch. Batter name
+      is resolved via a left join to ref_players on batter_id. Runner IDs are
+      included for downstream baserunning joins. Grain: one row per pitch.
+      Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: batter_first_name
+        description: >
+          Batter's first name resolved from ref_players on batter_id.
+          Null if batter_id is not present in ref_players.
+
+      - name: batter_last_name
+        description: >
+          Batter's last name resolved from ref_players on batter_id.
+          Null if batter_id is not present in ref_players.
+
+      - name: batter_name
+        description: >
+          Batter's display name (player_name field) resolved from ref_players
+          on batter_id. Null if batter_id is not present in ref_players.
+
+      - name: batter_hand
+        description: >
+          Side of the plate the batter stands on. L=Left, R=Right.
+          Renamed from stand.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['L', 'R', 'S']
+                    # S = switch hitter; Statcast can record the actual side
+                    # faced in a given PA for switch hitters
+
+      - name: batter_age
+        description: >
+          Batter's age during the season using the current Statcast calculation
+          method. Renamed from age_bat.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (batter_age between 15 and 60)"
+
+      - name: batter_age_legacy
+        description: >
+          Batter's age using the legacy MLB calculation (as of June 30 of the
+          season). Renamed from age_bat_legacy.
+
+      - name: pitcher_hand
+        description: Pitcher's throwing hand. L=Left, R=Right. Renamed from p_throws.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['L', 'R']
+
+      - name: matchup_handedness
+        description: >
+          Derived. Describes the handedness matchup between batter and pitcher.
+          same_hand = batter and pitcher share the same throwing/stance hand
+          (e.g. RHP vs RHB); opposite_hand = they differ (e.g. RHP vs LHB).
+          Derived by comparing batter_hand and pitcher_hand.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['same_hand', 'opposite_hand']
+
+      - name: batter_prior_pas_this_game
+        description: >
+          Number of plate appearances the batter has had earlier in this game
+          before the current PA. Renamed from n_priorpa_thisgame_player_at_bat.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or batter_prior_pas_this_game >= 0"
+
+      - name: batter_days_since_prev_game
+        description: >
+          Calendar days since the batter last appeared in a game.
+          Renamed from batter_days_since_prev_game.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or batter_days_since_prev_game >= 0"
+
+      - name: batter_days_until_next_game
+        description: >
+          Calendar days until the batter's next game appearance.
+          Renamed from batter_days_until_next_game.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or batter_days_until_next_game >= 0"
+
+      - name: runner_on_1b_id
+        description: >
+          Pre-pitch MLB Player ID of runner on 1st base. Null if base is empty.
+          Renamed from on_1b.
+
+      - name: runner_on_2b_id
+        description: >
+          Pre-pitch MLB Player ID of runner on 2nd base. Null if base is empty.
+          Renamed from on_2b.
+
+      - name: runner_on_3b_id
+        description: >
+          Pre-pitch MLB Player ID of runner on 3rd base. Null if base is empty.
+          Renamed from on_3b.
+
+
+  # ============================================================================
+  # mart_pitch_characteristics
+  # ============================================================================
+  - name: mart_pitch_characteristics
+    description: >
+      Physical characteristics of the pitch — velocity, movement, spin, release
+      mechanics, and zone location. All pitches are included regardless of
+      outcome. Grain: one row per pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: pitch_type
+        description: >
+          Statcast pitch type abbreviation (e.g., FF=4-Seam Fastball, SL=Slider,
+          CH=Changeup, CU=Curveball).
+
+      - name: pitch_name
+        description: Human-readable pitch name derived from Statcast data.
+
+      - name: pitch_category
+        description: >
+          Derived. Broad pitch family grouping for aggregation, derived from
+          pitch_type. fastball = FF, SI, FC; breaking = SL, ST, SV, CU, KC,
+          CS, EP; offspeed = CH, FS, FO, SC; knuckleball = KN; other = anything
+          not matching a known type code.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['fastball', 'breaking', 'offspeed', 'knuckleball', 'other']
+
+      - name: release_speed_mph
+        description: >
+          Pitch velocity out of hand in mph. Pre-2017 values are via PitchF/X,
+          adjusted to approximate release point. 2017+ values are Statcast.
+          Renamed from release_speed.
+        tests:
+          - dbt_utils.expression_is_true:
+                severity: warn
+                arguments:
+                  expression: "is null or (release_speed_mph between 40 and 110)"
+
+      - name: effective_speed_mph
+        description: >
+          Derived pitch speed based on the pitcher's extension — represents the
+          velocity the batter perceives. Renamed from effective_speed.
+        tests:
+          - dbt_utils.expression_is_true:
+                severity: warn
+                arguments:
+                  expression: "is null or (effective_speed_mph between 40 and 115)"
+
+      - name: speed_vs_perceived_diff
+        description: >
+          Derived. Difference between release_speed_mph and effective_speed_mph
+          (release_speed_mph - effective_speed_mph). Positive values mean the
+          batter perceives the pitch as slower than its true release speed,
+          typically due to extended release point.
+
+      - name: release_spin_rate_rpm
+        description: >
+          Spin rate of the pitch at release, in revolutions per minute, as tracked
+          by Statcast. Renamed from release_spin_rate.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (release_spin_rate_rpm between 0 and 4000)"
+
+      - name: spin_axis_degrees
+        description: >
+          Spin axis in the 2D X-Z plane in degrees (0–360). 180 = pure backspin
+          fastball; 0 = pure topspin (12-6) curveball. Renamed from spin_axis.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (spin_axis_degrees between 0 and 360)"
+
+      - name: release_pos_x_ft
+        description: >
+          Horizontal release position of the ball in feet from the catcher's
+          perspective. Renamed from release_pos_x.
+
+      - name: release_pos_y_ft
+        description: >
+          Depth of the release point from home plate in feet from the catcher's
+          perspective. Renamed from release_pos_y.
+
+      - name: release_pos_z_ft
+        description: >
+          Vertical release height of the ball in feet from the catcher's
+          perspective. Renamed from release_pos_z.
+
+      - name: release_extension_ft
+        description: >
+          How far off the mound, in feet, the pitcher releases the pitch.
+          Renamed from release_extension.
+        tests:
+          - dbt_utils.expression_is_true:
+                severity: warn
+                arguments:
+                  expression: "is null or (release_extension_ft between 0 and 9)"
+
+      - name: pitcher_arm_angle_degrees
+        description: >
+          Pitcher's arm angle at release in degrees. Lower values indicate a more
+          sidearm slot; higher values indicate more over-the-top. Aligns with the
+          Savant Arm Angle leaderboard. Not present in legacy CSV docs.
+          Renamed from arm_angle.
+
+      - name: pitch_movement_x_ft
+        description: >
+          Horizontal movement of the pitch in feet from the catcher's perspective.
+          Renamed from pfx_x.
+
+      - name: pitch_movement_z_ft
+        description: >
+          Vertical movement of the pitch in feet from the catcher's perspective.
+          Renamed from pfx_z.
+
+      - name: api_break_z_with_gravity_in
+        description: >
+          Vertical break including gravity effect in inches, reflecting the true
+          drop of the pitch relative to a gravity-only trajectory. Not present in
+          legacy CSV docs; added in newer Statcast API exports.
+          Renamed from api_break_z_with_gravity.
+
+      - name: api_break_x_arm_in
+        description: >
+          Horizontal break from the arm-side perspective in inches. Positive values
+          indicate movement toward the pitcher's arm side. Not present in legacy
+          CSV docs; added in newer Statcast API exports.
+          Renamed from api_break_x_arm.
+
+      - name: api_break_x_batter_in
+        description: >
+          Horizontal break from the batter's perspective in inches. Positive values
+          indicate movement in toward a same-handed batter. Not present in legacy
+          CSV docs; added in newer Statcast API exports.
+          Renamed from api_break_x_batter_in.
+
+      - name: vx0_fps
+        description: >
+          Velocity of the pitch in feet per second in the x-dimension,
+          determined at y=50 feet. Renamed from vx0.
+
+      - name: vy0_fps
+        description: >
+          Velocity of the pitch in feet per second in the y-dimension,
+          determined at y=50 feet. Renamed from vy0.
+
+      - name: vz0_fps
+        description: >
+          Velocity of the pitch in feet per second in the z-dimension,
+          determined at y=50 feet. Renamed from vz0.
+
+      - name: ax_fps2
+        description: >
+          Acceleration of the pitch in feet per second per second in the
+          x-dimension, determined at y=50 feet. Renamed from ax.
+
+      - name: ay_fps2
+        description: >
+          Acceleration of the pitch in feet per second per second in the
+          y-dimension, determined at y=50 feet. Renamed from ay.
+
+      - name: az_fps2
+        description: >
+          Acceleration of the pitch in feet per second per second in the
+          z-dimension, determined at y=50 feet. Renamed from az.
+
+      - name: plate_x_ft
+        description: >
+          Horizontal position of the ball when it crosses home plate in feet from
+          the catcher's perspective. Renamed from plate_x.
+
+      - name: plate_z_ft
+        description: >
+          Vertical position of the ball when it crosses home plate in feet from
+          the catcher's perspective. Renamed from plate_z.
+
+      - name: strike_zone_top_ft
+        description: >
+          Top of the batter's strike zone in feet, set by the operator when the
+          ball is halfway to the plate. Renamed from sz_top.
+
+      - name: strike_zone_bot_ft
+        description: >
+          Bottom of the batter's strike zone in feet, set by the operator when the
+          ball is halfway to the plate. Renamed from sz_bot.
+
+      - name: pitch_zone
+        description: >
+          Strike zone region where the ball crosses the plate from the catcher's
+          perspective. Zones 1–9 are within the strike zone; 11–14 are outside.
+          Renamed from zone.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14]
+
+      - name: is_in_zone
+        description: >
+          Derived. True if the pitch crosses within the rulebook strike zone.
+          Horizontal bounds are approximately ±0.8333 feet (half of 17-inch plate)
+          and vertical bounds are between strike_zone_bot_ft and strike_zone_top_ft.
+        tests:
+          - not_null
+
+      - name: pitch_side
+        description: >
+          Derived. Horizontal location of the pitch relative to the pitcher's arm
+          side. arm_side = the pitch is on the same side as the pitcher's throwing
+          arm (e.g. right side for a RHP); glove_side = opposite side. Derived
+          from pitcher_hand and plate_x_ft.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: ['arm_side', 'glove_side']
+
+
+  # ============================================================================
+  # mart_pitch_play_event
+  # ============================================================================
+  - name: mart_pitch_play_event
+    description: >
+      Pitch-level and plate appearance outcome flags. Includes swing/contact
+      indicators, terminal PA event classification, error detection parsed from
+      plate_appearance_description, and run/win expectancy impact.
+      Grain: one row per pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: pitch_result_code
+        description: >
+          Short-hand pitch result. B=Ball, S=Strike, X=In Play.
+          Renamed from type.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['B', 'S', 'X']
+
+      - name: pitch_description
+        description: >
+          Verbose description of the pitch outcome (e.g., called_strike,
+          swinging_strike, ball, foul). Renamed from description.
+
+      - name: plate_appearance_event
+        description: >
+          Terminal plate appearance result on the final pitch of a PA
+          (e.g., single, strikeout, home_run, walk). Null on non-terminal pitches.
+          Renamed from events.
+
+      - name: plate_appearance_description
+        description: >
+          Full game-day text description of the plate appearance. Renamed from des.
+
+      - name: is_strike
+        description: >
+          Derived. True when pitch_result_code = 'S'. Includes called strikes,
+          swinging strikes, fouls, and foul tips.
+        tests:
+          - not_null
+
+      - name: is_ball
+        description: >
+          Derived. True when pitch_result_code = 'B'. Includes balls, blocked
+          balls, intentional balls, and pitchouts.
+        tests:
+          - not_null
+
+      - name: is_in_play
+        description: >
+          Derived. True when pitch_result_code = 'X' — the batter put the ball
+          in play.
+        tests:
+          - not_null
+
+      - name: is_swing_and_miss
+        description: >
+          Derived. True when the batter swung and missed. Covers
+          swinging_strike, swinging_strike_blocked, foul_tip, and missed_bunt
+          pitch description values.
+        tests:
+          - not_null
+
+      - name: is_swing
+        description: >
+          Derived. True when the batter offered at the pitch. Includes all
+          swinging strikes, fouls, and balls put in play. Derived from
+          pitch_description matching any swing-type value.
+        tests:
+          - not_null
+
+      - name: is_called_strike
+        description: >
+          Derived. True when the umpire called the pitch a strike without a
+          swing. Derived from pitch_description = 'called_strike'.
+        tests:
+          - not_null
+
+      - name: is_called_ball
+        description: >
+          Derived. True when the umpire called the pitch a ball. Covers ball,
+          blocked_ball, pitchout, and intent_ball description values.
+        tests:
+          - not_null
+
+      - name: is_terminal_pitch
+        description: >
+          Derived. True when this pitch ended the plate appearance, indicated
+          by plate_appearance_event being non-null.
+        tests:
+          - not_null
+
+      - name: is_strikeout
+        description: >
+          Derived. True when the plate appearance ended in a strikeout or
+          strikeout double play. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_walk
+        description: >
+          Derived. True when the plate appearance ended in a walk or intentional
+          walk. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_hit_by_pitch
+        description: >
+          Derived. True when the plate appearance ended with the batter being
+          hit by the pitch. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_hit
+        description: >
+          Derived. True when the plate appearance ended in a single, double,
+          triple, or home run. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_home_run
+        description: >
+          Derived. True when the plate appearance ended in a home run.
+          Subset of is_hit. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_on_base_event
+        description: >
+          Derived. True when the plate appearance resulted in the batter reaching
+          base via hit, walk, intentional walk, hit by pitch, or sacrifice fly.
+          Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: is_out_event
+        description: >
+          Derived. True when the plate appearance resulted in at least one out
+          being recorded, including strikeouts, field outs, double plays, and
+          sacrifice plays. Only true on terminal pitches.
+        tests:
+          - not_null
+
+      - name: error_on_play
+        description: >
+          Derived. True when the word "error" appears anywhere in
+          plate_appearance_description, indicating a fielding or throwing error
+          was recorded on the play.
+        tests:
+          - not_null
+
+      - name: error_type
+        description: >
+          Derived. The type of error recorded on the play, parsed from
+          plate_appearance_description. throwing = throwing error;
+          fielding = fielding error; unknown = description contains "error"
+          but type cannot be determined; null = no error on the play.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: ['throwing', 'fielding', 'unknown']
+                  # null is valid when error_on_play is false
+
+      - name: error_position
+        description: >
+          Derived. The defensive position that committed the error, parsed from
+          the phrase "error by the [position]" in plate_appearance_description.
+          One of: pitcher, catcher, first_base, second_base, third_base,
+          shortstop, left_field, center_field, right_field, unknown.
+          Null when no error occurred on the play.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: ['pitcher', 'catcher', 'first_base', 'second_base',
+                           'third_base', 'shortstop', 'left_field', 'center_field',
+                           'right_field', 'unknown']
+                  # null is valid when error_on_play is false
+
+      - name: delta_run_exp
+        description: Change in run expectancy before and after the pitch.
+
+      - name: delta_pitcher_run_exp
+        description: >
+          Run expectancy delta from the pitcher's perspective. Derived as the
+          inverse of delta_run_exp (delta_run_exp * -1). Not present in legacy
+          CSV docs; included in newer Statcast API exports as delta_pitcher_run_exp.
+
+      - name: delta_home_win_exp
+        description: >
+          Change in home team win expectancy before and after the plate appearance.
+
+
+  # ============================================================================
+  # mart_pitch_hit_characteristics
+  # ============================================================================
+  - name: mart_pitch_hit_characteristics
+    description: >
+      Batted ball physics, contact quality, expected outcome metrics, and bat
+      tracking for pitches put in play. Filtered to pitch_result_code = 'X'
+      only — pitches not put in play are excluded from this model.
+      Grain: one row per in-play pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: batted_ball_type
+        description: >
+          Batted ball classification: ground_ball, line_drive, fly_ball, or popup.
+          Renamed from bb_type.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: ['ground_ball', 'line_drive', 'fly_ball', 'popup']
+
+      - name: launch_speed_angle_zone
+        description: >
+          Contact quality zone based on exit velocity and launch angle.
+          1=Weak, 2=Topped, 3=Under, 4=Flare/Burner, 5=Solid Contact, 6=Barrel.
+          Renamed from launch_speed_angle.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: [1, 2, 3, 4, 5, 6]
+
+      - name: contact_quality
+        description: >
+          Derived. Human-readable label for launch_speed_angle_zone.
+          weak = 1, topped = 2, under = 3, flare_burner = 4,
+          solid_contact = 5, barrel = 6.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: ['weak', 'topped', 'under', 'flare_burner',
+                           'solid_contact', 'barrel']
+
+      - name: exit_velocity_mph
+        description: >
+          Exit velocity of the batted ball in mph as tracked by Statcast.
+          Renamed from launch_speed.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (exit_velocity_mph between 0 and 130)"
+
+      - name: launch_angle_degrees
+        description: >
+          Launch angle of the batted ball in degrees as tracked by Statcast.
+          Renamed from launch_angle.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (launch_angle_degrees between -90 and 90)"
+
+      - name: hit_distance_ft
+        description: >
+          Projected hit distance of the batted ball in feet.
+          Renamed from hit_distance_sc.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (hit_distance_ft between 0 and 600)"
+
+      - name: is_barrel
+        description: >
+          Derived. True when launch_speed_angle_zone = 6. Represents the ideal
+          combination of exit velocity and launch angle per Statcast's barrel
+          definition.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_hard_hit
+        description: >
+          Derived. True when exit_velocity_mph >= 95. Statcast defines a hard-hit
+          ball as one with an exit velocity of 95 mph or higher.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_sweet_spot
+        description: >
+          Derived. True when launch_angle_degrees is between 8 and 32 degrees
+          inclusive. Statcast's launch angle sweet-spot range.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_hard_hit_sweet_spot
+        description: >
+          Derived. True when both is_hard_hit and is_sweet_spot are true —
+          exit_velocity_mph >= 95 and launch_angle_degrees between 8 and 32.
+          Represents combined quality of contact.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: hit_coord_x
+        description: >
+          Hit coordinate X of the batted ball in field diagram pixel space.
+          Renamed from hc_x.
+
+      - name: hit_coord_y
+        description: >
+          Hit coordinate Y of the batted ball in field diagram pixel space.
+          Renamed from hc_y.
+
+      - name: hit_location_fielder
+        description: >
+          Position number of the first fielder to touch the batted ball.
+          Renamed from hit_location.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+      - name: xba
+        description: >
+          Expected Batting Average based on launch angle and exit velocity.
+          Renamed from estimated_ba_using_speedangle.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (xba between 0 and 1)"
+
+      - name: xwoba
+        description: >
+          Expected wOBA based on launch angle and exit velocity.
+          Renamed from estimated_woba_using_speedangle.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (xwoba between 0 and 4)"
+
+      - name: xslg
+        description: >
+          Expected SLG based on launch angle and exit velocity. Not present in
+          legacy CSV docs; included in newer Statcast API exports.
+          Renamed from estimated_slg_using_speedangle.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (xslg between 0 and 4)"
+
+      - name: woba_value
+        description: Realized wOBA value based on the actual result of the play.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (woba_value between 0 and 4)"
+
+      - name: woba_denom
+        description: >
+          wOBA denominator. 1 if the plate appearance counts toward wOBA (e.g.,
+          excludes IBB and sacrifice bunts); 0 otherwise.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: [0, 1]
+
+      - name: babip_value
+        description: >
+          BABIP value based on the result of the play. 1=hit (excluding home
+          runs), 0=out, null if not applicable.
+        tests:
+          - accepted_values:
+                arguments:
+                  values: [0, 1]
+
+      - name: iso_value
+        description: Isolated power value based on the result of the play.
+
+      - name: bat_speed_mph
+        description: >
+          Bat speed at the sweet spot in mph. Reported as the average of the top
+          90% of a player's swings. Available from the 2023 season onward.
+          Renamed from bat_speed.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (bat_speed_mph between 0 and 100)"
+
+      - name: swing_length_ft
+        description: >
+          Total distance in feet traveled by the bat head in X/Y/Z space from
+          the start of tracking until the impact point. Renamed from swing_length.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (swing_length_ft between 0 and 15)"
+
+      - name: attack_angle_degrees
+        description: >
+          Vertical angle of the bat sweet spot at the point of impact in degrees.
+          Positive values indicate an upswing; negative values indicate a
+          downswing. Renamed from attack_angle.
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or (attack_angle_degrees between -90 and 90)"
+
+      - name: attack_direction_degrees
+        description: >
+          Horizontal angle of the bat sweet spot at contact, expressed relative
+          to the pull or oppo direction. Renamed from attack_direction.
+
+      - name: swing_path_tilt_degrees
+        description: >
+          Vertical angle of the arc traced by the swing path over the 40ms prior
+          to contact. Higher tilt = steeper swing; lower tilt = flatter swing.
+          Renamed from swing_path_tilt.
+
+      - name: hyper_speed
+        description: >
+          Internal Statcast bat tracking metric. Not publicly documented; believed
+          to be a bat speed derivative used in quality-of-contact modeling.
+          Renamed from hyper_speed.
+
+      - name: intercept_offset_x_inches
+        description: >
+          Horizontal distance in inches between where the ball crosses the plate
+          and the batter's contact-point intercept position. Used in Savant's
+          batting stance and intercept analysis. Available from 2024 onward.
+          Renamed from intercept_ball_minus_batter_pos_x_inches.
+
+      - name: intercept_offset_y_inches
+        description: >
+          Depth distance in inches between the ball's plate-crossing position and
+          the batter's contact-point intercept. Companion to
+          intercept_offset_x_inches. Available from 2024 onward.
+          Renamed from intercept_ball_minus_batter_pos_y_inches.
+
+      - name: is_fast_swing
+        description: >
+          Derived. True when bat_speed_mph >= 75. Statcast defines a fast swing
+          as one with a bat speed of 75 mph or higher. Null when bat tracking
+          data is unavailable (pre-2023).
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or is_fast_swing in (true, false)"
+
+      - name: is_ideal_attack_angle
+        description: >
+          Derived. True when attack_angle_degrees is between 5 and 20 degrees
+          inclusive. Statcast's definition of ideal attack angle for productive
+          contact. Null when bat tracking data is unavailable (pre-2023).
+        tests:
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: "is null or is_ideal_attack_angle in (true, false)"
+
+
+  # ============================================================================
+  # mart_pitch_fielding
+  # ============================================================================
+  - name: mart_pitch_fielding
+    description: >
+      Defensive alignment and fielder identity at the time of each pitch.
+      Separated from pitcher profile to allow independent fielding and
+      alignment analysis. Grain: one row per pitch. Join key: pitch_sk.
+
+    columns:
+
+      - name: pitch_sk
+        description: >
+          Surrogate key derived via md5_number_upper64 on the concatenation of
+          game_pk, at_bat_number, batter_id, pitch_number, pitcher_id, and
+          inning_half. Uniquely identifies one pitch within a plate appearance
+          within a game.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests:
+          - not_null
+
+      - name: pitch_number
+        description: Pitch sequence number within the current plate appearance.
+        tests:
+          - not_null
+
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher. Renamed from pitcher.
+        tests:
+          - not_null
+
+      - name: batter_id
+        description: MLB Player ID for the batter. Renamed from batter.
+        tests:
+          - not_null
+
+      - name: if_fielding_alignment
+        description: Infield fielding alignment at the time of the pitch.
+        tests:
+          - not_null:
+              severity: warn
+          - accepted_values:
+                arguments:
+                  values: ['Standard', 'Infield shade', 'Infield shift', 'Strategic']
+
+      - name: of_fielding_alignment
+        description: Outfield fielding alignment at the time of the pitch.
+        tests:
+          - not_null:
+              severity: warn
+          - accepted_values:
+                arguments:
+                  values: ['Standard', 'Strategic', 'Extreme outfield shift',
+                           '4th outfielder']
+
+      - name: is_infield_shift
+        description: >
+          Derived. True when if_fielding_alignment = 'Infield shift'. Indicates
+          a full infield shift where three infielders are positioned on one side
+          of second base.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_infield_shade
+        description: >
+          Derived. True when if_fielding_alignment = 'Infield shade'. Indicates
+          a subtle lateral lean toward the pull side without a full shift.
+          Legally distinct from a full shift under 2023 MLB rules.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_infield_strategic
+        description: >
+          Derived. True when if_fielding_alignment = 'Strategic'. Indicates a
+          situational depth-based alignment such as corners drawn in or the
+          infield playing back, rather than a lateral overload.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_infield_non_standard
+        description: >
+          Derived. True when if_fielding_alignment is anything other than
+          'Standard'. Catches any infield deviation including shift, shade, and
+          strategic alignments. Useful as a catch-all if new values are added
+          to the source.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_outfield_extreme_shift
+        description: >
+          Derived. True when of_fielding_alignment = 'Extreme outfield shift'.
+          Indicates all three outfielders are shifted heavily toward one side
+          of the field.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_fourth_outfielder
+        description: >
+          Derived. True when of_fielding_alignment = '4th outfielder'. Indicates
+          a four-outfielder defensive alignment, typically deployed against
+          pull-heavy power hitters.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_outfield_strategic
+        description: >
+          Derived. True when of_fielding_alignment = 'Strategic'. Indicates a
+          situational outfield depth adjustment such as playing shallow for a
+          sacrifice fly situation, rather than a lateral overload.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_outfield_non_standard
+        description: >
+          Derived. True when of_fielding_alignment is anything other than
+          'Standard'. Covers extreme shift, fourth outfielder, and strategic
+          alignments. Useful as a catch-all if new values are added to the source.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: is_any_shade_or_shift
+        description: >
+          Derived. True when either the infield is in a shift or shade
+          (if_fielding_alignment in 'Infield shift' or 'Infield shade') or the
+          outfield is in an extreme shift or four-outfielder alignment
+          (of_fielding_alignment in 'Extreme outfield shift' or '4th outfielder').
+          Excludes 'Strategic' on both sides since that reflects depth adjustment
+          rather than lateral positional overloading.
+        tests:
+          - not_null:
+              severity: warn
+
+      - name: catcher_id
+        description: MLB Player ID for the catcher. Renamed from fielder_2.
+
+      - name: first_base_id
+        description: MLB Player ID for the first baseman. Renamed from fielder_3.
+
+      - name: second_base_id
+        description: MLB Player ID for the second baseman. Renamed from fielder_4.
+
+      - name: third_base_id
+        description: MLB Player ID for the third baseman. Renamed from fielder_5.
+
+      - name: shortstop_id
+        description: MLB Player ID for the shortstop. Renamed from fielder_6.
+
+      - name: left_field_id
+        description: MLB Player ID for the left fielder. Renamed from fielder_7.
+
+      - name: center_field_id
+        description: MLB Player ID for the center fielder. Renamed from fielder_8.
+
+      - name: right_field_id
+        description: MLB Player ID for the right fielder. Renamed from fielder_9.

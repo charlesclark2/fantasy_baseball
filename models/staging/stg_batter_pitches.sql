@@ -17,21 +17,6 @@ source as (
 renamed as (
 
     select
-
-        -- -----------------------------------------------------------------------
-        -- Surrogate key
-        -- Pitch is uniquely identified by game + at-bat + pitch sequence number.
-        -- game_pk + at_bat_number + pitch_number should be unique per row, but
-        -- sv_id (play event id) is non-unique per game, so we derive our own key.
-        -- -----------------------------------------------------------------------
-        md5_number_upper64(
-            concat(
-                game_pk::varchar, 
-                at_bat_number::varchar, 
-                pitch_number::varchar
-            )
-        )                                              as pitch_sk,
-
         -- -----------------------------------------------------------------------
         -- Game identifiers
         -- -----------------------------------------------------------------------
@@ -425,4 +410,22 @@ renamed as (
 
 )
 
-select * from renamed
+select 
+        -- -----------------------------------------------------------------------
+        -- Surrogate key
+        -- Pitch is uniquely identified by game + at-bat + pitch sequence number.
+        -- game_pk + at_bat_number + pitch_number should be unique per row, but
+        -- sv_id (play event id) is non-unique per game, so we derive our own key.
+        -- -----------------------------------------------------------------------
+    md5_number_upper64(
+        concat(
+            game_pk::varchar,
+            at_bat_number::int::varchar,
+            batter_id::int::varchar, 
+            pitch_number::int::varchar, 
+            pitcher_id::int::varchar, 
+            inning_half::varchar
+        )
+    )                                                   as pitch_sk,
+    * 
+from renamed
