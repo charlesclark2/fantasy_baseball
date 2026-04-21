@@ -1805,3 +1805,1550 @@ models:
           For completed seasons this marks the team's final season record.
         tests:
           - not_null
+
+
+  # ============================================================================
+  # mart_team_rolling_offense
+  # ============================================================================
+  - name: mart_team_rolling_offense
+    description: >
+      Rolling offensive statistics for each MLB team across four aggregation
+      windows: trailing 7 days, trailing 14 days, trailing 30 days, and
+      season-to-date. Metrics cover runs scored, plate-appearance efficiency
+      (wOBA, xwOBA), strikeout and walk rates, slugging, and batted-ball
+      quality (hard-hit rate, barrel rate). Regular season only (game_type = 'R').
+      Grain: one row per team × game date. Join keys: team, game_date.
+
+    tests:
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d <= games_14d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_14d <= games_30d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "pa_count >= 1"
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier. Foreign key to mart_game_results.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 2008"
+
+      - name: team
+        description: >
+          Statcast abbreviation for the batting team. Derived from home_team or
+          away_team based on inning_half.
+        tests:
+          - not_null
+
+      # ── Game-level actuals ────────────────────────────────────────────────────
+
+      - name: runs_scored
+        description: Runs scored by this team in this game. Sourced from mart_game_results.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: pa_count
+        description: Total plate appearances for the batting team in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: woba
+        description: >
+          Realized wOBA (weighted on-base average) for this game. Computed as
+          sum(woba_value) / sum(woba_denom) across all plate appearances.
+          Null when woba_denom = 0 (e.g., game with only IBBs).
+
+      - name: xwoba
+        description: >
+          Expected wOBA based on exit velocity and launch angle for this game.
+          Populated only for in-play plate appearances; null when no batted-ball
+          data is available.
+
+      - name: k_pct
+        description: >
+          Strikeout rate for this game: strikeouts / plate appearances, rounded
+          to three decimal places.
+
+      - name: bb_pct
+        description: >
+          Walk rate for this game: walks (including intentional) / plate
+          appearances, rounded to three decimal places.
+
+      - name: slugging
+        description: >
+          Slugging percentage for this game: total bases / at-bats. Excludes
+          walks, HBP, and sacrifice plays from the denominator.
+
+      - name: hard_hit_pct
+        description: >
+          Hard-hit rate for this game: batted balls with exit velocity >= 95 mph
+          divided by total batted balls. Null when no batted-ball data exists.
+
+      - name: barrel_pct
+        description: >
+          Barrel rate for this game: batted balls with launch_speed_angle_zone = 6
+          divided by total batted balls. Null when no batted-ball data exists.
+
+      # ── Rolling 7-day ─────────────────────────────────────────────────────────
+
+      - name: games_7d
+        description: Number of games played by this team in the trailing 7 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_per_game_7d
+        description: Average runs scored per game over the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_7d
+        description: Rolling 7-day realized wOBA. Null when all PAs in the window have woba_denom = 0.
+
+      - name: xwoba_7d
+        description: Rolling 7-day expected wOBA. Null when no in-play contact in the window.
+
+      - name: k_pct_7d
+        description: Rolling 7-day strikeout rate.
+
+      - name: bb_pct_7d
+        description: Rolling 7-day walk rate.
+
+      - name: slugging_7d
+        description: Rolling 7-day slugging percentage.
+
+      - name: hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate. Null when no batted-ball data in the window.
+
+      - name: barrel_pct_7d
+        description: Rolling 7-day barrel rate. Null when no batted-ball data in the window.
+
+      # ── Rolling 14-day ────────────────────────────────────────────────────────
+
+      - name: games_14d
+        description: Number of games played by this team in the trailing 14 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_per_game_14d
+        description: Average runs scored per game over the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_14d
+        description: Rolling 14-day realized wOBA.
+
+      - name: xwoba_14d
+        description: Rolling 14-day expected wOBA.
+
+      - name: k_pct_14d
+        description: Rolling 14-day strikeout rate.
+
+      - name: bb_pct_14d
+        description: Rolling 14-day walk rate.
+
+      - name: slugging_14d
+        description: Rolling 14-day slugging percentage.
+
+      - name: hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate.
+
+      - name: barrel_pct_14d
+        description: Rolling 14-day barrel rate.
+
+      # ── Rolling 30-day ────────────────────────────────────────────────────────
+
+      - name: games_30d
+        description: Number of games played by this team in the trailing 30 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_per_game_30d
+        description: Average runs scored per game over the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_30d
+        description: Rolling 30-day realized wOBA.
+
+      - name: xwoba_30d
+        description: Rolling 30-day expected wOBA.
+
+      - name: k_pct_30d
+        description: Rolling 30-day strikeout rate.
+
+      - name: bb_pct_30d
+        description: Rolling 30-day walk rate.
+
+      - name: slugging_30d
+        description: Rolling 30-day slugging percentage.
+
+      - name: hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate.
+
+      - name: barrel_pct_30d
+        description: Rolling 30-day barrel rate.
+
+      # ── Season-to-date ────────────────────────────────────────────────────────
+
+      - name: games_std
+        description: Number of games played by this team in the current season up to and including game_date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_per_game_std
+        description: Average runs scored per game season-to-date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_std
+        description: Season-to-date realized wOBA.
+
+      - name: xwoba_std
+        description: Season-to-date expected wOBA.
+
+      - name: k_pct_std
+        description: Season-to-date strikeout rate.
+
+      - name: bb_pct_std
+        description: Season-to-date walk rate.
+
+      - name: slugging_std
+        description: Season-to-date slugging percentage.
+
+      - name: hard_hit_pct_std
+        description: Season-to-date hard-hit rate.
+
+      - name: barrel_pct_std
+        description: Season-to-date barrel rate.
+
+
+  # ============================================================================
+  # mart_team_rolling_pitching
+  # ============================================================================
+  - name: mart_team_rolling_pitching
+    description: >
+      Rolling pitching statistics for each MLB team across four aggregation
+      windows: trailing 7 days, trailing 14 days, trailing 30 days, and
+      season-to-date. Metrics cover runs allowed, opponent wOBA, xwOBA,
+      strikeout rate, walk rate, hard-hit rate allowed, and barrel rate allowed,
+      with full starter vs. bullpen splits for every window. Starter is defined
+      as the pitcher who threw the first pitch of the game for that team.
+      Regular season only (game_type = 'R').
+      Grain: one row per team × game date. Join keys: team, game_date.
+
+    tests:
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d <= games_14d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_14d <= games_30d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "pa_count >= 1"
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier. Foreign key to mart_game_results.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 2008"
+
+      - name: team
+        description: >
+          Statcast abbreviation for the pitching (fielding) team. Derived from
+          home_team or away_team based on inning_half.
+        tests:
+          - not_null
+
+      # ── Game-level actuals ────────────────────────────────────────────────────
+
+      - name: runs_allowed
+        description: Runs allowed by this team's pitching staff in this game. Sourced from mart_game_results.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: pa_count
+        description: Total plate appearances faced by this team's pitching staff in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: woba_against
+        description: >
+          Realized wOBA against this team's pitching for this game. Computed as
+          sum(woba_value) / sum(woba_denom) across all plate appearances faced.
+
+      - name: xwoba_against
+        description: >
+          Expected wOBA against based on exit velocity and launch angle for this game.
+          Null when no in-play contact data is available.
+
+      - name: k_pct
+        description: >
+          Strikeout rate for this game from the pitching perspective:
+          strikeouts / PA faced.
+
+      - name: bb_pct
+        description: >
+          Walk rate for this game from the pitching perspective:
+          walks / PA faced.
+
+      - name: hard_hit_pct_allowed
+        description: >
+          Hard-hit rate allowed for this game: batted balls with exit velocity >= 95 mph
+          divided by total batted balls against.
+
+      - name: barrel_pct_allowed
+        description: >
+          Barrel rate allowed for this game: batted balls with launch_speed_angle_zone = 6
+          divided by total batted balls against.
+
+      # ── Rolling 7-day ─────────────────────────────────────────────────────────
+
+      - name: games_7d
+        description: Number of games pitched by this team in the trailing 7 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_allowed_per_game_7d
+        description: Average runs allowed per game over the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_against_7d
+        description: Rolling 7-day opponent wOBA.
+
+      - name: xwoba_against_7d
+        description: Rolling 7-day opponent xwOBA.
+
+      - name: k_pct_7d
+        description: Rolling 7-day strikeout rate (pitching).
+
+      - name: bb_pct_7d
+        description: Rolling 7-day walk rate (pitching).
+
+      - name: hard_hit_pct_allowed_7d
+        description: Rolling 7-day hard-hit rate allowed.
+
+      - name: barrel_pct_allowed_7d
+        description: Rolling 7-day barrel rate allowed.
+
+      - name: starter_woba_against_7d
+        description: Rolling 7-day opponent wOBA against the starting pitcher only.
+
+      - name: starter_xwoba_against_7d
+        description: Rolling 7-day opponent xwOBA against the starting pitcher only.
+
+      - name: starter_k_pct_7d
+        description: Rolling 7-day strikeout rate for starting pitchers.
+
+      - name: starter_bb_pct_7d
+        description: Rolling 7-day walk rate for starting pitchers.
+
+      - name: starter_hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate allowed by starting pitchers.
+
+      - name: starter_barrel_pct_7d
+        description: Rolling 7-day barrel rate allowed by starting pitchers.
+
+      - name: bullpen_woba_against_7d
+        description: Rolling 7-day opponent wOBA against relief pitchers.
+
+      - name: bullpen_xwoba_against_7d
+        description: Rolling 7-day opponent xwOBA against relief pitchers.
+
+      - name: bullpen_k_pct_7d
+        description: Rolling 7-day strikeout rate for relief pitchers.
+
+      - name: bullpen_bb_pct_7d
+        description: Rolling 7-day walk rate for relief pitchers.
+
+      - name: bullpen_hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate allowed by relief pitchers.
+
+      - name: bullpen_barrel_pct_7d
+        description: Rolling 7-day barrel rate allowed by relief pitchers.
+
+      # ── Rolling 14-day ────────────────────────────────────────────────────────
+
+      - name: games_14d
+        description: Number of games pitched by this team in the trailing 14 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_allowed_per_game_14d
+        description: Average runs allowed per game over the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_against_14d
+        description: Rolling 14-day opponent wOBA.
+
+      - name: xwoba_against_14d
+        description: Rolling 14-day opponent xwOBA.
+
+      - name: k_pct_14d
+        description: Rolling 14-day strikeout rate (pitching).
+
+      - name: bb_pct_14d
+        description: Rolling 14-day walk rate (pitching).
+
+      - name: hard_hit_pct_allowed_14d
+        description: Rolling 14-day hard-hit rate allowed.
+
+      - name: barrel_pct_allowed_14d
+        description: Rolling 14-day barrel rate allowed.
+
+      - name: starter_woba_against_14d
+        description: Rolling 14-day opponent wOBA against starting pitchers.
+
+      - name: starter_xwoba_against_14d
+        description: Rolling 14-day opponent xwOBA against starting pitchers.
+
+      - name: starter_k_pct_14d
+        description: Rolling 14-day strikeout rate for starting pitchers.
+
+      - name: starter_bb_pct_14d
+        description: Rolling 14-day walk rate for starting pitchers.
+
+      - name: starter_hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate allowed by starting pitchers.
+
+      - name: starter_barrel_pct_14d
+        description: Rolling 14-day barrel rate allowed by starting pitchers.
+
+      - name: bullpen_woba_against_14d
+        description: Rolling 14-day opponent wOBA against relief pitchers.
+
+      - name: bullpen_xwoba_against_14d
+        description: Rolling 14-day opponent xwOBA against relief pitchers.
+
+      - name: bullpen_k_pct_14d
+        description: Rolling 14-day strikeout rate for relief pitchers.
+
+      - name: bullpen_bb_pct_14d
+        description: Rolling 14-day walk rate for relief pitchers.
+
+      - name: bullpen_hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate allowed by relief pitchers.
+
+      - name: bullpen_barrel_pct_14d
+        description: Rolling 14-day barrel rate allowed by relief pitchers.
+
+      # ── Rolling 30-day ────────────────────────────────────────────────────────
+
+      - name: games_30d
+        description: Number of games pitched by this team in the trailing 30 calendar days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_allowed_per_game_30d
+        description: Average runs allowed per game over the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_against_30d
+        description: Rolling 30-day opponent wOBA.
+
+      - name: xwoba_against_30d
+        description: Rolling 30-day opponent xwOBA.
+
+      - name: k_pct_30d
+        description: Rolling 30-day strikeout rate (pitching).
+
+      - name: bb_pct_30d
+        description: Rolling 30-day walk rate (pitching).
+
+      - name: hard_hit_pct_allowed_30d
+        description: Rolling 30-day hard-hit rate allowed.
+
+      - name: barrel_pct_allowed_30d
+        description: Rolling 30-day barrel rate allowed.
+
+      - name: starter_woba_against_30d
+        description: Rolling 30-day opponent wOBA against starting pitchers.
+
+      - name: starter_xwoba_against_30d
+        description: Rolling 30-day opponent xwOBA against starting pitchers.
+
+      - name: starter_k_pct_30d
+        description: Rolling 30-day strikeout rate for starting pitchers.
+
+      - name: starter_bb_pct_30d
+        description: Rolling 30-day walk rate for starting pitchers.
+
+      - name: starter_hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate allowed by starting pitchers.
+
+      - name: starter_barrel_pct_30d
+        description: Rolling 30-day barrel rate allowed by starting pitchers.
+
+      - name: bullpen_woba_against_30d
+        description: Rolling 30-day opponent wOBA against relief pitchers.
+
+      - name: bullpen_xwoba_against_30d
+        description: Rolling 30-day opponent xwOBA against relief pitchers.
+
+      - name: bullpen_k_pct_30d
+        description: Rolling 30-day strikeout rate for relief pitchers.
+
+      - name: bullpen_bb_pct_30d
+        description: Rolling 30-day walk rate for relief pitchers.
+
+      - name: bullpen_hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate allowed by relief pitchers.
+
+      - name: bullpen_barrel_pct_30d
+        description: Rolling 30-day barrel rate allowed by relief pitchers.
+
+      # ── Season-to-date ────────────────────────────────────────────────────────
+
+      - name: games_std
+        description: Number of games pitched by this team in the current season up to and including game_date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: runs_allowed_per_game_std
+        description: Average runs allowed per game season-to-date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_against_std
+        description: Season-to-date opponent wOBA.
+
+      - name: xwoba_against_std
+        description: Season-to-date opponent xwOBA.
+
+      - name: k_pct_std
+        description: Season-to-date strikeout rate (pitching).
+
+      - name: bb_pct_std
+        description: Season-to-date walk rate (pitching).
+
+      - name: hard_hit_pct_allowed_std
+        description: Season-to-date hard-hit rate allowed.
+
+      - name: barrel_pct_allowed_std
+        description: Season-to-date barrel rate allowed.
+
+      - name: starter_woba_against_std
+        description: Season-to-date opponent wOBA against starting pitchers.
+
+      - name: starter_xwoba_against_std
+        description: Season-to-date opponent xwOBA against starting pitchers.
+
+      - name: starter_k_pct_std
+        description: Season-to-date strikeout rate for starting pitchers.
+
+      - name: starter_bb_pct_std
+        description: Season-to-date walk rate for starting pitchers.
+
+      - name: starter_hard_hit_pct_std
+        description: Season-to-date hard-hit rate allowed by starting pitchers.
+
+      - name: starter_barrel_pct_std
+        description: Season-to-date barrel rate allowed by starting pitchers.
+
+      - name: bullpen_woba_against_std
+        description: Season-to-date opponent wOBA against relief pitchers.
+
+      - name: bullpen_xwoba_against_std
+        description: Season-to-date opponent xwOBA against relief pitchers.
+
+      - name: bullpen_k_pct_std
+        description: Season-to-date strikeout rate for relief pitchers.
+
+      - name: bullpen_bb_pct_std
+        description: Season-to-date walk rate for relief pitchers.
+
+      - name: bullpen_hard_hit_pct_std
+        description: Season-to-date hard-hit rate allowed by relief pitchers.
+
+      - name: bullpen_barrel_pct_std
+        description: Season-to-date barrel rate allowed by relief pitchers.
+
+
+  # ============================================================================
+  # mart_pitcher_rolling_stats
+  # ============================================================================
+  - name: mart_pitcher_rolling_stats
+    description: >
+      Rolling pitcher performance statistics for every pitcher across four
+      aggregation windows: trailing 7 days, trailing 14 days, trailing 30 days,
+      and season-to-date. Designed as a primary feature source for game outcome
+      prediction — a starter's recent form is more predictive than their season
+      line, especially after injuries or mechanical changes. Includes K%, BB%,
+      whiff rate, swinging strike rate, batter chase rate, barrel rate allowed,
+      hard-hit rate allowed, xwOBA against, average fastball velocity, and
+      average release extension. Starter is defined as the pitcher who threw
+      the first pitch for their team in the game. Regular season only
+      (game_type = 'R'). Grain: one row per pitcher × game. Join keys: pitcher_id, game_date.
+
+    tests:
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d <= games_14d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_14d <= games_30d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "batters_faced >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "pitch_count >= batters_faced"
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier. Foreign key to mart_game_results.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 2008"
+
+      - name: pitcher_id
+        description: >
+          MLB Player ID for the pitcher. Renamed from pitcher in stg_batter_pitches.
+        tests:
+          - not_null
+
+      - name: pitcher_hand
+        description: >
+          Pitching hand of the pitcher. Renamed from p_throws in stg_batter_pitches.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['L', 'R']
+
+      - name: pitching_team
+        description: >
+          Statcast abbreviation for the pitcher's team. Derived from home_team or
+          away_team based on inning_half.
+        tests:
+          - not_null
+
+      - name: facing_team
+        description: Statcast abbreviation for the opposing (batting) team.
+        tests:
+          - not_null
+
+      - name: is_starter
+        description: >
+          True when this pitcher was the starter (threw the first pitch for their
+          team in this game). False for all relief appearances.
+        tests:
+          - not_null
+
+      # ── Single-game actuals ───────────────────────────────────────────────────
+
+      - name: batters_faced
+        description: Total plate appearances faced by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitch_count
+        description: Total pitches thrown by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: strikeouts
+        description: Strikeouts recorded by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: walks
+        description: Walks (BB + IBB) allowed by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: hits_allowed
+        description: Hits allowed (1B + 2B + 3B + HR) by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: home_runs_allowed
+        description: Home runs allowed by this pitcher in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: woba_against
+        description: >
+          Realized wOBA against this pitcher for this game. Computed as
+          sum(woba_value) / sum(woba_denom).
+
+      - name: xwoba_against
+        description: >
+          Expected wOBA against based on exit velocity and launch angle for
+          this game. Null when no in-play contact data is available.
+
+      - name: k_pct
+        description: >
+          Strikeout rate for this game: strikeouts / batters faced.
+
+      - name: bb_pct
+        description: >
+          Walk rate for this game: walks / batters faced.
+
+      - name: whiff_rate
+        description: >
+          Whiff rate for this game: swing-and-miss pitches / total swings.
+          A swing is any pitch the batter offered at (including fouls and
+          in-play contact). A whiff excludes foul_tip (contact made).
+
+      - name: swinging_strike_rate
+        description: >
+          Swinging strike rate (SwStr%) for this game: swing-and-miss pitches /
+          total pitches thrown. Differs from whiff_rate in the denominator.
+
+      - name: batter_chase_rate
+        description: >
+          Rate at which batters swung at pitches outside the strike zone
+          (Statcast zones 11-14) in this game. Higher values favor the pitcher.
+
+      - name: hard_hit_pct_allowed
+        description: >
+          Hard-hit rate allowed for this game: batted balls with exit velocity
+          >= 95 mph / total batted balls against.
+
+      - name: barrel_pct_allowed
+        description: >
+          Barrel rate allowed for this game: batted balls with
+          launch_speed_angle_zone = 6 / total batted balls against.
+
+      - name: avg_fastball_velo
+        description: >
+          Average fastball velocity (mph) in this game across all 4-seam (FF),
+          sinker (SI), and cutter (FC) pitches with valid release speed readings.
+
+      - name: avg_release_extension
+        description: >
+          Average release extension (ft) in this game across all pitches with
+          valid readings. Higher extension reduces effective pitch distance.
+
+      # ── Rolling 7-day ─────────────────────────────────────────────────────────
+
+      - name: games_7d
+        description: Number of game appearances by this pitcher in the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: batters_faced_7d
+        description: Total batters faced over the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitches_7d
+        description: Total pitches thrown over the trailing 7 calendar days.
+        tests:
+          - not_null
+
+      - name: woba_against_7d
+        description: Rolling 7-day opponent wOBA.
+
+      - name: xwoba_against_7d
+        description: Rolling 7-day opponent xwOBA.
+
+      - name: k_pct_7d
+        description: Rolling 7-day strikeout rate.
+
+      - name: bb_pct_7d
+        description: Rolling 7-day walk rate.
+
+      - name: whiff_rate_7d
+        description: Rolling 7-day whiff rate (swing-and-miss / swings).
+
+      - name: swinging_strike_rate_7d
+        description: Rolling 7-day swinging strike rate (swing-and-miss / pitches).
+
+      - name: batter_chase_rate_7d
+        description: Rolling 7-day rate at which batters swung at out-of-zone pitches.
+
+      - name: hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate allowed.
+
+      - name: barrel_pct_7d
+        description: Rolling 7-day barrel rate allowed.
+
+      - name: avg_fastball_velo_7d
+        description: Rolling 7-day average fastball velocity (mph).
+
+      - name: avg_release_extension_7d
+        description: Rolling 7-day average release extension (ft).
+
+      # ── Rolling 14-day ────────────────────────────────────────────────────────
+
+      - name: games_14d
+        description: Number of game appearances by this pitcher in the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: batters_faced_14d
+        description: Total batters faced over the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitches_14d
+        description: Total pitches thrown over the trailing 14 calendar days.
+        tests:
+          - not_null
+
+      - name: woba_against_14d
+        description: Rolling 14-day opponent wOBA.
+
+      - name: xwoba_against_14d
+        description: Rolling 14-day opponent xwOBA.
+
+      - name: k_pct_14d
+        description: Rolling 14-day strikeout rate.
+
+      - name: bb_pct_14d
+        description: Rolling 14-day walk rate.
+
+      - name: whiff_rate_14d
+        description: Rolling 14-day whiff rate.
+
+      - name: swinging_strike_rate_14d
+        description: Rolling 14-day swinging strike rate.
+
+      - name: batter_chase_rate_14d
+        description: Rolling 14-day rate at which batters swung at out-of-zone pitches.
+
+      - name: hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate allowed.
+
+      - name: barrel_pct_14d
+        description: Rolling 14-day barrel rate allowed.
+
+      - name: avg_fastball_velo_14d
+        description: Rolling 14-day average fastball velocity (mph).
+
+      - name: avg_release_extension_14d
+        description: Rolling 14-day average release extension (ft).
+
+      # ── Rolling 30-day ────────────────────────────────────────────────────────
+
+      - name: games_30d
+        description: Number of game appearances by this pitcher in the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: batters_faced_30d
+        description: Total batters faced over the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitches_30d
+        description: Total pitches thrown over the trailing 30 calendar days.
+        tests:
+          - not_null
+
+      - name: woba_against_30d
+        description: Rolling 30-day opponent wOBA.
+
+      - name: xwoba_against_30d
+        description: Rolling 30-day opponent xwOBA.
+
+      - name: k_pct_30d
+        description: Rolling 30-day strikeout rate.
+
+      - name: bb_pct_30d
+        description: Rolling 30-day walk rate.
+
+      - name: whiff_rate_30d
+        description: Rolling 30-day whiff rate.
+
+      - name: swinging_strike_rate_30d
+        description: Rolling 30-day swinging strike rate.
+
+      - name: batter_chase_rate_30d
+        description: Rolling 30-day rate at which batters swung at out-of-zone pitches.
+
+      - name: hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate allowed.
+
+      - name: barrel_pct_30d
+        description: Rolling 30-day barrel rate allowed.
+
+      - name: avg_fastball_velo_30d
+        description: Rolling 30-day average fastball velocity (mph).
+
+      - name: avg_release_extension_30d
+        description: Rolling 30-day average release extension (ft).
+
+      # ── Season-to-date ────────────────────────────────────────────────────────
+
+      - name: games_std
+        description: Number of game appearances by this pitcher in the current season to date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: batters_faced_std
+        description: Total batters faced season-to-date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitches_std
+        description: Total pitches thrown season-to-date.
+        tests:
+          - not_null
+
+      - name: woba_against_std
+        description: Season-to-date opponent wOBA.
+
+      - name: xwoba_against_std
+        description: Season-to-date opponent xwOBA.
+
+      - name: k_pct_std
+        description: Season-to-date strikeout rate.
+
+      - name: bb_pct_std
+        description: Season-to-date walk rate.
+
+      - name: whiff_rate_std
+        description: Season-to-date whiff rate.
+
+      - name: swinging_strike_rate_std
+        description: Season-to-date swinging strike rate.
+
+      - name: batter_chase_rate_std
+        description: Season-to-date rate at which batters swung at out-of-zone pitches.
+
+      - name: hard_hit_pct_std
+        description: Season-to-date hard-hit rate allowed.
+
+      - name: barrel_pct_std
+        description: Season-to-date barrel rate allowed.
+
+      - name: avg_fastball_velo_std
+        description: Season-to-date average fastball velocity (mph).
+
+      - name: avg_release_extension_std
+        description: Season-to-date average release extension (ft).
+
+
+  # ============================================================================
+  # mart_batter_rolling_stats
+  # ============================================================================
+  - name: mart_batter_rolling_stats
+    description: >
+      Rolling batter performance statistics for every batter across four
+      aggregation windows: trailing 7 days, trailing 14 days, trailing 30 days,
+      and season-to-date. Covers traditional rate stats (AVG, OBP, SLG, OPS,
+      wOBA), expected metrics (xwOBA, xBA, xSLG), batted-ball quality
+      (hard-hit rate, barrel rate), and plate-discipline metrics (K%, BB%,
+      whiff rate, swinging strike rate, chase rate, zone swing rate). Single-game
+      actuals are included for reference but rolling windows are the intended
+      feature source due to small sample noise. Regular season only
+      (game_type = 'R'). Grain: one row per batter × game. Join keys: batter_id, game_date.
+
+    tests:
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_7d <= games_14d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "games_14d <= games_30d"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "pa_count >= 1"
+      - dbt_utils.expression_is_true:
+            arguments:
+              expression: "pitches_seen >= pa_count"
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier. Foreign key to mart_game_results.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year the game took place.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 2008"
+
+      - name: batter_id
+        description: >
+          MLB Player ID for the batter. Renamed from batter in stg_batter_pitches.
+        tests:
+          - not_null
+
+      - name: batter_hand
+        description: >
+          Side of the plate the batter stands on. Renamed from stand in
+          stg_batter_pitches.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['L', 'R']
+
+      - name: batting_team
+        description: >
+          Statcast abbreviation for the batter's team. Derived from home_team or
+          away_team based on inning_half.
+        tests:
+          - not_null
+
+      - name: opposing_team
+        description: Statcast abbreviation for the opposing (pitching) team.
+        tests:
+          - not_null
+
+      # ── Single-game actuals ───────────────────────────────────────────────────
+
+      - name: pa_count
+        description: Total plate appearances for this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pitches_seen
+        description: Total pitches seen (all pitch events) by this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: hits
+        description: Hits (1B + 2B + 3B + HR) recorded by this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: home_runs
+        description: Home runs hit by this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: strikeouts
+        description: Strikeouts recorded against this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: walks
+        description: Walks (BB + IBB) drawn by this batter in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 0"
+
+      - name: avg
+        description: >
+          Batting average for this game: hits / at-bats. At-bats exclude BB,
+          IBB, HBP, SF, sac bunts, and catcher interference. High single-game
+          variance; use rolling windows for predictive features.
+
+      - name: obp
+        description: >
+          On-base percentage for this game: (H + BB + HBP) / (AB + BB + HBP + SF).
+          Denominator excludes sac bunts and catcher interference.
+
+      - name: slg
+        description: >
+          Slugging percentage for this game: total bases / at-bats.
+
+      - name: ops
+        description: >
+          On-base plus slugging for this game: OBP + SLG.
+
+      - name: woba
+        description: >
+          Realized wOBA for this game: sum(woba_value) / sum(woba_denom).
+          Null when all PAs have woba_denom = 0 (e.g., only IBBs).
+
+      - name: xwoba
+        description: >
+          Expected wOBA based on exit velocity and launch angle.
+          Null when no in-play contact data exists for this game.
+
+      - name: xba
+        description: >
+          Expected batting average based on exit velocity and launch angle.
+          Renamed from estimated_ba_using_speedangle in stg_batter_pitches.
+
+      - name: xslg
+        description: >
+          Expected slugging based on exit velocity and launch angle.
+          Renamed from estimated_slg_using_speedangle in stg_batter_pitches.
+
+      - name: k_pct
+        description: >
+          Strikeout rate for this game: strikeouts / plate appearances.
+
+      - name: bb_pct
+        description: >
+          Walk rate for this game: walks / plate appearances.
+
+      - name: hard_hit_pct
+        description: >
+          Hard-hit rate for this game: batted balls with exit velocity >= 95 mph
+          / total batted balls. Null when no batted-ball data exists.
+
+      - name: barrel_pct
+        description: >
+          Barrel rate for this game: batted balls with launch_speed_angle_zone = 6
+          / total batted balls. Null when no batted-ball data exists.
+
+      - name: whiff_rate
+        description: >
+          Whiff rate for this game: swing-and-miss pitches / total swings.
+          Excludes foul_tip (contact made).
+
+      - name: swinging_strike_rate
+        description: >
+          Swinging strike rate (SwStr%) for this game: swing-and-miss pitches
+          / total pitches seen. Differs from whiff_rate in the denominator.
+
+      - name: chase_rate
+        description: >
+          Chase rate for this game: swings on pitches outside the strike zone
+          (Statcast zones 11-14) / total out-of-zone pitches seen. Lower values
+          indicate better plate discipline.
+
+      - name: zone_swing_rate
+        description: >
+          Zone swing rate for this game: swings on pitches inside the strike zone
+          (Statcast zones 1-9) / total in-zone pitches seen. Higher values
+          indicate better recognition and aggression on strikes.
+
+      # ── Rolling 7-day ─────────────────────────────────────────────────────────
+
+      - name: games_7d
+        description: Number of games played by this batter in the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pa_count_7d
+        description: Total plate appearances over the trailing 7 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: avg_7d
+        description: Rolling 7-day batting average.
+
+      - name: obp_7d
+        description: Rolling 7-day on-base percentage.
+
+      - name: slg_7d
+        description: Rolling 7-day slugging percentage.
+
+      - name: ops_7d
+        description: Rolling 7-day OPS. Computed as rolling OBP + rolling SLG from accumulated numerators/denominators, not as avg(OBP) + avg(SLG).
+
+      - name: woba_7d
+        description: Rolling 7-day realized wOBA.
+
+      - name: xwoba_7d
+        description: Rolling 7-day expected wOBA.
+
+      - name: xba_7d
+        description: Rolling 7-day expected batting average.
+
+      - name: xslg_7d
+        description: Rolling 7-day expected slugging.
+
+      - name: k_pct_7d
+        description: Rolling 7-day strikeout rate.
+
+      - name: bb_pct_7d
+        description: Rolling 7-day walk rate.
+
+      - name: hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate.
+
+      - name: barrel_pct_7d
+        description: Rolling 7-day barrel rate.
+
+      - name: whiff_rate_7d
+        description: Rolling 7-day whiff rate.
+
+      - name: swinging_strike_rate_7d
+        description: Rolling 7-day swinging strike rate.
+
+      - name: chase_rate_7d
+        description: Rolling 7-day chase rate (out-of-zone swing rate).
+
+      - name: zone_swing_rate_7d
+        description: Rolling 7-day zone swing rate (in-zone swing rate).
+
+      # ── Rolling 14-day ────────────────────────────────────────────────────────
+
+      - name: games_14d
+        description: Number of games played by this batter in the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pa_count_14d
+        description: Total plate appearances over the trailing 14 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: avg_14d
+        description: Rolling 14-day batting average.
+
+      - name: obp_14d
+        description: Rolling 14-day on-base percentage.
+
+      - name: slg_14d
+        description: Rolling 14-day slugging percentage.
+
+      - name: ops_14d
+        description: Rolling 14-day OPS.
+
+      - name: woba_14d
+        description: Rolling 14-day realized wOBA.
+
+      - name: xwoba_14d
+        description: Rolling 14-day expected wOBA.
+
+      - name: xba_14d
+        description: Rolling 14-day expected batting average.
+
+      - name: xslg_14d
+        description: Rolling 14-day expected slugging.
+
+      - name: k_pct_14d
+        description: Rolling 14-day strikeout rate.
+
+      - name: bb_pct_14d
+        description: Rolling 14-day walk rate.
+
+      - name: hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate.
+
+      - name: barrel_pct_14d
+        description: Rolling 14-day barrel rate.
+
+      - name: whiff_rate_14d
+        description: Rolling 14-day whiff rate.
+
+      - name: swinging_strike_rate_14d
+        description: Rolling 14-day swinging strike rate.
+
+      - name: chase_rate_14d
+        description: Rolling 14-day chase rate.
+
+      - name: zone_swing_rate_14d
+        description: Rolling 14-day zone swing rate.
+
+      # ── Rolling 30-day ────────────────────────────────────────────────────────
+
+      - name: games_30d
+        description: Number of games played by this batter in the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pa_count_30d
+        description: Total plate appearances over the trailing 30 calendar days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: avg_30d
+        description: Rolling 30-day batting average.
+
+      - name: obp_30d
+        description: Rolling 30-day on-base percentage.
+
+      - name: slg_30d
+        description: Rolling 30-day slugging percentage.
+
+      - name: ops_30d
+        description: Rolling 30-day OPS.
+
+      - name: woba_30d
+        description: Rolling 30-day realized wOBA.
+
+      - name: xwoba_30d
+        description: Rolling 30-day expected wOBA.
+
+      - name: xba_30d
+        description: Rolling 30-day expected batting average.
+
+      - name: xslg_30d
+        description: Rolling 30-day expected slugging.
+
+      - name: k_pct_30d
+        description: Rolling 30-day strikeout rate.
+
+      - name: bb_pct_30d
+        description: Rolling 30-day walk rate.
+
+      - name: hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate.
+
+      - name: barrel_pct_30d
+        description: Rolling 30-day barrel rate.
+
+      - name: whiff_rate_30d
+        description: Rolling 30-day whiff rate.
+
+      - name: swinging_strike_rate_30d
+        description: Rolling 30-day swinging strike rate.
+
+      - name: chase_rate_30d
+        description: Rolling 30-day chase rate.
+
+      - name: zone_swing_rate_30d
+        description: Rolling 30-day zone swing rate.
+
+      # ── Season-to-date ────────────────────────────────────────────────────────
+
+      - name: games_std
+        description: Number of games played by this batter in the current season to date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: pa_count_std
+        description: Total plate appearances season-to-date.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+                arguments:
+                  expression: ">= 1"
+
+      - name: avg_std
+        description: Season-to-date batting average.
+
+      - name: obp_std
+        description: Season-to-date on-base percentage.
+
+      - name: slg_std
+        description: Season-to-date slugging percentage.
+
+      - name: ops_std
+        description: Season-to-date OPS.
+
+      - name: woba_std
+        description: Season-to-date realized wOBA.
+
+      - name: xwoba_std
+        description: Season-to-date expected wOBA.
+
+      - name: xba_std
+        description: Season-to-date expected batting average.
+
+      - name: xslg_std
+        description: Season-to-date expected slugging.
+
+      - name: k_pct_std
+        description: Season-to-date strikeout rate.
+
+      - name: bb_pct_std
+        description: Season-to-date walk rate.
+
+      - name: hard_hit_pct_std
+        description: Season-to-date hard-hit rate.
+
+      - name: barrel_pct_std
+        description: Season-to-date barrel rate.
+
+      - name: whiff_rate_std
+        description: Season-to-date whiff rate.
+
+      - name: swinging_strike_rate_std
+        description: Season-to-date swinging strike rate.
+
+      - name: chase_rate_std
+        description: Season-to-date chase rate.
+
+      - name: zone_swing_rate_std
+        description: Season-to-date zone swing rate.
