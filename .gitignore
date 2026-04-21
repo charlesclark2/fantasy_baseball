@@ -1,9 +1,16 @@
 
-target/
-dbt_packages/
-logs/
-dbt_internal_packages/
+# Project-level ignores
 .claude/
 .user.yml
-package-lock.yml
-profiles.yml
+
+# Python / notebook artifacts
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+*.egg-info/
+.env
+venv/
+.venv/
+
+# OS
+.DS_Store

@@ -1,0 +1,32 @@
+team_id,team_abbrev,canonical_abbrev,team_name,city,league,division,league_division,is_legacy_abbrev,is_active
+26,AZ,AZ,Arizona Diamondbacks,Phoenix,NL,West,NL West,FALSE,TRUE
+13,ATH,ATH,Athletics,Sacramento,AL,West,AL West,FALSE,TRUE
+31,ATL,ATL,Atlanta Braves,Atlanta,NL,East,NL East,FALSE,TRUE
+1,BAL,BAL,Baltimore Orioles,Baltimore,AL,East,AL East,FALSE,TRUE
+2,BOS,BOS,Boston Red Sox,Boston,AL,East,AL East,FALSE,TRUE
+21,CHC,CHC,Chicago Cubs,Chicago,NL,Central,NL Central,FALSE,TRUE
+22,CIN,CIN,Cincinnati Reds,Cincinnati,NL,Central,NL Central,FALSE,TRUE
+7,CLE,CLE,Cleveland Guardians,Cleveland,AL,Central,AL Central,FALSE,TRUE
+27,COL,COL,Colorado Rockies,Denver,NL,West,NL West,FALSE,TRUE
+6,CWS,CWS,Chicago White Sox,Chicago,AL,Central,AL Central,FALSE,TRUE
+8,DET,DET,Detroit Tigers,Detroit,AL,Central,AL Central,FALSE,TRUE
+11,HOU,HOU,Houston Astros,Houston,AL,West,AL West,FALSE,TRUE
+9,KC,KC,Kansas City Royals,Kansas City,AL,Central,AL Central,FALSE,TRUE
+12,LAA,LAA,Los Angeles Angels,Anaheim,AL,West,AL West,FALSE,TRUE
+28,LAD,LAD,Los Angeles Dodgers,Los Angeles,NL,West,NL West,FALSE,TRUE
+17,MIA,MIA,Miami Marlins,Miami,NL,East,NL East,FALSE,TRUE
+23,MIL,MIL,Milwaukee Brewers,Milwaukee,NL,Central,NL Central,FALSE,TRUE
+10,MIN,MIN,Minnesota Twins,Minneapolis,AL,Central,AL Central,FALSE,TRUE
+18,NYM,NYM,New York Mets,New York,NL,East,NL East,FALSE,TRUE
+3,NYY,NYY,New York Yankees,New York,AL,East,AL East,FALSE,TRUE
+13,OAK,ATH,Athletics,Oakland,AL,West,AL West,TRUE,FALSE
+19,PHI,PHI,Philadelphia Phillies,Philadelphia,NL,East,NL East,FALSE,TRUE
+24,PIT,PIT,Pittsburgh Pirates,Pittsburgh,NL,Central,NL Central,FALSE,TRUE
+29,SD,SD,San Diego Padres,San Diego,NL,West,NL West,FALSE,TRUE
+14,SEA,SEA,Seattle Mariners,Seattle,AL,West,AL West,FALSE,TRUE
+30,SF,SF,San Francisco Giants,San Francisco,NL,West,NL West,FALSE,TRUE
+25,STL,STL,St. Louis Cardinals,St. Louis,NL,Central,NL Central,FALSE,TRUE
+4,TB,TB,Tampa Bay Rays,St. Petersburg,AL,East,AL East,FALSE,TRUE
+15,TEX,TEX,Texas Rangers,Arlington,AL,West,AL West,FALSE,TRUE
+5,TOR,TOR,Toronto Blue Jays,Toronto,AL,East,AL East,FALSE,TRUE
+20,WSH,WSH,Washington Nationals,Washington,NL,East,NL East,FALSE,TRUE

@@ -1560,3 +1560,248 @@ models:
 
       - name: right_field_id
         description: MLB Player ID for the right fielder. Renamed from fielder_9.
+
+
+  # ============================================================================
+  # mart_game_results
+  # ============================================================================
+  - name: mart_game_results
+    description: >
+      Final result, score, teams, and context for every game. Aggregated from
+      pitch-level data: final scores are the maximum post-pitch scores recorded,
+      and total_innings is the highest inning reached. Covers all game types
+      (R=Regular Season, S=Spring Training, F/D/L/W=Playoffs). Grain: one row
+      per game. Join key: game_pk.
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+
+      - name: game_type
+        description: >
+          Game type code. E=Exhibition, S=Spring Training, R=Regular Season,
+          F=Wild Card, D=Division Series, L=LCS, W=World Series.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['E', 'S', 'R', 'F', 'D', 'L', 'W']
+
+      - name: home_team
+        description: Statcast abbreviation for the home team.
+        tests:
+          - not_null
+
+      - name: home_team_id
+        description: team_id from ref_teams for the home team franchise.
+
+      - name: home_team_name
+        description: Full home team name resolved from ref_teams.
+
+      - name: home_league
+        description: League of the home team (AL or NL).
+
+      - name: home_division
+        description: Division of the home team (East, Central, or West).
+
+      - name: home_league_division
+        description: Combined league-division label for the home team (e.g., "AL East").
+
+      - name: away_team
+        description: Statcast abbreviation for the away team.
+        tests:
+          - not_null
+
+      - name: away_team_id
+        description: team_id from ref_teams for the away team franchise.
+
+      - name: away_team_name
+        description: Full away team name resolved from ref_teams.
+
+      - name: away_league
+        description: League of the away team (AL or NL).
+
+      - name: away_division
+        description: Division of the away team (East, Central, or West).
+
+      - name: away_league_division
+        description: Combined league-division label for the away team.
+
+      - name: home_final_score
+        description: Home team's final score (runs). Derived as max(post_pitch_home_score).
+        tests:
+          - not_null
+
+      - name: away_final_score
+        description: Away team's final score (runs). Derived as max(post_pitch_away_score).
+        tests:
+          - not_null
+
+      - name: run_differential
+        description: >
+          home_final_score minus away_final_score. Positive = home team won by
+          that margin; negative = away team won by that margin; 0 = tie.
+
+      - name: total_innings
+        description: Total innings played. 9 for a standard game; > 9 for extra innings.
+        tests:
+          - not_null
+
+      - name: is_extra_innings
+        description: True when total_innings > 9.
+        tests:
+          - not_null
+
+      - name: is_tie
+        description: True when home_final_score = away_final_score (suspended/tied game).
+        tests:
+          - not_null
+
+      - name: home_team_won
+        description: >
+          True when the home team won, false when the away team won, null for ties
+          or suspended games.
+
+      - name: winning_team
+        description: Statcast abbreviation of the winning team. Null for ties.
+
+      - name: losing_team
+        description: Statcast abbreviation of the losing team. Null for ties.
+
+      - name: is_interleague
+        description: True when the home and away teams are from different leagues.
+        tests:
+          - not_null
+
+
+  # ============================================================================
+  # mart_team_season_record
+  # ============================================================================
+  - name: mart_team_season_record
+    description: >
+      A team's win-loss record as of every calendar day within the regular
+      season, with Type-2 SCD columns tracking when each record state became
+      effective and when it expired. One row per team per calendar date,
+      spanning from the first game of the season to the last. Non-game days
+      carry the most recent game result forward. Regular season only
+      (game_type = 'R'); ties excluded. Grain: one row per team per date.
+
+    columns:
+
+      - name: team_id
+        description: Integer franchise identifier from ref_teams.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: >
+          Statcast abbreviation for the team as found in the source data
+          (e.g., ATH post-2024, OAK pre-2025).
+        tests:
+          - not_null
+
+      - name: team_name
+        description: Full team name from ref_teams.
+        tests:
+          - not_null
+
+      - name: league
+        description: AL or NL.
+        tests:
+          - not_null
+
+      - name: division
+        description: East, Central, or West.
+        tests:
+          - not_null
+
+      - name: league_division
+        description: Combined label (e.g., "NL Central").
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Regular season year.
+        tests:
+          - not_null
+
+      - name: record_date
+        description: Calendar date this row represents.
+        tests:
+          - not_null
+
+      - name: wins
+        description: Cumulative regular season wins as of record_date.
+        tests:
+          - not_null
+
+      - name: losses
+        description: Cumulative regular season losses as of record_date.
+        tests:
+          - not_null
+
+      - name: games_played
+        description: Total games played (wins + losses) as of record_date.
+        tests:
+          - not_null
+
+      - name: win_pct
+        description: >
+          Winning percentage as of record_date, rounded to three decimal places.
+          Null on the first day of the season before any games are played.
+
+      - name: games_back
+        description: >
+          Games behind the division leader as of record_date, using the standard
+          MLB formula: ((leader_wins - team_wins) + (team_losses - leader_losses))
+          / 2. The division leader shows 0.0. Teams tied for first also show 0.0.
+
+      - name: is_division_leader
+        description: >
+          True when the team has the most wins and fewest losses in their
+          division on record_date (i.e., games_back = 0). Multiple teams
+          may be co-leaders on the same date.
+        tests:
+          - not_null
+
+      - name: streak_direction
+        description: Direction of the current streak as of record_date. W or L.
+
+      - name: streak_length
+        description: >
+          Number of consecutive games in the current streak as of record_date.
+          Resets after each result change.
+
+      - name: record_effective_date
+        description: >
+          SCD2. The date on which this W-L record was first achieved — i.e., the
+          date of the last game that changed the record. On non-game days this
+          carries forward from the most recent game date.
+
+      - name: record_expiration_date
+        description: >
+          SCD2. The last calendar date on which this W-L record was valid —
+          one day before the next game that changed it. Null for the most recent
+          record of each team-season (is_current = true).
+
+      - name: is_current
+        description: >
+          SCD2. True for the final (most recent) record of each team in each
+          season. Null record_expiration_date corresponds to is_current = true.
+          For completed seasons this marks the team's final season record.
+        tests:
+          - not_null

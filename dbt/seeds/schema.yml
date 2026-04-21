@@ -1,0 +1,93 @@
+version: 2
+
+seeds:
+
+  # ============================================================================
+  # ref_teams
+  # ============================================================================
+  - name: ref_teams
+    description: >
+      Static cross-reference table for all 30 MLB franchises. Each Statcast
+      team abbreviation maps to a team_id, full name, city, league, and
+      division. The Oakland Athletics / Athletics franchise has two rows —
+      one for the legacy OAK abbreviation (used through 2024) and one for
+      the current ATH abbreviation (2025+) — both sharing team_id = 13.
+      Join on team_abbrev to resolve any abbreviation found in the source data.
+      Grain: one row per Statcast team abbreviation.
+
+    columns:
+
+      - name: team_abbrev
+        description: >
+          Statcast team abbreviation as it appears in home_team and away_team
+          source columns. Primary lookup key. Unique across all rows.
+        tests:
+          - not_null
+          - unique
+
+      - name: team_id
+        description: >
+          Integer identifier for the franchise. Shared between OAK and ATH
+          rows (both = 13) so downstream models can group by franchise
+          regardless of which abbreviation was in use at the time.
+        tests:
+          - not_null
+
+      - name: canonical_abbrev
+        description: >
+          The current official abbreviation for the franchise. OAK maps to
+          ATH; all other teams map to themselves.
+        tests:
+          - not_null
+
+      - name: team_name
+        description: Full team name (e.g., "St. Louis Cardinals").
+        tests:
+          - not_null
+
+      - name: city
+        description: >
+          City or metropolitan area where the team is based. Reflects the
+          location associated with the abbreviation row (OAK = Oakland,
+          ATH = Sacramento).
+        tests:
+          - not_null
+
+      - name: league
+        description: League the team plays in. AL = American League, NL = National League.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['AL', 'NL']
+
+      - name: division
+        description: Division within the league. East, Central, or West.
+        tests:
+          - not_null
+          - accepted_values:
+                arguments:
+                  values: ['East', 'Central', 'West']
+
+      - name: league_division
+        description: >
+          Combined league and division label for convenience (e.g., "AL East",
+          "NL Central"). Derived from league and division.
+        tests:
+          - not_null
+
+      - name: is_legacy_abbrev
+        description: >
+          True for abbreviation rows that are no longer in active use.
+          Currently true only for OAK (the pre-2025 Oakland Athletics
+          abbreviation). False for all currently active abbreviations.
+        tests:
+          - not_null
+
+      - name: is_active
+        description: >
+          True for franchises that are currently active MLB members.
+          False for legacy abbreviation rows (OAK) that represent
+          a historical name or location.
+        tests:
+          - not_null

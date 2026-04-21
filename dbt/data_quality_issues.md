@@ -12,10 +12,11 @@ Identified during dbtf build test run. All failures listed here are genuine data
   - **Resolution:** Acceptability threshold of 0.05% applied. Test set to `warn` with `error_if: ">= 26"` so any growth beyond the known 25 bad rows will surface as an error.
   - **Resolution Date:** 2026-04-20
 
-- [ ] `accepted_values_mart_pitch_game_context_strikes__0__1__2` — strikes column contains values outside 0–2 (schema.yml:118)
-  - **Findings:** *(pending investigation)*
-  - **Resolution:** *(pending)*
-  - **Resolution Date:** TBD
+- [x] `accepted_values_mart_pitch_game_context_strikes__0__1__2` — strikes column contains values outside 0–2 (schema.yml:118)
+  - **Findings:** There was one pitch from `game_pk` 662725 which was labeled strike 3 when it 
+  was actually a hit.
+  - **Resolution:** Updated the source table to set this one pitch to 2 strikes. 
+  - **Resolution Date:** 2026-04-21
 
 ### mart_pitch_characteristics
 
