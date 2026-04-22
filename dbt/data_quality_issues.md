@@ -132,6 +132,18 @@ Identified during dbtf build test run. All failures listed here are genuine data
   - **Resolution:** Fixed `innings_pitched` derivation in `mart_starting_pitcher_game_log.sql` by replacing `(outs_recorded / 3)` with `floor(outs_recorded / 3)` to force integer division before adding the fractional component. Correct formula: `floor(outs_recorded / 3) + (mod(outs_recorded, 3) * 0.1)`.
   - **Resolution Date:** 2026-04-22
 
+### mart_batter_vs_handedness_splits
+
+- [ ] `dbt_utils_expression_is_true_mart_batter_vs_handedness_splits_hard_hit_pct__between_0_and_1` — hard_hit_pct contains values outside 0–1 (schema.yml)
+  - **Findings:** *(pending investigation)*
+  - **Resolution:** *(pending)*
+  - **Resolution Date:** TBD
+
+- [ ] `dbt_utils_expression_is_true_mart_batter_vs_handedness_splits_hard_hits_batted_balls` — hard_hits exceeds batted_balls on some rows (schema.yml)
+  - **Findings:** *(pending investigation)* — The `is_hard_hit` flag (exit_velocity_mph >= 95) is applied at the pitch level but counted at the PA level. If exit velocity is recorded on non-batted-ball events (e.g. foul balls or tracking artifacts), hard_hits may exceed batted_balls for some batter × pitcher_hand × game_year combinations.
+  - **Resolution:** *(pending)*
+  - **Resolution Date:** TBD
+
 ---
 
 ## 2026-04-22 — Failed Tests

@@ -3739,3 +3739,538 @@ models:
           - accepted_values:
               arguments:
                 values: [0, 1]
+
+  - name: mart_pitcher_vs_handedness_splits
+    description: >
+      Grain: pitcher_id × batter_hand × game_year. One row per pitcher per
+      batter handedness (L or R) per season, covering regular season games only.
+
+      Captures the platoon split profile of each pitcher — performance metrics
+      and pitch mix tendencies broken out by whether the batter was left-handed
+      or right-handed. Many starting pitchers have severe platoon splits that
+      are obscured by overall statistics. These splits are critical inputs for
+      modeling matchup advantages before lineup construction is finalized.
+
+      Pitch type buckets:
+        Fastball  — FF (4-seam), SI (sinker), FC (cutter)
+        Breaking  — SL (slider), CU (curveball), KC (knuckle curve), CS (slow
+                    curve), SV (slurve), ST (sweeper), SC (screwball)
+        Offspeed  — CH (changeup), FS (split-finger), FO (forkball), EP (eephus)
+        Other     — KN, IN, PO, FA, AB, null — included in total_pitches but
+                    excluded from pitch mix percentage denominators.
+
+      Count situation definitions (pre-pitch ball-strike count):
+        pitcher_ahead — 0-2 or 1-2 (two strikes, at most one ball)
+        hitter_ahead  — 2-0, 3-0, or 3-1 (balls exceed strikes by ≥ 2)
+        two_strike    — any count with 2 strikes (0-2, 1-2, 2-2, 3-2)
+
+      Small-sample caution: rows with fewer than ~50 plate appearances should
+      be interpreted carefully. No minimum PA filter is applied here — filter
+      downstream as needed.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, batter_hand, game_year]
+      # Rate bounds and internal consistency
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "total_pitches >= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "strikeouts <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "walks <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hits <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "home_runs <= hits"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "swings <= total_pitches"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "whiffs <= swings"
+      # Pitch mix percentages sum to no more than 1 (other/unknown pitches make up the remainder)
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "coalesce(fastball_pct, 0) + coalesce(breaking_pct, 0) + coalesce(offspeed_pct, 0) <= 1.01"
+      # K% + BB% cannot exceed 1 — they share the same PA denominator
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "coalesce(k_pct, 0) + coalesce(bb_pct, 0) <= 1"
+
+    columns:
+      # ── Grain ─────────────────────────────────────────────────────────────────
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher.
+        tests: [not_null]
+      - name: batter_hand
+        description: Batter handedness for this split row — L (left) or R (right).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['L', 'R']
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+
+      # ── Volume ────────────────────────────────────────────────────────────────
+      - name: plate_appearances
+        description: Total plate appearances against this pitcher by this batter handedness in the season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: total_pitches
+        description: Total pitches thrown to this batter handedness in the season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: strikeouts
+        description: Strikeouts recorded against this batter handedness in the season.
+        tests: [not_null]
+      - name: walks
+        description: Walks (including intentional) issued to this batter handedness in the season.
+        tests: [not_null]
+      - name: hit_by_pitch
+        description: Batters hit by pitch of this handedness in the season.
+        tests: [not_null]
+      - name: hits
+        description: Hits allowed (singles through home runs) to this batter handedness.
+        tests: [not_null]
+      - name: home_runs
+        description: Home runs allowed to this batter handedness. Subset of hits.
+        tests: [not_null]
+      - name: swings
+        description: Total swings taken by this batter handedness against this pitcher in the season.
+        tests: [not_null]
+      - name: whiffs
+        description: Total whiffs (missed swings) by this batter handedness. Subset of swings.
+        tests: [not_null]
+
+      # ── Outcome rates ─────────────────────────────────────────────────────────
+      - name: k_pct
+        description: Strikeout rate — strikeouts / plate_appearances. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: bb_pct
+        description: Walk rate — walks / plate_appearances. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: hr_pct
+        description: Home run rate — home_runs / plate_appearances. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: xwoba_against
+        description: >
+          Expected weighted on-base average (xwOBA) against for this pitcher–
+          handedness split. Expected value for batted balls; actual wOBA value
+          for strikeouts, walks, and HBP. League average is approximately 0.320.
+          Null when no wOBA-denominator plate appearances exist.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      # ── Swing / whiff rates ───────────────────────────────────────────────────
+      - name: whiff_rate
+        description: Whiffs per swing — whiffs / swings. Scale 0–1. Null if no swings.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: swinging_strike_rate
+        description: Whiffs per pitch — whiffs / total_pitches. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Overall pitch mix ─────────────────────────────────────────────────────
+      - name: fastball_pct
+        description: >
+          Fraction of pitches classified as fastballs (FF, SI, FC) against this
+          batter handedness. Scale 0–1. Does not sum to 1 with breaking_pct and
+          offspeed_pct — the remainder is other/unclassified pitch types.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: breaking_pct
+        description: >
+          Fraction of pitches classified as breaking balls (SL, CU, KC, CS, SV,
+          ST, SC) against this batter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: offspeed_pct
+        description: >
+          Fraction of pitches classified as offspeed (CH, FS, FO, EP) against
+          this batter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Count situation pitch tendencies ──────────────────────────────────────
+      - name: pitches_pitcher_ahead
+        description: Total pitches thrown in pitcher-ahead counts (0-2, 1-2) to this batter handedness.
+        tests: [not_null]
+      - name: fastball_pct_pitcher_ahead
+        description: Fastball rate in pitcher-ahead counts (0-2, 1-2). Reveals put-away pitch preferences.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: breaking_pct_pitcher_ahead
+        description: Breaking ball rate in pitcher-ahead counts (0-2, 1-2).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: offspeed_pct_pitcher_ahead
+        description: Offspeed rate in pitcher-ahead counts (0-2, 1-2).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: pitches_hitter_ahead
+        description: Total pitches thrown in hitter-ahead counts (2-0, 3-0, 3-1) to this batter handedness.
+        tests: [not_null]
+      - name: fastball_pct_hitter_ahead
+        description: >
+          Fastball rate in hitter-ahead counts (2-0, 3-0, 3-1). High values indicate a
+          pitcher who must challenge; low values suggest command of secondary pitches.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: breaking_pct_hitter_ahead
+        description: Breaking ball rate in hitter-ahead counts (2-0, 3-0, 3-1).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: offspeed_pct_hitter_ahead
+        description: Offspeed rate in hitter-ahead counts (2-0, 3-0, 3-1).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: pitches_two_strike
+        description: Total pitches thrown with 2 strikes (0-2, 1-2, 2-2, 3-2) to this batter handedness.
+        tests: [not_null]
+      - name: whiff_rate_two_strike
+        description: >
+          Whiff rate in two-strike counts. Higher values indicate stronger put-away
+          ability; compared across L and R splits to reveal handedness-dependent
+          strikeout approach.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: fastball_pct_two_strike
+        description: Fastball rate in two-strike counts to this batter handedness.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: breaking_pct_two_strike
+        description: Breaking ball rate in two-strike counts to this batter handedness.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: offspeed_pct_two_strike
+        description: Offspeed rate in two-strike counts to this batter handedness.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+  - name: mart_batter_vs_handedness_splits
+    description: >
+      Grain: batter_id × pitcher_hand × game_year. One row per batter per
+      pitcher handedness (L or R) per season, covering regular season games only.
+
+      Mirror of mart_pitcher_vs_handedness_splits from the hitter's perspective.
+      Together these two tables allow full platoon advantage assessment for every
+      batter-pitcher matchup: this table provides how a batter performs against
+      each pitcher handedness; the pitcher table provides how that pitcher
+      performs against each batter handedness.
+
+      Key metric definitions:
+        Hard hit    — exit_velocity_mph >= 95 mph on a batted ball
+        Barrel      — launch_speed_angle_zone = 6 (Statcast barrel classification)
+        Batted ball — in-play outcome (singles through outs, excludes K/BB/HBP)
+        AT-bat      — PA minus walk, intent_walk, HBP, sac fly, sac bunt,
+                      catcher interf
+        OBP denom   — PA minus sac bunt and catcher interf only
+        Chase rate  — swings at pitches in zones 11–14 / total out-of-zone pitches
+        Zone contact — swings at pitches in zones 1–9 / total in-zone pitches
+
+      Small-sample caution: rows with fewer than ~50 PA should be interpreted
+      carefully. No minimum PA filter is applied — filter downstream as needed.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [batter_id, pitcher_hand, game_year]
+      # Internal consistency
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "pitches_seen >= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "plate_appearances >= at_bats"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "plate_appearances >= obp_denom"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "strikeouts <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "walks <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hits <= plate_appearances"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "home_runs <= hits"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hard_hits <= batted_balls"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "barrels <= hard_hits"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "whiffs <= swings"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "swings <= pitches_seen"
+      # OPS is a computed combination — validate against its components
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "ops is null or (ops >= obp and ops >= slg)"
+      # K% + BB% share the same PA denominator and cannot together exceed 1
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "coalesce(k_pct, 0) + coalesce(bb_pct, 0) <= 1"
+
+    columns:
+      # ── Grain ─────────────────────────────────────────────────────────────────
+      - name: batter_id
+        description: MLB Player ID for the batter.
+        tests: [not_null]
+      - name: pitcher_hand
+        description: Pitcher throwing hand for this split row — L (left) or R (right).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['L', 'R']
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+
+      # ── Volume ────────────────────────────────────────────────────────────────
+      - name: plate_appearances
+        description: Total plate appearances against this pitcher handedness in the season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: at_bats
+        description: >
+          At-bats against this pitcher handedness. Excludes walks, HBP, sac flies,
+          sac bunts, and catcher interference from plate_appearances.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: pitches_seen
+        description: Total pitches seen from this pitcher handedness in the season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: strikeouts
+        description: Strikeouts against this pitcher handedness.
+        tests: [not_null]
+      - name: walks
+        description: Walks (including intentional) against this pitcher handedness.
+        tests: [not_null]
+      - name: hit_by_pitch
+        description: Hit by pitch occurrences against this pitcher handedness.
+        tests: [not_null]
+      - name: singles
+        description: Singles hit against this pitcher handedness.
+        tests: [not_null]
+      - name: doubles
+        description: Doubles hit against this pitcher handedness.
+        tests: [not_null]
+      - name: triples
+        description: Triples hit against this pitcher handedness.
+        tests: [not_null]
+      - name: home_runs
+        description: Home runs hit against this pitcher handedness. Subset of hits.
+        tests: [not_null]
+      - name: hits
+        description: Total hits (singles through home runs) against this pitcher handedness.
+        tests: [not_null]
+      - name: total_bases
+        description: Total bases accumulated against this pitcher handedness. Used in SLG calculation.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= hits"
+      - name: batted_balls
+        description: In-play contact events against this pitcher handedness. Denominator for hard_hit_pct and barrel_pct.
+        tests: [not_null]
+      - name: hard_hits
+        description: Batted balls with exit velocity >= 95 mph against this pitcher handedness.
+        tests: [not_null]
+      - name: barrels
+        description: Batted balls classified as barrels (launch_speed_angle_zone = 6) against this pitcher handedness. Subset of hard_hits.
+        tests: [not_null]
+      - name: swings
+        description: Total swings taken against this pitcher handedness in the season.
+        tests: [not_null]
+      - name: whiffs
+        description: Total missed swings (whiffs) against this pitcher handedness. Subset of swings.
+        tests: [not_null]
+
+      # ── Outcome rates ─────────────────────────────────────────────────────────
+      - name: k_pct
+        description: Strikeout rate — strikeouts / plate_appearances. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: bb_pct
+        description: Walk rate — walks / plate_appearances. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: obp
+        description: On-base percentage — on_base_events / obp_denom. Scale 0–1. Null if obp_denom is 0.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: slg
+        description: Slugging percentage — total_bases / at_bats. Scale 0–4. Null if at_bats is 0.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+      - name: ops
+        description: >
+          On-base plus slugging — obp + slg. Scale 0–5. Null if either
+          component is null. Computed from accumulated components rather than
+          summing per-PA OBP and SLG to avoid averaging bias.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 5"
+      - name: woba
+        description: >
+          Weighted on-base average (actual) against this pitcher handedness.
+          Computed as sum(woba_value) / sum(woba_denom). League average is
+          approximately 0.320. Null when no wOBA-denominator PAs exist.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+      - name: xwoba
+        description: >
+          Expected weighted on-base average against this pitcher handedness.
+          Expected value used for batted balls; actual wOBA value used for
+          strikeouts, walks, and HBP. League average is approximately 0.320.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      # ── Quality of contact ────────────────────────────────────────────────────
+      - name: hard_hit_pct
+        description: >
+          Fraction of batted balls with exit velocity >= 95 mph. Scale 0–1.
+          Null if no batted balls. Primary measure of raw contact quality.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: barrel_pct
+        description: >
+          Fraction of batted balls classified as barrels (Statcast zone 6).
+          Scale 0–1. Null if no batted balls. Strongest single predictor of
+          batter power output.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Swing / whiff / discipline ────────────────────────────────────────────
+      - name: swing_rate
+        description: Fraction of pitches the batter swings at against this pitcher handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: whiff_rate
+        description: Whiffs per swing — whiffs / swings. Scale 0–1. Null if no swings.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: swinging_strike_rate
+        description: Whiffs per pitch seen — whiffs / pitches_seen. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: chase_rate
+        description: >
+          Fraction of out-of-zone pitches (zones 11–14) the batter swings at.
+          Scale 0–1. High chase rate indicates vulnerability to pitches outside
+          the zone — a key exploit for pitchers with good command.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+      - name: zone_contact_rate
+        description: >
+          Fraction of in-zone pitches (zones 1–9) the batter swings at. Scale
+          0–1. Combined with chase_rate provides a full picture of plate discipline
+          split by pitcher handedness.
