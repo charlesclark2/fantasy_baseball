@@ -1,0 +1,12 @@
+[project]
+name = "baseball-ingest"
+version = "0.1.0"
+description = "MLB Stats API and Statcast ingestion scripts for baseball_betting_and_fantasy"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=46.0.7",
+    "python-dotenv>=1.2.2",
+    "requests>=2.33.1",
+    "snowflake-connector-python>=4.4.0",
+]

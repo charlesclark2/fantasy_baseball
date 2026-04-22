@@ -580,3 +580,325 @@ models:
         description: >
           Nulled. Non-unique play event ID per game. Not suitable as a key.
           Retained for lineage traceability only. Do not use in downstream models.
+
+  # ── Stats API staging models ─────────────────────────────────────────────────
+
+  - name: stg_statsapi_games
+    description: >
+      One row per MLB game, flattened from the Stats API monthly schedule JSON.
+      Source is baseball_data.statsapi.monthly_schedule via lateral flatten on
+      the dates and games arrays. Covers all game types (regular season, playoffs,
+      etc.) — filter on game_type = 'R' for regular season only.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier (Stats API primary key).
+        tests: [not_null, unique]
+      - name: game_guid
+        description: UUID-format game GUID as returned by the Stats API.
+      - name: game_type
+        description: >
+          Single-character game type code. R=Regular Season, S=Spring Training,
+          E=Exhibition, F=Wild Card, D=Division Series, L=LCS, W=World Series.
+        tests: [not_null]
+      - name: season
+        description: Season year.
+        tests: [not_null]
+      - name: game_date
+        description: Full timestamp of first pitch (with timezone offset).
+      - name: official_date
+        description: Official calendar date of the game.
+        tests: [not_null]
+      - name: day_night
+        description: Day or night game indicator.
+      - name: double_header
+        description: >
+          Doubleheader flag. N=not a doubleheader, S=split admission, Y=same admission.
+      - name: game_number
+        description: >
+          Game number within a doubleheader (1 or 2). Always 1 for non-doubleheader games.
+      - name: games_in_series
+        description: Total number of games in the series.
+      - name: series_game_number
+        description: Game number within the current series.
+      - name: series_description
+        description: Human-readable series label (e.g., "Regular Season").
+      - name: scheduled_innings
+        description: Number of scheduled innings (typically 9; 7 for some doubleheaders).
+      - name: is_tie
+        description: Whether the game ended in a tie.
+      - name: abstract_game_state
+        description: >
+          High-level game state. Preview=not yet started, Live=in progress,
+          Final=completed.
+      - name: detailed_state
+        description: Detailed game status description (e.g., "Final", "Postponed").
+      - name: status_code
+        description: Compact status code from the Stats API status object.
+      - name: home_team_id
+        description: Stats API team ID for the home team.
+        tests: [not_null]
+      - name: home_team_name
+        description: Full name of the home team.
+      - name: home_score
+        description: Final runs scored by the home team. Null before game completion.
+      - name: home_is_winner
+        description: True if the home team won.
+      - name: home_wins
+        description: Home team's cumulative wins in their league record at game time.
+      - name: home_losses
+        description: Home team's cumulative losses in their league record at game time.
+      - name: away_team_id
+        description: Stats API team ID for the away team.
+        tests: [not_null]
+      - name: away_team_name
+        description: Full name of the away team.
+      - name: away_score
+        description: Final runs scored by the away team. Null before game completion.
+      - name: away_is_winner
+        description: True if the away team won.
+      - name: away_wins
+        description: Away team's cumulative wins in their league record at game time.
+      - name: away_losses
+        description: Away team's cumulative losses in their league record at game time.
+      - name: venue_id
+        description: Stats API venue ID.
+      - name: venue_name
+        description: Ballpark name.
+
+  - name: stg_statsapi_lineups
+    description: >
+      One row per player per game side (home or away), unpivoted from the
+      Stats API confirmed lineup arrays. Grain is game_pk × home_away × batting_order.
+      Games with no confirmed lineup data will have no rows in this model.
+      batting_order is 1-indexed (1 = leadoff).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, home_away, batting_order]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier. Joins to stg_statsapi_games.
+        tests: [not_null]
+      - name: official_date
+        description: Official calendar date of the game.
+        tests: [not_null]
+      - name: home_away
+        description: Whether this row represents the home or away lineup.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: batting_order
+        description: >
+          1-indexed batting order position (1=leadoff, 9=ninth). Derived from
+          the player's position within the API lineup array.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+      - name: player_id
+        description: Stats API MLB player ID.
+        tests: [not_null]
+      - name: full_name
+        description: Player's full name as returned by the Stats API.
+      - name: first_name
+        description: Player's first name.
+      - name: last_name
+        description: Player's last name.
+      - name: use_name
+        description: Player's preferred display name (may differ from first_name).
+      - name: position_code
+        description: Position code (e.g., "1" for pitcher, "2" for catcher).
+      - name: position_name
+        description: Full position name (e.g., "Pitcher", "First Base").
+      - name: position_type
+        description: Position type category (e.g., "Pitcher", "Infielder", "Outfielder").
+      - name: position_abbreviation
+        description: Short position abbreviation (e.g., "P", "C", "1B", "DH").
+
+  - name: stg_statsapi_lineups_wide
+    description: >
+      Wide representation of confirmed lineups. One row per game_pk × home_away side
+      with batting order slots 1–9 spread into named columns (slot_N_player_id,
+      slot_N_full_name, slot_N_position). Built from stg_statsapi_lineups via
+      conditional aggregation. Rows with no confirmed lineup are excluded
+      (slot_1_player_id must not be null).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, home_away]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier. Joins to stg_statsapi_games.
+        tests: [not_null]
+      - name: official_date
+        description: Official calendar date of the game.
+        tests: [not_null]
+      - name: home_away
+        description: Whether this row represents the home or away lineup.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: slot_1_player_id
+        description: Stats API player ID for the leadoff hitter (batting order position 1).
+        tests: [not_null]
+      - name: slot_1_full_name
+        description: Full name of the leadoff hitter.
+      - name: slot_1_position
+        description: Position abbreviation for the leadoff hitter.
+      - name: slot_2_player_id
+        description: Stats API player ID for batting order position 2.
+      - name: slot_2_full_name
+        description: Full name of batting order position 2.
+      - name: slot_2_position
+        description: Position abbreviation for batting order position 2.
+      - name: slot_3_player_id
+        description: Stats API player ID for batting order position 3.
+      - name: slot_3_full_name
+        description: Full name of batting order position 3.
+      - name: slot_3_position
+        description: Position abbreviation for batting order position 3.
+      - name: slot_4_player_id
+        description: Stats API player ID for the cleanup hitter (batting order position 4).
+      - name: slot_4_full_name
+        description: Full name of the cleanup hitter.
+      - name: slot_4_position
+        description: Position abbreviation for the cleanup hitter.
+      - name: slot_5_player_id
+        description: Stats API player ID for batting order position 5.
+      - name: slot_5_full_name
+        description: Full name of batting order position 5.
+      - name: slot_5_position
+        description: Position abbreviation for batting order position 5.
+      - name: slot_6_player_id
+        description: Stats API player ID for batting order position 6.
+      - name: slot_6_full_name
+        description: Full name of batting order position 6.
+      - name: slot_6_position
+        description: Position abbreviation for batting order position 6.
+      - name: slot_7_player_id
+        description: Stats API player ID for batting order position 7.
+      - name: slot_7_full_name
+        description: Full name of batting order position 7.
+      - name: slot_7_position
+        description: Position abbreviation for batting order position 7.
+      - name: slot_8_player_id
+        description: Stats API player ID for batting order position 8.
+      - name: slot_8_full_name
+        description: Full name of batting order position 8.
+      - name: slot_8_position
+        description: Position abbreviation for batting order position 8.
+      - name: slot_9_player_id
+        description: Stats API player ID for batting order position 9.
+      - name: slot_9_full_name
+        description: Full name of batting order position 9.
+      - name: slot_9_position
+        description: Position abbreviation for batting order position 9.
+
+  - name: stg_statsapi_venues
+    description: >
+      One row per ballpark, flattened from baseball_data.statsapi.venues_raw.
+      Includes physical field dimensions, geographic location (lat/lon, elevation),
+      timezone, and cross-reference IDs for external systems. The xrefIds array
+      is pivoted into individual columns keyed by xref_type. Joins to
+      stg_statsapi_games on venue_id.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [venue_id]
+
+    columns:
+      - name: venue_id
+        description: Stats API venue ID. Primary key; joins to stg_statsapi_games.venue_id.
+        tests: [not_null, unique]
+      - name: venue_name
+        description: Full ballpark name (e.g., "PNC Park").
+        tests: [not_null]
+      - name: season
+        description: Season year for which this venue record was returned by the API.
+      - name: is_active
+        description: Whether the venue is currently active in the Stats API.
+      - name: ingest_date
+        description: Calendar date on which this record was last ingested from the API.
+        tests: [not_null]
+
+      # ── Location ─────────────────────────────────────────────────────────────
+      - name: address
+        description: Street address of the ballpark.
+      - name: city
+        description: City where the ballpark is located.
+      - name: state
+        description: Full state name.
+      - name: state_abbrev
+        description: Two-letter state abbreviation.
+      - name: postal_code
+        description: Postal/ZIP code of the ballpark.
+      - name: country
+        description: Country (typically "USA").
+      - name: latitude
+        description: WGS-84 latitude of the ballpark's default coordinates.
+      - name: longitude
+        description: WGS-84 longitude of the ballpark's default coordinates.
+      - name: elevation_ft
+        description: >
+          Elevation of the ballpark in feet above sea level. Relevant for
+          ball-carry modeling — higher elevation reduces air resistance.
+      - name: azimuth_angle
+        description: >
+          Compass bearing (degrees) from home plate toward center field.
+          Useful for wind and sun-angle analysis.
+      - name: phone
+        description: Main public phone number for the ballpark.
+
+      # ── Timezone ─────────────────────────────────────────────────────────────
+      - name: timezone_id
+        description: IANA timezone identifier (e.g., "America/New_York").
+      - name: timezone_abbrev
+        description: Timezone abbreviation at time of ingest (e.g., "EDT", "PDT").
+      - name: timezone_utc_offset
+        description: UTC offset in hours at time of ingest.
+      - name: timezone_utc_offset_at_game_time
+        description: UTC offset in hours adjusted for typical game-time conditions.
+
+      # ── Field dimensions and specs ────────────────────────────────────────────
+      - name: capacity
+        description: Seating capacity of the ballpark.
+      - name: turf_type
+        description: Playing surface type (e.g., "Grass", "ArtificialTurf").
+      - name: roof_type
+        description: Roof configuration (e.g., "Open", "Retractable", "Indoor").
+      - name: left_line_ft
+        description: Distance from home plate to the left-field foul pole (feet).
+      - name: left_ft
+        description: Distance from home plate to straightaway left field (feet).
+      - name: left_center_ft
+        description: Distance from home plate to left-center field (feet).
+      - name: center_ft
+        description: Distance from home plate to straightaway center field (feet).
+      - name: right_center_ft
+        description: Distance from home plate to right-center field (feet).
+      - name: right_line_ft
+        description: Distance from home plate to the right-field foul pole (feet).
+
+      # ── Cross-reference IDs ───────────────────────────────────────────────────
+      - name: xref_retrosheet_id
+        description: Retrosheet park code for historical game log joins.
+      - name: xref_weather_channel_loc_id
+        description: Weather Channel location code for weather data integration.
+      - name: xref_ballpark_code
+        description: MLB internal ballpark code (e.g., "pit.mlb").
+      - name: xref_stubhub_id
+        description: StubHub venue ID for ticket market data integration.
+      - name: xref_weatherbug_station_id
+        description: WeatherBug station code for hyperlocal weather data.

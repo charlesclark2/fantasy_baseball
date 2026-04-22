@@ -1,6 +1,56 @@
 version: 2
 
 sources:
+  - name: statsapi
+    database: baseball_data
+    schema: statsapi
+    description: >
+      Raw MLB Stats API data ingested via ingest_statsapi.py.
+      Contains schedule, lineup, and venue data.
+
+    tables:
+      - name: monthly_schedule
+        description: >
+          One row per ingested month. The json_field VARIANT column contains
+          the full Stats API schedule response including game metadata and
+          confirmed lineups for all games in the month.
+        columns:
+          - name: month_start_date
+            description: First day of the ingested month.
+            tests: [not_null, unique]
+          - name: month_end_date
+            description: Last day of the ingested month.
+            tests: [not_null]
+          - name: games_cnt
+            description: Number of games returned in the API response for the month.
+            tests: [not_null]
+          - name: json_field
+            description: Full Stats API schedule response as a VARIANT (semi-structured JSON).
+            tests: [not_null]
+
+      - name: venues_raw
+        description: >
+          One row per venue, ingested via ingest_statsapi.py venues subcommand.
+          The json_field VARIANT column contains the full Stats API venue response
+          hydrated with fieldInfo, location, timezone, and xrefId. Keyed on venue_id;
+          re-ingesting a venue overwrites the existing row. The venues present
+          correspond to all ballparks observed in stg_statsapi_games.
+        columns:
+          - name: venue_id
+            description: Stats API venue ID. Primary key for this table.
+            tests: [not_null, unique]
+          - name: json_field
+            description: >
+              Full Stats API venue response as a VARIANT. Top-level structure is
+              an object with a "venues" array containing one element. Hydrated
+              sections: fieldInfo (dimensions, capacity, turf/roof type),
+              location (address, coordinates, elevation), timeZone (IANA id,
+              UTC offset), xrefIds (Retrosheet, StubHub, ballpark_code, etc.).
+            tests: [not_null]
+          - name: ingest_date
+            description: Calendar date on which this venue record was last ingested.
+            tests: [not_null]
+
   - name: savant
     database: baseball_data
     schema: savant

@@ -644,10 +644,12 @@ models:
           velocity the batter perceives. Renamed from effective_speed.
         tests:
           - dbt_utils.expression_is_true:
-                config:
-                  severity: warn
-                arguments:
-                  expression: "is null or (effective_speed_mph between 40 and 115)"
+              config:
+                severity: warn
+                error_if: ">= 800"
+                warn_if: ">= 1"
+              arguments:
+                expression: "is null or (effective_speed_mph between 26 and 115)"
 
       - name: speed_vs_perceived_diff
         description: >
@@ -3352,3 +3354,388 @@ models:
 
       - name: zone_swing_rate_std
         description: Season-to-date zone swing rate.
+
+  - name: mart_starting_pitcher_game_log
+    description: >
+      Game-level log for pitchers who qualify as the starting pitcher.
+      Grain: pitcher_id × game_pk. One row per qualifying start.
+
+      Starter definition: the pitcher who threw the first pitch for their team
+      in the game AND who meets at least one threshold — threw ≥ 20 pitches OR
+      appeared in ≥ 3 distinct innings. This floor excludes openers used for
+      one- or two-batter platoon matchups while retaining both traditional
+      starters and bulk pitchers who enter after a true opener.
+
+      Filtered to regular season games (game_type = 'R') only.
+      Foundation for rolling pitcher workload models and days-of-rest derivation.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, game_pk]
+      # Cross-column checks must live at model level — column-level expression_is_true
+      # prepends the column name, so multi-column expressions go here instead.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "batting_team != pitching_team"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "away_team != home_team"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "total_pitches >= batters_faced"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "outs_recorded <= batters_faced * 3"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "home_runs_allowed <= hits_allowed"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "strikeouts <= batters_faced"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "walks <= batters_faced"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hit_by_pitch <= batters_faced"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hits_allowed <= batters_faced"
+      # Tenths digit of innings_pitched can only be 0, 1, or 2
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "mod(round(innings_pitched * 10)::integer, 10) in (0, 1, 2)"
+
+    columns:
+      # ── Game context ───────────────────────────────────────────────────────────
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= '2015-04-01'"
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+      - name: pitcher_id
+        description: MLB Player ID for the starting pitcher.
+        tests: [not_null]
+      - name: pitching_team
+        description: Team abbreviation of the pitcher's team for this game.
+        tests: [not_null]
+      - name: batting_team
+        description: >
+          Team abbreviation of the opposing (batting) team. Must differ from
+          pitching_team — a team cannot pitch against itself.
+        tests: [not_null]
+      - name: home_team
+        description: Home team abbreviation.
+      - name: away_team
+        description: Away team abbreviation. Must differ from home_team.
+      - name: is_home_team
+        description: True if the pitcher's team was the home team in this game.
+
+      # ── Volume / workload ──────────────────────────────────────────────────────
+      - name: total_pitches
+        description: >
+          Total pitches thrown by the pitcher in this start. Must be at least
+          as large as batters_faced since every batter sees at least one pitch.
+        tests: [not_null]
+      - name: batters_faced
+        description: >
+          Number of distinct plate appearances the pitcher was involved in,
+          including any at-bat they entered mid-count.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: outs_recorded
+        description: >
+          Total outs the pitcher was credited with recording, including
+          double-play and strikeout-double-play events. Cannot exceed three
+          times the number of batters faced (a triple play being the upper bound
+          per at-bat).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: innings_pitched
+        description: >
+          Innings pitched in traditional baseball display format — whole innings
+          plus tenths representing thirds (e.g., 6.1 = six and one-third innings,
+          6.2 = six and two-thirds). Derived as floor(outs_recorded / 3) +
+          mod(outs_recorded, 3) × 0.1. Use outs_recorded for arithmetic;
+          use innings_pitched for display only. The tenths digit can only be
+          0, 1, or 2 — a value of X.3 would indicate a data error.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      # ── Outcome counts ─────────────────────────────────────────────────────────
+      - name: strikeouts
+        description: >
+          Total strikeouts recorded in this start. Cannot exceed batters faced —
+          a pitcher cannot strike out more batters than they faced.
+        tests: [not_null]
+      - name: walks
+        description: >
+          Total walks (including intentional walks) issued in this start.
+          Cannot exceed batters faced.
+        tests: [not_null]
+      - name: hit_by_pitch
+        description: >
+          Total batters hit by pitch in this start. Cannot exceed batters faced.
+        tests: [not_null]
+      - name: home_runs_allowed
+        description: >
+          Total home runs allowed in this start. Home runs are a subset of hits,
+          so home_runs_allowed must not exceed hits_allowed.
+        tests: [not_null]
+      - name: hits_allowed
+        description: >
+          Total hits allowed (singles, doubles, triples, home runs) in this
+          start. Cannot exceed batters faced.
+        tests: [not_null]
+
+      # ── Rate stats ─────────────────────────────────────────────────────────────
+      - name: xwoba_against
+        description: >
+          Expected weighted on-base average (xwOBA) against for this start.
+          Computed as the sum of coalesced xwOBA values (expected for batted
+          balls; actual wOBA value for strikeouts, walks, and HBP where no
+          expected component exists) divided by wOBA denominators. League
+          average is approximately 0.320. Null only when no wOBA-denominator
+          plate appearances occurred (extremely rare edge case).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+      - name: avg_fastball_velo
+        description: >
+          Average velocity (mph) of fastball-type pitches in this start, rounded
+          to one decimal. Includes 4-seam fastball (FF), sinker (SI), and cutter
+          (FC). Null if no fastball-type pitches were thrown (e.g., soft-tossers
+          classified entirely as off-speed). Valid range for MLB pitchers
+          is 70–105 mph.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 70 and 105"
+
+  - name: mart_bullpen_workload
+    description: >
+      Grain: pitching_team × game_pk. One row per team per game played.
+      Tracks bullpen fatigue entering each game using rolling windows over the
+      preceding 1, 3, and 7 calendar days.
+
+      Bullpen definition: any pitcher who appears in a game but is not the
+      qualifying starter in mart_starting_pitcher_game_log.
+
+      Closer and high-leverage appearances are proxied from inning data —
+      high-leverage = inning 7+, closer = inning 9+. Role labels are not
+      available in the Statcast source.
+
+      Rolling windows use an upper bound of 1 day prior so current-game
+      bullpen usage never leaks into the fatigue predictors. All rolling
+      columns will be null for a team's first appearance in the dataset
+      (no prior-day data exists).
+
+      Doubleheader handling: rolling windows aggregate to calendar-date
+      level before computing preceding-day sums. Both games of a doubleheader
+      share the same prior-day fatigue values.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, pitching_team]
+      # Monotonicity: longer windows must be >= shorter windows (when both populated)
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              bullpen_pitches_prev_3d is null
+              or bullpen_pitches_prev_1d is null
+              or bullpen_pitches_prev_3d >= bullpen_pitches_prev_1d
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              bullpen_pitches_prev_7d is null
+              or bullpen_pitches_prev_3d is null
+              or bullpen_pitches_prev_7d >= bullpen_pitches_prev_3d
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              pitchers_used_prev_7d is null
+              or pitchers_used_prev_3d is null
+              or pitchers_used_prev_7d >= pitchers_used_prev_3d
+      # Teams must differ
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "home_team != away_team"
+
+    columns:
+      # ── Identifiers ───────────────────────────────────────────────────────────
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= '2015-04-01'"
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+      - name: pitching_team
+        description: Team abbreviation of the team whose bullpen is being profiled.
+        tests: [not_null]
+      - name: home_team
+        description: Home team abbreviation.
+      - name: away_team
+        description: Away team abbreviation.
+
+      # ── Current game context ──────────────────────────────────────────────────
+      - name: bullpen_pitches_today
+        description: Total pitches thrown by this team's bullpen in the current game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: pitchers_used_today
+        description: Distinct relievers who appeared for this team in the current game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+      - name: reliever_appearances_today
+        description: Total reliever appearance slots used in the current game (may exceed pitchers_used_today if a pitcher enters multiple times, which is rare but possible).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= pitchers_used_today"
+      - name: had_high_leverage_appearance
+        description: >
+          1 if any reliever pitched in inning 7 or later in this game; 0 otherwise.
+          Proxy for whether the team deployed late-inning specialists.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: had_closer_appearance
+        description: >
+          1 if any reliever pitched in inning 9 or later in this game; 0 otherwise.
+          Proxy for closer usage; does not confirm the pitcher holds an official
+          closer role.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+      # ── Prior-day fatigue predictors ──────────────────────────────────────────
+      - name: bullpen_pitches_prev_1d
+        description: >
+          Total bullpen pitches thrown by this team in the 1 calendar day
+          immediately preceding the game date. Null if no games were played
+          in that window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: bullpen_pitches_prev_3d
+        description: >
+          Total bullpen pitches thrown by this team in the 3 calendar days
+          preceding the game date (days −3 through −1). Null if no games
+          were played in that window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: bullpen_pitches_prev_7d
+        description: >
+          Total bullpen pitches thrown by this team in the 7 calendar days
+          preceding the game date (days −7 through −1). Null if no games
+          were played in that window. Primary fatigue window for weekly
+          workload modeling.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: pitchers_used_prev_3d
+        description: >
+          Sum of distinct-per-game reliever counts across the prior 3 days.
+          Represents total reliever slots consumed, not a strict distinct
+          count (a pitcher appearing on two of those days is counted twice).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: pitchers_used_prev_7d
+        description: >
+          Sum of distinct-per-game reliever counts across the prior 7 days.
+          See pitchers_used_prev_3d for interpretation note.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: reliever_appearances_prev_3d
+        description: Total individual reliever appearances (pitcher-game slots) used by this team in the prior 3 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: reliever_appearances_prev_7d
+        description: Total individual reliever appearances (pitcher-game slots) used by this team in the prior 7 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+      - name: high_leverage_used_prev_2d
+        description: >
+          1 if this team deployed a reliever in inning 7+ in either of the 2
+          calendar days preceding this game; 0 if games were played but no
+          high-leverage reliever appeared; null if no games were played.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: closer_used_prev_1d
+        description: >
+          1 if this team deployed a reliever in inning 9+ in the calendar day
+          immediately preceding this game; 0 if a game was played but no
+          9th-inning reliever appeared; null if no game was played.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: closer_used_prev_2d
+        description: >
+          1 if this team deployed a reliever in inning 9+ in either of the 2
+          calendar days preceding this game; 0 if games were played but no
+          9th-inning reliever appeared; null if no games were played.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
