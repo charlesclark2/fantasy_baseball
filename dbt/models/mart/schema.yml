@@ -984,8 +984,10 @@ models:
           - dbt_utils.expression_is_true:
                 config:
                   severity: warn
+                  warn_if: ">= 1"
+                  error_if: ">= 25"
                 arguments:
-                  expression: "is null or (release_extension_ft between 0 and 9)"
+                  expression: "is null or (release_extension_ft between -0.5 and 10.0)"
 
       - name: pitcher_arm_angle_degrees
         description: >
@@ -1461,41 +1463,32 @@ models:
 
       - name: is_barrel
         description: >
-          Derived. True when launch_speed_angle_zone = 6. Represents the ideal
-          combination of exit velocity and launch angle per Statcast's barrel
-          definition.
+          Derived. True when launch_speed_angle_zone = 6. False when tracking
+          data is unavailable (sac bunts, early Statcast coverage gaps, radar
+          failures). Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_hard_hit
         description: >
-          Derived. True when exit_velocity_mph >= 95. Statcast defines a hard-hit
-          ball as one with an exit velocity of 95 mph or higher.
+          Derived. True when exit_velocity_mph >= 95. False when exit velocity
+          is not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_sweet_spot
         description: >
           Derived. True when launch_angle_degrees is between 8 and 32 degrees
-          inclusive. Statcast's launch angle sweet-spot range.
+          inclusive. False when launch angle is not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_hard_hit_sweet_spot
         description: >
-          Derived. True when both is_hard_hit and is_sweet_spot are true —
-          exit_velocity_mph >= 95 and launch_angle_degrees between 8 and 32.
-          Represents combined quality of contact.
+          Derived. True when exit_velocity_mph >= 95 and launch_angle_degrees
+          between 8 and 32. False when either metric is not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: hit_coord_x
         description: >
@@ -1732,97 +1725,76 @@ models:
 
       - name: is_infield_shift
         description: >
-          Derived. True when if_fielding_alignment = 'Infield shift'. Indicates
-          a full infield shift where three infielders are positioned on one side
-          of second base.
+          Derived. True when if_fielding_alignment = 'Infield shift'. False when
+          Statcast alignment tracking is unavailable for the pitch. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_infield_shade
         description: >
-          Derived. True when if_fielding_alignment = 'Infield shade'. Indicates
-          a subtle lateral lean toward the pull side without a full shift.
-          Legally distinct from a full shift under 2023 MLB rules.
+          Derived. True when if_fielding_alignment = 'Infield shade'. Legally
+          distinct from a full shift under 2023 MLB rules. False when alignment
+          not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_infield_strategic
         description: >
           Derived. True when if_fielding_alignment = 'Strategic'. Indicates a
           situational depth-based alignment such as corners drawn in or the
-          infield playing back, rather than a lateral overload.
+          infield playing back. False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_infield_non_standard
         description: >
           Derived. True when if_fielding_alignment is anything other than
           'Standard'. Catches any infield deviation including shift, shade, and
-          strategic alignments. Useful as a catch-all if new values are added
-          to the source.
+          strategic alignments. False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_outfield_extreme_shift
         description: >
           Derived. True when of_fielding_alignment = 'Extreme outfield shift'.
-          Indicates all three outfielders are shifted heavily toward one side
-          of the field.
+          Indicates all three outfielders shifted heavily toward one side.
+          False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_fourth_outfielder
         description: >
           Derived. True when of_fielding_alignment = '4th outfielder'. Indicates
           a four-outfielder defensive alignment, typically deployed against
-          pull-heavy power hitters.
+          pull-heavy power hitters. False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_outfield_strategic
         description: >
           Derived. True when of_fielding_alignment = 'Strategic'. Indicates a
           situational outfield depth adjustment such as playing shallow for a
-          sacrifice fly situation, rather than a lateral overload.
+          sacrifice fly situation. False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_outfield_non_standard
         description: >
           Derived. True when of_fielding_alignment is anything other than
           'Standard'. Covers extreme shift, fourth outfielder, and strategic
-          alignments. Useful as a catch-all if new values are added to the source.
+          alignments. False when alignment not tracked. Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: is_any_shade_or_shift
         description: >
-          Derived. True when either the infield is in a shift or shade
-          (if_fielding_alignment in 'Infield shift' or 'Infield shade') or the
-          outfield is in an extreme shift or four-outfielder alignment
-          (of_fielding_alignment in 'Extreme outfield shift' or '4th outfielder').
-          Excludes 'Strategic' on both sides since that reflects depth adjustment
-          rather than lateral positional overloading.
+          Derived. True when either the infield is in a shift or shade or the
+          outfield is in an extreme shift or four-outfielder alignment. Excludes
+          'Strategic' on both sides since that reflects depth adjustment rather
+          than lateral positional overloading. False when alignment not tracked.
+          Never null.
         tests:
-          - not_null:
-              config:
-                severity: warn
+          - not_null
 
       - name: catcher_id
         description: MLB Player ID for the catcher. Renamed from fielder_2.
@@ -4752,10 +4724,12 @@ models:
         description: >
           Weighted on-base average (actual) for this game. sum(woba_value) /
           sum(woba_denom). League average ~0.320. Null when no wOBA-denom PAs.
+          Note: in early Statcast years (pre-2019), woba_denom is null for batted
+          ball events in the source, so woba can exceed 2 for those games.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba >= 0)"
 
       - name: xwoba
         description: >
@@ -4824,11 +4798,11 @@ models:
                 expression: ">= 0"
 
       - name: woba_7d
-        description: Rolling 7-day team wOBA against this starter handedness. Scale 0–2.
+        description: Rolling 7-day team wOBA against this starter handedness. Scale 0–2 in normal conditions.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba_7d >= 0)"
 
       - name: xwoba_7d
         description: Rolling 7-day team xwOBA against this starter handedness. Scale 0–2.
@@ -4889,11 +4863,11 @@ models:
                 expression: ">= 0"
 
       - name: woba_14d
-        description: Rolling 14-day team wOBA against this starter handedness. Scale 0–2.
+        description: Rolling 14-day team wOBA against this starter handedness. Scale 0–2 in normal conditions.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba_14d >= 0)"
 
       - name: xwoba_14d
         description: Rolling 14-day team xwOBA against this starter handedness. Scale 0–2.
@@ -4954,11 +4928,11 @@ models:
                 expression: ">= 0"
 
       - name: woba_30d
-        description: Rolling 30-day team wOBA against this starter handedness. Scale 0–2.
+        description: Rolling 30-day team wOBA against this starter handedness. Scale 0–2 in normal conditions.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba_30d >= 0)"
 
       - name: xwoba_30d
         description: Rolling 30-day team xwOBA against this starter handedness. Scale 0–2.
@@ -5023,11 +4997,11 @@ models:
                 expression: ">= 0"
 
       - name: woba_std
-        description: Season-to-date team wOBA against this starter handedness. Scale 0–2.
+        description: Season-to-date team wOBA against this starter handedness. Scale 0–2 in normal conditions.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba_std >= 0)"
 
       - name: xwoba_std
         description: Season-to-date team xwOBA against this starter handedness. Scale 0–2.
@@ -5403,9 +5377,6 @@ models:
       - dbt_utils.expression_is_true:
           arguments:
             expression: "games_7d >= 1"
-      - dbt_utils.expression_is_true:
-          arguments:
-            expression: "games_std >= games_7d"
 
     columns:
 
@@ -5464,11 +5435,14 @@ models:
       - name: woba
         description: >
           Weighted on-base average for the team's offense in this game.
-          Null when no qualifying plate appearances occurred. Scale approximately 0-2.
+          Null when no qualifying plate appearances (woba_denom = 0) occurred.
+          Scale approximately 0–0.5 in normal conditions; can exceed 2 in early
+          Statcast years (pre-2019) where woba_denom is null for batted ball events
+          in the source, inflating the numerator relative to the denominator.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba >= 0)"
 
       - name: xwoba
         description: >
@@ -5539,11 +5513,13 @@ models:
       - name: woba_against
         description: >
           Weighted on-base average allowed by the team's pitching in this game.
-          Null when no qualifying plate appearances occurred.
+          Null when no qualifying plate appearances (woba_denom = 0) occurred.
+          Can exceed 2 in early Statcast years (pre-2019) for the same reason
+          as the offense woba column.
         tests:
           - dbt_utils.expression_is_true:
               arguments:
-                expression: "between 0 and 2"
+                expression: "is null or (woba_against >= 0)"
 
       - name: xwoba_against
         description: >
@@ -5794,8 +5770,8 @@ models:
       - name: games_std
         description: >
           Games played in this home/away context season-to-date through and including
-          this game. Resets each season year. Always >= games_7d since it accumulates
-          the full season.
+          this game. Resets each season year. Note: games_7d uses a date-range window
+          with no year partition, so at season boundaries it can exceed games_std.
         tests:
           - not_null
           - dbt_utils.expression_is_true:

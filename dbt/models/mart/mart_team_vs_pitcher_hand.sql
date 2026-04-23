@@ -171,8 +171,8 @@ game_offense as (
         sum(is_walk::integer)                                   as walks,
         sum(total_bases)                                        as total_bases,
         sum(is_at_bat::integer)                                 as at_bats,
-        sum(is_hard_hit::integer)                               as hard_hit_balls,
-        sum(is_barrel::integer)                                 as barrels,
+        coalesce(sum(is_hard_hit::integer), 0)                  as hard_hit_balls,
+        coalesce(sum(is_barrel::integer), 0)                    as barrels,
         count(case when exit_velocity_mph is not null
               then 1 end)                                       as batted_balls,
         -- Runs scored = batting team's final score for the game

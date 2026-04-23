@@ -63,22 +63,23 @@ final as (
         hit_distance_ft,
 
         -- ── Derived contact quality flags ─────────────────────────────────────────
-        (launch_speed_angle_zone = 6)::boolean                  as is_barrel,
-            -- Perfect combination of exit velocity and launch angle
+        coalesce((launch_speed_angle_zone = 6)::boolean, false) as is_barrel,
+            -- True when launch_speed_angle_zone = 6. False when tracking data is
+            -- unavailable (sac bunts, early Statcast coverage gaps, tracking failures).
 
-        (exit_velocity_mph >= 95)::boolean                      as is_hard_hit,
-            -- Statcast hard-hit threshold: 95+ mph exit velocity
+        coalesce((exit_velocity_mph >= 95)::boolean, false)     as is_hard_hit,
+            -- True when exit_velocity_mph >= 95. False when exit velocity not tracked.
 
-        (
-            launch_angle_degrees between 8 and 32
-        )::boolean                                              as is_sweet_spot,
-            -- Launch angle sweet-spot per Statcast definition
+        coalesce(
+            (launch_angle_degrees between 8 and 32)::boolean, false
+        )                                                       as is_sweet_spot,
+            -- True when launch_angle_degrees between 8 and 32. False when not tracked.
 
-        (
-            launch_angle_degrees between 8 and 32
-            and exit_velocity_mph >= 95
-        )::boolean                                              as is_hard_hit_sweet_spot,
-            -- Combined quality flag: sweet-spot LA + hard-hit EV
+        coalesce(
+            (launch_angle_degrees between 8 and 32
+            and exit_velocity_mph >= 95)::boolean, false
+        )                                                       as is_hard_hit_sweet_spot,
+            -- True when sweet-spot LA and hard-hit EV both met. False when not tracked.
 
         -- ── Hit location ─────────────────────────────────────────────────────────
         hit_coord_x,

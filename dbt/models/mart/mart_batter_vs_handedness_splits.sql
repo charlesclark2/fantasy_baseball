@@ -115,7 +115,7 @@ pitches_tagged as (
             'single', 'double', 'triple', 'home_run',
             'field_out', 'force_out', 'grounded_into_double_play',
             'double_play', 'triple_play', 'fielders_choice_out',
-            'fielders_choice', 'sac_fly', 'sac_fly_double_play',
+            'fielders_choice', 'field_error', 'sac_fly', 'sac_fly_double_play',
             'sac_bunt', 'sac_bunt_double_play', 'other_out'
         ) then 1 else 0 end                                                 as is_batted_ball,
 

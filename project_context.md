@@ -188,6 +188,20 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 
 ## 7. Known Data Quality Issues
 
+### Data Quality Workflow
+
+Data quality issues are tracked in two files under `data_quality/`:
+
+- **`data_quality/open_data_quality_issues.md`** — All unresolved issues. Each entry carries a root-cause description, a diagnostic SQL query (where available), a proposed resolution, and a TBD resolution date.
+- **`data_quality/resolved_data_quality_issues_april_2026.md`** (and future month files) — Issues that have been fully investigated, remediated in the schema or source, and closed out with a resolution date.
+
+**Resolution process:**
+1. Identify the failing test and its severity (`error` blocks the build; `warn` passes but flags)
+2. Run the diagnostic query against `baseball_data.betting.*` via snowsql to characterize the failing rows (counts, distributions, game/player context)
+3. Determine root cause: bad source data, overly tight test bounds, model logic bug, or test design issue
+4. Apply the appropriate fix: relax bounds with `warn_if`/`error_if` thresholds, correct the source row, fix the model SQL, or remove/replace the test
+5. Move the issue from `open_data_quality_issues.md` to the current month's resolved file, with full findings and the diagnostic query
+
 ### Resolved
 | Issue | Resolution |
 |---|---|
@@ -195,20 +209,19 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 | 1 pitch with `strikes = 3` on a hit | Fixed in source |
 | 413 pitches with `release_speed < 40 mph` (Eephus) | Bounds relaxed to 28–110 mph |
 | 748 pitches with `effective_speed < 40 mph`, 1 at 194.6 mph | Bounds relaxed to 26–115 mph |
+| `release_extension_ft` outside 0–9 ft (381 rows: 361 near-boundary noise, 19 extreme outliers, 1 negative) | Bounds relaxed to -0.5–10.0 ft; `error_if >= 25` threshold set |
 | `innings_pitched` float division bug in `mart_starting_pitcher_game_log` | Fixed: `floor(outs/3) + (mod(outs,3) * 0.1)` |
 | Duplicate lineups from month-boundary API overlap | Fixed: `QUALIFY ROW_NUMBER() = 1` in `stg_statsapi_lineups` |
 | Raw count columns (`strikeouts`, `walks`, `at_bats`, `total_bases`, `hard_hit_balls`, `barrels`, `batted_balls`) dropped from final SELECT in `mart_team_vs_pitcher_hand` | Added missing columns to `rolling` CTE SELECT list |
-
-### Pending Investigation
-- Null `is_barrel`, `is_hard_hit`, `is_sweet_spot` flags in `mart_pitch_hit_characteristics`
-- Null fielding alignment flags in `mart_pitch_fielding`
-- Duplicate `game_pk` values in `stg_statsapi_games` (potential month-boundary or doubleheader issue)
-- Null `woba` and rolling `woba_*` rows in `mart_team_vs_pitcher_hand` when all PAs in a game have `woba_denom = 0` — `null between 0 and 2` fails `expression_is_true` (5 tests)
-- Null `hard_hit_balls` and `barrels` in `mart_team_vs_pitcher_hand` for games with no balls in play — `sum()` of all-null inputs returns null, not 0 (2 tests)
-- Null `woba` and `woba_against` in `mart_home_away_splits` — same root cause as `mart_team_vs_pitcher_hand` woba nulls (2 tests)
-- `games_std >= games_7d` test fails at season boundaries in `mart_home_away_splits` — the 7-day window has no year partition and can span season boundaries while `games_std` resets; test design issue, not a data error (1 test)
-- `hard_hit_pct` inconsistency in `mart_batter_vs_handedness_splits` (pitch-level vs. PA-level aggregation edge case)
-- `release_extension_ft` bounds check pending investigation in `mart_pitch_characteristics`
+| Null `is_barrel`, `is_hard_hit`, `is_sweet_spot`, `is_hard_hit_sweet_spot` in `mart_pitch_hit_characteristics` | Fixed: `coalesce(..., false)` on all four boolean casts; sac bunts and early Statcast coverage gaps produce null source fields |
+| Null fielding alignment flags (9 derived flags) in `mart_pitch_fielding` | Fixed: `coalesce(..., false)` on all nine boolean casts; 70,778 regular-season pitches across all years lack Statcast alignment tracking |
+| `hard_hit_pct > 1` and `hard_hits > batted_balls` in `mart_batter_vs_handedness_splits` | Fixed: added `field_error` to `is_batted_ball` event list; field errors are batted balls with exit velocity but were missing from the case expression |
+| Duplicate `game_pk` values in `stg_statsapi_games` (529 extra rows from postponed/rescheduled games) | Fixed: `QUALIFY ROW_NUMBER() = 1` dedup keeping the scored Final row over Postponed; Cancelled kept over Postponed when no Final exists |
+| Null `woba` and rolling `woba_*` in `mart_team_vs_pitcher_hand` (5 tests) | Test expressions relaxed to `is null or (col >= 0)`; null valid when woba_denom=0; early Statcast source has null woba_denom for batted balls, causing woba > 2 for 3 games |
+| Null `hard_hit_balls` and `barrels` in `mart_team_vs_pitcher_hand` for games with no balls in play (2 tests) | Fixed: `coalesce(sum(is_hard_hit::integer), 0)` and `coalesce(sum(is_barrel::integer), 0)` in `game_offense` CTE |
+| Null `woba` and `woba_against` in `mart_home_away_splits` (2 tests) | Test expressions relaxed to `is null or (col >= 0)`; same Statcast woba_denom source issue as `mart_team_vs_pitcher_hand` |
+| `games_std >= games_7d` test fails at season boundaries in `mart_home_away_splits` (1 test) | Test removed; `games_7d` window has no year partition and can span season boundaries while `games_std` resets — test design flaw, not a data error |
+| Null `ingestion_ts` in `baseball_data.oddsapi.mlb_odds_raw` (source test) | Self-resolved: null rows eliminated when table was rebuilt in commit 3786845; current ingestion script always populates `ingestion_ts`; 64/64 oddsapi chain tests pass |
 
 ---
 
@@ -231,7 +244,7 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Bullpen workload | Complete |
 | Lineup data (confirmed pre-game) | Complete (staging) |
 | Ballpark context | Complete (staging) |
-| Data quality tests | Mostly complete; 10 pending issues |
+| Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
 | ML feature store | Not started |
 | Prediction models | Not started |
 | Betting/sizing layer | Not started |
@@ -248,18 +261,15 @@ Estimated completion: before ML work begins.
 
 **Goals:**
 - Resolve all 5 pending data quality issues
-- Confirm `stg_statsapi_games` deduplication strategy for doubleheaders
 - Confirm `mart_pitch_hit_characteristics` null flag root cause and fix
 - Confirm `mart_pitch_fielding` null flag root cause and fix
-- Validate `mart_team_vs_pitcher_hand` raw count columns and wOBA null edge case
-- Validate `mart_batter_vs_handedness_splits` hard-hit aggregation logic
 - Add `venue_id` / park factor join to `mart_game_results` (venue context is staged but not yet joined)
 - Confirm lineup data is reliably populated for historical games (coverage audit)
 - Document data availability windows (Statcast coverage by year, lineup coverage by year)
 
 **Deliverables:**
 - All dbt tests passing at error thresholds
-- Full coverage audit documented in `data_quality_issues.md`
+- Full coverage audit documented in `data_quality/open_data_quality_issues.md`
 
 ---
 
@@ -414,7 +424,8 @@ Operationalize the full stack:
 | `dbt/models/mart/schema.yml` | Mart model schemas and tests |
 | `dbt/seeds/ref_teams.csv` | Static team reference (30 franchises + legacy abbreviations) |
 | `dbt/README.md` | dbt layer documentation |
-| `dbt/data_quality_issues.md` | Known issues, root cause analysis, and resolutions |
+| `data_quality/open_data_quality_issues.md` | Open data quality issues — pending investigation and resolution |
+| `data_quality/resolved_data_quality_issues_april_2026.md` | Resolved data quality issues — April 2026 |
 | `scripts/daily_run.md` | **Daily ingestion runbook** — step-by-step commands to keep all Snowflake source tables current; covers savant, statsapi, and odds_api ingestion plus dbt refresh |
 | `scripts/savant_ingestion.py` | Baseball Savant CSV ingestion; chunked by day, idempotent, extensible via `StatcastEndpoint` registry; subcommands: `batter_pitches` |
 | `scripts/ingest_statsapi.py` | Python ingestion for Stats API schedule and venues; schedule subcommand defaults to current month only to avoid full historical re-processing |

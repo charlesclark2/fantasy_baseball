@@ -68,3 +68,9 @@ select
     game:venue:name::varchar                                as venue_name
 
 from games_flattened
+qualify row_number() over (
+    partition by game_pk
+    order by
+        (home_score is not null)::integer desc,
+        case detailed_state when 'Cancelled' then 0 else 1 end asc
+) = 1
