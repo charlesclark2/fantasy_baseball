@@ -4,9 +4,11 @@ ingest_statsapi.py
 Ingests MLB Stats API data into Snowflake. Two ingestion modes are supported
 and can be run independently via CLI subcommands:
 
-  schedule  — Iterates month-by-month from April 2015 to the current month
-              and upserts each month's schedule+lineup response into
-              baseball_data.statsapi.monthly_schedule.
+  schedule  — Iterates month-by-month over a configurable date range and
+              upserts each month's schedule+lineup response into
+              baseball_data.statsapi.monthly_schedule. Defaults to the
+              current calendar month only — pass --start-date to widen the
+              window for backfills or to pick up retroactive lineup updates.
 
   venues    — Accepts a list of venue IDs (from a file or stdin) and upserts
               each venue's full API response (with fieldInfo, location,
@@ -44,7 +46,15 @@ DDL for target tables:
     );
 
 Usage:
+    # Daily update — current month only (default)
     uv run ingest_statsapi.py schedule
+
+    # Refresh current + prior month to pick up retroactive lineup updates
+    uv run ingest_statsapi.py schedule --start-date 2026-04-01
+
+    # Full historical backfill from the beginning of Statcast data
+    uv run ingest_statsapi.py schedule --start-date 2015-04-01
+
     uv run ingest_statsapi.py venues --venue-ids-file /path/to/venue_ids.csv
     uv run ingest_statsapi.py venues --venue-ids 1 2 3 31
 """
@@ -305,14 +315,17 @@ def load_venue_ids_from_file(path: str) -> list[int]:
 
 # ── Subcommand runners ────────────────────────────────────────────────────────
 
-def run_schedule(conn: snowflake.connector.SnowflakeConnection) -> None:
-    today = date.today()
-    months = list(iter_months(INGEST_START, today))
+def run_schedule(
+    conn: snowflake.connector.SnowflakeConnection,
+    start: date,
+    end: date,
+) -> None:
+    months = list(iter_months(start, end))
     total  = len(months)
 
     log.info(
         "Schedule ingest: %d month(s) from %s to %s",
-        total, INGEST_START.strftime("%Y-%m"), today.strftime("%Y-%m"),
+        total, start.strftime("%Y-%m"), end.strftime("%Y-%m"),
     )
 
     for idx, (month_start, month_end) in enumerate(months, start=1):
@@ -383,9 +396,27 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser(
+    schedule_parser = sub.add_parser(
         "schedule",
-        help="Ingest monthly schedule + lineup data from April 2015 to today.",
+        help="Ingest monthly schedule + lineup data for a configurable date range.",
+    )
+    schedule_parser.add_argument(
+        "--start-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help=(
+            "First date to ingest, inclusive. Defaults to the first day of the "
+            "current calendar month. Pass 2015-04-01 for a full historical backfill."
+        ),
+    )
+    schedule_parser.add_argument(
+        "--end-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help=(
+            "Last date to ingest, inclusive. Defaults to the last day of the "
+            "current calendar month."
+        ),
     )
 
     venues_parser = sub.add_parser(
@@ -417,7 +448,17 @@ def main() -> None:
 
     try:
         if args.command == "schedule":
-            run_schedule(conn)
+            today = date.today()
+            if args.start_date:
+                schedule_start = date.fromisoformat(args.start_date)
+            else:
+                schedule_start = today.replace(day=1)
+            if args.end_date:
+                schedule_end = date.fromisoformat(args.end_date)
+            else:
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                schedule_end = today.replace(day=last_day)
+            run_schedule(conn, schedule_start, schedule_end)
 
         elif args.command == "venues":
             if args.venue_ids_file:

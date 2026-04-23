@@ -12,8 +12,9 @@ Extend the pitch-level foundation into player-level projections and matchup anal
 
 ## Data Sources
 
-- **`baseball_data.savant`** — MLB Statcast pitch-level data (`batter_pitches`, `ref_players`). One row per pitch per plate appearance per game.
+- **`baseball_data.savant`** — MLB Statcast pitch-level data (`batter_pitches`, `ref_players`). One row per pitch per plate appearance per game. Ingested via `scripts/savant_ingestion.py` (Baseball Savant CSV endpoint, chunked by day). Run `uv run savant_ingestion.py batter_pitches` daily to keep current; pass `--start-date` / `--end-date` for backfills or reprocessing.
 - **`baseball_data.statsapi`** — MLB Stats API (`monthly_schedule` as variant JSON, `venues_raw`). Game schedules, confirmed lineups, and ballpark metadata.
+- **`baseball_data.oddsapi`** — The Odds API betting market data. Two raw tables: `mlb_events_raw` (one row per events pull; full response array in `raw_json`) and `mlb_odds_raw` (one row per event per market/region pull; nested bookmaker/market/outcome structure in `raw_json`). Both tables carry `x_requests_used` and `x_requests_remaining` columns for API credit monitoring. Ingested via `scripts/odds_api_ingestion.py`.
 - **Seeds** — `ref_teams.csv`: static reference mapping 30 franchises to IDs, abbreviations, leagues, and divisions.
 
 ## Project Structure
@@ -62,6 +63,13 @@ models/
 
     -- Historical context models
     mart_head_to_head_team_history -- Season and all-time H2H record for every franchise pair
+
+    -- Odds API models (one row per event; one row per event × bookmaker × market × outcome)
+    mart_odds_events                -- One row per event_id (latest snapshot); event dimension
+    mart_odds_outcomes              -- Full history of bookmaker odds; supports line movement analysis
+
+    -- Bridge models
+    mart_game_odds_bridge           -- One row per game_pk; links mart_game_results to mart_odds_events
 ```
 
 ## Key Concepts
@@ -75,16 +83,30 @@ models/
 
 ## Running the Project
 
+This project uses **dbt-fusion** (`dbtf`), not the standard `dbt` CLI. Use `dbtf` for all commands.
+
 ```bash
 # Install dependencies
-dbt deps
+dbtf deps
 
 # Build all models and run tests
-dbt build
+dbtf build
 
 # Build a single model and its tests
-dbt build --select mart_team_vs_pitcher_hand
+dbtf build --select mart_team_vs_pitcher_hand
 
 # Run tests only
-dbt test
+dbtf test
 ```
+
+## Querying Snowflake Directly
+
+Use the `default` snowsql connection with the project RSA key for all ad-hoc queries:
+
+```bash
+snowsql -c default \
+  --private-key-path /Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem \
+  -q "SELECT * FROM baseball_data.betting.mart_odds_events LIMIT 10;"
+```
+
+The `-c default` flag selects the named connection defined in `~/.snowsql/config` (account `IHUPICS-DP59975`, user `dbt_rw`, database `BASEBALL_DATA`). The `--private-key-path` flag supplies the RSA private key used for key-pair authentication.

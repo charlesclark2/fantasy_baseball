@@ -1,6 +1,68 @@
 version: 2
 
 sources:
+  - name: oddsapi
+    database: baseball_data
+    schema: oddsapi
+    description: >
+      Raw betting market data from The Odds API, ingested via
+      scripts/odds_api_ingestion.py. All tables are append-only; raw JSON is
+      stored at full fidelity. Every row carries x_requests_used and
+      x_requests_remaining for API credit monitoring.
+
+    tables:
+      - name: mlb_events_raw
+        description: >
+          One row per ingestion run of the /v4/sports/baseball_mlb/events
+          endpoint. raw_json holds the full response array of upcoming MLB
+          events. Rows with null or empty raw_json exist from earlier ingestion
+          iterations and are filtered in the staging layer.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: raw_json
+            description: Full API response array as VARIANT. Each element is one event object.
+          - name: x_requests_used
+            description: Value of the x-requests-used response header. Null if header absent.
+          - name: x_requests_remaining
+            description: Value of the x-requests-remaining response header. Null if header absent.
+
+      - name: mlb_odds_raw
+        description: >
+          One row per event per market/region ingestion call of the
+          /v4/sports/baseball_mlb/odds endpoint. raw_json holds the full event
+          object including the nested bookmakers → markets → outcomes structure.
+          Convenience columns (event_id, home_team, etc.) are extracted for
+          fast filtering without JSON parsing.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: raw_json
+            description: >
+              Full event object as VARIANT. Nested structure:
+              bookmakers[] → markets[] → outcomes[]. Each bookmaker entry
+              includes key, title, last_update, and a markets array. Each
+              market entry includes key, last_update, and an outcomes array.
+              Each outcome includes name, price (American odds), and
+              optionally point (for totals markets).
+            tests: [not_null]
+          - name: event_id
+            description: Odds API event identifier. Joins to stg_oddsapi_events.event_id.
+          - name: bookmakers_count
+            description: Number of bookmakers in the raw_json payload. Convenience field.
+          - name: x_requests_used
+            description: Value of the x-requests-used response header. Null if header absent.
+          - name: x_requests_remaining
+            description: Value of the x-requests-remaining response header. Null if header absent.
+
   - name: statsapi
     database: baseball_data
     schema: statsapi

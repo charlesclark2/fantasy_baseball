@@ -1,6 +1,157 @@
 version: 2
 
 models:
+
+  # ── Odds API staging models ──────────────────────────────────────────────────
+
+  - name: stg_oddsapi_events
+    description: >
+      Staged MLB events from baseball_data.oddsapi.mlb_events_raw.
+      Grain: one row per event_id (latest ingestion snapshot). The raw source
+      stores the full API response array in a single VARIANT column per run;
+      this model flattens that array and deduplicates to the most recent
+      ingestion per event. Rows with null or empty raw_json from earlier
+      ingestion iterations are excluded.
+
+    columns:
+      - name: event_id
+        description: >
+          Odds API event identifier. Unique in this model after deduplication.
+          Joins to stg_oddsapi_odds.event_id.
+        tests:
+          - unique
+          - not_null
+
+      - name: sport_key
+        description: Sport key returned by the API. Always 'baseball_mlb' for this source.
+        tests: [not_null]
+
+      - name: sport_title
+        description: Human-readable sport title. Always 'MLB' for this source.
+
+      - name: commence_time
+        description: Scheduled game start time in UTC, cast from the API ISO 8601 string.
+        tests: [not_null]
+
+      - name: home_team
+        description: Full team name of the home team as returned by The Odds API.
+        tests: [not_null]
+
+      - name: away_team
+        description: Full team name of the away team as returned by The Odds API.
+        tests: [not_null]
+
+      - name: ingestion_ts
+        description: Wall-clock UTC timestamp of the ingestion run that produced this row.
+        tests: [not_null]
+
+      - name: load_id
+        description: UUID identifying the ingestion run. All events from the same run share this value.
+        tests: [not_null]
+
+      - name: x_requests_used
+        description: API credits consumed as of this request (from x-requests-used header). Null if header absent.
+
+      - name: x_requests_remaining
+        description: API credits remaining as of this request (from x-requests-remaining header). Null if header absent.
+
+  - name: stg_oddsapi_odds
+    description: >
+      Staged MLB betting odds from baseball_data.oddsapi.mlb_odds_raw.
+      Grain: one row per (ingestion_ts, event_id, bookmaker_key, market_key,
+      outcome_name). Historical snapshots are preserved so downstream models
+      can track odds movement over time. Three levels of lateral flatten
+      expand the nested structure: bookmakers[] → markets[] → outcomes[].
+      Within a single load_id, duplicates from overlapping us / us2 region
+      responses are removed (one row kept per bookmaker × market × outcome).
+      Rows where raw_json is null or missing the bookmakers array are excluded.
+
+    columns:
+      - name: event_id
+        description: >
+          Odds API event identifier. Joins to stg_oddsapi_events.event_id.
+        tests: [not_null]
+
+      - name: sport_key
+        description: Sport key. Always 'baseball_mlb' for this source.
+
+      - name: sport_title
+        description: Human-readable sport title. Always 'MLB' for this source.
+
+      - name: commence_time
+        description: Scheduled game start time in UTC.
+        tests: [not_null]
+
+      - name: home_team
+        description: Full team name of the home team.
+        tests: [not_null]
+
+      - name: away_team
+        description: Full team name of the away team.
+        tests: [not_null]
+
+      - name: bookmaker_key
+        description: >
+          Slug identifying the bookmaker (e.g. 'bovada', 'betmgm', 'draftkings').
+        tests: [not_null]
+
+      - name: bookmaker_title
+        description: Display name of the bookmaker (e.g. 'Bovada', 'BetMGM').
+
+      - name: bookmaker_last_update
+        description: UTC timestamp of the bookmaker's most recent odds update, as reported by The Odds API.
+
+      - name: market_key
+        description: >
+          Market type (e.g. 'h2h' for moneyline, 'totals' for over/under).
+        tests: [not_null]
+
+      - name: market_last_update
+        description: UTC timestamp of the market's most recent update.
+
+      - name: outcome_name
+        description: >
+          Name of the outcome. For h2h: team name (home or away). For totals:
+          'Over' or 'Under'.
+        tests: [not_null]
+
+      - name: outcome_price_american
+        description: >
+          American-format odds for this outcome (e.g. -110, +150). Negative
+          values indicate the favorite; positive values the underdog.
+        tests: [not_null]
+
+      - name: outcome_point
+        description: >
+          Total line for this outcome. Non-null only for totals markets
+          (e.g. 9.5 for a 9.5-run over/under). Null for h2h outcomes.
+
+      - name: market_requested
+        description: >
+          Market key passed in the API request that produced this row
+          (from request_params). Useful for tracing which call generated the row.
+
+      - name: region_requested
+        description: >
+          Region parameter passed in the API request (e.g. 'us', 'us2').
+          Useful for auditing bookmaker coverage by region.
+
+      - name: ingestion_ts
+        description: Wall-clock UTC timestamp of the ingestion run.
+        tests: [not_null]
+
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+      - name: x_requests_used
+        description: API credits consumed as of this request. Null if header absent.
+
+      - name: x_requests_remaining
+        description: API credits remaining as of this request. Null if header absent.
+
+  # ── Statcast / Savant staging models ─────────────────────────────────────────
+
   - name: stg_batter_pitches
     description: >
       Staged Statcast pitch-level data from baseball_data.savant.batter_pitches.

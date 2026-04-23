@@ -3,6 +3,289 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_game_odds_bridge
+  # ============================================================================
+  - name: mart_game_odds_bridge
+    description: >
+      Bridge table linking every game in mart_game_results to its corresponding
+      event in mart_odds_events. Enables downstream models to combine game
+      outcomes with pre-game betting odds.
+      Join logic: game_date = commence_date AND home_team_name = odds home_team
+      AND away_team_name = odds away_team (full team names).
+      All game_pk rows are preserved; event_id is null when no odds event was
+      ingested for that game (e.g. historical games predating odds ingestion).
+      Grain: one row per game_pk.
+
+    columns:
+
+      - name: game_pk
+        description: >
+          MLB game identifier. Primary key of this bridge. Foreign key to
+          mart_game_results.game_pk.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_type
+        description: >
+          Game type code from mart_game_results. R=Regular Season,
+          S=Spring Training, F=Wild Card, D=Division Series, L=LCS,
+          W=World Series.
+        tests:
+          - not_null
+
+      - name: home_team_abbrev
+        description: Statcast abbreviation of the home team (e.g. PHI).
+        tests:
+          - not_null
+
+      - name: home_team_name
+        description: Full name of the home team (e.g. Philadelphia Phillies).
+        tests:
+          - not_null
+
+      - name: away_team_abbrev
+        description: Statcast abbreviation of the away team (e.g. NYM).
+        tests:
+          - not_null
+
+      - name: away_team_name
+        description: Full name of the away team (e.g. New York Mets).
+        tests:
+          - not_null
+
+      - name: event_id
+        description: >
+          The Odds API event identifier. Foreign key to
+          mart_odds_events.event_id. Null when no odds event was ingested for
+          this game.
+
+      - name: has_odds
+        description: >
+          True when event_id is not null, indicating at least one odds snapshot
+          exists for this game. False for all historical games predating odds
+          ingestion.
+        tests:
+          - not_null
+
+  # ============================================================================
+  # mart_odds_events
+  # ============================================================================
+  - name: mart_odds_events
+    description: >
+      One row per MLB event sourced from The Odds API, deduplicating to the
+      most recently ingested snapshot per event_id. Use as the authoritative
+      event dimension when joining to mart_odds_outcomes.
+      Grain: one row per event_id.
+
+    columns:
+
+      - name: event_id
+        description: Unique event identifier assigned by The Odds API.
+        tests:
+          - not_null
+          - unique
+
+      - name: sport_key
+        description: Sport key from The Odds API (e.g. baseball_mlb).
+        tests:
+          - not_null
+
+      - name: sport_title
+        description: Human-readable sport title (e.g. MLB).
+        tests:
+          - not_null
+
+      - name: commence_time
+        description: Scheduled game start time in UTC (TIMESTAMP_NTZ).
+        tests:
+          - not_null
+
+      - name: commence_date
+        description: Scheduled game start date in UTC, derived from commence_time.
+        tests:
+          - not_null
+
+      - name: home_team
+        description: Full name of the home team as returned by The Odds API.
+        tests:
+          - not_null
+
+      - name: away_team
+        description: Full name of the away team as returned by The Odds API.
+        tests:
+          - not_null
+
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run that produced this snapshot.
+        tests:
+          - not_null
+
+      - name: load_id
+        description: UUID identifying the ingestion run batch.
+        tests:
+          - not_null
+
+      - name: x_requests_used
+        description: >
+          Value of the x-requests-used API response header at ingestion time.
+          Null if the header was absent.
+
+      - name: x_requests_remaining
+        description: >
+          Value of the x-requests-remaining API response header at ingestion time.
+          Null if the header was absent.
+
+  # ============================================================================
+  # mart_odds_outcomes
+  # ============================================================================
+  - name: mart_odds_outcomes
+    description: >
+      Full history of odds outcomes from The Odds API across all bookmakers
+      and markets. One row per (ingestion_ts, event_id, bookmaker_key,
+      market_key, outcome_name). Historical snapshots are preserved so
+      downstream models can analyze line movement and cross-bookmaker
+      comparisons over time. Within a single load_id, duplicates are
+      removed when the same bookmaker appears in both the us and us2
+      region responses.
+      Grain: one row per (ingestion_ts, event_id, bookmaker_key, market_key,
+      outcome_name).
+      Join key: event_id → mart_odds_events.
+
+    columns:
+
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run that produced this snapshot.
+        tests:
+          - not_null
+
+      - name: load_id
+        description: UUID identifying the ingestion run batch.
+        tests:
+          - not_null
+
+      - name: x_requests_used
+        description: Value of the x-requests-used API response header at ingestion time.
+
+      - name: x_requests_remaining
+        description: Value of the x-requests-remaining API response header at ingestion time.
+
+      - name: market_requested
+        description: >
+          The markets query parameter sent to The Odds API for this row's
+          ingestion run (e.g. h2h,totals).
+
+      - name: region_requested
+        description: >
+          The regions query parameter sent to The Odds API for this row's
+          ingestion run (e.g. us,us2).
+
+      - name: event_id
+        description: >
+          Unique event identifier assigned by The Odds API. Foreign key to
+          mart_odds_events.event_id.
+        tests:
+          - not_null
+
+      - name: sport_key
+        description: Sport key from The Odds API (e.g. baseball_mlb).
+        tests:
+          - not_null
+
+      - name: sport_title
+        description: Human-readable sport title (e.g. MLB).
+        tests:
+          - not_null
+
+      - name: commence_time
+        description: Scheduled game start time in UTC (TIMESTAMP_NTZ).
+        tests:
+          - not_null
+
+      - name: commence_date
+        description: Scheduled game start date in UTC, derived from commence_time.
+        tests:
+          - not_null
+
+      - name: home_team
+        description: Full name of the home team.
+        tests:
+          - not_null
+
+      - name: away_team
+        description: Full name of the away team.
+        tests:
+          - not_null
+
+      - name: bookmaker_key
+        description: Machine-readable bookmaker identifier (e.g. draftkings, fanduel).
+        tests:
+          - not_null
+
+      - name: bookmaker_title
+        description: Human-readable bookmaker name (e.g. DraftKings).
+        tests:
+          - not_null
+
+      - name: bookmaker_last_update
+        description: Timestamp when the bookmaker last updated their odds for this event.
+
+      - name: market_key
+        description: >
+          Market identifier. h2h = head-to-head (moneyline);
+          totals = over/under total runs.
+        tests:
+          - not_null
+
+      - name: market_last_update
+        description: Timestamp when this market's odds were last updated.
+
+      - name: outcome_name
+        description: >
+          Outcome label. For h2h markets, this is the team name. For totals
+          markets, this is Over or Under.
+        tests:
+          - not_null
+
+      - name: outcome_price_american
+        description: >
+          American-format odds for this outcome (e.g. -110, +150). Negative
+          values indicate a favorite; positive values indicate an underdog.
+        tests:
+          - not_null
+
+      - name: outcome_point
+        description: >
+          The over/under line for totals markets (e.g. 9.5). Null for h2h
+          markets which have no point spread.
+
+      - name: is_totals_market
+        description: >
+          True when outcome_point is not null, indicating this row belongs
+          to a totals (over/under) market. False for h2h (moneyline) markets.
+        tests:
+          - not_null
+
+      - name: is_home_outcome
+        description: >
+          True when outcome_name matches home_team, indicating this price
+          is for the home team to win. False otherwise (including totals rows).
+        tests:
+          - not_null
+
+      - name: is_away_outcome
+        description: >
+          True when outcome_name matches away_team, indicating this price
+          is for the away team to win. False otherwise (including totals rows).
+        tests:
+          - not_null
+
+  # ============================================================================
   # mart_pitch_game_context
   # ============================================================================
   - name: mart_pitch_game_context

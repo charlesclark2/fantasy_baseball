@@ -13,8 +13,8 @@ The project is currently in the **data mart development phase**. All modeling, f
 | Layer | Technology |
 |---|---|
 | Data Warehouse | Snowflake |
-| Transformation | dbt (SQL) |
-| Ingestion | Python (`scripts/ingest_statsapi.py`) |
+| Transformation | dbt-fusion / `dbtf` (SQL) |
+| Ingestion | Python (`scripts/savant_ingestion.py`, `scripts/ingest_statsapi.py`, `scripts/odds_api_ingestion.py`) |
 | ML (planned) | Python (`betting_ml/`) |
 | EDA (planned) | Jupyter (`exploratory_data_analysis/`) |
 
@@ -36,6 +36,18 @@ These keys govern how all models relate to one another. Using any other identifi
 ## 4. Data Sources
 
 ### 4.1 Statcast (`baseball_data.savant`)
+
+**Ingestion:** `scripts/savant_ingestion.py` pulls pitch-level data directly from the Baseball Savant CSV export endpoint (`https://baseballsavant.mlb.com/statcast_search/csv`). Requests are chunked by single calendar day to stay under Baseball Savant's 25,000-row per-request limit. Each day is deleted before re-insertion, making reruns idempotent. The script auto-detects the last loaded date and defaults the end date to yesterday, so a daily run with no arguments keeps the table current. New Baseball Savant endpoints can be added by defining a `StatcastEndpoint` in the `ENDPOINTS` registry — no other code changes are needed.
+
+```bash
+# Daily update (auto-detects gap from last loaded date to yesterday)
+uv run savant_ingestion.py batter_pitches
+
+# Explicit range (e.g. backfill or reprocess)
+uv run savant_ingestion.py batter_pitches --start-date 2026-03-20 --end-date 2026-04-21
+```
+
+**Current data:** 2015-04-05 through present (updated daily). 2026 season data begins 2026-03-25 (Opening Week).
 
 **`batter_pitches`** — The core source table. One row per pitch per plate appearance per game. Contains 100+ columns covering:
 
@@ -59,7 +71,19 @@ These keys govern how all models relate to one another. Using any other identifi
 
 **`venues_raw`** — One row per ballpark. The `json_field` VARIANT column contains field dimensions, surface type, roof type, GPS coordinates, elevation, timezone, and cross-reference IDs. Ingested via `scripts/ingest_statsapi.py venues`.
 
-### 4.3 Seeds
+### 4.3 The Odds API (`baseball_data.oddsapi`)
+
+Betting market data sourced from [The Odds API](https://the-odds-api.com/). Ingested via `scripts/odds_api_ingestion.py`. All tables are append-only; raw JSON is stored at full fidelity so no source data is lost.
+
+**`mlb_events_raw`** — One row per ingestion run of the `/v4/sports/baseball_mlb/events` endpoint. `raw_json` contains the full response array of upcoming events. Includes ingestion metadata: `load_id`, `ingestion_ts`, `x_requests_used`, `x_requests_remaining`, and the full `request_url` and `request_params` for auditability.
+
+**`mlb_odds_raw`** — One row per event per market/region ingestion call of the `/v4/sports/baseball_mlb/odds` endpoint. `raw_json` preserves the complete event object including the nested `bookmakers → markets → outcomes` array. Convenience columns (`event_id`, `sport_key`, `home_team`, `away_team`, `bookmakers_count`) are extracted for fast filtering without JSON parsing. API credit headers (`x_requests_used`, `x_requests_remaining`) are logged and persisted with every row.
+
+**API credit monitoring:** Every call to The Odds API returns `x-requests-used` and `x-requests-remaining` headers. These are captured by `OddsApiResponse`, logged at INFO level after each request, and written into both raw tables. If a header is missing the value is stored as `NULL` — ingestion never fails due to absent credit metadata.
+
+**Default ingestion window:** The events endpoint defaults to a 7-day forward-looking window (today at 00:00:00 UTC through +7 days) using helpers in `scripts/date_utils.py`. The window can be overridden at the CLI.
+
+### 4.4 Seeds
 
 **`ref_teams`** — Static 33-row reference table (30 active franchises + legacy abbreviation entries). Contains `team_abbrev`, `team_id`, `team_name`, `league` (AL/NL), `division` (East/Central/West), and `is_active` flag.
 
@@ -130,6 +154,19 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 | `mart_batter_vs_handedness_splits` | Batter × pitcher hand × season | AVG, wOBA, xwOBA, K%, BB%, hard-hit % vs. LHP and RHP |
 | `mart_pitcher_vs_handedness_splits` | Pitcher × batter hand × season | K%, BB%, wOBA against, hard-hit % against vs. LHB and RHB |
 | `mart_head_to_head_team_history` | Team pair × season | Season and all-time H2H record, run differential, and extra-innings rate for every franchise pair; abbreviations normalized to canonical form (e.g. OAK → ATH) for continuous franchise history |
+
+#### Odds API Models (2 models)
+
+| Model | Grain | Contents |
+|---|---|---|
+| `mart_odds_events` | Event | One row per event_id (latest ingestion snapshot); authoritative event dimension with commence_time, home_team, away_team. Join key for mart_odds_outcomes. |
+| `mart_odds_outcomes` | Ingestion snapshot × event × bookmaker × market × outcome | Full history of bookmaker odds. Preserves all ingestion snapshots to support line movement analysis and cross-bookmaker comparisons. Includes derived flags: `is_totals_market`, `is_home_outcome`, `is_away_outcome`. |
+
+#### Bridge Models (1 model)
+
+| Model | Grain | Contents |
+|---|---|---|
+| `mart_game_odds_bridge` | Game (`game_pk`) | One row per game in mart_game_results, left-joined to mart_odds_events on game_date + full team names. `event_id` is null for games without odds coverage (e.g. historical games predating odds ingestion). `has_odds` boolean flag for quick filtering. As of 2026-04-22, game results run through 2025-09-28 and odds events start 2026-04-23; matches will populate automatically as the 2026 season progresses. |
 
 ---
 
@@ -378,6 +415,54 @@ Operationalize the full stack:
 | `dbt/seeds/ref_teams.csv` | Static team reference (30 franchises + legacy abbreviations) |
 | `dbt/README.md` | dbt layer documentation |
 | `dbt/data_quality_issues.md` | Known issues, root cause analysis, and resolutions |
-| `scripts/ingest_statsapi.py` | Python ingestion for Stats API schedule and venues |
+| `scripts/daily_run.md` | **Daily ingestion runbook** — step-by-step commands to keep all Snowflake source tables current; covers savant, statsapi, and odds_api ingestion plus dbt refresh |
+| `scripts/savant_ingestion.py` | Baseball Savant CSV ingestion; chunked by day, idempotent, extensible via `StatcastEndpoint` registry; subcommands: `batter_pitches` |
+| `scripts/ingest_statsapi.py` | Python ingestion for Stats API schedule and venues; schedule subcommand defaults to current month only to avoid full historical re-processing |
+| `scripts/odds_api_ingestion.py` | Python ingestion for The Odds API events and odds endpoints; two subcommands: `events` and `odds` |
+| `scripts/date_utils.py` | Reusable UTC date/time helpers (`format_iso_utc`, `default_window`) used by odds ingestion; injectable `now` parameter makes functions unit-testable |
+| `scripts/tests/test_date_utils.py` | Pytest unit tests for `date_utils` (19 tests covering format, window boundaries, timezone conversion, rollover) |
+| `scripts/ddl/oddsapi_raw_tables.sql` | DDL for `baseball_data.oddsapi.mlb_events_raw` and `mlb_odds_raw`; run once via snowsql to create tables |
 | `betting_ml/` | Placeholder — ML model code lives here (Phase 4+) |
 | `exploratory_data_analysis/` | Placeholder — EDA notebooks live here (Phase 3+) |
+
+---
+
+## 12. Tooling Reference
+
+### Daily ingestion runbook
+
+See `scripts/daily_run.md` for the full step-by-step daily run sequence. Quick summary:
+
+```bash
+cd scripts/
+uv run savant_ingestion.py batter_pitches          # Statcast — auto-detects gap
+uv run ingest_statsapi.py schedule                 # Stats API — current month only
+uv run odds_api_ingestion.py events                # Odds API events — 7-day window
+uv run odds_api_ingestion.py odds                  # Odds API odds — h2h + totals
+cd ../dbt && dbtf build                            # Refresh all mart models
+```
+
+> For `ingest_statsapi.py schedule`, the default window is the **current calendar month only**. Pass `--start-date YYYY-MM-01` to widen the window. Never omit `--start-date` and expect a historical backfill — that requires `--start-date 2015-04-01`.
+
+### dbtf (dbt-fusion)
+
+All dbt commands use `dbtf`, not `dbt`. See `dbt/README.md` for the full command reference.
+
+```bash
+dbtf build                                   # build all models + run tests
+dbtf build --select mart_odds_events         # build a single model
+dbtf test --select mart_odds_events          # run tests for a single model
+```
+
+### snowsql
+
+Use the `default` named connection with the project RSA key for all ad-hoc Snowflake queries:
+
+```bash
+snowsql -c default \
+  --private-key-path /Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem \
+  -q "SELECT * FROM baseball_data.betting.mart_odds_events LIMIT 10;"
+```
+
+- `-c default` — selects the `[connections.default]` block in `~/.snowsql/config` (account `IHUPICS-DP59975`, user `dbt_rw`, database `BASEBALL_DATA`)
+- `--private-key-path` — RSA private key for key-pair authentication; required because the `dbt_rw` user does not use password auth

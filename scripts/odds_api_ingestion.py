@@ -1,0 +1,663 @@
+"""
+odds_api_ingestion.py
+---------------------
+Ingests MLB data from The Odds API into Snowflake. Two ingestion modes are
+supported and can be run independently via CLI subcommands:
+
+  events  — Calls /v4/sports/baseball_mlb/events and inserts each event object
+             as its own row in the configured events target table.
+
+  odds    — Calls /v4/sports/baseball_mlb/odds for one or more market/region
+             combinations and inserts each event's odds as its own row in the
+             configured odds target table.
+
+Loading is append-only. No rows are updated or deleted. Every run produces a
+new set of rows tagged with a shared load_id so a full run can be isolated in
+queries.
+
+Target tables are resolved at startup from environment variables, falling back
+to the production defaults. Override any of the four variables to redirect
+writes without editing code (useful for testing against a staging schema):
+
+    ODDS_TARGET_DATABASE   (default: baseball_data)
+    ODDS_TARGET_SCHEMA     (default: oddsapi)
+    ODDS_EVENTS_TABLE      (default: mlb_events_raw)
+    ODDS_ODDS_TABLE        (default: mlb_odds_raw)
+
+Snowflake authentication — private key (preferred) or password fallback:
+    Private key (set SNOWFLAKE_PRIVATE_KEY_PATH; passphrase optional):
+        SNOWFLAKE_ACCOUNT
+        SNOWFLAKE_USER
+        SNOWFLAKE_WAREHOUSE
+        SNOWFLAKE_PRIVATE_KEY_PATH      path to .p8 / PEM private key file
+        SNOWFLAKE_PRIVATE_KEY_PASSPHRASE  (optional, omit if key is unencrypted)
+        SNOWFLAKE_ROLE                  (optional)
+
+    Password fallback (used when SNOWFLAKE_PRIVATE_KEY_PATH is not set):
+        SNOWFLAKE_ACCOUNT
+        SNOWFLAKE_USER
+        SNOWFLAKE_PASSWORD
+        SNOWFLAKE_WAREHOUSE
+        SNOWFLAKE_ROLE                  (optional)
+
+    Odds API:
+        ODDS_API_KEY
+
+Usage:
+    uv run odds_api_ingestion.py events
+    uv run odds_api_ingestion.py events --commence-time-from 2026-04-22T00:00:00Z --commence-time-to 2026-04-29T00:00:00Z
+    uv run odds_api_ingestion.py odds
+    uv run odds_api_ingestion.py odds --markets h2h totals --regions us us2
+    uv run odds_api_ingestion.py odds --odds-format american --date-format iso
+"""
+
+import argparse
+import dataclasses
+import json
+import logging
+import os
+import time
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from date_utils import default_window, format_iso_utc
+
+import requests
+import snowflake.connector
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_pem_private_key,
+)
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# ── Constants ──────────────────────────────────────────────────────────────────
+
+ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
+EVENTS_ENDPOINT   = "/sports/baseball_mlb/events"
+ODDS_ENDPOINT     = "/sports/baseball_mlb/odds"
+
+SOURCE_SYSTEM = "the_odds_api"
+PROCESS_NAME  = "odds_api_ingestion.py"
+
+# Production defaults — all four are overridable via env vars at startup.
+_DEFAULT_DATABASE     = "baseball_data"
+_DEFAULT_SCHEMA       = "oddsapi"
+_DEFAULT_EVENTS_TABLE = "mlb_events_raw"
+_DEFAULT_ODDS_TABLE   = "mlb_odds_raw"
+
+# Defaults for the odds endpoint
+DEFAULT_MARKETS     = ["h2h", "totals"]
+DEFAULT_REGIONS     = ["us", "us2"]
+DEFAULT_ODDS_FORMAT = "american"
+DEFAULT_DATE_FORMAT = "iso"
+
+# Default look-ahead window for the events endpoint (days)
+DEFAULT_EVENTS_WINDOW_DAYS = 7
+
+# Polite delay between API calls (seconds)
+REQUEST_DELAY = 0.5
+
+
+# ── Target resolution ─────────────────────────────────────────────────────────
+
+@dataclasses.dataclass(frozen=True)
+class SnowflakeTarget:
+    """Fully-qualified Snowflake write destination for one table."""
+    database: str
+    schema: str
+    table: str
+
+    @property
+    def qualified_name(self) -> str:
+        return f"{self.database}.{self.schema}.{self.table}"
+
+
+def resolve_targets() -> tuple[SnowflakeTarget, SnowflakeTarget]:
+    """
+    Read target location from env vars, falling back to production defaults.
+    Returns (events_target, odds_target).
+    """
+    database = os.environ.get("ODDS_TARGET_DATABASE", _DEFAULT_DATABASE)
+    schema   = os.environ.get("ODDS_TARGET_SCHEMA",   _DEFAULT_SCHEMA)
+
+    events_target = SnowflakeTarget(
+        database = database,
+        schema   = schema,
+        table    = os.environ.get("ODDS_EVENTS_TABLE", _DEFAULT_EVENTS_TABLE),
+    )
+    odds_target = SnowflakeTarget(
+        database = database,
+        schema   = schema,
+        table    = os.environ.get("ODDS_ODDS_TABLE", _DEFAULT_ODDS_TABLE),
+    )
+    return events_target, odds_target
+
+
+# ── Snowflake connection ───────────────────────────────────────────────────────
+
+def _load_private_key(path: str, passphrase: str | None) -> bytes:
+    with open(path, "rb") as fh:
+        pem = fh.read()
+    pwd = passphrase.encode() if passphrase else None
+    key = load_pem_private_key(pem, password=pwd, backend=default_backend())
+    return key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+
+
+def get_snowflake_connection(
+    database: str, schema: str
+) -> snowflake.connector.SnowflakeConnection:
+    """
+    Build a Snowflake connection scoped to the given database and schema.
+    Uses private key auth when SNOWFLAKE_PRIVATE_KEY_PATH is set, otherwise
+    falls back to password auth.
+    """
+    required_base = ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE"]
+    missing = [k for k in required_base if not os.environ.get(k)]
+    if missing:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
+
+    kwargs: dict = {
+        "account":   os.environ["SNOWFLAKE_ACCOUNT"],
+        "user":      os.environ["SNOWFLAKE_USER"],
+        "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
+        "database":  database,
+        "schema":    schema,
+    }
+
+    private_key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+    if private_key_path:
+        log.info("Authenticating with private key: %s", private_key_path)
+        passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
+        kwargs["private_key"] = _load_private_key(private_key_path, passphrase)
+    else:
+        password = os.environ.get("SNOWFLAKE_PASSWORD")
+        if not password:
+            raise EnvironmentError(
+                "Either SNOWFLAKE_PRIVATE_KEY_PATH or SNOWFLAKE_PASSWORD must be set."
+            )
+        log.info("Authenticating with password")
+        kwargs["password"] = password
+
+    role = os.environ.get("SNOWFLAKE_ROLE")
+    if role:
+        kwargs["role"] = role
+
+    return snowflake.connector.connect(**kwargs)
+
+
+# ── Odds API request layer ─────────────────────────────────────────────────────
+
+class OddsApiResponse:
+    """Wraps a raw requests.Response to expose the JSON body and credit headers."""
+
+    def __init__(self, response: requests.Response) -> None:
+        self._response = response
+        self.status_code: int = response.status_code
+        self.url: str = response.url
+        self.payload: Any = response.json()
+        self.requests_used: int | None = _parse_int_header(
+            response.headers.get("x-requests-used")
+        )
+        self.requests_remaining: int | None = _parse_int_header(
+            response.headers.get("x-requests-remaining")
+        )
+
+    def log_credits(self) -> None:
+        log.info(
+            "  API credits — used: %s  remaining: %s",
+            self.requests_used,
+            self.requests_remaining,
+        )
+
+
+def _parse_int_header(value: str | None) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None
+
+
+def _get_api_key() -> str:
+    key = os.environ.get("ODDS_API_KEY")
+    if not key:
+        raise EnvironmentError("ODDS_API_KEY is not set in the environment or .env file.")
+    return key
+
+
+def call_odds_api(endpoint: str, params: dict) -> OddsApiResponse:
+    """
+    Make a GET request to the given Odds API endpoint path (e.g.
+    '/sports/baseball_mlb/events') with the provided query parameters.
+    The API key is injected automatically from the environment.
+    Raises requests.HTTPError for non-2xx responses.
+    """
+    url = f"{ODDS_API_BASE_URL}{endpoint}"
+    full_params = {"apiKey": _get_api_key(), **params}
+
+    log.info("GET %s  params=%s", url, {k: v for k, v in params.items()})
+    response = requests.get(url, params=full_params, timeout=30)
+    response.raise_for_status()
+
+    result = OddsApiResponse(response)
+    result.log_credits()
+    return result
+
+
+# ── Snowflake write helpers ────────────────────────────────────────────────────
+
+def insert_event_row(
+    conn: snowflake.connector.SnowflakeConnection,
+    *,
+    target: SnowflakeTarget,
+    ingestion_ts: datetime,
+    load_id: str,
+    source_endpoint: str,
+    request_url: str,
+    request_params: dict,
+    http_status_code: int,
+    x_requests_used: int | None,
+    x_requests_remaining: int | None,
+    raw_json: Any,
+    event_id: str | None,
+    sport_key: str | None,
+    sport_title: str | None,
+    commence_time: str | None,
+    home_team: str | None,
+    away_team: str | None,
+) -> None:
+    sql = f"""
+        INSERT INTO {target.qualified_name} (
+            ingestion_ts, load_id,
+            source_system, process_name,
+            source_endpoint, request_url, request_params,
+            http_status_code, x_requests_used, x_requests_remaining,
+            raw_json,
+            event_id, sport_key, sport_title, commence_time, home_team, away_team
+        )
+        SELECT
+            %(ingestion_ts)s::timestamp_ntz,
+            %(load_id)s,
+            %(source_system)s,
+            %(process_name)s,
+            %(source_endpoint)s,
+            %(request_url)s,
+            PARSE_JSON(%(request_params)s),
+            %(http_status_code)s,
+            %(x_requests_used)s,
+            %(x_requests_remaining)s,
+            PARSE_JSON(%(raw_json)s),
+            %(event_id)s,
+            %(sport_key)s,
+            %(sport_title)s,
+            %(commence_time)s::timestamp_ntz,
+            %(home_team)s,
+            %(away_team)s
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {
+            "ingestion_ts":          ingestion_ts.isoformat(),
+            "load_id":               load_id,
+            "source_system":         SOURCE_SYSTEM,
+            "process_name":          PROCESS_NAME,
+            "source_endpoint":       source_endpoint,
+            "request_url":           request_url,
+            "request_params":        json.dumps(request_params),
+            "http_status_code":      http_status_code,
+            "x_requests_used":       x_requests_used,
+            "x_requests_remaining":  x_requests_remaining,
+            "raw_json":              json.dumps(raw_json),
+            "event_id":              event_id,
+            "sport_key":             sport_key,
+            "sport_title":           sport_title,
+            "commence_time":         commence_time,
+            "home_team":             home_team,
+            "away_team":             away_team,
+        })
+
+
+def insert_odds_row(
+    conn: snowflake.connector.SnowflakeConnection,
+    *,
+    target: SnowflakeTarget,
+    ingestion_ts: datetime,
+    load_id: str,
+    source_endpoint: str,
+    request_url: str,
+    request_params: dict,
+    http_status_code: int,
+    x_requests_used: int | None,
+    x_requests_remaining: int | None,
+    raw_json: Any,
+    event_id: str | None,
+    sport_key: str | None,
+    sport_title: str | None,
+    commence_time: str | None,
+    home_team: str | None,
+    away_team: str | None,
+    bookmakers_count: int | None,
+) -> None:
+    sql = f"""
+        INSERT INTO {target.qualified_name} (
+            ingestion_ts, load_id,
+            source_system, process_name,
+            source_endpoint, request_url, request_params,
+            http_status_code, x_requests_used, x_requests_remaining,
+            raw_json,
+            event_id, sport_key, sport_title, commence_time, home_team, away_team,
+            bookmakers_count
+        )
+        SELECT
+            %(ingestion_ts)s::timestamp_ntz,
+            %(load_id)s,
+            %(source_system)s,
+            %(process_name)s,
+            %(source_endpoint)s,
+            %(request_url)s,
+            PARSE_JSON(%(request_params)s),
+            %(http_status_code)s,
+            %(x_requests_used)s,
+            %(x_requests_remaining)s,
+            PARSE_JSON(%(raw_json)s),
+            %(event_id)s,
+            %(sport_key)s,
+            %(sport_title)s,
+            %(commence_time)s::timestamp_ntz,
+            %(home_team)s,
+            %(away_team)s,
+            %(bookmakers_count)s
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {
+            "ingestion_ts":          ingestion_ts.isoformat(),
+            "load_id":               load_id,
+            "source_system":         SOURCE_SYSTEM,
+            "process_name":          PROCESS_NAME,
+            "source_endpoint":       source_endpoint,
+            "request_url":           request_url,
+            "request_params":        json.dumps(request_params),
+            "http_status_code":      http_status_code,
+            "x_requests_used":       x_requests_used,
+            "x_requests_remaining":  x_requests_remaining,
+            "raw_json":              json.dumps(raw_json),
+            "event_id":              event_id,
+            "sport_key":             sport_key,
+            "sport_title":           sport_title,
+            "commence_time":         commence_time,
+            "home_team":             home_team,
+            "away_team":             away_team,
+            "bookmakers_count":      bookmakers_count,
+        })
+
+
+# ── Subcommand runners ─────────────────────────────────────────────────────────
+
+def run_events(
+    conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
+    commence_time_from: str,
+    commence_time_to: str,
+) -> None:
+    """
+    Fetch MLB events within the given UTC time window and store the complete
+    response array as a single row in target. One API call produces one row;
+    the dbt staging layer is responsible for flattening the raw_json array
+    into individual event rows.
+    """
+    load_id      = str(uuid.uuid4())
+    ingestion_ts = datetime.now(tz=timezone.utc)
+    params: dict = {
+        "commenceTimeFrom": commence_time_from,
+        "commenceTimeTo":   commence_time_to,
+    }
+
+    log.info(
+        "Events ingest → %s  window=[%s, %s]  load_id=%s",
+        target.qualified_name, commence_time_from, commence_time_to, load_id,
+    )
+
+    try:
+        result = call_odds_api(EVENTS_ENDPOINT, params)
+    except requests.HTTPError as exc:
+        log.error("HTTP error fetching events: %s", exc)
+        return
+    except requests.RequestException as exc:
+        log.error("Request failed fetching events: %s", exc)
+        return
+
+    event_count = len(result.payload) if isinstance(result.payload, list) else 0
+    log.info("  %d event(s) in response", event_count)
+
+    # Store the full response array as a single row. The per-event extracted
+    # columns (event_id, etc.) are not applicable at this grain and are left
+    # null; downstream dbt models flatten raw_json into individual event rows.
+    try:
+        insert_event_row(
+            conn,
+            target               = target,
+            ingestion_ts         = ingestion_ts,
+            load_id              = load_id,
+            source_endpoint      = EVENTS_ENDPOINT,
+            request_url          = result.url,
+            request_params       = params,
+            http_status_code     = result.status_code,
+            x_requests_used      = result.requests_used,
+            x_requests_remaining = result.requests_remaining,
+            raw_json             = result.payload,
+            event_id             = None,
+            sport_key            = None,
+            sport_title          = None,
+            commence_time        = None,
+            home_team            = None,
+            away_team            = None,
+        )
+        log.info("Events ingest complete — 1 row inserted, %d event(s) in payload (load_id=%s)",
+                 event_count, load_id)
+    except Exception as exc:
+        log.error("Snowflake write failed: %s", exc)
+
+
+def run_odds(
+    conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
+    markets: list[str],
+    regions: list[str],
+    odds_format: str,
+    date_format: str,
+) -> None:
+    """
+    Fetch MLB odds for each (market, region) combination and insert each
+    event's odds as its own row into target. Separating by market keeps each
+    raw_json payload focused and makes downstream parsing straightforward.
+    """
+    load_id      = str(uuid.uuid4())
+    ingestion_ts = datetime.now(tz=timezone.utc)
+    total_calls  = len(markets) * len(regions)
+    call_num     = 0
+
+    log.info(
+        "Odds ingest → %s  %d market(s) × %d region(s) = %d call(s)  load_id=%s",
+        target.qualified_name, len(markets), len(regions), total_calls, load_id,
+    )
+
+    for market in markets:
+        for region in regions:
+            call_num += 1
+            params = {
+                "markets":    market,
+                "regions":    region,
+                "oddsFormat": odds_format,
+                "dateFormat": date_format,
+            }
+            log.info("[%d/%d] market=%s  region=%s", call_num, total_calls, market, region)
+
+            try:
+                result = call_odds_api(ODDS_ENDPOINT, params)
+            except requests.HTTPError as exc:
+                log.warning("  HTTP error for market=%s region=%s: %s — skipping", market, region, exc)
+                time.sleep(REQUEST_DELAY)
+                continue
+            except requests.RequestException as exc:
+                log.warning("  Request failed for market=%s region=%s: %s — skipping", market, region, exc)
+                time.sleep(REQUEST_DELAY)
+                continue
+
+            events: list[dict] = result.payload if isinstance(result.payload, list) else []
+            log.info("  %d event(s) with odds returned", len(events))
+
+            inserted = 0
+            for event in events:
+                bookmakers = event.get("bookmakers")
+                try:
+                    insert_odds_row(
+                        conn,
+                        target               = target,
+                        ingestion_ts         = ingestion_ts,
+                        load_id              = load_id,
+                        source_endpoint      = ODDS_ENDPOINT,
+                        request_url          = result.url,
+                        request_params       = params,
+                        http_status_code     = result.status_code,
+                        x_requests_used      = result.requests_used,
+                        x_requests_remaining = result.requests_remaining,
+                        raw_json             = event,
+                        event_id             = event.get("id"),
+                        sport_key            = event.get("sport_key"),
+                        sport_title          = event.get("sport_title"),
+                        commence_time        = event.get("commence_time"),
+                        home_team            = event.get("home_team"),
+                        away_team            = event.get("away_team"),
+                        bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
+                    )
+                    inserted += 1
+                except Exception as exc:
+                    log.error(
+                        "  Snowflake write failed for event %s (market=%s region=%s): %s",
+                        event.get("id"), market, region, exc,
+                    )
+
+            log.info("  %d/%d row(s) inserted", inserted, len(events))
+            time.sleep(REQUEST_DELAY)
+
+    log.info("Odds ingest complete — load_id=%s", load_id)
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────────
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Ingest MLB odds data from The Odds API into Snowflake.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    events_parser = sub.add_parser(
+        "events",
+        help="Fetch upcoming MLB events and ingest into the configured events table.",
+    )
+    events_parser.add_argument(
+        "--commence-time-from",
+        default=None,
+        metavar="ISO8601",
+        help=(
+            "Lower bound for event commence time in ISO 8601 UTC format "
+            "(e.g. 2026-04-22T00:00:00Z). Defaults to today at 00:00:00Z."
+        ),
+    )
+    events_parser.add_argument(
+        "--commence-time-to",
+        default=None,
+        metavar="ISO8601",
+        help=(
+            f"Upper bound for event commence time in ISO 8601 UTC format. "
+            f"Defaults to {DEFAULT_EVENTS_WINDOW_DAYS} days from today at 00:00:00Z."
+        ),
+    )
+
+    odds_parser = sub.add_parser(
+        "odds",
+        help="Fetch MLB odds and ingest into the configured odds table.",
+    )
+    odds_parser.add_argument(
+        "--markets",
+        nargs="+",
+        default=DEFAULT_MARKETS,
+        metavar="MARKET",
+        help=f"Odds market keys to fetch (default: {' '.join(DEFAULT_MARKETS)}).",
+    )
+    odds_parser.add_argument(
+        "--regions",
+        nargs="+",
+        default=DEFAULT_REGIONS,
+        metavar="REGION",
+        help=f"Regions for bookmaker filtering (default: {' '.join(DEFAULT_REGIONS)}).",
+    )
+    odds_parser.add_argument(
+        "--odds-format",
+        default=DEFAULT_ODDS_FORMAT,
+        choices=["american", "decimal", "hongkong", "indonesian", "malay"],
+        help=f"Odds format returned by the API (default: {DEFAULT_ODDS_FORMAT}).",
+    )
+    odds_parser.add_argument(
+        "--date-format",
+        default=DEFAULT_DATE_FORMAT,
+        choices=["iso", "unix"],
+        help=f"Date format for commence_time fields (default: {DEFAULT_DATE_FORMAT}).",
+    )
+
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+
+    events_target, odds_target = resolve_targets()
+    log.info(
+        "Connecting to Snowflake  events→%s  odds→%s",
+        events_target.qualified_name,
+        odds_target.qualified_name,
+    )
+    conn = get_snowflake_connection(events_target.database, events_target.schema)
+
+    try:
+        if args.command == "events":
+            window_from, window_to = default_window(days=DEFAULT_EVENTS_WINDOW_DAYS)
+            run_events(
+                conn,
+                events_target,
+                commence_time_from = args.commence_time_from or window_from,
+                commence_time_to   = args.commence_time_to   or window_to,
+            )
+
+        elif args.command == "odds":
+            run_odds(
+                conn,
+                odds_target,
+                markets     = args.markets,
+                regions     = args.regions,
+                odds_format = args.odds_format,
+                date_format = args.date_format,
+            )
+
+    finally:
+        conn.close()
+        log.info("Snowflake connection closed")
+
+
+if __name__ == "__main__":
+    main()
