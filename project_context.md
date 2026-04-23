@@ -100,15 +100,15 @@ See `data_quality/data_availability_windows.md` for verified first-available dat
 
 The feature layer (`dbt/models/feature/`) is a dedicated ML boundary layer, separate from the mart layer. Models are materialized as **tables** into the `baseball_data.betting_features` Snowflake schema (distinct from `baseball_data.betting` where mart models live). All models in this layer enforce the **no-leakage rule**: every rolling window and stat lookup uses `< game_date` — no same-day data may appear in any feature.
 
-Phase 2 will populate this layer with five pre-game feature assembly models:
+Phase 2 (complete as of 2026-04-23) populated this layer with five pre-game feature assembly models:
 
 | Model | Grain | Description |
 |---|---|---|
-| `feature_pregame_lineup_features` | Game × side | Per-team lineup feature vector with aggregated batter rolling stats |
-| `feature_pregame_starter_features` | Game × starter | Per-starter feature vector with rolling pitcher stats and platoon splits |
-| `feature_pregame_team_features` | Game × team | Per-team context: rolling offense, pitching, bullpen workload and effectiveness, season record |
+| `feature_pregame_lineup_features` | Game × side | Per-team lineup feature vector with aggregated batter rolling stats and prior-season platoon splits across all 9 lineup slots |
+| `feature_pregame_starter_features` | Game × starter | Per-starter feature vector with rolling pitcher stats, days rest, and prior-season platoon splits |
+| `feature_pregame_team_features` | Game × team | Per-team context: rolling offense, pitching, bullpen workload and effectiveness, season record, and schedule context (days rest, streak, timezone travel) |
 | `feature_pregame_park_features` | Game | Park dimensions, elevation, surface, roof type, and empirical run factors |
-| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; direct ML input |
+| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; 25,146 regular-season rows; `has_full_data` flag selects the ~23,444 data-complete training rows (2016–2025) |
 
 ---
 
@@ -123,6 +123,7 @@ Five models normalize and type-cast raw sources. All staging models are material
 | `stg_statsapi_lineups` | monthly_schedule JSON | Player × game × side | Unpivots lineup JSON to one row per player per batting-order slot per side; deduped on month-boundary overlap |
 | `stg_statsapi_lineups_wide` | stg_statsapi_lineups | Team × game × side | Wide pivot — one row per team per game with 9 batting-order slot columns |
 | `stg_statsapi_venues` | statsapi.venues_raw (JSON flatten) | Venue | Extracts park dimensions, surface, roof, coordinates, elevation, timezone |
+| `stg_statsapi_probable_pitchers` | monthly_schedule JSON | Game × side | Extracts `probable_pitcher_id` and name per game × side; null when rotation not yet announced; deduped to latest record per `game_pk + side` |
 
 ### 5.4 Mart Layer
 
@@ -174,6 +175,7 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 | `mart_starting_pitcher_game_log` | Starter × game | IP, outs recorded, K, BB, earned runs, ERA, avg fastball velo per start |
 | `mart_bullpen_workload` | Team × game | Bullpen fatigue: pitches thrown, relievers used, closer/high-leverage appearances over 1/3/7-day windows |
 | `mart_bullpen_effectiveness` | Team × game | Bullpen quality: K%, BB%, xwOBA against, hard-hit %, whiff rate, IP over 14- and 30-day rolling windows. Complement to `mart_bullpen_workload`; join on `team_abbrev + game_pk` |
+| `mart_team_schedule_context` | Team × game | Schedule fatigue context: days rest (null on Opening Day), games_last_7d, games_last_14d, home/away streak length, timezone travel signal. Join on `team_abbrev + game_pk`. |
 | `mart_batter_vs_handedness_splits` | Batter × pitcher hand × season | AVG, wOBA, xwOBA, K%, BB%, hard-hit % vs. LHP and RHP |
 | `mart_pitcher_vs_handedness_splits` | Pitcher × batter hand × season | K%, BB%, wOBA against, hard-hit % against vs. LHB and RHB |
 | `mart_head_to_head_team_history` | Team pair × season | Season and all-time H2H record, run differential, and extra-innings rate for every franchise pair; abbreviations normalized to canonical form (e.g. OAK → ATH) for continuous franchise history |
@@ -276,10 +278,11 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Starting pitcher game log | Complete |
 | Bullpen workload | Complete |
 | Bullpen effectiveness (quality) | Complete — `mart_bullpen_effectiveness` with 14/30-day K%, BB%, xwOBA against, hard-hit %, whiff rate, IP |
+| Schedule fatigue context | Complete — `mart_team_schedule_context` with days rest, games_last_7d/14d, home/away streak, timezone travel signal |
 | Lineup data (confirmed pre-game) | Complete (staging) |
 | Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
-| ML feature store | Not started |
+| ML feature store | Complete — Phase 2 done 2026-04-23; five feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons) |
 | Prediction models | Not started |
 | Betting/sizing layer | Not started |
 
@@ -430,31 +433,38 @@ Update `data_quality/data_availability_windows.md` to reflect the expanded odds 
 
 ---
 
-### Phase 2 — Pre-Game Feature Assembly
+### Phase 2 — Pre-Game Feature Assembly ✓ Complete (2026-04-23)
 
-The prediction task requires a single feature vector per game, assembled from information available **before first pitch**. This phase builds that assembly layer.
+The prediction task requires a single feature vector per game, assembled from information available **before first pitch**. All five feature models are built, tested, and validated.
 
-**New models to build:**
+**Models built (all in `dbt/models/feature/`, schema: `baseball_data.betting_features`):**
 
 | Model | Grain | Description |
 |---|---|---|
-| `mart_pregame_lineup_features` | Game × side | For each team/side: join `stg_statsapi_lineups_wide` with `mart_batter_rolling_stats` (most recent game before this one) and `mart_batter_vs_handedness_splits` (season-to-date) to produce a lineup-level feature vector (9-slot batter stats + aggregated team batting metrics) |
-| `mart_pregame_starter_features` | Game × starter | For each starting pitcher: join `mart_starting_pitcher_game_log` with `mart_pitcher_rolling_stats` (most recent game) and `mart_pitcher_vs_handedness_splits` to produce a pre-game pitcher feature vector |
-| `mart_pregame_team_features` | Game × team | For each team: join `mart_team_rolling_offense`, `mart_team_rolling_pitching`, `mart_team_vs_pitcher_hand`, `mart_team_season_record`, and `mart_bullpen_workload` into a single team context row |
-| `mart_pregame_park_features` | Game | Join `mart_game_results` with `stg_statsapi_venues` to attach park dimensions, elevation, surface, and roof type — known park factor drivers |
-| `mart_pregame_game_features` | Game | Master assembly: join all four pre-game feature tables into a single wide row per game. This is the direct input to ML feature engineering. |
+| `feature_pregame_lineup_features` | Game × side | Aggregated batter rolling stats (30-day + season-to-date) and prior-season platoon splits across all 9 lineup slots |
+| `feature_pregame_starter_features` | Game × starter | Rolling pitcher stats (K%, xwOBA against), days rest, and prior-season platoon splits; source is `stg_statsapi_probable_pitchers` |
+| `feature_pregame_team_features` | Game × team | Rolling offense, rolling pitching, platoon splits vs. L/R, season record, bullpen workload, bullpen effectiveness, and schedule context (days rest, games_last_7d/14d, home/away streak, timezone travel) |
+| `feature_pregame_park_features` | Game | Park dimensions, elevation, surface, roof type (from `stg_statsapi_venues`), and prior-season empirical run factors (from `mart_park_run_factors`) |
+| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; 25,146 regular-season rows |
 
-**Key design constraints:**
-- All features must be computed from data available **as of game_date - 1 day** (no data leakage)
-- Rolling windows should use the most recent N-game or N-day window ending the day before the game
-- Lineup slot features should account for confirmed lineup order and opposing starter handedness
-- Park features are static per venue (no rolling needed)
+**Training set (has_full_data = true) by season — verified 2026-04-23:**
+
+| Season | Games |
+|---|---|
+| 2015 | 0 (no prior-season run factor) |
+| 2016–2019 | ~9,268 |
+| 2020 | 801 (COVID 60-game season) |
+| 2021–2025 | ~11,665 |
+| **Total (2016–2025 complete)** | **~23,444** |
+
+**Key design constraints enforced:**
+- All features use data strictly before game_date: rolling stats `< game_date`, platoon splits `game_year - 1`, park factors `game_year - 1`, season record `game_date - 1`
+- `has_full_data` flag selects the data-complete training subset (both lineups confirmed, both starters have prior history, park has prior-season run factor)
+- Full leakage audit documented in `data_quality/leakage_audit.md`; spot-check against game_pk 777235 (LAD vs HOU, 2025-07-04) passed
 
 **Lineup coverage audit (completed 2026-04-23):**
 
-A pre-Phase 2 audit confirmed that `stg_statsapi_lineups_wide` has **100% coverage for every regular season from 2015 through 2026** — home and away lineups are populated for all completed games with no partial-season gaps. The ≥70% threshold is met without restriction across the full historical record.
-
-**Design decision:** `mart_pregame_lineup_features` should treat `stg_statsapi_lineups_wide` as a **required join** (not an optional feature block). No training set date cutoff is needed — lineup features are reliable for the full 2015–present history. Nulls will only appear for future unplayed games (expected behavior). The ML training set does not need a separate code path for missing lineup data.
+`stg_statsapi_lineups_wide` has **100% coverage for every regular season from 2015 through 2026** — lineup features are a required join with no date cutoff needed.
 
 ---
 

@@ -27,6 +27,7 @@ models/
     stg_statsapi_lineups          -- Unpivots confirmed lineup arrays by batting order slot
     stg_statsapi_lineups_wide     -- Wide pivot: one row per team per game
     stg_statsapi_venues           -- Ballpark dimensions, elevation, timezone
+    stg_statsapi_probable_pitchers -- Probable starters per game × side; null when rotation not yet announced
 
   mart/
     -- Pitch-grain models (incremental, merge on pitch_sk)
@@ -41,6 +42,7 @@ models/
 
     -- Game-level models
     mart_game_results             -- Final score, winner, extra innings; aggregated from pitch level
+    mart_park_run_factors         -- Prior-season and 3-year rolling run factors per venue; join on venue_id + game_year
 
     -- Player rolling stats (one row per player × game; 7/14/30-day + season-to-date windows)
     mart_pitcher_rolling_stats    -- K%, BB%, whiff rate, barrel rate allowed, fastball velo
@@ -56,6 +58,8 @@ models/
     -- Pitcher usage models
     mart_starting_pitcher_game_log -- IP, outs, K, BB, ERA per start
     mart_bullpen_workload         -- Reliever innings, inherited runners, days rest
+    mart_bullpen_effectiveness    -- Bullpen quality: K%, BB%, xwOBA against, whiff rate over 14/30-day rolling windows
+    mart_team_schedule_context    -- Schedule fatigue: days rest, games_last_7d/14d, home/away streak length, timezone travel signal
 
     -- Platoon split models (one row per player × pitcher/batter hand × season)
     mart_batter_vs_handedness_splits  -- Batter performance vs. LHP/RHP by season
@@ -74,7 +78,7 @@ models/
   feature/                         # ML pre-game feature vectors; materializes into baseball_data.betting_features
     feature_pregame_lineup_features  -- One row per game × side; aggregated batter rolling stats + prior-season platoon splits across all 9 lineup slots
     feature_pregame_starter_features -- One row per game × pitcher; starting pitcher rolling stats, days rest, platoon splits
-    feature_pregame_team_features    -- One row per game × team; rolling offense, pitching, bullpen workload/effectiveness, season win%
+    feature_pregame_team_features    -- One row per game × team; rolling offense, pitching, bullpen workload/effectiveness, season win%, schedule context (days rest, streak, travel)
     feature_pregame_park_features    -- One row per game; park dimensions, elevation, surface, roof type, prior-season run factors
     feature_pregame_game_features    -- One row per game (master assembly); joins all four upstream feature tables into a single wide ML input row
 ```
