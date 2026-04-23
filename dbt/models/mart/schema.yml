@@ -635,8 +635,10 @@ models:
           - dbt_utils.expression_is_true:
                 config:
                   severity: warn
+                  error_if: ">= 50"
+                  warn_if:  ">= 1"
                 arguments:
-                  expression: "is null or (release_speed_mph between 40 and 110)"
+                  expression: "is null or (release_speed_mph between 28 and 110)"
 
       - name: effective_speed_mph
         description: >
@@ -4274,3 +4276,1320 @@ models:
           Fraction of in-zone pitches (zones 1–9) the batter swings at. Scale
           0–1. Combined with chase_rate provides a full picture of plate discipline
           split by pitcher handedness.
+
+
+  # ============================================================================
+  # mart_team_vs_pitcher_hand
+  # ============================================================================
+  - name: mart_team_vs_pitcher_hand
+    description: >
+      Grain: one row per batting team × opposing starter hand × game (game_pk).
+      Team-level offensive production in regular-season games, split by the
+      handedness of the opposing starting pitcher. Rolling windows (7/14/30-day
+      and season-to-date) are maintained independently for LHP-starter games and
+      RHP-starter games.
+
+      Use case: fast team-level platoon signal. When tonight's starter is a LHP,
+      look up the team's recent wOBA, xwOBA, K%, and BB% in prior LHP-starter
+      games rather than aggregating individual batter splits at query time.
+
+      Starter identification: the opposing starting pitcher is the first pitcher
+      to face batters from each side (lowest at_bat_number + pitch_number in the
+      game). All PAs in the game are credited to that starter type, including
+      PAs against relievers, so metrics reflect full-game offensive context when
+      the opposing starter was of a given handedness.
+
+      Runs scored is derived as max(post_pitch_bat_score) across all terminal PAs
+      in the game for the batting team. The raw source column is varchar in
+      Statcast; the staging model casts it to integer before this model reads it.
+
+      Rolling windows are partitioned by (team, opp_starter_hand) so LHP-game
+      and RHP-game windows accumulate independently. Season-to-date restarts at
+      the beginning of each game_year.
+
+      Source: stg_batter_pitches only (regular season, pitcher_hand in L/R).
+      Join keys: team, opp_starter_hand, game_date, game_pk.
+
+    tests:
+      # ── Grain uniqueness ────────────────────────────────────────────────────
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team, opp_starter_hand, game_pk]
+
+      # ── PA accounting: strikeouts + walks cannot exceed total PAs ───────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "strikeouts + walks <= pa_count"
+
+      # ── Contact quality hierarchy: barrels ⊆ hard_hit_balls ⊆ batted_balls ──
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "hard_hit_balls <= batted_balls"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "barrels <= hard_hit_balls"
+
+      # ── Rolling window monotonicity: wider windows must cover at least as
+      #    many games as narrower windows (within the same partition order) ────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "games_14d >= games_7d"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "games_30d >= games_14d"
+
+      # ── K% + BB% share the same PA denominator — cannot exceed 1 together ──
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "coalesce(k_pct, 0) + coalesce(bb_pct, 0) <= 1"
+
+    columns:
+
+      # ── Grain columns ────────────────────────────────────────────────────────
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+
+      - name: team
+        description: Abbreviation of the batting team.
+        tests:
+          - not_null
+
+      - name: opp_starter_hand
+        description: >
+          Handedness of the opposing starting pitcher — L (left) or R (right).
+          Identifies the starting pitcher as the first pitcher to appear for the
+          opposing side in the game (minimum at_bat_number + pitch_number).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['L', 'R']
+
+      # ── Single-game volume ────────────────────────────────────────────────────
+      - name: runs_scored
+        description: >
+          Runs scored by the batting team in this game. Derived as the maximum
+          post_pitch_bat_score across all terminal PAs in the game for this
+          batting team. Represents the final score.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: pa_count
+        description: Total plate appearances taken by the batting team in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: strikeouts
+        description: Strikeouts recorded for the batting team in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: walks
+        description: Walks (including intentional) drawn by the batting team in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: total_bases
+        description: Total bases accumulated by the batting team in this game. Used as slugging numerator.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: at_bats
+        description: >
+          At-bats for the batting team in this game. Excludes walks, HBP, sac
+          flies, and sac bunts from plate_appearances. Denominator for slugging.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: hard_hit_balls
+        description: >
+          Batted balls with exit velocity >= 95 mph in this game. Subset of
+          batted_balls; superset of barrels.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: barrels
+        description: >
+          Batted balls classified as barrels (launch_speed_angle_zone = 6) in
+          this game. Subset of hard_hit_balls.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: batted_balls
+        description: >
+          In-play contact events (non-null exit_velocity_mph) for the batting
+          team in this game. Denominator for hard_hit_pct and barrel_pct.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      # ── Single-game rates ─────────────────────────────────────────────────────
+      - name: woba
+        description: >
+          Weighted on-base average (actual) for this game. sum(woba_value) /
+          sum(woba_denom). League average ~0.320. Null when no wOBA-denom PAs.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba
+        description: >
+          Expected wOBA for this game. Uses Statcast expected value for batted
+          balls; actual wOBA for K/BB/HBP. Null when no qualifying PAs exist.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct
+        description: Strikeout rate for this game — strikeouts / pa_count. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct
+        description: Walk rate for this game — walks / pa_count. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging
+        description: Slugging percentage for this game — total_bases / at_bats. Scale 0–4.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct
+        description: >
+          Fraction of batted balls hit >= 95 mph in this game. Scale 0–1. Null
+          if no batted balls recorded.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct
+        description: >
+          Fraction of batted balls classified as barrels in this game. Scale 0–1.
+          Null if no batted balls recorded. Strongest single-game power indicator.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Rolling 7-day ─────────────────────────────────────────────────────────
+      - name: games_7d
+        description: >
+          Number of games against this starter handedness in the prior 7 days
+          (inclusive of today). Denominator context for all _7d rolling metrics.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_7d
+        description: Average runs scored per game against this starter type over the trailing 7 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_7d
+        description: Rolling 7-day team wOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba_7d
+        description: Rolling 7-day team xwOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct_7d
+        description: Rolling 7-day K% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_7d
+        description: Rolling 7-day BB% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_7d
+        description: Rolling 7-day slugging percentage against this starter handedness. Scale 0–4.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct_7d
+        description: Rolling 7-day barrel rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Rolling 14-day ────────────────────────────────────────────────────────
+      - name: games_14d
+        description: Number of games against this starter handedness in the prior 14 days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_14d
+        description: Average runs scored per game against this starter type over the trailing 14 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_14d
+        description: Rolling 14-day team wOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba_14d
+        description: Rolling 14-day team xwOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct_14d
+        description: Rolling 14-day K% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_14d
+        description: Rolling 14-day BB% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_14d
+        description: Rolling 14-day slugging percentage against this starter handedness. Scale 0–4.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct_14d
+        description: Rolling 14-day barrel rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Rolling 30-day ────────────────────────────────────────────────────────
+      - name: games_30d
+        description: Number of games against this starter handedness in the prior 30 days (inclusive).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_30d
+        description: Average runs scored per game against this starter type over the trailing 30 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_30d
+        description: Rolling 30-day team wOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba_30d
+        description: Rolling 30-day team xwOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct_30d
+        description: Rolling 30-day K% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_30d
+        description: Rolling 30-day BB% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_30d
+        description: Rolling 30-day slugging percentage against this starter handedness. Scale 0–4.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct_30d
+        description: Rolling 30-day barrel rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Season-to-date ────────────────────────────────────────────────────────
+      - name: games_std
+        description: >
+          Number of games against this starter handedness in the current season
+          through this game date (season-to-date). Restarts at 1 on the first
+          game of each new game_year. Partitioned by (team, opp_starter_hand,
+          game_year) using ROWS UNBOUNDED PRECEDING.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_std
+        description: Season-to-date average runs scored per game against this starter handedness.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_std
+        description: Season-to-date team wOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba_std
+        description: Season-to-date team xwOBA against this starter handedness. Scale 0–2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct_std
+        description: Season-to-date K% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_std
+        description: Season-to-date BB% against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_std
+        description: Season-to-date slugging percentage against this starter handedness. Scale 0–4.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_std
+        description: Season-to-date hard-hit rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct_std
+        description: Season-to-date barrel rate against this starter handedness. Scale 0–1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+  # ============================================================================
+  # mart_head_to_head_team_history
+  # ============================================================================
+  - name: mart_head_to_head_team_history
+    description: >
+      Grain: one row per team_a × team_b × game_year (season).
+
+      Head-to-head regular-season record, run context, and cumulative franchise
+      history for every pair of MLB teams. Captures persistent matchup asymmetry
+      — certain team constructions (e.g. contact-heavy lineups vs. extreme-
+      strikeout rotations, aggressive base-running vs. strong defensive teams)
+      produce systematic outcome skews that are not explained by each team's
+      overall record. This model quantifies those effects.
+
+      Team ordering: team_a is always alphabetically less than team_b so each
+      franchise pair appears exactly once per season row regardless of home/away
+      assignment. All directional metrics (run differential, win percentage) are
+      expressed from team_a's perspective.
+
+      Abbreviation normalization: both team columns use canonical_abbrev from
+      ref_teams (e.g. OAK is mapped to ATH) so franchise history is continuous
+      across rebrands. The coalesce falls back to the raw abbreviation if a team
+      is unexpectedly absent from the seed.
+
+      Metrics are provided at two granularities:
+        - Season-level: single-season results for the given game_year.
+        - Historical cumulative: running totals / averages from the earliest
+          season in the data through and including game_year (inclusive). Uses
+          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW partitioned by
+          (team_a, team_b) ordered by game_year.
+
+      Source: mart_game_results (regular season only, game_type = 'R').
+      Join keys: team_a, team_b, game_year.
+
+    tests:
+      # ── Grain uniqueness ──────────────────────────────────────────────────
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_a, team_b, game_year]
+
+      # ── Canonical pair ordering ───────────────────────────────────────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "team_a < team_b"
+
+      # ── Season accounting identity ────────────────────────────────────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "team_a_wins + team_b_wins + ties = games_played"
+
+      # ── Historical accounting identity ────────────────────────────────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "all_time_team_a_wins + all_time_team_b_wins + all_time_ties = all_time_games_played"
+
+      # ── Cumulative must cover at least the season ─────────────────────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "all_time_games_played >= games_played"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "all_time_team_a_wins >= team_a_wins"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "all_time_team_b_wins >= team_b_wins"
+
+      # ── Extra-innings games are a subset of all games ─────────────────────
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "extra_innings_games <= games_played"
+
+    columns:
+
+      # ── Grain columns ──────────────────────────────────────────────────────
+      - name: team_a
+        description: >
+          Canonical abbreviation of the alphabetically-first team in the
+          matchup. Always less than team_b. Normalized via ref_teams.canonical_abbrev.
+        tests:
+          - not_null
+
+      - name: team_b
+        description: >
+          Canonical abbreviation of the alphabetically-second team in the
+          matchup. Always greater than team_a. Normalized via ref_teams.canonical_abbrev.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year (calendar year). Regular season only.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+
+      # ── Season volume ──────────────────────────────────────────────────────
+      - name: games_played
+        description: >
+          Number of regular-season games played between the two teams in this
+          season. Typically 6–19 depending on division alignment (divisional
+          opponents play more frequently than inter-league pairs).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: team_a_wins
+        description: Games won by team_a in this season series.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: team_b_wins
+        description: Games won by team_b in this season series.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: ties
+        description: >
+          Games ending in a tie score in this season series. Ties are rare in
+          modern MLB (suspended games, weather) but non-zero in historical data.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: team_a_win_pct
+        description: >
+          Fraction of decided games (non-ties) won by team_a this season.
+          Scale 0–1. Null if all games in the series ended in a tie (extremely
+          rare edge case). Calculated as team_a_wins / (games_played - ties).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: season_series_winner
+        description: >
+          Canonical abbreviation of the team that won the season series (more
+          wins than the opponent). Null when the series ended split (equal wins
+          for both teams or all games tied). Equals either team_a or team_b.
+
+      # ── Season run context ─────────────────────────────────────────────────
+      - name: avg_run_differential
+        description: >
+          Average per-game run differential from team_a's perspective in this
+          season series. Positive = team_a outscored team_b on average; negative
+          = team_b outscored team_a. Scale: roughly -10 to +10.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between -30 and 30"
+
+      - name: avg_team_a_runs
+        description: Average runs scored per game by team_a in this season series.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: avg_team_b_runs
+        description: Average runs scored per game by team_b in this season series.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: avg_total_runs
+        description: >
+          Average combined runs scored per game in this season series. Useful
+          as a matchup-specific over/under baseline — pairs of teams can
+          systematically produce high- or low-scoring games based on lineup and
+          rotation construction.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      # ── Season game characteristics ────────────────────────────────────────
+      - name: extra_innings_games
+        description: >
+          Number of games between these two teams that went beyond 9 innings
+          in this season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: extra_innings_pct
+        description: >
+          Fraction of games between these teams that went to extra innings in
+          this season. Scale 0–1. Elevated values may indicate evenly-matched
+          bullpens or a tendency toward close, low-scoring games in this matchup.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Historical cumulative columns ──────────────────────────────────────
+      - name: all_time_games_played
+        description: >
+          Total regular-season games played between the two teams from the
+          earliest season in the dataset through and including game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: all_time_team_a_wins
+        description: >
+          Cumulative wins for team_a against team_b through and including
+          game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: all_time_team_b_wins
+        description: >
+          Cumulative wins for team_b against team_a through and including
+          game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: all_time_ties
+        description: >
+          Cumulative tied games between the two teams through and including
+          game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: all_time_team_a_win_pct
+        description: >
+          Cumulative win percentage for team_a in decided games against team_b
+          through and including game_year. Scale 0–1. Null only if every
+          historical game ended in a tie (practically impossible). Provides a
+          long-run matchup dominance signal that smooths single-season variance.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: all_time_avg_run_differential
+        description: >
+          Cumulative average per-game run differential from team_a's perspective
+          through and including game_year. Anchored by total games played so it
+          does not drift from averaging averages across seasons.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between -30 and 30"
+
+      - name: all_time_avg_team_a_runs
+        description: >
+          Cumulative average runs scored per game by team_a against team_b
+          through and including game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: all_time_avg_team_b_runs
+        description: >
+          Cumulative average runs scored per game by team_b against team_a
+          through and including game_year.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: all_time_avg_total_runs
+        description: >
+          Cumulative average combined runs per game between the two teams
+          through and including game_year. Primary matchup-specific feature
+          for over/under prediction — persistent high- or low-scoring tendencies
+          between specific team pairings are captured here.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+  # ============================================================================
+  # mart_home_away_splits
+  # ============================================================================
+  - name: mart_home_away_splits
+    description: >
+      Home/away context splits for each team's offensive and pitching performance.
+      Grain: one row per team × home_away_flag × game date (regular season only).
+      Rolling windows (7/14/30-day and season-to-date) are computed separately
+      within each context — a team's 7-day home window includes only home games.
+      Home field advantage varies significantly by team and stadium; this model
+      surfaces persistent asymmetry that overall rolling stats obscure.
+      Join keys: team, home_away_flag, game_date.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team, home_away_flag, game_pk]
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "home_away_flag in ('Home', 'Away')"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "games_std >= 1"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "games_7d >= 1"
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "games_std >= games_7d"
+
+    columns:
+
+      # ── Grain ────────────────────────────────────────────────────────────────
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Regular-season year the game took place.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 2015"
+
+      - name: team
+        description: Team abbreviation (canonical form from ref_teams where available).
+        tests:
+          - not_null
+
+      - name: home_away_flag
+        description: >
+          Whether the team played at home or away in this game. Values: 'Home' or 'Away'.
+          Rolling windows are partitioned by (team, home_away_flag) so that each
+          context's statistics do not bleed into the other.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Home', 'Away']
+
+      # ── Game-level offense actuals ───────────────────────────────────────────
+      - name: runs_scored
+        description: Runs scored by the team in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: pa_count
+        description: Total plate appearances by the team's batters in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: woba
+        description: >
+          Weighted on-base average for the team's offense in this game.
+          Null when no qualifying plate appearances occurred. Scale approximately 0-2.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba
+        description: >
+          Expected weighted on-base average based on batted ball quality for the
+          team's offense in this game. Null before 2023 (bat tracking unavailable)
+          and when no in-play PAs occurred.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct
+        description: Strikeout rate (strikeouts / plate appearances) for the offense in this game.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct
+        description: Walk rate (walks / plate appearances) for the offense in this game.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging
+        description: Slugging percentage (total bases / at-bats) for the offense in this game.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct
+        description: >
+          Fraction of batted balls with exit velocity >= 95 mph for the offense in
+          this game. Null when no batted ball data exists.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct
+        description: >
+          Fraction of batted balls classified as barrels (launch_speed_angle_zone = 6)
+          for the offense in this game. Null when no batted ball data exists.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Game-level pitching actuals ──────────────────────────────────────────
+      - name: runs_allowed
+        description: Runs allowed by the team's pitching staff in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: pa_count_against
+        description: Total plate appearances faced by the team's pitching staff in this game.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: woba_against
+        description: >
+          Weighted on-base average allowed by the team's pitching in this game.
+          Null when no qualifying plate appearances occurred.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: xwoba_against
+        description: >
+          Expected wOBA allowed based on batted ball quality against the team's
+          pitching in this game. Null before 2023 and when no in-play PAs occurred.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 2"
+
+      - name: k_pct_recorded
+        description: Strikeout rate recorded by the team's pitchers (Ks / PA faced) in this game.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_allowed
+        description: Walk rate allowed by the team's pitchers (BBs / PA faced) in this game.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: hard_hit_pct_allowed
+        description: >
+          Fraction of batted balls against the pitching staff with exit velocity
+          >= 95 mph in this game. Null when no batted ball data exists.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: barrel_pct_allowed
+        description: >
+          Fraction of batted balls against the pitching staff classified as barrels
+          in this game. Null when no batted ball data exists.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      # ── Rolling 7-day ────────────────────────────────────────────────────────
+      - name: games_7d
+        description: Games played in this home/away context in the trailing 7 days including today.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_7d
+        description: Average runs scored per game in the trailing 7-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_7d
+        description: Rolling 7-day wOBA for the offense in this context.
+
+      - name: xwoba_7d
+        description: Rolling 7-day expected wOBA for the offense. Null before 2023.
+
+      - name: k_pct_7d
+        description: Rolling 7-day strikeout rate for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_7d
+        description: Rolling 7-day walk rate for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_7d
+        description: Rolling 7-day slugging percentage for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_7d
+        description: Rolling 7-day hard-hit rate for the offense in this context.
+
+      - name: barrel_pct_7d
+        description: Rolling 7-day barrel rate for the offense in this context.
+
+      - name: runs_allowed_per_game_7d
+        description: Average runs allowed per game in the trailing 7-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_against_7d
+        description: Rolling 7-day wOBA allowed by the pitching staff in this context.
+
+      - name: xwoba_against_7d
+        description: Rolling 7-day expected wOBA allowed. Null before 2023.
+
+      - name: k_pct_recorded_7d
+        description: Rolling 7-day strikeout rate recorded by the pitching staff in this context.
+
+      - name: bb_pct_allowed_7d
+        description: Rolling 7-day walk rate allowed by the pitching staff in this context.
+
+      - name: hard_hit_pct_allowed_7d
+        description: Rolling 7-day hard-hit rate allowed by the pitching staff in this context.
+
+      - name: barrel_pct_allowed_7d
+        description: Rolling 7-day barrel rate allowed by the pitching staff in this context.
+
+      # ── Rolling 14-day ───────────────────────────────────────────────────────
+      - name: games_14d
+        description: Games played in this context in the trailing 14 days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_14d
+        description: Average runs scored per game in the trailing 14-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_14d
+        description: Rolling 14-day wOBA for the offense in this context.
+
+      - name: xwoba_14d
+        description: Rolling 14-day expected wOBA for the offense. Null before 2023.
+
+      - name: k_pct_14d
+        description: Rolling 14-day strikeout rate for the offense in this context.
+
+      - name: bb_pct_14d
+        description: Rolling 14-day walk rate for the offense in this context.
+
+      - name: slugging_14d
+        description: Rolling 14-day slugging percentage for the offense in this context.
+
+      - name: hard_hit_pct_14d
+        description: Rolling 14-day hard-hit rate for the offense in this context.
+
+      - name: barrel_pct_14d
+        description: Rolling 14-day barrel rate for the offense in this context.
+
+      - name: runs_allowed_per_game_14d
+        description: Average runs allowed per game in the trailing 14-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_against_14d
+        description: Rolling 14-day wOBA allowed by the pitching staff in this context.
+
+      - name: xwoba_against_14d
+        description: Rolling 14-day expected wOBA allowed. Null before 2023.
+
+      - name: k_pct_recorded_14d
+        description: Rolling 14-day strikeout rate recorded by the pitching staff in this context.
+
+      - name: bb_pct_allowed_14d
+        description: Rolling 14-day walk rate allowed by the pitching staff in this context.
+
+      - name: hard_hit_pct_allowed_14d
+        description: Rolling 14-day hard-hit rate allowed by the pitching staff in this context.
+
+      - name: barrel_pct_allowed_14d
+        description: Rolling 14-day barrel rate allowed by the pitching staff in this context.
+
+      # ── Rolling 30-day ───────────────────────────────────────────────────────
+      - name: games_30d
+        description: Games played in this context in the trailing 30 days.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_30d
+        description: Average runs scored per game in the trailing 30-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_30d
+        description: Rolling 30-day wOBA for the offense in this context.
+
+      - name: xwoba_30d
+        description: Rolling 30-day expected wOBA for the offense. Null before 2023.
+
+      - name: k_pct_30d
+        description: Rolling 30-day strikeout rate for the offense in this context.
+
+      - name: bb_pct_30d
+        description: Rolling 30-day walk rate for the offense in this context.
+
+      - name: slugging_30d
+        description: Rolling 30-day slugging percentage for the offense in this context.
+
+      - name: hard_hit_pct_30d
+        description: Rolling 30-day hard-hit rate for the offense in this context.
+
+      - name: barrel_pct_30d
+        description: Rolling 30-day barrel rate for the offense in this context.
+
+      - name: runs_allowed_per_game_30d
+        description: Average runs allowed per game in the trailing 30-day window in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_against_30d
+        description: Rolling 30-day wOBA allowed by the pitching staff in this context.
+
+      - name: xwoba_against_30d
+        description: Rolling 30-day expected wOBA allowed. Null before 2023.
+
+      - name: k_pct_recorded_30d
+        description: Rolling 30-day strikeout rate recorded by the pitching staff in this context.
+
+      - name: bb_pct_allowed_30d
+        description: Rolling 30-day walk rate allowed by the pitching staff in this context.
+
+      - name: hard_hit_pct_allowed_30d
+        description: Rolling 30-day hard-hit rate allowed by the pitching staff in this context.
+
+      - name: barrel_pct_allowed_30d
+        description: Rolling 30-day barrel rate allowed by the pitching staff in this context.
+
+      # ── Season-to-date ───────────────────────────────────────────────────────
+      - name: games_std
+        description: >
+          Games played in this home/away context season-to-date through and including
+          this game. Resets each season year. Always >= games_7d since it accumulates
+          the full season.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 1"
+
+      - name: runs_per_game_std
+        description: Average runs scored per game season-to-date in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_std
+        description: Season-to-date wOBA for the offense in this context.
+
+      - name: xwoba_std
+        description: Season-to-date expected wOBA for the offense. Null before 2023.
+
+      - name: k_pct_std
+        description: Season-to-date strikeout rate for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_std
+        description: Season-to-date walk rate for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: slugging_std
+        description: Season-to-date slugging percentage for the offense in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 4"
+
+      - name: hard_hit_pct_std
+        description: Season-to-date hard-hit rate for the offense in this context.
+
+      - name: barrel_pct_std
+        description: Season-to-date barrel rate for the offense in this context.
+
+      - name: runs_allowed_per_game_std
+        description: Average runs allowed per game season-to-date in this context.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: woba_against_std
+        description: Season-to-date wOBA allowed by the pitching staff in this context.
+
+      - name: xwoba_against_std
+        description: Season-to-date expected wOBA allowed. Null before 2023.
+
+      - name: k_pct_recorded_std
+        description: Season-to-date strikeout rate recorded by the pitching staff in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: bb_pct_allowed_std
+        description: Season-to-date walk rate allowed by the pitching staff in this context.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 1"
+
+      - name: hard_hit_pct_allowed_std
+        description: Season-to-date hard-hit rate allowed by the pitching staff in this context.
+
+      - name: barrel_pct_allowed_std
+        description: Season-to-date barrel rate allowed by the pitching staff in this context.
