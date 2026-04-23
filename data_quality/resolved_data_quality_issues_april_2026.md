@@ -3,6 +3,56 @@ All issues below were identified and resolved during April 2026. Open issues are
 
 ---
 
+## stg_statsapi_probable_pitchers — Historical coverage gap (RESOLVED 2026-04-23)
+
+**Issue:** `probable_pitcher_id` was null for 100% of rows across all seasons (2015–2026). The warn-severity `not_null` test on `probable_pitcher_id` fired for every row.
+
+**Root cause:** `scripts/ingest_statsapi.py` requested the Stats API schedule endpoint with `hydrate=lineups` only. The `probablePitcher` hydration was never included, so `teams:home:probablePitcher` and `teams:away:probablePitcher` were absent from every stored JSON object in `baseball_data.statsapi.monthly_schedule`.
+
+**Fix:** Updated `ingest_statsapi.py` line 102 — `hydrate` parameter changed from `"lineups"` to `"lineups,probablePitcher"`. Full historical backfill run on 2026-04-23:
+```
+uv run ingest_statsapi.py schedule --start-date 2015-04-01
+```
+133 months processed (2015-04 through 2026-04). Each month's JSON fully replaced via MERGE on `month_start_date`.
+
+**Post-backfill coverage audit (regular season, both pitchers populated):**
+
+| game_year | season_phase    | total_games | games_with_both | pct_both |
+|-----------|-----------------|-------------|-----------------|----------|
+| 2015      | early_season    | 324         | 324             | 100.0%   |
+| 2015      | mid_late_season | 2,106       | 2,098           | 99.6%    |
+| 2016      | early_season    | 350         | 349             | 99.7%    |
+| 2016      | mid_late_season | 2,080       | 2,071           | 99.6%    |
+| 2017      | early_season    | 368         | 365             | 99.2%    |
+| 2017      | mid_late_season | 2,062       | 2,042           | 99.0%    |
+| 2018      | early_season    | 415         | 409             | 98.6%    |
+| 2018      | mid_late_season | 2,017       | 1,995           | 98.9%    |
+| 2019      | early_season    | 432         | 430             | 99.5%    |
+| 2019      | mid_late_season | 1,998       | 1,985           | 99.3%    |
+| 2020      | mid_late_season | 900         | 874             | 97.1%    |
+| 2021      | early_season    | 375         | 372             | 99.2%    |
+| 2021      | mid_late_season | 2,055       | 2,048           | 99.7%    |
+| 2022      | early_season    | 315         | 315             | 100.0%   |
+| 2022      | mid_late_season | 2,115       | 2,111           | 99.8%    |
+| 2023      | early_season    | 425         | 424             | 99.8%    |
+| 2023      | mid_late_season | 2,005       | 2,001           | 99.8%    |
+| 2024      | early_season    | 445         | 445             | 100.0%   |
+| 2024      | mid_late_season | 1,985       | 1,983           | 99.9%    |
+| 2025      | early_season    | 457         | 456             | 99.8%    |
+| 2025      | mid_late_season | 1,973       | 1,968           | 99.7%    |
+| 2026      | early_season    | 468         | 391             | 83.5%    |
+
+*2026 early_season is 83.5% — games in the second half of April 2026 and beyond had not yet had pitchers announced at backfill time. This is expected and will resolve as daily ingestion runs.*
+
+**Design decision for Phase 2 (coverage ≥ 70% threshold met):**
+- `stg_statsapi_probable_pitchers` is viable as a historical feature source. All completed seasons 2015–2025 are ≥ 97% populated.
+- Residual nulls (~0.4–3%) represent postponed/cancelled games or late rotation decisions. These must be handled via fallback to `mart_starting_pitcher_game_log` in Phase 2 feature assembly — treat as an optional join block with coalesce rather than a required key.
+- Live pre-game scoring (Phase 6/7): `stg_statsapi_probable_pitchers` is the primary source for upcoming games. Daily ingestion now includes `probablePitcher` and will populate new games as rotations are announced.
+
+**Resolution date:** 2026-04-23
+
+---
+
 ## mart_pitch_game_context
 
 - [x] `accepted_values_mart_pitch_game_context_balls__0__1__2__3` — balls column contains values outside 0–3 (schema.yml:110)

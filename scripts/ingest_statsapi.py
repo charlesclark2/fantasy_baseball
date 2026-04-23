@@ -99,7 +99,7 @@ STATSAPI_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
 STATSAPI_SCHEDULE_PARAMS = {
     "sportId": 1,
     "gameType": "R",
-    "hydrate": "lineups",
+    "hydrate": "lineups,probablePitcher",
 }
 
 STATSAPI_VENUE_URL = "https://statsapi.mlb.com/api/v1/venues/{venue_id}"

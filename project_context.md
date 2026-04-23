@@ -60,8 +60,9 @@ uv run savant_ingestion.py batter_pitches --start-date 2026-03-20 --end-date 202
 - Win/run expectancy delta per pitch
 - Score and base/out state at the time of each pitch
 - Fielding alignment flags (shift, shade)
-- **Bat tracking (2023 onward only):** `bat_speed_mph`, `swing_length_ft`, `attack_angle_degrees`, `swing_path_tilt`, `attack_direction`, `hyper_speed`
-- **Intercept offset (2024 onward only):** `intercept_offset_x_inches`, `intercept_offset_y_inches`
+- **Bat tracking (2023-07-14 onward; swing events only):** `bat_speed_mph`, `swing_length_ft`, `attack_angle_degrees`, `swing_path_tilt`, `attack_direction` — Hawk-Eye bat sensor rolled out at 2023 All-Star break; ~45% population rate (swing-contact pitches only)
+- **Intercept offset (2023-07-14 onward; swing events only):** `intercept_offset_x_inches`, `intercept_offset_y_inches` — same rollout and coverage as bat tracking
+- **hyper_speed (2015 onward):** Available since first Statcast season; ~33% population rate (batted contact events); distinct from the 2023 Hawk-Eye bat tracking system
 
 **`ref_players`** — Player reference table with BAM IDs, full names, and career date ranges.
 
@@ -87,11 +88,31 @@ Betting market data sourced from [The Odds API](https://the-odds-api.com/). Inge
 
 **`ref_teams`** — Static 33-row reference table (30 active franchises + legacy abbreviation entries). Contains `team_abbrev`, `team_id`, `team_name`, `league` (AL/NL), `division` (East/Central/West), and `is_active` flag.
 
+### 4.5 Data Availability Windows
+
+See `data_quality/data_availability_windows.md` for verified first-available dates, per-season pitch counts, and ML design implications for each feature group: Statcast full history, bat tracking (2023-07-14+), intercept offset (2023-07-14+), hyper_speed (2015+), confirmed lineups (2015+, 100% coverage), probable starters (2015+), and odds data (2026-04-23+).
+
 ---
 
 ## 5. Data Architecture
 
-### 5.1 Staging Layer
+### 5.1 Feature Layer
+
+The feature layer (`dbt/models/feature/`) is a dedicated ML boundary layer, separate from the mart layer. Models are materialized as **tables** into the `baseball_data.betting_features` Snowflake schema (distinct from `baseball_data.betting` where mart models live). All models in this layer enforce the **no-leakage rule**: every rolling window and stat lookup uses `< game_date` — no same-day data may appear in any feature.
+
+Phase 2 will populate this layer with five pre-game feature assembly models:
+
+| Model | Grain | Description |
+|---|---|---|
+| `feature_pregame_lineup_features` | Game × side | Per-team lineup feature vector with aggregated batter rolling stats |
+| `feature_pregame_starter_features` | Game × starter | Per-starter feature vector with rolling pitcher stats and platoon splits |
+| `feature_pregame_team_features` | Game × team | Per-team context: rolling offense, pitching, bullpen workload and effectiveness, season record |
+| `feature_pregame_park_features` | Game | Park dimensions, elevation, surface, roof type, and empirical run factors |
+| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; direct ML input |
+
+---
+
+### 5.3 Staging Layer
 
 Five models normalize and type-cast raw sources. All staging models are materialized as **tables** so downstream mart views have a stable, pre-computed base.
 
@@ -103,9 +124,9 @@ Five models normalize and type-cast raw sources. All staging models are material
 | `stg_statsapi_lineups_wide` | stg_statsapi_lineups | Team × game × side | Wide pivot — one row per team per game with 9 batting-order slot columns |
 | `stg_statsapi_venues` | statsapi.venues_raw (JSON flatten) | Venue | Extracts park dimensions, surface, roof, coordinates, elevation, timezone |
 
-### 5.2 Mart Layer
+### 5.4 Mart Layer
 
-Twenty mart models organized by grain. Pitch-grain models are materialized as **incremental tables** (merge on `pitch_sk`). Aggregate and rolling models are materialized as **tables**.
+Twenty-two mart models organized by grain. Pitch-grain models are materialized as **incremental tables** (merge on `pitch_sk`). Aggregate and rolling models are materialized as **tables**.
 
 #### Pitch-Grain Models (7 models)
 All share `pitch_sk` as the primary key. They can be joined to one another without duplication.
@@ -120,11 +141,12 @@ All share `pitch_sk` as the primary key. They can be joined to one another witho
 | `mart_pitch_hit_characteristics` | Exit velocity, launch angle, hit distance, batted ball type, contact quality flags (`is_barrel`, `is_hard_hit`, `is_sweet_spot`), xBA/xwOBA, bat tracking (2023+) |
 | `mart_pitch_fielding` | Infield/outfield alignment classification, fielder IDs by position, shift/shade flags |
 
-#### Game-Level Model (1 model)
+#### Game-Level Models (2 models)
 
 | Model | Contents |
 |---|---|
-| `mart_game_results` | Final score, teams, league/division, winner, run differential, extra innings flag, interleague flag |
+| `mart_game_results` | Final score, teams, league/division, winner, run differential, extra innings flag, interleague flag, `venue_id`, `venue_name` |
+| `mart_park_run_factors` | Empirical run environment per ballpark: `runs_per_game_at_park` (season average) and `park_run_factor_3yr` (3-year rolling avg). One row per `venue_id` per `game_year`. Regular season only; minimum 10 games. Join to `stg_statsapi_venues` on `venue_id` for physical park dimensions. |
 
 #### Player Rolling Stats (2 models)
 One row per player per game. Rolling windows: 7/14/30-day + season-to-date. Regular season only (`game_type = 'R'`).
@@ -144,13 +166,14 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 | `mart_team_vs_pitcher_hand` | Offensive splits vs. RHP and LHP starters: runs, wOBA, xwOBA, K%, BB%, hard-hit %, barrel rate |
 | `mart_home_away_splits` | Offense and pitching split by home/away context: runs, wOBA, xwOBA, K%, BB%, SLG, hard-hit %, barrel rate — for each side separately |
 
-#### Specialty Models (6 models)
+#### Specialty Models (7 models)
 
 | Model | Grain | Contents |
 |---|---|---|
 | `mart_team_season_record` | Team × game | Cumulative W/L record and win % through each date |
 | `mart_starting_pitcher_game_log` | Starter × game | IP, outs recorded, K, BB, earned runs, ERA, avg fastball velo per start |
-| `mart_bullpen_workload` | Reliever × game | Innings pitched, inherited runners, days since last appearance |
+| `mart_bullpen_workload` | Team × game | Bullpen fatigue: pitches thrown, relievers used, closer/high-leverage appearances over 1/3/7-day windows |
+| `mart_bullpen_effectiveness` | Team × game | Bullpen quality: K%, BB%, xwOBA against, hard-hit %, whiff rate, IP over 14- and 30-day rolling windows. Complement to `mart_bullpen_workload`; join on `team_abbrev + game_pk` |
 | `mart_batter_vs_handedness_splits` | Batter × pitcher hand × season | AVG, wOBA, xwOBA, K%, BB%, hard-hit % vs. LHP and RHP |
 | `mart_pitcher_vs_handedness_splits` | Pitcher × batter hand × season | K%, BB%, wOBA against, hard-hit % against vs. LHB and RHB |
 | `mart_head_to_head_team_history` | Team pair × season | Season and all-time H2H record, run differential, and extra-innings rate for every franchise pair; abbreviations normalized to canonical form (e.g. OAK → ATH) for continuous franchise history |
@@ -172,11 +195,13 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 
 ## 6. Key Design Notes
 
-**Bat tracking availability:** `bat_speed_mph`, `swing_length_ft`, `attack_angle_degrees`, and related fields are available in Statcast data **starting in 2023 only**. Models referencing these columns will produce nulls for pre-2023 rows. ML features built on bat tracking should be clearly scoped to the 2023+ era or treated as optional feature sets.
+**Bat tracking availability:** `bat_speed`, `swing_length`, `attack_angle`, `attack_direction`, and `swing_path_tilt` are available **starting 2023-07-14** (Hawk-Eye bat sensor; mid-season All-Star break rollout). They populate for swing-contact events only (~45% of pitches in 2024+; ~20% for the 2023 partial season). ML features built on these columns must treat them as an optional era-specific block — models trained on 2015–present data must have a fallback path that omits them.
+
+**hyper_speed availability:** `hyper_speed` has been available **since 2015-04-05** and is distinct from the 2023 bat tracking system. It populates for batted contact events (~33% of pitches) and is usable for the full training history.
 
 **Expected metrics availability:** `xba`, `xwoba`, `xslg` are only populated for in-play events (balls put in play). They are null for called strikes, swinging strikes, fouls, and walks.
 
-**Intercept offset fields** (`intercept_offset_x_inches`, `intercept_offset_y_inches`) are available **starting in 2024 only**.
+**Intercept offset fields** (`intercept_offset_x_inches`, `intercept_offset_y_inches`) are available **starting 2023-07-14** — same rollout date as bat tracking, not 2024. Swing-contact events only, same ~45% population rate.
 
 **Rolling window season isolation:** All rolling window CTEs partition by `game_year` to prevent November stats from bleeding into April of the following season.
 
@@ -242,8 +267,9 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Head-to-head franchise history | Complete |
 | Starting pitcher game log | Complete |
 | Bullpen workload | Complete |
+| Bullpen effectiveness (quality) | Complete — `mart_bullpen_effectiveness` with 14/30-day K%, BB%, xwOBA against, hard-hit %, whiff rate, IP |
 | Lineup data (confirmed pre-game) | Complete (staging) |
-| Ballpark context | Complete (staging) |
+| Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
 | ML feature store | Not started |
 | Prediction models | Not started |
@@ -260,15 +286,15 @@ The main gap between current state and a deployable prediction model is the **fe
 Estimated completion: before ML work begins.
 
 **Goals:**
-- Resolve all 5 pending data quality issues
-- Confirm `mart_pitch_hit_characteristics` null flag root cause and fix
-- Confirm `mart_pitch_fielding` null flag root cause and fix
-- Add `venue_id` / park factor join to `mart_game_results` (venue context is staged but not yet joined)
-- Confirm lineup data is reliably populated for historical games (coverage audit)
+- ~~Resolve all pending data quality issues~~ ✓ Complete — all `error`-severity tests pass; 2 remaining items are intentional `warn`-severity tests for `mart_pitch_fielding` (irresolvable Statcast sensor gaps, acknowledged limitations)
+- ~~Confirm `mart_pitch_hit_characteristics` null flag root cause and fix~~ ✓ Complete — `coalesce(..., false)` applied to all four boolean casts; sac bunts and early Statcast coverage gaps documented
+- ~~Confirm `mart_pitch_fielding` null flag root cause and fix~~ ✓ Complete — `coalesce(..., false)` applied to all nine alignment boolean flags; 70,778-row sensor gap in source acknowledged as irresolvable
+- ~~Add `venue_id` / park factor join to `mart_game_results`~~ ✓ Complete — `venue_id` and `venue_name` joined from `stg_statsapi_games`; `mart_park_run_factors` built with season and 3-year rolling run factors per venue; all tests pass
+- ~~Confirm lineup data is reliably populated for historical games (coverage audit)~~ ✓ Complete — 100% coverage 2015–2026; lineup features are a required join with no date cutoff
 - Document data availability windows (Statcast coverage by year, lineup coverage by year)
 
 **Deliverables:**
-- All dbt tests passing at error thresholds
+- ✓ All dbt tests passing at error thresholds (2 intentional `warn`-severity tests remain — by design)
 - Full coverage audit documented in `data_quality/open_data_quality_issues.md`
 
 ---
@@ -292,6 +318,12 @@ The prediction task requires a single feature vector per game, assembled from in
 - Rolling windows should use the most recent N-game or N-day window ending the day before the game
 - Lineup slot features should account for confirmed lineup order and opposing starter handedness
 - Park features are static per venue (no rolling needed)
+
+**Lineup coverage audit (completed 2026-04-23):**
+
+A pre-Phase 2 audit confirmed that `stg_statsapi_lineups_wide` has **100% coverage for every regular season from 2015 through 2026** — home and away lineups are populated for all completed games with no partial-season gaps. The ≥70% threshold is met without restriction across the full historical record.
+
+**Design decision:** `mart_pregame_lineup_features` should treat `stg_statsapi_lineups_wide` as a **required join** (not an optional feature block). No training set date cutoff is needed — lineup features are reliable for the full 2015–present history. Nulls will only appear for future unplayed games (expected behavior). The ML training set does not need a separate code path for missing lineup data.
 
 ---
 
@@ -422,10 +454,12 @@ Operationalize the full stack:
 | `dbt/models/sources.yml` | Source table definitions (savant, statsapi) |
 | `dbt/models/staging/schema.yml` | Staging model schemas and tests |
 | `dbt/models/mart/schema.yml` | Mart model schemas and tests |
+| `dbt/models/feature/schema.yml` | Feature layer model schemas and tests; materializes into `baseball_data.betting_features` |
 | `dbt/seeds/ref_teams.csv` | Static team reference (30 franchises + legacy abbreviations) |
 | `dbt/README.md` | dbt layer documentation |
 | `data_quality/open_data_quality_issues.md` | Open data quality issues — pending investigation and resolution |
 | `data_quality/resolved_data_quality_issues_april_2026.md` | Resolved data quality issues — April 2026 |
+| `data_quality/data_availability_windows.md` | Verified first-available dates and per-season coverage for all feature groups; Phase 3 EDA and era-aware model scoping reference |
 | `scripts/daily_run.md` | **Daily ingestion runbook** — step-by-step commands to keep all Snowflake source tables current; covers savant, statsapi, and odds_api ingestion plus dbt refresh |
 | `scripts/savant_ingestion.py` | Baseball Savant CSV ingestion; chunked by day, idempotent, extensible via `StatcastEndpoint` registry; subcommands: `batter_pitches` |
 | `scripts/ingest_statsapi.py` | Python ingestion for Stats API schedule and venues; schedule subcommand defaults to current month only to avoid full historical re-processing |

@@ -39,8 +39,10 @@ seeds:
 
 models:
   baseball_betting_and_fantasy:
-    # Config indicated by + and applies to all files under models/example/
     staging:
       +materialized: table
     mart:
       +materialized: view
+    feature:
+      +materialized: table
+      +schema: betting_features

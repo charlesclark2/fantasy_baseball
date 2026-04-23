@@ -99,6 +99,27 @@ dbtf build --select mart_team_vs_pitcher_hand
 dbtf test
 ```
 
+## Data Quality
+
+All dbt tests are schema tests defined in `models/mart/schema.yml` and `models/staging/schema.yml`. Tests use `error` severity by default; `warn` severity is reserved for acknowledged source-data limitations that cannot be resolved at the model layer.
+
+**Current status:** All `error`-severity tests pass. Two intentional `warn`-severity tests remain:
+- `not_null_mart_pitch_fielding_if_fielding_alignment` — 70,778 pitches (0.96%) lack alignment tracking in the Statcast source (sensor gap, not a model bug); highest concentration in 2015–2016
+- `not_null_mart_pitch_fielding_of_fielding_alignment` — Same 70,778 rows; both alignment columns are always null together
+
+The nine derived boolean alignment flags (`is_infield_shift`, etc.) are all protected with `coalesce(..., false)` and are never null.
+
+**Issue tracking:**
+- Open issues: `data_quality/open_data_quality_issues.md`
+- Resolved issues: `data_quality/resolved_data_quality_issues_april_2026.md`
+
+**Resolution workflow:**
+1. Identify the failing test and its severity
+2. Run a diagnostic query via snowsql to characterize failing rows
+3. Determine root cause (source data gap, model logic bug, or test design flaw)
+4. Apply fix and confirm build passes
+5. Move entry from open to resolved file; update `project_context.md`
+
 ## Querying Snowflake Directly
 
 Use the `default` snowsql connection with the project RSA key for all ad-hoc queries:

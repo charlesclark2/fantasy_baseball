@@ -52,6 +52,16 @@ ref_teams as (
 
 ),
 
+venue_lookup as (
+
+    select
+        game_pk,
+        venue_id,
+        venue_name
+    from {{ ref('stg_statsapi_games') }}
+
+),
+
 final as (
 
     select
@@ -63,6 +73,10 @@ final as (
         gl.game_date,
         gl.game_year,
         gl.game_type,
+
+        -- ── Venue ─────────────────────────────────────────────────────────────────
+        vl.venue_id,
+        vl.venue_name,
 
         -- ── Home team ────────────────────────────────────────────────────────────
         gl.home_team,
@@ -114,6 +128,7 @@ final as (
         (ht.league != at.league)::boolean          as is_interleague
 
     from game_level gl
+    left join venue_lookup vl on gl.game_pk = vl.game_pk
     left join ref_teams ht on gl.home_team = ht.team_abbrev
     left join ref_teams at on gl.away_team = at.team_abbrev
 

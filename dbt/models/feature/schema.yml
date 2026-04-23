@@ -1,0 +1,17 @@
+version: 2
+
+# ============================================================================
+# Feature Layer — ML Pre-Game Feature Vectors
+# ============================================================================
+# Models in this folder materialize into baseball_data.betting_features in
+# Snowflake (distinct from baseball_data.betting where mart models live).
+#
+# LEAKAGE RULE: Every rolling window lookup and stat join in this layer MUST
+# use strictly less-than game_date (< game_date, not <=). No same-day data
+# may appear in any feature. Violations invalidate the training set.
+#
+# Grain: one row per game_pk (master assembly) or game_pk × side/team/starter
+# depending on the model. See individual model descriptions below.
+# ============================================================================
+
+models:

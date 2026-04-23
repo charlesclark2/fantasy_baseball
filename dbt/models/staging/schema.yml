@@ -957,6 +957,52 @@ models:
       - name: slot_9_position
         description: Position abbreviation for batting order position 9.
 
+  - name: stg_statsapi_probable_pitchers
+    description: >
+      One row per game_pk per side (home / away), extracted from the Stats API
+      monthly schedule JSON. The probablePitcher field is populated 1–3 days
+      before game time once the rotation is announced. probable_pitcher_id is
+      null when the field is absent — this is expected for future games or
+      games where the rotation has not yet been set. No rows are dropped.
+      Join to stg_statsapi_games on game_pk for full game context.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, side]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier. Joins to stg_statsapi_games.game_pk.
+        tests:
+          - not_null:
+              config:
+                severity: error
+      - name: game_date
+        description: Official calendar date of the game (from officialDate).
+        tests: [not_null]
+      - name: side
+        description: Which team this row represents — home or away.
+        tests:
+          - not_null:
+              config:
+                severity: error
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: probable_pitcher_id
+        description: >
+          Stats API player ID for the probable starting pitcher. Null when the
+          rotation has not yet been announced. Expected to be null for a
+          material fraction of historical and future games.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: probable_pitcher_name
+        description: >
+          Full name of the probable starting pitcher as returned by the Stats
+          API. Null when probable_pitcher_id is null.
+
   - name: stg_statsapi_venues
     description: >
       One row per ballpark, flattened from baseball_data.statsapi.venues_raw.

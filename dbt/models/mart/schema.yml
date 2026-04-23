@@ -1946,6 +1946,98 @@ models:
         tests:
           - not_null
 
+      - name: venue_id
+        description: >
+          MLB Stats API venue identifier for the ballpark where the game was
+          played. Sourced from stg_statsapi_games. Null when the game predates
+          venue ingestion or the Stats API schedule record has no venue field.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      - name: venue_name
+        description: >
+          Name of the ballpark where the game was played. Sourced from
+          stg_statsapi_games. Null when venue_id is null.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+
+  # ============================================================================
+  # mart_park_run_factors
+  # ============================================================================
+  - name: mart_park_run_factors
+    description: >
+      Empirical run environment per ballpark, one row per venue_id per game_year.
+      Captures the observed total runs per game scored at each park in a given
+      regular season, plus a 3-year rolling average (park_run_factor_3yr) that
+      smooths single-season variation for use as an ML feature. Only rows with
+      at least 10 regular season games at the venue in the season are emitted.
+      Physical park characteristics (dimensions, elevation, surface, roof) are
+      in stg_statsapi_venues; join on venue_id to combine both signals.
+      Grain: one row per venue_id per game_year.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [venue_id, game_year]
+
+    columns:
+
+      - name: venue_id
+        description: >
+          MLB Stats API venue identifier. Primary component of the composite
+          grain key. Foreign key to stg_statsapi_venues.venue_id.
+        tests:
+          - not_null
+
+      - name: venue_name
+        description: Name of the ballpark at the time of ingestion.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: >
+          Regular season year. Second component of the composite grain key.
+        tests:
+          - not_null
+
+      - name: game_count
+        description: >
+          Number of regular season games played at this venue in game_year.
+          Always >= 10 (rows below this threshold are excluded).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 10"
+
+      - name: runs_per_game_at_park
+        description: >
+          Average total runs scored per game (home + away) at this venue in
+          game_year. Season-level signal; use park_run_factor_3yr for a
+          smoothed feature.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      - name: park_run_factor_3yr
+        description: >
+          3-year rolling average of runs_per_game_at_park, anchored at the
+          current game_year and looking back up to 2 prior seasons. Computed
+          over the venue partition ordered by game_year (ROWS BETWEEN
+          2 PRECEDING AND CURRENT ROW). Primary park run factor feature for ML.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 5 and 25"
+
 
   # ============================================================================
   # mart_team_season_record
@@ -3996,6 +4088,185 @@ models:
           - accepted_values:
               arguments:
                 values: [0, 1]
+
+  # ============================================================================
+  # mart_bullpen_effectiveness
+  # ============================================================================
+  - name: mart_bullpen_effectiveness
+    description: >
+      Grain: team_abbrev × game_pk. One row per team per game where the team
+      deployed at least one reliever. Captures rolling bullpen quality metrics
+      over the 14- and 30-day windows preceding each game. All rolling windows
+      use an upper bound of 1 day prior so current-game data never leaks into
+      the features.
+
+      Reliever definition: any pitcher who is NOT the qualifying starter per
+      mart_starting_pitcher_game_log (first pitcher with >= 20 pitches or
+      >= 3 distinct innings). Identical to mart_bullpen_workload.
+
+      Complement to mart_bullpen_workload: join both models on
+      team_abbrev (= pitching_team) + game_pk for a full pre-game bullpen view.
+      mart_bullpen_workload covers fatigue and availability; this model covers
+      effectiveness and stuff quality.
+
+      Doubleheader handling: rolling windows aggregate to calendar-date level
+      before summing across the window. Both games of a doubleheader carry the
+      same prior-day effectiveness values.
+
+      All pct metrics (k_pct, bb_pct, xwoba_against, hard_hit_pct, whiff_rate)
+      are null when no prior appearances exist in the window (start of season).
+      innings_pitched is coalesced to 0.0 when the window is empty.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_abbrev, game_pk]
+      # 30-day window must be >= 14-day window when both are populated
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: >
+              innings_pitched_30d is null
+              or innings_pitched_14d is null
+              or innings_pitched_30d >= innings_pitched_14d
+
+    columns:
+
+      # ── Identifiers ─────────────────────────────────────────────────────────
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: >
+          Statcast abbreviation of the team whose bullpen is being profiled
+          (the pitching team). Matches pitching_team in mart_bullpen_workload.
+        tests:
+          - not_null
+
+      # ── 14-day rolling effectiveness ─────────────────────────────────────────
+      - name: k_pct_14d
+        description: >
+          Strikeout rate for this team's bullpen over the prior 14 days
+          (strikeouts / batters_faced). Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (k_pct_14d between 0 and 1)"
+
+      - name: bb_pct_14d
+        description: >
+          Walk rate for this team's bullpen over the prior 14 days
+          (walks / batters_faced). Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (bb_pct_14d between 0 and 1)"
+
+      - name: xwoba_against_14d
+        description: >
+          Expected wOBA allowed by this team's bullpen over the prior 14 days.
+          Uses xwoba for in-play events and woba_value for K/BB/HBP.
+          Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (xwoba_against_14d between 0 and 3)"
+
+      - name: hard_hit_pct_14d
+        description: >
+          Hard-hit rate allowed (exit velocity >= 95 mph / batted balls) over
+          the prior 14 days. Null if no in-play events in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (hard_hit_pct_14d between 0 and 1)"
+
+      - name: whiff_rate_14d
+        description: >
+          Swing-and-miss rate (swinging strikes / pitches thrown) for this
+          team's bullpen over the prior 14 days. Null if no appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (whiff_rate_14d between 0 and 1)"
+
+      - name: innings_pitched_14d
+        description: >
+          Total innings pitched (decimal: outs / 3.0) by this team's bullpen
+          over the prior 14 days. 0.0 when no appearances in window.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
+      # ── 30-day rolling effectiveness ─────────────────────────────────────────
+      - name: k_pct_30d
+        description: >
+          Strikeout rate for this team's bullpen over the prior 30 days
+          (strikeouts / batters_faced). Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (k_pct_30d between 0 and 1)"
+
+      - name: bb_pct_30d
+        description: >
+          Walk rate for this team's bullpen over the prior 30 days
+          (walks / batters_faced). Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (bb_pct_30d between 0 and 1)"
+
+      - name: xwoba_against_30d
+        description: >
+          Expected wOBA allowed by this team's bullpen over the prior 30 days.
+          Null if no reliever appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (xwoba_against_30d between 0 and 3)"
+
+      - name: hard_hit_pct_30d
+        description: >
+          Hard-hit rate allowed (exit velocity >= 95 mph / batted balls) over
+          the prior 30 days. Null if no in-play events in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (hard_hit_pct_30d between 0 and 1)"
+
+      - name: whiff_rate_30d
+        description: >
+          Swing-and-miss rate (swinging strikes / pitches thrown) for this
+          team's bullpen over the prior 30 days. Null if no appearances in window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (whiff_rate_30d between 0 and 1)"
+
+      - name: innings_pitched_30d
+        description: >
+          Total innings pitched (decimal: outs / 3.0) by this team's bullpen
+          over the prior 30 days. 0.0 when no appearances in window.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 0"
+
 
   - name: mart_pitcher_vs_handedness_splits
     description: >
