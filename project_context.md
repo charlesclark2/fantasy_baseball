@@ -100,7 +100,7 @@ See `data_quality/data_availability_windows.md` for verified first-available dat
 
 The feature layer (`dbt/models/feature/`) is a dedicated ML boundary layer, separate from the mart layer. Models are materialized as **tables** into the `baseball_data.betting_features` Snowflake schema (distinct from `baseball_data.betting` where mart models live). All models in this layer enforce the **no-leakage rule**: every rolling window and stat lookup uses `< game_date` — no same-day data may appear in any feature.
 
-Phase 2 (complete as of 2026-04-23) populated this layer with five pre-game feature assembly models:
+Phase 2 (complete as of 2026-04-23) populated this layer with six pre-game feature assembly models:
 
 | Model | Grain | Description |
 |---|---|---|
@@ -108,7 +108,8 @@ Phase 2 (complete as of 2026-04-23) populated this layer with five pre-game feat
 | `feature_pregame_starter_features` | Game × starter | Per-starter feature vector with rolling pitcher stats, days rest, and prior-season platoon splits |
 | `feature_pregame_team_features` | Game × team | Per-team context: rolling offense, pitching, bullpen workload and effectiveness, season record, and schedule context (days rest, streak, timezone travel) |
 | `feature_pregame_park_features` | Game | Park dimensions, elevation, surface, roof type, and empirical run factors |
-| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; 25,146 regular-season rows; `has_full_data` flag selects the ~23,444 data-complete training rows (2016–2025) |
+| `feature_pregame_odds_features` | Game | Pre-game betting market features from lowvig (selected for lowest vig across h2h and totals markets). Moneyline + totals prices, vig-adjusted implied probabilities, market vig. Leakage guard: only `ingestion_ts < commence_time` snapshots used. Prices populate going forward via live ingestion; historical prices require Card 3 backfill completion. |
+| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all five feature tables; 25,146 regular-season rows; `has_full_data` flag selects the ~23,444 data-complete training rows (2016–2025); `has_odds` standalone flag for betting market availability |
 
 ---
 
@@ -191,7 +192,7 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 
 | Model | Grain | Contents |
 |---|---|---|
-| `mart_game_odds_bridge` | Game (`game_pk`) | One row per game in mart_game_results, left-joined to mart_odds_events on game_date + full team names. `event_id` is null for games without odds coverage (e.g. historical games predating odds ingestion). `has_odds` boolean flag for quick filtering. As of 2026-04-22, game results run through 2025-09-28 and odds events start 2026-04-23; matches will populate automatically as the 2026 season progresses. |
+| `mart_game_odds_bridge` | Game (`game_pk`) | One row per game in mart_game_results, left-joined to mart_odds_events on game_date + full team names (normalized to Stats API canonical names). `event_id` is null for games without odds coverage (pre-2021 or games not returned by The Odds API). `has_odds` boolean flag for quick filtering. Match rates: 72–78% for 2021–2026 regular season games (Odds API covers ~10 of ~13 games per day). Team name normalization: "Cleveland Indians" → "Cleveland Guardians" (2021), "Oakland Athletics" → "Athletics" (2021–2025). |
 
 ---
 
@@ -282,7 +283,7 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Lineup data (confirmed pre-game) | Complete (staging) |
 | Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
-| ML feature store | Complete — Phase 2 done 2026-04-23; five feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons) |
+| ML feature store | Complete — Phase 2 done 2026-04-23; six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features (prices populate going forward via live ingestion; historical coverage requires Card 3 backfill) |
 | Prediction models | Not started |
 | Betting/sizing layer | Not started |
 
@@ -422,14 +423,14 @@ Update `data_quality/data_availability_windows.md` to reflect the expanded odds 
 
 *Blockers:* **Blocked by Cards 1 and 3.** Historical raw data must be present in both source tables before downstream verification is meaningful. Card 2 (decimal odds) should also be merged before running this verification so the full column set is tested together.
 
-**Acceptance criteria:**
-- [ ] `dbtf build` passes all tests after historical backfill with no new failures
-- [ ] Row count in `stg_oddsapi_events` reflects all historical + live events with no duplicates per `event_id`
-- [ ] Row count in `stg_oddsapi_odds` reflects all historical + live odds rows with no grain violations
-- [ ] `mart_game_odds_bridge.has_odds = true` for 2021–2025 regular season games where odds were available
-- [ ] No unexpected nulls in `outcome_price_decimal` for historical rows in `mart_odds_outcomes`
-- [ ] Per-season match rate in `mart_game_odds_bridge` documented (query + results added to `data_quality/open_data_quality_issues.md` or a new audit note)
-- [ ] `data_quality/data_availability_windows.md` updated: odds coverage window changed from "2026-04-23 – present" to "2021 regular season – present (historical via backfill; live from 2026-04-23)"
+**Acceptance criteria (completed 2026-04-23):**
+- [x] `dbtf build` passes all tests after historical backfill with no new failures (962 pass / 18 warn / 0 error)
+- [x] Row count in `stg_oddsapi_events` reflects all historical + live events with no duplicates per `event_id` (9,419 distinct event_ids = 9,419 total rows)
+- [x] Row count in `stg_oddsapi_odds` reflects all historical + live odds rows with no grain violations (0 null prices, 0 grain duplicates)
+- [x] `mart_game_odds_bridge.has_odds = true` for 2021–2025 regular season games where odds were available (72.4–75.9% per season after team name normalization fix)
+- [x] No unexpected nulls in `outcome_price_decimal` for historical rows in `mart_odds_outcomes`
+- [x] Per-season match rate in `mart_game_odds_bridge` documented in `data_quality/open_data_quality_issues.md` with pre-fix vs post-fix table
+- [x] `data_quality/data_availability_windows.md` updated with full odds coverage section including per-season match rates
 
 ---
 
@@ -445,7 +446,8 @@ The prediction task requires a single feature vector per game, assembled from in
 | `feature_pregame_starter_features` | Game × starter | Rolling pitcher stats (K%, xwOBA against), days rest, and prior-season platoon splits; source is `stg_statsapi_probable_pitchers` |
 | `feature_pregame_team_features` | Game × team | Rolling offense, rolling pitching, platoon splits vs. L/R, season record, bullpen workload, bullpen effectiveness, and schedule context (days rest, games_last_7d/14d, home/away streak, timezone travel) |
 | `feature_pregame_park_features` | Game | Park dimensions, elevation, surface, roof type (from `stg_statsapi_venues`), and prior-season empirical run factors (from `mart_park_run_factors`) |
-| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all four feature tables; 25,146 regular-season rows |
+| `feature_pregame_odds_features` | Game | Pre-game betting market signals from lowvig: moneyline (h2h) and totals prices, vig-adjusted implied probabilities, market vig. Bookmaker selected 2026-04-23: lowvig has lowest median vig in both h2h (2.33%) and totals (3.39%) markets with ≥99% event coverage. Leakage guard enforced: only `ingestion_ts < commence_time` snapshots used. Prices populate going forward (live daily ingestion); historical prices require Card 3 backfill. |
+| `feature_pregame_game_features` | Game | Master assembly: one wide row per game joining all five feature tables; 25,146 regular-season rows; `has_odds` standalone flag |
 
 **Training set (has_full_data = true) by season — verified 2026-04-23:**
 
@@ -659,6 +661,44 @@ dbtf build                                   # build all models + run tests
 dbtf build --select mart_odds_events         # build a single model
 dbtf test --select mart_odds_events          # run tests for a single model
 ```
+
+### Snowflake MCP Server (Claude Code in-conversation queries)
+
+The Snowflake MCP server is configured in `.mcp.json` at the repo root. It lets Claude query Snowflake directly during a conversation — no need to switch to snowsql for exploratory questions.
+
+**Package:** `snowflake-labs-mcp` (Snowflake Labs official; run via `uvx`, no persistent install needed)
+
+**Auth:** reads the `[connections.default]` block from `~/.snowsql/config` — same RSA key-pair credential used by snowsql. No credentials in `.mcp.json`.
+
+**Permissions:** read-only. SQL restricted to `SELECT`, `DESCRIBE`, `SHOW`, `USE` via `snowflake_mcp_config.yaml`. Object management and all write operations are blocked.
+
+**Activate:** restart Claude Code after adding `.mcp.json` — the server appears as the `snowflake` MCP tool automatically.
+
+```bash
+# Verify the server starts correctly (run manually to test; env vars mirror .mcp.json)
+SNOWFLAKE_ACCOUNT="IHUPICS-DP59975" \
+SNOWFLAKE_USER="dbt_rw" \
+SNOWFLAKE_ROLE="ACCOUNTADMIN" \
+SNOWFLAKE_WAREHOUSE="COMPUTE_WH" \
+SNOWFLAKE_PRIVATE_KEY_FILE="/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem" \
+uvx snowflake-labs-mcp \
+  --service-config-file /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/snowflake_mcp_config.yaml
+# Expected output: "Initializing tools and resources..." then "Starting MCP server"
+# "Closing Snowflake connection" at the end is normal — server shuts down when no client is attached
+```
+
+Example queries Claude can run in-conversation once connected:
+```sql
+-- Feature store coverage check
+SELECT game_year, COUNT(*) AS games, SUM(has_full_data::integer) AS full_data_games
+FROM baseball_data.betting_features.feature_pregame_game_features
+GROUP BY game_year ORDER BY game_year;
+
+-- Quick mart sanity check
+SELECT * FROM baseball_data.betting.mart_game_results LIMIT 5;
+```
+
+---
 
 ### snowsql
 

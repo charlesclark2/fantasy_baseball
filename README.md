@@ -8,7 +8,7 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phase 1 — Data Mart** is complete. The Snowflake mart layer covers all primary feature domains needed for game outcome prediction. Phase 2 (pre-game feature assembly) is next.
+**Phase 2 — Pre-Game Feature Assembly** is complete. The full feature store is built and validated. Phase 3 (EDA) is next.
 
 | Domain | Status |
 |---|---|
@@ -21,8 +21,10 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 | Confirmed batting lineups (staging) | Complete — 100% coverage 2015–present |
 | Probable starting pitchers (staging) | Complete — 97–100% coverage for completed seasons |
 | Ballpark context and run factors | Complete |
-| Betting odds (staging + mart) | Complete — forward-looking from 2026-04-23 |
-| ML feature assembly | Not started (Phase 2) |
+| Betting odds (staging + mart) | Events backfilled 2021–present (72-76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
+| Schedule fatigue context | Complete |
+| ML feature store | Complete — Phase 2 done 2026-04-23; 25,146 game rows; ~23,444 training rows (2016–2025); betting odds features integrated (lowvig, live ingestion only until Card 3 backfill) |
+| EDA | In progress (Phase 3) |
 | Prediction models | Not started (Phase 4) |
 | Betting application layer | Not started (Phase 6) |
 
@@ -35,7 +37,7 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   ├── models/
 │   │   ├── staging/            # Type-cast and normalize raw sources
 │   │   ├── mart/               # Feature-domain mart tables
-│   │   └── feature/            # Pre-game feature assembly (Phase 2)
+│   │   └── feature/            # Pre-game feature assembly (Phase 2, complete)
 │   └── seeds/                  # ref_teams static reference
 ├── scripts/                    # Python ingestion scripts
 │   ├── savant_ingestion.py     # Baseball Savant (Statcast) — daily
@@ -47,8 +49,10 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   ├── open_data_quality_issues.md           # Unresolved issues
 │   ├── resolved_data_quality_issues_april_2026.md
 │   └── data_availability_windows.md          # Verified feature availability dates
+├── exploratory_data_analysis/  # EDA notebooks (Phase 3, Marimo)
 ├── betting_ml/                 # ML model code (Phase 4+, placeholder)
-├── exploratory_data_analysis/  # EDA notebooks (Phase 3+, placeholder)
+├── .mcp.json                   # Snowflake MCP server config for Claude Code
+├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)
 └── project_context.md          # Full architecture, data sources, roadmap
 ```
 
@@ -76,7 +80,7 @@ cd ../dbt && dbtf build                            # Refresh all mart models
 | Baseball Savant (Statcast) | 2015-04-05 – present | ~7.5M pitches; updated daily |
 | MLB Stats API schedule | 2015 – present | Lineups + probable pitchers via `monthly_schedule` JSON |
 | MLB Stats API venues | All active parks | Field dimensions, surface, roof, elevation |
-| The Odds API | 2026-04-23 – present | Moneyline + totals; forward-looking only |
+| The Odds API | 2021 regular season – present | Events backfilled 2021–present; odds prices: 2023 partial + live 2026 (credit gap stopped full backfill) |
 
 Key data availability notes (verified against actual row counts — see [`data_quality/data_availability_windows.md`](data_quality/data_availability_windows.md)):
 - **Bat tracking** (`bat_speed`, `swing_length`, `attack_angle`, `attack_direction`, `swing_path_tilt`): 2023-07-14+, swing events only (~45% of pitches)
@@ -94,9 +98,55 @@ Key data availability notes (verified against actual row counts — see [`data_q
 | Transforms | dbt-fusion (`dbtf`) — use `dbtf`, not `dbt` |
 | Ingestion | Python + `uv` |
 | ML (planned) | Python / XGBoost (`betting_ml/`) |
-| EDA (planned) | Jupyter (`exploratory_data_analysis/`) |
+| EDA | Marimo (`exploratory_data_analysis/`) |
+| Claude Code data access | Snowflake MCP server (`snowflake-labs-mcp`) |
 
-Ad-hoc Snowflake queries:
+---
+
+## dbt MCP Server (Claude Code)
+
+The repo includes a dbt MCP server so Claude Code can introspect the dbt project — list models, retrieve column descriptions, and trace lineage — without reading schema.yml manually.
+
+**Setup** — activates automatically when Claude Code loads this project. No additional install step needed; `uvx` pulls `dbt-mcp` on first run.
+
+**Compatibility** — standard `dbt` (dbt-core) cannot parse this project due to package version conflicts with dbt-fusion's installed packages. The server is configured with `DBT_PATH=/Users/charlesclark/.local/bin/dbt` (the dbt-fusion binary) to avoid this.
+
+**Tools enabled** (read-only; build/run/test excluded):
+- `list` — list all models by resource type or layer
+- `compile` — compile Jinja SQL without executing
+- `parse` — regenerate manifest.json
+- `get_lineage_dev` — model lineage from manifest
+- `get_node_details_dev` — model + column details from manifest
+- `search_product_docs` / `get_product_doc_pages` — dbt documentation search
+
+**Verify** after restarting Claude Code:
+```
+Ask Claude: "List all models in the dbt project using the dbt MCP server"
+```
+
+---
+
+## Snowflake MCP Server (Claude Code)
+
+The repo includes a Snowflake MCP server so Claude Code can query Snowflake directly in-conversation. It is scoped to read-only (`SELECT`, `DESCRIBE`, `SHOW`, `USE` only).
+
+**Setup** — the server activates automatically when Claude Code loads this project. No additional install step is needed; `uvx` pulls `snowflake-labs-mcp` on first run.
+
+**Auth** — RSA key-pair via the existing key at `~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem` (same key used by snowsql). Connection parameters are injected via environment variables in `.mcp.json`; no plaintext credentials are stored in the file.
+
+**Config files:**
+- `.mcp.json` — server command, args, and env vars (Snowflake account, user, role, warehouse, key path)
+- `snowflake_mcp_config.yaml` — service permissions (query_manager only; object_manager and semantic_manager disabled)
+
+**Verify** after restarting Claude Code:
+```
+Ask Claude: "Query SELECT game_date, home_team, away_team FROM baseball_data.betting.mart_game_results LIMIT 3"
+```
+
+---
+
+## Ad-hoc Snowflake Queries (snowsql)
+
 ```bash
 snowsql -c default \
   --private-key-path /path/to/rsa_key.pem \

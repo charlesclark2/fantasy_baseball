@@ -480,3 +480,135 @@ models:
           Use WHERE has_full_data = true to select the data-complete training subset.
         tests:
           - not_null
+
+      - name: has_odds
+        description: >
+          True when an event_id was matched in mart_game_odds_bridge for this game.
+          Does NOT guarantee that odds price columns are populated — Card 3 historical
+          backfill covers only 2023 (226 events) and live 2026. Intentionally excluded
+          from has_full_data: odds are an optional feature block.
+        tests:
+          - not_null
+
+  - name: feature_pregame_odds_features
+    description: >
+      Pre-game betting market features. One row per game_pk (regular season only).
+      Integrates pre-game moneyline and totals odds from lowvig into the Phase 2
+      feature store.
+
+      Bookmaker selection (Step 0, 2026-04-23): lowvig has the lowest vig in both
+      h2h (2.33% median) and totals (3.39% median) markets with ≥99% coverage in
+      each. Runner-up betonlineag ties on h2h vig but trails on totals (4.71%).
+
+      Leakage guard: only odds snapshots where ingestion_ts < commence_time are used.
+      Most recent pre-game snapshot per (event_id, market_key, outcome_name) selected
+      via ROW_NUMBER ordered by ingestion_ts desc.
+
+      has_odds = true means an event_id was matched for this game in mart_game_odds_bridge
+      (72–78% of regular season games, 2021–present). Odds price columns (moneyline,
+      implied_prob, vig) are null when no pre-game lowvig snapshot exists — Card 3
+      backfill covers 2023 (partial) and live 2026 only.
+
+      Implied probability formula: raw_i = 1.0 / decimal_price_i; implied_prob_i =
+      raw_i / sum(all_raw). By construction home + away = 1.0, over + under = 1.0.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+          - unique
+          - relationships:
+              arguments:
+                to: ref('mart_game_results')
+                field: game_pk
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: has_odds
+        description: >
+          True when an event_id was matched in mart_game_odds_bridge. Does not
+          guarantee that odds price columns are populated.
+        tests:
+          - not_null
+
+      - name: home_implied_prob
+        description: >
+          Vig-adjusted home win probability from lowvig h2h market.
+          raw_home / (raw_home + raw_away), raw_i = 1.0 / decimal_price_i.
+          Null when no pre-game lowvig h2h snapshot exists for the event.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "home_implied_prob is not null"
+
+      - name: away_implied_prob
+        description: >
+          Vig-adjusted away win probability. Sums with home_implied_prob to exactly 1.0.
+          Null when no pre-game lowvig h2h snapshot exists for the event.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "away_implied_prob is not null"
+
+      - name: total_market_vig
+        description: >
+          Overround on the h2h market: SUM(1/decimal) - 1 across both outcomes.
+          Null when no pre-game lowvig h2h snapshot exists. Typically 0.02–0.03 for lowvig.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              config:
+                where: "total_market_vig is not null"
+
+      - name: over_implied_prob
+        description: >
+          Vig-adjusted over probability from lowvig totals market.
+          raw_over / (raw_over + raw_under). Null when no pre-game totals snapshot exists.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "over_implied_prob is not null"
+
+      - name: under_implied_prob
+        description: >
+          Vig-adjusted under probability. Sums with over_implied_prob to exactly 1.0.
+          Null when no pre-game totals snapshot exists.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "under_implied_prob is not null"
+
+      - name: totals_market_vig
+        description: >
+          Overround on the totals (over/under) market: SUM(1/decimal) - 1.
+          Null when no pre-game lowvig totals snapshot exists. Typically 0.03–0.04 for lowvig.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+              config:
+                where: "totals_market_vig is not null"

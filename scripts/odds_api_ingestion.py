@@ -18,14 +18,15 @@ supported and can be run independently via CLI subcommands:
                       market/region combinations and inserts each event's odds
                       as its own row in the configured odds target table.
 
-  historical-odds   — Reads distinct event IDs from mlb_events_raw (populated
-                      by historical-events) and fetches historical odds for each
-                      event via /v4/historical/sports/baseball_mlb/events with
-                      eventIds + markets + regions params. Snapshot date is set
-                      to commence_time minus 1 day to capture the pre-game line.
-                      Results land in mlb_odds_raw — the same target as live odds
-                      — so stg_oddsapi_odds and all downstream models consume
-                      them without schema changes.
+  historical-odds   — Fetches historical odds for each regular-season game date
+                      via /v4/historical/sports/baseball_mlb/odds using the same
+                      snapshot strategy as historical-events (1 hour before first
+                      pitch UTC). commenceTimeFrom/commenceTimeTo scope the
+                      response to that calendar date. Idempotent: (game_date,
+                      market) pairs already in target are skipped. Results land
+                      in mlb_odds_raw — the same target as live odds — so
+                      stg_oddsapi_odds and all downstream models consume them
+                      without schema changes.
 
 Loading is append-only. No rows are updated or deleted. Every run produces a
 new set of rows tagged with a shared load_id so a full run can be isolated in
@@ -792,48 +793,33 @@ def run_historical_events(
 
 # ── Historical odds helpers ───────────────────────────────────────────────────
 
-def fetch_events_for_historical_odds(
+def fetch_already_loaded_odds_combos(
     conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
     start_date: date,
     end_date: date,
-) -> list[tuple[date, str]]:
+) -> set[tuple[date, str]]:
     """
-    Return (game_date, comma_joined_event_ids) for every regular-season game
-    date in [start_date, end_date], ordered by date.
-
-    Grouping by game date lets the caller pass all event IDs for a date as a
-    single comma-separated eventIds param, reducing API calls from one-per-event
-    to one-per-date per market.
-
-    Cross-references stg_statsapi_games (game_type='R') to exclude spring
-    training / exhibition events that exist in mlb_events_raw but have no
-    corresponding regular-season game.
+    Return set of (game_date, market) pairs already present in target for this
+    range. Used to skip (date, market) combos that completed in a prior run.
     """
-    sql = """
-        SELECT
-            e.value:commence_time::date                                      AS game_date,
-            LISTAGG(DISTINCT e.value:id::varchar, ',')
-                WITHIN GROUP (ORDER BY e.value:id::varchar)                  AS event_ids
-        FROM baseball_data.oddsapi.mlb_events_raw,
-        LATERAL FLATTEN(input => raw_json) e
-        WHERE typeof(raw_json) = 'ARRAY'
-          AND e.value:id IS NOT NULL
-          AND e.value:commence_time::date >= %(start_date)s::date
-          AND e.value:commence_time::date <= %(end_date)s::date
-          AND e.value:commence_time::date IN (
-              SELECT DISTINCT official_date
-              FROM baseball_data.betting.stg_statsapi_games
-              WHERE game_type = 'R'
-          )
-        GROUP BY game_date
-        ORDER BY game_date
+    sql = f"""
+        SELECT DISTINCT
+            commence_time::date              AS game_date,
+            request_params:markets::varchar  AS market
+        FROM {target.qualified_name}
+        WHERE source_endpoint = %(endpoint)s
+          AND commence_time IS NOT NULL
+          AND commence_time::date >= %(start_date)s::date
+          AND commence_time::date <= %(end_date)s::date
     """
     with conn.cursor() as cur:
         cur.execute(sql, {
+            "endpoint":   HIST_ODDS_ENDPOINT,
             "start_date": start_date.isoformat(),
             "end_date":   end_date.isoformat(),
         })
-        return [(row[0], row[1]) for row in cur.fetchall()]
+        return {(row[0], row[1]) for row in cur.fetchall() if row[0] and row[1]}
 
 
 def run_historical_odds(
@@ -846,33 +832,38 @@ def run_historical_odds(
     Fetch historical odds for every regular-season game date in [start_date,
     end_date] and insert them into target.
 
-    Events are grouped by game date. For each (date, market) pair a single API
-    call is made to the historical odds endpoint with all event IDs for that
-    date passed as a comma-joined eventIds parameter — one call per date per
-    market rather than one call per event per market.
+    Uses the same snapshot strategy as run_historical_events: the ``date``
+    parameter is set to 1 hour before the earliest first pitch UTC on each
+    game date. This ensures the event IDs exist at the snapshot time.
 
-    Snapshot ``date`` is set to noon UTC on the day before the game date to
-    capture pre-game lines.
+    commenceTimeFrom / commenceTimeTo scope each response to that calendar
+    date only. No eventIds filter is used — the time window is sufficient to
+    isolate each day's games and avoids ID-stability issues across snapshots.
 
-    The historical odds endpoint returns {"timestamp":..., "data":[...]}.
-    When multiple eventIds are requested, data contains one object per event.
-    Each event object is stored as its own row in target so stg_oddsapi_odds
-    can flatten raw_json:bookmakers without schema changes.
+    One API call per (game_date, market). The historical odds endpoint returns
+    {"timestamp":..., "data":[...]}; each event object in data is stored as
+    its own row in target so stg_oddsapi_odds can flatten raw_json:bookmakers
+    without schema changes.
+
+    Idempotent: (game_date, market) pairs already present in target are skipped.
     """
-    log.info("Querying events from mlb_events_raw: %s → %s", start_date, end_date)
-    date_groups = fetch_events_for_historical_odds(conn, start_date, end_date)
+    log.info("Querying game dates with start times: %s → %s", start_date, end_date)
+    game_dates = fetch_game_dates_with_start_times(conn, start_date, end_date)
 
-    if not date_groups:
+    if not game_dates:
         log.warning(
-            "No events found in mlb_events_raw for %s – %s — "
-            "run historical-events first for this range",
+            "No regular-season game dates found in %s – %s — nothing to ingest",
             start_date, end_date,
         )
         return
 
+    log.info("Checking for already-loaded (game_date, market) pairs ...")
+    already_loaded = fetch_already_loaded_odds_combos(conn, target, start_date, end_date)
+    if already_loaded:
+        log.info("  %d (game_date, market) pair(s) already loaded — will skip", len(already_loaded))
+
     markets       = DEFAULT_MARKETS
-    regions_str   = ",".join(DEFAULT_REGIONS)
-    total_dates   = len(date_groups)
+    total_dates   = len(game_dates)
     total_calls   = total_dates * len(markets)
     load_id       = str(uuid.uuid4())
     call_num      = 0
@@ -883,31 +874,49 @@ def run_historical_odds(
         total_dates, len(markets), total_calls, target.qualified_name, load_id,
     )
 
-    for game_date, event_ids_str in date_groups:
-        ingestion_ts = datetime.now(tz=timezone.utc)
+    for game_date, first_game_utc in game_dates:
+        if first_game_utc.tzinfo is None:
+            first_game_utc = first_game_utc.replace(tzinfo=timezone.utc)
 
-        # Noon UTC on the day before the game date — captures pre-game lines.
-        snapshot_dt = datetime(
+        # Same snapshot as historical-events: 1 hour before first pitch.
+        # Ensures the events exist in the API at the snapshot time.
+        snapshot_dt  = first_game_utc - timedelta(hours=1)
+        snapshot_str = format_iso_utc(snapshot_dt)
+
+        day_start = datetime(
             game_date.year, game_date.month, game_date.day,
-            12, 0, 0, tzinfo=timezone.utc,
-        ) - timedelta(days=1)
-        snapshot_str  = format_iso_utc(snapshot_dt)
-        events_on_date = len(event_ids_str.split(","))
+            0, 0, 0, tzinfo=timezone.utc,
+        )
+        day_end = datetime(
+            game_date.year, game_date.month, game_date.day,
+            23, 59, 59, tzinfo=timezone.utc,
+        )
+
+        ingestion_ts = datetime.now(tz=timezone.utc)
 
         for market in markets:
             call_num += 1
+
+            if (game_date, market) in already_loaded:
+                log.info(
+                    "[%d/%d] %s  market=%s — already loaded, skipping",
+                    call_num, total_calls, game_date, market,
+                )
+                continue
+
             params: dict = {
-                "date":       snapshot_str,
-                "eventIds":   event_ids_str,
-                "markets":    market,
-                "regions":    regions_str,
-                "oddsFormat": DEFAULT_ODDS_FORMAT,
-                "dateFormat": DEFAULT_DATE_FORMAT,
+                "date":             snapshot_str,
+                "markets":          market,
+                "regions":          ",".join(DEFAULT_REGIONS),
+                "oddsFormat":       DEFAULT_ODDS_FORMAT,
+                "dateFormat":       DEFAULT_DATE_FORMAT,
+                "commenceTimeFrom": format_iso_utc(day_start),
+                "commenceTimeTo":   format_iso_utc(day_end),
             }
 
             log.info(
-                "[%d/%d] %s  market=%s  snapshot=%s  events=%d",
-                call_num, total_calls, game_date, market, snapshot_str, events_on_date,
+                "[%d/%d] %s  market=%s  snapshot=%s",
+                call_num, total_calls, game_date, market, snapshot_str,
             )
 
             try:
@@ -927,13 +936,11 @@ def run_historical_odds(
                 time.sleep(REQUEST_DELAY)
                 continue
 
-            # Historical odds endpoint returns {"timestamp":..., "data":[...]}.
-            # With multiple eventIds, data contains one object per event.
             payload = result.payload
             if isinstance(payload, dict):
                 data_array = payload.get("data", [])
             elif isinstance(payload, list):
-                data_array = payload  # defensive: bare array
+                data_array = payload
             else:
                 data_array = []
 

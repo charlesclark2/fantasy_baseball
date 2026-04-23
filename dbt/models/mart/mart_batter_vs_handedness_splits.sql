@@ -184,6 +184,7 @@ pa_agg as (
 
     from pitches_tagged
     where plate_appearance_event is not null
+      and plate_appearance_event != 'truncated_pa'
     group by batter_id, pitcher_hand, game_year
 )
 

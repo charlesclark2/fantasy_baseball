@@ -11,9 +11,13 @@ models:
       event in mart_odds_events. Enables downstream models to combine game
       outcomes with pre-game betting odds.
       Join logic: game_date = commence_date AND home_team_name = odds home_team
-      AND away_team_name = odds away_team (full team names).
+      AND away_team_name = odds away_team (full team names, after normalization).
+      Odds API team names are normalized to Stats API canonical names before
+      joining: "Cleveland Indians" → "Cleveland Guardians" (2021 only),
+      "Oakland Athletics" → "Athletics" (2021-2025).
       All game_pk rows are preserved; event_id is null when no odds event was
-      ingested for that game (e.g. historical games predating odds ingestion).
+      ingested for that game (not all games appear in The Odds API historical
+      data; ~74-77% of regular season games have a matching event 2021-2025).
       Grain: one row per game_pk.
 
     columns:

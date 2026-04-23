@@ -72,6 +72,10 @@ away_team as (
     where side = 'away'
 ),
 
+odds as (
+    select * from {{ ref('feature_pregame_odds_features') }}
+),
+
 final as (
     select
 
@@ -84,9 +88,9 @@ final as (
         pk.venue_id,
         pk.venue_name,
 
-        -- ── Data completeness flag ─────────────────────────────────────────────
-        -- true = both lineups confirmed, both starters have prior history, park
-        -- has prior-season run factor. Use for data-complete training subset.
+        -- ── Data completeness flags ────────────────────────────────────────────
+        -- has_full_data: both lineups confirmed, both starters have prior history,
+        -- park has prior-season run factor. Use for data-complete training subset.
         (
             coalesce(h_ln.has_full_lineup,       false)
             and coalesce(a_ln.has_full_lineup,   false)
@@ -94,6 +98,11 @@ final as (
             and coalesce(a_st.has_starter_data,  false)
             and pk.runs_per_game_at_park is not null
         )::boolean                              as has_full_data,
+
+        -- has_odds: event_id matched in mart_game_odds_bridge (does not guarantee
+        -- price columns are populated — Card 3 backfill is partial).
+        -- Intentionally excluded from has_full_data: odds are an optional block.
+        od.has_odds,
 
         -- ── Home lineup ───────────────────────────────────────────────────────
         h_ln.has_full_lineup                    as home_has_full_lineup,
@@ -456,7 +465,25 @@ final as (
         pk.right_center_ft,
         pk.right_line_ft,
         pk.runs_per_game_at_park,
-        pk.park_run_factor_3yr
+        pk.park_run_factor_3yr,
+
+        -- ── Betting market features ────────────────────────────────────────────
+        od.odds_bookmaker_key,
+        od.odds_ingestion_ts,
+        od.odds_hours_before_game,
+        od.home_moneyline_american,
+        od.away_moneyline_american,
+        od.home_moneyline_decimal,
+        od.away_moneyline_decimal,
+        od.home_implied_prob,
+        od.away_implied_prob,
+        od.total_market_vig,
+        od.total_line,
+        od.over_american,
+        od.under_american,
+        od.over_implied_prob,
+        od.under_implied_prob,
+        od.totals_market_vig
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -467,6 +494,8 @@ final as (
     left join away_team a_tm    on  a_tm.game_pk = g.game_pk
     left join {{ ref('feature_pregame_park_features') }} pk
         on  pk.game_pk = g.game_pk
+    left join odds od
+        on  od.game_pk = g.game_pk
 )
 
 select * from final

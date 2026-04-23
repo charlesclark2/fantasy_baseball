@@ -8,18 +8,24 @@
 --
 --          Join logic:
 --            game_date = commence_date
---            home_team_name = odds home_team  (full team name)
---            away_team_name = odds away_team  (full team name)
+--            home_team_name = odds home_team  (full team name, after normalization)
+--            away_team_name = odds away_team  (full team name, after normalization)
 --
 --          All game_pk rows are preserved; event_id is null when no odds
 --          event was ingested for that game (e.g. historical games predating
---          odds ingestion).
+--          odds ingestion, or games not covered by The Odds API).
 --
 --          mart_odds_events can carry multiple event_ids for the same
 --          matchup when the API returns different IDs across ingestion runs.
 --          The odds side is pre-deduplicated to one row per
 --          (commence_date, home_team, away_team) — keeping the latest
 --          ingestion_ts — before joining, preserving game_pk grain.
+--
+--          Team name normalization: The Odds API preserves historical franchise
+--          names while the Stats API (mart_game_results) uses current names
+--          retroactively for all seasons. Two mappings are applied:
+--            "Cleveland Indians"  → "Cleveland Guardians"  (2021 Odds API name)
+--            "Oakland Athletics"  → "Athletics"            (Odds API 2021-2025 name)
 -- =============================================================================
 
 {{
@@ -42,7 +48,30 @@ with game_results as (
 
 ),
 
--- Deduplicate odds events to one canonical row per matchup per date.
+-- Normalize historical Odds API team names to match Stats API canonical names.
+-- The Stats API retroactively applies current franchise names to all historical
+-- games; the Odds API preserves the name in use at the time of the game.
+odds_events_normalized as (
+
+    select
+        event_id,
+        commence_date,
+        case home_team
+            when 'Cleveland Indians' then 'Cleveland Guardians'
+            when 'Oakland Athletics' then 'Athletics'
+            else home_team
+        end as home_team,
+        case away_team
+            when 'Cleveland Indians' then 'Cleveland Guardians'
+            when 'Oakland Athletics' then 'Athletics'
+            else away_team
+        end as away_team,
+        ingestion_ts
+    from {{ ref('mart_odds_events') }}
+
+),
+
+-- Deduplicate to one canonical row per matchup per date.
 -- The API occasionally returns different event_ids for the same game
 -- across separate ingestion runs; pick the most recently ingested one.
 odds_events_deduped as (
@@ -57,7 +86,7 @@ odds_events_deduped as (
             partition by commence_date, home_team, away_team
             order by ingestion_ts desc
         ) as _rn
-    from {{ ref('mart_odds_events') }}
+    from odds_events_normalized
 
 ),
 

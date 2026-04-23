@@ -127,6 +127,7 @@ plate_appearances as (
 
     from pitches_tagged
     where plate_appearance_event is not null
+      and plate_appearance_event != 'truncated_pa'
 
 ),
 

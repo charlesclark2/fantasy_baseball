@@ -1,0 +1,26 @@
+# Snowflake MCP Server — service configuration
+# Controls which tools and SQL statement types are enabled.
+# This file is referenced by .mcp.json and is safe to commit — no credentials here.
+#
+# Full reference: https://github.com/Snowflake-Labs/mcp
+
+# Enable query execution only; disable object and semantic management.
+other_services:
+  query_manager: true
+  object_manager: false
+  semantic_manager: false
+
+# Each entry is a single-key dict: {StatementType: allowed}.
+# Restricts to read-only — SELECT, DESCRIBE, SHOW, USE only.
+sql_statement_permissions:
+  - Select: true
+  - Describe: true
+  - Show: true
+  - Use: true
+  - Alter: false
+  - Create: false
+  - Delete: false
+  - Drop: false
+  - Insert: false
+  - Update: false
+  - Truncate: false

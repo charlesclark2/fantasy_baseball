@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "dbt": {
+      "command": "uvx",
+      "args": ["dbt-mcp"],
+      "env": {
+        "DBT_PROJECT_DIR": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/dbt",
+        "DBT_PROFILES_DIR": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/dbt",
+        "DBT_PATH": "/Users/charlesclark/.local/bin/dbt",
+        "DBT_MCP_ENABLE_TOOLS": "list,compile,parse,get_lineage_dev,get_node_details_dev,search_product_docs,get_product_doc_pages,get_column_lineage",
+        "DO_NOT_TRACK": "true"
+      }
+    },
+    "snowflake": {
+      "command": "uvx",
+      "args": [
+        "snowflake-labs-mcp",
+        "--service-config-file",
+        "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/snowflake_mcp_config.yaml"
+      ],
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "IHUPICS-DP59975",
+        "SNOWFLAKE_USER": "dbt_rw",
+        "SNOWFLAKE_ROLE": "ACCOUNTADMIN",
+        "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+        "SNOWFLAKE_PRIVATE_KEY_FILE": "/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem"
+      }
+    }
+  }
+}
