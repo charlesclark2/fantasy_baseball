@@ -143,6 +143,11 @@ select
     -- Outcome
     outcome_name,
     outcome_price_american,
+    case
+        when outcome_price_american >= 100
+            then (outcome_price_american / 100.0) + 1.0
+        else (100.0 / abs(outcome_price_american)) + 1.0
+    end::float                                               as outcome_price_decimal,
     outcome_point          -- non-null for totals (Over/Under line); null for h2h
 
 from outcomes_flattened

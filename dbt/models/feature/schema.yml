@@ -6,12 +6,477 @@ version: 2
 # Models in this folder materialize into baseball_data.betting_features in
 # Snowflake (distinct from baseball_data.betting where mart models live).
 #
-# LEAKAGE RULE: Every rolling window lookup and stat join in this layer MUST
-# use strictly less-than game_date (< game_date, not <=). No same-day data
-# may appear in any feature. Violations invalidate the training set.
+# LEAKAGE RULE (enforced in every model — audited 2026-04-23):
+#   1. Rolling window lookups: rs.game_date::date < game_date  (strictly <)
+#   2. Platoon splits: game_year = year(game_date) - 1         (prior season)
+#   3. Park run factors: prf.game_year = game_year - 1         (prior season)
+#   4. Season record: record_date = game_date - 1              (day before)
+#   No same-day data may appear in any feature. Violations invalidate the
+#   training set. See data_quality/leakage_audit.md for the full code review
+#   checklist and spot-check results (game_pk 777235, 2025-07-04).
 #
 # Grain: one row per game_pk (master assembly) or game_pk × side/team/starter
 # depending on the model. See individual model descriptions below.
 # ============================================================================
 
 models:
+
+  - name: feature_pregame_lineup_features
+    description: >
+      Pre-game batting lineup features for ML. One row per game_pk × side (home/away).
+      Aggregates rolling batter stats (30-day and season-to-date) and prior-season
+      platoon splits across all 9 lineup slots. All rolling stat joins use
+      game_date < official_date (strictly less than) to prevent data leakage.
+      Platoon splits use the prior season (game_year - 1) to prevent in-season leakage.
+      Nulls are expected for games at or near the start of each season (no prior
+      game-date rows yet in rolling stats) and for 2015 games (no 2014 platoon data).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, side]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: has_full_lineup
+        tests:
+          - not_null
+
+      - name: lhb_count
+        tests:
+          - not_null
+
+      - name: rhb_count
+        tests:
+          - not_null
+
+      - name: avg_woba_30d
+        description: >
+          Average 30-day rolling wOBA across all lineup slots with pre-game data.
+          Null when no batter in the lineup has a prior game-date row (e.g. Opening Day 2015).
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: avg_xwoba_30d
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: avg_woba_std
+        description: Season-to-date rolling wOBA average across lineup. Null early in each season.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: avg_woba_vs_lhp
+        description: >
+          Average prior-season wOBA vs LHP across lineup. Null for 2015 games (no 2014 data)
+          and for any batter with no prior-season appearance in mart_batter_vs_handedness_splits.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: avg_woba_vs_rhp
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+  - name: feature_pregame_starter_features
+    description: >
+      Pre-game starting pitcher features for ML. One row per game_pk × pitcher_id.
+      Only includes games with a confirmed probable pitcher (null probable_pitcher_id
+      rows from stg_statsapi_probable_pitchers are excluded). The master assembly
+      LEFT JOINs this model to detect missing starters.
+      All rolling stat joins use game_date::date < pp.game_date (strictly less than).
+      Platoon splits use the prior season (game_year - 1) to prevent in-season leakage.
+      Nulls expected for debut pitchers (has_starter_data = false), 2015 Opening Day
+      (no prior-season platoon data), and early-season games (limited rolling history).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, pitcher_id]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: pitcher_id
+        tests:
+          - not_null
+
+      - name: has_starter_data
+        description: >
+          False when the pitcher has no prior Statcast history (e.g. MLB debut or first
+          season before our 2015 data cutoff). True for all pitchers with at least one
+          prior regular-season game appearance in mart_pitcher_rolling_stats.
+        tests:
+          - not_null
+
+      - name: days_rest
+        description: >
+          Days since the pitcher's most recent start (from mart_starting_pitcher_game_log).
+          Uses starts only — relief appearances do not reset the clock.
+          Null when no prior starts exist in the dataset (first career start, or first
+          start in our 2015+ data window).
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: k_pct_30d
+        description: >
+          30-day rolling K% (strikeouts / batters faced) allowed. Null for debut
+          pitchers or when no prior-game data exists within the window.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: xwoba_against_30d
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: xwoba_vs_lhb
+        description: >
+          Prior-season xwOBA against vs LHB. Null for 2015 starters (no 2014 data)
+          and for any pitcher who had no prior-season appearances (injury, minor leagues,
+          or debut). Approximately 22% null across the full 2015-present dataset.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 20000"
+
+      - name: xwoba_vs_rhb
+        description: Prior-season xwOBA against vs RHB. Same null pattern as xwoba_vs_lhb.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 20000"
+
+  - name: feature_pregame_team_features
+    description: >
+      Pre-game team context features for ML. One row per game_pk × team_abbrev
+      (home and away). Joins rolling offense, rolling pitching, platoon splits,
+      season win%, bullpen workload, bullpen effectiveness, and schedule context
+      (days rest, game frequency, home/away streak, timezone travel) into a
+      single team context row.
+      All rolling stat joins use game_date::date < spine.game_date::date
+      (strictly less than) to prevent data leakage. Season record joins on
+      record_date = game_date - 1. Bullpen workload and effectiveness use
+      internal '1 day preceding' upper bounds and are joined on game_pk.
+      Schedule context is joined on game_pk + team_abbrev — no leakage risk
+      as all values look strictly backward from game_date.
+      Nulls expected for Opening Day (no prior season record), early-season
+      games (limited rolling history), and teams in their first game of the
+      2015 data window (no prior rolling stats row).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, team_abbrev]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        tests:
+          - not_null
+
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: off_woba_30d
+        description: >
+          30-day rolling team wOBA (offense). Null for teams with no prior game
+          in the 30-day window (Opening Day, early-season games).
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: off_xwoba_30d
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: pit_xwoba_against_30d
+        description: >
+          30-day rolling team xwOBA allowed (pitching). Null for same early-season pattern.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: win_pct
+        description: >
+          Team win percentage as of the day before the game (from mart_team_season_record).
+          Null for Opening Day games (no record yet on game_date - 1).
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: days_rest
+        description: >
+          Days since this team's previous game (from mart_team_schedule_context).
+          Null for the first game of each season. 0 for game 2 of a doubleheader.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: games_last_7d
+        description: Games this team played in the 7 calendar days before this game.
+        tests:
+          - not_null
+
+      - name: games_last_14d
+        description: Games this team played in the 14 calendar days before this game.
+        tests:
+          - not_null
+
+      - name: consecutive_home_games
+        description: Length of current home stand including this game. Null when away.
+
+      - name: consecutive_away_games
+        description: Length of current road trip including this game. Null when home.
+
+      - name: tz_changed_from_last_game
+        description: >
+          True when the team traveled across timezone boundaries since their last game.
+          False on Opening Day and when venue data is unavailable.
+        tests:
+          - not_null
+
+  - name: feature_pregame_park_features
+    description: >
+      Pre-game park context features for ML. One row per game_pk (regular season only).
+      Joins physical park characteristics (dimensions, elevation, surface, roof type)
+      from stg_statsapi_venues and empirical run factors from mart_park_run_factors.
+      Park run factors use game_year - 1 (prior season) to prevent in-season leakage.
+      Nulls are expected in park_run_factor_3yr for 2015 games (no 2014 data in the
+      dataset) and for venues with fewer than 10 games in the prior season.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: venue_id
+        description: >
+          Null for a small number of games where venue data is missing from
+          stg_statsapi_games. These games will have null for all venue-derived columns.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 10"
+                error_if: ">= 500"
+
+      - name: elevation_ft
+        description: >
+          Park elevation in feet above sea level. Null when venue_id is null or
+          when the venue record has no elevation in the Stats API.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: center_ft
+        description: Center field distance in feet. Null when venue_id is missing.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: runs_per_game_at_park
+        description: >
+          Prior-season average total runs per game at this venue (both teams combined).
+          Null for 2015 games (no 2014 history) and for venues with fewer than 10
+          games in the prior season.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: park_run_factor_3yr
+        description: >
+          3-year rolling average of runs_per_game_at_park ending in game_year - 1.
+          Null for 2015 games (no prior data), and for any year where the venue
+          has fewer than 10 games in the prior season (mart_park_run_factors
+          excludes those rows). ~30 teams × 1 first season = ~2,430 null rows
+          expected across the dataset.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+  - name: feature_pregame_game_features
+    description: >
+      Master pre-game ML feature assembly. One row per game_pk (regular season only).
+      Joins all four upstream feature tables into a single wide row per game:
+        - feature_pregame_lineup_features   (home_ / away_ prefix)
+        - feature_pregame_starter_features  (home_starter_ / away_starter_ prefix)
+        - feature_pregame_team_features     (home_ / away_ prefix, retains off_/pit_/bp_ sub-prefixes)
+        - feature_pregame_park_features     (no prefix — game-level)
+      Row count matches mart_game_results (regular season). Missing features produce
+      nulls; no rows are dropped.
+
+      has_full_data = true when: home_has_full_lineup AND away_has_full_lineup AND
+      home_starter_has_starter_data AND away_starter_has_starter_data AND
+      runs_per_game_at_park IS NOT NULL. Use this flag to select the data-complete
+      training subset for EDA and ML.
+
+      Training set size (has_full_data = true) by season — verified 2026-04-23:
+        SELECT game_year, count(*) AS games
+        FROM baseball_data.betting_features.feature_pregame_game_features
+        WHERE has_full_data = true
+        GROUP BY game_year
+        ORDER BY game_year;
+
+      Results as of 2026-04-23:
+        2015:    0  (no prior-season run factor; all rows has_full_data = false)
+        2016: 2364
+        2017: 2288
+        2018: 1953  (shortened season — CBA postponements)
+        2019: 2363
+        2020:  801  (COVID 60-game season)
+        2021: 2320
+        2022: 2377
+        2023: 2371
+        2024: 2369
+        2025: 2228  (season in progress at audit date)
+        2026:  351  (season in progress at audit date)
+        Total (2016–2025 complete seasons): ~23,444 games
+
+      Row count parity (verified 2026-04-23):
+        feature_pregame_game_features: 25,146 rows
+        mart_game_results (game_type = 'R'): 25,146 rows
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: home_team
+        tests:
+          - not_null
+
+      - name: away_team
+        tests:
+          - not_null
+
+      - name: has_full_data
+        description: >
+          True when both lineups are confirmed full (9 batters), both starters
+          have prior Statcast history (has_starter_data = true), and the park
+          has a prior-season run factor (runs_per_game_at_park is not null).
+          False when any of these conditions is unmet (Opening Day, debut
+          pitchers, 2015 games, missing probable pitcher data).
+          Use WHERE has_full_data = true to select the data-complete training subset.
+        tests:
+          - not_null

@@ -54,6 +54,7 @@ select
     -- ── Outcome ───────────────────────────────────────────────────────────────
     outcome_name,
     outcome_price_american,
+    outcome_price_decimal,
     outcome_point,          -- non-null for totals (Over/Under line); null for h2h
 
     -- ── Derived flags ─────────────────────────────────────────────────────────

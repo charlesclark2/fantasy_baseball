@@ -70,6 +70,13 @@ models/
 
     -- Bridge models
     mart_game_odds_bridge           -- One row per game_pk; links mart_game_results to mart_odds_events
+
+  feature/                         # ML pre-game feature vectors; materializes into baseball_data.betting_features
+    feature_pregame_lineup_features  -- One row per game × side; aggregated batter rolling stats + prior-season platoon splits across all 9 lineup slots
+    feature_pregame_starter_features -- One row per game × pitcher; starting pitcher rolling stats, days rest, platoon splits
+    feature_pregame_team_features    -- One row per game × team; rolling offense, pitching, bullpen workload/effectiveness, season win%
+    feature_pregame_park_features    -- One row per game; park dimensions, elevation, surface, roof type, prior-season run factors
+    feature_pregame_game_features    -- One row per game (master assembly); joins all four upstream feature tables into a single wide ML input row
 ```
 
 ## Key Concepts
@@ -80,6 +87,7 @@ models/
 - **Regular season filter**: All rolling stat and split models filter to `game_type = 'R'` to exclude Spring Training and Playoffs from historical normalization.
 - **Derived flags**: Boolean and categorical columns (e.g. `is_barrel`, `count_leverage`, `is_infield_shift`) are computed in the mart layer to avoid repeating logic downstream.
 - **Bat tracking**: Columns like `bat_speed_mph`, `swing_length_ft`, and `attack_angle_degrees` are only available from the 2023 season onward.
+- **Feature layer**: Models in `feature/` materialize into `baseball_data.betting_features` (separate from `baseball_data.betting` where mart models live). Every join in the feature layer enforces a strict no-leakage rule — rolling stats use `< game_date`, platoon splits and park factors use `game_year - 1`, and season record uses `game_date - 1`. See `data_quality/leakage_audit.md` for the full code review checklist and spot-check results.
 
 ## Running the Project
 

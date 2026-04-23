@@ -259,6 +259,16 @@ models:
         tests:
           - not_null
 
+      - name: outcome_price_decimal
+        description: >
+          Decimal-format odds derived from outcome_price_american.
+          Positive American (≥100): (american / 100.0) + 1. Negative American (<0): (100.0 / ABS(american)) + 1.
+          E.g. +150 → 2.50, -110 → ~1.909, -200 → 1.50. Passed through from stg_oddsapi_odds.
+        tests:
+          - not_null:
+              config:
+                where: "outcome_price_american is not null"
+
       - name: outcome_point
         description: >
           The over/under line for totals markets (e.g. 9.5). Null for h2h
@@ -6123,3 +6133,98 @@ models:
 
       - name: barrel_pct_allowed_std
         description: Season-to-date barrel rate allowed by the pitching staff in this context.
+
+  # ============================================================================
+  # mart_team_schedule_context
+  # ============================================================================
+  - name: mart_team_schedule_context
+    description: >
+      Schedule fatigue context for each team entering each regular season game.
+      One row per team_abbrev × game_pk (home and away each get a row). Built
+      from mart_game_results and stg_statsapi_venues. Captures days rest,
+      recent game frequency, home/away streak length, and timezone travel
+      signal. No leakage risk: all values look strictly backward from game_date.
+      Join to feature_pregame_team_features on team_abbrev + game_pk.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, team_abbrev]
+
+    columns:
+
+      - name: game_pk
+        tests:
+          - not_null
+
+      - name: game_date
+        tests:
+          - not_null
+
+      - name: game_year
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        tests:
+          - not_null
+
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: days_rest
+        description: >
+          Days since this team's previous game. Null for each team's first game
+          of the season. 0 is valid for the second game of a doubleheader.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: games_last_7d
+        description: >
+          Games this team played in the 7 calendar days before this game.
+          Exceeds 7 when doubleheaders fall within the window (max observed: ~10).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 14"
+
+      - name: games_last_14d
+        description: >
+          Games this team played in the 14 calendar days before this game.
+          Exceeds 14 when doubleheaders fall within the window (max observed: ~19).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 0 and 28"
+
+      - name: is_home_game
+        description: True when the team is the home team for this game.
+        tests:
+          - not_null
+
+      - name: consecutive_home_games
+        description: >
+          Length of current home stand including this game. Null when side = away.
+          Resets to 1 at the start of each new home stand.
+
+      - name: consecutive_away_games
+        description: >
+          Length of current road trip including this game. Null when side = home.
+          Resets to 1 at the start of each new road trip.
+
+      - name: tz_changed_from_last_game
+        description: >
+          True when the venue timezone for this game differs from the team's
+          previous game. Proxy for cross-timezone travel fatigue. False on
+          Opening Day (no prior game in season) and when venue data is missing.
+        tests:
+          - not_null

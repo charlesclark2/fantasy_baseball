@@ -1,15 +1,31 @@
 """
 odds_api_ingestion.py
 ---------------------
-Ingests MLB data from The Odds API into Snowflake. Two ingestion modes are
+Ingests MLB data from The Odds API into Snowflake. Four ingestion modes are
 supported and can be run independently via CLI subcommands:
 
-  events  — Calls /v4/sports/baseball_mlb/events and inserts each event object
-             as its own row in the configured events target table.
+  events            — Calls /v4/sports/baseball_mlb/events and inserts the full
+                      response array as a single row in the events target table.
 
-  odds    — Calls /v4/sports/baseball_mlb/odds for one or more market/region
-             combinations and inserts each event's odds as its own row in the
-             configured odds target table.
+  historical-events — Calls /v4/historical/sports/baseball_mlb/events once per
+                      regular-season game date in a configurable range. The API
+                      snapshot timestamp is set to 1 hour before the earliest
+                      first pitch on each date. Results land in the same events
+                      target table as the live events subcommand so all
+                      downstream dbt models consume them without schema changes.
+
+  odds              — Calls /v4/sports/baseball_mlb/odds for one or more
+                      market/region combinations and inserts each event's odds
+                      as its own row in the configured odds target table.
+
+  historical-odds   — Reads distinct event IDs from mlb_events_raw (populated
+                      by historical-events) and fetches historical odds for each
+                      event via /v4/historical/sports/baseball_mlb/events with
+                      eventIds + markets + regions params. Snapshot date is set
+                      to commence_time minus 1 day to capture the pre-game line.
+                      Results land in mlb_odds_raw — the same target as live odds
+                      — so stg_oddsapi_odds and all downstream models consume
+                      them without schema changes.
 
 Loading is append-only. No rows are updated or deleted. Every run produces a
 new set of rows tagged with a shared load_id so a full run can be isolated in
@@ -46,9 +62,22 @@ Snowflake authentication — private key (preferred) or password fallback:
 Usage:
     uv run odds_api_ingestion.py events
     uv run odds_api_ingestion.py events --commence-time-from 2026-04-22T00:00:00Z --commence-time-to 2026-04-29T00:00:00Z
+
+    # Full historical events backfill (2021 season opener through day before live ingestion)
+    uv run odds_api_ingestion.py historical-events
+
+    # Incremental / partial events backfill
+    uv run odds_api_ingestion.py historical-events --start-date 2023-04-01 --end-date 2023-10-01
+
     uv run odds_api_ingestion.py odds
     uv run odds_api_ingestion.py odds --markets h2h totals --regions us us2
     uv run odds_api_ingestion.py odds --odds-format american --date-format iso
+
+    # Full historical odds backfill (requires historical-events to have run first)
+    uv run odds_api_ingestion.py historical-odds
+
+    # Incremental / partial historical odds backfill
+    uv run odds_api_ingestion.py historical-odds --start-date 2024-04-01 --end-date 2024-10-01
 """
 
 import argparse
@@ -58,7 +87,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from date_utils import default_window, format_iso_utc
@@ -85,9 +114,18 @@ log = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-ODDS_API_BASE_URL = "https://api.the-odds-api.com/v4"
-EVENTS_ENDPOINT   = "/sports/baseball_mlb/events"
-ODDS_ENDPOINT     = "/sports/baseball_mlb/odds"
+ODDS_API_BASE_URL    = "https://api.the-odds-api.com/v4"
+EVENTS_ENDPOINT      = "/sports/baseball_mlb/events"
+ODDS_ENDPOINT        = "/sports/baseball_mlb/odds"
+HIST_EVENTS_ENDPOINT = "/historical/sports/baseball_mlb/events"
+HIST_ODDS_ENDPOINT   = "/historical/sports/baseball_mlb/odds"
+
+# First day of the 2021 regular season — default historical events backfill start
+HIST_DEFAULT_START = date(2021, 4, 1)
+# Day before live ingestion began — default historical backfill end (shared)
+HIST_DEFAULT_END   = date(2026, 4, 22)
+# Default start for historical odds backfill (card 3 scope: 2023–present)
+HIST_ODDS_DEFAULT_START = date(2023, 1, 1)
 
 SOURCE_SYSTEM = "the_odds_api"
 PROCESS_NAME  = "odds_api_ingestion.py"
@@ -234,30 +272,63 @@ def _parse_int_header(value: str | None) -> int | None:
         return None
 
 
-def _get_api_key() -> str:
-    key = os.environ.get("ODDS_API_KEY")
-    if not key:
+def _get_ordered_keys(historical: bool) -> list[str]:
+    """
+    Return API keys to try in priority order.
+
+    For live endpoints: starter key first (if set), then main key.
+    For historical endpoints: main key only — starter tier does not support
+    the /historical/ path.
+    """
+    keys: list[str] = []
+    if not historical:
+        starter = os.environ.get("ODDS_API_STARTER_KEY")
+        if starter:
+            keys.append(starter)
+    main_key = os.environ.get("ODDS_API_KEY")
+    if not main_key:
         raise EnvironmentError("ODDS_API_KEY is not set in the environment or .env file.")
-    return key
+    keys.append(main_key)
+    return keys
 
 
 def call_odds_api(endpoint: str, params: dict) -> OddsApiResponse:
     """
     Make a GET request to the given Odds API endpoint path (e.g.
     '/sports/baseball_mlb/events') with the provided query parameters.
-    The API key is injected automatically from the environment.
-    Raises requests.HTTPError for non-2xx responses.
+
+    For live endpoints, the starter key (ODDS_API_STARTER_KEY) is tried first.
+    If the starter key returns HTTP 401 or 422 (invalid or quota exhausted) the
+    main key (ODDS_API_KEY) is used as a fallback. Historical endpoints always
+    use the main key directly — the starter tier does not support /historical/.
+
+    Raises requests.HTTPError when all available keys are exhausted.
     """
-    url = f"{ODDS_API_BASE_URL}{endpoint}"
-    full_params = {"apiKey": _get_api_key(), **params}
+    url        = f"{ODDS_API_BASE_URL}{endpoint}"
+    historical = "historical" in endpoint
+    keys       = _get_ordered_keys(historical)
 
     log.info("GET %s  params=%s", url, {k: v for k, v in params.items()})
-    response = requests.get(url, params=full_params, timeout=30)
-    response.raise_for_status()
 
-    result = OddsApiResponse(response)
-    result.log_credits()
-    return result
+    for i, key in enumerate(keys):
+        key_label = "starter key" if i == 0 and len(keys) > 1 else "main key"
+        response  = requests.get(url, params={"apiKey": key, **params}, timeout=30)
+
+        if response.status_code in (401, 422) and i < len(keys) - 1:
+            log.warning(
+                "  %s returned HTTP %d — falling back to main key",
+                key_label, response.status_code,
+            )
+            continue
+
+        response.raise_for_status()
+        result = OddsApiResponse(response)
+        if len(keys) > 1:
+            log.info("  Using %s", key_label)
+        result.log_credits()
+        return result
+
+    raise RuntimeError("All API keys exhausted without a successful response")
 
 
 # ── Snowflake write helpers ────────────────────────────────────────────────────
@@ -558,6 +629,362 @@ def run_odds(
     log.info("Odds ingest complete — load_id=%s", load_id)
 
 
+# ── Historical events helpers ─────────────────────────────────────────────────
+
+def fetch_game_dates_with_start_times(
+    conn: snowflake.connector.SnowflakeConnection,
+    start_date: date,
+    end_date: date,
+) -> list[tuple[date, datetime]]:
+    """
+    Return (official_date, first_game_utc) for every regular-season game date
+    in [start_date, end_date], ordered by date.
+
+    Queries stg_statsapi_games, which stores game_date as timestamp_tz from the
+    Stats API — the only source in this project with actual game start times.
+    """
+    sql = """
+        SELECT
+            official_date,
+            MIN(CONVERT_TIMEZONE('UTC', game_date)) AS first_game_utc
+        FROM baseball_data.betting.stg_statsapi_games
+        WHERE official_date >= %(start_date)s::date
+          AND official_date <= %(end_date)s::date
+          AND game_type = 'R'
+        GROUP BY official_date
+        ORDER BY official_date
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {
+            "start_date": start_date.isoformat(),
+            "end_date":   end_date.isoformat(),
+        })
+        return [(row[0], row[1]) for row in cur.fetchall()]
+
+
+def run_historical_events(
+    conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
+    start_date: date,
+    end_date: date,
+) -> None:
+    """
+    Fetch historical MLB events for every regular-season game date in
+    [start_date, end_date] and insert them into target.
+
+    For each game date the API snapshot timestamp (``date`` param) is set to
+    1 hour before the earliest scheduled first pitch UTC. commenceTimeFrom /
+    commenceTimeTo are scoped to the full calendar date so only that day's
+    games are returned.
+
+    The historical endpoint wraps its event array in {"data": [...]}. Only
+    the inner array is stored as raw_json so stg_oddsapi_events (which does
+    lateral flatten expecting an array) works without any schema changes.
+    """
+    log.info(
+        "Querying game dates with start times: %s → %s", start_date, end_date
+    )
+    game_dates = fetch_game_dates_with_start_times(conn, start_date, end_date)
+
+    if not game_dates:
+        log.warning(
+            "No regular-season game dates found in %s – %s — nothing to ingest",
+            start_date, end_date,
+        )
+        return
+
+    total = len(game_dates)
+    log.info(
+        "Historical events ingest: %d game date(s) → %s",
+        total, target.qualified_name,
+    )
+
+    for idx, (game_date, first_game_utc) in enumerate(game_dates, start=1):
+        load_id      = str(uuid.uuid4())
+        ingestion_ts = datetime.now(tz=timezone.utc)
+
+        # Ensure first_game_utc is timezone-aware (Snowflake connector may
+        # return a naive datetime for timestamp_tz depending on driver version).
+        if first_game_utc.tzinfo is None:
+            first_game_utc = first_game_utc.replace(tzinfo=timezone.utc)
+
+        snapshot_dt  = first_game_utc - timedelta(hours=1)
+        snapshot_str = format_iso_utc(snapshot_dt)
+
+        # Scope response to this calendar date in UTC
+        day_start = datetime(
+            game_date.year, game_date.month, game_date.day,
+            0, 0, 0, tzinfo=timezone.utc,
+        )
+        day_end = datetime(
+            game_date.year, game_date.month, game_date.day,
+            23, 59, 59, tzinfo=timezone.utc,
+        )
+
+        params: dict = {
+            "date":             snapshot_str,
+            "commenceTimeFrom": format_iso_utc(day_start),
+            "commenceTimeTo":   format_iso_utc(day_end),
+            "dateFormat":       "iso",
+        }
+
+        log.info(
+            "[%d/%d] %s  snapshot=%s  first_pitch=%s",
+            idx, total, game_date, snapshot_str, format_iso_utc(first_game_utc),
+        )
+
+        try:
+            result = call_odds_api(HIST_EVENTS_ENDPOINT, params)
+        except requests.HTTPError as exc:
+            log.warning("  HTTP error for %s: %s — skipping", game_date, exc)
+            time.sleep(REQUEST_DELAY)
+            continue
+        except requests.RequestException as exc:
+            log.warning("  Request failed for %s: %s — skipping", game_date, exc)
+            time.sleep(REQUEST_DELAY)
+            continue
+
+        # Historical endpoint returns {"timestamp":..., "data":[...]}; extract
+        # just the array so the staging model's lateral flatten works unchanged.
+        payload = result.payload
+        if isinstance(payload, dict):
+            events_array = payload.get("data", [])
+        elif isinstance(payload, list):
+            events_array = payload  # defensive: live-style response
+        else:
+            events_array = []
+
+        event_count = len(events_array)
+        log.info("  %d event(s) in response", event_count)
+
+        try:
+            insert_event_row(
+                conn,
+                target               = target,
+                ingestion_ts         = ingestion_ts,
+                load_id              = load_id,
+                source_endpoint      = HIST_EVENTS_ENDPOINT,
+                request_url          = result.url,
+                request_params       = params,
+                http_status_code     = result.status_code,
+                x_requests_used      = result.requests_used,
+                x_requests_remaining = result.requests_remaining,
+                raw_json             = events_array,
+                event_id             = None,
+                sport_key            = None,
+                sport_title          = None,
+                commence_time        = None,
+                home_team            = None,
+                away_team            = None,
+            )
+            log.info(
+                "  Inserted — %d event(s), load_id=%s", event_count, load_id,
+            )
+        except Exception as exc:
+            log.error("  Snowflake write failed for %s: %s", game_date, exc)
+
+        time.sleep(REQUEST_DELAY)
+
+    log.info(
+        "Historical events ingest complete — %d date(s) processed", total,
+    )
+
+
+# ── Historical odds helpers ───────────────────────────────────────────────────
+
+def fetch_events_for_historical_odds(
+    conn: snowflake.connector.SnowflakeConnection,
+    start_date: date,
+    end_date: date,
+) -> list[tuple[date, str]]:
+    """
+    Return (game_date, comma_joined_event_ids) for every regular-season game
+    date in [start_date, end_date], ordered by date.
+
+    Grouping by game date lets the caller pass all event IDs for a date as a
+    single comma-separated eventIds param, reducing API calls from one-per-event
+    to one-per-date per market.
+
+    Cross-references stg_statsapi_games (game_type='R') to exclude spring
+    training / exhibition events that exist in mlb_events_raw but have no
+    corresponding regular-season game.
+    """
+    sql = """
+        SELECT
+            e.value:commence_time::date                                      AS game_date,
+            LISTAGG(DISTINCT e.value:id::varchar, ',')
+                WITHIN GROUP (ORDER BY e.value:id::varchar)                  AS event_ids
+        FROM baseball_data.oddsapi.mlb_events_raw,
+        LATERAL FLATTEN(input => raw_json) e
+        WHERE typeof(raw_json) = 'ARRAY'
+          AND e.value:id IS NOT NULL
+          AND e.value:commence_time::date >= %(start_date)s::date
+          AND e.value:commence_time::date <= %(end_date)s::date
+          AND e.value:commence_time::date IN (
+              SELECT DISTINCT official_date
+              FROM baseball_data.betting.stg_statsapi_games
+              WHERE game_type = 'R'
+          )
+        GROUP BY game_date
+        ORDER BY game_date
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {
+            "start_date": start_date.isoformat(),
+            "end_date":   end_date.isoformat(),
+        })
+        return [(row[0], row[1]) for row in cur.fetchall()]
+
+
+def run_historical_odds(
+    conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
+    start_date: date,
+    end_date: date,
+) -> None:
+    """
+    Fetch historical odds for every regular-season game date in [start_date,
+    end_date] and insert them into target.
+
+    Events are grouped by game date. For each (date, market) pair a single API
+    call is made to the historical odds endpoint with all event IDs for that
+    date passed as a comma-joined eventIds parameter — one call per date per
+    market rather than one call per event per market.
+
+    Snapshot ``date`` is set to noon UTC on the day before the game date to
+    capture pre-game lines.
+
+    The historical odds endpoint returns {"timestamp":..., "data":[...]}.
+    When multiple eventIds are requested, data contains one object per event.
+    Each event object is stored as its own row in target so stg_oddsapi_odds
+    can flatten raw_json:bookmakers without schema changes.
+    """
+    log.info("Querying events from mlb_events_raw: %s → %s", start_date, end_date)
+    date_groups = fetch_events_for_historical_odds(conn, start_date, end_date)
+
+    if not date_groups:
+        log.warning(
+            "No events found in mlb_events_raw for %s – %s — "
+            "run historical-events first for this range",
+            start_date, end_date,
+        )
+        return
+
+    markets       = DEFAULT_MARKETS
+    regions_str   = ",".join(DEFAULT_REGIONS)
+    total_dates   = len(date_groups)
+    total_calls   = total_dates * len(markets)
+    load_id       = str(uuid.uuid4())
+    call_num      = 0
+    rows_inserted = 0
+
+    log.info(
+        "Historical odds ingest: %d game date(s) × %d market(s) = %d call(s) → %s  load_id=%s",
+        total_dates, len(markets), total_calls, target.qualified_name, load_id,
+    )
+
+    for game_date, event_ids_str in date_groups:
+        ingestion_ts = datetime.now(tz=timezone.utc)
+
+        # Noon UTC on the day before the game date — captures pre-game lines.
+        snapshot_dt = datetime(
+            game_date.year, game_date.month, game_date.day,
+            12, 0, 0, tzinfo=timezone.utc,
+        ) - timedelta(days=1)
+        snapshot_str  = format_iso_utc(snapshot_dt)
+        events_on_date = len(event_ids_str.split(","))
+
+        for market in markets:
+            call_num += 1
+            params: dict = {
+                "date":       snapshot_str,
+                "eventIds":   event_ids_str,
+                "markets":    market,
+                "regions":    regions_str,
+                "oddsFormat": DEFAULT_ODDS_FORMAT,
+                "dateFormat": DEFAULT_DATE_FORMAT,
+            }
+
+            log.info(
+                "[%d/%d] %s  market=%s  snapshot=%s  events=%d",
+                call_num, total_calls, game_date, market, snapshot_str, events_on_date,
+            )
+
+            try:
+                result = call_odds_api(HIST_ODDS_ENDPOINT, params)
+            except requests.HTTPError as exc:
+                log.warning(
+                    "  HTTP error for %s market=%s: %s — skipping",
+                    game_date, market, exc,
+                )
+                time.sleep(REQUEST_DELAY)
+                continue
+            except requests.RequestException as exc:
+                log.warning(
+                    "  Request failed for %s market=%s: %s — skipping",
+                    game_date, market, exc,
+                )
+                time.sleep(REQUEST_DELAY)
+                continue
+
+            # Historical odds endpoint returns {"timestamp":..., "data":[...]}.
+            # With multiple eventIds, data contains one object per event.
+            payload = result.payload
+            if isinstance(payload, dict):
+                data_array = payload.get("data", [])
+            elif isinstance(payload, list):
+                data_array = payload  # defensive: bare array
+            else:
+                data_array = []
+
+            if not data_array:
+                log.info("  No data in response — skipping insert")
+                time.sleep(REQUEST_DELAY)
+                continue
+
+            log.info("  %d event(s) in response", len(data_array))
+
+            date_inserted = 0
+            for event_obj in data_array:
+                bookmakers = event_obj.get("bookmakers")
+                try:
+                    insert_odds_row(
+                        conn,
+                        target               = target,
+                        ingestion_ts         = ingestion_ts,
+                        load_id              = load_id,
+                        source_endpoint      = HIST_ODDS_ENDPOINT,
+                        request_url          = result.url,
+                        request_params       = params,
+                        http_status_code     = result.status_code,
+                        x_requests_used      = result.requests_used,
+                        x_requests_remaining = result.requests_remaining,
+                        raw_json             = event_obj,
+                        event_id             = event_obj.get("id"),
+                        sport_key            = event_obj.get("sport_key"),
+                        sport_title          = event_obj.get("sport_title"),
+                        commence_time        = event_obj.get("commence_time"),
+                        home_team            = event_obj.get("home_team"),
+                        away_team            = event_obj.get("away_team"),
+                        bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
+                    )
+                    date_inserted += 1
+                    rows_inserted += 1
+                except Exception as exc:
+                    log.error(
+                        "  Snowflake write failed for event=%s market=%s: %s",
+                        event_obj.get("id"), market, exc,
+                    )
+
+            log.info("  %d/%d row(s) inserted", date_inserted, len(data_array))
+            time.sleep(REQUEST_DELAY)
+
+    log.info(
+        "Historical odds ingest complete — %d date(s), %d call(s), %d row(s)  load_id=%s",
+        total_dates, call_num, rows_inserted, load_id,
+    )
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -586,6 +1013,60 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             f"Upper bound for event commence time in ISO 8601 UTC format. "
             f"Defaults to {DEFAULT_EVENTS_WINDOW_DAYS} days from today at 00:00:00Z."
+        ),
+    )
+
+    hist_events_parser = sub.add_parser(
+        "historical-events",
+        help=(
+            "Fetch historical MLB events for each regular-season game date "
+            "and ingest into the configured events table."
+        ),
+    )
+    hist_events_parser.add_argument(
+        "--start-date",
+        metavar="YYYY-MM-DD",
+        default=HIST_DEFAULT_START.isoformat(),
+        help=(
+            f"First game date to fetch, inclusive (default: {HIST_DEFAULT_START}). "
+            "Pass a later date to resume an interrupted backfill."
+        ),
+    )
+    hist_events_parser.add_argument(
+        "--end-date",
+        metavar="YYYY-MM-DD",
+        default=HIST_DEFAULT_END.isoformat(),
+        help=(
+            f"Last game date to fetch, inclusive (default: {HIST_DEFAULT_END} — "
+            "the day before live odds ingestion began)."
+        ),
+    )
+
+    hist_odds_parser = sub.add_parser(
+        "historical-odds",
+        help=(
+            "Fetch historical MLB odds for events from mlb_events_raw and "
+            "ingest into the configured odds table. Requires historical-events "
+            "to have been run first for the target date range."
+        ),
+    )
+    hist_odds_parser.add_argument(
+        "--start-date",
+        metavar="YYYY-MM-DD",
+        default=HIST_ODDS_DEFAULT_START.isoformat(),
+        help=(
+            f"First event commence date to include, inclusive "
+            f"(default: {HIST_ODDS_DEFAULT_START}). "
+            "Pass a later date to resume an interrupted backfill."
+        ),
+    )
+    hist_odds_parser.add_argument(
+        "--end-date",
+        metavar="YYYY-MM-DD",
+        default=HIST_DEFAULT_END.isoformat(),
+        help=(
+            f"Last event commence date to include, inclusive "
+            f"(default: {HIST_DEFAULT_END})."
         ),
     )
 
@@ -642,6 +1123,22 @@ def main() -> None:
                 events_target,
                 commence_time_from = args.commence_time_from or window_from,
                 commence_time_to   = args.commence_time_to   or window_to,
+            )
+
+        elif args.command == "historical-events":
+            run_historical_events(
+                conn,
+                events_target,
+                start_date = date.fromisoformat(args.start_date),
+                end_date   = date.fromisoformat(args.end_date),
+            )
+
+        elif args.command == "historical-odds":
+            run_historical_odds(
+                conn,
+                odds_target,
+                start_date = date.fromisoformat(args.start_date),
+                end_date   = date.fromisoformat(args.end_date),
             )
 
         elif args.command == "odds":

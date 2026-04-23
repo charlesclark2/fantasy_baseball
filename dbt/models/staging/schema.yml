@@ -121,6 +121,16 @@ models:
           values indicate the favorite; positive values the underdog.
         tests: [not_null]
 
+      - name: outcome_price_decimal
+        description: >
+          Decimal-format odds derived from outcome_price_american.
+          Positive American (≥100): (american / 100.0) + 1. Negative American (<0): (100.0 / ABS(american)) + 1.
+          E.g. +150 → 2.50, -110 → ~1.909, -200 → 1.50.
+        tests:
+          - not_null:
+              config:
+                where: "outcome_price_american is not null"
+
       - name: outcome_point
         description: >
           Total line for this outcome. Non-null only for totals markets

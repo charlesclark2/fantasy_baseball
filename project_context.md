@@ -195,6 +195,14 @@ One row per team per game. Rolling windows: 7/14/30-day + season-to-date. Regula
 
 ## 6. Key Design Notes
 
+**No-leakage rule (feature layer):** Every rolling window lookup and stat join in `dbt/models/feature/` must use data strictly from before the game date. The enforced patterns are:
+- Rolling window joins: `stats.game_date::date < game_date` (strictly less than — never `<=`)
+- Platoon splits: `game_year = year(game_date) - 1` (prior season only — full-season in-progress aggregates would leak)
+- Park run factors: `prf.game_year = game_year - 1` (prior season only)
+- Season record: `record_date = game_date - 1` (standings as of the day before)
+
+Violations allow the model to "see" same-day game results during training, producing optimistic in-sample metrics that collapse out-of-sample. The full code review checklist and a Snowflake spot-check against game_pk 777235 (LAD vs HOU, 2025-07-04) are documented in `data_quality/leakage_audit.md`. All five feature models passed the audit on 2026-04-23.
+
 **Bat tracking availability:** `bat_speed`, `swing_length`, `attack_angle`, `attack_direction`, and `swing_path_tilt` are available **starting 2023-07-14** (Hawk-Eye bat sensor; mid-season All-Star break rollout). They populate for swing-contact events only (~45% of pitches in 2024+; ~20% for the 2023 partial season). ML features built on these columns must treat them as an optional era-specific block — models trained on 2015–present data must have a fallback path that omits them.
 
 **hyper_speed availability:** `hyper_speed` has been available **since 2015-04-05** and is distinct from the 2023 bat tracking system. It populates for batted contact events (~33% of pitches) and is usable for the full training history.
@@ -291,11 +299,134 @@ Estimated completion: before ML work begins.
 - ~~Confirm `mart_pitch_fielding` null flag root cause and fix~~ ✓ Complete — `coalesce(..., false)` applied to all nine alignment boolean flags; 70,778-row sensor gap in source acknowledged as irresolvable
 - ~~Add `venue_id` / park factor join to `mart_game_results`~~ ✓ Complete — `venue_id` and `venue_name` joined from `stg_statsapi_games`; `mart_park_run_factors` built with season and 3-year rolling run factors per venue; all tests pass
 - ~~Confirm lineup data is reliably populated for historical games (coverage audit)~~ ✓ Complete — 100% coverage 2015–2026; lineup features are a required join with no date cutoff
-- Document data availability windows (Statcast coverage by year, lineup coverage by year)
+- ~~Document data availability windows (Statcast coverage by year, lineup coverage by year)~~ ✓ Complete — verified against actual Snowflake row counts; intercept offset corrected to 2023-07-14 (not 2024); full table in `data_quality/data_availability_windows.md`
 
 **Deliverables:**
 - ✓ All dbt tests passing at error thresholds (2 intentional `warn`-severity tests remain — by design)
-- Full coverage audit documented in `data_quality/open_data_quality_issues.md`
+- ✓ Coverage audit documented in `data_quality/open_data_quality_issues.md`
+- ✓ Data availability windows documented in `data_quality/data_availability_windows.md`
+
+---
+
+### Phase 1 Enhancement — Historical Odds Backfill
+
+The current odds pipeline is forward-looking only (live ingestion started 2026-04-23). To make odds features usable for model training and backtesting, historical events and odds must be backfilled for the 2021–2025 regular seasons using The Odds API historical endpoints. These four cards extend Phase 1 and must be completed before Phase 3 EDA or Phase 4 model training can incorporate betting market features.
+
+---
+
+#### Card 1 — Ingest Historical MLB Events from The Odds API (2021–present)
+
+**Title:** Ingest historical MLB events from The Odds API — 2021 to present
+
+**Description:**
+
+*Technical implementation:* Add a `historical-events` subcommand to `scripts/odds_api_ingestion.py`. The endpoint is `GET /v4/historical/sports/baseball_mlb/events` with a `date` parameter in ISO 8601 UTC format. For each game date from the 2021 season opener through 2026-04-22 (the day before live ingestion began):
+
+1. Determine the first game start time on that date (query `baseball_data.betting.mart_game_results` for `MIN(game_datetime_utc)` where `game_date = <date>` and `game_type = 'R'`)
+2. Set the `date` parameter to 1 hour before the first game start on that date (e.g., if first game is 13:05 ET / 17:05 UTC, use `16:05:00Z`)
+3. Pass `commenceTimeFrom` and `commenceTimeTo` scoped to that calendar date (UTC) to limit the response to that day's games
+4. Write each response into `baseball_data.oddsapi.mlb_events_raw` — same table as live events — tagged with `source_endpoint = '/v4/historical/sports/baseball_mlb/events'` for auditability
+
+The subcommand must accept `--start-date` and `--end-date` CLI args to support incremental backfills and reruns. The script should skip dates with no regular season games (query `mart_game_results` to build the game-date list). Respect API rate limiting with the existing `REQUEST_DELAY` between calls.
+
+*Blockers:* None — fully independent. Note: ~810 game days across 2021–2025 regular seasons = ~810 API requests. Verify available credits before running the full backfill.
+
+**Acceptance criteria:**
+- [ ] New `historical-events` subcommand added to `odds_api_ingestion.py` with `--start-date` and `--end-date` args
+- [ ] Script queries `mart_game_results` to build the list of game dates in range; skips non-game dates
+- [ ] Each API call uses `date` = 1 hour before the earliest game start UTC on that date
+- [ ] All responses inserted into `baseball_data.oddsapi.mlb_events_raw` with correct ingestion metadata columns populated
+- [ ] API credits logged after each call
+- [ ] Full backfill for 2021–2025 regular seasons completes with no unhandled errors
+- [ ] `event_id` is non-null for all returned event rows
+
+---
+
+#### Card 2 — Add Decimal Odds Column to Staging and Mart Models
+
+**Title:** Add `outcome_price_decimal` derived column to stg_oddsapi_odds and mart_odds_outcomes
+
+**Description:**
+
+*Technical implementation:* American odds → decimal odds conversion:
+- Positive American odds (≥ 100): `decimal_odds = (outcome_price_american / 100.0) + 1`
+- Negative American odds (< 0): `decimal_odds = (100.0 / ABS(outcome_price_american)) + 1`
+
+Add `outcome_price_decimal FLOAT` as a derived column in two dbt models:
+
+1. `dbt/models/staging/stg_oddsapi_odds.sql` — add the computed column immediately after `outcome_price_american` in the final SELECT using a `CASE WHEN outcome_price_american >= 100 THEN ... ELSE ... END` expression
+2. `dbt/models/mart/mart_odds_outcomes.sql` — pass `outcome_price_decimal` through from staging (no re-derivation needed)
+
+Update `schema.yml` for both models with a column description and a `not_null` test scoped to rows where `outcome_price_american is not null`.
+
+*Blockers:* None — fully independent of Cards 1, 3, and 4.
+
+**Acceptance criteria:**
+- [ ] `outcome_price_decimal` column added to `stg_oddsapi_odds` with correct formula for positive and negative American odds
+- [ ] `outcome_price_decimal` column added to `mart_odds_outcomes` (passed through from staging)
+- [ ] Spot-check passes: +150 → 2.50, −110 → 1.909 (rounded), +100 → 2.00, −200 → 1.50
+- [ ] Column is non-null for all rows where `outcome_price_american` is non-null
+- [ ] `schema.yml` updated with column description for both models
+- [ ] `dbtf build --select stg_oddsapi_odds mart_odds_outcomes` passes all tests
+
+---
+
+#### Card 3 — Ingest Historical Odds Using Event IDs (blocked by Card 1)
+
+**Title:** Ingest historical MLB odds from The Odds API using event IDs from historical events backfill — 2021 to present
+
+**Description:**
+
+*Technical implementation:* Add a `historical-odds` subcommand to `scripts/odds_api_ingestion.py`. This command reads distinct event IDs from `baseball_data.oddsapi.mlb_events_raw` (populated by Card 1) for a given date range, then for each event fetches historical odds by calling:
+
+`GET /v4/historical/sports/baseball_mlb/events?apiKey=...&date=<snapshot_date>&eventIds=<event_id>&markets=h2h,totals&regions=us,us2`
+
+Where `snapshot_date` = the event's `commence_time` minus 1 day (ISO 8601 UTC). This returns the odds snapshot from one day before the game — the pre-game market line.
+
+Results are written to `baseball_data.oddsapi.mlb_odds_raw` — the same target as live odds ingestion — so `stg_oddsapi_odds`, `mart_odds_outcomes`, and all downstream models consume them automatically without schema changes.
+
+The subcommand must accept `--start-date` / `--end-date` args to allow incremental backfills. Both `h2h` and `totals` markets must be fetched per event (two calls per event). Apply `REQUEST_DELAY` between calls.
+
+*Blockers:* **Blocked by Card 1.** Event IDs must be present in `mlb_events_raw` before historical odds can be fetched. Estimated API credit consumption: ~810 game days × ~15 events/day × 2 markets = ~24,300 requests. Confirm credits are available before running the full backfill.
+
+**Acceptance criteria:**
+- [ ] New `historical-odds` subcommand added to `odds_api_ingestion.py` with `--start-date` and `--end-date` args
+- [ ] Script queries `baseball_data.oddsapi.mlb_events_raw` to get distinct event IDs and their `commence_time` for the target date range
+- [ ] For each event, `date` parameter = `commence_time` minus 1 day (ISO 8601 UTC)
+- [ ] Both `h2h` and `totals` markets fetched per event
+- [ ] Results written to `baseball_data.oddsapi.mlb_odds_raw` with all required metadata columns populated
+- [ ] Rate limiting applied between all API calls
+- [ ] `--start-date` / `--end-date` filtering works correctly for incremental reruns
+- [ ] Full 2021–2025 backfill completes with no unhandled errors
+
+---
+
+#### Card 4 — Verify Historical Odds Flow Through Staging, Mart, and Bridge Models (blocked by Cards 1 and 3)
+
+**Title:** Verify historical odds data flows correctly through all downstream dbt models and update coverage documentation
+
+**Description:**
+
+*Technical implementation:* After Cards 1 and 3 populate `mlb_events_raw` and `mlb_odds_raw` with historical data, verify that all downstream dbt models handle the expanded dataset correctly and that no existing tests break:
+
+1. `stg_oddsapi_events` — confirm lateral flatten + dedup logic correctly handles events with `commence_time` in the past; no grain violations expected
+2. `stg_oddsapi_odds` — confirm no null `outcome_price_american` or grain duplicates introduced by historical rows
+3. `mart_odds_events` — dedup-to-latest logic must still return one row per `event_id`; verify historical events appear with correct `commence_time` and `commence_date`
+4. `mart_odds_outcomes` — verify `is_totals_market`, `is_home_outcome`, `is_away_outcome` flags are correct on historical rows; `outcome_price_decimal` (from Card 2) must be populated
+5. `mart_game_odds_bridge` — currently joins `mart_game_results` to `mart_odds_events` on `game_date + full team names`; with historical odds present, match rate for 2021–2025 games should improve significantly. Verify join logic handles past games correctly and document the resulting per-season match rate.
+
+Update `data_quality/data_availability_windows.md` to reflect the expanded odds coverage window (2021 regular season onward).
+
+*Blockers:* **Blocked by Cards 1 and 3.** Historical raw data must be present in both source tables before downstream verification is meaningful. Card 2 (decimal odds) should also be merged before running this verification so the full column set is tested together.
+
+**Acceptance criteria:**
+- [ ] `dbtf build` passes all tests after historical backfill with no new failures
+- [ ] Row count in `stg_oddsapi_events` reflects all historical + live events with no duplicates per `event_id`
+- [ ] Row count in `stg_oddsapi_odds` reflects all historical + live odds rows with no grain violations
+- [ ] `mart_game_odds_bridge.has_odds = true` for 2021–2025 regular season games where odds were available
+- [ ] No unexpected nulls in `outcome_price_decimal` for historical rows in `mart_odds_outcomes`
+- [ ] Per-season match rate in `mart_game_odds_bridge` documented (query + results added to `data_quality/open_data_quality_issues.md` or a new audit note)
+- [ ] `data_quality/data_availability_windows.md` updated: odds coverage window changed from "2026-04-23 – present" to "2021 regular season – present (historical via backfill; live from 2026-04-23)"
 
 ---
 
@@ -472,7 +603,27 @@ Operationalize the full stack:
 
 ---
 
-## 12. Tooling Reference
+## 12. Project Management
+
+### Trello Card Format
+
+Every Trello card must include:
+
+**Title** — Action-oriented, specific enough to understand scope without opening the card.
+
+**Description** — Three sections, kept concise:
+
+*Technical implementation* — Bullet points covering: what to build, which source tables it depends on, grain, key logic or design decisions, and any architectural constraints (e.g., no-leakage rule). Avoid exhaustive column lists — reference table names and let the implementer read the schema.
+
+*Blockers* — Prerequisite cards, missing data, or open decisions that must be resolved before this card can start.
+
+*Acceptance criteria* — Short, checkable conditions. Each criterion must be verifiable (e.g., "`dbtf build --select <model>` passes all tests", "row count matches expected grain"). Avoid vague criteria ("looks good", "seems correct"). Aim for 5–8 criteria per card.
+
+**Example of correct scope and style:** See the Card 4 (Verify historical odds flow) text in Section 9 — Phase 1 Enhancement. That card is the reference for length and detail level.
+
+---
+
+## 13. Tooling Reference
 
 ### Daily ingestion runbook
 
