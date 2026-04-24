@@ -1,0 +1,188 @@
+{
+  "cross_correlation": {
+    "home_starter_vs_bp_r": 0.16921312520807158,
+    "home_starter_vs_bp_pval": 1.1587227934547384e-110,
+    "away_starter_vs_bp_r": 0.16433001502515426,
+    "away_starter_vs_bp_pval": 2.1536526852700923e-104,
+    "high_collinearity": false
+  },
+  "partial_correlations": [
+    {
+      "feature": "home_starter_xwoba_against_std",
+      "target": "total_runs",
+      "pearson_r": 0.06883650697800096,
+      "partial_r": 0.059145909540123,
+      "controlling_for": "home_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "home_starter_xwoba_against_std",
+      "target": "run_differential",
+      "pearson_r": -0.0702661546849496,
+      "partial_r": -0.06098839471559887,
+      "controlling_for": "home_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "home_starter_xwoba_against_std",
+      "target": "home_win",
+      "pearson_r": -0.05782612547776561,
+      "partial_r": -0.049625366713402175,
+      "controlling_for": "home_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "home_bp_xwoba_against_30d",
+      "target": "total_runs",
+      "pearson_r": 0.06299324957503943,
+      "partial_r": 0.05222033608569358,
+      "controlling_for": "home_starter_xwoba_against_std"
+    },
+    {
+      "feature": "home_bp_xwoba_against_30d",
+      "target": "run_differential",
+      "pearson_r": -0.06068094298368088,
+      "partial_r": -0.049627538621672344,
+      "controlling_for": "home_starter_xwoba_against_std"
+    },
+    {
+      "feature": "home_bp_xwoba_against_30d",
+      "target": "home_win",
+      "pearson_r": -0.053101002992267235,
+      "partial_r": -0.044023508895033175,
+      "controlling_for": "home_starter_xwoba_against_std"
+    },
+    {
+      "feature": "away_starter_xwoba_against_std",
+      "target": "total_runs",
+      "pearson_r": 0.037671513174301424,
+      "partial_r": 0.03769222566653107,
+      "controlling_for": "away_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "away_starter_xwoba_against_std",
+      "target": "run_differential",
+      "pearson_r": 0.07933094124103461,
+      "partial_r": 0.07082892235832906,
+      "controlling_for": "away_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "away_starter_xwoba_against_std",
+      "target": "home_win",
+      "pearson_r": 0.06352870070847388,
+      "partial_r": 0.05445270023925097,
+      "controlling_for": "away_bp_xwoba_against_30d"
+    },
+    {
+      "feature": "away_bp_xwoba_against_30d",
+      "target": "total_runs",
+      "pearson_r": 0.002993148599301282,
+      "partial_r": -0.003243780784369642,
+      "controlling_for": "away_starter_xwoba_against_std"
+    },
+    {
+      "feature": "away_bp_xwoba_against_30d",
+      "target": "run_differential",
+      "pearson_r": 0.058320613097695026,
+      "partial_r": 0.04605340696153767,
+      "controlling_for": "away_starter_xwoba_against_std"
+    },
+    {
+      "feature": "away_bp_xwoba_against_30d",
+      "target": "home_win",
+      "pearson_r": 0.06033043677282196,
+      "partial_r": 0.050680730576187875,
+      "controlling_for": "away_starter_xwoba_against_std"
+    }
+  ],
+  "ols_decomposition": {
+    "total_runs": {
+      "starter_only_r2": 0.006046566749891347,
+      "bullpen_only_r2": 0.003969193675029237,
+      "combined_r2": 0.00872828104626222,
+      "incremental_r2": 0.002681714296370874
+    },
+    "run_differential": {
+      "starter_only_r2": 0.011481242575949624,
+      "bullpen_only_r2": 0.007312185591545339,
+      "combined_r2": 0.016304234255053007,
+      "incremental_r2": 0.004822991679103383
+    },
+    "home_win": {
+      "starter_only_r2": 0.007544841005241332,
+      "bullpen_only_r2": 0.006666566756175607,
+      "combined_r2": 0.01226044455604225,
+      "incremental_r2": 0.0047156035508009175
+    }
+  },
+  "workload_correlations": [
+    {
+      "feature": "home_bullpen_pitches_prev_3d",
+      "target": "total_runs",
+      "pearson_r": 0.02511666992453029
+    },
+    {
+      "feature": "home_bullpen_pitches_prev_3d",
+      "target": "run_differential",
+      "pearson_r": -0.009180407941766824
+    },
+    {
+      "feature": "home_bullpen_pitches_prev_3d",
+      "target": "home_win",
+      "pearson_r": -0.0009270782281000517
+    },
+    {
+      "feature": "home_pitchers_used_prev_7d",
+      "target": "total_runs",
+      "pearson_r": 0.0020070356701854357
+    },
+    {
+      "feature": "home_pitchers_used_prev_7d",
+      "target": "run_differential",
+      "pearson_r": 0.00208960085198945
+    },
+    {
+      "feature": "home_pitchers_used_prev_7d",
+      "target": "home_win",
+      "pearson_r": 0.006785531854753567
+    },
+    {
+      "feature": "away_bullpen_pitches_prev_3d",
+      "target": "total_runs",
+      "pearson_r": 0.0264749623725974
+    },
+    {
+      "feature": "away_bullpen_pitches_prev_3d",
+      "target": "run_differential",
+      "pearson_r": 0.01902664434682578
+    },
+    {
+      "feature": "away_bullpen_pitches_prev_3d",
+      "target": "home_win",
+      "pearson_r": 0.02043355969108565
+    },
+    {
+      "feature": "away_pitchers_used_prev_7d",
+      "target": "total_runs",
+      "pearson_r": 0.013652287988566813
+    },
+    {
+      "feature": "away_pitchers_used_prev_7d",
+      "target": "run_differential",
+      "pearson_r": 0.009462460576357993
+    },
+    {
+      "feature": "away_pitchers_used_prev_7d",
+      "target": "home_win",
+      "pearson_r": 0.0030716212398158977
+    }
+  ],
+  "workload_incremental_r2": {
+    "home_total_runs": 0.00047777658164838144,
+    "home_run_differential": -0.0035825584325499538,
+    "home_home_win": -0.0037866445317353836
+  },
+  "design_recommendation": {
+    "keep_both": true,
+    "drop_bullpen": false,
+    "add_workload_flag": false,
+    "rationale": "No high collinearity (home r=0.1692, away r=0.1643) and mean incremental R\u00b2=0.004073 >= 0.002 threshold. Keep both starter and bullpen xwOBA in Phase 4. Workload max incremental R\u00b2=0.000478 <= 0.005 threshold \u2014 workload adds no meaningful signal beyond trailing xwOBA."
+  }
+}

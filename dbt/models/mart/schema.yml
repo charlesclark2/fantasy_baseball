@@ -300,6 +300,90 @@ models:
           - not_null
 
   # ============================================================================
+  # mart_odds_consensus
+  # ============================================================================
+  - name: mart_odds_consensus
+    description: >
+      Pre-game bookmaker consensus aggregation. One row per event_id.
+      Aggregates vig-adjusted implied probabilities across all bookmakers
+      in mart_odds_outcomes, filtered to pre-game snapshots only
+      (ingestion_ts < commence_time). Card 3.11 benchmark: consensus Brier
+      score = 0.2395, confirming these features carry signal for ML training.
+
+      Sharp books (identified by Card 3.11): lowvig, betonlineag, bovada.
+      Soft books: draftkings, fanduel, betmgm, williamhill_us, betrivers.
+
+      Grain: one row per event_id. Rows exist only for events with at least
+      one pre-game h2h bookmaker price.
+
+    columns:
+
+      - name: event_id
+        description: >
+          The Odds API event identifier. Primary key. Foreign key to
+          mart_odds_events.event_id.
+        tests:
+          - not_null
+          - unique
+
+      - name: home_win_prob_consensus
+        description: >
+          Average vig-adjusted home win probability across all bookmakers with
+          pre-game h2h prices for this event. Non-null for all rows.
+
+      - name: home_win_prob_sharp
+        description: >
+          Average vig-adjusted home win probability across sharp books only
+          (lowvig, betonlineag, bovada — identified by Card 3.11). Null when
+          no sharp book had pre-game h2h coverage for this event.
+
+      - name: home_win_prob_soft
+        description: >
+          Average vig-adjusted home win probability across soft books only
+          (draftkings, fanduel, betmgm, williamhill_us, betrivers). Null when
+          no soft book had pre-game h2h coverage for this event.
+
+      - name: sharp_soft_ml_delta
+        description: >
+          home_win_prob_sharp minus home_win_prob_soft. Positive values indicate
+          sharp books favor the home team more than soft books — a potential
+          signal of sharp action. Null when either sharp or soft group has no
+          coverage for this event.
+
+      - name: ml_consensus_std
+        description: >
+          Standard deviation of vig-adjusted home win probability across all
+          bookmakers. Higher values indicate disagreement across the market.
+          Null (not 0.0) when only one bookmaker has coverage for this event.
+
+      - name: market_bookmaker_count
+        description: >
+          Count of bookmakers with valid pre-game h2h prices for this event.
+          Always >= 1 for all rows in this mart.
+
+      - name: total_line_consensus
+        description: >
+          Average over/under total line across all bookmakers with pre-game
+          totals prices. Null when no bookmaker has totals coverage.
+
+      - name: total_line_std
+        description: >
+          Standard deviation of the over/under line across bookmakers. Null
+          (not 0.0) when only one bookmaker has totals coverage. Low values
+          indicate consensus on the line; higher values indicate disagreement.
+
+      - name: over_prob_consensus
+        description: >
+          Average vig-adjusted over probability across all bookmakers with
+          pre-game totals prices. Null when no bookmaker has totals coverage.
+
+      - name: totals_bookmaker_count
+        description: >
+          Count of bookmakers with valid pre-game totals prices for this event.
+          Null when no totals coverage exists. Diagnostic column — not passed
+          through as a model signal feature in feature_pregame_odds_features.
+
+  # ============================================================================
   # mart_pitch_game_context
   # ============================================================================
   - name: mart_pitch_game_context

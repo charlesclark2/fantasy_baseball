@@ -12,5 +12,8 @@ __pycache__/
 venv/
 .venv/
 
+# Marimo session state (large JSON files with hash strings that trigger GitHub secret scanning)
+exploratory_data_analysis/__marimo__/
+
 # OS
 .DS_Store

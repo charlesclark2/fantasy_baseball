@@ -667,6 +667,62 @@ models:
           scoring increase relative to 2022 (confirmed in Notebook 01). Use as an era interaction term
           or stratification variable in models spanning the 2022–2023 boundary.
 
+      - name: home_win_prob_consensus
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Average vig-adjusted home win probability across all bookmakers with pre-game
+          h2h prices. Card 3.11 Brier benchmark: 0.2395 (2021–2025). Null when no
+          bookmaker h2h coverage. Recommended primary training feature.
+
+      - name: home_win_prob_sharp
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Average vig-adjusted home win probability across sharp books (lowvig, betonlineag,
+          bovada). Null when no sharp book has coverage. Diagnostic; not a recommended
+          primary training feature (include_sharp_soft_features = False per Card 3.11).
+
+      - name: home_win_prob_soft
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Average vig-adjusted home win probability across soft books (draftkings, fanduel,
+          betmgm, williamhill_us, betrivers). Null when no soft book has coverage.
+          Diagnostic only; not recommended as primary training feature per Card 3.11.
+
+      - name: sharp_soft_ml_delta
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          home_win_prob_sharp minus home_win_prob_soft. Null when either group has no
+          coverage. Diagnostic only per Card 3.11.
+
+      - name: ml_consensus_std
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Standard deviation of vig-adjusted home win probability across all bookmakers.
+          Null when only one bookmaker has coverage.
+
+      - name: market_bookmaker_count
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Count of bookmakers contributing to the h2h consensus. Null when has_odds = false.
+
+      - name: total_line_consensus
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Average over/under total line across bookmakers with totals coverage.
+          Null when no totals coverage exists.
+
+      - name: total_line_std
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Standard deviation of over/under line across bookmakers. Null when only one book
+          has totals coverage.
+
+      - name: over_prob_consensus
+        description: >
+          Passed through from feature_pregame_odds_features (source: mart_odds_consensus).
+          Average vig-adjusted over probability across bookmakers with totals coverage.
+          Null when no totals coverage exists.
+
   - name: feature_pregame_odds_features
     description: >
       Pre-game betting market features. One row per game_pk (regular season only).
@@ -789,3 +845,63 @@ models:
                 min_value: 0
               config:
                 where: "totals_market_vig is not null"
+
+      - name: home_win_prob_consensus
+        description: >
+          Average vig-adjusted home win probability across all bookmakers with
+          pre-game h2h prices (source: mart_odds_consensus). Card 3.11 benchmark:
+          Brier score = 0.2395 on 2021–2025. Null when has_odds = false or no
+          bookmaker had pre-game h2h coverage. Recommended as a primary training
+          feature (include_consensus_features = True per Card 3.11).
+
+      - name: home_win_prob_sharp
+        description: >
+          Average vig-adjusted home win probability across sharp books only
+          (lowvig, betonlineag, bovada — identified by Card 3.11 calibration).
+          Null when no sharp book had pre-game h2h coverage. Present for
+          diagnostics; not recommended as a primary training feature
+          (include_sharp_soft_features = False per Card 3.11).
+
+      - name: home_win_prob_soft
+        description: >
+          Average vig-adjusted home win probability across soft books only
+          (draftkings, fanduel, betmgm, williamhill_us, betrivers). Null when
+          no soft book had pre-game h2h coverage. Diagnostic column only;
+          not recommended as a primary training feature per Card 3.11.
+
+      - name: sharp_soft_ml_delta
+        description: >
+          home_win_prob_sharp minus home_win_prob_soft. Positive values indicate
+          sharp books favor the home team more than soft books. Null when either
+          sharp or soft group has no coverage. Diagnostic column only;
+          not recommended as a primary training feature per Card 3.11.
+
+      - name: ml_consensus_std
+        description: >
+          Standard deviation of vig-adjusted home win probability across all
+          bookmakers. Captures cross-market disagreement. Null (not 0.0) when
+          only one bookmaker has coverage. Source: mart_odds_consensus.
+
+      - name: market_bookmaker_count
+        description: >
+          Count of bookmakers contributing to the h2h consensus for this event.
+          Always >= 1 when non-null. Null when has_odds = false.
+          Source: mart_odds_consensus.
+
+      - name: total_line_consensus
+        description: >
+          Average over/under total runs line across all bookmakers with pre-game
+          totals prices. Null when no bookmaker has totals coverage.
+          Source: mart_odds_consensus.
+
+      - name: total_line_std
+        description: >
+          Standard deviation of the over/under line across bookmakers. Null
+          (not 0.0) when only one bookmaker has totals coverage.
+          Source: mart_odds_consensus.
+
+      - name: over_prob_consensus
+        description: >
+          Average vig-adjusted over probability across all bookmakers with
+          pre-game totals prices. Null when no bookmaker has totals coverage.
+          Source: mart_odds_consensus.

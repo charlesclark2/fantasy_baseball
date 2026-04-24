@@ -1,0 +1,396 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: hyperparameter-optimization
+  namespace: default
+spec:
+  description: >
+    Apply systematic hyperparameter tuning to XGBoost models for all three
+    prediction targets (total_runs, run_differential, home_win) using Optuna
+    with the TPE sampler and the temporal CV splits from Card 4.6. Tune NGBoost
+    n_estimators and distribution type via grid search for both regression targets.
+    All tuning uses mean CV score (MAE for regression, Brier score for
+    classification) as the optimization objective. Persist tuned models using the
+    model_io.py convention from Card 4.7. Log all trials and comparisons to
+    betting_ml/evaluation/hyperparameter_tuning.md.
+  acceptanceCriteria:
+    - description: >
+        Optuna tuning completed for XGBoost on total_runs, run_differential, and
+        home_win; at least 50 trials per target logged with TPE sampler; all trial
+        params and scores recorded in tuning_results.json
+    - description: >
+        Tuned XGBoost mean CV MAE for total_runs meets or improves on the Card 4.8
+        baseline XGBoost mean CV MAE; tuned XGBoost mean CV MAE for run_differential
+        meets or improves on the Card 4.9 baseline; script exits non-zero if either
+        tuned score regresses by more than 1% relative
+    - description: >
+        Tuned XGBoost mean CV Brier score for home_win meets or improves on the
+        Card 4.10 baseline XGBoost (Platt-calibrated) mean CV Brier score
+    - description: >
+        NGBoost grid search completed for total_runs and run_differential across
+        n_estimators ∈ {200, 500, 1000} and dist ∈ {Normal, LogNormal}; best
+        configuration documented; LogNormal failure on run_differential (negative
+        target support) handled gracefully and noted
+    - description: >
+        Five tuned models persisted via save_model() from utils/model_io.py with
+        _tuned suffix: xgb_tuned for total_runs and run_differential, xgb_classifier_tuned
+        for home_win, ngboost_tuned for total_runs and run_differential
+    - description: >
+        Best hyperparameters, per-trial scores, baseline vs. tuned comparison, and
+        NGBoost grid results documented in betting_ml/evaluation/hyperparameter_tuning.md;
+        project_context.md Phase 4 section updated with Card 4.11 findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-4-7-through-4-10-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Cards 4.7, 4.8, 4.9, and 4.10 must all be complete before Card 4.11 begins.
+    Card 4.7 provides betting_ml/utils/model_io.py (save_model / load_model via joblib;
+    path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl).
+    Card 4.8 provides baseline XGBoost MAE for total_runs in cv_results.json.
+    Card 4.9 provides baseline XGBoost MAE for run_differential in cv_results_run_diff.json.
+    Card 4.10 provides baseline XGBoost Platt Brier score for home_win in
+    cv_results_win_outcome.json.
+    All four baseline result files are required at tuning start because the
+    improvement acceptance criteria load baseline scores from them.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: hyperparameter-optimization-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-hyperparameter-search is the compute-heavy node: it runs all
+    Optuna studies and the NGBoost grid search, persists five tuned models, and
+    writes tuning_results.json. generate-tuning-report is the terminal node and
+    produces hyperparameter_tuning.md and the project_context.md update.
+  goalRef:
+    name: hyperparameter-optimization
+  graph:
+    nodes:
+
+      - id: run-hyperparameter-search
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/run_hyperparameter_search.py. Runs Optuna
+          hyperparameter search for all three XGBoost targets and NGBoost grid
+          search for regression targets, then persists the best models.
+
+          Setup:
+            Load features via load_features(). Build CV folds via
+            all_season_splits(df, min_train_seasons=3).
+            Load baseline CV scores for comparison:
+              total_runs baseline XGBoost MAE: mean of mae across fold_results
+                where model='xgboost' from betting_ml/evaluation/cv_results.json
+              run_diff baseline XGBoost MAE: mean from cv_results_run_diff.json
+              win_outcome baseline Brier: mean of brier_score across fold_results
+                where model='xgb_platt' from cv_results_win_outcome.json
+            Feature matrices (same exclusion as in each baseline card):
+              X_reg = df.drop(columns=['total_runs', 'run_differential', 'home_win',
+                'total_line', 'has_odds'], errors='ignore')
+              y_total_runs = df['total_runs']
+              y_run_diff = df['run_differential']
+              y_home_win = df['home_win'].astype(int)
+
+          Optuna search space (shared across all three XGBoost targets):
+            max_depth: suggest_int 3–8
+            learning_rate: suggest_float 0.01–0.3 (log=True)
+            n_estimators: suggest_int 100–1000
+            subsample: suggest_float 0.6–1.0
+            colsample_bytree: suggest_float 0.5–1.0
+            reg_alpha: suggest_float 0.0–1.0
+            reg_lambda: suggest_float 0.5–2.0
+
+          Optuna objective function pattern (one study per target):
+            For regression targets (total_runs, run_differential):
+              Instantiate XGBRegressor(**trial_params).
+              For each fold: apply build_imputation_pipeline().fit(X_train).transform;
+              fit XGBRegressor on X_train_imp; predict on X_eval_imp;
+              compute MAE. Return mean MAE across all folds.
+            For win_outcome:
+              Instantiate XGBClassifier(**trial_params, eval_metric='logloss',
+              use_label_encoder=False).
+              For each fold: fit and predict_proba; apply Platt calibration
+              (CalibratedClassifierCV cv='prefit' method='sigmoid') on (X_eval, y_eval);
+              compute brier_score_loss(y_eval, calibrated_proba[:, 1]).
+              Return mean Brier score across all folds.
+            Create optuna.create_study(direction='minimize',
+              sampler=optuna.samplers.TPESampler(seed=42)).
+            Call study.optimize(objective, n_trials=50).
+            Suppress Optuna's verbose per-trial logging with
+            optuna.logging.set_verbosity(optuna.logging.WARNING).
+
+          After each study completes, record:
+            best_params, best_cv_score, all trial (number, params, value) tuples.
+
+          NGBoost grid search — for each target in (total_runs, run_differential):
+            Grid: n_estimators ∈ [200, 500, 1000], dist ∈ ['Normal', 'LogNormal']
+            For each combination, run full CV:
+              Import NGBRegressor and the appropriate distribution from ngboost.distns.
+              For each fold: fit on X_train_imp, predict on X_eval_imp, compute MAE.
+              Wrap in try/except: if LogNormal raises (negative target support) or
+              produces NaN predictions, record cv_mae=null, viable=false, and a
+              note in lognormal_note. This is expected for run_differential.
+            Identify best viable configuration per target.
+
+          Persist tuned models — retrain each best model on the training data of
+          the last CV fold (max-index train split), then persist using
+          save_model() from betting_ml.utils.model_io:
+            save_model(xgb_reg_total_runs, target='total_runs',
+              model_name='xgb_tuned', eval_year=<last_fold_eval_year>)
+            save_model(xgb_reg_run_diff, target='run_differential',
+              model_name='xgb_tuned', eval_year=<last_fold_eval_year>)
+            save_model(xgb_clf_calibrated_win, target='home_win',
+              model_name='xgb_classifier_tuned', eval_year=<last_fold_eval_year>)
+            save_model(ngb_total_runs, target='total_runs',
+              model_name='ngboost_tuned', eval_year=<last_fold_eval_year>)
+            save_model(ngb_run_diff, target='run_differential',
+              model_name='ngboost_tuned', eval_year=<last_fold_eval_year>)
+          last_fold_eval_year is determined from the game_year values in the last
+          fold's eval index: int(df.loc[last_eval_idx, 'game_year'].mode()[0]).
+
+          Print progress per Optuna study (study name and best value after optimize
+          completes) and a summary table of tuned vs. baseline CV scores.
+
+          Write betting_ml/evaluation/tuning_results.json with structure:
+            {
+              "xgboost_tuning": {
+                "total_runs": {
+                  "n_trials": int,
+                  "best_params": {
+                    "max_depth": int, "learning_rate": float,
+                    "n_estimators": int, "subsample": float,
+                    "colsample_bytree": float, "reg_alpha": float,
+                    "reg_lambda": float
+                  },
+                  "best_cv_score": float,
+                  "baseline_cv_score": float,
+                  "metric": "mae",
+                  "improved": bool,
+                  "all_trials": [
+                    {"trial_number": int, "params": {...}, "value": float},
+                    ...
+                  ]
+                },
+                "run_differential": { ... same structure ... },
+                "win_outcome": {
+                  "n_trials": int,
+                  "best_params": {...},
+                  "best_cv_score": float,
+                  "baseline_cv_score": float,
+                  "metric": "brier_score",
+                  "improved": bool,
+                  "all_trials": [...]
+                }
+              },
+              "ngboost_tuning": {
+                "total_runs": {
+                  "grid_results": [
+                    {"n_estimators": int, "dist": str,
+                     "cv_mae": float | null, "viable": bool,
+                     "lognormal_note": str | null},
+                    ...
+                  ],
+                  "best_n_estimators": int,
+                  "best_dist": str,
+                  "best_cv_mae": float
+                },
+                "run_differential": {
+                  "grid_results": [...],
+                  "best_n_estimators": int,
+                  "best_dist": str,
+                  "best_cv_mae": float,
+                  "lognormal_viable": bool,
+                  "lognormal_note": str | null
+                }
+              },
+              "persisted_models": [
+                {"target": str, "model_name": str, "eval_year": int, "path": str},
+                ...
+              ],
+              "summary": {
+                "xgb_total_runs_improved": bool,
+                "xgb_run_diff_improved": bool,
+                "xgb_win_outcome_improved": bool,
+                "best_ngboost_config_total_runs": {"n_estimators": int, "dist": str},
+                "best_ngboost_config_run_diff": {"n_estimators": int, "dist": str}
+              }
+            }
+
+          Script exits non-zero with a descriptive message if:
+            tuned_xgb_mae_total_runs > baseline_xgb_mae_total_runs * 1.01
+            OR tuned_xgb_mae_run_diff > baseline_xgb_mae_run_diff * 1.01
+            OR tuned_xgb_brier_win_outcome > baseline_xgb_brier_win_outcome * 1.01
+        dependsOn:
+          - cards-4-7-through-4-10-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Hyperparameter search script
+            path: betting_ml/scripts/run_hyperparameter_search.py
+          - type: command_succeeds
+            name: Hyperparameter search runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/run_hyperparameter_search.py
+            timeout: 14400
+          - type: artifact_exists
+            name: Tuning results JSON written
+            path: betting_ml/evaluation/tuning_results.json
+          - type: command_succeeds
+            name: tuning_results.json has all required keys and ≥50 trials per XGBoost target
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/tuning_results.json') as f:
+                    results = json.load(f)
+                assert 'xgboost_tuning' in results, "Missing 'xgboost_tuning'"
+                assert 'ngboost_tuning' in results, "Missing 'ngboost_tuning'"
+                assert 'persisted_models' in results, "Missing 'persisted_models'"
+                assert 'summary' in results, "Missing 'summary'"
+                xgb = results['xgboost_tuning']
+                for target in ('total_runs', 'run_differential', 'win_outcome'):
+                    assert target in xgb, f"Missing XGBoost tuning results for {target}"
+                    n = xgb[target]['n_trials']
+                    assert n >= 50, f"XGBoost {target}: expected ≥50 trials, got {n}"
+                    assert 'best_params' in xgb[target], f"Missing best_params for {target}"
+                    assert 'best_cv_score' in xgb[target], f"Missing best_cv_score for {target}"
+                ngb = results['ngboost_tuning']
+                for target in ('total_runs', 'run_differential'):
+                    assert target in ngb, f"Missing NGBoost tuning results for {target}"
+                    assert 'grid_results' in ngb[target], f"Missing grid_results for {target}"
+                    assert len(ngb[target]['grid_results']) > 0, f"Empty grid for {target}"
+          - type: command_succeeds
+            name: Persisted models list contains all five expected tuned models
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, os
+                with open('betting_ml/evaluation/tuning_results.json') as f:
+                    results = json.load(f)
+                persisted = results['persisted_models']
+                assert len(persisted) >= 5, (
+                    f"Expected at least 5 persisted models, got {len(persisted)}: {persisted}"
+                )
+                model_names = {p['model_name'] for p in persisted}
+                required = {'xgb_tuned', 'xgb_classifier_tuned', 'ngboost_tuned'}
+                missing = required - model_names
+                assert not missing, f"Missing model_name entries in persisted_models: {missing}"
+                for p in persisted:
+                    assert os.path.exists(p['path']), f"Persisted model file missing: {p['path']}"
+          - type: command_succeeds
+            name: NGBoost grid contains Normal and LogNormal results for total_runs
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/tuning_results.json') as f:
+                    results = json.load(f)
+                grid = results['ngboost_tuning']['total_runs']['grid_results']
+                dists = {r['dist'] for r in grid}
+                assert 'Normal' in dists, f"NGBoost grid missing Normal dist; got: {dists}"
+                assert 'LogNormal' in dists, f"NGBoost grid missing LogNormal dist; got: {dists}"
+                n_estimators_tested = {r['n_estimators'] for r in grid}
+                assert len(n_estimators_tested) >= 2, (
+                    f"Expected at least 2 n_estimators values; got: {n_estimators_tested}"
+                )
+
+      - id: generate-tuning-report
+        kind: Task
+        description: >
+          Read tuning_results.json and write
+          betting_ml/evaluation/hyperparameter_tuning.md, then update
+          project_context.md Phase 4 section with Card 4.11 findings.
+
+          hyperparameter_tuning.md must contain these sections in order:
+
+          ## XGBoost Hyperparameter Search Results
+            Table with columns: Target | Metric | Baseline CV Score | Tuned CV Score |
+            Improvement (%) | Trials.
+            One row per target (total_runs, run_differential, home_win).
+            Best hyperparameter values for each target listed beneath the table.
+
+          ## Optuna Trial Convergence
+            For each target, state the trial number at which the best value was
+            first achieved (earliest trial where value == best_cv_score).
+            Comment on whether convergence was early (first 10 trials) or required
+            extended search.
+
+          ## NGBoost Grid Search Results
+            Table: Target | n_estimators | Dist | CV MAE | Viable.
+            For run_differential, include a note on why LogNormal is not viable
+            (negative target support).
+            State the best configuration per target.
+
+          ## Best Hyperparameter Configurations
+            Code block or table showing the full best_params dict for each XGBoost
+            target and the best NGBoost config (n_estimators, dist) for each
+            regression target.
+
+          ## Persisted Models
+            Table: Target | Model Name | Eval Year | Path.
+            Confirm all five models saved successfully.
+
+          Update project_context.md: add a "Card 4.11 Results" subsection in the
+          Phase 4 tracking section containing: xgb_total_runs_improved (bool),
+          xgb_run_diff_improved (bool), xgb_win_outcome_improved (bool),
+          best_ngboost_config for each regression target, and a one-sentence
+          summary of the tuning outcome.
+        dependsOn:
+          - run-hyperparameter-search
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Hyperparameter tuning report
+            path: betting_ml/evaluation/hyperparameter_tuning.md
+          - type: command_succeeds
+            name: Tuning report contains all required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/hyperparameter_tuning.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'optuna', 'tpe', 'mae', 'brier', 'baseline', 'tuned',
+                    'xgboost', 'ngboost', 'total_runs', 'run_differential',
+                    'home_win', 'normal', 'lognormal', 'n_estimators',
+                    'learning_rate', 'max_depth', 'persisted', 'convergence'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.11 results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.11', 'optuna', 'tuned']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.11 updates: {missing}'

@@ -8,7 +8,7 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is in progress — feature engineering Cards 4.1 (delta/momentum) and 4.2 (lineup-vs-starter matchup) complete.
+**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is in progress — 7 notebooks complete with findings; analysis scripts for Cards 3.8 and 3.9 complete. **Phase 4 (ML Pipeline)** foundation started — data loader, CV splits, and preprocessing built.
 
 | Domain | Status |
 |---|---|
@@ -21,11 +21,12 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 | Confirmed batting lineups (staging) | Complete — 100% coverage 2015–present |
 | Probable starting pitchers (staging) | Complete — 97–100% coverage for completed seasons |
 | Ballpark context and run factors | Complete |
-| Betting odds (staging + mart) | Events backfilled 2021–present (72-76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
+| Betting odds (staging + mart) | Events backfilled 2021–present (72–76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
 | Schedule fatigue context | Complete |
-| ML feature store | Phase 2 complete (2026-04-23); feature engineering in progress — Card 4.1 done: delta/momentum features (2026-04-23); Card 4.2 done: lineup-vs-starter handedness matchup adjustments (2026-04-23) |
-| EDA | In progress (Phase 3) — findings in exploratory_data_analysis/betting_model_findings.md |
-| Prediction models | Feature engineering in progress — Cards 4.1 and 4.2 complete; Cards 4.3–4.5 next |
+| ML feature store | Phase 2 complete (2026-04-23); feature engineering complete — Cards 4.1–4.5 done (delta/momentum, handedness matchup, reliability flags, starter IP depth, era flags + game context) |
+| EDA | Phase 3 in progress — notebooks 01–07 complete; Card 3.7 done (engineered feature lift); Cards 3.8 done (bullpen/starter decomposition — script); Card 3.9 done (home/away pitching asymmetry — script); Cards 3.10–3.11 queued (plan specs drafted) |
+| ML pipeline foundation | Phase 4 started — `betting_ml/utils/` built: data loader, temporal CV splits, imputation + Bayesian shrinkage preprocessing (Card 4.6 complete) |
+| Prediction models | Phase 4 in progress; plan specs drafted for Cards 4.7–4.12 |
 | Betting application layer | Not started (Phase 6) |
 
 ---
@@ -35,9 +36,9 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 ```
 ├── dbt/                        # dbt-fusion project (all SQL transforms)
 │   ├── models/
-│   │   ├── staging/            # Type-cast and normalize raw sources
-│   │   ├── mart/               # Feature-domain mart tables
-│   │   └── feature/            # Pre-game feature assembly (Phase 2, complete)
+│   │   ├── staging/            # Type-cast and normalize raw sources (6 models)
+│   │   ├── mart/               # Feature-domain mart tables (22 models)
+│   │   └── feature/            # Pre-game feature assembly — Phase 2 complete (6 models)
 │   └── seeds/                  # ref_teams static reference
 ├── scripts/                    # Python ingestion scripts
 │   ├── savant_ingestion.py     # Baseball Savant (Statcast) — daily
@@ -50,7 +51,30 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   ├── resolved_data_quality_issues_april_2026.md
 │   └── data_availability_windows.md          # Verified feature availability dates
 ├── exploratory_data_analysis/  # EDA notebooks (Phase 3, Marimo)
-├── betting_ml/                 # ML model code (Phase 4+, placeholder)
+│   ├── 01_target_variables.py  # Target distributions; era shift; baseline MAE
+│   ├── 02_feature_coverage.py  # Null rate heatmap; imputation decisions
+│   ├── 03_rolling_window_stability.py  # Window size effect; early-season instability
+│   ├── 04_feature_correlations.py      # Pearson/Spearman correlations; multicollinearity
+│   ├── 05_park_and_context.py          # Park factors; schedule fatigue; OLS R² comparison
+│   ├── 06_bat_tracking_era.py          # Bat tracking signal; single-model verdict
+│   ├── 07_engineered_feature_lift.py   # Delta/momentum and handedness lift validation
+│   └── betting_model_findings.md       # Cumulative EDA findings (sections 01–09)
+├── betting_ml/                 # ML model code (Phase 4+)
+│   ├── utils/
+│   │   ├── data_loader.py      # Snowflake → pandas; applies has_full_data + games_played filters
+│   │   ├── cv_splits.py        # Temporal leave-one-season-out CV splits
+│   │   └── preprocessing.py   # Imputation + Bayesian shrinkage pipeline
+│   ├── scripts/
+│   │   ├── analyze_pitching_decomp.py          # Card 3.8: bullpen vs. starter decomposition
+│   │   └── analyze_home_away_pitch_asymmetry.py # Card 3.9: home/away pitching asymmetry
+│   ├── evaluation/             # JSON results artifacts from analysis scripts
+│   ├── models/                 # Serialized model files (Phase 4+)
+│   └── tests/
+│       ├── test_cv_splits.py
+│       └── test_preprocessing.py
+├── plan_specs/                 # Declarative PlanSpec YAML files for agentic execution
+│   ├── phase_3/                # EDA analysis cards (3.8–3.11)
+│   └── phase_4/                # ML pipeline cards (4.6–4.12)
 ├── .mcp.json                   # Snowflake MCP server config for Claude Code
 ├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)
 └── project_context.md          # Full architecture, data sources, roadmap
@@ -173,9 +197,15 @@ uv run marimo run exploratory_data_analysis/01_target_variables.py --headless
 
 **Notebooks:**
 
-| File | Phase | Description |
+| File | Status | Key Finding |
 |---|---|---|
-| [`01_target_variables.py`](exploratory_data_analysis/01_target_variables.py) | Phase 3 | Target distribution analysis — total runs, run differential, home win rate (2016–2025) |
+| [`01_target_variables.py`](exploratory_data_analysis/01_target_variables.py) | Complete | Single model recommended; add `game_year`/`post_2022_rules` flag; exclude 2020; naive MAE baseline ~3.5 runs |
+| [`02_feature_coverage.py`](exploratory_data_analysis/02_feature_coverage.py) | Complete | Odds cols 100% null (pre-backfill); starter platoon splits 11–17% null (debut pitchers); all other groups <5% null |
+| [`03_rolling_window_stability.py`](exploratory_data_analysis/03_rolling_window_stability.py) | Complete | Season-to-date strongest for pitcher metrics; 30d ≈ STD for offense; apply `min(games_played) ≥ 15` filter |
+| [`04_feature_correlations.py`](exploratory_data_analysis/04_feature_correlations.py) | Complete | Park dominates totals; pitching beats offense 2:1; top predictor: park_run_factor (r=0.122); 10 redundant pairs |
+| [`05_park_and_context.py`](exploratory_data_analysis/05_park_and_context.py) | Complete | Include park + elevation; schedule features near-zero signal (r<0.023); include as binary flags only |
+| [`06_bat_tracking_era.py`](exploratory_data_analysis/06_bat_tracking_era.py) | Complete | Single-model path; bat tracking max r=0.022 vs. 0.088 for park factor; OLS ΔR²<0.001; exclude Phase 4 |
+| [`07_engineered_feature_lift.py`](exploratory_data_analysis/07_engineered_feature_lift.py) | Complete | 7d windows add real signal (ΔR²=0.043–0.047); handedness low-signal (ΔR²=0.001–0.002); include 7d directly |
 
 ---
 

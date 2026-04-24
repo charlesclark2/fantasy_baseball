@@ -4,7 +4,7 @@
 
 Build a machine learning system capable of predicting the outcome and total runs scored in an MLB game given the pitching matchup, team matchup, and confirmed batting lineups. The system is grounded in Statcast pitch-level data and augmented with game schedule, lineup, and ballpark context from the MLB Stats API.
 
-The project is currently in the **data mart development phase**. All modeling, feature engineering, and ML infrastructure comes after the mart layer is complete and validated.
+The project is currently in **Phase 3 (Exploratory Data Analysis)** with **Phase 4 (ML Pipeline) started**. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. Seven EDA notebooks are complete; two Phase 3 analysis scripts (Cards 3.8 and 3.9) are complete. Phase 4 ML pipeline foundation is built (`betting_ml/utils/`). Phase 4 feature matrix design constraints are updated through Cards 3.8 and 3.9.
 
 ---
 
@@ -283,9 +283,11 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Lineup data (confirmed pre-game) | Complete (staging) |
 | Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
-| ML feature store | Complete (Phase 2) + feature engineering in progress — six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features; Cards 4.1–4.5 complete (delta/momentum, lineup-vs-starter matchup, rolling window reliability flags, starter expected depth, game context and era flags 2026-04-23) |
-| Prediction models | Not started |
-| Betting/sizing layer | Not started |
+| ML feature store | Complete (Phase 2) + feature engineering complete — six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features; Cards 4.1–4.5 complete (delta/momentum, lineup-vs-starter matchup, rolling window reliability flags, starter expected depth, game context and era flags — all 2026-04-23) |
+| EDA | Phase 3 in progress — notebooks 01–07 complete with findings (sections 01–07); Card 3.8 complete (bullpen/starter decomposition — analysis script); Card 3.9 complete (home/away pitching asymmetry — analysis script); Cards 3.10–3.11 queued (plan specs drafted) |
+| ML pipeline foundation | Phase 4 started — `betting_ml/utils/` complete: data loader, temporal CV splits, imputation + Bayesian shrinkage preprocessing (Card 4.6 complete) |
+| Prediction models | Not started (Phase 4 Cards 4.7–4.12 queued; plan specs drafted) |
+| Betting/sizing layer | Not started (Phase 6) |
 
 The main gap between current state and a deployable prediction model is the **feature assembly layer** — joining the mart tables into a single pre-game feature vector per game — and the **ML pipeline** itself.
 
@@ -494,6 +496,10 @@ uv run marimo run exploratory_data_analysis/01_target_variables.py --headless
 | `01_target_variables.py` | Total runs, run differential, home win rate distributions (2016–2025) | Single model recommended; add `game_year`/`post_2022_rules` feature; exclude 2020; naive MAE baseline ~3.5 runs |
 | `02_feature_coverage.py` | Null rate heatmap (374 cols × all seasons), `has_full_data` verification, imputation decisions | Odds cols 100% null (pre-backfill); starter platoon splits 11–17% null (debut pitchers); all other groups <5% null |
 | `03_rolling_window_stability.py` | Correlation vs. window size (7d/14d/30d/STD) for team and starter features; early-season stability by games-played bucket; slider to preview training set size | Season-to-date is strongest for pitcher metrics; 30-day ≈ STD for offense; apply `min(games_played) ≥ 15` filter in Phase 4 |
+| `04_feature_correlations.py` | Univariate Pearson + Spearman correlation of every feature with each target; multicollinearity heatmaps per feature group with redundant-pair (|r| > 0.85) flagging; home/away matchup differential analysis; Phase 4 feature selection recommendation | **Park dominates totals; pitching beats offense 2:1.** Top total_runs predictors: park_run_factor (r=0.122), elevation (r=0.111), home_pit_xwoba_against_30d (r=0.075). 10 redundant pairs (all 14d window variants). wOBA↔xwOBA not redundant (r=0.68–0.70). `total_matchup_quality` is noise (r=0.005); `matchup_advantage` has modest totals signal (r=0.050) but fails for spread/ML (formula confound). Away pitching near-zero for total_runs (r=0.008) — confirmed asymmetry, see Card 3.9. |
+| `05_park_and_context.py` | Park run factor quartile analysis (rank-order check, Pearson r); days rest and TZ travel bar charts with ANOVA + t-tests; OLS R² comparison (park-only vs. park + schedule); interactive stadium dropdown with dual-axis season trend chart; dynamic Phase 4 verdict | **Include park + elevation; schedule features are cheap flags only.** park_run_factor r=0.122; rank order fully preserved; Q4−Q1 = +1.15 runs. elevation_ft r=0.111 (partially independent). Days rest r<0.003, TZ change r<0.023 — both near-zero. ΔR² for adding schedule to park-only OLS < 0.002 (below 0.005 threshold). Include rest/TZ as binary flags given near-zero cost; do not expect measurable ablation lift. |
+| `06_bat_tracking_era.py` | Bat tracking null rate by season; coverage on 2023–2025 vs. full training set; correlation comparison (traditional vs. bat tracking features); bat speed–wOBA redundancy check; OLS R² with and without bat tracking; verdict: single-model or era-specific path | **Single-model path.** Bat tracking max |r| = 0.022 with total runs (vs. 0.088 for park factor); OLS ΔR² < 0.001; bat speed–wOBA overlap is low (|r| = 0.225 — not redundancy). 30-day team average loses individual-level precision. Exclude from Phase 4; re-evaluate with per-batter matchup aggregations in Phase 5+. |
+| `07_engineered_feature_lift.py` | Correlation fast pass for all delta/momentum (Card 4.1) and handedness matchup (Card 4.2) features vs. three targets; cross-correlation with base features; OLS ΔR² baseline → +delta → +handedness | **7d windows add real signal; handedness validated low-signal.** Delta features: max |r|=0.020 individually (very low); OLS ΔR²=0.043–0.047 over 30d/std baseline — signal is 7d recency lift, not momentum direction. Handedness k_pct_adj shows |r|=0.063–0.086 with run_diff/home_win but ΔR²=0.001–0.002 after controlling for starter K%/xwOBA (below 0.005 threshold). Use 7d windows directly in Phase 4; exclude handedness from primary model. |
 
 **Findings document:** Key findings from each notebook are appended to `exploratory_data_analysis/betting_model_findings.md` as notebooks are completed.
 
@@ -514,6 +520,134 @@ Before fitting models, spend time in `exploratory_data_analysis/` to:
 
 ---
 
+#### Card 3.7 — Engineered Feature Incremental Lift Validation ✓ Complete (2026-04-24)
+
+**Title:** Validate that Cards 4.1 (delta/momentum) and 4.2 (lineup-vs-starter handedness) provide incremental predictive signal over base rolling features
+
+*Acceptance criteria:*
+- [x] Correlation table for all engineered features vs. all three targets
+- [x] OLS ΔR² computed for delta block and handedness block
+- [x] Findings appended to `betting_model_findings.md` section 07
+- [x] Phase 4 design constraints updated with verdict
+
+**Results:** Delta block ΔR²=0.043–0.047 (above 0.005 threshold) — signal is 7d recency lift, not momentum direction; use 7d windows directly in Phase 4. Handedness block ΔR²=0.001–0.002 (below threshold) — validated low-signal; exclude from Phase 4 primary model.
+
+---
+
+#### Card 3.8 — Bullpen vs. Starter Signal Decomposition ✓ Complete (2026-04-24)
+
+**Title:** Decompose pitching quality signal between starting pitcher and bullpen; determine if they contribute independent variance to game outcomes
+
+**Why:** Home bullpen xwOBA (r=0.058) and starter xwOBA (r=0.060) overlap in NB04. If |r| > 0.70 between them, only the stronger predictor should be included; if independent, both should be retained. Workload features may add signal beyond trailing xwOBA.
+
+*Acceptance criteria:*
+- [x] Starter vs. bullpen xwOBA cross-correlation table (home and away pairs; flag high_collinearity if |r| > 0.70)
+- [x] Partial correlation table (each pitching feature vs. all three targets, controlling for the other pitching feature)
+- [x] OLS R² decomposition: starter-only, bullpen-only, combined; incremental R² computed per target
+- [x] Workload feature correlations vs. targets; workload incremental R² vs. bullpen-only baseline
+- [x] Findings appended to `betting_model_findings.md` section 08
+- [x] Phase 4 design constraints updated (keep both / drop bullpen / add workload flag)
+
+**Results:** No high collinearity (home r=0.169, away r=0.164). Mean incremental R²=0.004 — above 0.002 threshold. **Verdict: keep both starter and bullpen xwOBA** as independent features. Workload features (bullpen_pitches_prev_3d, pitchers_used_prev_7d) max incremental R²=0.0005 — exclude.
+
+---
+
+#### Card 3.9 — Home/Away Pitching Quality Asymmetry ✓ Complete (2026-04-24)
+
+**Title:** Investigate the structural asymmetry between home and away team pitching features as predictors of total runs
+
+**Why:** NB04 found a 9× Pearson r gap with total_runs between home pitching (r=0.075) and away pitching (r=0.008). Unresolved, Phase 4 models will underweight away pitching quality. Competing explanations: (H1) collinearity with park factor absorbs away variance; (H2) rotation alignment sample confound; (H3) park contamination in away xwOBA_against; (H4) signal direction issue for away team stats measured at home parks.
+
+*Acceptance criteria:*
+- [x] Partial correlation: `away_pit_xwoba_against_30d` vs. total_runs controlling for `park_run_factor_3yr` and `home_pit_xwoba_against_30d`
+- [x] Stratified correlation by park factor quartile (Q1–Q4)
+- [x] Era-split comparison (2016–2019 vs. 2021–2025)
+- [x] Starter vs. team-level signal comparison (`away_starter_xwoba_against_std` vs. `away_pit_xwoba_against_std`)
+- [x] Root cause hypothesis supported or refuted
+- [x] Findings appended to `betting_model_findings.md` section 09
+- [x] Phase 4 design constraints updated
+
+**Results summary (2026-04-24):**
+- n=17,690 games (2016–2025, excl. 2020); all pitching + park columns non-null
+- Partial r of `away_pit_xwoba_against_30d` vs. total_runs (controlling park_rf + h_pit_30) = **0.0122** (raw r=0.0107); park does not absorb away signal
+- The asymmetry is **total_runs-specific**: away pitching has strong signal for run_differential (partial r=0.096) and home_win (partial r=0.086)
+- Park quartile stratification: asymmetry persists across all quartiles for total_runs (Q1: 4.6×, Q4: 19.0×); H1 refuted
+- Era-split: total_runs asymmetry 5.8× pre-juiced → 18.2× modern; run_diff/home_win asymmetry does not persist; H2 partially supported
+- Away starter vs. team-level delta = −0.0002; H3 not supported
+- H4 (signal direction ambiguity): inconclusive
+- Design recommendation: include both home and away pitching features; include era flags; apply regularization
+
+---
+
+#### Card 3.10 — Era-Split Correlation Stability ✓ Complete (2026-04-24)
+
+**Title:** Test whether feature-outcome correlations are stable across the pre-2022 and post-2022 rule-change eras
+
+**Why:** NB01 found a ~0.64-run structural mean shift at the 2022→2023 boundary. A unified model assumes correlation structure is stable across eras. If key correlations changed (e.g., bullpen xwOBA less predictive post-clock, team offense more predictive post-shift ban), era-specific models may be required. Pre-2022: 2016–2021 (excl. 2020, n≈9,500); post-2022: 2022–2025 (n≈8,048).
+
+*Acceptance criteria:*
+- [x] Correlation table: top 20 features × all three targets × both eras; flag where |r| changes > 0.015
+- [x] Era comparison summary: features stable vs. structurally shifted
+- [x] Z-test significance table for top 10 features per target
+- [x] Verdict: single model with `post_2022_rules` flag sufficient, or separate era models required
+- [x] Findings appended to `betting_model_findings.md` section 10
+- [x] Phase 4 design constraints updated
+
+**Results (2026-04-24):**
+- n_features_tested: 20 | n_flagged_delta_015 (Fisher z-tests): 8 | n_significantly_shifted: 0
+- mean_abs_r_delta: 0.0122 | correlation_structure_is_stable: False
+- shifted_features: [] (zero statistically significant shifts at p < 0.05)
+- Verdict: **post_2022_rules_flag_sufficient = True** | separate_era_models_required = False
+
+---
+
+#### Card 3.11 — Bookmaker Calibration and Market Efficiency Analysis ✓ Complete (2026-04-24)
+
+**Title:** Analyze bookmaker accuracy for moneyline and totals markets; identify best-calibrated books; surface consensus and disagreement features for Phase 4
+
+**Why:** Historical odds backfill (2021–2025, ~7,000–8,000 matched games) is complete. Before treating implied probabilities as Phase 4 features, need to know: (1) which books are best-calibrated (not just lowest-vig), (2) whether cross-book disagreement carries its own signal, (3) what consensus/disagreement features to add to `feature_pregame_odds_features`. Primary books (full 2021–2025): draftkings, fanduel, betmgm, williamhill_us, betrivers, bovada, betonlineag, lowvig. Notebook: `exploratory_data_analysis/11_bookmaker_calibration.py`.
+
+**Analysis:** (1) Vig/overround ranking per bookmaker × market. (2) Moneyline calibration: Brier score, log loss, calibration curve (decile buckets), home-team bias per bookmaker per season (≥500 events). (3) Totals accuracy: MAE, bias, over rate, line distribution by season. (4) Cross-bookmaker consensus/disagreement: consensus prob, sharp vs. soft split, `sharp_soft_delta`, disagreement quartile signal test. (5) Market efficiency: consensus Brier score as Phase 4 benchmark; favorite/underdog calibration split; season-over-season Brier trend.
+
+**Hypotheses (H1–H7):** Sharp books have lower Brier than soft books; lowvig has lowest overround; books overvalue home teams by +1–3%; high disagreement predicts higher outcome variance; sharp-soft delta has directional signal; post-2023 rule changes caused totals lines to rise ~0.3–0.5 runs; market consensus Brier beats Phase 4 baseline models.
+
+**New features for `feature_pregame_odds_features` (only for `has_odds = true` games):**
+
+| Feature | Description |
+|---|---|
+| `home_win_prob_consensus` | Mean vig-adjusted home win probability across all bookmakers |
+| `home_win_prob_sharp` | Mean vig-adjusted home win probability across sharp books (lowvig, betfair, betonlineag, bovada) |
+| `home_win_prob_soft` | Mean vig-adjusted home win probability across retail books (fanduel, draftkings, betmgm, williamhill_us, betrivers) |
+| `sharp_soft_ml_delta` | Sharp minus soft home win probability |
+| `ml_consensus_std` | Standard deviation of home win probability across all books |
+| `total_line_consensus` | Mean totals line across all books |
+| `total_line_std` | Standard deviation of totals line across books |
+| `market_bookmaker_count` | Number of bookmakers with h2h odds for this game |
+| `over_prob_consensus` | Mean vig-adjusted over probability across all books with totals markets |
+
+*These features are derived in a new dbt model (`mart_odds_consensus`) aggregating `mart_odds_outcomes` to game-grain; only the final pre-game snapshot (`ingestion_ts < commence_time`) per bookmaker per event is used.*
+
+*Acceptance criteria:*
+- [x] Vig/overround table: all bookmakers ranked by median overround for h2h and totals, 2021–2025
+- [x] Moneyline calibration: Brier score and log loss per bookmaker per season; calibration curve for top 5 books by event count; home-team bias table
+- [x] Totals accuracy: MAE and bias per bookmaker per season; over rate and line distribution by season
+- [x] Cross-bookmaker consensus computed for all matched events; sharp vs. soft Brier comparison (≥2,000 games per group); disagreement quartile signal test
+- [x] All 7 hypotheses (H1–H7) answered (supported / not supported / inconclusive)
+- [x] Market baseline Brier score documented as Phase 4 benchmark
+- [x] Findings appended to `betting_model_findings.md` section 11
+- [x] Phase 4 design constraints updated with market feature inclusion decision
+- [x] Card 4.X (new consensus odds features dbt model) queued if sharp-soft delta or consensus std prove signal-bearing
+
+**Results summary (2026-04-24):**
+- consensus_brier_overall: 0.2395 (Phase 4 model benchmark — must beat to add value over market)
+- include_consensus_features: **True** (H7 supported: consensus Brier < 0.240)
+- include_sharp_soft_features: **False** (H1 inconclusive: sharp/soft Brier difference = 0.0000)
+- queue_mart_odds_consensus_card: **True**
+- H2 supported (lowvig rank #1), H3 not supported (home bias ~0%), H6 not supported (no post-2023 line rise)
+- n_sharp_games / n_soft_games: 7,203 / 7,203 (both ≥ 2,000 ✓)
+
+---
+
 ### Phase 4 — Baseline Prediction Models
 
 Build initial models in `betting_ml/` using the assembled feature store from Phase 2, extended by the feature engineering cards below.
@@ -530,7 +664,7 @@ Build initial models in `betting_ml/` using the assembled feature store from Pha
 | Training set filter | `min(home_games_played, away_games_played) ≥ 15` — removes early-season noise (5.5% of rows), retains 85% of training data | Notebook 03 |
 | Primary feature window — pitcher metrics | Season-to-date (`_std`) — strongest correlation with outcomes; 30d close but STD wins for K%, xwOBA | Notebook 03 |
 | Primary feature window — team offense | 30-day (`_30d`) — equivalent to STD for wOBA; more robust to in-season roster changes | Notebook 03 |
-| Short-window features (7d, 14d) | Retain as supplementary hot/cold streak signals; also used as inputs to delta/momentum features | Notebook 03 |
+| Short-window features (7d, 14d) | **Include 7d windows directly** — 7d rolling windows add ΔR²=0.037–0.047 over 30d/std-only baseline (verified NB07). Use raw 7d columns, not delta encoding. Drop 14d standalone. | Notebooks 03, 07 |
 | 2020 season | Exclude from training — COVID bubble, structural confounders | Notebook 01 |
 | Era feature | Include `game_year` and `post_2022_rules` flag; 2022→2023 shift ban + pitch clock caused a ~0.64-run structural mean shift | Notebook 01 |
 | Home win rate | Use time-varying `home_win_rate_trailing_3yr`; home advantage has declined from 0.548 (2020) to 0.519 (2023) — static 0.529 is wrong for recent seasons | Notebook 01 |
@@ -538,6 +672,18 @@ Build initial models in `betting_ml/` using the assembled feature store from Pha
 | Starter platoon splits null handling | Add `has_starter_platoon_data` indicator; impute nulls with prior-season league-average split by pitcher hand × batter hand | Notebook 02 |
 | Total runs distribution shape | Right tail — blowout games exceed Gaussian predictions; evaluate LogNormal in addition to Normal parameterization for NGBoost | Notebook 01 |
 | Weakest training bucket | 10–30 game window (not just 0–10); Bayesian shrinkage targets this transitional zone, not just Opening Day | Notebook 03 |
+| Drop 14-day standalone features | 14-day window is redundant with 30-day (high multicollinearity, no independent signal); retain 7-day as a direct rolling window feature (not as delta encoding) | Notebooks 04, 07 |
+| Prefer xwOBA over raw wOBA same-window | wOBA and xwOBA within the same window are highly correlated; xwOBA is more stable (park-adjusted); drop raw wOBA where both exist for the same window | Notebook 04 |
+| Matchup differentials — retain for totals only | **Drop `total_matchup_quality_30d`** (r=0.005 with total_runs — no value over components). Retain `matchup_advantage_30d` as a supplementary feature for totals model only (r=0.050 with total_runs — modest signal). Formula has directional confound (home_pit_xwoba_against adds positively to home advantage metric) that makes it invalid for run differential / moneyline targets (r=−0.011, −0.012 respectively). | Notebook 04 |
+| Park factor and elevation — include both | `park_run_factor_3yr` (r=0.122, strongest total_runs predictor; Q4−Q1 = +1.15 runs; rank order fully preserved). `elevation_ft` (r=0.111, second strongest; partially independent of park factor). Both required in Phase 4 feature matrix. | Notebook 05 |
+| Schedule features — cheap flags, no expected lift | `home_days_rest`, `away_days_rest`: r<0.003 with total_runs; continuous features, near-zero cost. `home_tz_changed`, `away_tz_changed`: r<0.023; binary flags, near-zero cost. Adding all four to park-only OLS: estimated ΔR² < 0.002 (below 0.005 threshold). Include but de-prioritize in ablation tests. | Notebook 05 |
+| Bat tracking features (`bat_speed_mph`, `swing_length_ft`) | **Exclude from Phase 4 primary model.** Sub-sample = 5,523 games (26.8% of full training set); max |r| with total runs = 0.022 (vs. 0.088 for park factor); OLS ΔR² < 0.001 (well below 0.005 threshold). Bat speed–wOBA correlation is low (|r| = 0.225) — the weak signal is not redundancy but rather that 30-day team averages lose the individual-level precision bat speed carries. Re-evaluate with per-batter matchup aggregations in Phase 5+. | Notebook 06 |
+| Delta/momentum features (Card 4.1) — `*_7d_minus_30d`, `*_7d_minus_std`, `fastball_velo_trend` | **Prefer raw 7d windows over delta encoding.** Individual delta |r| < 0.022 (very low marginal signal). ΔR²=0.043–0.047 over 30d/std-only baseline — real signal, but reflects 7d recency lift (not momentum direction). Delta encoding is informationally equivalent to having both the 7d and 30d/std windows. Phase 4 feature matrix: include `*_7d` rolling columns as primary recent-window signal; delta encoding optional but adds collinearity when both windows are present. | Notebook 07 |
+| Lineup-vs-starter handedness matchup (Card 4.2) — `*_lineup_vs_starter_xwoba_adj`, `*_k_pct_adj`, `*_bb_pct_adj` | **Validated low-signal — exclude from primary model.** k_pct_adj shows marginal |r|=0.063–0.086 for run_diff/home_win but shares ~52% variance with base starter K% (cross-r=0.524). OLS ΔR²=0.001–0.002 on top of baseline+delta (below 0.005 threshold). Signal already captured by starter xwOBA and K% in the model. Re-evaluate with per-batter platoon matchup aggregations in Phase 5+. | Notebook 07 |
+| **Card 3.8 Pitching Signal Decomposition — starter vs. bullpen xwOBA** | **Keep both starter and bullpen xwOBA; exclude workload features.** Cross-correlation: home r=0.169, away r=0.164 (no high collinearity; threshold |r|>0.70). Mean incremental R² from combining both pitching blocks = 0.0041 (above 0.002 threshold) — starter and bullpen each carry independent variance. Workload features (`bullpen_pitches_prev_3d`, `pitchers_used_prev_7d`) max incremental R²=0.0005 (well below 0.005 threshold). Include `home_starter_xwoba_against_std`, `home_bp_xwoba_against_30d`, `away_starter_xwoba_against_std`, `away_bp_xwoba_against_30d` as separate features in Phase 4 feature matrix. | Notebook 08 (script) |
+| **Card 3.9 Home/Away Pitching Asymmetry** | **Include both home and away pitching features; do not prefer starter over team-level for away; include era flags.** Partial r of `away_pit_xwoba_against_30d` vs. total_runs (controlling park_rf + home_pit_30d) = 0.0122 — park factor does not absorb away pitching variance. Asymmetry is total_runs-specific: away pitching has full signal for run_differential (partial r=0.096) and home_win (partial r=0.086). Park quartile stratification: asymmetry persists across all quartiles (Q1: 4.6×, Q4: 19.0×) — H1 refuted. Era-split: total_runs asymmetry 5.8× pre-juiced → 18.2× modern (H2 partially supported; era flag required). Away starter vs. team-level delta = −0.0002 (H3 refuted). asymmetry_is_structural=False (era confound present). Recommendation: include both pitching feature sets; apply regularization for total_runs models. | Notebook 09 (script) |
+| **Card 3.10 Era-Split Correlation Stability** | **Train unified model with `post_2022_rules` flag; separate era models not required.** n_significantly_shifted = 0 (zero features with statistically significant correlation shifts at p < 0.05 AND \|r_delta\| > 0.015 across top 20 features × 3 targets). mean_abs_r_delta = 0.0122 (above 0.010 stability threshold but all shifts are noise-level given era sample sizes n_pre=9,500, n_post=8,048). post_2022_rules_flag_sufficient = True. shifted_features = [] (none). 19 of 60 feature-target pairs flagged at \|r_delta\| > 0.015 but all p > 0.05 in Fisher z-tests. Phase 4 implication: Train unified model with post_2022_rules flag; the `post_2022_rules` binary flag already in the feature matrix is the correct implementation path. | Notebook 10 (script) |
+| **Card 3.11 Bookmaker Calibration and Market Efficiency** | **Include consensus features; do not include sharp-soft features; queue mart_odds_consensus dbt card.** consensus_brier_overall=0.2395 — this is the Phase 4 model benchmark (must beat to add value over market). include_consensus_features=True (H7 supported: consensus Brier < 0.240 threshold). include_sharp_soft_features=False (H1 inconclusive: sharp/soft Brier difference = 0.0000 — books are identical in predictive accuracy). queue_mart_odds_consensus_card=True. Verdicts: H2=supported (lowvig rank #1, lowest overround), H3=not supported (home-team bias ≈ 0%, refutes +1–3% prior), H6=not supported (no clean post-2023 totals line rise). Consistent under-bias in totals (~0.4–0.5 runs, 45–48% over rate) across all books and seasons. Phase 4 implication: `home_win_prob_consensus` and `total_line_consensus` are priority odds features for has_odds=true games; a Card 4.X to build mart_odds_consensus should be queued before Phase 4 feature assembly. | Notebook 11 (script) |
 
 **Model approach — A/B test per target:**
 
@@ -550,9 +696,9 @@ Build initial models in `betting_ml/` using the assembled feature store from Pha
 NGBoost outputs a full parametric distribution per prediction — P(total_runs > any_line) is directly computable, making it the most natural bridge between regression output and bookmaker implied probability comparison.
 
 **Feature groups to evaluate:**
-- Team rolling offense (7/14/30-day + STD wOBA, runs, K%, BB%) + delta momentum signals (Card 4.1)
-- Team rolling pitching (7/14/30-day + STD wOBA against, K%, BB%) + delta momentum signals (Card 4.1)
-- Explicit lineup-vs-starter handedness matchup (Card 4.2)
+- Team rolling offense (7d + 30d wOBA, runs, K%, BB%) — include 7d windows directly (not delta encoding; see NB07 Card 3.7 verdict)
+- Team rolling pitching (7d + 30d xwOBA against, K%, BB%) — same window strategy
+- Lineup-vs-starter handedness matchup (Card 4.2) — validated low-signal (NB07 ΔR²<0.005); exclude from primary model
 - Starter features (K%, xwOBA against, days rest, platoon splits, recent avg IP) (Cards 4.4, 4.6)
 - Lineup features (aggregated batter wOBA + handedness composition)
 - Park features (dimensions, elevation, surface, roof, prior-season run factors)
@@ -719,7 +865,97 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
-#### Card 4.7 — Baseline Regression Models: Total Runs
+#### Card 4.7 — Build `mart_odds_consensus` dbt Model (Queued — Prerequisite for Cards 4.7–4.12)
+
+**Title:** Build `mart_odds_consensus` dbt model — pre-game bookmaker consensus aggregation for Phase 4 odds features
+
+**Why:** Card 3.11 (Bookmaker Calibration, 2026-04-24) set `queue_mart_odds_consensus_card = True` after confirming consensus features carry signal (H7 supported: consensus Brier = 0.2395 < 0.240 threshold, `include_consensus_features = True`). The 9 consensus columns defined by Card 3.11 cannot be assembled in `feature_pregame_odds_features` until this mart model exists. Historical odds backfill (Cards 1–4) is complete and provides the underlying data. This card is the direct blocker before Cards 4.7–4.12 can include betting market features in model training.
+
+*Technical implementation:*
+
+1. **New model:** `dbt/models/mart/mart_odds_consensus.sql`
+   - Grain: one row per `event_id`
+   - Materialization: `table` (standard for mart aggregate models)
+   - Source: `{{ ref('mart_odds_outcomes') }}`
+
+2. **Pre-game snapshot filter (leakage guard):** Filter `mart_odds_outcomes` to `ingestion_ts < commence_time` only. No post-game or same-game snapshots may appear — this is the same leakage rule enforced across all feature-layer models.
+
+3. **Latest-per-book selection:** Within the pre-game window, take the most recent snapshot per `(event_id, bookmaker_key, market_key, outcome_name)` using `QUALIFY ROW_NUMBER() OVER (PARTITION BY ... ORDER BY ingestion_ts DESC) = 1`.
+
+4. **H2H vig adjustment per bookmaker:**
+   - `raw_home_prob = ABS(home_price) / (ABS(home_price) + 100)` if `home_price < 0`, else `100 / (home_price + 100)`
+   - Same formula for away; `home_imp = raw_home_prob / (raw_home_prob + raw_away_prob)`
+
+5. **Totals vig adjustment per bookmaker:** same pattern for over/under; `over_imp = raw_over_prob / (raw_over_prob + raw_under_prob)`.
+
+6. **Sharp and soft book groups (established by Card 3.11):**
+   - Sharp: `lowvig`, `betonlineag`, `bovada`
+   - Soft: `draftkings`, `fanduel`, `betmgm`, `williamhill_us`, `betrivers`
+
+7. **Consensus output columns (10 total):**
+
+| Column | Definition |
+|---|---|
+| `home_win_prob_consensus` | `AVG(home_imp)` across all books with h2h odds |
+| `home_win_prob_sharp` | `AVG(home_imp)` for sharp books only; null if no sharp book present |
+| `home_win_prob_soft` | `AVG(home_imp)` for soft books only; null if no soft book present |
+| `sharp_soft_ml_delta` | `home_win_prob_sharp − home_win_prob_soft` |
+| `ml_consensus_std` | `STDDEV(home_imp)` across all books |
+| `market_bookmaker_count` | `COUNT(DISTINCT bookmaker_key)` for h2h market |
+| `total_line_consensus` | `AVG(total_line)` across all books with totals odds |
+| `total_line_std` | `STDDEV(total_line)` across books |
+| `over_prob_consensus` | `AVG(over_imp)` across all books with totals odds |
+| `totals_bookmaker_count` | `COUNT(DISTINCT bookmaker_key)` for totals market |
+
+8. **Downstream update — `feature_pregame_odds_features`:** After `mart_odds_consensus` is built, join it on `event_id` (already accessible via `mart_game_odds_bridge`) and add all 9 signal columns to the final SELECT. Pass through into `feature_pregame_game_features`.
+
+9. **`schema.yml`:** Add `mart_odds_consensus` block with column descriptions and a `unique` test on `event_id`. Add the 9 new columns to `feature_pregame_odds_features` and `feature_pregame_game_features` schema entries.
+
+*Blockers:* None. `mart_odds_outcomes`, `mart_game_odds_bridge`, and historical odds backfill (Phase 1 Cards 1–4) are all complete. Must be merged before any Phase 4 model training run that includes odds features (Cards 4.7–4.12).
+
+*Acceptance criteria:*
+- [ ] `dbt/models/mart/mart_odds_consensus.sql` created; materialized as table
+- [ ] Pre-game leakage guard enforced: only `ingestion_ts < commence_time` snapshots included; spot-check confirms no rows with `ingestion_ts >= commence_time`
+- [ ] Latest-per-book selection uses QUALIFY pattern; no duplicate `(event_id, bookmaker_key)` rows in h2h or totals CTEs
+- [ ] All 10 output columns present: `home_win_prob_consensus`, `home_win_prob_sharp`, `home_win_prob_soft`, `sharp_soft_ml_delta`, `ml_consensus_std`, `market_bookmaker_count`, `total_line_consensus`, `total_line_std`, `over_prob_consensus`, `totals_bookmaker_count`
+- [ ] `home_win_prob_consensus` is non-null for all events with at least one h2h bookmaker
+- [ ] Sharp and soft columns are null (not 0.0) for events where that group had no coverage
+- [ ] Spot-check: a Snowflake query joining `mart_odds_consensus` to `mart_game_results` outcomes for 2021–2025 produces consensus Brier within ±0.002 of the 0.2395 Card 3.11 benchmark
+- [ ] `feature_pregame_odds_features` updated: joins `mart_odds_consensus` on `event_id`; all 9 signal columns passed through
+- [ ] `feature_pregame_game_features` passes through all new consensus columns from `feature_pregame_odds_features`
+- [ ] `schema.yml` updated for `mart_odds_consensus`, `feature_pregame_odds_features`, and `feature_pregame_game_features` with column descriptions
+- [ ] `unique` test on `mart_odds_consensus.event_id` passes (one row per event)
+- [ ] `dbtf build --select mart_odds_consensus feature_pregame_odds_features feature_pregame_game_features` passes all tests with no new failures
+
+---
+
+#### Card 4.8 — Feature Selection and Dimensionality Reduction
+
+**Title:** Consume EDA notebook 04 findings; build feature selection module and model serialization convention
+
+**Description:**
+
+*Technical implementation:*
+- Run EDA notebook 04 (`04_feature_correlations.py`) if not already complete. Findings must be appended to `exploratory_data_analysis/betting_model_findings.md` before proceeding.
+- **Feature selection module** (`utils/feature_selection.py`): applies notebook 04 findings programmatically.
+  - Drop features with near-zero univariate correlation to all three targets (|r| < 0.02, configurable).
+  - Remove one feature from each high-multicollinearity pair (|r| > 0.85), retaining the member with higher correlation to at least one target.
+  - Unconditionally retain `post_2022_rules`, `game_year`, and `home_win_rate_trailing_3yr` regardless of univariate correlation (structural features from Card 4.5).
+- Persist the canonical feature list to `betting_ml/evaluation/feature_selection.md`: retained features with target correlations; dropped features with reason (low signal vs. multicollinearity). This list is the input contract for Cards 4.8–4.10; ad-hoc column changes must update this document.
+- **Model serialization convention** (`utils/model_io.py`): defines `save_model(model, target, model_name, eval_year)` and `load_model(target, model_name, eval_year)` using `joblib`. Standard path: `betting_ml/models/{target}/{model_name}_{eval_year}.pkl`. Required by all downstream model cards.
+
+*Blockers:* Card 4.6 (data loader needed to load features for correlation analysis). EDA notebook 04 preferred but not required — correlation analysis can run inline if notebook is not yet complete.
+
+*Acceptance criteria:*
+- [ ] EDA notebook 04 (`04_feature_correlations.py`) run; findings appended to `exploratory_data_analysis/betting_model_findings.md`
+- [ ] `utils/feature_selection.py` implements near-zero correlation drop and multicollinearity resolution; at least one high-multicollinearity pair (|r| > 0.85) identified and resolved
+- [ ] Canonical feature list documented in `betting_ml/evaluation/feature_selection.md`; retained features listed with target correlations; dropped features listed with reason
+- [ ] `post_2022_rules`, `game_year`, and `home_win_rate_trailing_3yr` unconditionally present in retained feature list
+- [ ] `utils/model_io.py` implemented; `save_model` and `load_model` round-trip verified with a toy sklearn model
+
+---
+
+#### Card 4.9 — Baseline Regression Models: Total Runs
 
 **Title:** Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for total runs prediction; output full predictive distribution
 
@@ -735,7 +971,7 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 - SHAP feature importance on XGBoost to verify that lineup-vs-starter matchup features (Card 4.2) and delta features (Card 4.1) contribute non-zero positive signal.
 - Log results to `betting_ml/evaluation/total_runs_results.md`.
 
-*Blockers:* Card 4.6. Cards 4.1–4.5 preferred before final evaluation; initial runs can start with existing features.
+*Blockers:* Cards 4.6 and 4.7. Cards 4.1–4.5 preferred before final evaluation; initial runs can start with existing features.
 
 *Acceptance criteria:*
 - [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds
@@ -748,32 +984,32 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
-#### Card 4.8 — Baseline Regression Models: Run Differential
+#### Card 4.10 — Baseline Regression Models: Run Differential
 
 **Title:** Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for run differential; derive win probability from predictive distribution
 
 **Description:**
 
 *Technical implementation:*
-- Same three-model structure as Card 4.7 applied to run differential (`home_score - away_score`) as target.
+- Same three-model structure as Card 4.8 applied to run differential (`home_score - away_score`) as target.
 - Win probability derivation: from the NGBoost predictive distribution N(μ, σ²), compute `P(home win) = P(run_diff > 0) = 1 - Φ((0 - μ) / σ)`. This derives win probability from the regression model without training a separate classifier.
-- Compare derived win probability against the binary win classifier (Card 4.9) using Brier score and calibration curves — the two approaches should produce consistent estimates.
+- Compare derived win probability against the binary win classifier (Card 4.10) using Brier score and calibration curves — the two approaches should produce consistent estimates.
 - Evaluate whether era features (`post_2022_rules`, `game_year`) and time-varying home win rate (Card 4.5) materially reduce prediction error vs. a model without them.
 - Log results to `betting_ml/evaluation/run_differential_results.md`.
 
-*Blockers:* Card 4.6. Cards 4.1–4.5 preferred before final evaluation.
+*Blockers:* Cards 4.6 and 4.7. Cards 4.1–4.5 preferred before final evaluation.
 
 *Acceptance criteria:*
 - [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds for run differential
 - [ ] Win probability derived from NGBoost distribution: `P(run_diff > 0)` and Brier score documented
-- [ ] Derived win probability vs. Card 4.9 classifier compared — consistency within 0.05 Brier score expected
+- [ ] Derived win probability vs. Card 4.10 classifier compared — consistency within 0.05 Brier score expected
 - [ ] Era feature ablation: model with vs. without `post_2022_rules` compared — verify the flag reduces 2022→2023 prediction error
 - [ ] Time-varying home win rate confirmed as improvement over static 0.529, or documented as having no effect
 - [ ] Results documented in `betting_ml/evaluation/run_differential_results.md`
 
 ---
 
-#### Card 4.9 — Baseline Classification Models: Win Outcome
+#### Card 4.11 — Baseline Classification Models: Win Outcome
 
 **Title:** Train and evaluate Logistic Regression and XGBoost classification baselines for binary win outcome; calibrate probability outputs
 
@@ -788,7 +1024,7 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 - Metrics: log loss, Brier score, AUC-ROC. Calibration curve plotted per held-out season.
 - Log results to `betting_ml/evaluation/win_outcome_results.md`.
 
-*Blockers:* Card 4.6.
+*Blockers:* Cards 4.6 and 4.7.
 
 *Acceptance criteria:*
 - [ ] Logistic Regression and calibrated XGBoost trained on all temporal CV folds
@@ -800,7 +1036,40 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
-#### Card 4.10 — Probability Output Layer and Bayesian Market Update
+#### Card 4.12 — Hyperparameter Optimization
+
+**Title:** Systematic XGBoost and NGBoost hyperparameter tuning for all three targets using Optuna; persist tuned models
+
+**Description:**
+
+*Technical implementation:*
+- Apply systematic hyperparameter tuning to the XGBoost models from Cards 4.8–4.10 using Optuna with the TPE sampler. 50 trials per model; evaluate each trial using the temporal CV splits from Card 4.6.
+- **XGBoost search space** (applied to all three target models):
+  - `max_depth`: 3–8
+  - `learning_rate`: 0.01–0.3 (log scale)
+  - `n_estimators`: 100–1000
+  - `subsample`: 0.6–1.0
+  - `colsample_bytree`: 0.5–1.0
+  - `reg_alpha`: 0.0–1.0
+  - `reg_lambda`: 0.5–2.0
+- **Objective functions**: MAE for total runs and run differential; Brier score for win outcome.
+- After XGBoost tuning, tune NGBoost `n_estimators` and distribution type (`Normal` vs. `LogNormal`) for regression targets via grid search.
+- Log all trials to `betting_ml/evaluation/hyperparameter_tuning.md`: search space, best parameters, and CV score per model.
+- Persist tuned models via `utils/model_io.py` (Card 4.7) using the same path convention as baseline models with a `_tuned` suffix.
+
+*Blockers:* Cards 4.8, 4.9, and 4.10 (baselines required to establish improvement reference). Card 4.7 (`utils/model_io.py` required for model persistence).
+
+*Acceptance criteria:*
+- [ ] Optuna tuning completed for XGBoost variants of all three targets; at least 50 trials per model logged
+- [ ] Tuned XGBoost MAE for total runs meets or improves on baseline from Card 4.8 on the held-out season
+- [ ] Tuned XGBoost Brier score for win outcome meets or improves on baseline from Card 4.10 on the held-out season
+- [ ] NGBoost `n_estimators` and distribution type tuned for total runs and run differential; best configuration documented
+- [ ] Best hyperparameters and CV scores for all models logged in `betting_ml/evaluation/hyperparameter_tuning.md`
+- [ ] Tuned models persisted via `utils/model_io.py` with `_tuned` suffix
+
+---
+
+#### Card 4.12 — Probability Output Layer and Bayesian Market Update
 
 **Title:** Build probability output layer integrating model predictions with bookmaker implied probabilities via Bayesian update
 
@@ -810,10 +1079,10 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 - For games where `has_odds = true`: compute the Bayesian posterior by treating the bookmaker's vig-adjusted implied probability as a prior and the model's predicted probability as the likelihood. In log-odds space: `log_odds_posterior = α × log_odds_model + (1 - α) × log_odds_market` where α is a mixing weight tuned via CV (start with α = 0.5). Motivation: the market line reflects professional handicappers and information the model cannot access; treating it as a prior rather than a comparison target captures the best of both signals.
 - Compute edge signal: `edge = model_prob − market_implied_prob` (positive = model sees value over market price).
 - Output one row per game per market (h2h, totals) with `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, and `implied_kelly_fraction` (`edge / market_odds` as a simple Kelly approximation).
-- Pure Python module; reads from model outputs of Cards 4.7–4.9 and from `feature_pregame_odds_features`.
+- Pure Python module; reads from tuned model outputs of Cards 4.8–4.10 (via Card 4.11) and from `feature_pregame_odds_features`.
 - Initially useful only for live 2026 games; will become more powerful after Card 3 historical odds backfill completes.
 
-*Blockers:* Cards 4.7, 4.8, and 4.9 (model probability outputs required). `has_odds = true` data required for validation — currently only live 2026 games.
+*Blockers:* Cards 4.8, 4.9, 4.10, and 4.11 (tuned model outputs required). `has_odds = true` data required for validation — currently only live 2026 games.
 
 *Acceptance criteria:*
 - [ ] Bayesian update implemented in log-odds space; posterior probability computed for h2h and totals markets
@@ -966,11 +1235,30 @@ Operationalize the full stack:
 | `scripts/date_utils.py` | Reusable UTC date/time helpers (`format_iso_utc`, `default_window`) used by odds ingestion; injectable `now` parameter makes functions unit-testable |
 | `scripts/tests/test_date_utils.py` | Pytest unit tests for `date_utils` (19 tests covering format, window boundaries, timezone conversion, rollover) |
 | `scripts/ddl/oddsapi_raw_tables.sql` | DDL for `baseball_data.oddsapi.mlb_events_raw` and `mlb_odds_raw`; run once via snowsql to create tables |
-| `betting_ml/` | Placeholder — ML model code lives here (Phase 4+) |
-| `exploratory_data_analysis/` | Marimo EDA notebooks (Phase 3+); run with `uv run marimo run <notebook>.py` |
+| `exploratory_data_analysis/` | Marimo EDA notebooks (Phase 3); run with `uv run marimo run <notebook>.py` |
 | `exploratory_data_analysis/01_target_variables.py` | Target variable analysis — total runs, run differential, home win rate distributions (2016–2025) |
 | `exploratory_data_analysis/02_feature_coverage.py` | Null rate heatmap (374 cols × all seasons), `has_full_data` count verification, imputation strategy decisions |
-| `exploratory_data_analysis/betting_model_findings.md` | Cumulative EDA findings document; one section per completed notebook |
+| `exploratory_data_analysis/03_rolling_window_stability.py` | Rolling window stability — correlation vs. window size (7d/14d/30d/STD); early-season instability by games-played bucket; slider for training set size preview |
+| `exploratory_data_analysis/04_feature_correlations.py` | Feature-outcome correlations (Pearson + Spearman) for all features × 3 targets; multicollinearity heatmaps per group; matchup differential analysis; Phase 4 feature selection recommendation |
+| `exploratory_data_analysis/05_park_and_context.py` | Park run factor analysis, schedule fatigue (days rest + TZ travel), OLS R² comparison (park-only vs. park + schedule), interactive stadium trend chart, Phase 4 park/schedule verdict |
+| `exploratory_data_analysis/06_bat_tracking_era.py` | Bat tracking null rate by season; coverage vs. full training set; correlation comparison (traditional vs. bat tracking); bat speed–wOBA redundancy; OLS R² with/without bat tracking; single-model vs. era-split verdict |
+| `exploratory_data_analysis/07_engineered_feature_lift.py` | Correlation fast pass for delta/momentum (Card 4.1) and handedness matchup (Card 4.2) features vs. 3 targets; OLS ΔR² for each feature block |
+| `exploratory_data_analysis/betting_model_findings.md` | Cumulative EDA findings document; sections 01–09 complete |
+| `betting_ml/` | ML model code (Phase 4+) |
+| `betting_ml/utils/data_loader.py` | Snowflake → pandas loader; queries `feature_pregame_game_features` + `mart_game_results`; applies `has_full_data=true` and `min_games_played` filter |
+| `betting_ml/utils/cv_splits.py` | Temporal leave-one-season-out CV splits; no shuffled k-fold; respects chronological order |
+| `betting_ml/utils/preprocessing.py` | Imputation pipeline + Bayesian shrinkage; handles all 6 null groups from NB02; shrinkage weight = n/(n+k) toward league-mean prior |
+| `betting_ml/scripts/analyze_pitching_decomp.py` | Card 3.8 analysis — bullpen vs. starter xwOBA decomposition; writes `evaluation/pitching_decomp_results.json` |
+| `betting_ml/scripts/analyze_home_away_pitch_asymmetry.py` | Card 3.9 analysis — home/away pitching asymmetry root-cause; writes `evaluation/home_away_pitch_asymmetry_results.json` |
+| `betting_ml/evaluation/pitching_decomp_results.json` | Card 3.8 results — cross-correlation, partial correlations, OLS R² decomposition, design recommendation |
+| `betting_ml/evaluation/home_away_pitch_asymmetry_results.json` | Card 3.9 results — partial correlations, quartile analysis, era-split, design recommendation |
+| `betting_ml/tests/test_cv_splits.py` | Unit tests for temporal CV split logic |
+| `betting_ml/tests/test_preprocessing.py` | Unit tests for imputation and Bayesian shrinkage pipeline |
+| `plan_specs/` | Declarative PlanSpec YAML files for agentic task execution |
+| `plan_specs/plan_spec_implementation.md` | PlanSpec overview, structure reference, and agentic engineering rationale |
+| `plan_specs/eda_plan_spec_template.yaml` | Template for Phase 3 EDA analysis card plan specs |
+| `plan_specs/phase_3/` | Phase 3 EDA plan specs (Cards 3.8–3.11) |
+| `plan_specs/phase_4/` | Phase 4 ML pipeline plan specs (Cards 4.6–4.12) |
 
 ---
 
@@ -1033,6 +1321,7 @@ Each notebook connects to Snowflake using the same RSA key as snowsql (`~/Docume
 - Figures are returned as single-element tuples (`return (fig_name,)`) so Marimo both displays and exports them
 - `plt.close("all")` is called at the top of every plot cell to prevent figure accumulation
 - Interactive tables use `mo.ui.table(df)` and combined displays use `mo.vstack([...])`
+- **No early-return guards** — bare `return` mid-cell body causes Marimo to wrap the entire cell in `app._unparsable_cell`. Use `if condition:` blocks to wrap visualization code instead of `if condition: return`
 
 ---
 
@@ -1096,3 +1385,40 @@ snowsql -c default \
 
 - `-c default` — selects the `[connections.default]` block in `~/.snowsql/config` (account `IHUPICS-DP59975`, user `dbt_rw`, database `BASEBALL_DATA`)
 - `--private-key-path` — RSA private key for key-pair authentication; required because the `dbt_rw` user does not use password auth
+
+---
+
+## 14. Plan Specs
+
+Declarative YAML planning specs (planspec.io/v1alpha1) for agentic task execution. Each spec defines a Goal, optional Gate(s), and a Plan with a task DAG. See `plan_specs/plan_spec_implementation.md` for the full PlanSpec reference and `plan_specs/eda_plan_spec_template.yaml` for the EDA card template.
+
+**Directory:** `plan_specs/phase_{number}/{card_number}_{short_title}.yaml`
+
+**Naming convention:** The filename prefix is the card number within the phase (not the full `{phase}.{card}` notation). Examples:
+- Card 4.6 → `plan_specs/phase_4/6_ml_pipeline_foundation_plan.yaml`
+- Card 3.10 → `plan_specs/phase_3/10_era_split_corr_stability.yaml`
+
+**Document kinds (separated by `---`):**
+- `Goal` — objective and high-level acceptance criteria
+- `Gate` — human-gated checkpoint that blocks downstream tasks until a reviewer clears it
+- `Plan` — task DAG with `dependsOn` edges; tasks reference gates by `metadata.name`
+
+**Acceptance criteria types:**
+- `artifact_exists` — verifies a file path exists
+- `command_succeeds` — runs a shell command; passes if exit code is 0
+
+**Current plan specs:**
+
+| Phase | Card | File | Status |
+|---|---|---|---|
+| 3 | 3.8 | `plan_specs/phase_3/8_bullpen_vs_starter_signal_decomp.yaml` | Draft |
+| 3 | 3.9 | `plan_specs/phase_3/9_home_away_pitch_quality.yaml` | Draft |
+| 3 | 3.10 | `plan_specs/phase_3/10_era_split_corr_stability.yaml` | Draft |
+| 3 | 3.11 | `plan_specs/phase_3/11_bookmaker_analysis.yaml` | Draft |
+| 4 | 4.6 | `plan_specs/phase_4/6_ml_pipeline_foundation_plan.yaml` | Draft |
+| 4 | 4.7 | `plan_specs/phase_4/7_feature_selection_plan.yaml` | Draft |
+| 4 | 4.8 | `plan_specs/phase_4/8_base_reg_model_tot_runs.yaml` | Draft |
+| 4 | 4.9 | `plan_specs/phase_4/9_base_reg_model_run_diff.yaml` | Draft |
+| 4 | 4.10 | `plan_specs/phase_4/10_base_class_model_win_outcome.yaml` | Draft |
+| 4 | 4.11 | `plan_specs/phase_4/11_hyperparameter_optimization.yaml` | Draft |
+| 4 | 4.12 | `plan_specs/phase_4/12_bayes_prob_layer.yaml` | Draft |

@@ -1,0 +1,428 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: win-outcome-classification-baselines
+  namespace: default
+spec:
+  description: >
+    Train and evaluate Logistic Regression and XGBoost classification baselines
+    for binary home win outcome using the temporal CV splits and imputation
+    pipeline from Card 4.6. Calibrate XGBoost probability outputs via both Platt
+    scaling (sigmoid) and isotonic regression; compare calibration methods using
+    ECE (Expected Calibration Error). Validate that home_win_rate_trailing_3yr
+    reduces home-team overpricing bias from the declining home advantage trend
+    (0.548 → 0.519 per NB01). Primary concern is calibration quality because
+    probability outputs feed directly into EV calculations in Phase 6.
+  acceptanceCriteria:
+    - description: >
+        Logistic Regression and calibrated XGBoost trained and evaluated on all
+        temporal CV folds for binary home_win; per-fold log loss, Brier score,
+        and AUC-ROC reported alongside naive baseline (predict training-set
+        home win rate for all games)
+    - description: >
+        Calibration curves (predicted probability decile vs. actual win rate)
+        generated per held-out season for Logistic Regression and XGBoost;
+        XGBoost post-calibration shows no systematic over/under-confidence
+        across probability deciles
+    - description: >
+        Platt scaling vs. isotonic regression calibration compared for XGBoost
+        across all folds; better calibration method documented with average ECE
+        per method
+    - description: >
+        Home-team bias analysis in 2023–2025 folds: XGBoost (Platt) evaluated
+        with and without home_win_rate_trailing_3yr; NB01 finding of declining
+        home advantage (0.548 → 0.519) confirmed or refuted by model output;
+        bias direction (overprices_home / underprices_home / neutral) documented
+        per fold
+    - description: >
+        Brier score and log loss reported per model and per held-out season;
+        best non-baseline model identified on both metrics
+    - description: >
+        Results documented in betting_ml/evaluation/win_outcome_results.md with
+        per-season metrics table, calibration analysis, home bias analysis, and
+        best-model rationale; project_context.md Phase 4 section updated with
+        Card 4.10 findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-6-pipeline-foundation-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.6 (ML Pipeline Foundation) must be complete before Card 4.10 begins.
+    Card 4.6 provides: load_features() (betting_ml/utils/data_loader.py),
+    all_season_splits() (betting_ml/utils/cv_splits.py), and
+    build_imputation_pipeline() (betting_ml/utils/preprocessing.py).
+    xgboost must be available in the project environment — it is installed in
+    Card 4.8; if Card 4.8 has not yet run, ensure pyproject.toml includes
+    xgboost and run `uv sync` before executing this plan.
+    Verified when betting_ml/scripts/validate_pipeline.py exits 0.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: win-outcome-classification-baselines-plan
+  namespace: default
+spec:
+  description: >
+    Three-task DAG. implement-win-outcome-trainer creates the classifier trainer
+    module with calibration utilities. run-cv-evaluation-win-outcome executes all
+    CV folds, calibration comparison, and home bias ablation, writing
+    cv_results_win_outcome.json. generate-win-outcome-results produces the results
+    report and updates project_context.md.
+  goalRef:
+    name: win-outcome-classification-baselines
+  graph:
+    nodes:
+
+      - id: implement-win-outcome-trainer
+        kind: Task
+        description: >
+          Create betting_ml/models/win_outcome_trainer.py with four functions
+          supporting Logistic Regression, calibrated XGBoost, calibration curves,
+          and ECE computation.
+
+          train_logistic(X_train, y_train, X_eval):
+            Fit LogisticRegression(max_iter=1000, C=1.0, solver='lbfgs').
+            Return dict with keys:
+              y_pred_proba: np.ndarray of P(home win) on X_eval (shape: [n_eval])
+              model: fitted LogisticRegression instance
+
+          train_xgboost_classifier(X_train, y_train, X_eval, calibration='sigmoid'):
+            Fit XGBClassifier(n_estimators=400, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, eval_metric='logloss',
+            use_label_encoder=False).
+            Apply CalibratedClassifierCV(estimator=fitted_model, cv='prefit',
+            method=calibration) where calibration is 'sigmoid' (Platt) or
+            'isotonic'. Fit the calibrator on (X_eval, y_eval) — passed as the
+            fourth positional argument y_eval. Note: using the eval fold as the
+            calibration set is an approximation acceptable for CV comparison;
+            a production deployment would use a dedicated hold-out split.
+            Return dict with keys:
+              y_pred_proba: np.ndarray of calibrated P(home win) on X_eval
+              y_pred_proba_uncalibrated: np.ndarray of raw XGBoost P(home win)
+              model: fitted XGBClassifier instance
+              calibrated_model: fitted CalibratedClassifierCV instance
+
+          compute_calibration_curve(y_true, y_pred_proba, n_bins=10):
+            Bin predictions into n_bins equal-width [0, 1] buckets.
+            For each non-empty bin: mean predicted probability, actual win rate,
+            count. Return list of dicts:
+              [{'bin_center': float, 'mean_pred_prob': float,
+                'actual_win_rate': float, 'n_games': int}, ...]
+            Omit bins with zero games.
+
+          compute_ece(y_true, y_pred_proba, n_bins=10):
+            Expected Calibration Error: weighted average of
+            |mean_pred_prob - actual_win_rate| across non-empty bins, weighted
+            by n_games / total_games. Return float.
+        dependsOn:
+          - card-4-6-pipeline-foundation-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Win outcome trainer module
+            path: betting_ml/models/win_outcome_trainer.py
+          - type: command_succeeds
+            name: win_outcome_trainer.py imports and exposes all required functions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.models.win_outcome_trainer import (
+                    train_logistic,
+                    train_xgboost_classifier,
+                    compute_calibration_curve,
+                    compute_ece,
+                )
+                print('imports OK')
+
+      - id: run-cv-evaluation-win-outcome
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/train_win_outcome_baselines.py. Trains
+          all model variants on binary home_win, evaluates calibration per fold,
+          runs the home bias ablation for 2023–2025 folds.
+
+          Setup:
+            Load features via load_features(). Target y = df['home_win'].astype(int).
+            Naive baseline: predict p_naive = y_train.mean() for all eval games.
+            Feature matrix X = df.drop(columns=['total_runs', 'run_differential',
+            'home_win', 'total_line', 'has_odds'], errors='ignore').
+            home_bias_col = 'home_win_rate_trailing_3yr'
+
+          Full CV loop — for each fold from all_season_splits(df, min_train_seasons=3):
+            1. Apply build_imputation_pipeline().fit(X_train).transform(X_train/X_eval)
+            2. Naive baseline: p_naive = np.full(len(X_eval), float(y_train.mean()))
+            3. train_logistic(X_train_imp, y_train, X_eval_imp)
+            4. train_xgboost_classifier(X_train_imp, y_train, X_eval_imp, y_eval,
+               calibration='sigmoid')  # Platt — pass y_eval as 4th arg for calibration
+            5. train_xgboost_classifier(X_train_imp, y_train, X_eval_imp, y_eval,
+               calibration='isotonic')
+            6. For each of (naive_baseline, logistic, xgb_platt, xgb_isotonic):
+               a. log_loss from sklearn.metrics (clip probs to [1e-7, 1-1e-7] before)
+               b. brier_score_loss from sklearn.metrics
+               c. roc_auc_score from sklearn.metrics
+               d. compute_calibration_curve(y_eval, y_pred_proba)
+               e. compute_ece(y_eval, y_pred_proba)
+            7. Also compute compute_ece for xgb_platt raw (uncalibrated) predictions
+               to document pre- vs. post-calibration ECE improvement.
+
+          Home bias ablation — run once after the full CV loop using only folds
+          whose eval year is 2023, 2024, or 2025:
+            For each qualifying fold, re-run XGBoost (Platt calibration) twice:
+              a. With home_bias_col present in X (full feature set)
+              b. With home_bias_col dropped from X_train and X_eval before imputation
+            For each fold record:
+              log_loss_with_hwrt, log_loss_without_hwrt: float
+              brier_with_hwrt, brier_without_hwrt: float
+              home_bias_direction: 'overprices_home' | 'underprices_home' | 'neutral'
+            Determine home_bias_direction using model WITHOUT hwrt:
+              mean_pred = np.mean(p_without_hwrt)
+              mean_actual = np.mean(y_eval.astype(float))
+              if mean_pred > mean_actual + 0.02: 'overprices_home'
+              elif mean_pred < mean_actual - 0.02: 'underprices_home'
+              else: 'neutral'
+            hwrt_reduces_bias = True if removing hwrt increases log_loss on
+            average across these folds (i.e., hwrt is helping), AND if at least
+            one fold shows 'overprices_home' without it.
+
+          Print a per-fold summary table showing fold label, eval row count, and
+          for each model: log loss, Brier score, AUC-ROC, ECE.
+
+          Write betting_ml/evaluation/cv_results_win_outcome.json with structure:
+            {
+              "fold_results": [
+                {
+                  "fold": str,
+                  "model": str,
+                  "n_eval": int,
+                  "log_loss": float | null,
+                  "brier_score": float | null,
+                  "auc_roc": float | null,
+                  "ece": float | null,
+                  "calibration_curve": [
+                    {"bin_center": float, "mean_pred_prob": float,
+                     "actual_win_rate": float, "n_games": int},
+                    ...
+                  ] | null
+                },
+                ...
+              ],
+              "calibration_comparison": {
+                "fold_results_platt": [
+                  {"fold": str, "ece_calibrated": float, "ece_uncalibrated": float},
+                  ...
+                ],
+                "fold_results_isotonic": [{"fold": str, "ece": float}, ...],
+                "avg_ece_platt": float,
+                "avg_ece_isotonic": float,
+                "better_calibration_method": "platt" | "isotonic"
+              },
+              "home_bias_ablation": {
+                "folds_analyzed": ["2023", "2024", "2025"],
+                "results": [
+                  {
+                    "fold": str,
+                    "log_loss_with_hwrt": float,
+                    "log_loss_without_hwrt": float,
+                    "brier_with_hwrt": float,
+                    "brier_without_hwrt": float,
+                    "home_bias_direction": str
+                  },
+                  ...
+                ],
+                "hwrt_reduces_bias": bool
+              },
+              "summary": {
+                "best_log_loss_model": str,
+                "best_brier_model": str,
+                "best_auc_model": str,
+                "best_calibration_model": str,
+                "better_calibration_method": str,
+                "hwrt_reduces_bias": bool,
+                "home_bias_in_recent_seasons": str
+              }
+            }
+
+          Script exits 0 on success. Exits non-zero with a descriptive message
+          if no trained model (excluding naive baseline) beats the naive baseline
+          on log loss on the majority of folds.
+        dependsOn:
+          - implement-win-outcome-trainer
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Win outcome CV evaluation script
+            path: betting_ml/scripts/train_win_outcome_baselines.py
+          - type: command_succeeds
+            name: CV evaluation script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/train_win_outcome_baselines.py
+            timeout: 1800
+          - type: artifact_exists
+            name: Win outcome CV results JSON written
+            path: betting_ml/evaluation/cv_results_win_outcome.json
+          - type: command_succeeds
+            name: cv_results_win_outcome.json has expected top-level keys and all required models
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
+                    results = json.load(f)
+                assert 'fold_results' in results, "Missing 'fold_results'"
+                assert 'calibration_comparison' in results, "Missing 'calibration_comparison'"
+                assert 'home_bias_ablation' in results, "Missing 'home_bias_ablation'"
+                assert 'summary' in results, "Missing 'summary'"
+                models = {r['model'] for r in results['fold_results']}
+                required_models = {'logistic', 'xgb_platt', 'xgb_isotonic', 'naive_baseline'}
+                missing = required_models - models
+                assert not missing, f'Missing required models in results: {missing}'
+                cal = results['calibration_comparison']
+                assert 'better_calibration_method' in cal, "Missing better_calibration_method"
+                assert 'avg_ece_platt' in cal, "Missing avg_ece_platt"
+                assert 'avg_ece_isotonic' in cal, "Missing avg_ece_isotonic"
+          - type: command_succeeds
+            name: Home bias ablation contains 2023 fold with required fields
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
+                    results = json.load(f)
+                abl = results['home_bias_ablation']
+                folds = {r['fold'] for r in abl['results']}
+                assert '2023' in folds, f"Home bias ablation missing 2023 fold; got: {folds}"
+                assert 'hwrt_reduces_bias' in abl, "Missing hwrt_reduces_bias flag"
+                for fold_result in abl['results']:
+                    for key in ('log_loss_with_hwrt', 'log_loss_without_hwrt',
+                                'brier_with_hwrt', 'brier_without_hwrt',
+                                'home_bias_direction'):
+                        assert key in fold_result, (
+                            f"Missing '{key}' in fold {fold_result.get('fold')}"
+                        )
+          - type: command_succeeds
+            name: Logistic regression has non-null log_loss in at least one fold
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
+                    results = json.load(f)
+                lr_folds = [
+                    r for r in results['fold_results']
+                    if r['model'] == 'logistic' and r.get('log_loss') is not None
+                ]
+                assert len(lr_folds) > 0, (
+                    'No Logistic Regression fold has a non-null log_loss'
+                )
+
+      - id: generate-win-outcome-results
+        kind: Task
+        description: >
+          Read cv_results_win_outcome.json and write
+          betting_ml/evaluation/win_outcome_results.md, then update
+          project_context.md Phase 4 section with Card 4.10 findings.
+
+          win_outcome_results.md must contain these sections in order:
+
+          ## Per-Season Metrics by Model
+            Markdown table with columns: Season | Naive Log Loss | Logistic Log Loss |
+            XGB Platt Log Loss | XGB Isotonic Log Loss | Logistic Brier |
+            XGB Platt Brier | Logistic AUC | XGB Platt AUC.
+            One row per CV fold. Bold the best non-baseline model per fold on
+            log loss.
+
+          ## Model Comparison Summary
+            Average log loss, Brier score, and AUC-ROC across all folds for each
+            model. State which model wins on each metric.
+
+          ## Calibration Analysis
+            Method description: how calibration curves are computed (predicted
+            probability decile vs. actual win rate, ECE computation).
+            Table: Fold | XGB Uncalibrated ECE | XGB Platt ECE | XGB Isotonic ECE |
+            Logistic ECE.
+            State whether Platt or isotonic calibration is superior overall, with
+            the average ECE for each method. Describe any systematic
+            over/under-confidence patterns in XGBoost pre- vs. post-calibration.
+
+          ## Home Team Bias Analysis
+            State the NB01 finding: home advantage declined from 0.548 (2020) to
+            0.519 (2023); a model using a static home win rate will systematically
+            overprice home teams in recent seasons.
+            Table: Season | Log Loss with HWRT | Log Loss without HWRT |
+            Brier with HWRT | Brier without HWRT | Home Bias Direction.
+            Conclude whether home_win_rate_trailing_3yr materially reduces the
+            home team overpricing bias in the 2023–2025 seasons.
+
+          ## Best Model Selection
+            Recommended model for downstream EV calculations (Phase 6) with
+            rationale covering: calibration quality as the primary criterion,
+            log loss, Brier score, and whether the marginal ECE improvement from
+            isotonic vs. Platt calibration justifies its added complexity.
+            Forward reference: in Card 4.11 stacking, this classifier's win
+            probability output will be combined with the regression-derived win
+            probability from NGBoost Normal (Card 4.9); the better-calibrated
+            model should anchor the ensemble.
+
+          Update project_context.md: add a "Card 4.10 Results" subsection in the
+          Phase 4 tracking section containing: best model name, best model mean
+          log loss, best model mean Brier score, better_calibration_method,
+          hwrt_reduces_bias (bool), and home_bias_in_recent_seasons description.
+        dependsOn:
+          - run-cv-evaluation-win-outcome
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Win outcome results report
+            path: betting_ml/evaluation/win_outcome_results.md
+          - type: command_succeeds
+            name: Results report contains all required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/win_outcome_results.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'log loss', 'brier', 'auc', 'logistic', 'xgboost',
+                    'calibration', 'platt', 'isotonic', 'home', 'bias',
+                    'home_win_rate', '2023', 'naive', 'best model',
+                    'ece'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.10 results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.10', 'log loss', 'brier']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.10 updates: {missing}'

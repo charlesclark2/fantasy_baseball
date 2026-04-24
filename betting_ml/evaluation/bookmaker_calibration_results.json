@@ -1,0 +1,1389 @@
+{
+  "vig_overround": {
+    "h2h": [
+      {
+        "bookmaker": "lowvig",
+        "median_overround": 1.0218081104362713,
+        "n_events": 6299,
+        "h2h_rank": 1
+      },
+      {
+        "bookmaker": "betonlineag",
+        "median_overround": 1.0227819494058468,
+        "n_events": 7111,
+        "h2h_rank": 2
+      },
+      {
+        "bookmaker": "betrivers",
+        "median_overround": 1.0395861448493027,
+        "n_events": 7210,
+        "h2h_rank": 3
+      },
+      {
+        "bookmaker": "fanduel",
+        "median_overround": 1.0405040504050405,
+        "n_events": 7114,
+        "h2h_rank": 4
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "median_overround": 1.041407867494824,
+        "n_events": 6886,
+        "h2h_rank": 5
+      },
+      {
+        "bookmaker": "draftkings",
+        "median_overround": 1.042501517911354,
+        "n_events": 8181,
+        "h2h_rank": 6
+      },
+      {
+        "bookmaker": "bovada",
+        "median_overround": 1.0441803441648811,
+        "n_events": 7068,
+        "h2h_rank": 7
+      },
+      {
+        "bookmaker": "betmgm",
+        "median_overround": 1.0454545454545454,
+        "n_events": 7092,
+        "h2h_rank": 8
+      }
+    ],
+    "totals": [
+      {
+        "bookmaker": "lowvig",
+        "median_overround": 1.0336630227312162,
+        "n_events": 6318
+      },
+      {
+        "bookmaker": "betmgm",
+        "median_overround": 1.0470788428814521,
+        "n_events": 7105
+      },
+      {
+        "bookmaker": "betonlineag",
+        "median_overround": 1.0470788428814521,
+        "n_events": 7130
+      },
+      {
+        "bookmaker": "bovada",
+        "median_overround": 1.0470788428814521,
+        "n_events": 6562
+      },
+      {
+        "bookmaker": "draftkings",
+        "median_overround": 1.0470788428814521,
+        "n_events": 7302
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "median_overround": 1.0470788428814521,
+        "n_events": 6973
+      },
+      {
+        "bookmaker": "betrivers",
+        "median_overround": 1.047424644485269,
+        "n_events": 7207
+      },
+      {
+        "bookmaker": "fanduel",
+        "median_overround": 1.0476190476190477,
+        "n_events": 6246
+      }
+    ],
+    "lowvig_h2h_rank": 1
+  },
+  "moneyline_calibration": {
+    "by_bookmaker_season": [
+      {
+        "bookmaker": "betmgm",
+        "season": 2021,
+        "n_events": 1576,
+        "brier_score": 0.23989937531008207,
+        "log_loss": 0.6725607822137006
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2022,
+        "n_events": 1782,
+        "brier_score": 0.23403997586713454,
+        "log_loss": 0.6606546855461498
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2024,
+        "n_events": 1772,
+        "brier_score": 0.24017613492716106,
+        "log_loss": 0.6731138196872617
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2025,
+        "n_events": 1834,
+        "brier_score": 0.24269114295482175,
+        "log_loss": 0.6780303630759981
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2021,
+        "n_events": 1673,
+        "brier_score": 0.24111959302966682,
+        "log_loss": 0.6750594663245031
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2022,
+        "n_events": 1731,
+        "brier_score": 0.23348161432378833,
+        "log_loss": 0.6594673208063966
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2024,
+        "n_events": 1752,
+        "brier_score": 0.24034742872205084,
+        "log_loss": 0.6734135388227386
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2025,
+        "n_events": 1828,
+        "brier_score": 0.2424529894348994,
+        "log_loss": 0.6775331507827311
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2021,
+        "n_events": 1684,
+        "brier_score": 0.24060955492335623,
+        "log_loss": 0.6740281281423639
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2022,
+        "n_events": 1777,
+        "brier_score": 0.233839511884596,
+        "log_loss": 0.6602181413850546
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2024,
+        "n_events": 1780,
+        "brier_score": 0.24055746013469154,
+        "log_loss": 0.6738762781998853
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2025,
+        "n_events": 1840,
+        "brier_score": 0.24246386336094425,
+        "log_loss": 0.6775243900042061
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2021,
+        "n_events": 1655,
+        "brier_score": 0.24039252987699525,
+        "log_loss": 0.6735652957876905
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2022,
+        "n_events": 1660,
+        "brier_score": 0.2329100676552205,
+        "log_loss": 0.6583545437401851
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2024,
+        "n_events": 1782,
+        "brier_score": 0.24004472424500983,
+        "log_loss": 0.672800016885883
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2025,
+        "n_events": 1844,
+        "brier_score": 0.24267452332580886,
+        "log_loss": 0.678006673214533
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2021,
+        "n_events": 1596,
+        "brier_score": 0.23944156824917717,
+        "log_loss": 0.6716108409107195
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2022,
+        "n_events": 1786,
+        "brier_score": 0.23384346623680535,
+        "log_loss": 0.6602490913975961
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2023,
+        "n_events": 1180,
+        "brier_score": 0.2429346215127298,
+        "log_loss": 0.6786688242545834
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2024,
+        "n_events": 1786,
+        "brier_score": 0.24034423652989942,
+        "log_loss": 0.6734178627608365
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2025,
+        "n_events": 1833,
+        "brier_score": 0.2427587045507171,
+        "log_loss": 0.6781802057922649
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2021,
+        "n_events": 1587,
+        "brier_score": 0.24042269613356665,
+        "log_loss": 0.6735913349281716
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2022,
+        "n_events": 1781,
+        "brier_score": 0.23432057970015102,
+        "log_loss": 0.6612549620371957
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2024,
+        "n_events": 1785,
+        "brier_score": 0.2404435840975006,
+        "log_loss": 0.6736126792809226
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2025,
+        "n_events": 1831,
+        "brier_score": 0.2427672428338713,
+        "log_loss": 0.6782123399834274
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2021,
+        "n_events": 859,
+        "brier_score": 0.24064443765476556,
+        "log_loss": 0.6740425803813038
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2022,
+        "n_events": 1749,
+        "brier_score": 0.23363382493386275,
+        "log_loss": 0.6598108989605781
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2024,
+        "n_events": 1736,
+        "brier_score": 0.24051709942715135,
+        "log_loss": 0.6737868000247594
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2025,
+        "n_events": 1828,
+        "brier_score": 0.2424546009617801,
+        "log_loss": 0.677535832273792
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2021,
+        "n_events": 1422,
+        "brier_score": 0.24107681960983549,
+        "log_loss": 0.6750327692099615
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2022,
+        "n_events": 1776,
+        "brier_score": 0.23368900517090702,
+        "log_loss": 0.6599221317721244
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2024,
+        "n_events": 1769,
+        "brier_score": 0.24038904217904042,
+        "log_loss": 0.6735292358234022
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2025,
+        "n_events": 1793,
+        "brier_score": 0.2425169186126198,
+        "log_loss": 0.6776786778961656
+      }
+    ],
+    "calibration_curves": {
+      "draftkings": [
+        {
+          "decile": 1,
+          "mean_predicted": 0.3660110318414204,
+          "mean_actual": 0.3626373626373626,
+          "n_events": 819
+        },
+        {
+          "decile": 2,
+          "mean_predicted": 0.4299277260749628,
+          "mean_actual": 0.4332579185520362,
+          "n_events": 884
+        },
+        {
+          "decile": 3,
+          "mean_predicted": 0.46905875147707937,
+          "mean_actual": 0.46248462484624847,
+          "n_events": 813
+        },
+        {
+          "decile": 4,
+          "mean_predicted": 0.499894419647923,
+          "mean_actual": 0.5010706638115632,
+          "n_events": 934
+        },
+        {
+          "decile": 5,
+          "mean_predicted": 0.5254542158047057,
+          "mean_actual": 0.5416666666666666,
+          "n_events": 792
+        },
+        {
+          "decile": 6,
+          "mean_predicted": 0.5468506671367955,
+          "mean_actual": 0.5321637426900585,
+          "n_events": 684
+        },
+        {
+          "decile": 7,
+          "mean_predicted": 0.5709755379429091,
+          "mean_actual": 0.554932735426009,
+          "n_events": 892
+        },
+        {
+          "decile": 8,
+          "mean_predicted": 0.5979009696458968,
+          "mean_actual": 0.5828804347826086,
+          "n_events": 736
+        },
+        {
+          "decile": 9,
+          "mean_predicted": 0.6307047397696316,
+          "mean_actual": 0.6301204819277109,
+          "n_events": 830
+        },
+        {
+          "decile": 10,
+          "mean_predicted": 0.6892666401805676,
+          "mean_actual": 0.7252195734002509,
+          "n_events": 797
+        }
+      ],
+      "betrivers": [
+        {
+          "decile": 1,
+          "mean_predicted": 0.364370316290856,
+          "mean_actual": 0.37006802721088433,
+          "n_events": 735
+        },
+        {
+          "decile": 2,
+          "mean_predicted": 0.4269080152151098,
+          "mean_actual": 0.4345991561181435,
+          "n_events": 711
+        },
+        {
+          "decile": 3,
+          "mean_predicted": 0.46439105974586226,
+          "mean_actual": 0.45616438356164385,
+          "n_events": 730
+        },
+        {
+          "decile": 4,
+          "mean_predicted": 0.4950125634099193,
+          "mean_actual": 0.49014084507042255,
+          "n_events": 710
+        },
+        {
+          "decile": 5,
+          "mean_predicted": 0.5212056541896448,
+          "mean_actual": 0.5385656292286874,
+          "n_events": 739
+        },
+        {
+          "decile": 6,
+          "mean_predicted": 0.5456453345642484,
+          "mean_actual": 0.5423728813559322,
+          "n_events": 708
+        },
+        {
+          "decile": 7,
+          "mean_predicted": 0.5704899652715705,
+          "mean_actual": 0.5453277545327755,
+          "n_events": 717
+        },
+        {
+          "decile": 8,
+          "mean_predicted": 0.5981568728228995,
+          "mean_actual": 0.5807799442896936,
+          "n_events": 718
+        },
+        {
+          "decile": 9,
+          "mean_predicted": 0.6326081877617313,
+          "mean_actual": 0.6284530386740331,
+          "n_events": 724
+        },
+        {
+          "decile": 10,
+          "mean_predicted": 0.6939979787235695,
+          "mean_actual": 0.7311977715877437,
+          "n_events": 718
+        }
+      ],
+      "fanduel": [
+        {
+          "decile": 1,
+          "mean_predicted": 0.36628617891520415,
+          "mean_actual": 0.37771739130434784,
+          "n_events": 736
+        },
+        {
+          "decile": 2,
+          "mean_predicted": 0.42975674005244374,
+          "mean_actual": 0.43209876543209874,
+          "n_events": 729
+        },
+        {
+          "decile": 3,
+          "mean_predicted": 0.46696105182046976,
+          "mean_actual": 0.4544179523141655,
+          "n_events": 713
+        },
+        {
+          "decile": 4,
+          "mean_predicted": 0.49789296065939237,
+          "mean_actual": 0.5006765899864682,
+          "n_events": 739
+        },
+        {
+          "decile": 5,
+          "mean_predicted": 0.5246390160404211,
+          "mean_actual": 0.5471956224350205,
+          "n_events": 731
+        },
+        {
+          "decile": 6,
+          "mean_predicted": 0.5480324852710539,
+          "mean_actual": 0.530827067669173,
+          "n_events": 665
+        },
+        {
+          "decile": 7,
+          "mean_predicted": 0.571038647241393,
+          "mean_actual": 0.5553914327917282,
+          "n_events": 677
+        },
+        {
+          "decile": 8,
+          "mean_predicted": 0.5972743193102095,
+          "mean_actual": 0.5720338983050848,
+          "n_events": 708
+        },
+        {
+          "decile": 9,
+          "mean_predicted": 0.6330031490294697,
+          "mean_actual": 0.6417910447761194,
+          "n_events": 737
+        },
+        {
+          "decile": 10,
+          "mean_predicted": 0.6944482050983349,
+          "mean_actual": 0.7260677466863034,
+          "n_events": 679
+        }
+      ],
+      "betonlineag": [
+        {
+          "decile": 1,
+          "mean_predicted": 0.3639917521961918,
+          "mean_actual": 0.38342696629213485,
+          "n_events": 712
+        },
+        {
+          "decile": 2,
+          "mean_predicted": 0.42675703492457084,
+          "mean_actual": 0.41643454038997213,
+          "n_events": 718
+        },
+        {
+          "decile": 3,
+          "mean_predicted": 0.46555100893634216,
+          "mean_actual": 0.4571026722925457,
+          "n_events": 711
+        },
+        {
+          "decile": 4,
+          "mean_predicted": 0.49646786844581187,
+          "mean_actual": 0.5069060773480663,
+          "n_events": 724
+        },
+        {
+          "decile": 5,
+          "mean_predicted": 0.5227842102424067,
+          "mean_actual": 0.525035765379113,
+          "n_events": 699
+        },
+        {
+          "decile": 6,
+          "mean_predicted": 0.5472568424964949,
+          "mean_actual": 0.5314207650273224,
+          "n_events": 732
+        },
+        {
+          "decile": 7,
+          "mean_predicted": 0.5716875163629669,
+          "mean_actual": 0.5662299854439592,
+          "n_events": 687
+        },
+        {
+          "decile": 8,
+          "mean_predicted": 0.5990083605501771,
+          "mean_actual": 0.572829131652661,
+          "n_events": 714
+        },
+        {
+          "decile": 9,
+          "mean_predicted": 0.6333267753234024,
+          "mean_actual": 0.64822695035461,
+          "n_events": 705
+        },
+        {
+          "decile": 10,
+          "mean_predicted": 0.6930920263174075,
+          "mean_actual": 0.7207334273624824,
+          "n_events": 709
+        }
+      ],
+      "betmgm": [
+        {
+          "decile": 1,
+          "mean_predicted": 0.36966665746745375,
+          "mean_actual": 0.36988110964332893,
+          "n_events": 757
+        },
+        {
+          "decile": 2,
+          "mean_predicted": 0.4307471123170862,
+          "mean_actual": 0.42668621700879766,
+          "n_events": 682
+        },
+        {
+          "decile": 3,
+          "mean_predicted": 0.46726812728603956,
+          "mean_actual": 0.45544554455445546,
+          "n_events": 707
+        },
+        {
+          "decile": 4,
+          "mean_predicted": 0.4998786352800927,
+          "mean_actual": 0.5094736842105263,
+          "n_events": 950
+        },
+        {
+          "decile": 5,
+          "mean_predicted": 0.5266148569563173,
+          "mean_actual": 0.5540983606557377,
+          "n_events": 610
+        },
+        {
+          "decile": 6,
+          "mean_predicted": 0.5460445364577158,
+          "mean_actual": 0.5206463195691203,
+          "n_events": 557
+        },
+        {
+          "decile": 7,
+          "mean_predicted": 0.567783146213333,
+          "mean_actual": 0.5674232309746329,
+          "n_events": 749
+        },
+        {
+          "decile": 8,
+          "mean_predicted": 0.5977338411977405,
+          "mean_actual": 0.5756358768406962,
+          "n_events": 747
+        },
+        {
+          "decile": 9,
+          "mean_predicted": 0.6299550422898753,
+          "mean_actual": 0.6527131782945736,
+          "n_events": 645
+        },
+        {
+          "decile": 10,
+          "mean_predicted": 0.6876026723728991,
+          "mean_actual": 0.7209302325581395,
+          "n_events": 688
+        }
+      ]
+    },
+    "home_team_bias": [
+      {
+        "bookmaker": "betmgm",
+        "season": 2021,
+        "n_events": 1576,
+        "mean_implied_home_prob": 0.5284941574431312,
+        "actual_home_win_rate": 0.5291878172588832,
+        "bias": -0.000694
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2022,
+        "n_events": 1782,
+        "mean_implied_home_prob": 0.5294178093224521,
+        "actual_home_win_rate": 0.5359147025813692,
+        "bias": -0.006497
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2024,
+        "n_events": 1772,
+        "mean_implied_home_prob": 0.531946908800019,
+        "actual_home_win_rate": 0.5276523702031602,
+        "bias": 0.004295
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2025,
+        "n_events": 1834,
+        "mean_implied_home_prob": 0.5294489098165909,
+        "actual_home_win_rate": 0.5425299890948746,
+        "bias": -0.013081
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2021,
+        "n_events": 1673,
+        "mean_implied_home_prob": 0.5318470125339283,
+        "actual_home_win_rate": 0.525403466826061,
+        "bias": 0.006444
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2022,
+        "n_events": 1731,
+        "mean_implied_home_prob": 0.5312870853867965,
+        "actual_home_win_rate": 0.537261698440208,
+        "bias": -0.005975
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2024,
+        "n_events": 1752,
+        "mean_implied_home_prob": 0.5338581377467355,
+        "actual_home_win_rate": 0.5273972602739726,
+        "bias": 0.006461
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2025,
+        "n_events": 1828,
+        "mean_implied_home_prob": 0.5310414915594001,
+        "actual_home_win_rate": 0.5443107221006565,
+        "bias": -0.013269
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2021,
+        "n_events": 1684,
+        "mean_implied_home_prob": 0.5311801357829391,
+        "actual_home_win_rate": 0.5249406175771971,
+        "bias": 0.00624
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2022,
+        "n_events": 1777,
+        "mean_implied_home_prob": 0.5311140887517041,
+        "actual_home_win_rate": 0.5357343837929094,
+        "bias": -0.00462
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2024,
+        "n_events": 1780,
+        "mean_implied_home_prob": 0.5327547906657304,
+        "actual_home_win_rate": 0.5269662921348315,
+        "bias": 0.005788
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2025,
+        "n_events": 1840,
+        "mean_implied_home_prob": 0.530200880789856,
+        "actual_home_win_rate": 0.5434782608695652,
+        "bias": -0.013277
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2021,
+        "n_events": 1655,
+        "mean_implied_home_prob": 0.5305449391573062,
+        "actual_home_win_rate": 0.5250755287009063,
+        "bias": 0.005469
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2022,
+        "n_events": 1660,
+        "mean_implied_home_prob": 0.5304600606858976,
+        "actual_home_win_rate": 0.5385542168674698,
+        "bias": -0.008094
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2024,
+        "n_events": 1782,
+        "mean_implied_home_prob": 0.5328340603620559,
+        "actual_home_win_rate": 0.5269360269360269,
+        "bias": 0.005898
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2025,
+        "n_events": 1844,
+        "mean_implied_home_prob": 0.5301044520996248,
+        "actual_home_win_rate": 0.5433839479392625,
+        "bias": -0.013279
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2021,
+        "n_events": 1596,
+        "mean_implied_home_prob": 0.5321635016105875,
+        "actual_home_win_rate": 0.5244360902255639,
+        "bias": 0.007727
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2022,
+        "n_events": 1786,
+        "mean_implied_home_prob": 0.53008173027795,
+        "actual_home_win_rate": 0.5358342665173572,
+        "bias": -0.005753
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2023,
+        "n_events": 1180,
+        "mean_implied_home_prob": 0.525360233316689,
+        "actual_home_win_rate": 0.5194915254237288,
+        "bias": 0.005869
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2024,
+        "n_events": 1786,
+        "mean_implied_home_prob": 0.5327331487023641,
+        "actual_home_win_rate": 0.5263157894736842,
+        "bias": 0.006417
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2025,
+        "n_events": 1833,
+        "mean_implied_home_prob": 0.5308353710111517,
+        "actual_home_win_rate": 0.5428259683578832,
+        "bias": -0.011991
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2021,
+        "n_events": 1587,
+        "mean_implied_home_prob": 0.5329013852950173,
+        "actual_home_win_rate": 0.5280403276622558,
+        "bias": 0.004861
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2022,
+        "n_events": 1781,
+        "mean_implied_home_prob": 0.5315780716432411,
+        "actual_home_win_rate": 0.5356541268950028,
+        "bias": -0.004076
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2024,
+        "n_events": 1785,
+        "mean_implied_home_prob": 0.5319362701231559,
+        "actual_home_win_rate": 0.5260504201680672,
+        "bias": 0.005886
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2025,
+        "n_events": 1831,
+        "mean_implied_home_prob": 0.5302568437176166,
+        "actual_home_win_rate": 0.5439650464227198,
+        "bias": -0.013708
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2021,
+        "n_events": 859,
+        "mean_implied_home_prob": 0.5291129784895752,
+        "actual_home_win_rate": 0.5122235157159488,
+        "bias": 0.016889
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2022,
+        "n_events": 1749,
+        "mean_implied_home_prob": 0.5311057580810132,
+        "actual_home_win_rate": 0.5368782161234992,
+        "bias": -0.005772
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2024,
+        "n_events": 1736,
+        "mean_implied_home_prob": 0.5334610577495866,
+        "actual_home_win_rate": 0.5276497695852534,
+        "bias": 0.005811
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2025,
+        "n_events": 1828,
+        "mean_implied_home_prob": 0.531025629347648,
+        "actual_home_win_rate": 0.5443107221006565,
+        "bias": -0.013285
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2021,
+        "n_events": 1422,
+        "mean_implied_home_prob": 0.5322562815507494,
+        "actual_home_win_rate": 0.5288326300984529,
+        "bias": 0.003424
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2022,
+        "n_events": 1776,
+        "mean_implied_home_prob": 0.5310567390855104,
+        "actual_home_win_rate": 0.5349099099099099,
+        "bias": -0.003853
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2024,
+        "n_events": 1769,
+        "mean_implied_home_prob": 0.5329738621103961,
+        "actual_home_win_rate": 0.5262860373092142,
+        "bias": 0.006688
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2025,
+        "n_events": 1793,
+        "mean_implied_home_prob": 0.53129601322312,
+        "actual_home_win_rate": 0.5415504740658115,
+        "bias": -0.010254
+      }
+    ]
+  },
+  "totals_accuracy": {
+    "by_bookmaker_season": [
+      {
+        "bookmaker": "betmgm",
+        "season": 2021,
+        "n_events": 1573,
+        "mae": 3.500953591862683,
+        "bias": -0.48506039415130325,
+        "over_rate": 0.47107438016528924
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2022,
+        "n_events": 1780,
+        "mae": 3.3109550561797754,
+        "bias": -0.376685393258427,
+        "over_rate": 0.46348314606741575
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2023,
+        "n_events": 133,
+        "mae": 3.6466165413533833,
+        "bias": -1.105263157894737,
+        "over_rate": 0.518796992481203
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2024,
+        "n_events": 1792,
+        "mae": 3.3878348214285716,
+        "bias": -0.4252232142857143,
+        "over_rate": 0.47377232142857145
+      },
+      {
+        "bookmaker": "betmgm",
+        "season": 2025,
+        "n_events": 1827,
+        "mae": 3.536672140120416,
+        "bias": -0.3615216201423098,
+        "over_rate": 0.44991789819376027
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2021,
+        "n_events": 1673,
+        "mae": 3.4865511057979677,
+        "bias": -0.48655110579796773,
+        "over_rate": 0.4686192468619247
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2022,
+        "n_events": 1731,
+        "mae": 3.334488734835355,
+        "bias": -0.37203928365106875,
+        "over_rate": 0.463316002310803
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2023,
+        "n_events": 132,
+        "mae": 3.621212121212121,
+        "bias": -1.1893939393939394,
+        "over_rate": 0.5151515151515151
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2024,
+        "n_events": 1773,
+        "mae": 3.3925549915397633,
+        "bias": -0.45403271291596164,
+        "over_rate": 0.47772137619853355
+      },
+      {
+        "bookmaker": "betonlineag",
+        "season": 2025,
+        "n_events": 1821,
+        "mae": 3.532948929159802,
+        "bias": -0.3517298187808896,
+        "over_rate": 0.44920373421197146
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2021,
+        "n_events": 1661,
+        "mae": 3.462673088500903,
+        "bias": -0.4379891631547261,
+        "over_rate": 0.4647802528597231
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2022,
+        "n_events": 1778,
+        "mae": 3.3084926884139483,
+        "bias": -0.3264904386951631,
+        "over_rate": 0.4578177727784027
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2023,
+        "n_events": 134,
+        "mae": 3.5858208955223883,
+        "bias": -1.1604477611940298,
+        "over_rate": 0.5223880597014925
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2024,
+        "n_events": 1801,
+        "mae": 3.384508606329817,
+        "bias": -0.4317046085508051,
+        "over_rate": 0.47418101054969464
+      },
+      {
+        "bookmaker": "betrivers",
+        "season": 2025,
+        "n_events": 1833,
+        "mae": 3.5370976541189307,
+        "bias": -0.3505182760501909,
+        "over_rate": 0.4522640480087289
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2021,
+        "n_events": 1623,
+        "mae": 3.5123228589032656,
+        "bias": -0.47843499691928526,
+        "over_rate": 0.4676524953789279
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2022,
+        "n_events": 1185,
+        "mae": 3.3345991561181436,
+        "bias": -0.4308016877637131,
+        "over_rate": 0.4675105485232067
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2023,
+        "n_events": 116,
+        "mae": 3.4741379310344827,
+        "bias": -1.2327586206896552,
+        "over_rate": 0.5344827586206896
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2024,
+        "n_events": 1802,
+        "mae": 3.3795782463928967,
+        "bias": -0.4306326304106548,
+        "over_rate": 0.4750277469478357
+      },
+      {
+        "bookmaker": "bovada",
+        "season": 2025,
+        "n_events": 1836,
+        "mae": 3.526143790849673,
+        "bias": -0.3611111111111111,
+        "over_rate": 0.4526143790849673
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2021,
+        "n_events": 734,
+        "mae": 3.4400544959128063,
+        "bias": -0.4564032697547684,
+        "over_rate": 0.44959128065395093
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2022,
+        "n_events": 1787,
+        "mae": 3.308617795187465,
+        "bias": -0.33771684387241185,
+        "over_rate": 0.45886961387800784
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2023,
+        "n_events": 1148,
+        "mae": 3.6528745644599305,
+        "bias": -0.7234320557491289,
+        "over_rate": 0.4808362369337979
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2024,
+        "n_events": 1807,
+        "mae": 3.3749308245711123,
+        "bias": -0.4463198671831765,
+        "over_rate": 0.47537354731599335
+      },
+      {
+        "bookmaker": "draftkings",
+        "season": 2025,
+        "n_events": 1826,
+        "mae": 3.5323110624315444,
+        "bias": -0.3608981380065717,
+        "over_rate": 0.45180722891566266
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2021,
+        "n_events": 702,
+        "mae": 3.400997150997151,
+        "bias": -0.3952991452991453,
+        "over_rate": 0.4515669515669516
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2022,
+        "n_events": 1780,
+        "mae": 3.322191011235955,
+        "bias": -0.3390449438202247,
+        "over_rate": 0.4589887640449438
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2023,
+        "n_events": 134,
+        "mae": 3.6007462686567164,
+        "bias": -1.1902985074626866,
+        "over_rate": 0.5149253731343284
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2024,
+        "n_events": 1806,
+        "mae": 3.389811738648948,
+        "bias": -0.446843853820598,
+        "over_rate": 0.4778516057585825
+      },
+      {
+        "bookmaker": "fanduel",
+        "season": 2025,
+        "n_events": 1824,
+        "mae": 3.53125,
+        "bias": -0.36348684210526316,
+        "over_rate": 0.45285087719298245
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2021,
+        "n_events": 859,
+        "mae": 3.4749708963911523,
+        "bias": -0.559953434225844,
+        "over_rate": 0.4842840512223516
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2022,
+        "n_events": 1749,
+        "mae": 3.32904516866781,
+        "bias": -0.3702115494568325,
+        "over_rate": 0.46255002858776445
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2023,
+        "n_events": 132,
+        "mae": 3.617424242424242,
+        "bias": -1.2083333333333333,
+        "over_rate": 0.5151515151515151
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2024,
+        "n_events": 1757,
+        "mae": 3.4009675583380763,
+        "bias": -0.4538986909504838,
+        "over_rate": 0.47808764940239046
+      },
+      {
+        "bookmaker": "lowvig",
+        "season": 2025,
+        "n_events": 1821,
+        "mae": 3.5326743547501374,
+        "bias": -0.3525535420098847,
+        "over_rate": 0.44920373421197146
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2021,
+        "n_events": 1484,
+        "mae": 3.4828167115902966,
+        "bias": -0.4585579514824798,
+        "over_rate": 0.46630727762803237
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2022,
+        "n_events": 1782,
+        "mae": 3.313692480359147,
+        "bias": -0.35802469135802467,
+        "over_rate": 0.45847362514029183
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2023,
+        "n_events": 131,
+        "mae": 3.5801526717557253,
+        "bias": -1.0916030534351144,
+        "over_rate": 0.5114503816793893
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2024,
+        "n_events": 1790,
+        "mae": 3.374022346368715,
+        "bias": -0.4282122905027933,
+        "over_rate": 0.47541899441340785
+      },
+      {
+        "bookmaker": "williamhill_us",
+        "season": 2025,
+        "n_events": 1786,
+        "mae": 3.534154535274356,
+        "bias": -0.35778275475923854,
+        "over_rate": 0.4490481522956327
+      }
+    ],
+    "line_distribution_by_season": [
+      {
+        "season": 2021,
+        "mean_line": 8.552693847450485,
+        "median_line": 8.5,
+        "std_line": 1.056177481022139
+      },
+      {
+        "season": 2022,
+        "mean_line": 8.184143749833453,
+        "median_line": 8.0625,
+        "std_line": 0.9056527122765193
+      },
+      {
+        "season": 2023,
+        "mean_line": 8.602854554865424,
+        "median_line": 8.5,
+        "std_line": 0.9042662888862052
+      },
+      {
+        "season": 2024,
+        "mean_line": 8.31961189290326,
+        "median_line": 8.375,
+        "std_line": 0.8152604382388681
+      },
+      {
+        "season": 2025,
+        "mean_line": 8.451567643932913,
+        "median_line": 8.5,
+        "std_line": 0.8200640521072633
+      }
+    ]
+  },
+  "consensus_analysis": {
+    "sharp_books": [
+      "lowvig",
+      "betonlineag",
+      "bovada"
+    ],
+    "soft_books": [
+      "draftkings",
+      "fanduel",
+      "betmgm",
+      "williamhill_us",
+      "betrivers"
+    ],
+    "sharp_brier": 0.23950492065443854,
+    "soft_brier": 0.2395449767737247,
+    "n_sharp_games": 7203,
+    "n_soft_games": 7203,
+    "sharp_soft_delta_r": 0.020645036019164047,
+    "sharp_soft_delta_pval": 0.07976745697971183,
+    "disagreement_quartile_signal": [
+      {
+        "quartile": 1,
+        "std_min": 0.0,
+        "std_max": 0.003906954686828013,
+        "n_games": 1810,
+        "outcome_variance": 0.24864169025956775,
+        "home_win_rate": 0.5386740331491713
+      },
+      {
+        "quartile": 2,
+        "std_min": 0.0039077443228224575,
+        "std_max": 0.005152836560786569,
+        "n_games": 1810,
+        "outcome_variance": 0.24991555421175282,
+        "home_win_rate": 0.5149171270718232
+      },
+      {
+        "quartile": 3,
+        "std_min": 0.005153460767140767,
+        "std_max": 0.006617726667904306,
+        "n_games": 1809,
+        "outcome_variance": 0.24844129891349545,
+        "home_win_rate": 0.5411829740187949
+      },
+      {
+        "quartile": 4,
+        "std_min": 0.006618415691952534,
+        "std_max": 0.03503325478045275,
+        "n_games": 1810,
+        "outcome_variance": 0.24911079959319424,
+        "home_win_rate": 0.5320441988950276
+      }
+    ]
+  },
+  "market_efficiency": {
+    "consensus_brier_overall": 0.2395159153315417,
+    "favorite_brier": 0.23726901025058805,
+    "underdog_brier": 0.24342313279354066,
+    "brier_by_season": [
+      {
+        "season": 2021,
+        "brier_score": 0.24066474039439542,
+        "n_games": 1695
+      },
+      {
+        "season": 2022,
+        "brier_score": 0.23379243768749267,
+        "n_games": 1787
+      },
+      {
+        "season": 2023,
+        "brier_score": 0.24916677017139716,
+        "n_games": 128
+      },
+      {
+        "season": 2024,
+        "brier_score": 0.2403734040891063,
+        "n_games": 1786
+      },
+      {
+        "season": 2025,
+        "brier_score": 0.24250767427232675,
+        "n_games": 1843
+      }
+    ]
+  },
+  "hypotheses": {
+    "H1": {
+      "verdict": "inconclusive",
+      "evidence": "sharp_brier=0.23950, soft_brier=0.23954, diff=0.00004. Supported if sharp < soft AND diff > 0.002; not supported if sharp >= soft; inconclusive if sharp < soft AND diff <= 0.002."
+    },
+    "H2": {
+      "verdict": "supported",
+      "evidence": "lowvig_h2h_rank=1 (sorted by median h2h overround ascending). Supported if rank <= 2; not supported if rank > 2."
+    },
+    "H3": {
+      "verdict": "not supported",
+      "evidence": "mean home-team bias=-0.00131 across all book-season pairs with >=500 events. Supported if 0.010 <= mean_bias <= 0.030; not supported if < 0.005 or > 0.040."
+    },
+    "H4": {
+      "verdict": "inconclusive",
+      "evidence": "Q4 outcome_variance=0.24911, Q1=0.24864, ratio=1.0019. Supported if Q4 > Q1 * 1.10; not supported if Q4 <= Q1."
+    },
+    "H5": {
+      "verdict": "inconclusive",
+      "evidence": "Pearson r(sharp_soft_delta, home_win)=0.02065, p=0.07977. Supported if |r| > 0.030 and p < 0.05; not supported if |r| <= 0.010."
+    },
+    "H6": {
+      "verdict": "not supported",
+      "evidence": "Mean totals line: 2021-2022=8.368, 2023-2025=8.458, delta=0.09. Supported if 0.20 <= delta <= 0.70; not supported if delta < 0.10 or > 0.90."
+    },
+    "H7": {
+      "verdict": "supported",
+      "evidence": "consensus_brier_overall=0.23952 (naive baseline ~0.250). Supported if < 0.240; not supported if >= 0.250; inconclusive if [0.240, 0.250)."
+    }
+  },
+  "design_recommendation": {
+    "include_consensus_features": true,
+    "include_sharp_soft_features": false,
+    "queue_mart_odds_consensus_card": true,
+    "market_baseline_brier": 0.2395159153315417,
+    "rationale": "consensus_brier_overall=0.23952. H7 (supported) \u2192 include_consensus_features=True. H1 (inconclusive) \u2192 include_sharp_soft_features=False. queue_mart_odds_consensus_card=True. All verdicts: H1=inconclusive; H2=supported; H3=not supported; H4=inconclusive; H5=inconclusive; H6=not supported; H7=supported."
+  }
+}

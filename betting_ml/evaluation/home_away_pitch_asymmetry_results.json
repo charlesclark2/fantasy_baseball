@@ -1,0 +1,346 @@
+{
+  "raw_correlations": [
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "total_runs",
+      "pearson_r": 0.08542073151302736,
+      "p_value": 5.183242159255501e-30,
+      "n": 17690
+    },
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "run_differential",
+      "pearson_r": -0.09620700066326926,
+      "p_value": 1.191780429356811e-37,
+      "n": 17690
+    },
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "home_win",
+      "pearson_r": -0.08405796394600595,
+      "p_value": 4.120891072547186e-29,
+      "n": 17690
+    },
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "total_runs",
+      "pearson_r": 0.010734491031305986,
+      "p_value": 0.15338746908280693,
+      "n": 17690
+    },
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "run_differential",
+      "pearson_r": 0.09392181918006828,
+      "p_value": 5.895501091832195e-36,
+      "n": 17690
+    },
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "home_win",
+      "pearson_r": 0.08367232018586232,
+      "p_value": 7.364824796006725e-29,
+      "n": 17690
+    }
+  ],
+  "partial_correlations": [
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "total_runs",
+      "raw_pearson_r": 0.010734491031305986,
+      "partial_r": 0.012191356715572716,
+      "controlling_for": "park_run_factor_3yr + home_pit_xwoba_against_30d",
+      "n": 17690
+    },
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "run_differential",
+      "raw_pearson_r": 0.09392181918006828,
+      "partial_r": 0.09643343037040078,
+      "controlling_for": "park_run_factor_3yr + home_pit_xwoba_against_30d",
+      "n": 17690
+    },
+    {
+      "feature": "away_pit_xwoba_against_30d",
+      "target": "home_win",
+      "raw_pearson_r": 0.08367232018586232,
+      "partial_r": 0.0858198159390117,
+      "controlling_for": "park_run_factor_3yr + home_pit_xwoba_against_30d",
+      "n": 17690
+    },
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "total_runs",
+      "raw_pearson_r": 0.08542073151302736,
+      "partial_r": 0.062473881626416754,
+      "controlling_for": "park_run_factor_3yr + away_pit_xwoba_against_30d",
+      "n": 17690
+    },
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "run_differential",
+      "raw_pearson_r": -0.09620700066326926,
+      "partial_r": -0.09690884521639859,
+      "controlling_for": "park_run_factor_3yr + away_pit_xwoba_against_30d",
+      "n": 17690
+    },
+    {
+      "feature": "home_pit_xwoba_against_30d",
+      "target": "home_win",
+      "raw_pearson_r": -0.08405796394600595,
+      "partial_r": -0.0849007809296385,
+      "controlling_for": "park_run_factor_3yr + away_pit_xwoba_against_30d",
+      "n": 17690
+    }
+  ],
+  "park_quartile_correlations": [
+    {
+      "quartile": 1,
+      "n": 4446,
+      "park_rf_min": 6.975309,
+      "park_rf_max": 8.4012345,
+      "target": "total_runs",
+      "home_pit_r": 0.043938974553765414,
+      "away_pit_r": 0.009508814201514905,
+      "asymmetry_ratio": 4.620867925546936
+    },
+    {
+      "quartile": 2,
+      "n": 4445,
+      "park_rf_min": 8.408529666,
+      "park_rf_max": 8.888889,
+      "target": "total_runs",
+      "home_pit_r": 0.07302115774876228,
+      "away_pit_r": 0.027816448247682996,
+      "asymmetry_ratio": 2.6251071703535933
+    },
+    {
+      "quartile": 3,
+      "n": 4435,
+      "park_rf_min": 8.894233333,
+      "park_rf_max": 9.377602333,
+      "target": "total_runs",
+      "home_pit_r": 0.05357791127381971,
+      "away_pit_r": 0.008188719432885322,
+      "asymmetry_ratio": 6.54289253807556
+    },
+    {
+      "quartile": 4,
+      "n": 4364,
+      "park_rf_min": 9.385571,
+      "park_rf_max": 11.965904333,
+      "target": "total_runs",
+      "home_pit_r": 0.10913134804662575,
+      "away_pit_r": 0.0057454439750889786,
+      "asymmetry_ratio": 18.994415143511283
+    },
+    {
+      "quartile": 1,
+      "n": 4446,
+      "park_rf_min": 6.975309,
+      "park_rf_max": 8.4012345,
+      "target": "run_differential",
+      "home_pit_r": -0.09855774581121197,
+      "away_pit_r": 0.08852387439499337,
+      "asymmetry_ratio": 1.1133465009839887
+    },
+    {
+      "quartile": 2,
+      "n": 4445,
+      "park_rf_min": 8.408529666,
+      "park_rf_max": 8.888889,
+      "target": "run_differential",
+      "home_pit_r": -0.07873654203633655,
+      "away_pit_r": 0.09105355313298391,
+      "asymmetry_ratio": 0.8647278368296255
+    },
+    {
+      "quartile": 3,
+      "n": 4435,
+      "park_rf_min": 8.894233333,
+      "park_rf_max": 9.377602333,
+      "target": "run_differential",
+      "home_pit_r": -0.11166417562854344,
+      "away_pit_r": 0.11096537992626103,
+      "asymmetry_ratio": 1.0062974208960198
+    },
+    {
+      "quartile": 4,
+      "n": 4364,
+      "park_rf_min": 9.385571,
+      "park_rf_max": 11.965904333,
+      "target": "run_differential",
+      "home_pit_r": -0.08062414962551388,
+      "away_pit_r": 0.08431029333234287,
+      "asymmetry_ratio": 0.956278841394863
+    },
+    {
+      "quartile": 1,
+      "n": 4446,
+      "park_rf_min": 6.975309,
+      "park_rf_max": 8.4012345,
+      "target": "home_win",
+      "home_pit_r": -0.0909913788593,
+      "away_pit_r": 0.06952227880738933,
+      "asymmetry_ratio": 1.3088089231279454
+    },
+    {
+      "quartile": 2,
+      "n": 4445,
+      "park_rf_min": 8.408529666,
+      "park_rf_max": 8.888889,
+      "target": "home_win",
+      "home_pit_r": -0.06577154815315123,
+      "away_pit_r": 0.07961945968808717,
+      "asymmetry_ratio": 0.8260737815957837
+    },
+    {
+      "quartile": 3,
+      "n": 4435,
+      "park_rf_min": 8.894233333,
+      "park_rf_max": 9.377602333,
+      "target": "home_win",
+      "home_pit_r": -0.09650850563061622,
+      "away_pit_r": 0.09501824388027512,
+      "asymmetry_ratio": 1.015683953833317
+    },
+    {
+      "quartile": 4,
+      "n": 4364,
+      "park_rf_min": 9.385571,
+      "park_rf_max": 11.965904333,
+      "target": "home_win",
+      "home_pit_r": -0.06998121232453408,
+      "away_pit_r": 0.08950879514345879,
+      "asymmetry_ratio": 0.7818361560154263
+    }
+  ],
+  "era_split_correlations": [
+    {
+      "era": "pre_juiced",
+      "n": 7547,
+      "target": "total_runs",
+      "h_pit_30_r": 0.08890598278908929,
+      "a_pit_30_r": 0.015390044243494693,
+      "h_pit_std_r": 0.09579470386777825,
+      "a_pit_std_r": 0.021485525374870574,
+      "asymmetry_ratio": 5.776850370437985
+    },
+    {
+      "era": "pre_juiced",
+      "n": 7547,
+      "target": "run_differential",
+      "h_pit_30_r": -0.100115644028726,
+      "a_pit_30_r": 0.07968367918680869,
+      "h_pit_std_r": -0.1104245515652317,
+      "a_pit_std_r": 0.09705444154613732,
+      "asymmetry_ratio": 1.2564134218001788
+    },
+    {
+      "era": "pre_juiced",
+      "n": 7547,
+      "target": "home_win",
+      "h_pit_30_r": -0.08691491300293328,
+      "a_pit_30_r": 0.07830244440839368,
+      "h_pit_std_r": -0.10315448947530229,
+      "a_pit_std_r": 0.09650400268824028,
+      "asymmetry_ratio": 1.1099897794967992
+    },
+    {
+      "era": "modern",
+      "n": 10001,
+      "target": "total_runs",
+      "h_pit_30_r": 0.08484480571049174,
+      "a_pit_30_r": 0.004669281034004779,
+      "h_pit_std_r": 0.0767313480436197,
+      "a_pit_std_r": 0.00947986003942275,
+      "asymmetry_ratio": 18.17085009289353
+    },
+    {
+      "era": "modern",
+      "n": 10001,
+      "target": "run_differential",
+      "h_pit_30_r": -0.0924508776931773,
+      "a_pit_30_r": 0.106738031331985,
+      "h_pit_std_r": -0.10569162559326876,
+      "a_pit_std_r": 0.11144190618749085,
+      "asymmetry_ratio": 0.8661474878211808
+    },
+    {
+      "era": "modern",
+      "n": 10001,
+      "target": "home_win",
+      "h_pit_30_r": -0.08031340311950802,
+      "a_pit_30_r": 0.09099830677653042,
+      "h_pit_std_r": -0.09299937978941727,
+      "a_pit_std_r": 0.08408944299191529,
+      "asymmetry_ratio": 0.8825812915040067
+    }
+  ],
+  "starter_vs_team_correlations": [
+    {
+      "side": "home",
+      "feature_type": "starter",
+      "feature": "home_starter_xwoba_against_std",
+      "total_runs_r": 0.07057335337386458,
+      "run_differential_r": -0.0706823641518709,
+      "home_win_r": -0.059379261566566886,
+      "mean_abs_r": 0.06687832636410079
+    },
+    {
+      "side": "home",
+      "feature_type": "team_level",
+      "feature": "home_pit_xwoba_against_30d",
+      "total_runs_r": 0.08542073151302736,
+      "run_differential_r": -0.09620700066326926,
+      "home_win_r": -0.08405796394600595,
+      "mean_abs_r": 0.0885618987074342
+    },
+    {
+      "side": "away",
+      "feature_type": "starter",
+      "feature": "away_starter_xwoba_against_std",
+      "total_runs_r": 0.039125580090142394,
+      "run_differential_r": 0.08226854713206772,
+      "home_win_r": 0.06624644341603482,
+      "mean_abs_r": 0.06254685687941497
+    },
+    {
+      "side": "away",
+      "feature_type": "team_level",
+      "feature": "away_pit_xwoba_against_30d",
+      "total_runs_r": 0.010734491031305986,
+      "run_differential_r": 0.09392181918006828,
+      "home_win_r": 0.08367232018586232,
+      "mean_abs_r": 0.06277621013241219
+    }
+  ],
+  "hypothesis_verdicts": {
+    "H1_park_absorbs_away_variance": {
+      "verdict": "not supported",
+      "evidence": "Max |partial_r| for away_pit_xwoba_against_30d (controlling for park_run_factor_3yr + home_pit_xwoba_against_30d) = 0.0964. Threshold < 0.03 \u2192 H1 refuted. Park factor does not fully absorb away pitching variance.",
+      "h1_park_absorbs_away": false
+    },
+    "H2_rotation_era_confound": {
+      "verdict": "supported",
+      "evidence": "Asymmetry ratio (|h_pit_30_r| / |a_pit_30_r|) examined in pre_juiced (2016\u20132019) and modern (2021\u20132025) eras. H2 era confound = True. Asymmetry confined to one era \u2014 rotation alignment sample may drive asymmetry.",
+      "h2_era_confound": true
+    },
+    "H3_park_contamination_team_level": {
+      "verdict": "not supported",
+      "evidence": "Mean away starter vs. team-level |r| delta = -0.0002. Threshold > 0.01 \u2192 H3 refuted. Away starter feature does not clearly outperform away team-level xwOBA, suggesting both capture similar near-zero signal.",
+      "h3_park_contamination": false,
+      "away_starter_minus_team_delta": -0.00022935325299722198
+    },
+    "H4_signal_direction_ambiguity": {
+      "verdict": "inconclusive",
+      "evidence": "H4 (signal direction ambiguity) posits that away xwOBA_against measured in home parks introduces directional noise. If H1 is refuted and H3 shows near-zero delta, the residual asymmetry is likely structural \u2014 away pitching quality is genuinely less predictive of runs in home parks due to selection and lineup optimization effects. With a_pit_30 partial r (vs total_runs, controlling park + h_pit_30) = 0.0122, this ambiguity remains plausible but cannot be separated from structural explanations without pitch-level park-adjusted data."
+    }
+  },
+  "design_recommendation": {
+    "park_absorbs_away_variance": false,
+    "prefer_starter_over_team_level_away": false,
+    "asymmetry_is_structural": false,
+    "rationale": "Partial r of away_pit_xwoba_against_30d vs. total_runs (controlling for park_run_factor_3yr + home_pit_xwoba_against_30d) = 0.0122. H1 (park absorbs away variance): not supported. H2 (era confound): supported. H3 (park contamination): not supported (away starter vs. team-level delta = -0.0002). asymmetry_is_structural = False. Phase 4 implication: Evidence is mixed; include both pitching feature sets and apply regularization to prevent away team-level xwOBA from dominating."
+  }
+}

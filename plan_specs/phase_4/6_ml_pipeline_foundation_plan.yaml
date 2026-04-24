@@ -1,0 +1,386 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: betting-ml-pipeline-foundation
+  namespace: default
+spec:
+  description: >
+    Build the betting_ml/ pipeline foundation: Snowflake data loader, temporal
+    cross-validation splits, and imputation preprocessing with Bayesian shrinkage
+    for early-season rolling stat stabilization.
+  acceptanceCriteria:
+    - description: >
+        betting_ml/ directory exists with data/, models/, evaluation/, utils/,
+        tests/, and scripts/ subdirectories; all Python packages resolve via
+        __init__.py files
+    - description: >
+        Data loader connects to Snowflake, applies has_full_data = TRUE and
+        min_games_played >= 15 filters, excludes 2020, and returns a pandas
+        DataFrame with total_runs, run_differential, and home_win targets
+        alongside post_2022_rules and game_year
+    - description: >
+        Temporal CV splits produce non-overlapping train/eval sets in strict
+        chronological order across all folds; no eval-set game_year appears in
+        any fold's training set
+    - description: >
+        Imputation pipeline handles all six null groups from EDA notebook 02
+        with zero nulls remaining in the output feature matrix
+    - description: >
+        Bayesian shrinkage with k=15 pulls a team at n=5 games played further
+        toward league mean than one at n=25 games played; formula:
+        imputed = (n / (n + k)) * observed + (1 - n / (n + k)) * league_mean
+    - description: >
+        Unit tests for cv_splits and preprocessing modules pass with zero
+        failures on synthetic DataFrames without a live Snowflake connection
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-4-1-thru-4-5-merged
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Cards 4.1 (delta/momentum features), 4.2 (lineup-vs-starter matchup),
+    4.3 (rolling stat enrichment with games_played_in_window), 4.4 (reliability
+    flags), and 4.5 (post-2022 rule indicators) must all be merged to main
+    before the imputation pipeline task begins. The Bayesian shrinkage step
+    requires games_played_in_window columns added in Card 4.3; the six-group
+    null logic requires reliability flag columns from Card 4.4.
+    The data loader and CV splits tasks may be implemented before this gate clears.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: betting-ml-pipeline-foundation-plan
+  namespace: default
+spec:
+  description: >
+    Six-task DAG implementing the betting_ml/ pipeline foundation.
+    create-directory-structure is the only root node. implement-data-loader
+    and implement-cv-splits are parallel after it. implement-imputation-pipeline
+    is blocked by both implement-data-loader and the cards-4-1-thru-4-5-merged
+    gate. write-unit-tests follows both imputation and CV splits.
+    validate-end-to-end is the final integration check.
+  goalRef:
+    name: betting-ml-pipeline-foundation
+  graph:
+    nodes:
+
+      - id: create-directory-structure
+        kind: Task
+        description: >
+          Create the betting_ml/ Python package tree. Required files:
+          __init__.py in betting_ml/, betting_ml/utils/, betting_ml/tests/,
+          and betting_ml/scripts/; .gitkeep placeholders in betting_ml/data/,
+          betting_ml/models/, and betting_ml/evaluation/. This establishes the
+          package layout that all downstream tasks write into.
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Root package init
+            path: betting_ml/__init__.py
+          - type: artifact_exists
+            name: Utils package init
+            path: betting_ml/utils/__init__.py
+          - type: artifact_exists
+            name: Tests package init
+            path: betting_ml/tests/__init__.py
+          - type: artifact_exists
+            name: Scripts package init
+            path: betting_ml/scripts/__init__.py
+          - type: artifact_exists
+            name: data/ placeholder
+            path: betting_ml/data/.gitkeep
+          - type: artifact_exists
+            name: models/ placeholder
+            path: betting_ml/models/.gitkeep
+          - type: artifact_exists
+            name: evaluation/ placeholder
+            path: betting_ml/evaluation/.gitkeep
+
+      - id: implement-data-loader
+        kind: Task
+        description: >
+          Implement betting_ml/utils/data_loader.py. Connects to Snowflake
+          using RSA key auth at the path used by EDA notebooks
+          (~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem).
+          Queries baseball_data.betting_features.feature_pregame_game_features
+          joined to baseball_data.betting.mart_game_results on game_pk.
+          Derives three target columns: total_runs (home_score + away_score),
+          run_differential (home_score - away_score), home_win (1 when
+          home_score > away_score, else 0). Applies WHERE has_full_data = TRUE
+          AND games_played >= min_games_played AND game_year != 2020. Retains
+          post_2022_rules and game_year in output. Public API:
+          load_features(min_games_played: int = 15) -> pd.DataFrame.
+        dependsOn:
+          - create-directory-structure
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Data loader module
+            path: betting_ml/utils/data_loader.py
+          - type: command_succeeds
+            name: Module imports and load_features accepts min_games_played param
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                import inspect
+                sig = inspect.signature(load_features)
+                assert 'min_games_played' in sig.parameters
+          - type: command_succeeds
+            name: Loaded DataFrame contains all three target columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                df = load_features()
+                required = {'total_runs', 'run_differential', 'home_win'}
+                missing = required - set(df.columns)
+                assert not missing, f'Missing target columns: {missing}'
+          - type: command_succeeds
+            name: 2020 season excluded from output
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                df = load_features()
+                count_2020 = (df['game_year'] == 2020).sum()
+                assert count_2020 == 0, f'Found {count_2020} rows with game_year=2020'
+          - type: command_succeeds
+            name: post_2022_rules and game_year present in output
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                df = load_features()
+                missing = {'post_2022_rules', 'game_year'} - set(df.columns)
+                assert not missing, f'Missing columns: {missing}'
+
+      - id: implement-cv-splits
+        kind: Task
+        description: >
+          Implement betting_ml/utils/cv_splits.py. Exposes two public functions.
+          season_forward_splits(df, eval_year) — yields one (train_idx, eval_idx)
+          tuple; train contains all rows where game_year < eval_year, eval contains
+          all rows where game_year == eval_year.
+          all_season_splits(df, min_train_seasons=3) — yields all valid
+          season_forward folds walking back from the latest available season to
+          the earliest season where the number of distinct training years >=
+          min_train_seasons. Both functions accept a DataFrame with a game_year
+          column and return pandas Index objects. Shuffled or random splits are
+          explicitly prohibited.
+        dependsOn:
+          - create-directory-structure
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CV splits module
+            path: betting_ml/utils/cv_splits.py
+          - type: command_succeeds
+            name: Module imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.utils.cv_splits import season_forward_splits, all_season_splits"
+          - type: command_succeeds
+            name: Train and eval year sets are strictly disjoint
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                from betting_ml.utils.cv_splits import season_forward_splits
+                df = pd.DataFrame({'game_year': list(range(2016, 2026)) * 5})
+                ti, ei = next(season_forward_splits(df, eval_year=2025))
+                train_years = set(df.loc[ti, 'game_year'])
+                eval_years = set(df.loc[ei, 'game_year'])
+                assert eval_years == {2025}, f'Eval years: {eval_years}'
+                assert 2025 not in train_years, 'Eval year 2025 leaked into training set'
+          - type: command_succeeds
+            name: all_season_splits produces folds in strict chronological order
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                from betting_ml.utils.cv_splits import all_season_splits
+                df = pd.DataFrame({'game_year': list(range(2016, 2026)) * 5})
+                folds = list(all_season_splits(df, min_train_seasons=3))
+                assert len(folds) > 0, 'No folds generated'
+                for ti, ei in folds:
+                    max_train = df.loc[ti, 'game_year'].max()
+                    min_eval = df.loc[ei, 'game_year'].min()
+                    assert max_train < min_eval, f'Leak: train max {max_train} >= eval min {min_eval}'
+
+      - id: implement-imputation-pipeline
+        kind: Task
+        description: >
+          Implement betting_ml/utils/preprocessing.py covering all six null groups
+          identified in EDA notebook 02. Public API:
+          build_imputation_pipeline(k: int = 15) -> sklearn.pipeline.Pipeline;
+          bayesian_shrinkage(observed, league_mean, n, k=15) -> float.
+          Imputation logic per group:
+          (1) Starter platoon splits — add has_starter_platoon_data (1/0) indicator;
+              fill nulls with prior-season league average grouped by
+              pitcher_hand x batter_hand.
+          (2) Park run factor — cascade 3yr rolling -> 1yr rolling -> 1.000
+              (league average); add is_new_venue (1/0) indicator.
+          (3) Opening Day team win% columns — fill with 0.500.
+          (4) Opening Day days_rest columns — fill with 4.
+          (5) Early-season bullpen xwOBA columns — fill with prior-season
+              league-average bullpen xwOBA.
+          (6) All rolling stat columns — apply Bayesian shrinkage:
+              weight = n / (n + k) where n = games_played_in_window and k is the
+              shrinkage constant (default 15); imputed = weight * observed +
+              (1 - weight) * league_mean_prior.
+        dependsOn:
+          - implement-data-loader
+          - cards-4-1-thru-4-5-merged
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Preprocessing module
+            path: betting_ml/utils/preprocessing.py
+          - type: command_succeeds
+            name: Module imports and exposes correct public API
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.utils.preprocessing import build_imputation_pipeline, bayesian_shrinkage"
+          - type: command_succeeds
+            name: Bayesian shrinkage formula correct — n=5 pulled further toward mean than n=25
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.preprocessing import bayesian_shrinkage
+                lm, obs = 0.330, 0.400
+                s5 = bayesian_shrinkage(obs, lm, n=5)
+                s25 = bayesian_shrinkage(obs, lm, n=25)
+                assert abs(s5 - lm) < abs(s25 - lm), (
+                    f'Expected n=5 ({s5:.4f}) closer to mean ({lm}) than n=25 ({s25:.4f})'
+                )
+          - type: command_succeeds
+            name: Bayesian shrinkage at n=0 returns league mean exactly
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.preprocessing import bayesian_shrinkage
+                result = bayesian_shrinkage(observed=0.400, league_mean=0.330, n=0)
+                assert result == 0.330, f'n=0 should return league_mean 0.330, got {result}'
+          - type: command_succeeds
+            name: Full imputation pipeline produces zero nulls in output
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                from betting_ml.utils.preprocessing import build_imputation_pipeline
+                import pandas as pd
+                df = load_features()
+                X = df.drop(columns=['total_runs', 'run_differential', 'home_win'])
+                pipe = build_imputation_pipeline()
+                X_out = pd.DataFrame(pipe.fit_transform(X))
+                nulls = int(X_out.isnull().sum().sum())
+                assert nulls == 0, f'{nulls} nulls remain in output after imputation'
+
+      - id: write-unit-tests
+        kind: Task
+        description: >
+          Write pytest unit tests in betting_ml/tests/. Two test files required.
+          test_cv_splits.py: verify train/eval year sets are disjoint for all
+          folds, no eval-year game appears in any training fold, min_train_seasons
+          boundary prevents folds with insufficient history, all_season_splits
+          produces the expected number of folds for a known year range.
+          test_preprocessing.py: verify each of the six null groups is handled
+          in isolation using synthetic DataFrames, Bayesian shrinkage at boundary
+          cases (n=0 returns league_mean; n=k returns midpoint weight of 0.5;
+          n >> k approaches observed), park run factor cascade uses 3yr when
+          available and falls back correctly, has_starter_platoon_data and
+          is_new_venue indicator columns present in pipeline output.
+          All tests must use synthetic DataFrames only; mock load_features
+          via unittest.mock.patch where needed. No live Snowflake connection.
+        dependsOn:
+          - implement-cv-splits
+          - implement-imputation-pipeline
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CV splits test file
+            path: betting_ml/tests/test_cv_splits.py
+          - type: artifact_exists
+            name: Preprocessing test file
+            path: betting_ml/tests/test_preprocessing.py
+          - type: command_succeeds
+            name: All unit tests pass with zero failures
+            command: uv
+            args:
+              - run
+              - pytest
+              - betting_ml/tests/
+              - "-v"
+              - "--tb=short"
+
+      - id: validate-end-to-end
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/validate_pipeline.py — a runnable smoke
+          test that exercises the full stack. Calls load_features(), applies
+          build_imputation_pipeline().fit_transform(), generates all season-forward
+          CV folds via all_season_splits(), and prints a summary table of fold eval
+          year, train row count, eval row count, and null count per fold. Hard
+          assertions: zero nulls across all folds, 2020 absent from every fold,
+          post_2022_rules and game_year present in every train and eval set.
+          Script must exit 0 on success and non-zero with a descriptive message
+          on any assertion failure.
+        dependsOn:
+          - write-unit-tests
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: End-to-end validation script
+            path: betting_ml/scripts/validate_pipeline.py
+          - type: command_succeeds
+            name: Validation script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/validate_pipeline.py
+          - type: command_succeeds
+            name: Full test suite still passes after end-to-end integration
+            command: uv
+            args:
+              - run
+              - pytest
+              - betting_ml/tests/
+              - "-v"
+              - "--tb=short"

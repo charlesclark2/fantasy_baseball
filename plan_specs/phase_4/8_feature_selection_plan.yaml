@@ -1,0 +1,317 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: feature-selection-and-model-io
+  namespace: default
+spec:
+  description: >
+    Consume EDA notebook 04 feature correlation findings; implement a programmatic
+    feature selection module (utils/feature_selection.py) and model serialization
+    convention (utils/model_io.py). The canonical feature list produced here is
+    the input contract for all downstream model cards (4.8–4.10).
+  acceptanceCriteria:
+    - description: >
+        EDA notebook 04 (04_feature_correlations.py) has been run and findings
+        appended to exploratory_data_analysis/betting_model_findings.md
+    - description: >
+        utils/feature_selection.py drops features with |r| < 0.02 to all three
+        targets and resolves multicollinear pairs (|r| > 0.85); post_2022_rules,
+        game_year, and home_win_rate_trailing_3yr are unconditionally retained
+    - description: >
+        Canonical feature list persisted to betting_ml/evaluation/feature_selection.md
+        with retained features and target correlations; dropped features with reason
+    - description: >
+        utils/model_io.py implements save_model / load_model using joblib;
+        path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl
+    - description: >
+        save_model / load_model round-trip verified with a toy sklearn model
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-6-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.6 (ML Pipeline Foundation: Data Loading, Splits, and Preprocessing)
+    must be merged to main before feature selection and model serialization tasks
+    begin. The data loader (utils/data_loader.py) implemented in Card 4.6 is
+    required for the persist-feature-list task and integration validation.
+    run-eda-notebook-04 and implement-feature-selection may be started before
+    this gate clears, but any task that calls load_features() requires Card 4.6
+    infrastructure to be in place.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: feature-selection-and-model-io-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG implementing feature selection and model serialization.
+    run-eda-notebook-04 is the root node. implement-feature-selection depends on
+    the notebook run and the card-4-6-complete gate. implement-model-io depends
+    only on the gate and runs in parallel with feature selection. persist-feature-list
+    depends on feature selection. validate-integration is the final convergence
+    node requiring both model-io and the persisted feature list.
+  goalRef:
+    name: feature-selection-and-model-io
+  graph:
+    nodes:
+
+      - id: run-eda-notebook-04
+        kind: Task
+        description: >
+          Run EDA notebook 04 (04_feature_correlations.py) in headless mode to
+          generate feature correlation findings. Results must be appended to
+          exploratory_data_analysis/betting_model_findings.md under a clearly
+          dated header before this task is complete. If the notebook requires a
+          live Snowflake connection and the environment is not configured,
+          the correlation analysis may be performed inline within
+          implement-feature-selection using load_features() — but the notebook
+          run is the strongly preferred path.
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: EDA notebook 04 file exists
+            path: exploratory_data_analysis/04_feature_correlations.py
+          - type: command_succeeds
+            name: betting_model_findings.md contains notebook 04 findings header
+            command: grep
+            args:
+              - "-q"
+              - "04_feature_correlations\\|feature correlation\\|Feature Correlation"
+              - "exploratory_data_analysis/betting_model_findings.md"
+
+      - id: implement-feature-selection
+        kind: Task
+        description: >
+          Implement betting_ml/utils/feature_selection.py. Public API:
+          select_features(df, targets, corr_threshold=0.02,
+          multicollinearity_threshold=0.85) -> tuple[list[str], dict[str, str]].
+          Returns (retained_features, dropped_with_reasons) where
+          dropped_with_reasons maps each dropped feature name to the reason string
+          ("near_zero_correlation" or "multicollinearity:<retained_feature>").
+          Logic:
+          (1) Exclude all target column names from the candidate feature set.
+          (2) Compute Pearson r between each feature and each target; drop features
+              where |r| < corr_threshold for ALL three targets.
+          (3) Compute feature-feature correlation matrix; for each pair where
+              |r| > multicollinearity_threshold, drop the member with lower max |r|
+              to any target.
+          (4) Unconditionally retain post_2022_rules, game_year, and
+              home_win_rate_trailing_3yr regardless of univariate correlation or
+              multicollinearity status.
+        dependsOn:
+          - run-eda-notebook-04
+          - card-4-6-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Feature selection module
+            path: betting_ml/utils/feature_selection.py
+          - type: command_succeeds
+            name: Module imports and exposes select_features with configurable thresholds
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.feature_selection import select_features
+                import inspect
+                sig = inspect.signature(select_features)
+                assert 'corr_threshold' in sig.parameters
+                assert 'multicollinearity_threshold' in sig.parameters
+          - type: command_succeeds
+            name: Protected features retained even when correlation is below threshold
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                import numpy as np
+                from betting_ml.utils.feature_selection import select_features
+                np.random.seed(42)
+                n = 200
+                df = pd.DataFrame({
+                    'total_runs': np.random.randn(n),
+                    'run_differential': np.random.randn(n),
+                    'home_win': np.random.randint(0, 2, n),
+                    'post_2022_rules': np.zeros(n),
+                    'game_year': np.random.randint(2016, 2026, n),
+                    'home_win_rate_trailing_3yr': np.full(n, 0.500),
+                    'noise_a': np.random.randn(n) * 0.0001,
+                })
+                targets = ['total_runs', 'run_differential', 'home_win']
+                retained, dropped = select_features(df, targets)
+                protected = {'post_2022_rules', 'game_year', 'home_win_rate_trailing_3yr'}
+                missing = protected - set(retained)
+                assert not missing, f'Protected features missing from retained list: {missing}'
+          - type: command_succeeds
+            name: High-multicollinearity duplicate dropped; lower-corr member removed
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                import numpy as np
+                from betting_ml.utils.feature_selection import select_features
+                np.random.seed(42)
+                n = 500
+                signal = np.random.randn(n)
+                df = pd.DataFrame({
+                    'total_runs': signal + np.random.randn(n) * 0.3,
+                    'run_differential': signal + np.random.randn(n) * 0.5,
+                    'home_win': (signal > 0).astype(int),
+                    'post_2022_rules': np.random.randint(0, 2, n),
+                    'game_year': np.random.randint(2016, 2026, n),
+                    'home_win_rate_trailing_3yr': np.random.uniform(0.4, 0.6, n),
+                    'strong_feature': signal + np.random.randn(n) * 0.1,
+                })
+                df['near_duplicate'] = df['strong_feature'] + np.random.randn(n) * 0.001
+                targets = ['total_runs', 'run_differential', 'home_win']
+                retained, dropped = select_features(df, targets)
+                mc_dropped = [k for k, v in dropped.items() if 'multicollinearity' in v]
+                assert len(mc_dropped) >= 1, f'Expected at least one multicollinear drop; got {dropped}'
+
+      - id: implement-model-io
+        kind: Task
+        description: >
+          Implement betting_ml/utils/model_io.py. Public API:
+          save_model(model, target: str, model_name: str, eval_year: int) -> str
+          — serializes model with joblib to
+          betting_ml/models/{target}/{model_name}_{eval_year}.pkl, creating parent
+          directories as needed; returns the resolved absolute path.
+          load_model(target: str, model_name: str, eval_year: int) -> object
+          — deserializes and returns the model from the standard path.
+          Raises FileNotFoundError with a descriptive message if the path does
+          not exist. Tuned model variants follow the same convention with a
+          "_tuned" suffix in model_name (e.g. "xgb_tuned").
+        dependsOn:
+          - card-4-6-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Model IO module
+            path: betting_ml/utils/model_io.py
+          - type: command_succeeds
+            name: Module imports and exposes save_model and load_model
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.utils.model_io import save_model, load_model"
+          - type: command_succeeds
+            name: save_model / load_model round-trip succeeds with a toy sklearn model
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import save_model, load_model
+                from sklearn.dummy import DummyClassifier
+                import os
+                model = DummyClassifier(strategy='most_frequent')
+                model.fit([[1, 2], [3, 4], [5, 6]], [0, 1, 0])
+                path = save_model(model, target='home_win', model_name='dummy', eval_year=2024)
+                assert path.endswith('home_win/dummy_2024.pkl'), f'Unexpected path: {path}'
+                assert os.path.exists(path), f'File not found at {path}'
+                loaded = load_model(target='home_win', model_name='dummy', eval_year=2024)
+                pred = loaded.predict([[1, 2]])
+                assert len(pred) == 1
+                os.remove(path)
+          - type: command_succeeds
+            name: load_model raises FileNotFoundError for a nonexistent model
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                try:
+                    load_model(target='home_win', model_name='nonexistent', eval_year=1900)
+                    assert False, 'Expected FileNotFoundError'
+                except FileNotFoundError:
+                    pass
+
+      - id: persist-feature-list
+        kind: Task
+        description: >
+          Run select_features() against the full feature dataset from Snowflake
+          (via load_features()) to produce the canonical feature list for this
+          project. Persist results to betting_ml/evaluation/feature_selection.md
+          with three sections:
+          (1) Retained Features — feature name, max |r| to any target, and
+              Pearson r to each of total_runs, run_differential, and home_win.
+          (2) Dropped (Near-Zero Correlation) — feature name and max |r| observed.
+          (3) Dropped (Multicollinearity) — feature name and the retained feature
+              it was redundant with.
+          This markdown file is the input contract for Cards 4.8–4.10: only
+          retained features may be passed to fit() calls in downstream model cards.
+        dependsOn:
+          - implement-feature-selection
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Canonical feature list markdown
+            path: betting_ml/evaluation/feature_selection.md
+          - type: command_succeeds
+            name: post_2022_rules present in feature_selection.md
+            command: grep
+            args:
+              - "-q"
+              - "post_2022_rules"
+              - "betting_ml/evaluation/feature_selection.md"
+          - type: command_succeeds
+            name: game_year present in feature_selection.md
+            command: grep
+            args:
+              - "-q"
+              - "game_year"
+              - "betting_ml/evaluation/feature_selection.md"
+          - type: command_succeeds
+            name: home_win_rate_trailing_3yr present in feature_selection.md
+            command: grep
+            args:
+              - "-q"
+              - "home_win_rate_trailing_3yr"
+              - "betting_ml/evaluation/feature_selection.md"
+
+      - id: validate-integration
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/validate_feature_selection.py — a runnable
+          integration smoke test. Script must: load features via load_features(),
+          apply select_features() with default thresholds, verify all three
+          protected features are retained, verify at least one multicollinear drop
+          was recorded, perform a save/load round-trip using a DummyClassifier
+          fitted on the retained feature set, confirm the loaded model predicts
+          without error. Print a summary table: total features before selection,
+          retained count, near-zero-correlation dropped count, multicollinearity
+          dropped count, protected feature presence (pass/fail per feature).
+          Script must exit 0 on success and non-zero with a descriptive message
+          on any assertion failure.
+        dependsOn:
+          - implement-model-io
+          - persist-feature-list
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Integration validation script
+            path: betting_ml/scripts/validate_feature_selection.py
+          - type: command_succeeds
+            name: Integration validation script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/validate_feature_selection.py

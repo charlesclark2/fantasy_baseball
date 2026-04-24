@@ -1,0 +1,339 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: run-differential-regression-baselines
+  namespace: default
+spec:
+  description: >
+    Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for
+    run differential (home_score - away_score) using the temporal CV splits
+    and imputation pipeline from Card 4.6, and the trainer/evaluation
+    infrastructure from Card 4.8. Derive win probability from the NGBoost
+    Normal predictive distribution P(run_diff > 0), and validate era feature
+    and time-varying home win rate contributions via ablation.
+  acceptanceCriteria:
+    - description: >
+        Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal
+        CV folds for run_differential; per-fold MAE and RMSE reported alongside
+        the global mean baseline
+    - description: >
+        Win probability derived from NGBoost Normal distribution:
+        P(home win) = P(run_diff > 0) computed via p_over_line('Normal', dist_params, total_line=0)
+    - description: >
+        Derived win probability Brier score computed on binary home_win target
+        and documented per fold and in aggregate
+    - description: >
+        Era feature ablation: XGBoost model with vs. without post_2022_rules,
+        game_year, and home_win_rate_trailing_3yr compared; for the 2023 fold
+        specifically, the direction and magnitude of prediction error change
+        documented (motivated by NB01 finding of ~0.64-run structural mean shift
+        from the 2022 shift ban and pitch clock)
+    - description: >
+        Time-varying home win rate (home_win_rate_trailing_3yr) contribution
+        documented — whether it reduces prediction error beyond the era flags
+        alone, referencing NB01 finding of home advantage decline from 0.548
+        (2020) to 0.519 (2023)
+    - description: >
+        Results documented in betting_ml/evaluation/run_differential_results.md
+        with per-season MAE/RMSE table, win probability Brier score, era ablation
+        table, and best-model rationale; project_context.md Phase 4 section
+        updated with Card 4.9 findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-8-total-runs-baselines-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.8 (Total Runs Regression Baselines) must be complete before Card 4.9
+    begins. Card 4.8 creates shared infrastructure reused by Card 4.9:
+    betting_ml/models/total_runs_trainer.py (train_ridge, train_xgboost,
+    train_ngboost, p_over_line) and betting_ml/utils/evaluation.py
+    (fold_metrics, brier_score_over_under, calibration_table). The pyproject.toml
+    dependencies for xgboost, ngboost, shap, and scipy must also be installed.
+    Verified when betting_ml/evaluation/cv_results.json exists from a successful
+    run of train_total_runs_baselines.py.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: run-differential-regression-baselines-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-cv-evaluation-run-diff is the first node (blocked by the
+    Card 4.8 gate) and handles all model training, era ablation, and win
+    probability derivation. generate-run-diff-results is the terminal node and
+    produces the results report and project_context.md update.
+  goalRef:
+    name: run-differential-regression-baselines
+  graph:
+    nodes:
+
+      - id: run-cv-evaluation-run-diff
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/train_run_diff_baselines.py. Trains all
+          three model families on run_differential, derives win probability from
+          the NGBoost predictive distribution, and runs the era feature ablation.
+
+          Setup:
+            Load features via load_features(). Target y = df['run_differential'].
+            Keep home_win column alongside (needed for Brier score) but exclude
+            it from the feature matrix. Define era_cols = ['post_2022_rules',
+            'game_year', 'home_win_rate_trailing_3yr']. Feature matrix X =
+            df.drop(columns=['total_runs', 'run_differential', 'home_win',
+            'total_line', 'has_odds'], errors='ignore').
+
+          Full CV loop — for each fold from all_season_splits(df, min_train_seasons=3):
+            1. Apply build_imputation_pipeline().fit(X_train).transform(X_train/X_eval)
+            2. Global mean baseline: np.full(len(X_eval), y_train.mean())
+            3. train_ridge(X_train_imp, y_train, X_eval_imp)
+            4. train_xgboost(X_train_imp, y_train, X_eval_imp)
+            5. train_ngboost(X_train_imp, y_train, X_eval_imp, dist="Normal")
+            6. train_ngboost(X_train_imp, y_train, X_eval_imp, dist="LogNormal")
+               Note: NGBoost LogNormal requires strictly positive targets. Run
+               differential can be negative, so LogNormal may fail or produce
+               invalid results. Wrap in try/except; if it fails or produces NaN
+               predictions, record model="ngboost_lognormal" with mae=null and
+               a note in the summary that LogNormal is not appropriate for
+               run_differential (negative support). Do not exit non-zero for this.
+            7. Compute fold_metrics() for each model and baseline
+            8. Win probability from NGBoost Normal:
+               p_home_win = p_over_line('Normal', dist_params, total_line=0)
+               This gives P(run_diff > 0) = P(home win) directly.
+               win_brier = brier_score_over_under(
+                   y_eval_run_diff, p_home_win, total_line=0
+               )
+               (brier_score_over_under with total_line=0 uses outcome =
+               (run_diff > 0) which equals binary home_win by definition)
+
+          Era feature ablation — run once after the full CV loop:
+            Re-run full CV for XGBoost only, dropping era_cols from X before
+            fitting (use X.drop(columns=era_cols, errors='ignore')).
+            Record ablation MAE per fold. Compute for each fold:
+              era_delta_mae = mae_without_era - mae_with_era
+            (positive = era features help; negative = era features hurt)
+            Identify the 2023 fold separately — this is where the post-2022
+            rule-change effect is sharpest.
+
+            Home win rate sub-ablation: repeat XGBoost CV dropping only
+            home_win_rate_trailing_3yr (keeping post_2022_rules and game_year)
+            to isolate its marginal contribution beyond the era flags.
+            Record home_win_rate_delta_mae = mae_without_hwrt - mae_with_all_era.
+
+          Print a per-fold summary table during execution showing fold label,
+          eval row count, MAE per model, and win probability Brier for NGBoost.
+
+          Write betting_ml/evaluation/cv_results_run_diff.json with structure:
+            {
+              "fold_results": [
+                {
+                  "fold": str,
+                  "model": str,
+                  "n_eval": int,
+                  "mae": float | null,
+                  "rmse": float | null,
+                  "win_prob_brier": float | null
+                },
+                ...
+              ],
+              "era_ablation": {
+                "fold_results_without_era": [
+                  {"fold": str, "mae": float, "rmse": float},
+                  ...
+                ],
+                "fold_2023_mae_with_era": float,
+                "fold_2023_mae_without_era": float,
+                "fold_2023_era_delta_mae": float,
+                "all_folds_avg_era_delta_mae": float,
+                "fold_2023_mae_without_hwrt": float,
+                "home_win_rate_delta_mae_2023": float
+              },
+              "summary": {
+                "best_mae_model": str,
+                "best_win_prob_brier_model": str,
+                "era_features_help": bool,
+                "home_win_rate_trailing_helps": bool,
+                "lognormal_viable": bool
+              }
+            }
+
+          Script exits 0 on success. Exits non-zero with a descriptive message
+          if no trained model (excluding global mean and failed LogNormal) beats
+          the global mean baseline MAE on the majority of folds.
+        dependsOn:
+          - card-4-8-total-runs-baselines-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Run differential CV evaluation script
+            path: betting_ml/scripts/train_run_diff_baselines.py
+          - type: command_succeeds
+            name: CV evaluation script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/train_run_diff_baselines.py
+            timeout: 1800
+          - type: artifact_exists
+            name: Run differential CV results JSON written
+            path: betting_ml/evaluation/cv_results_run_diff.json
+          - type: command_succeeds
+            name: cv_results_run_diff.json has expected top-level keys and all required models
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
+                    results = json.load(f)
+                assert 'fold_results' in results, "Missing 'fold_results'"
+                assert 'era_ablation' in results, "Missing 'era_ablation'"
+                assert 'summary' in results, "Missing 'summary'"
+                models = {r['model'] for r in results['fold_results']}
+                required_models = {'ridge', 'xgboost', 'ngboost_normal', 'global_mean'}
+                missing = required_models - models
+                assert not missing, f'Missing required models in results: {missing}'
+                abl = results['era_ablation']
+                assert 'fold_2023_era_delta_mae' in abl, "Missing era ablation delta for 2023 fold"
+                assert 'home_win_rate_delta_mae_2023' in abl, "Missing home win rate ablation delta"
+          - type: command_succeeds
+            name: NGBoost Normal has non-null win_prob_brier in at least one fold
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
+                    results = json.load(f)
+                ngb_folds = [
+                    r for r in results['fold_results']
+                    if r['model'] == 'ngboost_normal' and r.get('win_prob_brier') is not None
+                ]
+                assert len(ngb_folds) > 0, (
+                    'No NGBoost Normal fold has a non-null win_prob_brier — '
+                    'check that p_over_line is called with total_line=0'
+                )
+          - type: command_succeeds
+            name: Era ablation records fold_2023 entry for XGBoost with and without era features
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
+                    results = json.load(f)
+                abl = results['era_ablation']
+                for key in ('fold_2023_mae_with_era', 'fold_2023_mae_without_era',
+                            'fold_2023_era_delta_mae', 'all_folds_avg_era_delta_mae'):
+                    assert abl.get(key) is not None, f"Era ablation missing key: {key}"
+
+      - id: generate-run-diff-results
+        kind: Task
+        description: >
+          Read cv_results_run_diff.json and write
+          betting_ml/evaluation/run_differential_results.md, then update
+          project_context.md Phase 4 section with Card 4.9 findings.
+
+          run_differential_results.md must contain these sections in order:
+
+          ## Per-Season MAE/RMSE by Model
+            Markdown table with columns: Season | Global Mean MAE | Ridge MAE |
+            XGBoost MAE | NGBoost Normal MAE | NGBoost LogNormal MAE (or "N/A"
+            if LogNormal was not viable) | Ridge RMSE | XGBoost RMSE |
+            NGBoost Normal RMSE. One row per CV fold. Bold the best non-baseline
+            model per fold.
+
+          ## Model Comparison Summary
+            Average MAE and RMSE across all folds for each model. State which
+            model wins on MAE and which on RMSE.
+
+          ## Win Probability from Run Differential Distribution
+            Method: P(home win) = P(run_diff > 0) under NGBoost Normal N(μ, σ²).
+            Equivalently: 1 − Φ(−μ/σ) where Φ is the standard Normal CDF.
+            Table: Fold | NGBoost Normal Win Prob Brier | N eval games.
+            Aggregate Brier score across all folds.
+            Forward reference: this Brier score will be compared against the
+            binary classifier from Card 4.10 once that card is complete. A
+            regression-derived win probability that rivals a dedicated classifier
+            would support using a single NGBoost model for both regression and
+            classification targets.
+
+          ## Era Feature Ablation
+            Table: Fold | MAE with era features | MAE without era features |
+            Delta (positive = era features help).
+            Highlight the 2023 fold row with a note referencing the NB01 finding
+            (~0.64-run structural mean shift from the 2022 shift ban and pitch clock).
+            State whether post_2022_rules + game_year materially reduce run
+            differential prediction error across folds and specifically in 2023.
+
+          ## Time-Varying Home Win Rate
+            Sub-section under era ablation. State the NB01 finding: home advantage
+            declined from 0.548 (2020) to 0.519 (2023); static 0.529 is wrong for
+            recent seasons. Report home_win_rate_delta_mae_2023 and the average
+            across folds. Conclude whether home_win_rate_trailing_3yr provides
+            additional benefit beyond the era flags alone, or whether its effect
+            is absorbed by post_2022_rules + game_year.
+
+          ## Best Model Selection
+            Recommended model for downstream use (Card 4.11 stacking and Card 4.12
+            betting strategy) with rationale covering: MAE vs. baseline, whether
+            the probabilistic output quality justifies NGBoost's additional compute,
+            and whether the derived win probability Brier score is competitive
+            enough to substitute for a dedicated binary classifier.
+
+          Update project_context.md: add a "Card 4.9 Results" subsection in the
+          Phase 4 tracking section containing: best model name, best model mean
+          MAE, era_features_help (bool), home_win_rate_trailing_helps (bool),
+          aggregate NGBoost Normal win probability Brier score, and whether
+          LogNormal was viable for run differential.
+        dependsOn:
+          - run-cv-evaluation-run-diff
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Run differential results report
+            path: betting_ml/evaluation/run_differential_results.md
+          - type: command_succeeds
+            name: Results report contains all required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/run_differential_results.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'mae', 'rmse', 'brier', 'ngboost', 'win probability',
+                    'era', 'post_2022', 'home_win_rate', 'ablation', 'best model',
+                    '2023', 'global mean'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.9 results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.9', 'mae', 'brier']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.9 updates: {missing}'

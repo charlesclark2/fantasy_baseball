@@ -1,0 +1,454 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: card-3-10-era-split-corr-stability
+  namespace: default
+spec:
+  description: >
+    Test whether feature-outcome correlations are stable across the pre-2022 and
+    post-2022 rule-change eras. NB01 identified a ~0.64-run structural mean shift
+    at the 2022→2023 boundary driven by the shift ban and pitch clock. A unified
+    model trained on 2016–2025 data assumes the correlation structure between
+    features and targets (total_runs, run_differential, home_win) is consistent
+    across that window. If key correlations changed — for example, bullpen xwOBA
+    becoming less predictive post-clock, or team offense more predictive post-shift
+    ban — era-specific models (or at minimum an era interaction term) would be
+    required. Pre-2022 era: game_year in 2016–2021 excluding 2020 (n≈13,625).
+    Post-2022 era: game_year in 2022–2025 (n≈7,015). Analysis selects the top 20
+    features by mean |r| across all three targets in the full dataset, then
+    computes per-era correlations and flags features where |r| changes by more
+    than 0.015 between eras. Fisher z-tests determine statistical significance of
+    the shifts. The final verdict drives the Phase 4 design decision: include
+    post_2022_rules as a flag in a unified model, or train separate era-specific
+    models.
+  acceptanceCriteria:
+    - description: >
+        Correlation table: top 20 features by mean |r| across all three targets
+        (total_runs, run_differential, home_win) in the full dataset, with per-era
+        Pearson r for pre-2022 and post-2022 eras, r_delta (post minus pre), and
+        a flag indicating |r_delta| > 0.015
+    - description: >
+        Era comparison summary: count of features where |r_delta| > 0.015, count
+        significantly shifted by Fisher z-test (p < 0.05), and list of shifted
+        feature names across all three targets
+    - description: >
+        Fisher z-test significance table for the top 10 features per target (by
+        full-dataset |r| for that target), reporting z_stat, p_value, and
+        significant flag per feature-target pair
+    - description: >
+        Verdict: if more than 5 top features show significant correlation shifts
+        (|r_delta| > 0.015 AND p < 0.05 for at least one target), recommend
+        separate era models; otherwise recommend single model with post_2022_rules
+        flag
+    - description: >
+        Findings appended to betting_model_findings.md under section 10 with
+        correlation tables, Z-test results, and the era-model verdict
+    - description: >
+        project_context.md Phase 4 design constraints updated with Card 3.10
+        subsection containing the verdict, shifted feature count, mean |r_delta|,
+        and the design recommendation
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: phase3-feature-store-and-era-columns-available
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The dbt feature engineering mart must be available via load_features() (in
+    betting_ml/utils/data_loader.py) and must contain game_year plus a sufficient
+    sample of games from both era windows. Required: load_features() returns a
+    DataFrame with game_year non-null, with at least 5,000 rows where game_year
+    in [2016, 2017, 2018, 2019, 2021] and at least 2,500 rows where game_year in
+    [2022, 2023, 2024, 2025]. Standard pitching and team offense features must be
+    non-null in representative rows (home_pit_xwoba_against_30d,
+    home_starter_xwoba_against_std, home_bp_xwoba_against_30d, and their away
+    equivalents). Verified when load_features() returns the expected row counts
+    without error.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: card-3-10-era-split-corr-stability-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-era-split-analysis is the first node (blocked by the
+    phase3-feature-store-and-era-columns-available gate) and runs all four
+    analysis steps, printing a summary table and writing a JSON results artifact.
+    document-era-split-findings is the terminal node and appends section 10 to
+    betting_model_findings.md and updates the Phase 4 design constraints in
+    project_context.md.
+  goalRef:
+    name: card-3-10-era-split-corr-stability
+  graph:
+    nodes:
+
+      - id: run-era-split-analysis
+        kind: Task
+        description: >
+          Implement and run betting_ml/scripts/analyze_era_split_corr_stability.py.
+          The script loads game-level features via load_features(), runs four
+          analysis steps, prints a summary table, and writes
+          betting_ml/evaluation/era_split_corr_stability_results.json.
+
+          Data loading:
+            from betting_ml.utils.data_loader import load_features
+            df = load_features()
+            Exclude game_year == 2020.
+            Define eras:
+              pre_2022: game_year in [2016, 2017, 2018, 2019, 2021]
+              post_2022: game_year in [2022, 2023, 2024, 2025]
+
+          Targets: total_runs, run_differential, home_win.
+
+          Feature set:
+            Candidate features are all numeric columns in df except for:
+              - Target columns: total_runs, run_differential, home_win
+              - Metadata / identifier columns: game_pk, game_date, home_team,
+                away_team, home_team_id, away_team_id, venue_id, game_year
+              - Binary era flags and data availability flags: post_2022_rules,
+                has_starter_platoon_data, has_odds
+            Any remaining numeric column is a candidate feature.
+            Restrict candidate features to columns with at least 1,000 non-null
+            values in each era to avoid spurious correlations on sparse columns.
+
+          Step 1 — Full-Dataset Correlations and Feature Shortlist:
+            For each candidate feature f and each target t, compute
+            scipy.stats.pearsonr(df[f].dropna(), df[t][df[f].notna()]) using
+            only rows where f is non-null. Record pearson_r, p_value, and n.
+            Compute mean_abs_r per feature = mean(|r_total_runs|,
+            |r_run_differential|, |r_home_win|).
+            Select top_features: the 20 features with highest mean_abs_r.
+            If fewer than 20 candidates satisfy the 1,000-row-per-era threshold,
+            use all that qualify (minimum 10 required; raise ValueError if fewer
+            than 10 qualify).
+            Record all full-dataset correlations for top_features in results JSON
+            as full_dataset_correlations list.
+            Record top_features as top_features_selected list.
+
+          Step 2 — Era-Split Correlations:
+            For each feature f in top_features and each target t:
+              Restrict to rows where f is non-null.
+              pre: df_pre = rows with game_year in [2016, 2017, 2018, 2019, 2021]
+              post: df_post = rows with game_year in [2022, 2023, 2024, 2025]
+              Compute pearson_r and p_value for each era using scipy.stats.pearsonr.
+              r_delta = post_r - pre_r (signed; absolute |r_delta| used for flagging)
+              flagged = (abs(r_delta) > 0.015)
+            Record all results in era_split_correlations list.
+
+          Step 3 — Fisher Z-Test:
+            For each target t, select the top 10 features by full-dataset |r|
+            for that specific target (not by mean_abs_r across targets). If
+            top_features has fewer than 10 features for a given target, use all.
+            For each selected feature f and target t:
+              pre_r = era-split pre_2022_r for (f, t) from Step 2
+              post_r = era-split post_2022_r for (f, t) from Step 2
+              pre_n = non-null row count for f in pre era
+              post_n = non-null row count for f in post era
+              Compute Fisher z-transform:
+                z1 = np.arctanh(np.clip(pre_r, -0.9999, 0.9999))
+                z2 = np.arctanh(np.clip(post_r, -0.9999, 0.9999))
+                se = np.sqrt(1 / (pre_n - 3) + 1 / (post_n - 3))
+                z_stat = (z2 - z1) / se
+                p_value = 2 * (1 - scipy.stats.norm.cdf(abs(z_stat)))
+              significant = (abs(r_delta) > 0.015 and p_value < 0.05)
+            Record all results in fisher_z_tests list.
+
+          Step 4 — Era Stability Summary and Design Recommendation:
+            Across all feature-target pairs in fisher_z_tests:
+              n_flagged_delta_015 = count where flagged == True
+              n_significantly_shifted = count where significant == True
+              shifted_features = unique feature names where significant == True
+                                 (deduplicated across targets)
+              mean_abs_r_delta = mean of all |r_delta| values in
+                                 era_split_correlations
+            correlation_structure_is_stable = (mean_abs_r_delta < 0.010)
+
+            Design recommendation logic (apply in order):
+              1. If len(shifted_features) > 5:
+                   separate_era_models_required = True
+                   post_2022_rules_flag_sufficient = False
+              2. Else:
+                   separate_era_models_required = False
+                   post_2022_rules_flag_sufficient = True
+              3. correlation_structure_is_stable = (mean_abs_r_delta < 0.010)
+              4. Rationale string: cite len(shifted_features),
+                 mean_abs_r_delta, and the verdict. Example:
+                 "{N} features showed significant correlation shifts
+                 (|r_delta| > 0.015, p < 0.05); mean |r_delta| = {X:.4f}
+                 across top 20 features × 3 targets. Verdict: {verdict}."
+
+          Print a summary table during execution:
+
+            STEP 1 — Full-Dataset Correlations (Top 20 Features)
+              Feature | mean_abs_r | r_total_runs | r_run_diff | r_home_win
+              (sorted by mean_abs_r descending)
+
+            STEP 2 — Era-Split Correlations (Flagged features: |r_delta| > 0.015)
+              Feature | Target | Pre-2022 r | Post-2022 r | r_delta | Flagged
+              (print only rows where flagged == True; if none, print "No features
+               flagged at |r_delta| > 0.015 threshold")
+
+            STEP 3 — Fisher Z-Test (Top 10 per target)
+              Feature | Target | Pre r | Post r | r_delta | z_stat | p_value | Significant
+              (sorted by |r_delta| descending)
+
+            STEP 4 — Era Stability Summary
+              n_features_tested: N
+              n_flagged_delta_015: N
+              n_significantly_shifted: N
+              mean_abs_r_delta: X.XXXX
+              correlation_structure_is_stable: True/False
+              shifted_features: [list]
+              Verdict: separate_era_models_required / post_2022_rules_flag_sufficient
+
+          Write betting_ml/evaluation/era_split_corr_stability_results.json with:
+            {
+              "full_dataset_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pearson_r": float,
+                  "p_value": float,
+                  "n": int
+                },
+                ...
+              ],
+              "top_features_selected": [str, ...],
+              "era_split_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pre_2022_r": float,
+                  "pre_2022_n": int,
+                  "pre_2022_p": float,
+                  "post_2022_r": float,
+                  "post_2022_n": int,
+                  "post_2022_p": float,
+                  "r_delta": float,
+                  "abs_r_delta": float,
+                  "flagged": bool
+                },
+                ...
+              ],
+              "fisher_z_tests": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pre_2022_r": float,
+                  "post_2022_r": float,
+                  "r_delta": float,
+                  "z_stat": float,
+                  "p_value": float,
+                  "significant": bool
+                },
+                ...
+              ],
+              "era_stability_summary": {
+                "n_features_tested": int,
+                "n_flagged_delta_015": int,
+                "n_significantly_shifted": int,
+                "mean_abs_r_delta": float,
+                "correlation_structure_is_stable": bool,
+                "shifted_features": [str, ...]
+              },
+              "design_recommendation": {
+                "separate_era_models_required": bool,
+                "post_2022_rules_flag_sufficient": bool,
+                "correlation_structure_is_stable": bool,
+                "rationale": str
+              }
+            }
+
+          Script exits 0 in all cases. Write the JSON before exit.
+        dependsOn:
+          - phase3-feature-store-and-era-columns-available
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Era-split correlation stability analysis script
+            path: betting_ml/scripts/analyze_era_split_corr_stability.py
+          - type: command_succeeds
+            name: Analysis script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/analyze_era_split_corr_stability.py
+            timeout: 300
+          - type: artifact_exists
+            name: Era-split correlation stability results JSON written
+            path: betting_ml/evaluation/era_split_corr_stability_results.json
+          - type: command_succeeds
+            name: Results JSON has all required top-level keys and design recommendation
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/era_split_corr_stability_results.json') as f:
+                    r = json.load(f)
+                required = [
+                    'full_dataset_correlations', 'top_features_selected',
+                    'era_split_correlations', 'fisher_z_tests',
+                    'era_stability_summary', 'design_recommendation'
+                ]
+                missing = [k for k in required if k not in r]
+                assert not missing, f'Missing keys: {missing}'
+                rec = r['design_recommendation']
+                for key in ('separate_era_models_required', 'post_2022_rules_flag_sufficient',
+                            'correlation_structure_is_stable', 'rationale'):
+                    assert key in rec, f'design_recommendation missing: {key}'
+                summary = r['era_stability_summary']
+                for key in ('n_features_tested', 'n_flagged_delta_015', 'n_significantly_shifted',
+                            'mean_abs_r_delta', 'correlation_structure_is_stable', 'shifted_features'):
+                    assert key in summary, f'era_stability_summary missing: {key}'
+                assert len(r['top_features_selected']) >= 10, (
+                    f'top_features_selected has only {len(r["top_features_selected"])} entries; '
+                    f'expected >= 10'
+                )
+          - type: command_succeeds
+            name: Era-split correlations cover all three targets and at least 10 features
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/era_split_corr_stability_results.json') as f:
+                    r = json.load(f)
+                ec = r['era_split_correlations']
+                targets = {e['target'] for e in ec}
+                required_targets = {'total_runs', 'run_differential', 'home_win'}
+                missing_targets = required_targets - targets
+                assert not missing_targets, f'era_split_correlations missing targets: {missing_targets}'
+                features = {e['feature'] for e in ec}
+                assert len(features) >= 10, (
+                    f'era_split_correlations has only {len(features)} unique features; '
+                    f'expected >= 10'
+                )
+                for e in ec:
+                    for field in ('pre_2022_r', 'pre_2022_n', 'post_2022_r', 'post_2022_n',
+                                  'r_delta', 'abs_r_delta', 'flagged'):
+                        assert field in e, f'era_split_correlations entry missing field: {field}'
+          - type: command_succeeds
+            name: Fisher z-tests cover all three targets with valid z_stat and p_value fields
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/era_split_corr_stability_results.json') as f:
+                    r = json.load(f)
+                fz = r['fisher_z_tests']
+                assert len(fz) >= 3, (
+                    f'fisher_z_tests has only {len(fz)} entries; expected >= 3 (1 per target min)'
+                )
+                targets = {e['target'] for e in fz}
+                required_targets = {'total_runs', 'run_differential', 'home_win'}
+                missing_targets = required_targets - targets
+                assert not missing_targets, f'fisher_z_tests missing targets: {missing_targets}'
+                for e in fz:
+                    for field in ('feature', 'target', 'pre_2022_r', 'post_2022_r',
+                                  'r_delta', 'z_stat', 'p_value', 'significant'):
+                        assert field in e, f'fisher_z_tests entry missing field: {field}'
+
+      - id: document-era-split-findings
+        kind: Task
+        description: >
+          Read betting_ml/evaluation/era_split_corr_stability_results.json and:
+          (1) Append a "## Section 10: Era-Split Correlation Stability" section to
+              betting_model_findings.md.
+          (2) Update the Phase 4 design constraints in project_context.md.
+
+          Section 10 in betting_model_findings.md must contain:
+
+          ### Top Features (Full Dataset)
+            Markdown table: Feature | mean |r| | r (total_runs) | r (run_diff) |
+            r (home_win). One row per feature in top_features_selected, sorted by
+            mean |r| descending.
+            Interpret: which feature groups (park, pitching, offense) dominate
+            the top 20.
+
+          ### Era-Split Correlations
+            Markdown table: Feature | Target | Pre-2022 r | Post-2022 r | r_delta |
+            Flagged. Include all rows from era_split_correlations, sorted by
+            |r_delta| descending.
+            Interpret: are shifts concentrated in a particular feature type or
+            target? Note the n_flagged_delta_015 count.
+
+          ### Fisher Z-Test Results
+            Markdown table: Feature | Target | Pre r | Post r | r_delta | z_stat |
+            p_value | Significant. One row per entry in fisher_z_tests.
+            Interpret: which shifts are statistically significant vs. noise given
+            unequal era sample sizes.
+
+          ### Era Stability Summary
+            Report n_features_tested, n_flagged_delta_015, n_significantly_shifted,
+            mean_abs_r_delta, correlation_structure_is_stable, and list of
+            shifted_features.
+
+          ### Design Recommendation
+            State the recommendation (separate_era_models_required /
+            post_2022_rules_flag_sufficient) and the rationale string from the JSON.
+            Note: if post_2022_rules_flag_sufficient = True, confirm that the
+            post_2022_rules binary flag already in the Phase 4 design constraints
+            table is the correct implementation path.
+
+          Update project_context.md Phase 4 design constraints section:
+            Add a "Card 3.10 Era-Split Correlation Stability" subsection containing:
+              - n_significantly_shifted (count of features with significant shifts)
+              - mean_abs_r_delta across top 20 features
+              - design_recommendation: separate_era_models_required,
+                post_2022_rules_flag_sufficient
+              - shifted_features list (if any)
+              - One-sentence Phase 4 implication: either "Train unified model with
+                post_2022_rules flag" or "Train separate pre-2022 and post-2022
+                models; do not pool eras without interaction terms"
+        dependsOn:
+          - run-era-split-analysis
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: betting_model_findings.md contains all required section 10 keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_model_findings.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'section 10', 'era', 'correlation', 'pre-2022', 'post-2022',
+                    'fisher', 'z-test', 'r_delta', 'flagged', 'shifted',
+                    'design recommendation', 'incremental'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'betting_model_findings.md missing section 10 keywords: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 3.10 era-split findings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'card 3.10', 'era', 'correlation', 'shifted',
+                    'post_2022_rules_flag_sufficient'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 3.10 updates: {missing}'

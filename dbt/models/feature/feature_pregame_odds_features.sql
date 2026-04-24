@@ -97,6 +97,10 @@ h2h as (
     group by event_id
 ),
 
+consensus_odds as (
+    select * from {{ ref('mart_odds_consensus') }}
+),
+
 -- Pivot Over and Under into one row per event.
 -- outcome_point carries the line (e.g. 8.5); most recent snapshot wins
 -- when the line moves during the day.
@@ -180,9 +184,26 @@ select
              / ((1.0 / totals.over_decimal) + (1.0 / totals.under_decimal))
     end::float                                                          as under_implied_prob,
 
-    totals.totals_market_vig
+    totals.totals_market_vig,
+
+    -- ── Consensus market features (mart_odds_consensus, Card 3.11) ────────────
+    -- home_win_prob_consensus: Brier = 0.2395 on 2021–2025 (Card 3.11 benchmark)
+    -- Sharp books: lowvig, betonlineag, bovada. Soft: draftkings, fanduel, betmgm,
+    -- williamhill_us, betrivers. sharp/soft columns are null when that group has
+    -- no pre-game coverage for this event; not recommended as primary training
+    -- features (include_sharp_soft_features = False per Card 3.11).
+    con.home_win_prob_consensus,
+    con.home_win_prob_sharp,
+    con.home_win_prob_soft,
+    con.sharp_soft_ml_delta,
+    con.ml_consensus_std,
+    con.market_bookmaker_count,
+    con.total_line_consensus,
+    con.total_line_std,
+    con.over_prob_consensus
 
 from games g
-left join bridge b  on b.game_pk   = g.game_pk
-left join h2h       on h2h.event_id = b.event_id
-left join totals    on totals.event_id = b.event_id
+left join bridge b       on b.game_pk    = g.game_pk
+left join h2h            on h2h.event_id  = b.event_id
+left join totals         on totals.event_id = b.event_id
+left join consensus_odds con on con.event_id = b.event_id

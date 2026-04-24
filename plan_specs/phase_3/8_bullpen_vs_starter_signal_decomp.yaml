@@ -1,0 +1,360 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bullpen-vs-starter-signal-decomposition
+  namespace: default
+spec:
+  description: >
+    Decompose the pitching quality signal between starting pitcher and bullpen
+    to determine whether home_starter_xwoba_against_std and
+    home_bp_xwoba_against_30d contribute independent variance to game outcomes
+    or whether their overlap (both r≈0.06 in raw correlation) renders including
+    both redundant. Cross-correlation, partial correlation, and OLS decomposition
+    establish independence. Workload features (bullpen_pitches_prev_3d,
+    pitchers_used_prev_7d) are tested for marginal signal beyond trailing xwOBA.
+    Findings drive a concrete Phase 4 design constraint: keep both / drop bullpen
+    / add workload flag.
+  acceptanceCriteria:
+    - description: >
+        Pearson r between home_starter_xwoba_against_std and
+        home_bp_xwoba_against_30d (and away equivalents) computed and tabulated;
+        decision rule applied: if |r| > 0.70 keep only the stronger predictor
+    - description: >
+        Partial correlation of each pitching feature with all three targets
+        (total_runs, run_differential, home_win), controlling for the other
+        pitching feature, computed and tabulated
+    - description: >
+        OLS R² decomposition for starter-only, bullpen-only, and combined specs
+        across all three targets; incremental R² from adding each feature set
+        documented
+    - description: >
+        Pearson r between workload features (home/away bullpen_pitches_prev_3d,
+        home/away pitchers_used_prev_7d) and all three targets reported; whether
+        workload adds signal beyond trailing xwOBA assessed
+    - description: >
+        Findings appended to betting_model_findings.md under section 08 with
+        summary table and design recommendation
+    - description: >
+        project_context.md Phase 4 design constraints updated with one of:
+        "keep both starter and bullpen xwOBA", "drop bullpen xwOBA (collinear
+        with starter)", or "keep both and add workload flag"
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: phase3-pitching-features-available
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The dbt feature engineering mart must contain pitching features before this
+    analysis runs. Required columns: home_starter_xwoba_against_std,
+    home_bp_xwoba_against_30d, away_starter_xwoba_against_std,
+    away_bp_xwoba_against_30d, home_bullpen_pitches_prev_3d,
+    home_pitchers_used_prev_7d, away_bullpen_pitches_prev_3d,
+    away_pitchers_used_prev_7d. Verified when load_features() (or equivalent
+    mart read) returns a DataFrame with non-null values in these columns for
+    at least one season.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bullpen-vs-starter-signal-decomposition-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-pitching-decomposition is the first node (blocked by the
+    phase3-pitching-features-available gate) and runs all four analysis steps,
+    printing a summary table and writing a JSON results artifact.
+    document-pitching-findings is the terminal node and appends section 08 to
+    betting_model_findings.md and updates the Phase 4 design constraint in
+    project_context.md.
+  goalRef:
+    name: bullpen-vs-starter-signal-decomposition
+  graph:
+    nodes:
+
+      - id: run-pitching-decomposition
+        kind: Task
+        description: >
+          Implement and run betting_ml/scripts/analyze_pitching_decomp.py.
+          The script reads game-level features from load_features() (or directly
+          from the mart), runs the four analysis steps, prints a summary table,
+          and writes betting_ml/evaluation/pitching_decomp_results.json.
+
+          Column aliases used throughout:
+            h_start  = home_starter_xwoba_against_std
+            h_bp     = home_bp_xwoba_against_30d
+            a_start  = away_starter_xwoba_against_std
+            a_bp     = away_bp_xwoba_against_30d
+            h_bp_pit = home_bullpen_pitches_prev_3d
+            h_bp_use = home_pitchers_used_prev_7d
+            a_bp_pit = away_bullpen_pitches_prev_3d
+            a_bp_use = away_pitchers_used_prev_7d
+          Targets: total_runs, run_differential, home_win.
+          Restrict to rows where all pitching columns are non-null.
+
+          Step 1 — Cross-correlation:
+            Compute Pearson r(h_start, h_bp) and r(a_start, a_bp) using
+            scipy.stats.pearsonr. Print r and p-value for each pair.
+            Decision: if |r| > 0.70 for either pair, set
+            high_collinearity=True; else False.
+            Record in results JSON.
+
+          Step 2 — Partial correlation:
+            For each pitching feature f and each target t, compute partial r
+            of f with t controlling for the paired pitching feature (the other
+            of starter/bp from the same team side) using:
+              from pingouin import partial_corr
+              (or manual residual-on-residual OLS if pingouin unavailable)
+            Produce a table: feature | target | pearson_r | partial_r |
+            partial_r_controlling_for.
+            If pingouin is not installed, implement the residual method:
+              fit OLS(f ~ control), take residuals e_f
+              fit OLS(t ~ control), take residuals e_t
+              partial_r = pearsonr(e_f, e_t)
+
+          Step 3 — OLS decomposition:
+            For each target t, fit three OLS models via statsmodels.OLS
+            (add_constant):
+              starter_only:  X = [h_start, a_start]
+              bullpen_only:  X = [h_bp, a_bp]
+              combined:      X = [h_start, a_start, h_bp, a_bp]
+            Record R², adjusted R², and BIC for each. Compute
+            incremental_r2 = combined_r2 - max(starter_only_r2, bullpen_only_r2).
+            This measures variance uniquely explained by adding the second
+            pitching block.
+
+          Step 4 — Workload signal:
+            Compute Pearson r of each workload feature
+            (h_bp_pit, h_bp_use, a_bp_pit, a_bp_use) with each target.
+            For each side, fit OLS(t ~ h_bp + h_bp_pit + h_bp_use) and compare
+            R² to bullpen_only R² from Step 3.
+            workload_incremental_r2 = r2_with_workload - bullpen_only_r2.
+
+          Print a summary table during execution:
+            STEP 1 — Cross-correlation
+              h_start vs h_bp:  r=X.XX  p=X.XXX
+              a_start vs a_bp:  r=X.XX  p=X.XXX
+              high_collinearity: True/False
+
+            STEP 2 — Partial correlations (sample rows)
+              feature | target | pearson_r | partial_r | controlling_for
+
+            STEP 3 — OLS R² decomposition
+              target | starter_only_r2 | bullpen_only_r2 | combined_r2 | incremental_r2
+
+            STEP 4 — Workload correlations
+              feature | target | pearson_r
+              Workload incremental R² (h side, total_runs): X.XXXX
+
+          Write betting_ml/evaluation/pitching_decomp_results.json with:
+            {
+              "cross_correlation": {
+                "home_starter_vs_bp_r": float,
+                "home_starter_vs_bp_pval": float,
+                "away_starter_vs_bp_r": float,
+                "away_starter_vs_bp_pval": float,
+                "high_collinearity": bool
+              },
+              "partial_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pearson_r": float,
+                  "partial_r": float,
+                  "controlling_for": str
+                },
+                ...
+              ],
+              "ols_decomposition": {
+                "total_runs": {
+                  "starter_only_r2": float,
+                  "bullpen_only_r2": float,
+                  "combined_r2": float,
+                  "incremental_r2": float
+                },
+                "run_differential": { ... },
+                "home_win": { ... }
+              },
+              "workload_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pearson_r": float
+                },
+                ...
+              ],
+              "workload_incremental_r2": {
+                "home_total_runs": float,
+                "home_run_differential": float,
+                "home_home_win": float
+              },
+              "design_recommendation": {
+                "keep_both": bool,
+                "drop_bullpen": bool,
+                "add_workload_flag": bool,
+                "rationale": str
+              }
+            }
+
+          Design recommendation logic (apply in this order):
+            1. If high_collinearity (|r| > 0.70): drop_bullpen=True, keep_both=False.
+               Keep whichever of starter/bullpen has higher mean |partial_r| across targets.
+            2. Else if mean incremental_r2 across targets < 0.002: keep_both=False,
+               drop_bullpen=True (marginal gain not worth collinearity).
+            3. Else: keep_both=True.
+            4. If max(workload_incremental_r2 values) > 0.005: add_workload_flag=True.
+            5. Rationale string: cite the cross-correlation r value, incremental R²,
+               and the workload threshold result.
+
+          Script exits 0 in all cases (this is analysis, not model training;
+          no hard failure threshold applies). Write the JSON before exit.
+        dependsOn:
+          - phase3-pitching-features-available
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Pitching decomposition analysis script
+            path: betting_ml/scripts/analyze_pitching_decomp.py
+          - type: command_succeeds
+            name: Analysis script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/analyze_pitching_decomp.py
+            timeout: 300
+          - type: artifact_exists
+            name: Pitching decomposition results JSON written
+            path: betting_ml/evaluation/pitching_decomp_results.json
+          - type: command_succeeds
+            name: Results JSON has all required top-level keys and design recommendation
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/pitching_decomp_results.json') as f:
+                    r = json.load(f)
+                required = [
+                    'cross_correlation', 'partial_correlations',
+                    'ols_decomposition', 'workload_correlations',
+                    'workload_incremental_r2', 'design_recommendation'
+                ]
+                missing = [k for k in required if k not in r]
+                assert not missing, f'Missing keys: {missing}'
+                cc = r['cross_correlation']
+                assert 'high_collinearity' in cc, "Missing high_collinearity flag"
+                rec = r['design_recommendation']
+                for key in ('keep_both', 'drop_bullpen', 'add_workload_flag', 'rationale'):
+                    assert key in rec, f'design_recommendation missing: {key}'
+                for target in ('total_runs', 'run_differential', 'home_win'):
+                    assert target in r['ols_decomposition'], f'OLS missing target: {target}'
+                    ols = r['ols_decomposition'][target]
+                    for field in ('starter_only_r2', 'bullpen_only_r2', 'combined_r2', 'incremental_r2'):
+                        assert field in ols, f'OLS {target} missing: {field}'
+          - type: command_succeeds
+            name: Partial correlations cover all four pitching features vs all three targets
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/pitching_decomp_results.json') as f:
+                    r = json.load(f)
+                pc = r['partial_correlations']
+                features = {e['feature'] for e in pc}
+                targets = {e['target'] for e in pc}
+                required_targets = {'total_runs', 'run_differential', 'home_win'}
+                missing_targets = required_targets - targets
+                assert not missing_targets, f'Partial corr missing targets: {missing_targets}'
+                assert len(pc) >= 4, (
+                    f'Expected at least 4 partial correlation entries (4 features × 1+ targets), '
+                    f'got {len(pc)}'
+                )
+
+      - id: document-pitching-findings
+        kind: Task
+        description: >
+          Read betting_ml/evaluation/pitching_decomp_results.json and:
+          (1) Append a "## Section 08: Bullpen vs. Starter Signal Decomposition"
+              section to betting_model_findings.md.
+          (2) Update the Phase 4 design constraints in project_context.md.
+
+          Section 08 in betting_model_findings.md must contain:
+
+          ### Cross-Correlation
+            Report Pearson r for home and away starter-vs-bullpen pairs.
+            State whether collinearity threshold (|r| > 0.70) was triggered.
+
+          ### Partial Correlations
+            Markdown table: Feature | Target | Pearson r | Partial r |
+            Controlling For. One row per feature-target pair.
+            Interpret: does each feature retain signal after controlling for its
+            paired pitching feature?
+
+          ### OLS R² Decomposition
+            Markdown table: Target | Starter-only R² | Bullpen-only R² |
+            Combined R² | Incremental R². One row per target.
+            Interpret: is the incremental R² from combining both pitching blocks
+            meaningful (> 0.002) or negligible?
+
+          ### Workload Features
+            Pearson r table for each workload feature vs. each target.
+            Workload incremental R² vs. bullpen-only baseline.
+            Interpret: do bullpen_pitches_prev_3d and pitchers_used_prev_7d
+            add signal beyond trailing xwOBA?
+
+          ### Design Recommendation
+            State the recommendation (keep_both / drop_bullpen / add_workload_flag)
+            and the rationale string from the JSON.
+
+          Update project_context.md Phase 4 design constraints section:
+            Add a "Card 3.8 Pitching Signal Decomposition" subsection containing:
+              - cross_correlation r values (home and away)
+              - high_collinearity decision
+              - incremental_r2 (average across targets)
+              - design_recommendation: keep_both, drop_bullpen, add_workload_flag
+              - One-sentence feature selection implication for Phase 4
+        dependsOn:
+          - run-pitching-decomposition
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: betting_model_findings.md contains all required section 08 keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_model_findings.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'section 08', 'bullpen', 'starter', 'cross-correlation',
+                    'partial correlation', 'ols', 'r²', 'workload',
+                    'incremental', 'design recommendation'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'betting_model_findings.md missing section 08 keywords: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 3.8 pitching findings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 3.8', 'bullpen', 'starter', 'incremental']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 3.8 updates: {missing}'

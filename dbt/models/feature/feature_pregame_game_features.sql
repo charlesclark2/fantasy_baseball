@@ -588,7 +588,18 @@ final as (
         od.under_american,
         od.over_implied_prob,
         od.under_implied_prob,
-        od.totals_market_vig
+        od.totals_market_vig,
+
+        -- ── Consensus market features (mart_odds_consensus, Card 3.11) ────────
+        od.home_win_prob_consensus,
+        od.home_win_prob_sharp,
+        od.home_win_prob_soft,
+        od.sharp_soft_ml_delta,
+        od.ml_consensus_std,
+        od.market_bookmaker_count,
+        od.total_line_consensus,
+        od.total_line_std,
+        od.over_prob_consensus
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk

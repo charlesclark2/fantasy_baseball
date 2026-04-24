@@ -1,0 +1,486 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: card-3-9-home-away-pitch-asymmetry
+  namespace: default
+spec:
+  description: >
+    Investigate the structural asymmetry discovered in NB04 between home and away
+    team pitching features as predictors of total runs. Home pitching
+    (home_pit_xwoba_against_30d, r=0.075) outperforms away pitching
+    (away_pit_xwoba_against_30d, r=0.008) by 9×. Four competing hypotheses are
+    tested: H1 — park factor collinearity absorbs away variance; H2 — rotation
+    alignment sample confound; H3 — park contamination in away xwOBA_against
+    measurements; H4 — signal direction ambiguity for away stats measured in home
+    parks. Analysis uses partial correlation controlling for park_run_factor_3yr
+    and the opposing pitching feature, stratification by park factor quartile,
+    era-split comparison (2016–2019 vs. 2021–2025), and direct starter vs.
+    team-level signal comparison. Findings drive a concrete Phase 4 design
+    constraint: whether to rely on away starter features only, apply partial
+    correlation weighting to away team-level features, or treat the asymmetry as
+    structural and let the model learn the weighting.
+  acceptanceCriteria:
+    - description: >
+        Partial correlation of away_pit_xwoba_against_30d with total_runs,
+        run_differential, and home_win computed while controlling for both
+        park_run_factor_3yr and home_pit_xwoba_against_30d; tabulated alongside
+        raw Pearson r for direct comparison; H1 verdict applied.
+    - description: >
+        Pearson r between away_pit_xwoba_against_30d and all three targets
+        computed within each park factor quartile (Q1–Q4); home equivalent
+        computed for baseline; asymmetry ratio (|h_r| / |a_r|) reported per
+        quartile; H1 quartile evidence documented.
+    - description: >
+        Era-split correlation table produced: Pearson r for home and away
+        pitching features × all three targets for 2016–2019 and 2021–2025
+        separately (excluding 2020); asymmetry present in one era or both
+        documented; H2 era evidence captured.
+    - description: >
+        Starter vs. team-level comparison: Pearson r of away_starter_xwoba_against_std
+        vs. away_pit_xwoba_against_std for all three targets; same comparison for
+        home side as baseline; if starter r exceeds team-level r for away by
+        delta > 0.010, H3 (park contamination) supported.
+    - description: >
+        All four hypotheses (H1–H4) adjudicated as supported / not supported /
+        inconclusive with numeric evidence cited; root cause ranked by strength
+        of evidence.
+    - description: >
+        Findings appended to betting_model_findings.md under section 09 with
+        summary table and design recommendation.
+    - description: >
+        project_context.md Phase 4 design constraints updated with Card 3.9
+        subsection containing: partial r value, asymmetry ratio, starter vs.
+        team-level delta, hypothesis verdicts, and one-sentence Phase 4
+        implication.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: phase3-pitching-and-park-features-available
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The dbt feature engineering mart must contain both pitching and park features
+    before this analysis runs. Required columns in feature_pregame_game_features:
+    home_pit_xwoba_against_30d, away_pit_xwoba_against_30d,
+    home_pit_xwoba_against_std, away_pit_xwoba_against_std,
+    home_starter_xwoba_against_std, away_starter_xwoba_against_std,
+    park_run_factor_3yr, total_runs, run_differential, home_win, game_year.
+    Verified when load_features() (or direct mart read) returns a DataFrame with
+    non-null values in park_run_factor_3yr and away_pit_xwoba_against_30d for
+    at least 5,000 rows across 2016–2025 (excluding 2020).
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: card-3-9-home-away-pitch-asymmetry-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-pitch-asymmetry-analysis is the first node (blocked by the
+    phase3-pitching-and-park-features-available gate) and runs all four analysis
+    steps, printing a summary table and writing a JSON results artifact.
+    document-pitch-asymmetry-findings is the terminal node and appends section 09
+    to betting_model_findings.md and updates the Phase 4 design constraint in
+    project_context.md.
+  goalRef:
+    name: card-3-9-home-away-pitch-asymmetry
+  graph:
+    nodes:
+
+      - id: run-pitch-asymmetry-analysis
+        kind: Task
+        description: >
+          Implement and run betting_ml/scripts/analyze_home_away_pitch_asymmetry.py.
+          The script reads game-level features from load_features() (or directly
+          from feature_pregame_game_features), runs the four analysis steps, prints
+          a summary table, and writes
+          betting_ml/evaluation/home_away_pitch_asymmetry_results.json.
+
+          Column aliases used throughout:
+            h_pit_30   = home_pit_xwoba_against_30d
+            a_pit_30   = away_pit_xwoba_against_30d
+            h_pit_std  = home_pit_xwoba_against_std
+            a_pit_std  = away_pit_xwoba_against_std
+            h_start    = home_starter_xwoba_against_std
+            a_start    = away_starter_xwoba_against_std
+            park_rf    = park_run_factor_3yr
+          Targets: total_runs, run_differential, home_win.
+          Restrict to rows where all pitching and park columns are non-null and
+          game_year != 2020.
+
+          Step 1 — Raw and Partial Correlations (H1 test):
+            For each pitching feature (h_pit_30, a_pit_30) and each target:
+              Compute Pearson r using scipy.stats.pearsonr — this is the raw baseline.
+            For each target t, compute partial r of a_pit_30 with t controlling
+            for BOTH park_rf AND h_pit_30 jointly using the residual method:
+              fit OLS(a_pit_30 ~ park_rf + h_pit_30), take residuals e_a
+              fit OLS(t ~ park_rf + h_pit_30), take residuals e_t
+              partial_r = pearsonr(e_a, e_t)
+            Also compute partial r of h_pit_30 with t controlling for park_rf and
+            a_pit_30 (symmetric, for completeness).
+            Decision: if max(|partial_r(a_pit_30, t)|) across all three targets
+            remains < 0.030, record h1_park_absorbs_away = True (H1 supported);
+            else h1_park_absorbs_away = False.
+            Record all raw and partial r values in results JSON.
+
+          Step 2 — Park Factor Quartile Stratification (H1 quartile evidence):
+            Compute park_rf quartile boundaries on the full dataset (Q1=25th pct,
+            Q2=50th, Q3=75th, Q4=100th). Assign each row a quartile label (1–4).
+            Within each quartile, compute:
+              Pearson r(h_pit_30, total_runs) — home pitching signal per park tier
+              Pearson r(a_pit_30, total_runs) — away pitching signal per park tier
+              asymmetry_ratio = abs(r_home) / max(abs(r_away), 1e-6)
+              n = row count for that quartile
+            Repeat for run_differential and home_win targets.
+            Print a table: quartile | n | park_rf_range | h_r | a_r | asymmetry_ratio
+            per target.
+            Record in results JSON.
+
+          Step 3 — Era-Split Correlations (H2 test):
+            Define eras:
+              pre_juiced:  game_year in [2016, 2017, 2018, 2019]
+              modern:      game_year in [2021, 2022, 2023, 2024, 2025]
+            For each era and each target, compute Pearson r for:
+              h_pit_30, a_pit_30, h_pit_std, a_pit_std
+            Compute asymmetry_ratio per era (|h_pit_30_r| / max(|a_pit_30_r|, 1e-6)).
+            Decision: if asymmetry_ratio > 3.0 in BOTH eras, record
+            h2_era_confound = False (H2 refuted — asymmetry is not era-specific);
+            else if asymmetry_ratio > 3.0 in only one era, h2_era_confound = True.
+            Print table: era | target | h_pit_30_r | a_pit_30_r | asymmetry_ratio | n
+            Record in results JSON.
+
+          Step 4 — Starter vs. Team-Level Comparison (H3 test):
+            For each target, compute Pearson r for all four features:
+              h_pit_30, a_pit_30, h_start, a_start
+            For each side (home, away), compute:
+              starter_r = r(starter_feature, target)
+              team_r    = r(team_level_feature, target)
+              delta     = abs(starter_r) - abs(team_r)
+            Decision: if mean delta for away side across three targets > 0.010,
+            record h3_park_contamination = True (H3 supported — starter features
+            outperform team-level for away team, suggesting park contamination
+            inflates team-level away xwOBA measurement).
+            Print table: side | feature_type | total_runs_r | run_differential_r |
+            home_win_r | mean_abs_r | delta_vs_team_level
+            Record in results JSON.
+
+          Print a summary table during execution:
+
+            STEP 1 — Raw and Partial Correlations
+              feature | target | raw_r | partial_r | controlling_for
+              h1_park_absorbs_away: True/False
+
+            STEP 2 — Park Quartile Stratification (total_runs)
+              quartile | n | park_rf_range | h_pit_30_r | a_pit_30_r | asymmetry_ratio
+
+            STEP 3 — Era-Split Correlations
+              era | target | h_pit_30_r | a_pit_30_r | asymmetry_ratio | n
+              h2_era_confound: True/False
+
+            STEP 4 — Starter vs. Team-Level Comparison
+              side | feature_type | total_runs_r | run_diff_r | home_win_r | mean_abs_r
+              h3_park_contamination: True/False
+
+          Write betting_ml/evaluation/home_away_pitch_asymmetry_results.json with:
+            {
+              "raw_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "pearson_r": float,
+                  "p_value": float,
+                  "n": int
+                },
+                ...
+              ],
+              "partial_correlations": [
+                {
+                  "feature": str,
+                  "target": str,
+                  "raw_pearson_r": float,
+                  "partial_r": float,
+                  "controlling_for": str,
+                  "n": int
+                },
+                ...
+              ],
+              "park_quartile_correlations": [
+                {
+                  "quartile": int,
+                  "n": int,
+                  "park_rf_min": float,
+                  "park_rf_max": float,
+                  "target": str,
+                  "home_pit_r": float,
+                  "away_pit_r": float,
+                  "asymmetry_ratio": float
+                },
+                ...
+              ],
+              "era_split_correlations": [
+                {
+                  "era": str,
+                  "n": int,
+                  "target": str,
+                  "h_pit_30_r": float,
+                  "a_pit_30_r": float,
+                  "h_pit_std_r": float,
+                  "a_pit_std_r": float,
+                  "asymmetry_ratio": float
+                },
+                ...
+              ],
+              "starter_vs_team_correlations": [
+                {
+                  "side": str,
+                  "feature_type": str,
+                  "feature": str,
+                  "total_runs_r": float,
+                  "run_differential_r": float,
+                  "home_win_r": float,
+                  "mean_abs_r": float
+                },
+                ...
+              ],
+              "hypothesis_verdicts": {
+                "H1_park_absorbs_away_variance": {
+                  "verdict": str,
+                  "evidence": str,
+                  "h1_park_absorbs_away": bool
+                },
+                "H2_rotation_era_confound": {
+                  "verdict": str,
+                  "evidence": str,
+                  "h2_era_confound": bool
+                },
+                "H3_park_contamination_team_level": {
+                  "verdict": str,
+                  "evidence": str,
+                  "h3_park_contamination": bool,
+                  "away_starter_minus_team_delta": float
+                },
+                "H4_signal_direction_ambiguity": {
+                  "verdict": str,
+                  "evidence": str
+                }
+              },
+              "design_recommendation": {
+                "park_absorbs_away_variance": bool,
+                "prefer_starter_over_team_level_away": bool,
+                "asymmetry_is_structural": bool,
+                "rationale": str
+              }
+            }
+
+          Design recommendation logic (apply in this order):
+            1. park_absorbs_away_variance = h1_park_absorbs_away (from Step 1).
+            2. prefer_starter_over_team_level_away = h3_park_contamination (from Step 4).
+            3. asymmetry_is_structural: set True if h2_era_confound = False AND
+               h1_park_absorbs_away = False (asymmetry persists after controlling for
+               both park and era — structural, not artifact).
+            4. Rationale string: cite the partial r value for a_pit_30 (vs. total_runs),
+               the away asymmetry ratio in both eras, the away starter vs. team-level
+               delta, and the Phase 4 implication (use away starter features / apply
+               partial r weighting / include both and let model learn).
+
+          Script exits 0 in all cases. Write the JSON before exit.
+        dependsOn:
+          - phase3-pitching-and-park-features-available
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Pitch asymmetry analysis script
+            path: betting_ml/scripts/analyze_home_away_pitch_asymmetry.py
+          - type: command_succeeds
+            name: Analysis script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/analyze_home_away_pitch_asymmetry.py
+            timeout: 300
+          - type: artifact_exists
+            name: Pitch asymmetry results JSON written
+            path: betting_ml/evaluation/home_away_pitch_asymmetry_results.json
+          - type: command_succeeds
+            name: Results JSON has all required top-level keys and design recommendation
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/home_away_pitch_asymmetry_results.json') as f:
+                    r = json.load(f)
+                required = [
+                    'raw_correlations', 'partial_correlations',
+                    'park_quartile_correlations', 'era_split_correlations',
+                    'starter_vs_team_correlations', 'hypothesis_verdicts',
+                    'design_recommendation'
+                ]
+                missing = [k for k in required if k not in r]
+                assert not missing, f'Missing keys: {missing}'
+                hv = r['hypothesis_verdicts']
+                for h in ('H1_park_absorbs_away_variance', 'H2_rotation_era_confound',
+                          'H3_park_contamination_team_level', 'H4_signal_direction_ambiguity'):
+                    assert h in hv, f'hypothesis_verdicts missing: {h}'
+                    assert 'verdict' in hv[h], f'{h} missing verdict'
+                    assert 'evidence' in hv[h], f'{h} missing evidence'
+                rec = r['design_recommendation']
+                for key in ('park_absorbs_away_variance', 'prefer_starter_over_team_level_away',
+                            'asymmetry_is_structural', 'rationale'):
+                    assert key in rec, f'design_recommendation missing: {key}'
+          - type: command_succeeds
+            name: Partial correlations cover a_pit_30 and h_pit_30 vs all three targets
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/home_away_pitch_asymmetry_results.json') as f:
+                    r = json.load(f)
+                pc = r['partial_correlations']
+                features = {e['feature'] for e in pc}
+                targets = {e['target'] for e in pc}
+                required_targets = {'total_runs', 'run_differential', 'home_win'}
+                missing_targets = required_targets - targets
+                assert not missing_targets, f'Partial corr missing targets: {missing_targets}'
+                assert len(pc) >= 6, (
+                    f'Expected at least 6 partial correlation entries '
+                    f'(2 features × 3 targets), got {len(pc)}'
+                )
+          - type: command_succeeds
+            name: Park quartile table has all four quartiles for at least one target
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/home_away_pitch_asymmetry_results.json') as f:
+                    r = json.load(f)
+                pq = r['park_quartile_correlations']
+                quartiles = {e['quartile'] for e in pq}
+                assert quartiles == {1, 2, 3, 4}, (
+                    f'Expected quartiles {{1,2,3,4}}, got {quartiles}'
+                )
+          - type: command_succeeds
+            name: Era-split table covers both eras and all three targets
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/home_away_pitch_asymmetry_results.json') as f:
+                    r = json.load(f)
+                es = r['era_split_correlations']
+                eras = {e['era'] for e in es}
+                targets = {e['target'] for e in es}
+                assert len(eras) == 2, f'Expected 2 eras, got {eras}'
+                required_targets = {'total_runs', 'run_differential', 'home_win'}
+                missing_targets = required_targets - targets
+                assert not missing_targets, f'Era split missing targets: {missing_targets}'
+
+      - id: document-pitch-asymmetry-findings
+        kind: Task
+        description: >
+          Read betting_ml/evaluation/home_away_pitch_asymmetry_results.json and:
+          (1) Append a "## Section 09: Home/Away Pitching Quality Asymmetry"
+              section to betting_model_findings.md.
+          (2) Update the Phase 4 design constraints in project_context.md.
+
+          Section 09 in betting_model_findings.md must contain:
+
+          ### Raw vs. Partial Correlations
+            Report Pearson r and partial r for h_pit_30 and a_pit_30 vs. each
+            target. Partial r controls for park_run_factor_3yr and the opposing
+            pitching feature simultaneously.
+            Interpret: does park factor account for the 9× asymmetry, or does
+            away pitching retain independent signal?
+
+          ### Park Factor Stratification
+            Markdown table: Quartile | N | Park RF Range | Home Pit r |
+            Away Pit r | Asymmetry Ratio. One row per quartile (total_runs target).
+            Interpret: does the asymmetry collapse in neutral-park quartiles (H1
+            evidence), or persist uniformly (H1 refuted)?
+
+          ### Era-Split Correlations
+            Markdown table: Era | N | Target | Home Pit r | Away Pit r |
+            Asymmetry Ratio. One row per era × target combination.
+            Interpret: is the asymmetry confined to one rule-change era (H2 supported)
+            or consistent across both eras (H2 refuted)?
+
+          ### Starter vs. Team-Level Signal
+            Markdown table: Side | Feature Type | total_runs r | run_diff r |
+            home_win r | Mean |r|. Rows for home starter, home team, away starter,
+            away team.
+            Interpret: for the away team, does the starter feature outperform the
+            team-level feature (H3 park contamination supported), or do both show
+            similar near-zero signal?
+
+          ### Hypothesis Verdicts
+            Markdown table: Hypothesis | Verdict | Evidence. One row per H1–H4.
+
+          ### Design Recommendation
+            State all three recommendation flags (park_absorbs_away_variance,
+            prefer_starter_over_team_level_away, asymmetry_is_structural) and the
+            rationale string from the JSON.
+            Explicitly state Phase 4 implication: which away pitching feature(s)
+            to include and how to handle the asymmetry in the feature matrix.
+
+          Update project_context.md Phase 4 design constraints section:
+            Add a "Card 3.9 Home/Away Pitching Asymmetry" subsection containing:
+              - partial_r value for a_pit_30 vs. total_runs (controlling for park + h_pit_30)
+              - asymmetry_ratio in both eras
+              - away starter vs. team-level delta
+              - hypothesis verdicts (H1–H4 one-word each)
+              - design_recommendation flags
+              - One-sentence feature selection implication for Phase 4
+        dependsOn:
+          - run-pitch-asymmetry-analysis
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: betting_model_findings.md contains all required section 09 keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_model_findings.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'section 09', 'asymmetr', 'home pitching', 'away pitching',
+                    'partial correlation', 'park factor', 'quartile', 'era',
+                    'starter', 'team-level', 'hypothesis', 'design recommendation'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'betting_model_findings.md missing section 09 keywords: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 3.9 pitching asymmetry findings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'card 3.9', 'asymmetr', 'away pitching', 'partial',
+                    'asymmetry_is_structural'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 3.9 updates: {missing}'

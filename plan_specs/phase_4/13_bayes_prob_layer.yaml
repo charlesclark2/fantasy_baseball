@@ -1,0 +1,445 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bayesian-probability-layer
+  namespace: default
+spec:
+  description: >
+    Build a probability output layer that integrates model-predicted probabilities
+    with bookmaker vig-adjusted implied probabilities via a log-odds Bayesian
+    update. For games where has_odds=True, compute a posterior probability using
+    a mixing weight α tuned via CV, an edge signal (model_prob − market_implied_prob),
+    and an implied Kelly fraction. Output one row per game per market (h2h, totals)
+    to betting_ml/outputs/probability_outputs.parquet for use by the Phase 6
+    betting application layer. Draws on the NGBoost probability outputs from
+    Cards 4.8 and 4.9; is initially useful for live 2026 games and will become
+    more powerful after historical odds backfill (Card 3) completes.
+  acceptanceCriteria:
+    - description: >
+        Bayesian posterior computed in log-odds space:
+        log_odds_posterior = α × log_odds_model + (1 − α) × log_odds_market;
+        implemented for both h2h (P(home win) from NGBoost run diff) and totals
+        (P(over line) from NGBoost total runs) markets
+    - description: >
+        Mixing weight α tuned on held-out has_odds=True games via grid search
+        over α ∈ [0.0, 0.1, ..., 1.0]; selected α minimizes log-loss of
+        posterior_prob vs. actual outcome; optimal α and per-candidate log-loss
+        values documented
+    - description: >
+        Edge signal validated: for has_odds games where model and market agree
+        (|model_prob − market_implied_prob| < 0.02), edge is near-zero; for
+        games with meaningful divergence, edge is non-zero in the expected direction
+    - description: >
+        Output parquet contains one row per game per market with columns:
+        game_key, market, model_prob, market_implied_prob, alpha,
+        posterior_prob, edge, implied_kelly_fraction
+    - description: >
+        Unit spot-check: model_prob=0.60 vs. market_implied_prob=0.52 produces
+        positive edge (+0.08), positive implied_kelly_fraction, and posterior_prob
+        strictly between 0.52 and 0.60 for any α ∈ (0, 1)
+    - description: >
+        Output written to betting_ml/outputs/probability_outputs.parquet;
+        results summary and α tuning table documented in
+        betting_ml/evaluation/probability_layer_results.md; project_context.md
+        Phase 4 section updated with Card 4.12 findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-4-7-4-8-4-9-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Cards 4.7, 4.8, and 4.9 must be complete before Card 4.12 begins.
+    Card 4.7 provides betting_ml/utils/model_io.py (save_model / load_model).
+    Card 4.8 provides betting_ml/models/total_runs_trainer.py with train_ngboost()
+    and p_over_line(), and betting_ml/utils/evaluation.py; cv_results.json must
+    exist. Card 4.9 provides betting_ml/scripts/train_run_diff_baselines.py
+    (confirms NGBoost run diff is viable) and cv_results_run_diff.json.
+    The has_odds column must be present in the loaded feature DataFrame —
+    validated by checking load_features() returns a DataFrame with 'has_odds'.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bayesian-probability-layer-plan
+  namespace: default
+spec:
+  description: >
+    Three-task DAG. implement-probability-layer-utils creates betting_ml/utils/
+    probability_layer.py with all core math functions. run-probability-layer-pipeline
+    implements and runs the end-to-end script: CV α tuning on has_odds games,
+    final predictions for 2026, and parquet output. generate-probability-results
+    produces the report and project_context.md update.
+  goalRef:
+    name: bayesian-probability-layer
+  graph:
+    nodes:
+
+      - id: implement-probability-layer-utils
+        kind: Task
+        description: >
+          Create betting_ml/utils/probability_layer.py with five pure functions
+          covering vig removal, log-odds Bayesian update, edge, Kelly, and α tuning.
+
+          vig_adjust(home_price, away_price, odds_format='american') -> tuple[float, float]:
+            Convert home_price and away_price to implied probabilities, remove vig,
+            return (home_prob_vig_adjusted, away_prob_vig_adjusted).
+            For American odds:
+              Positive odds (e.g. +150): decimal = odds/100 + 1; implied = 1/decimal
+              Negative odds (e.g. -120): decimal = 100/abs(odds) + 1; implied = 1/decimal
+            For decimal odds (odds_format='decimal'):
+              implied = 1/price directly
+            Vig removal: total = home_implied + away_implied
+              home_prob = home_implied / total
+              away_prob = away_implied / total
+            Raise ValueError if total <= 0.
+
+          log_odds(p: float) -> float:
+            Clip p to [1e-9, 1 - 1e-9] before computing log(p / (1 - p)).
+            Raise ValueError if p is not in (0, 1) after clipping would be
+            needed but the input is 0.0 or 1.0 exactly (edge protection).
+
+          sigmoid(x: float) -> float:
+            1.0 / (1.0 + math.exp(-x))
+
+          compute_posterior(model_prob, market_prob, alpha) -> float:
+            Validate alpha ∈ [0, 1]; raise ValueError otherwise.
+            log_odds_post = alpha * log_odds(model_prob) + (1 - alpha) * log_odds(market_prob)
+            return sigmoid(log_odds_post)
+            When alpha=1.0 the posterior equals the model probability.
+            When alpha=0.0 the posterior equals the market probability.
+
+          compute_edge(model_prob, market_prob) -> float:
+            return model_prob - market_prob
+            Positive = model sees value over the market; negative = market is
+            more confident than model.
+
+          compute_kelly(edge, market_implied_prob) -> float:
+            Simple Kelly approximation: edge / decimal_odds where
+            decimal_odds = 1.0 / market_implied_prob.
+            Returns edge * market_implied_prob.
+            Raises ValueError if market_implied_prob <= 0.
+
+          tune_alpha(
+            model_probs: np.ndarray,
+            market_probs: np.ndarray,
+            outcomes: np.ndarray,
+            alpha_grid: np.ndarray | None = None
+          ) -> tuple[float, list[dict]]:
+            alpha_grid defaults to np.round(np.arange(0.0, 1.01, 0.1), 2).
+            For each α: compute posterior for all games, measure sklearn log_loss
+            (clip posteriors to [1e-7, 1-1e-7] before passing to log_loss).
+            Returns (best_alpha, [{'alpha': float, 'log_loss': float}, ...]).
+            If fewer than 10 games are available for tuning, log a warning and
+            return (0.5, results) — default to equal weighting with small sample.
+        dependsOn:
+          - cards-4-7-4-8-4-9-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Probability layer utility module
+            path: betting_ml/utils/probability_layer.py
+          - type: command_succeeds
+            name: All functions import and the spot-check passes
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.probability_layer import (
+                    vig_adjust, log_odds, sigmoid, compute_posterior,
+                    compute_edge, compute_kelly, tune_alpha,
+                )
+                # Spot-check: model=0.60, market=0.52
+                edge = compute_edge(0.60, 0.52)
+                assert edge > 0, f"Expected positive edge, got {edge}"
+                kelly = compute_kelly(edge, 0.52)
+                assert kelly > 0, f"Expected positive Kelly fraction, got {kelly}"
+                posterior = compute_posterior(0.60, 0.52, alpha=0.5)
+                assert 0.52 < posterior < 0.60, (
+                    f"Expected posterior between 0.52 and 0.60, got {posterior}"
+                )
+                # Verify alpha=1 collapses to model prob
+                p_model_only = compute_posterior(0.60, 0.52, alpha=1.0)
+                assert abs(p_model_only - 0.60) < 1e-6, (
+                    f"alpha=1 should return model prob, got {p_model_only}"
+                )
+                # Verify alpha=0 collapses to market prob
+                p_market_only = compute_posterior(0.60, 0.52, alpha=0.0)
+                assert abs(p_market_only - 0.52) < 1e-6, (
+                    f"alpha=0 should return market prob, got {p_market_only}"
+                )
+                # Vig removal: -110/-110 standard line
+                home, away = vig_adjust(-110, -110, odds_format='american')
+                assert abs(home - 0.5) < 0.01, f"Expected ~0.50 for -110/-110, got {home}"
+                assert abs(home + away - 1.0) < 1e-6, "Vig-adjusted probs must sum to 1"
+                print('All spot-checks passed')
+
+      - id: run-probability-layer-pipeline
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/run_probability_layer.py. Runs the full
+          pipeline: CV α tuning on has_odds games, final predictions on 2026
+          has_odds games, and output to parquet.
+
+          Setup:
+            Load features via load_features().
+            Verify 'has_odds' column is present; raise with descriptive message if not.
+            Identify odds price columns:
+              h2h_cols: columns whose names contain 'h2h' or 'moneyline' (case-insensitive)
+              totals_cols: columns whose names contain 'totals' or 'over_price' or 'under_price'
+              Print the detected odds column names for inspection.
+            Feature matrix for model training (same as Cards 4.8/4.9):
+              X = df.drop(columns=['total_runs', 'run_differential', 'home_win',
+                'total_line', 'has_odds'], errors='ignore')
+              Also drop any detected h2h_cols and totals_cols from X (odds data
+              not used as model features — would be leakage).
+            y_runs = df['total_runs']
+            y_diff = df['run_differential']
+
+          CV α tuning loop — for each fold from all_season_splits(df, min_train_seasons=3):
+            1. Build and fit imputation pipeline on X_train; transform X_train and X_eval.
+            2. train_ngboost(X_train_imp, y_runs_train, X_eval_imp, dist='Normal')
+               → total runs dist_params; compute:
+               p_over_total = p_over_line('Normal', dist_params,
+                 total_line=df.loc[eval_idx, 'total_line'].values)
+            3. train_ngboost(X_train_imp, y_diff_train, X_eval_imp, dist='Normal')
+               → run diff dist_params; compute:
+               p_home_win = p_over_line('Normal', dist_params, total_line=0)
+               (scalar total_line=0 for P(run_diff > 0))
+            4. Filter eval rows to has_odds=True. If zero such rows exist for this fold,
+               skip α tuning data collection for this fold (continue).
+            5. For h2h market on has_odds eval rows:
+               market_home_prob = vig_adjust(
+                 df.loc[has_odds_idx, 'h2h_home_price'],   # adapt column name as detected
+                 df.loc[has_odds_idx, 'h2h_away_price'],
+                 odds_format='american'
+               )[0]
+               Record model_prob=p_home_win[has_odds_mask], market_prob=market_home_prob,
+               outcome=df.loc[has_odds_idx, 'home_win'].astype(int).values.
+            6. For totals market on has_odds eval rows:
+               Record model_prob=p_over_total[has_odds_mask],
+               market_prob from vig_adjust on totals over/under prices,
+               outcome=(df.loc[has_odds_idx, 'total_runs'] >
+                 df.loc[has_odds_idx, 'total_line']).astype(int).values.
+            Accumulate all has_odds eval records across folds for α tuning.
+
+          After CV loop:
+            Concatenate all accumulated has_odds records.
+            n_tuning_games = len(accumulated records)
+            Call tune_alpha(model_probs_all, market_probs_all, outcomes_all)
+            → best_alpha, alpha_scores
+            Print α tuning table (α | log-loss) and selected best_alpha.
+
+          Final predictions — 2026 has_odds games:
+            Identify 2026 rows: df[df['game_year'] == 2026]
+            Train on all pre-2026 rows (no eval fold — use full pre-2026 train set):
+              X_train_final = X[df['game_year'] < 2026]; apply imputation pipeline.
+              X_2026_imp = pipeline.transform(X[df['game_year'] == 2026])
+            Run train_ngboost on (X_train_final_imp, y_runs_pretrain, X_2026_imp) and
+            on (X_train_final_imp, y_diff_pretrain, X_2026_imp) to get 2026 predictions.
+            If no 2026 rows with has_odds=True exist: write an empty parquet with
+            the correct schema, print a warning, and exit 0.
+
+          Build output rows:
+            For each 2026 has_odds game, emit two rows:
+            Row 1 (h2h market):
+              game_key: df index or unique game identifier column if present
+              market: 'h2h'
+              model_prob: p_home_win for this game
+              market_implied_prob: vig-adjusted home win prob from odds
+              alpha: best_alpha
+              posterior_prob: compute_posterior(model_prob, market_implied_prob, best_alpha)
+              edge: compute_edge(model_prob, market_implied_prob)
+              implied_kelly_fraction: compute_kelly(edge, market_implied_prob)
+            Row 2 (totals market):
+              game_key: same identifier
+              market: 'totals'
+              model_prob: p_over_total for this game
+              market_implied_prob: vig-adjusted over prob from totals odds
+              alpha: best_alpha
+              posterior_prob, edge, implied_kelly_fraction: same pattern
+
+          Create betting_ml/outputs/ directory if it does not exist.
+          Write output rows as parquet: betting_ml/outputs/probability_outputs.parquet.
+
+          Write betting_ml/evaluation/probability_layer_results.json with structure:
+            {
+              "alpha_tuning": {
+                "n_tuning_games": int,
+                "alpha_scores": [{"alpha": float, "log_loss": float}, ...],
+                "best_alpha": float,
+                "small_sample_warning": bool
+              },
+              "output_summary": {
+                "n_games_2026_with_odds": int,
+                "n_output_rows": int,
+                "h2h_mean_edge": float | null,
+                "totals_mean_edge": float | null,
+                "h2h_positive_edge_pct": float | null,
+                "totals_positive_edge_pct": float | null
+              },
+              "edge_validation": {
+                "near_agreement_games": int,
+                "near_agreement_mean_abs_edge": float | null,
+                "high_divergence_games": int,
+                "high_divergence_mean_abs_edge": float | null
+              }
+            }
+
+          Print a summary table: market | n games | mean edge | % positive edge | mean Kelly.
+          Script exits 0 on success.
+        dependsOn:
+          - implement-probability-layer-utils
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Probability layer pipeline script
+            path: betting_ml/scripts/run_probability_layer.py
+          - type: command_succeeds
+            name: Pipeline script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/run_probability_layer.py
+            timeout: 3600
+          - type: artifact_exists
+            name: Probability outputs parquet written
+            path: betting_ml/outputs/probability_outputs.parquet
+          - type: artifact_exists
+            name: Probability layer results JSON written
+            path: betting_ml/evaluation/probability_layer_results.json
+          - type: command_succeeds
+            name: probability_layer_results.json has all required keys and valid alpha
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/probability_layer_results.json') as f:
+                    results = json.load(f)
+                assert 'alpha_tuning' in results, "Missing 'alpha_tuning'"
+                assert 'output_summary' in results, "Missing 'output_summary'"
+                assert 'edge_validation' in results, "Missing 'edge_validation'"
+                alpha = results['alpha_tuning']['best_alpha']
+                assert 0.0 <= alpha <= 1.0, f"best_alpha out of range: {alpha}"
+                scores = results['alpha_tuning']['alpha_scores']
+                assert len(scores) >= 2, f"Expected alpha_scores with ≥2 candidates, got {len(scores)}"
+          - type: command_succeeds
+            name: Output parquet has expected schema columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                df = pd.read_parquet('betting_ml/outputs/probability_outputs.parquet')
+                required_cols = {
+                    'market', 'model_prob', 'market_implied_prob',
+                    'alpha', 'posterior_prob', 'edge', 'implied_kelly_fraction'
+                }
+                missing = required_cols - set(df.columns)
+                assert not missing, f"Missing columns in output parquet: {missing}"
+                markets = set(df['market'].unique())
+                assert markets.issubset({'h2h', 'totals'}), (
+                    f"Unexpected market values: {markets - {'h2h', 'totals'}}"
+                )
+                print(f'Output parquet: {len(df)} rows, markets: {markets}')
+
+      - id: generate-probability-results
+        kind: Task
+        description: >
+          Read probability_layer_results.json and write
+          betting_ml/evaluation/probability_layer_results.md, then update
+          project_context.md Phase 4 section with Card 4.12 findings.
+
+          probability_layer_results.md must contain these sections in order:
+
+          ## Bayesian Update Method
+            Describe the log-odds formulation:
+              log_odds_posterior = α × log_odds_model + (1 − α) × log_odds_market
+              posterior_prob = sigmoid(log_odds_posterior)
+            Note that α=1 collapses to model probability and α=0 collapses to
+            market probability. Note the vig-removal step (why raw bookmaker
+            implied probabilities are biased upward before adjustment).
+
+          ## α Mixing Weight Tuning
+            Table: α | Log-Loss | Δ vs. best.
+            State the selected best_alpha, the validation game count, and whether
+            a small-sample warning was triggered (< 10 games). If small-sample
+            warning was triggered, state that α=0.5 was used as the default and
+            note that tuning will improve as historical odds backfill (Card 3)
+            completes.
+
+          ## Output Summary
+            State the number of 2026 has_odds games and the number of output rows.
+            Table: Market | N Games | Mean Edge | % Positive Edge | Mean Kelly Fraction.
+            Interpret: if mean edge is near zero, the model and market broadly
+            agree; if mean edge is consistently positive or negative, comment on
+            model vs. market divergence direction.
+
+          ## Edge Signal Validation
+            Report near-agreement games (|edge| < 0.02): mean absolute edge
+            should be near zero — confirms the edge formula is working correctly.
+            Report high-divergence games (|edge| >= 0.05): mean absolute edge
+            should be notably higher — confirms non-zero signal is detected.
+
+          ## Known Limitations and Next Steps
+            Note that α tuning is based on a limited has_odds sample (currently
+            live 2026 games only). Historical odds backfill (Card 3) will
+            dramatically increase the tuning sample. Note that the Kelly fraction
+            is a simplified approximation (does not account for bankroll, simultaneous
+            bets, or market liquidity). Forward reference to Phase 6 betting
+            application layer which will consume probability_outputs.parquet.
+
+          Update project_context.md: add a "Card 4.12 Results" subsection in the
+          Phase 4 tracking section containing: best_alpha, n_tuning_games,
+          small_sample_warning (bool), h2h_mean_edge, totals_mean_edge,
+          and a one-sentence interpretation of the edge signal.
+        dependsOn:
+          - run-probability-layer-pipeline
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Probability layer results report
+            path: betting_ml/evaluation/probability_layer_results.md
+          - type: command_succeeds
+            name: Results report contains all required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/probability_layer_results.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'log-odds', 'posterior', 'bayesian', 'alpha', 'vig',
+                    'market_implied_prob', 'model_prob', 'edge', 'kelly',
+                    'h2h', 'totals', 'mixing weight', 'log loss',
+                    'small-sample', 'card 3', 'phase 6'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.12 results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.12', 'alpha', 'edge']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.12 updates: {missing}'

@@ -1,0 +1,613 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: card-3-11-bookmaker-calibration
+  namespace: default
+spec:
+  description: >
+    Analyze bookmaker accuracy for moneyline and totals markets using the
+    completed 2021–2025 historical odds backfill (~7,000–8,000 matched games).
+    Primary books with full 2021–2025 coverage: draftkings, fanduel, betmgm,
+    williamhill_us, betrivers, bovada, betonlineag, lowvig. Analysis determines
+    which books are best-calibrated, whether sharp-vs-soft disagreement carries
+    signal, and which of nine consensus/disagreement features warrant inclusion
+    in feature_pregame_odds_features for Phase 4. The seven hypotheses (H1–H7)
+    are evaluated against observed calibration metrics. Outputs a market-consensus
+    Brier score as the Phase 4 model benchmark. Findings drive a concrete Phase 4
+    design constraint: include consensus features / include sharp-soft features /
+    queue the mart_odds_consensus dbt model card.
+  acceptanceCriteria:
+    - description: >
+        Vig/overround table produced: all bookmakers ranked by median overround
+        for h2h and totals markets across 2021–2025; lowvig rank in h2h confirmed
+    - description: >
+        Moneyline calibration table produced: Brier score and log loss per
+        bookmaker per season (≥500 events); calibration curves (10 decile buckets)
+        for the top 5 books by event count; home-team bias (mean implied home prob
+        minus actual home win rate) per bookmaker per season
+    - description: >
+        Totals accuracy table produced: MAE and bias per bookmaker per season
+        (≥100 events); over rate and mean totals line by season (2021–2025 trend)
+    - description: >
+        Cross-bookmaker consensus computed for all matched events; sharp books
+        (lowvig, betonlineag, bovada) vs. soft books (draftkings, fanduel, betmgm,
+        williamhill_us, betrivers) Brier comparison with ≥2,000 games per group;
+        disagreement quartile signal test completed across four quartiles of
+        ml_consensus_std
+    - description: >
+        All seven hypotheses (H1–H7) answered as supported / not supported /
+        inconclusive with cited metric values; market consensus Brier score
+        documented as the Phase 4 model benchmark
+    - description: >
+        Findings appended to betting_model_findings.md under section 11 with
+        summary tables and design recommendation
+    - description: >
+        project_context.md Phase 4 design constraints updated with market feature
+        inclusion decision, consensus Brier benchmark value, and
+        queue_mart_odds_consensus_card flag
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: phase3-historical-odds-backfill-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The 2021–2025 historical odds backfill must be complete before this analysis
+    can run. Required: (1) feature_pregame_game_features contains rows where
+    has_odds = true for seasons 2021–2025 with at least 5,000 matched games;
+    (2) mlb_odds_raw contains raw bookmaker odds rows for those same event_ids
+    across the primary eight bookmakers; (3) mart_game_results has final scores
+    for all matched game_pks. Verified when:
+      SELECT COUNT(*) FROM feature_pregame_game_features
+      WHERE has_odds = true AND game_year BETWEEN 2021 AND 2025
+    returns >= 5000.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: card-3-11-bookmaker-calibration-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-bookmaker-calibration is the first node (blocked by the
+    phase3-historical-odds-backfill-complete gate) and executes five analysis
+    steps covering vig ranking, moneyline calibration, totals accuracy,
+    cross-bookmaker consensus/disagreement, and hypothesis evaluation; it prints
+    a summary table and writes a structured JSON results artifact.
+    document-bookmaker-findings is the terminal node and appends section 11 to
+    betting_model_findings.md and updates the Phase 4 design constraints in
+    project_context.md.
+  goalRef:
+    name: card-3-11-bookmaker-calibration
+  graph:
+    nodes:
+
+      - id: run-bookmaker-calibration
+        kind: Task
+        description: >
+          Implement and run betting_ml/scripts/analyze_bookmaker_calibration.py.
+
+          Data source — three queries via the project's Snowflake RSA key
+          connection (same pattern as EDA notebooks):
+
+            (A) Game universe with event mapping:
+              SELECT g.game_pk, o.event_id, o.commence_time, g.game_year
+              FROM feature_pregame_game_features g
+              JOIN feature_pregame_odds_features o ON o.game_pk = g.game_pk
+              WHERE g.has_odds = true
+                AND g.game_year BETWEEN 2021 AND 2025
+
+            (B) Actual outcomes:
+              SELECT r.game_pk,
+                     CASE WHEN r.home_score > r.away_score THEN 1 ELSE 0 END
+                       AS home_win,
+                     r.home_score + r.away_score AS total_runs
+              FROM mart_game_results r
+              WHERE r.game_pk IN (<game_pks from A>)
+
+            (C) Bookmaker odds (raw parse from mlb_odds_raw):
+              For each row in mlb_odds_raw WHERE event_id IN (<event_ids from A>):
+                - Unnest raw_json['bookmakers'] array
+                - For each bookmaker entry: extract bookmaker_key, markets list
+                - Filter: ingestion_ts < commence_time (leakage guard)
+                - Deduplicate: keep MAX(ingestion_ts) per event_id x bookmaker_key
+                - From h2h market: extract home_price and away_price (American odds)
+                - From totals market: extract total_line (float), over_price,
+                  under_price (American odds)
+
+          Implied probability conversion (American odds):
+            If odds > 0:  raw_prob = 100 / (odds + 100)
+            If odds <= 0: raw_prob = abs(odds) / (abs(odds) + 100)
+          Vig-adjusted probability:
+            overround_h2h     = raw_prob_home + raw_prob_away
+            home_implied_prob  = raw_prob_home / overround_h2h
+            overround_totals  = raw_prob_over + raw_prob_under
+            over_implied_prob  = raw_prob_over / overround_totals
+
+          Column aliases used throughout:
+            game_pk   = canonical game identifier (join key between A, B, C)
+            event_id  = The Odds API event identifier (join key into mlb_odds_raw)
+            book      = bookmaker_key string (e.g. 'lowvig', 'draftkings')
+            h2h_over  = overround_h2h (raw vig measure, h2h market)
+            tot_over  = overround_totals (raw vig measure, totals market)
+            home_imp  = home_implied_prob (vig-adjusted home win probability)
+            over_imp  = over_implied_prob (vig-adjusted over probability)
+            hw        = home_win (binary 0/1 actual outcome)
+            tr        = total_runs (actual total runs scored)
+
+          Sharp books: lowvig, betonlineag, bovada
+          Soft books:  draftkings, fanduel, betmgm, williamhill_us, betrivers
+
+          Step 1 — Vig/Overround Rankings:
+            For each book with >= 100 events in a given market across 2021–2025:
+              h2h_median_overround    = median(h2h_over) across all events
+              totals_median_overround = median(tot_over) across all events
+              n_h2h_events            = count of events with h2h prices for this book
+              n_totals_events         = count of events with totals prices for this book
+            Sort books by h2h_median_overround ascending (lowest vig = rank 1).
+            Record lowvig_h2h_rank as its integer position in that sorted list.
+
+          Step 2 — Moneyline Calibration:
+            For each book x season combination with >= 500 events:
+              brier_score = mean((home_imp - hw) ** 2)
+              log_loss    = -mean(hw * log(home_imp) + (1 - hw) * log(1 - home_imp))
+              (clip home_imp to [0.001, 0.999] before computing log to avoid -inf)
+
+            Calibration curves — top 5 books by total event count across all seasons:
+              For each of these five books, bin all events (all seasons combined)
+              into 10 decile buckets by home_imp value.
+              For each bucket: decile index (1–10), mean_predicted = mean(home_imp),
+              mean_actual = mean(hw), n_events count.
+
+            Home-team bias — per book x season with >= 500 events:
+              mean_implied_home_prob = mean(home_imp)
+              actual_home_win_rate   = mean(hw)
+              bias = mean_implied_home_prob - actual_home_win_rate
+              (positive bias means the book overvalues home teams)
+
+          Step 3 — Totals Accuracy:
+            For each book x season with >= 100 totals events:
+              mae       = mean(abs(total_line - tr))
+              bias      = mean(total_line - tr)  (positive = line set too high)
+              over_rate = mean(tr > total_line)
+
+            Line distribution by season (pooled across all books, deduplicated
+            to one line per event using mean across books):
+              season | mean_line = mean(total_line) | median_line | std_line
+
+          Step 4 — Cross-Bookmaker Consensus and Disagreement:
+            For each event with >= 3 books reporting h2h odds, compute:
+              home_win_prob_consensus = mean(home_imp across all books)
+              home_win_prob_sharp     = mean(home_imp, sharp books only)
+              home_win_prob_soft      = mean(home_imp, soft books only)
+              sharp_soft_ml_delta     = home_win_prob_sharp - home_win_prob_soft
+              ml_consensus_std        = std(home_imp across all books)
+              total_line_consensus    = mean(total_line across all books with totals)
+              total_line_std          = std(total_line across books with totals)
+              market_bookmaker_count  = count of distinct books with h2h prices
+              over_prob_consensus     = mean(over_imp across books with totals)
+
+            Sharp vs. soft Brier (events where both groups have >= 1 book each):
+              sharp_brier = mean((home_win_prob_sharp - hw) ** 2)
+              soft_brier  = mean((home_win_prob_soft  - hw) ** 2)
+              Record n_sharp_games and n_soft_games (both must be >= 2000).
+
+            Sharp-soft delta signal (H5 input):
+              Compute Pearson r(sharp_soft_ml_delta, hw) using scipy.stats.pearsonr
+              across all events where both sharp and soft groups have >= 1 book.
+              Record r_value and p_value.
+
+            Disagreement quartile signal test (H4 input):
+              Bin all consensus events into 4 quartiles by ml_consensus_std.
+              Q1 = lowest std (most agreement), Q4 = highest std (most disagreement).
+              For each quartile:
+                std_min, std_max = range of ml_consensus_std in this bucket
+                n_games          = event count
+                outcome_variance = var(hw)
+                home_win_rate    = mean(hw)
+
+          Step 5 — Hypotheses and Market Efficiency:
+            Evaluate all seven hypotheses using results from Steps 1–4:
+
+            H1 (sharp books have lower Brier than soft books):
+              Evidence: sharp_brier vs. soft_brier and the absolute difference.
+              Supported     if sharp_brier < soft_brier AND difference > 0.002.
+              Not supported if sharp_brier >= soft_brier.
+              Inconclusive  if sharp_brier < soft_brier AND difference <= 0.002.
+
+            H2 (lowvig has lowest overround):
+              Evidence: lowvig_h2h_rank from Step 1.
+              Supported     if lowvig_h2h_rank <= 2.
+              Not supported if lowvig_h2h_rank > 2.
+              Inconclusive  if lowvig_h2h_rank == 2 and margin vs. rank 1 is < 0.001.
+
+            H3 (books overvalue home teams by +1–3%):
+              Evidence: mean(bias) across all books and seasons from Step 2.
+              Supported     if 0.010 <= mean_bias <= 0.030.
+              Not supported if mean_bias < 0.005 or mean_bias > 0.040.
+              Inconclusive  if 0.005 <= mean_bias < 0.010 or 0.030 < mean_bias <= 0.040.
+
+            H4 (high disagreement predicts higher outcome variance):
+              Evidence: outcome_variance for Q4 vs. Q1 from Step 4.
+              Supported     if Q4 outcome_variance > Q1 outcome_variance * 1.10.
+              Not supported if Q4 outcome_variance <= Q1 outcome_variance.
+              Inconclusive  if 1.00 < Q4/Q1 <= 1.10.
+
+            H5 (sharp-soft delta has directional signal):
+              Evidence: r_value from Step 4 sharp-soft delta Pearson r.
+              Supported     if abs(r_value) > 0.030 and p_value < 0.05.
+              Not supported if abs(r_value) <= 0.010.
+              Inconclusive  if 0.010 < abs(r_value) <= 0.030 or p_value >= 0.05.
+
+            H6 (post-2023 rule changes caused totals lines to rise ~0.3–0.5 runs):
+              Evidence: mean total_line_consensus for 2021–2022 vs. 2023–2025.
+              line_delta = mean_line_2023_2025 - mean_line_2021_2022.
+              Supported     if 0.20 <= line_delta <= 0.70.
+              Not supported if line_delta < 0.10 or line_delta > 0.90.
+              Inconclusive  if 0.10 <= line_delta < 0.20 or 0.70 < line_delta <= 0.90.
+
+            H7 (market consensus Brier beats Phase 4 naive baseline):
+              Evidence: consensus_brier_overall vs. naive baseline ~0.250.
+              consensus_brier_overall = mean((home_win_prob_consensus - hw) ** 2)
+                across all events with >= 3 books.
+              Supported     if consensus_brier_overall < 0.240.
+              Not supported if consensus_brier_overall >= 0.250.
+              Inconclusive  if 0.240 <= consensus_brier_overall < 0.250.
+
+            Market efficiency metrics:
+              consensus_brier_overall = (computed above for H7)
+              favorite_brier = mean((home_win_prob_consensus - hw) ** 2)
+                for events WHERE home_win_prob_consensus > 0.500
+              underdog_brier = mean((home_win_prob_consensus - hw) ** 2)
+                for events WHERE home_win_prob_consensus <= 0.500
+              brier_by_season: consensus_brier_overall and n_games per season
+
+          Design recommendation logic (apply in order):
+            1. If H7 supported (consensus_brier_overall < 0.240):
+               set include_consensus_features=True.
+            2. If H1 supported (sharp_brier < soft_brier AND diff > 0.002):
+               set include_sharp_soft_features=True.
+            3. If include_consensus_features OR include_sharp_soft_features:
+               set queue_mart_odds_consensus_card=True.
+            4. market_baseline_brier = consensus_brier_overall.
+            5. Rationale string: cite consensus_brier_overall, sharp vs. soft Brier
+               delta, H1–H7 verdict summary in one or two sentences.
+
+          Print a summary table during execution:
+            STEP 1 — Vig/Overround Rankings
+              book | h2h_median_overround | totals_median_overround | n_h2h_events
+              (all books, sorted by h2h_median_overround ascending)
+              lowvig h2h rank: N
+
+            STEP 2 — Moneyline Calibration (book x season, >=500 events)
+              book | season | n_events | brier_score | log_loss
+              Home-team bias (mean across seasons per book):
+              book | mean_bias
+
+            STEP 3 — Totals Accuracy (book x season, >=100 events)
+              book | season | n_events | mae | bias | over_rate
+              Mean totals line by season:
+              season | mean_line | std_line
+
+            STEP 4 — Consensus / Disagreement
+              Sharp books Brier: X.XXXX  (n=XXXX)
+              Soft books Brier:  X.XXXX  (n=XXXX)
+              Sharp-soft delta Pearson r with home_win: r=X.XXX  p=X.XXX
+              Disagreement quartile signal:
+              Q | std_range | n | outcome_variance | home_win_rate
+
+            STEP 5 — Hypotheses
+              H1 (sharp < soft Brier):            [verdict]  delta=X.XXXX
+              H2 (lowvig lowest overround):        [verdict]  rank=N
+              H3 (home-team bias +1-3%):           [verdict]  mean_bias=X.XXX
+              H4 (disagreement -> variance):        [verdict]  Q4/Q1=X.XX
+              H5 (sharp-soft delta signal):         [verdict]  r=X.XXX
+              H6 (post-2023 line rise 0.3-0.5r):   [verdict]  delta=X.XX
+              H7 (market beats naive baseline):     [verdict]  brier=X.XXXX
+              Market baseline Brier (consensus):    X.XXXX
+
+          Write betting_ml/evaluation/bookmaker_calibration_results.json with:
+            {
+              "vig_overround": {
+                "h2h": [
+                  {
+                    "bookmaker": str,
+                    "median_overround": float,
+                    "n_events": int,
+                    "h2h_rank": int
+                  }
+                ],
+                "totals": [
+                  {
+                    "bookmaker": str,
+                    "median_overround": float,
+                    "n_events": int
+                  }
+                ],
+                "lowvig_h2h_rank": int
+              },
+              "moneyline_calibration": {
+                "by_bookmaker_season": [
+                  {
+                    "bookmaker": str,
+                    "season": int,
+                    "n_events": int,
+                    "brier_score": float,
+                    "log_loss": float
+                  }
+                ],
+                "calibration_curves": {
+                  "<bookmaker_key>": [
+                    {
+                      "decile": int,
+                      "mean_predicted": float,
+                      "mean_actual": float,
+                      "n_events": int
+                    }
+                  ]
+                },
+                "home_team_bias": [
+                  {
+                    "bookmaker": str,
+                    "season": int,
+                    "n_events": int,
+                    "mean_implied_home_prob": float,
+                    "actual_home_win_rate": float,
+                    "bias": float
+                  }
+                ]
+              },
+              "totals_accuracy": {
+                "by_bookmaker_season": [
+                  {
+                    "bookmaker": str,
+                    "season": int,
+                    "n_events": int,
+                    "mae": float,
+                    "bias": float,
+                    "over_rate": float
+                  }
+                ],
+                "line_distribution_by_season": [
+                  {
+                    "season": int,
+                    "mean_line": float,
+                    "median_line": float,
+                    "std_line": float
+                  }
+                ]
+              },
+              "consensus_analysis": {
+                "sharp_books": ["lowvig", "betonlineag", "bovada"],
+                "soft_books": ["draftkings", "fanduel", "betmgm",
+                               "williamhill_us", "betrivers"],
+                "sharp_brier": float,
+                "soft_brier": float,
+                "n_sharp_games": int,
+                "n_soft_games": int,
+                "sharp_soft_delta_r": float,
+                "sharp_soft_delta_pval": float,
+                "disagreement_quartile_signal": [
+                  {
+                    "quartile": int,
+                    "std_min": float,
+                    "std_max": float,
+                    "n_games": int,
+                    "outcome_variance": float,
+                    "home_win_rate": float
+                  }
+                ]
+              },
+              "market_efficiency": {
+                "consensus_brier_overall": float,
+                "favorite_brier": float,
+                "underdog_brier": float,
+                "brier_by_season": [
+                  {
+                    "season": int,
+                    "brier_score": float,
+                    "n_games": int
+                  }
+                ]
+              },
+              "hypotheses": {
+                "H1": {"verdict": str, "evidence": str},
+                "H2": {"verdict": str, "evidence": str},
+                "H3": {"verdict": str, "evidence": str},
+                "H4": {"verdict": str, "evidence": str},
+                "H5": {"verdict": str, "evidence": str},
+                "H6": {"verdict": str, "evidence": str},
+                "H7": {"verdict": str, "evidence": str}
+              },
+              "design_recommendation": {
+                "include_consensus_features": bool,
+                "include_sharp_soft_features": bool,
+                "queue_mart_odds_consensus_card": bool,
+                "market_baseline_brier": float,
+                "rationale": str
+              }
+            }
+
+          Script exits 0 in all cases.
+        dependsOn:
+          - phase3-historical-odds-backfill-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Bookmaker calibration analysis script exists
+            path: betting_ml/scripts/analyze_bookmaker_calibration.py
+          - type: command_succeeds
+            name: Script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/analyze_bookmaker_calibration.py
+            timeout: 300
+          - type: artifact_exists
+            name: Bookmaker calibration results JSON written
+            path: betting_ml/evaluation/bookmaker_calibration_results.json
+          - type: command_succeeds
+            name: Results JSON has all required top-level keys and design recommendation
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/bookmaker_calibration_results.json') as f:
+                    r = json.load(f)
+                required = [
+                    'vig_overround', 'moneyline_calibration', 'totals_accuracy',
+                    'consensus_analysis', 'market_efficiency', 'hypotheses',
+                    'design_recommendation'
+                ]
+                missing = [k for k in required if k not in r]
+                assert not missing, f'Missing top-level keys: {missing}'
+                rec = r['design_recommendation']
+                for key in ('include_consensus_features', 'include_sharp_soft_features',
+                            'queue_mart_odds_consensus_card', 'market_baseline_brier',
+                            'rationale'):
+                    assert key in rec, f'design_recommendation missing: {key}'
+                for h in ('H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'H7'):
+                    assert h in r['hypotheses'], f'Missing hypothesis: {h}'
+                    assert 'verdict' in r['hypotheses'][h], f'{h} missing verdict'
+                    assert 'evidence' in r['hypotheses'][h], f'{h} missing evidence'
+          - type: command_succeeds
+            name: Consensus analysis has sharp and soft groups with sufficient game counts
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/bookmaker_calibration_results.json') as f:
+                    r = json.load(f)
+                ca = r['consensus_analysis']
+                assert ca['n_sharp_games'] >= 2000, \
+                    f"Sharp group has {ca['n_sharp_games']} games; need >= 2000"
+                assert ca['n_soft_games'] >= 2000, \
+                    f"Soft group has {ca['n_soft_games']} games; need >= 2000"
+                assert len(ca['disagreement_quartile_signal']) == 4, \
+                    f"Expected 4 disagreement quartiles, got {len(ca['disagreement_quartile_signal'])}"
+          - type: command_succeeds
+            name: Calibration curves cover top 5 books with exactly 10 decile buckets each
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/bookmaker_calibration_results.json') as f:
+                    r = json.load(f)
+                curves = r['moneyline_calibration']['calibration_curves']
+                assert len(curves) >= 5, \
+                    f"Expected calibration curves for >= 5 books, got {len(curves)}"
+                for book, deciles in curves.items():
+                    assert len(deciles) == 10, \
+                        f"Book {book} calibration curve has {len(deciles)} buckets; need 10"
+
+      - id: document-bookmaker-findings
+        kind: Task
+        description: >
+          Read betting_ml/evaluation/bookmaker_calibration_results.json and:
+          (1) Append a "## Section 11: Bookmaker Calibration and Market Efficiency"
+              section to betting_model_findings.md.
+          (2) Update the Phase 4 design constraints in project_context.md.
+
+          Section 11 in betting_model_findings.md must contain:
+
+          ### Vig / Overround Rankings
+            Markdown table: Bookmaker | H2H Median Overround | Totals Median
+            Overround | N Events. Sorted by H2H overround ascending (rank 1 = lowest
+            vig). State lowvig's rank explicitly.
+            Interpret: confirm or refute that lowvig has lowest overround; note the
+            spread between best and worst book.
+
+          ### Moneyline Calibration
+            Markdown table: Bookmaker | Season | N Events | Brier Score | Log Loss.
+            Second table: Bookmaker | Mean Bias (mean implied home prob minus actual
+            home win rate), across all qualifying seasons.
+            Interpret: which book has lowest mean Brier; direction and typical size
+            of home-team bias; whether bias is consistent across seasons.
+
+          ### Totals Market Accuracy
+            Markdown table: Bookmaker | Season | N Events | MAE | Bias | Over Rate.
+            Second table: Season | Mean Line | Std.
+            Interpret: is there a consistent over or under bias? Has the mean line
+            risen since 2023 (H6)?
+
+          ### Cross-Bookmaker Consensus and Disagreement
+            State sharp books Brier and soft books Brier with n for each group.
+            State sharp_soft_ml_delta Pearson r and p-value (H5).
+            Markdown table: Quartile | Std Range | N Games | Outcome Variance |
+            Home Win Rate. Four rows (Q1 through Q4).
+            Interpret: does Q4 outcome variance meaningfully exceed Q1 (H4)? Does
+            the sharp-soft delta carry directional signal (H5)?
+
+          ### Hypothesis Verdicts (H1–H7)
+            Markdown table: Hypothesis | Description | Verdict | Key Evidence.
+            One row per hypothesis. Verdict must be one of: supported / not
+            supported / inconclusive.
+
+          ### Market Efficiency Benchmark
+            Report consensus_brier_overall, favorite_brier, underdog_brier.
+            Markdown table: Season | Consensus Brier | N Games.
+            Interpret: is market calibration improving or stable season over season?
+            State the Phase 4 benchmark: "Market consensus Brier (2021–2025):
+            X.XXXX. Phase 4 models must beat this to add value over the market."
+
+          ### Design Recommendation
+            State include_consensus_features, include_sharp_soft_features, and
+            queue_mart_odds_consensus_card flag values.
+            Reproduce the rationale string from the JSON verbatim.
+            If queue_mart_odds_consensus_card=True: note that a Card 4.X to build
+            mart_odds_consensus (aggregating mart_odds_outcomes to game-grain, final
+            pre-game snapshot per bookmaker per event) should be queued before Phase
+            4 feature assembly.
+        dependsOn:
+          - run-bookmaker-calibration
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: betting_model_findings.md contains all required section 11 keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_model_findings.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'section 11', 'bookmaker', 'overround', 'brier',
+                    'moneyline', 'totals', 'calibration', 'consensus',
+                    'sharp', 'soft', 'disagreement', 'hypothesis',
+                    'market efficiency', 'design recommendation'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'betting_model_findings.md missing section 11 keywords: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 3.11 findings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'card 3.11', 'bookmaker', 'consensus', 'brier',
+                    'include_consensus_features'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 3.11 updates: {missing}'

@@ -1,0 +1,207 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: <card-id>-<short-slug>                    # e.g. card-3-11-bookmaker-calibration
+  namespace: default
+spec:
+  description: >
+    <One paragraph. State the analytical objective, the primary data source(s),
+    and what the outputs drive downstream. Be specific: name columns, models,
+    and targets. Avoid vague language like "analyze" or "explore" — say what
+    question is being answered and what decision the answer informs.>
+  acceptanceCriteria:
+    - description: >
+        <High-level outcome 1 — what the analysis produces (e.g., a ranked
+        table, a hypothesis test result, a new dbt model with non-null values).>
+    - description: >
+        <High-level outcome 2.>
+    - description: >
+        <High-level outcome 3 — typically: findings written to
+        betting_model_findings.md and project_context.md updated.>
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: <prerequisite-gate-name>                  # e.g. phase3-feature-store-available
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    <State what must be true before this analysis can run. Name the specific
+    dbt models, columns, or prior cards that must exist. Include a verification
+    condition: "Verified when <command or query> returns non-null rows.">
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: <card-id>-<short-slug>-plan
+  namespace: default
+spec:
+  description: >
+    <Two-sentence DAG summary. Name the nodes and their order. State which node
+    is blocked by the gate and which is terminal.>
+  goalRef:
+    name: <card-id>-<short-slug>                  # must match Goal metadata.name above
+  graph:
+    nodes:
+
+      - id: run-<analysis-slug>                   # e.g. run-bookmaker-calibration
+        kind: Task
+        description: >
+          Implement and run betting_ml/scripts/<script_name>.py.
+
+          Data source:
+            Load via load_features() or direct mart read.
+            Filter: <e.g., has_odds = true, ingestion_ts < commence_time>
+            Restrict to rows where <required columns> are non-null.
+
+          Column aliases used throughout:
+            alias_a  = full_column_name_a
+            alias_b  = full_column_name_b
+
+          Targets: <e.g., total_runs, run_differential, home_win>
+
+          Step 1 — <Step name>:
+            <Precise instructions: what to compute, what function/method to use,
+            what decision threshold applies. Include formulas inline.>
+            Record in results JSON.
+
+          Step 2 — <Step name>:
+            <Precise instructions.>
+
+          Step 3 — <Step name>:
+            <Precise instructions.>
+
+          Step 4 — <Step name>:
+            <Precise instructions.>
+
+          Print a summary table during execution:
+            STEP 1 — <Step name>
+              <variable>: <value>
+
+            STEP 2 — <Step name>
+              <column header 1> | <column header 2> | ...
+
+          Write betting_ml/evaluation/<results_filename>.json with structure:
+            {
+              "<section_1>": {
+                "<field_a>": <type>,
+                "<field_b>": <type>
+              },
+              "<section_2>": [
+                {
+                  "<field>": <type>,
+                  ...
+                }
+              ],
+              "design_recommendation": {
+                "<flag_1>": bool,
+                "<flag_2>": bool,
+                "rationale": str
+              }
+            }
+
+          Design recommendation logic (apply in order):
+            1. If <condition 1>: set <flag_1>=True.
+            2. Else if <condition 2>: set <flag_2>=True.
+            3. Rationale string: cite <metric> value and threshold result.
+
+          Script exits 0 in all cases.
+        dependsOn:
+          - <prerequisite-gate-name>
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Analysis script exists
+            path: betting_ml/scripts/<script_name>.py
+          - type: command_succeeds
+            name: Script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/<script_name>.py
+            timeout: 300
+          - type: artifact_exists
+            name: Results JSON written
+            path: betting_ml/evaluation/<results_filename>.json
+          - type: command_succeeds
+            name: Results JSON has all required top-level keys
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/<results_filename>.json') as f:
+                    r = json.load(f)
+                required = ['<section_1>', '<section_2>', 'design_recommendation']
+                missing = [k for k in required if k not in r]
+                assert not missing, f'Missing keys: {missing}'
+                rec = r['design_recommendation']
+                for key in ('<flag_1>', '<flag_2>', 'rationale'):
+                    assert key in rec, f'design_recommendation missing: {key}'
+
+      - id: document-<analysis-slug>-findings     # e.g. document-bookmaker-findings
+        kind: Task
+        description: >
+          Read betting_ml/evaluation/<results_filename>.json and:
+          (1) Append a "## Section <NN>: <Section Title>" section to
+              betting_model_findings.md.
+          (2) Update the Phase <N> design constraints in project_context.md.
+
+          Section <NN> in betting_model_findings.md must contain:
+
+          ### <Subsection 1 Title>
+            <What to report and how to interpret it.>
+
+          ### <Subsection 2 Title>
+            Markdown table: Column A | Column B | Column C.
+            <Interpretation note.>
+
+          ### Design Recommendation
+            State the recommendation flags and the rationale string from the JSON.
+
+          Update project_context.md Phase <N> design constraints section:
+            Add a "Card <X.Y> <Short Title>" subsection containing:
+              - <key metric 1>
+              - <key metric 2>
+              - design_recommendation flags
+              - One-sentence feature selection implication for Phase <N+1>
+        dependsOn:
+          - run-<analysis-slug>
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: betting_model_findings.md contains all required section keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_model_findings.md') as f:
+                    content = f.read().lower()
+                required = [
+                    'section <nn>', '<keyword_1>', '<keyword_2>',
+                    'design recommendation', 'incremental'
+                ]
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'betting_model_findings.md missing keywords: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card <X.Y> findings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card <x.y>', '<keyword_1>', '<keyword_2>']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card <X.Y> updates: {missing}'

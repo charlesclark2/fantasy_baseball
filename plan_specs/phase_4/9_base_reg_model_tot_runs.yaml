@@ -1,0 +1,555 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: total-runs-regression-baselines
+  namespace: default
+spec:
+  description: >
+    Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for
+    total runs prediction using the temporal CV splits and imputation pipeline
+    from Card 4.6. Produce full predictive distributions for P(over/under line)
+    calibration and SHAP feature importance to validate lineup-vs-starter and
+    delta feature signal from Cards 4.1–4.2.
+  acceptanceCriteria:
+    - description: >
+        Ridge, XGBoost, NGBoost Normal, and NGBoost LogNormal trained and
+        evaluated on all temporal CV folds; per-fold MAE and RMSE reported
+        for each model alongside the global mean baseline (~3.5 runs)
+    - description: >
+        All three trained models beat the global mean MAE baseline (~3.5 runs)
+        on held-out season folds
+    - description: >
+        NGBoost Normal vs. LogNormal comparison documented — which distribution
+        better fits blowout-game tails (motivated by NB01 finding that blowout
+        games exceed Gaussian predictions) stated with supporting metric
+    - description: >
+        P(over/under line) Brier score computed for games where has_odds = true
+        and total_line is non-null; results documented per model
+    - description: >
+        SHAP TreeExplainer values on the final-fold XGBoost model confirm that
+        at least one starter platoon-split feature (column name contains
+        "vs_lh" or "vs_rh") and at least one 7-day recency feature (column
+        name ends with "_7d") appear in the top-20 features by mean |SHAP|.
+        Note: delta-encoded features (_delta / 7d_minus_*) were removed from
+        the canonical feature list by Card 4.8; 7d raw windows are the
+        surviving recency signal carriers per the NB07 design constraint.
+    - description: >
+        Results documented in betting_ml/evaluation/total_runs_results.md with
+        per-season MAE/RMSE table, model comparison, distribution comparison,
+        calibration table, SHAP importance list, and best-model rationale;
+        project_context.md Phase 4 section updated with key findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-6-pipeline-foundation-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.6 (ML Pipeline Foundation) must be complete before model training
+    begins. Specifically: betting_ml/utils/data_loader.py, cv_splits.py, and
+    preprocessing.py must be implemented; betting_ml/scripts/validate_pipeline.py
+    must exit 0 with zero nulls across all 7 temporal CV folds and 2020 absent
+    from every fold.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-8-feature-selection-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.8 (Feature Selection and Model Serialization) must be complete
+    before model training begins. Specifically: betting_ml/utils/feature_selection.py
+    must expose load_retained_features(); betting_ml/utils/model_io.py must
+    expose save_model() and load_model(); betting_ml/evaluation/feature_selection.md
+    must exist as the canonical input contract for Cards 4.9–4.11.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: total-runs-regression-baselines-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG. install-model-dependencies is the root node (blocked by the
+    Card 4.6 gate). implement-total-runs-trainers and implement-evaluation-utilities
+    run in parallel after it. run-cv-evaluation depends on both. generate-results-report
+    is the terminal node.
+  goalRef:
+    name: total-runs-regression-baselines
+  graph:
+    nodes:
+
+      - id: install-model-dependencies
+        kind: Task
+        description: >
+          Add xgboost, ngboost, shap, and scipy to pyproject.toml dependencies
+          and confirm all four packages import successfully. xgboost provides the
+          gradient boosting regressor; ngboost provides probabilistic gradient
+          boosting with Normal and LogNormal distributions (ngboost.distns);
+          shap provides TreeExplainer-based feature importance for XGBoost;
+          scipy provides stats.norm.sf and stats.lognorm.sf for P(over/under)
+          computation.
+
+          Also create betting_ml/models/__init__.py so the models/ subdirectory
+          is importable as a Python package (betting_ml/models/.gitkeep was
+          created in Card 4.6 but no __init__.py was added).
+        dependsOn:
+          - card-4-6-pipeline-foundation-complete
+          - card-4-8-feature-selection-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Models package init
+            path: betting_ml/models/__init__.py
+          - type: command_succeeds
+            name: xgboost imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "import xgboost; print(xgboost.__version__)"
+          - type: command_succeeds
+            name: ngboost imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "import ngboost; print(ngboost.__version__)"
+          - type: command_succeeds
+            name: shap imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "import shap; print(shap.__version__)"
+          - type: command_succeeds
+            name: scipy.stats imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from scipy import stats; print(stats.__name__)"
+
+      - id: implement-total-runs-trainers
+        kind: Task
+        description: >
+          Implement betting_ml/models/total_runs_trainer.py. Four public
+          training functions plus one probability helper; each training function
+          accepts (X_train: pd.DataFrame, y_train: pd.Series,
+          X_eval: pd.DataFrame) and returns a dict.
+
+          train_ridge(X_train, y_train, X_eval) -> dict
+            keys: y_pred (np.ndarray shape (n_eval,)), model (fitted Ridge)
+            sklearn Ridge with alpha=1.0. Returns point predictions only;
+            no distributional output.
+
+          train_xgboost(X_train, y_train, X_eval) -> dict
+            keys: y_pred (np.ndarray), model (fitted XGBRegressor)
+            XGBRegressor(n_estimators=400, max_depth=5, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, random_state=42, n_jobs=-1).
+            Residual-based P(over/under) is derived in run-cv-evaluation by
+            fitting a Normal to OOF training residuals — not computed here.
+
+          train_ngboost(X_train, y_train, X_eval, dist="Normal") -> dict
+            keys: y_pred (np.ndarray), dist_params (dict), model (fitted NGBRegressor)
+            NGBRegressor with Dist from ngboost.distns (Normal or LogNormal),
+            n_estimators=500, random_state=42, verbose=False.
+            dist_params for Normal: {'loc': np.ndarray, 'scale': np.ndarray}
+              where loc = predicted mean, scale = predicted std per eval row.
+            dist_params for LogNormal: {'loc': np.ndarray, 'scale': np.ndarray}
+              where loc = predicted log-mean (s parameter), scale = predicted
+              log-std. y_pred = exp(loc + 0.5 * scale^2) (lognormal mean).
+
+          p_over_line(dist_name: str, dist_params: dict, total_line: float | np.ndarray) -> np.ndarray
+            Vectorized function returning P(total_runs > total_line) for each
+            game. dist_name is "Normal" or "LogNormal".
+            Normal: scipy.stats.norm.sf(total_line, loc=dist_params['loc'], scale=dist_params['scale'])
+            LogNormal: scipy.stats.lognorm.sf(total_line, s=dist_params['scale'], scale=np.exp(dist_params['loc']))
+            total_line may be a scalar (same line for all games) or a per-game array.
+
+          All training functions must handle the case where X_train contains
+          only numeric columns after imputation (guaranteed by Card 4.6
+          preprocessing pipeline). Raise ValueError if X_train or X_eval
+          contains non-numeric dtypes.
+        dependsOn:
+          - install-model-dependencies
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Total runs trainer module
+            path: betting_ml/models/total_runs_trainer.py
+          - type: command_succeeds
+            name: Module imports and exposes correct public API
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.models.total_runs_trainer import train_ridge, train_xgboost, train_ngboost, p_over_line"
+          - type: command_succeeds
+            name: Ridge produces predictions with correct shape on synthetic data
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np, pandas as pd
+                from betting_ml.models.total_runs_trainer import train_ridge
+                rng = np.random.default_rng(0)
+                X_tr = pd.DataFrame(rng.standard_normal((100, 10)))
+                y_tr = pd.Series(rng.uniform(6, 14, 100))
+                X_ev = pd.DataFrame(rng.standard_normal((20, 10)))
+                result = train_ridge(X_tr, y_tr, X_ev)
+                assert result['y_pred'].shape == (20,), f"Expected (20,), got {result['y_pred'].shape}"
+                assert 'model' in result, 'model key missing from train_ridge result'
+          - type: command_succeeds
+            name: XGBoost produces predictions with correct shape on synthetic data
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np, pandas as pd
+                from betting_ml.models.total_runs_trainer import train_xgboost
+                rng = np.random.default_rng(0)
+                X_tr = pd.DataFrame(rng.standard_normal((100, 10)))
+                y_tr = pd.Series(rng.uniform(6, 14, 100))
+                X_ev = pd.DataFrame(rng.standard_normal((20, 10)))
+                result = train_xgboost(X_tr, y_tr, X_ev)
+                assert result['y_pred'].shape == (20,), f"Expected (20,), got {result['y_pred'].shape}"
+          - type: command_succeeds
+            name: NGBoost Normal returns dist_params with loc and scale arrays of correct shape
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np, pandas as pd
+                from betting_ml.models.total_runs_trainer import train_ngboost
+                rng = np.random.default_rng(0)
+                X_tr = pd.DataFrame(rng.standard_normal((100, 10)))
+                y_tr = pd.Series(rng.uniform(6, 14, 100))
+                X_ev = pd.DataFrame(rng.standard_normal((20, 10)))
+                result = train_ngboost(X_tr, y_tr, X_ev, dist="Normal")
+                assert 'dist_params' in result, 'dist_params missing'
+                assert result['dist_params']['loc'].shape == (20,), 'loc shape mismatch'
+                assert result['dist_params']['scale'].shape == (20,), 'scale shape mismatch'
+                assert (result['dist_params']['scale'] > 0).all(), 'scale must be positive'
+          - type: command_succeeds
+            name: p_over_line returns probabilities in [0, 1] for Normal distribution
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np
+                from betting_ml.models.total_runs_trainer import p_over_line
+                params = {'loc': np.array([9.5, 10.0, 8.0]), 'scale': np.array([2.0, 2.0, 2.0])}
+                probs = p_over_line('Normal', params, total_line=9.5)
+                assert probs.shape == (3,), f'Expected (3,), got {probs.shape}'
+                assert ((probs >= 0) & (probs <= 1)).all(), 'Probabilities outside [0, 1]'
+                # P(X > mean) ≈ 0.5 for Normal
+                assert abs(probs[0] - 0.5) < 0.01, f'P(X > mean) should be ~0.5, got {probs[0]}'
+
+      - id: implement-evaluation-utilities
+        kind: Task
+        description: >
+          Implement betting_ml/utils/evaluation.py with three public functions.
+
+          fold_metrics(y_true: np.ndarray | pd.Series, y_pred: np.ndarray | pd.Series) -> dict
+            Returns {'mae': float, 'rmse': float}. MAE = mean(|y_true - y_pred|);
+            RMSE = sqrt(mean((y_true - y_pred)^2)). Returns {'mae': float('nan'),
+            'rmse': float('nan')} for empty inputs. Raises ValueError for
+            mismatched lengths.
+
+          brier_score_over_under(y_true_runs: np.ndarray, p_over: np.ndarray, total_line: float | np.ndarray) -> float
+            Binary Brier score for the over/under bet.
+            outcome = (y_true_runs > total_line).astype(float)
+            Brier = mean((p_over - outcome)^2)
+            Accepts numpy arrays or pandas Series; returns scalar float.
+            Returns float('nan') for empty inputs. Raises ValueError for
+            mismatched array lengths.
+
+          calibration_table(y_true_runs: np.ndarray, p_over: np.ndarray, total_line: float | np.ndarray, n_bins: int = 10) -> pd.DataFrame
+            Bins games by predicted P(over) into n_bins equal-width buckets
+            across [0, 1]. Returns DataFrame with columns: bin_center (float),
+            mean_p_over (float), actual_over_rate (float), n_games (int).
+            Bins with zero games are excluded from output.
+            Used to visually inspect whether predicted over-probabilities match
+            actual over rates (calibration diagnostic).
+        dependsOn:
+          - install-model-dependencies
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Evaluation utilities module
+            path: betting_ml/utils/evaluation.py
+          - type: command_succeeds
+            name: Module imports and exposes correct public API
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.utils.evaluation import fold_metrics, brier_score_over_under, calibration_table"
+          - type: command_succeeds
+            name: fold_metrics returns correct MAE and RMSE for known inputs
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np
+                from betting_ml.utils.evaluation import fold_metrics
+                y_true = np.array([10.0, 8.0, 12.0])
+                y_pred = np.array([9.0,  9.0, 11.0])
+                m = fold_metrics(y_true, y_pred)
+                # MAE = (1+1+1)/3 = 1.0; RMSE = sqrt((1+1+1)/3) = 1.0
+                assert abs(m['mae'] - 1.0) < 1e-9, f"Expected MAE=1.0, got {m['mae']}"
+                assert abs(m['rmse'] - 1.0) < 1e-9, f"Expected RMSE=1.0, got {m['rmse']}"
+          - type: command_succeeds
+            name: brier_score_over_under returns 0.0 for perfect probabilistic predictions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np
+                from betting_ml.utils.evaluation import brier_score_over_under
+                # Perfect: predict 1.0 when actually over, 0.0 when actually under
+                y_true = np.array([11.0, 9.0, 12.0])
+                p_over = np.array([1.0,  0.0,  1.0])
+                score = brier_score_over_under(y_true, p_over, total_line=10.0)
+                assert abs(score) < 1e-9, f'Expected Brier=0.0, got {score}'
+          - type: command_succeeds
+            name: calibration_table returns DataFrame with required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np
+                from betting_ml.utils.evaluation import calibration_table
+                rng = np.random.default_rng(42)
+                y_true = rng.uniform(6, 14, 200)
+                p_over = rng.uniform(0, 1, 200)
+                ct = calibration_table(y_true, p_over, total_line=9.5, n_bins=5)
+                assert set(ct.columns) >= {'bin_center', 'mean_p_over', 'actual_over_rate', 'n_games'}
+                assert len(ct) > 0, 'calibration_table returned empty DataFrame'
+
+      - id: run-cv-evaluation
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/train_total_runs_baselines.py. This script
+          runs the full temporal CV evaluation for all models and writes results
+          to betting_ml/evaluation/cv_results.json for use by generate-results-report.
+
+          Setup:
+            Load features via load_features(). Define targets =
+            ['total_runs', 'run_differential', 'home_win']. Define odds_cols =
+            ['total_line', 'has_odds'] (retain in df but exclude from feature
+            matrix X). Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Feature matrix X = df[load_retained_features()] — use only the 241
+            features from betting_ml/evaluation/feature_selection.md; do not
+            pass additional columns to fit() calls.
+
+          For each CV fold from all_season_splits(df, min_train_seasons=3):
+            1. Split X, y (total_runs), and odds columns into train/eval sets
+            2. Fit build_imputation_pipeline() on X_train; transform X_train and X_eval
+            3. Compute global mean baseline: y_pred_mean = np.full(len(X_eval), y_train.mean())
+            4. Train Ridge: result = train_ridge(X_train_imp, y_train, X_eval_imp)
+            5. Train XGBoost: result = train_xgboost(X_train_imp, y_train, X_eval_imp)
+               For P(over/under): fit Normal to (y_train - xgb_train_preds) to get
+               residual std sigma; P(over line) = norm.sf(total_line, loc=y_pred, scale=sigma)
+            6. Train NGBoost Normal: train_ngboost(..., dist="Normal")
+            7. Train NGBoost LogNormal: train_ngboost(..., dist="LogNormal")
+            8. Compute fold_metrics() for each model and the baseline
+            9. For eval rows where has_odds == True and total_line is non-null,
+               compute brier_score_over_under() for XGBoost, NGBoost Normal, and NGBoost LogNormal
+            10. Print fold summary line: fold label, eval rows, and MAE for each model
+
+          After all folds:
+            On the final (most recent) fold's XGBoost model, compute SHAP
+            TreeExplainer values on X_eval_imp. Record top-20 features by
+            mean absolute SHAP value. Assert that at least one feature name
+            contains "vs_lh" or "vs_rh" (starter platoon-split feature) and at
+            least one ends with "_7d" (7-day recency feature — the surviving
+            recency signal per NB07; delta-encoded features were removed by
+            Card 4.8 feature selection). If either assertion fails, print a
+            warning but do not exit non-zero — the assertion is informational
+            since features may not all be present in the current data snapshot.
+
+          Serialize models via save_model() from betting_ml/utils/model_io.py
+          after all folds complete. Save the final-fold model for each family:
+            save_model(ridge_model,   target='total_runs', model_name='ridge',          eval_year=final_fold_year)
+            save_model(xgb_model,     target='total_runs', model_name='xgboost',        eval_year=final_fold_year)
+            save_model(ngb_n_model,   target='total_runs', model_name='ngboost_normal',  eval_year=final_fold_year)
+            save_model(ngb_ln_model,  target='total_runs', model_name='ngboost_lognormal', eval_year=final_fold_year)
+          Files land at betting_ml/models/total_runs/{model_name}_{eval_year}.pkl
+          per the Card 4.8 model_io.py path convention.
+
+          Write betting_ml/evaluation/cv_results.json with structure:
+            {
+              "fold_results": [
+                {
+                  "fold": str, "model": str, "n_eval": int,
+                  "mae": float, "rmse": float,
+                  "brier_score": float | null  (null when no odds data in fold)
+                },
+                ...  (one entry per fold × model combination)
+              ],
+              "shap_top_features": [
+                {"feature": str, "mean_abs_shap": float},
+                ...  (top 20, sorted descending)
+              ],
+              "summary": {
+                "best_mae_model": str,
+                "best_brier_model": str,
+                "ngboost_better_dist": str  ("Normal" or "LogNormal")
+              }
+            }
+
+          Script exits 0 on success; exits non-zero with a descriptive message
+          if any trained model fails to beat the global mean baseline MAE on
+          the majority (> 50%) of folds.
+        dependsOn:
+          - implement-total-runs-trainers
+          - implement-evaluation-utilities
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CV evaluation script
+            path: betting_ml/scripts/train_total_runs_baselines.py
+          - type: command_succeeds
+            name: CV evaluation script runs to completion with exit code 0
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/train_total_runs_baselines.py
+            timeout: 1800
+          - type: artifact_exists
+            name: CV results JSON written
+            path: betting_ml/evaluation/cv_results.json
+          - type: command_succeeds
+            name: cv_results.json is valid JSON with expected top-level structure
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/cv_results.json') as f:
+                    results = json.load(f)
+                assert 'fold_results' in results, "Missing 'fold_results' key"
+                assert 'shap_top_features' in results, "Missing 'shap_top_features' key"
+                assert 'summary' in results, "Missing 'summary' key"
+                models = {r['model'] for r in results['fold_results']}
+                required_models = {'ridge', 'xgboost', 'ngboost_normal', 'ngboost_lognormal', 'global_mean'}
+                missing = required_models - models
+                assert not missing, f'Missing models in results: {missing}'
+                assert len(results['shap_top_features']) > 0, 'shap_top_features is empty'
+
+      - id: generate-results-report
+        kind: Task
+        description: >
+          Read cv_results.json and write betting_ml/evaluation/total_runs_results.md,
+          then update project_context.md Phase 4 section.
+
+          total_runs_results.md must contain these sections in order:
+
+          ## Per-Season MAE/RMSE by Model
+            Markdown table with columns: Season | Global Mean MAE | Ridge MAE |
+            XGBoost MAE | NGBoost Normal MAE | NGBoost LogNormal MAE | Ridge RMSE |
+            XGBoost RMSE | NGBoost Normal RMSE | NGBoost LogNormal RMSE.
+            One row per CV fold (2019, 2021–2026). Bold the best non-baseline
+            model per fold.
+
+          ## Model Comparison Summary
+            Average MAE and RMSE across all folds for each model. State clearly
+            which model wins on MAE and which wins on RMSE.
+
+          ## NGBoost Distribution Comparison (Normal vs. LogNormal)
+            Compare mean fold MAE of NGBoost Normal vs. NGBoost LogNormal.
+            Compare Brier scores where available. State which distribution
+            better fits blowout-game tails with one sentence of explanation
+            referencing the NB01 finding that blowout games exceed Gaussian
+            predictions.
+
+          ## P(Over/Under Line) Calibration
+            Brier score table: Model | Mean Brier Score | Folds with Odds Data.
+            Include calibration table (bin_center, mean_p_over, actual_over_rate,
+            n_games) for the best probabilistic model. Note that odds data is
+            available starting 2021 per the mart_game_odds_bridge match rates
+            documented in project_context.md.
+
+          ## SHAP Feature Importance (XGBoost, Final Fold)
+            Top-20 features table: Rank | Feature | Mean |SHAP|. Note whether
+            lineup-vs-starter matchup features and delta features appear and
+            at what rank.
+
+          ## Best Model Selection
+            One paragraph stating the recommended model for downstream use
+            (Cards 4.10–4.11) with rationale covering: MAE vs. baseline,
+            whether distributional output is needed, and computational cost.
+
+          Update project_context.md: in the Phase 4 tracking section, add a
+          subsection "Card 4.9 Results" with: best model name, best model mean
+          MAE, NGBoost winning distribution, best Brier score, and a one-line
+          SHAP note on feature group contributions.
+        dependsOn:
+          - run-cv-evaluation
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Results report
+            path: betting_ml/evaluation/total_runs_results.md
+          - type: command_succeeds
+            name: Results report contains all required section headers and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/total_runs_results.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'mae', 'rmse', 'brier', 'shap', 'ngboost', 'lognormal',
+                    'best model', 'global mean', 'calibration', 'normal vs'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.9 results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.9', 'mae', 'brier']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.9 updates: {missing}'
