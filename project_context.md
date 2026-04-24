@@ -16,7 +16,7 @@ The project is currently in the **data mart development phase**. All modeling, f
 | Transformation | dbt-fusion / `dbtf` (SQL) |
 | Ingestion | Python (`scripts/savant_ingestion.py`, `scripts/ingest_statsapi.py`, `scripts/odds_api_ingestion.py`) |
 | ML (planned) | Python (`betting_ml/`) |
-| EDA (planned) | Jupyter (`exploratory_data_analysis/`) |
+| EDA | Marimo (`exploratory_data_analysis/`) — reactive notebooks run via `uv run marimo run <notebook>.py` |
 
 ---
 
@@ -470,7 +470,32 @@ The prediction task requires a single feature vector per game, assembled from in
 
 ---
 
-### Phase 3 — Exploratory Data Analysis
+### Phase 3 — Exploratory Data Analysis (In Progress)
+
+Notebooks live in `exploratory_data_analysis/` and are written in [Marimo](https://marimo.io/) — a reactive Python notebook framework where each cell is a Python function. Notebooks are plain `.py` files with inline `uv` dependency declarations; no separate install or virtual environment is needed.
+
+**Running notebooks:**
+
+```bash
+# Interactive UI (browser at http://localhost:2718)
+uv run marimo run exploratory_data_analysis/01_target_variables.py
+
+# Live-edit mode
+uv run marimo edit exploratory_data_analysis/01_target_variables.py
+
+# Headless / CI
+uv run marimo run exploratory_data_analysis/01_target_variables.py --headless
+```
+
+**Completed notebooks:**
+
+| Notebook | Description | Key Finding |
+|---|---|---|
+| `01_target_variables.py` | Total runs, run differential, home win rate distributions (2016–2025) | Single model recommended; add `game_year`/`post_2022_rules` feature; exclude 2020; naive MAE baseline ~3.5 runs |
+| `02_feature_coverage.py` | Null rate heatmap (374 cols × all seasons), `has_full_data` verification, imputation decisions | Odds cols 100% null (pre-backfill); starter platoon splits 11–17% null (debut pitchers); all other groups <5% null |
+| `03_rolling_window_stability.py` | Correlation vs. window size (7d/14d/30d/STD) for team and starter features; early-season stability by games-played bucket; slider to preview training set size | Season-to-date is strongest for pitcher metrics; 30-day ≈ STD for offense; apply `min(games_played) ≥ 15` filter in Phase 4 |
+
+**Findings document:** Key findings from each notebook are appended to `exploratory_data_analysis/betting_model_findings.md` as notebooks are completed.
 
 Before fitting models, spend time in `exploratory_data_analysis/` to:
 
@@ -491,28 +516,359 @@ Before fitting models, spend time in `exploratory_data_analysis/` to:
 
 ### Phase 4 — Baseline Prediction Models
 
-Build initial models in `betting_ml/` using the assembled feature store from Phase 2.
+Build initial models in `betting_ml/` using the assembled feature store from Phase 2, extended by the feature engineering cards below.
 
 **Targets:**
-- **Total runs scored** (regression; enables over/under analysis)
-- **Run differential** (regression; calibrated to win probability)
-- **Binary win outcome** (classification; moneyline proxy)
+- **Total runs scored** (regression; output as a predictive distribution to derive P(over/under line))
+- **Run differential** (regression; win probability derived from the predictive distribution)
+- **Binary win outcome** (classification; moneyline proxy; calibration is the primary concern)
 
-**Baseline approach:**
-1. XGBoost regression and classification baselines — strong performance on tabular data, handles missing values (pre-2023 bat tracking nulls), interpretable via SHAP
-2. Train on regular season games with confirmed lineups (limit to `game_type = 'R'` where lineup data is populated)
-3. Cross-validate by season (train on years N−k through N−1, evaluate on year N) to respect temporal ordering
-4. Evaluate regression targets with MAE and RMSE; classification with log loss and Brier score
-5. Calibrate probability outputs (Platt scaling or isotonic regression) before any EV calculations
+**Design constraints from Phase 3 EDA (updated as notebooks complete):**
+
+| Constraint | Decision | Source |
+|---|---|---|
+| Training set filter | `min(home_games_played, away_games_played) ≥ 15` — removes early-season noise (5.5% of rows), retains 85% of training data | Notebook 03 |
+| Primary feature window — pitcher metrics | Season-to-date (`_std`) — strongest correlation with outcomes; 30d close but STD wins for K%, xwOBA | Notebook 03 |
+| Primary feature window — team offense | 30-day (`_30d`) — equivalent to STD for wOBA; more robust to in-season roster changes | Notebook 03 |
+| Short-window features (7d, 14d) | Retain as supplementary hot/cold streak signals; also used as inputs to delta/momentum features | Notebook 03 |
+| 2020 season | Exclude from training — COVID bubble, structural confounders | Notebook 01 |
+| Era feature | Include `game_year` and `post_2022_rules` flag; 2022→2023 shift ban + pitch clock caused a ~0.64-run structural mean shift | Notebook 01 |
+| Home win rate | Use time-varying `home_win_rate_trailing_3yr`; home advantage has declined from 0.548 (2020) to 0.519 (2023) — static 0.529 is wrong for recent seasons | Notebook 01 |
+| Odds features | Exclude from primary model (100% null in training window); add as optional enrichment block once Card 3 backfill is complete | Notebook 02 |
+| Starter platoon splits null handling | Add `has_starter_platoon_data` indicator; impute nulls with prior-season league-average split by pitcher hand × batter hand | Notebook 02 |
+| Total runs distribution shape | Right tail — blowout games exceed Gaussian predictions; evaluate LogNormal in addition to Normal parameterization for NGBoost | Notebook 01 |
+| Weakest training bucket | 10–30 game window (not just 0–10); Bayesian shrinkage targets this transitional zone, not just Opening Day | Notebook 03 |
+
+**Model approach — A/B test per target:**
+
+| Target | Model A | Model B | Model C | Primary metric |
+|---|---|---|---|---|
+| Total runs (regression) | Ridge/Lasso | XGBoost + residual distribution | NGBoost (Normal vs. LogNormal) | MAE vs. ~3.5 baseline; P(over) Brier score |
+| Run differential (regression) | Ridge/Lasso | XGBoost + residual distribution | NGBoost | MAE; derived win prob Brier score |
+| Win outcome (classification) | Logistic Regression | XGBoost + Platt/isotonic calibration | — | Log loss, Brier score, calibration curve |
+
+NGBoost outputs a full parametric distribution per prediction — P(total_runs > any_line) is directly computable, making it the most natural bridge between regression output and bookmaker implied probability comparison.
 
 **Feature groups to evaluate:**
-- Team rolling offense (7/14/30-day wOBA, runs, K%, BB%)
-- Team rolling pitching (7/14/30-day wOBA against, K%, BB%)
-- Platoon adjustment (team offense vs. pitcher hand)
-- Starter features (recent ERA, xwOBA against, K%, fastball velo trend)
-- Lineup features (aggregated batter wOBA + handedness composition vs. starter)
-- Park features (dimensions, elevation, surface)
+- Team rolling offense (7/14/30-day + STD wOBA, runs, K%, BB%) + delta momentum signals (Card 4.1)
+- Team rolling pitching (7/14/30-day + STD wOBA against, K%, BB%) + delta momentum signals (Card 4.1)
+- Explicit lineup-vs-starter handedness matchup (Card 4.2)
+- Starter features (K%, xwOBA against, days rest, platoon splits, recent avg IP) (Cards 4.4, 4.6)
+- Lineup features (aggregated batter wOBA + handedness composition)
+- Park features (dimensions, elevation, surface, roof, prior-season run factors)
 - Season record (win% as proxy for overall team quality)
+- Rolling window reliability flags (Cards 4.3, 4.6 Bayesian shrinkage)
+- Game context (day/night, series position, time-varying home win rate, era flags) (Card 4.5)
+
+---
+
+#### Card 4.1 — Add Delta/Momentum Features to Team and Starter Feature Models
+
+**Title:** Add rolling window delta features (momentum signals) to pregame team and starter feature models
+
+**Description:**
+
+*Technical implementation:*
+- In `feature_pregame_team_features`: add delta columns for key team metrics — `home_off_woba_7d_minus_30d`, `home_pit_xwoba_7d_minus_30d`, and away equivalents. These capture whether a team is trending up or down relative to their baseline. Notebook 03 confirmed 7-day and 30-day windows carry different predictive profiles, implying the spread has independent signal.
+- In `feature_pregame_starter_features`: add `home_starter_k_pct_7d_minus_std` and `home_starter_xwoba_7d_minus_std` (and away equivalents). Starter K% showed the largest window effect in notebook 03 — a 29% correlation increase from 7-day to STD — making the gap between them a meaningful velocity signal.
+- All delta columns computed as `short_window - long_window`; positive values indicate recent improvement over baseline.
+- Pass through into `feature_pregame_game_features` final SELECT.
+- Update `schema.yml` for both feature models with column descriptions.
+
+*Blockers:* None. All source windows already exist in the feature models.
+
+*Acceptance criteria:*
+- [ ] Delta columns added for team offense wOBA and pitching xwOBA (7d − 30d) in `feature_pregame_team_features`
+- [ ] Delta columns added for starter K% and xwOBA (7d − STD) in `feature_pregame_starter_features`
+- [ ] All delta columns passed through in `feature_pregame_game_features`
+- [ ] No new null rows introduced beyond what exists in the source window columns
+- [ ] `schema.yml` updated for both feature models
+- [ ] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
+
+---
+
+#### Card 4.2 — Add Lineup-vs-Starter Handedness Matchup Features
+
+**Title:** Compute explicit lineup-vs-starter handedness matchup signal in the master game feature model
+
+**Description:**
+
+*Technical implementation:*
+- In `feature_pregame_game_features`, join `feature_pregame_lineup_features` (lineup handedness composition — `home_lineup_pct_rhb`, `away_lineup_pct_rhb`) with `feature_pregame_starter_features` (starter hand and platoon splits).
+- Derive matchup adjustment columns per side. Example for home offense vs. away starter: `home_lineup_vs_away_starter_xwoba_adj` = weighted average of `home_lineup_pct_rhb × away_starter_xwoba_vs_rhb + (1 - home_lineup_pct_rhb) × away_starter_xwoba_vs_lhb`. Repeat for K% and BB%.
+- Repeat for away lineup vs. home starter.
+- Motivation: notebook 03 max individual |r| was 0.077 — most model signal will come from non-linear interactions. An explicit three-way interaction (lineup composition × starter hand × platoon split) is unlikely to be discovered by XGBoost/NGBoost from separate columns alone.
+- These columns are null when starter platoon splits are null (11–17% of games); null propagates correctly and is handled by the imputation pipeline in Card 4.6.
+- Update `schema.yml` with column descriptions.
+
+*Blockers:* None. Source columns exist in both upstream feature models.
+
+*Acceptance criteria:*
+- [ ] `home_lineup_vs_away_starter_xwoba_adj` and `away_lineup_vs_home_starter_xwoba_adj` added to `feature_pregame_game_features`
+- [ ] K% and BB% matchup adjustment columns added for both sides
+- [ ] Null propagation is correct — null when starter platoon splits are null, non-null otherwise
+- [ ] Spot-check: a RHP starter with high xwOBA_vs_rhb facing a right-heavy lineup produces a higher `xwoba_adj` than the same starter vs. a left-heavy lineup
+- [ ] `schema.yml` updated with column descriptions
+- [ ] `dbtf build --select feature_pregame_game_features` passes all tests
+
+---
+
+#### Card 4.3 — Add Rolling Window Reliability Flags to Feature Models
+
+**Title:** Add games-played-in-window sample size flags to pregame team and player feature models
+
+**Description:**
+
+*Technical implementation:*
+- In `feature_pregame_team_features`: add `home_games_played_7d`, `home_games_played_14d`, `home_games_played_30d`, `home_games_played_std` (and away equivalents) — count of regular season games played within each rolling window as of the game date. Source: `mart_team_rolling_offense` already computes game counts; extract and pass through.
+- In `feature_pregame_starter_features`: add `home_starter_appearances_30d` and `home_starter_appearances_std` — number of starts in each window from `mart_pitcher_rolling_stats`.
+- Pass all reliability flag columns through in `feature_pregame_game_features`.
+- Motivation: notebook 03 confirmed that pitching feature correlation is 48% lower in the 0–10 game bucket than the 30+ bucket. The 10–30 game transitional bucket is also weaker than 30+ — not just the first week. These flags allow the Bayesian shrinkage step in Card 4.6 to weight estimates appropriately rather than applying a hard filter.
+
+*Blockers:* None. Rolling game counts are available in mart rolling stat models.
+
+*Acceptance criteria:*
+- [ ] Games-played columns added for 7d, 14d, 30d, and STD windows for both home and away teams in `feature_pregame_team_features`
+- [ ] Starter appearances added for 30d and STD windows in `feature_pregame_starter_features`
+- [ ] All columns passed through in `feature_pregame_game_features`
+- [ ] Values are non-negative integers; zero is valid for season-opening games
+- [ ] `schema.yml` updated for all three feature models
+- [ ] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
+
+---
+
+#### Card 4.4 — Add Starter Expected Depth Signal to Starter Feature Model
+
+**Title:** Add recent innings-per-start trend to pregame starter feature model as a bullpen workload proxy
+
+**Description:**
+
+*Technical implementation:*
+- In `feature_pregame_starter_features`, join to `mart_starting_pitcher_game_log` (filtered to `game_date < game_date` — no leakage) and compute `home_starter_avg_ip_last_3` and `away_starter_avg_ip_last_3` — average innings pitched over the starter's 3 most recent starts.
+- Also derive `home_starter_avg_ip_season` and away equivalent — season-to-date IP per start as a stable baseline.
+- Motivation: a starter averaging 4.5 IP over recent outings implies heavy bullpen use regardless of what the workload model shows from prior days. Not currently in any feature model.
+- Null when the starter has fewer than 1 prior regular season start (debut starters); add `home_starter_has_ip_history` and `away_starter_has_ip_history` boolean flags.
+- Pass through in `feature_pregame_game_features` and update `schema.yml`.
+
+*Blockers:* None. `mart_starting_pitcher_game_log` is built and tested.
+
+*Acceptance criteria:*
+- [ ] `home_starter_avg_ip_last_3` and `away_starter_avg_ip_last_3` added using strictly `< game_date` (no leakage)
+- [ ] `home_starter_avg_ip_season` and away equivalent added
+- [ ] `home_starter_has_ip_history` / `away_starter_has_ip_history` boolean flags added
+- [ ] Null for debut starters; non-null for all pitchers with at least 1 prior start
+- [ ] Passed through in `feature_pregame_game_features`
+- [ ] `dbtf build --select feature_pregame_starter_features feature_pregame_game_features` passes all tests
+
+---
+
+#### Card 4.5 — Add Game Context and Era Features
+
+**Title:** Add day/night, series position, time-varying home win rate, and era flags to the master game feature model
+
+**Description:**
+
+*Technical implementation:*
+- **Day/night flag:** Extract `game_time` from `stg_statsapi_games`; derive `is_day_game` boolean. Join to `feature_pregame_game_features` on `game_pk`.
+- **Series position:** From `stg_statsapi_games`, compute `series_game_number` (1, 2, 3, or 4 for the current home-team/away-team series in the current road trip). Affects bullpen deployment on days 2 and 3 of a series.
+- **Time-varying home win rate:** Add `home_win_rate_trailing_3yr` — rolling 3-year average home win rate across all MLB games up to `game_date`, using strictly `< game_date`. Source: `mart_game_results`. Notebook 01 confirmed home win rate has declined from 0.548 (2020) to 0.519 (2023) — a static 0.529 is increasingly wrong for recent seasons.
+- **Era flags:** Add `post_2022_rules` boolean (`game_year >= 2023`) and `game_year` integer. Notebook 01 confirmed a ~0.64-run structural shift from 2022 → 2023 due to the shift ban, pitch clock, and universal DH.
+- All columns passed through `feature_pregame_game_features` and added to `schema.yml`.
+
+*Blockers:* None. All source data is in `stg_statsapi_games` and `mart_game_results`.
+
+*Acceptance criteria:*
+- [ ] `is_day_game` boolean added to `feature_pregame_game_features`
+- [ ] `series_game_number` integer (1–4+) added, non-null for all regular season games
+- [ ] `home_win_rate_trailing_3yr` uses strictly `< game_date`; no same-day games included
+- [ ] `post_2022_rules` boolean and `game_year` integer added
+- [ ] Spot-check: `home_win_rate_trailing_3yr` for a 2024 game should be in the range 0.519–0.535, not 0.529 static
+- [ ] `schema.yml` updated for all new columns
+- [ ] `dbtf build --select feature_pregame_game_features` passes all tests
+
+---
+
+#### Card 4.6 — ML Pipeline Foundation: Data Loading, Splits, and Preprocessing
+
+**Title:** Build the betting_ml/ pipeline foundation — Snowflake data loader, temporal cross-validation splits, and imputation preprocessing
+
+**Description:**
+
+*Technical implementation:*
+- Create the `betting_ml/` directory structure: `data/`, `models/`, `evaluation/`, `utils/`.
+- **Data loader** (`utils/data_loader.py`): queries `feature_pregame_game_features` joined to `mart_game_results` (targets: `home_score + away_score`, `home_score - away_score`, `home_win`). Uses the same Snowflake RSA key connection as EDA notebooks. Accepts `min_games_played` filter (default 15 per notebook 03 finding).
+- **Temporal cross-validation** (`utils/cv_splits.py`): generates season-forward splits (train on years N−k through N−1, evaluate on year N). No shuffled k-fold — temporal order must be respected. Start with leave-one-season-out (train 2016–2024, evaluate 2025).
+- **Imputation pipeline** (`utils/preprocessing.py`) implementing decisions from notebook 02:
+  - Starter platoon splits: add `has_starter_platoon_data` indicator; fill nulls with prior-season league-average split by pitcher hand × batter hand
+  - Park run factor: cascade from 3yr → 1yr → league average; add `is_new_venue` indicator
+  - Opening Day win%, days rest: fill with 0.500 and 4 days respectively
+  - Bullpen effectiveness early-season: fill with prior-season league-average xwOBA
+  - **Bayesian shrinkage for early-season rolling stats:** apply shrinkage toward the league-mean prior weighted by `games_played_in_window` (from Card 4.3). Shrinkage weight = `n / (n + k)` where k is a tunable constant (default: 15 games). Targets the 10–30 game transitional bucket identified in notebook 03 as the weakest correlation period.
+- Exclude 2020 from training; include `post_2022_rules` and `game_year` as features (from Card 4.5).
+
+*Blockers:* Cards 4.1–4.5 should be merged before final model runs (reliability flags needed for Bayesian shrinkage). Data loader and CV framework can be built independently.
+
+*Acceptance criteria:*
+- [ ] `betting_ml/` directory structure created with `data/`, `models/`, `evaluation/`, `utils/`
+- [ ] Data loader connects to Snowflake, applies `has_full_data = true` and `min_games_played ≥ 15` filter, returns a clean pandas DataFrame with all three targets appended
+- [ ] Temporal CV splits produce non-overlapping train/eval sets in correct chronological order; no future data leaks into training folds
+- [ ] Imputation pipeline handles all six null groups from notebook 02 with no remaining nulls in the output feature matrix
+- [ ] Bayesian shrinkage reduces early-season rolling stat variance correctly — verify a team with 5 games played is pulled further toward league mean than one with 25 games
+- [ ] 2020 games excluded; `post_2022_rules` and `game_year` present in output feature matrix
+- [ ] Unit tests for CV splits and imputation pipeline pass
+
+---
+
+#### Card 4.7 — Baseline Regression Models: Total Runs
+
+**Title:** Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for total runs prediction; output full predictive distribution
+
+**Description:**
+
+*Technical implementation:*
+- Three models evaluated on the same temporal CV splits from Card 4.6:
+  1. **Ridge regression** (sklearn) — linear floor; establishes how much signal is linear
+  2. **XGBoost regression** — point prediction; residual distribution estimated from out-of-fold errors to derive P(over/under line)
+  3. **NGBoost** (`ngboost` package) — probabilistic gradient boosting; evaluate both `Normal` and `LogNormal` distributions. LogNormal motivated by notebook 01 finding that blowout games exceed what a pure Gaussian predicts
+- Primary metric: MAE and RMSE on held-out season. Baseline to beat: MAE ~3.5 runs (global mean predictor from notebook 01).
+- Secondary metric: P(over/under line) Brier score — for games where `has_odds = true`, compare model-implied P(over total_line) to bookmaker's vig-adjusted implied probability.
+- SHAP feature importance on XGBoost to verify that lineup-vs-starter matchup features (Card 4.2) and delta features (Card 4.1) contribute non-zero positive signal.
+- Log results to `betting_ml/evaluation/total_runs_results.md`.
+
+*Blockers:* Card 4.6. Cards 4.1–4.5 preferred before final evaluation; initial runs can start with existing features.
+
+*Acceptance criteria:*
+- [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds
+- [ ] All three models beat the global mean MAE baseline (~3.5 runs) on the held-out season
+- [ ] NGBoost Normal vs. LogNormal compared — document which distribution better fits the blowout tail
+- [ ] P(over/under line) Brier score computed for games with odds data (2026 live games)
+- [ ] SHAP importance confirms lineup-vs-starter matchup and delta features have non-zero contribution
+- [ ] Per-season MAE/RMSE table and model comparison documented in `betting_ml/evaluation/total_runs_results.md`
+- [ ] Best model selected with rationale documented
+
+---
+
+#### Card 4.8 — Baseline Regression Models: Run Differential
+
+**Title:** Train and evaluate Ridge, XGBoost, and NGBoost regression baselines for run differential; derive win probability from predictive distribution
+
+**Description:**
+
+*Technical implementation:*
+- Same three-model structure as Card 4.7 applied to run differential (`home_score - away_score`) as target.
+- Win probability derivation: from the NGBoost predictive distribution N(μ, σ²), compute `P(home win) = P(run_diff > 0) = 1 - Φ((0 - μ) / σ)`. This derives win probability from the regression model without training a separate classifier.
+- Compare derived win probability against the binary win classifier (Card 4.9) using Brier score and calibration curves — the two approaches should produce consistent estimates.
+- Evaluate whether era features (`post_2022_rules`, `game_year`) and time-varying home win rate (Card 4.5) materially reduce prediction error vs. a model without them.
+- Log results to `betting_ml/evaluation/run_differential_results.md`.
+
+*Blockers:* Card 4.6. Cards 4.1–4.5 preferred before final evaluation.
+
+*Acceptance criteria:*
+- [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds for run differential
+- [ ] Win probability derived from NGBoost distribution: `P(run_diff > 0)` and Brier score documented
+- [ ] Derived win probability vs. Card 4.9 classifier compared — consistency within 0.05 Brier score expected
+- [ ] Era feature ablation: model with vs. without `post_2022_rules` compared — verify the flag reduces 2022→2023 prediction error
+- [ ] Time-varying home win rate confirmed as improvement over static 0.529, or documented as having no effect
+- [ ] Results documented in `betting_ml/evaluation/run_differential_results.md`
+
+---
+
+#### Card 4.9 — Baseline Classification Models: Win Outcome
+
+**Title:** Train and evaluate Logistic Regression and XGBoost classification baselines for binary win outcome; calibrate probability outputs
+
+**Description:**
+
+*Technical implementation:*
+- Two models on the binary home win target:
+  1. **Logistic Regression** (sklearn) — well-calibrated by construction; linear probability baseline
+  2. **XGBoost classifier** — apply Platt scaling (sigmoid calibration) and isotonic regression post-training; compare both calibration methods
+- Calibration is the primary concern — outputs feed directly into EV calculations in Phase 6. Evaluate calibration curves by probability decile per held-out season.
+- Evaluate whether declining home win rate (0.548 → 0.519 per notebook 01) causes systematic over-pricing of home teams in recent seasons. Verify `home_win_rate_trailing_3yr` (Card 4.5) reduces this bias.
+- Metrics: log loss, Brier score, AUC-ROC. Calibration curve plotted per held-out season.
+- Log results to `betting_ml/evaluation/win_outcome_results.md`.
+
+*Blockers:* Card 4.6.
+
+*Acceptance criteria:*
+- [ ] Logistic Regression and calibrated XGBoost trained on all temporal CV folds
+- [ ] Calibration curves plotted per held-out season — XGBoost post-calibration shows no systematic over/under-confidence across probability deciles
+- [ ] Platt scaling vs. isotonic calibration compared; better method documented
+- [ ] Model evaluated for home-team bias in 2023–2025 seasons; `home_win_rate_trailing_3yr` confirmed to reduce or eliminate the bias
+- [ ] Brier score and log loss reported per model and per held-out season
+- [ ] Results documented in `betting_ml/evaluation/win_outcome_results.md`
+
+---
+
+#### Card 4.10 — Probability Output Layer and Bayesian Market Update
+
+**Title:** Build probability output layer integrating model predictions with bookmaker implied probabilities via Bayesian update
+
+**Description:**
+
+*Technical implementation:*
+- For games where `has_odds = true`: compute the Bayesian posterior by treating the bookmaker's vig-adjusted implied probability as a prior and the model's predicted probability as the likelihood. In log-odds space: `log_odds_posterior = α × log_odds_model + (1 - α) × log_odds_market` where α is a mixing weight tuned via CV (start with α = 0.5). Motivation: the market line reflects professional handicappers and information the model cannot access; treating it as a prior rather than a comparison target captures the best of both signals.
+- Compute edge signal: `edge = model_prob − market_implied_prob` (positive = model sees value over market price).
+- Output one row per game per market (h2h, totals) with `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, and `implied_kelly_fraction` (`edge / market_odds` as a simple Kelly approximation).
+- Pure Python module; reads from model outputs of Cards 4.7–4.9 and from `feature_pregame_odds_features`.
+- Initially useful only for live 2026 games; will become more powerful after Card 3 historical odds backfill completes.
+
+*Blockers:* Cards 4.7, 4.8, and 4.9 (model probability outputs required). `has_odds = true` data required for validation — currently only live 2026 games.
+
+*Acceptance criteria:*
+- [ ] Bayesian update implemented in log-odds space; posterior probability computed for h2h and totals markets
+- [ ] Mixing weight α tuned on held-out games via CV; optimal α documented
+- [ ] Edge signal validated: games where model and market agree produce near-zero edge; divergence produces non-zero edge
+- [ ] Output includes `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, `implied_kelly_fraction` per game per market
+- [ ] Spot-check: model probability 0.60 vs. market implied 0.52 produces positive edge and positive Kelly fraction
+- [ ] Output written to a standard location in `betting_ml/` for use by Phase 6 betting application layer
+
+---
+
+#### [BACKLOG] Card 4.B1 — Weather Feature Integration
+
+**Title:** Integrate pre-game weather features (temperature, wind speed/direction, humidity) for outdoor ballparks
+
+**Description:**
+
+*Technical implementation:*
+- Source a weather API (e.g., OpenWeatherMap historical + forecast) for game-time conditions at each ballpark's GPS coordinates (available in `stg_statsapi_venues`).
+- Key features: `temp_f`, `wind_speed_mph`, `wind_direction_degrees`, `humidity_pct`, `is_precipitation`. Wind direction relative to park orientation is the most important interaction (Wrigley Field wind-out vs. wind-in is a ~2-run swing).
+- Roof-type filter: weather features are irrelevant for domed stadiums (`roof_type = 'dome'` in `stg_statsapi_venues`) — zero these out or add `weather_relevant` boolean.
+- Store raw weather snapshots in Snowflake; add a dbt staging model `stg_weather` and join into `feature_pregame_park_features`.
+- Leakage constraint: use forecast-at-game-time for live predictions, not observed actuals.
+
+*Blockers:* Weather API selection and credentials not yet in place. No historical weather data in the current pipeline.
+
+*Acceptance criteria:*
+- [ ] Weather API source selected and credentials secured
+- [ ] Historical weather ingestion script built covering 2016–2025 regular seasons at all active park coordinates
+- [ ] `stg_weather` dbt model staging raw weather to grain of `game_pk`
+- [ ] Weather features joined into `feature_pregame_park_features` with `weather_relevant` flag
+- [ ] Null rate < 5% for outdoor parks in the training window
+- [ ] Ablation study: model with vs. without weather features compared on the held-out season
+
+---
+
+#### [BACKLOG] Card 4.B2 — Umpire Tendency Features
+
+**Title:** Integrate pre-game umpire tendency features (zone size, K%/BB% impact) as a game-level signal
+
+**Description:**
+
+*Technical implementation:*
+- Source umpire tendency data (e.g., UmpScorecards) providing per-umpire rolling statistics: zone size relative to league average, called strike rate above/below expectation, resulting K% and BB% adjustments.
+- Key features: `ump_k_pct_adj`, `ump_bb_pct_adj`, `ump_zone_size_adj`. Join on `game_pk` once umpire assignments are known (typically announced morning of game).
+- Add a `stg_umpires` staging model and extend `feature_pregame_game_features` with an umpire join.
+
+*Blockers:* Umpire assignment data source not yet in place. No umpire data in the current pipeline.
+
+*Acceptance criteria:*
+- [ ] Umpire data source selected and historical assignments sourced for 2016–2025 seasons
+- [ ] `stg_umpires` dbt staging model built
+- [ ] Umpire tendency features joined into `feature_pregame_game_features` on `game_pk`
+- [ ] Null rate < 5% for games with known umpire assignments
+- [ ] Ablation study: model with vs. without umpire features compared on the held-out season
 
 ---
 
@@ -611,7 +967,10 @@ Operationalize the full stack:
 | `scripts/tests/test_date_utils.py` | Pytest unit tests for `date_utils` (19 tests covering format, window boundaries, timezone conversion, rollover) |
 | `scripts/ddl/oddsapi_raw_tables.sql` | DDL for `baseball_data.oddsapi.mlb_events_raw` and `mlb_odds_raw`; run once via snowsql to create tables |
 | `betting_ml/` | Placeholder — ML model code lives here (Phase 4+) |
-| `exploratory_data_analysis/` | Placeholder — EDA notebooks live here (Phase 3+) |
+| `exploratory_data_analysis/` | Marimo EDA notebooks (Phase 3+); run with `uv run marimo run <notebook>.py` |
+| `exploratory_data_analysis/01_target_variables.py` | Target variable analysis — total runs, run differential, home win rate distributions (2016–2025) |
+| `exploratory_data_analysis/02_feature_coverage.py` | Null rate heatmap (374 cols × all seasons), `has_full_data` count verification, imputation strategy decisions |
+| `exploratory_data_analysis/betting_model_findings.md` | Cumulative EDA findings document; one section per completed notebook |
 
 ---
 
@@ -651,6 +1010,31 @@ cd ../dbt && dbtf build                            # Refresh all mart models
 ```
 
 > For `ingest_statsapi.py schedule`, the default window is the **current calendar month only**. Pass `--start-date YYYY-MM-01` to widen the window. Never omit `--start-date` and expect a historical backfill — that requires `--start-date 2015-04-01`.
+
+### Marimo (EDA Notebooks)
+
+EDA notebooks in `exploratory_data_analysis/` use [Marimo](https://marimo.io/) — a reactive notebook framework. Notebooks are plain `.py` files with inline `uv` script dependency headers; `uv` resolves and installs all dependencies automatically on first run.
+
+```bash
+# Interactive browser UI (http://localhost:2718)
+uv run marimo run exploratory_data_analysis/01_target_variables.py
+
+# Live-edit mode (cells re-run on change)
+uv run marimo edit exploratory_data_analysis/01_target_variables.py
+
+# Headless (no browser — for scripted or CI runs)
+uv run marimo run exploratory_data_analysis/01_target_variables.py --headless
+```
+
+Each notebook connects to Snowflake using the same RSA key as snowsql (`~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem`). The connection is established once on load; all subsequent cells are reactive.
+
+**Marimo cell conventions used in this project:**
+- Each cell is a `@app.cell` decorated function; all referenced names must be imported or returned by a prior cell
+- Figures are returned as single-element tuples (`return (fig_name,)`) so Marimo both displays and exports them
+- `plt.close("all")` is called at the top of every plot cell to prevent figure accumulation
+- Interactive tables use `mo.ui.table(df)` and combined displays use `mo.vstack([...])`
+
+---
 
 ### dbtf (dbt-fusion)
 

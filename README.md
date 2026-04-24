@@ -145,6 +145,40 @@ Ask Claude: "Query SELECT game_date, home_team, away_team FROM baseball_data.bet
 
 ---
 
+## EDA Notebooks (Marimo)
+
+Notebooks live in [`exploratory_data_analysis/`](exploratory_data_analysis/). Each is a self-contained Marimo script with inline `uv` dependency declarations — no separate install step needed.
+
+**Run a notebook (interactive UI):**
+
+```bash
+uv run marimo run exploratory_data_analysis/01_target_variables.py
+```
+
+Opens in the browser at `http://localhost:2718`. All cells execute reactively; the Snowflake connection is established on load using the RSA key at `~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem`.
+
+**Edit a notebook (live-edit mode):**
+
+```bash
+uv run marimo edit exploratory_data_analysis/01_target_variables.py
+```
+
+Same URL, but cells are editable and re-run on change.
+
+**Run headless (no browser, e.g. CI):**
+
+```bash
+uv run marimo run exploratory_data_analysis/01_target_variables.py --headless
+```
+
+**Notebooks:**
+
+| File | Phase | Description |
+|---|---|---|
+| [`01_target_variables.py`](exploratory_data_analysis/01_target_variables.py) | Phase 3 | Target distribution analysis — total runs, run differential, home win rate (2016–2025) |
+
+---
+
 ## Ad-hoc Snowflake Queries (snowsql)
 
 ```bash

@@ -13,10 +13,13 @@
 --   All other major bookmakers (draftkings, fanduel, bovada, etc.) are ≥4.0% h2h vig.
 --   lowvig is the clear winner on both vig metrics.
 --
--- Leakage guard: only odds snapshots where ingestion_ts < commence_time are used.
--- The most recent pre-game snapshot per (event_id, market_key, outcome_name) is
--- selected via ROW_NUMBER() ordered by ingestion_ts desc. No same-game-day prices
--- inferred after first pitch are ever included.
+-- Leakage guard: only odds snapshots where bookmaker_last_update < commence_time are used.
+-- bookmaker_last_update is the API-returned timestamp of when the bookmaker last changed
+-- their line — used instead of ingestion_ts so that historical backfill rows (where
+-- ingestion_ts is the backfill run date, not the pre-game snapshot time) are not
+-- incorrectly excluded. The most recent pre-game snapshot per
+-- (event_id, market_key, outcome_name) is selected via ROW_NUMBER() ordered by
+-- ingestion_ts desc. No same-game-day prices inferred after first pitch are ever included.
 --
 -- has_odds: inherited from mart_game_odds_bridge — true when an event_id was matched
 -- for the game. Does NOT guarantee odds price columns are populated. Card 3 (historical
@@ -73,7 +76,7 @@ odds_pre_game as (
         ) as _rn
     from {{ ref('mart_odds_outcomes') }}
     where bookmaker_key = 'lowvig'
-      and ingestion_ts < commence_time
+      and bookmaker_last_update < commence_time
 ),
 
 -- Pivot home and away moneylines into one row per event.

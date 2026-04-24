@@ -138,9 +138,9 @@ When you open a conversation with a coding agent, it does not have a pre-built u
 | **System prompt** | Agent configuration and behavioral rules | Set by Snowflake; not directly editable by engineers |
 | **Active Snowflake session** | Current database, schema, warehouse, and role | Always available — no setup required |
 | **Snowflake metadata catalog** | Table and column names, data types, object comments | Native access; no MCP or external tool required |
-| **Notebook context cells** | Markdown cells at the top of a notebook serve as project-scoped instructions | The closest equivalent to `CLAUDE.md`; engineers write these manually |
-| **Highlighted code / selected cells** | The code the engineer has selected or is actively editing | Cortex Code uses selection context automatically |
-| **Conversation history** | Everything said in the current notebook session | Resets when the notebook session ends |
+| **Session preamble / semantic model YAML** | An opening context prompt pasted at the start of a CLI session, or a `@semantic_model.yaml` file for persistent metric definitions and business terminology | The closest equivalent to `CLAUDE.md`; must be provided at each session start for the CLI |
+| **Highlighted code / selected cells** | The code the engineer has selected or is actively editing (Snowsight/Notebooks); or the SQL/prompt text in the current CLI turn | Snowsight uses selection context automatically; CLI uses what is included in the prompt |
+| **Conversation history** | Everything said in the current CLI session or Snowsight session | Resets when the CLI process exits or the Snowsight session ends |
 
 The key structural difference: Claude Code starts with no schema knowledge and builds it via MCP tool calls; Cortex Code always has full schema awareness because it runs inside Snowflake and can query the information schema natively. This makes Cortex Code faster to get started with for pure SQL tasks, but means it has no visibility into files, Python scripts, or dbt models outside the Snowflake environment.
 
@@ -216,11 +216,16 @@ Claude Code automatically reads any `CLAUDE.md` file in the project root (and in
 
 The agent treats `CLAUDE.md` instructions as authoritative and applies them consistently throughout the session. One well-written `CLAUDE.md` improves every subsequent agent interaction in the project.
 
-**Cortex Code — notebook context preamble**
+**Cortex Code — session preamble and semantic model YAML**
 
-Cortex Code does not have a file-based equivalent of `CLAUDE.md`. The closest mechanism is a **markdown cell at the top of a Snowflake notebook** that defines conventions, constraints, and known patterns for that notebook's domain. Starting each working session by referencing this cell (or keeping it pinned at the top) gives the agent the same standing context. For teams using Cortex Analyst, the **semantic model YAML** plays a similar role: it permanently encodes metric definitions, column descriptions, join logic, and business terminology so the agent always has that context without re-explaining it.
+Cortex Code does not have a file-based equivalent of `CLAUDE.md` that loads automatically. The practical approach depends on which interface you are using:
 
-The practical difference: Claude Code's `CLAUDE.md` applies automatically across all sessions and all files in the project; Cortex Code's preamble is notebook-scoped and must be maintained manually per notebook. For a team-wide deployment, establishing a standard preamble template and including it in all team notebooks is the Cortex Code equivalent of maintaining a shared `CLAUDE.md`.
+- **CLI (`cortex`):** Open each session with a short context prompt that states the current database, schema conventions, naming standards, and any constraints the agent must follow. This takes about 30 seconds and re-establishes the same standing context every time. Maintain a team-standard "session preamble" as a text snippet or shell alias so engineers are not writing this from scratch.
+- **Snowsight / Snowflake Notebooks:** A markdown cell pinned at the top of the notebook serves as the session preamble. Keeping it visible and referencing it at the start of a session gives the agent the same standing context. Establish a standard preamble template across team notebooks.
+
+For both interfaces, the **Cortex Analyst semantic model YAML** plays the most durable role: it permanently encodes metric definitions, column descriptions, join logic, and business terminology at the Snowflake level. Reference it in the CLI via `@models/semantic_model.yaml` syntax. This is the closest thing to a persistent, automatically-loaded context — it does not reset between sessions.
+
+The key difference from `CLAUDE.md`: Claude Code's file loads automatically at every session start; Cortex Code's context must be re-established manually each session (CLI or Notebooks), unless the semantic model YAML covers the relevant domain. For a team-wide deployment, a shared preamble snippet + a well-maintained semantic model YAML is the Cortex Code equivalent of a shared `CLAUDE.md`.
 
 **The project context file: persistent working memory**
 
@@ -236,13 +241,13 @@ In this project, `project_context.md` serves this exact role. It records:
 - Feature store row counts and validated training window boundaries
 - Model inventory with grain, key, and dependency documentation
 
-Any agent — Claude Code or otherwise — that reads `project_context.md` at the start of a session immediately knows what a senior team member would know after a full onboarding. This is referenced in the project's `CLAUDE.md` so that Claude Code loads it automatically; for Cortex Code, pasting the relevant sections into a notebook preamble cell achieves the same effect.
+Any agent — Claude Code or otherwise — that reads `project_context.md` at the start of a session immediately knows what a senior team member would know after a full onboarding. This is referenced in the project's `CLAUDE.md` so that Claude Code loads it automatically; for Cortex Code (CLI or Snowsight), pasting the relevant sections as the opening message of each session achieves the same effect.
 
 The practical pattern for any project is to maintain two separate files with distinct responsibilities:
 
 | File | Contains | Update cadence |
 |---|---|---|
-| `CLAUDE.md` / notebook preamble | Behavioral rules, naming conventions, tools to use/avoid, what not to do | Rarely — when conventions change |
+| `CLAUDE.md` / session preamble snippet | Behavioral rules, naming conventions, tools to use/avoid, what not to do | Rarely — when conventions change |
 | `project_context.md` / `.ai/memory.md` | Current sprint status, architecture decisions, completed work, known issues | Each sprint or after major milestones |
 
 The working memory file is especially valuable at the start of new sessions and when onboarding a new engineer: rather than re-explaining the project from scratch, the agent (and the human) can read a single document and start contributing immediately.
@@ -271,7 +276,7 @@ Telling the agent exactly which object to look at eliminates the search phase an
 
 **Claude Code:** Reference files with `@filename` in the VS Code extension, or paste the full path directly into the chat. Include line numbers when the issue is localized ("the filter at line 47 of `stg_policy.sql`"). The agent jumps directly to reading that file rather than scanning the directory tree.
 
-**Cortex Code:** Reference tables using fully qualified names (`DATABASE.SCHEMA.TABLE_NAME`). Paste the output of `DESCRIBE TABLE` or `SHOW COLUMNS` directly into the chat when the issue involves specific columns. In Snowflake Notebooks, highlighting a cell or a specific block of SQL before prompting focuses the agent on that selection automatically. If the issue spans multiple objects, list them explicitly: "Look at `IRD_MART.FACT_DAILY_PREMIUM` and `IRD_MART.DIM_POLICY`. The join between them on `policy_id` is returning more rows than expected."
+**Cortex Code:** Reference tables using fully qualified names (`DATABASE.SCHEMA.TABLE_NAME`). Paste the output of `DESCRIBE TABLE` or `SHOW COLUMNS` directly into the chat when the issue involves specific columns. In the CLI, include the object reference inline in your prompt ("Look at `IRD_MART.FACT_DAILY_PREMIUM`..."); in Snowsight or Snowflake Notebooks, highlighting a cell or block of SQL before prompting focuses the agent on that selection automatically. If the issue spans multiple objects, list them explicitly: "Look at `IRD_MART.FACT_DAILY_PREMIUM` and `IRD_MART.DIM_POLICY`. The join between them on `policy_id` is returning more rows than expected."
 
 ---
 
@@ -313,7 +318,7 @@ The context window is finite in both tools. For large tasks — building a new m
 
 **Claude Code:** When context window pressure builds, use the `/compact` command to compress older turns before the client is forced to do it automatically (which happens at the worst moment, mid-task). End each session by asking the agent to write a handoff summary; use that summary as the first message of the next session.
 
-**Cortex Code:** Context resets when a Snowflake notebook session ends or when the kernel is restarted. There is no equivalent of `/compact` — the session is either live or reset. For Cortex Code, the practical approach is to work in focused, single-topic notebook sessions, and to record progress manually (in a markdown cell or a separate notes document) before closing. Starting the next session with a brief recap of where things stand re-establishes the agent's context efficiently.
+**Cortex Code:** Context resets when the CLI process exits or the Snowsight session ends. There is no equivalent of `/compact`. For the CLI, the practical approach is to work in focused, single-topic sessions and to note progress in `project_context.md` or a brief markdown summary before exiting. Starting the next session with a short recap (pasted as the opening message) re-establishes context efficiently. The CLI's terminal-native workflow makes this slightly faster than the Snowflake Notebooks approach — there is no browser tab to close, no kernel restart to wait for.
 
 ---
 
@@ -384,40 +389,49 @@ Requires an Anthropic Team or Enterprise plan subscription per seat. The subscri
 
 **What it is**
 
-Snowflake Cortex Code is an AI-assisted coding and analytics tool built natively into the Snowflake platform. It is part of the broader Cortex AI suite — which also includes Cortex Analyst (natural-language-to-SQL via a semantic layer), Cortex Search (enterprise search), and Cortex LLM functions (SQL-callable inference). Cortex Code specifically provides inline AI assistance within Snowflake Notebooks and Snowsight (the Snowflake web UI), using Snowflake-hosted LLMs to help engineers and analysts write, explain, and debug SQL and Python code.
+Snowflake Cortex Code is an AI-assisted coding and analytics tool built natively into the Snowflake platform. It is part of the broader Cortex AI suite — which also includes Cortex Analyst (natural-language-to-SQL via a semantic layer), Cortex Search (enterprise search), and Cortex LLM functions (SQL-callable inference). Cortex Code accepts natural language requests and orchestrates Snowflake operations in response: catalog discovery, SQL generation, data exploration, and application scaffolding. It displays its reasoning steps and actions as it works.
 
-Because it runs inside Snowflake, it has native, always-available access to the Snowflake metadata catalog — no MCP configuration or external tool setup is required to get schema-aware SQL generation.
+Because it runs within the Snowflake ecosystem, it has native, always-available access to the Snowflake metadata catalog — no MCP configuration or external tool setup is required to get schema-aware SQL generation.
 
 **Where it runs**
 
-Cortex Code runs entirely within Snowflake's cloud environment. The engineer accesses it through Snowsight (the browser-based Snowflake UI) or Snowflake Notebooks — there is no local installation required beyond a Snowflake account with Cortex AI features enabled. It does not have access to the engineer's local filesystem, the dbt project directory, or any systems outside the Snowflake account unless those are connected via external functions or data sharing.
+Cortex Code supports three interfaces:
+
+1. **CLI (`cortex`)** — A terminal-based agent installed locally (`curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh`). Engineers run `cortex` from any terminal (macOS, Linux, WSL, Windows) and interact via natural language, with results and reasoning displayed inline. Connections are stored in `~/.snowflake/connections.toml` (shared with Snowflake CLI). This is the most Claude-Code-like interaction model and is the interface recommended for engineering workflows.
+2. **Snowsight (web UI)** — Inline AI assistance in the Snowflake browser UI. Useful for quick queries, table exploration, and ad-hoc SQL generation within the browser.
+3. **Snowflake Notebooks** — AI assistance embedded within notebook cells. Code suggestions and natural language interactions are available inline without leaving the notebook environment.
+
+All three interfaces operate within the Snowflake environment boundary: they do not have access to the engineer's local filesystem, the local dbt project directory, or any systems outside the Snowflake account.
 
 **What it can do**
 
-- Generate SQL and Python code inline within Snowflake Notebooks and Snowsight
-- Explain query results, table schemas, and error messages in natural language
-- Natively access the Snowflake metadata catalog (table names, column names, data types, object comments) without any external setup
-- Leverage Cortex Analyst semantic models for natural-language-to-SQL over defined metric layers
+- Accept natural language requests in the terminal (CLI) or inline (Snowsight, Notebooks) and orchestrate multi-step Snowflake operations in response
+- Discover and explore the Snowflake catalog: databases, schemas, tables, columns, tags — "What databases do I have access to?" or "List every table tagged PII = TRUE"
+- Generate and run SQL — "Write a query for the top 10 customers by revenue" or "Write an optimized version of this query"
+- Natively access the full Snowflake metadata catalog without any external setup or MCP configuration
+- Leverage Cortex Analyst semantic models for natural-language-to-SQL over defined metric layers (`@models/semantic_model.yaml` syntax in CLI)
+- Build Streamlit applications from natural language descriptions — "Build a Streamlit dashboard on SALES_MART.REVENUE"
 - Call Cortex LLM functions directly within SQL queries (e.g. `SNOWFLAKE.CORTEX.COMPLETE()`)
+- Switch between available models mid-session using the `/model` command
 - Operate within the engineer's existing Snowflake RBAC role — no additional access grants required
 
 **What it cannot do (by design)**
 
-- Access files outside Snowflake (no local filesystem, no dbt project directory)
+- Access files on the local filesystem (no dbt project directory, no Python scripts outside Snowflake)
 - Read dbt `manifest.json` without it first being uploaded to a Snowflake stage via CI/CD
-- Take actions outside the Snowflake environment (no shell commands, no git operations, no Python scripts outside Notebooks)
-- Reason across SQL and local code in the same session (Snowflake-native boundary)
+- Run shell commands, git operations, or interact with on-premises systems outside the Snowflake account
+- Persist context automatically across sessions — each CLI invocation or Snowsight session starts fresh
 
 **Access model**
 
-Cortex AI features (including Cortex Code) are available on Snowflake Enterprise Edition and above, in supported regions. There is no per-seat license for Cortex Code itself — access is part of the Snowflake edition. Usage is billed via Snowflake credit consumption at a rate that varies by the underlying LLM model selected. Check the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf) for current per-token credit rates.
+Cortex AI features (including Cortex Code) are available on Snowflake Enterprise Edition and above, in supported regions. There is no per-seat license for Cortex Code itself — access is part of the Snowflake edition. The CLI requires the `SNOWFLAKE.CORTEX_USER` database role. Usage is billed via Snowflake credit consumption at a rate that varies by the underlying LLM model selected. Check the [Snowflake Service Consumption Table](https://www.snowflake.com/legal-files/CreditConsumptionTable.pdf) for current per-token credit rates.
 
 **Best suited for**
 
-- Data analysts and business analysts working primarily within the Snowflake UI
+- Data engineers and analysts who prefer a terminal-native workflow but want Snowflake-native schema awareness without MCP setup (CLI interface)
 - SQL-focused tasks (writing queries, debugging results, generating aggregations) where full Snowflake catalog awareness is a strong advantage
-- Teams already using Snowflake Notebooks as their primary development environment
-- Self-service analytics use cases where non-engineers need to query data without writing SQL themselves (Cortex Analyst)
+- Self-service analytics use cases where non-engineers need to query data without writing SQL themselves (Cortex Analyst via Snowsight)
+- Teams who want a lighter-weight setup compared to Claude Code for Snowflake-only work
 
 ---
 
@@ -425,20 +439,20 @@ Cortex AI features (including Cortex Code) are available on Snowflake Enterprise
 
 | Dimension | Claude Code | Snowflake Cortex Code |
 |---|---|---|
-| **Where it runs** | Developer environment (EC2, laptop) via CLI + VS Code | Snowflake cloud (Snowsight, Notebooks) |
+| **Where it runs** | Developer environment (EC2, laptop) via CLI + VS Code | Terminal CLI (`cortex`), Snowsight web UI, or Snowflake Notebooks — all Snowflake-scoped |
 | **Schema awareness** | Via Snowflake MCP — requires configuration; always current after setup | Native — full catalog access with no configuration required |
 | **Local file access** | Full — reads/writes any file on the developer's machine | None — Snowflake objects only |
 | **dbt integration** | Via dbt MCP — reads local `manifest.json`; no pipeline needed | Requires `manifest.json` uploaded to a Snowflake stage via CI/CD pipeline |
 | **On-premises GitLab** | Strongly preferred — no external pull required | Requires a push pipeline from on-prem GitLab to Snowflake (network egress, credential management) |
-| **Python / shell support** | Full — any Python script, shell command, git operation | Python within Snowflake Notebooks only; no shell access |
-| **Multi-step agentic reasoning** | Full — can chain dozens of tool calls across files, queries, and shell in one session | Single-session notebook context; no cross-file agentic loop |
+| **Python / shell support** | Full — any Python script, shell command, git operation | Python within Snowflake (Notebooks or Snowpark); no local shell access |
+| **Multi-step agentic reasoning** | Full — can chain dozens of tool calls across files, queries, and shell in one session | CLI and Snowsight support multi-step reasoning within Snowflake scope; no cross-file or local-shell agentic loop |
 | **MCP extensibility** | Full MCP client — any MCP server can be added | Emerging — Snowflake MCP client support is being developed |
 | **Cost model** | Per-seat subscription (predictable, flat) | Credit-per-token consumption (variable, usage-dependent) |
 | **10-seat pilot cost estimate** | ~$2,400/year (Team Standard, annual) | Variable — depends on usage volume and model tier |
 | **Auth / access control** | RSA key-pair + Snowflake RBAC role (service account) | Engineer's existing Snowflake RBAC role — no additional grants needed |
-| **Setup complexity** | Moderate — MCP server config, `.mcp.json`, RSA key | Low — enabled at the Snowflake admin level; no per-engineer install |
+| **Setup complexity** | Moderate — MCP server config, `.mcp.json`, RSA key | Low — CLI install is one `curl` command; auth via `~/.snowflake/connections.toml` |
 | **Data residency** | Query results stay in dev environment; prompts sent to `api.anthropic.com` | Fully within Snowflake — no data leaves the account |
-| **Primary audience** | Data Engineers (full-stack dev workflows) | Data Analysts (SQL, Notebooks, self-service analytics) |
+| **Primary audience** | Data Engineers (full-stack dev workflows, local files + Snowflake in one session) | Data Engineers and Analysts wanting Snowflake-native agentic workflows via CLI or Snowsight |
 
 ---
 
@@ -452,7 +466,7 @@ These are not mutually exclusive — most enterprise teams end up using both in 
 | Investigate a data quality issue across multiple dbt models | Claude Code | Requires reading multiple files and querying Snowflake in the same session |
 | Write an ad-hoc SQL query against Snowflake | Either | Cortex Code has native schema awareness; Claude Code has it via MCP after setup |
 | Explain a Snowflake table structure to an analyst | Cortex Code | Native catalog access; no setup; self-contained in Snowsight |
-| Write a Snowflake Notebook for a recurring report | Cortex Code | Notebook-native experience; inline assistance without leaving Snowflake |
+| Write a Snowflake Notebook or Streamlit report | Cortex Code | Native Snowflake experience; CLI can scaffold a Streamlit app from a natural language description |
 | Business analyst self-service queries | Cortex Analyst | Semantic-layer-driven NL-to-SQL; designed for non-engineering users |
 | Refactor a Python ingestion script | Claude Code | Requires file system access and shell execution — outside Snowflake's scope |
 | Trace lineage for a schema migration | Claude Code | dbt MCP provides instant local lineage; Cortex requires CI/CD pipeline for same |
@@ -877,7 +891,7 @@ Key facts about Cortex credit billing:
 | **Cost visibility** | Fully predictable from day 1 | Requires usage estimation; hard to forecast without telemetry |
 | **Infrastructure dependency** | None — runs on engineer's machine | Requires Snowflake Cortex-enabled edition; compute warehouse active during use |
 | **Included with existing Snowflake contract?** | No — separate Anthropic subscription | Potentially yes, if Snowflake edition already supports Cortex |
-| **Best for** | Engineers needing full dev environment integration (code, SQL, files, shell) | Analysts working primarily in Snowflake UI, Notebooks, or Streamlit |
+| **Best for** | Engineers needing full dev environment integration (code, SQL, files, shell) | Engineers and analysts who want Snowflake-native agentic workflows via CLI, Snowsight, or Notebooks |
 
 **Recommendation for IRD pilot:** Start with the Claude Code Team Standard plan for the 10-engineer cohort. The flat per-seat cost is budget-predictable, the MCP integration is already validated (this project), and the full development environment coverage suits DE/DA workflows better than a Snowflake-embedded tool. Cortex Code is the right answer for analyst-facing use cases where the work happens entirely within the Snowflake UI — evaluate it in parallel for that audience rather than as a replacement.
 
@@ -1017,7 +1031,7 @@ list,compile,parse,get_lineage_dev,get_node_details_dev,search_product_docs,get_
 
 ## 11. Extending to Snowflake Cortex Code
 
-[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) provides AI capabilities natively within the Snowflake platform, including Cortex Analyst (natural-language-to-SQL) and Cortex Code (AI-assisted SQL development in Snowflake notebooks and Snowsight). As MCP adoption grows across the AI tooling ecosystem, the same MCP server pattern can be surfaced to any MCP-compatible client.
+[Snowflake Cortex](https://docs.snowflake.com/en/user-guide/snowflake-cortex/overview) provides AI capabilities natively within the Snowflake platform, including Cortex Analyst (natural-language-to-SQL) and Cortex Code (AI-assisted SQL development via terminal CLI, Snowsight, and Snowflake Notebooks). As MCP adoption grows across the AI tooling ecosystem, the same MCP server pattern can be surfaced to any MCP-compatible client.
 
 ### How the configuration maps
 
