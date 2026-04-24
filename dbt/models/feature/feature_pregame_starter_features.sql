@@ -37,6 +37,10 @@ rolling_ranked as (
         rs.pitcher_hand,
         rs.game_date                        as stats_game_date,
 
+        -- Sample size flags
+        rs.games_30d,
+        rs.games_std,
+
         -- 7-day rolling
         rs.k_pct_7d,
         rs.bb_pct_7d,
@@ -104,6 +108,39 @@ prior_start as (
         on  gl.pitcher_id       = pp.pitcher_id
         and gl.game_date::date  < pp.game_date
     group by pp.game_pk, pp.pitcher_id
+),
+
+-- Average innings pitched: last 3 starts and season-to-date (LEAKAGE GUARD applied)
+-- Uses outs_recorded / 3.0 for proper decimal averaging (not the traditional 7.2 format).
+ip_starts as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        gl.outs_recorded,
+        year(gl.game_date)                      as start_year,
+        year(pp.game_date)                      as target_year,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by gl.game_date::date desc
+        )                                       as recency_rank
+    from probable_pitchers pp
+    inner join {{ ref('mart_starting_pitcher_game_log') }} gl
+        on  gl.pitcher_id       = pp.pitcher_id
+        and gl.game_date::date  < pp.game_date   -- LEAKAGE GUARD
+),
+
+ip_stats as (
+    select
+        game_pk,
+        pitcher_id,
+        round(
+            avg(case when recency_rank <= 3 then outs_recorded::float / 3.0 end),
+        2)                                      as avg_ip_last_3,
+        round(
+            avg(case when start_year = target_year then outs_recorded::float / 3.0 end),
+        2)                                      as avg_ip_season
+    from ip_starts
+    group by game_pk, pitcher_id
 ),
 
 -- Prior-season platoon splits vs LHB (game_year - 1 to prevent in-season leakage)
@@ -197,6 +234,14 @@ final as (
         -- ── Fastball velocity trend (positive = velocity trending up) ────────
         round(pgr.avg_fastball_velo_7d - pgr.avg_fastball_velo_30d, 1) as fastball_velo_trend,
 
+        -- ── Momentum deltas: 7-day minus season-to-date (positive = trending up)
+        pgr.k_pct_7d - pgr.k_pct_std                as k_pct_7d_minus_std,
+        pgr.xwoba_against_7d - pgr.xwoba_against_std as xwoba_7d_minus_std,
+
+        -- ── Sample size flags: appearances in each rolling window ─────────────
+        pgr.games_30d                                as appearances_30d,
+        pgr.games_std                                as appearances_std,
+
         -- ── Prior-season platoon splits vs LHB ───────────────────────────────
         pl.k_pct_vs_lhb,
         pl.bb_pct_vs_lhb,
@@ -207,7 +252,15 @@ final as (
         pr.k_pct_vs_rhb,
         pr.bb_pct_vs_rhb,
         pr.xwoba_vs_rhb,
-        pr.whiff_rate_vs_rhb
+        pr.whiff_rate_vs_rhb,
+
+        -- ── Recent IP trend and history flag ─────────────────────────────────
+        -- avg_ip_last_3: average decimal innings over the 3 most recent starts
+        -- avg_ip_season: season-to-date average decimal innings per start
+        -- has_ip_history: false for debut starters with no prior starts in the dataset
+        ips.avg_ip_last_3,
+        ips.avg_ip_season,
+        (ips.game_pk is not null)::boolean       as has_ip_history
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -222,6 +275,9 @@ final as (
     left join platoon_rhb pr
         on  pr.game_pk      = pp.game_pk
         and pr.pitcher_id   = pp.pitcher_id
+    left join ip_stats ips
+        on  ips.game_pk     = pp.game_pk
+        and ips.pitcher_id  = pp.pitcher_id
 )
 
 select * from final

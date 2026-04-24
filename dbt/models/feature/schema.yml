@@ -206,6 +206,51 @@ models:
                 warn_if: ">= 100"
                 error_if: ">= 20000"
 
+      - name: k_pct_7d_minus_std
+        description: >
+          Starter K% momentum: 7-day rolling K% minus season-to-date K%.
+          Positive values indicate the pitcher is striking out batters at a higher rate recently
+          than their season baseline. Notebook 03 found starter K% has the largest window effect
+          (29% correlation increase from 7-day to STD), making this spread a meaningful velocity signal.
+          Null when either the 7-day or STD window is null (debut pitchers, early-season).
+
+      - name: xwoba_7d_minus_std
+        description: >
+          Starter xwOBA-against momentum: 7-day rolling xwOBA allowed minus season-to-date xwOBA allowed.
+          Positive values indicate the pitcher is allowing harder expected contact recently than baseline.
+          Null when either the 7-day or STD window is null (debut pitchers, early-season).
+
+      - name: appearances_30d
+        description: >
+          Number of pitcher appearances (starts) in the 30-day rolling window ending the day before the game.
+          Indicates sample size reliability for 30-day rolling stats — a value of 3 means only 3 starts
+          contributed to those estimates. Null for debut pitchers with no prior Statcast history.
+
+      - name: appearances_std
+        description: >
+          Number of pitcher appearances (starts) in the season-to-date window ending the day before the game.
+          Indicates sample size reliability for season-to-date rolling stats. Zero is valid for a pitcher's
+          first game of the season. Null for debut pitchers with no prior Statcast history.
+
+      - name: avg_ip_last_3
+        description: >
+          Average decimal innings pitched over the starter's 3 most recent prior starts (any season),
+          computed from outs_recorded / 3.0 for proper decimal averaging. A value of 4.67 means the
+          starter averaged 4 full innings and 2 outs over their last 3 outings. Null when the starter
+          has no prior starts in the dataset (has_ip_history = false).
+
+      - name: avg_ip_season
+        description: >
+          Season-to-date average decimal innings pitched per start, using only starts in the current
+          season before this game (< game_date). Null for debut starters and pitchers making their
+          first start of the season. Provides a stable seasonal baseline relative to avg_ip_last_3.
+
+      - name: has_ip_history
+        description: >
+          True when the pitcher has at least one prior regular season start in the dataset before
+          this game (any season). False for debut starters. Used as a filter flag to distinguish
+          null avg_ip_* values due to missing data from null due to first-career-start nullability.
+
   - name: feature_pregame_team_features
     description: >
       Pre-game team context features for ML. One row per game_pk × team_abbrev
@@ -320,6 +365,43 @@ models:
           False on Opening Day and when venue data is unavailable.
         tests:
           - not_null
+
+      - name: off_woba_7d_minus_30d
+        description: >
+          Team offense momentum: 7-day rolling wOBA minus 30-day rolling wOBA.
+          Positive values indicate the team is hitting better recently than their baseline.
+          Null when either window is null (early-season games with insufficient history).
+
+      - name: pit_xwoba_7d_minus_30d
+        description: >
+          Team pitching momentum: 7-day rolling xwOBA allowed minus 30-day rolling xwOBA allowed.
+          Positive values indicate the pitching staff is allowing harder contact recently than baseline.
+          Null when either window is null (early-season games with insufficient history).
+
+      - name: off_games_played_7d
+        description: >
+          Number of team games played in the 7-day rolling window ending the day before the game.
+          Indicates sample size reliability for 7-day offensive rolling stats — low values
+          (0–2) mean early-season estimates are noisy. Null when no prior rolling offense row exists.
+
+      - name: off_games_played_14d
+        description: >
+          Number of team games played in the 14-day rolling window ending the day before the game.
+          Indicates sample size reliability for 14-day offensive rolling stats.
+          Null when no prior rolling offense row exists.
+
+      - name: off_games_played_30d
+        description: >
+          Number of team games played in the 30-day rolling window ending the day before the game.
+          Indicates sample size reliability for 30-day offensive rolling stats — notebook 03 confirmed
+          pitching feature |r| was 48% lower in the 0–10 game bucket vs. the 30+ game bucket.
+          Null when no prior rolling offense row exists.
+
+      - name: off_games_played_std
+        description: >
+          Number of team games played season-to-date ending the day before the game.
+          Indicates sample size reliability for season-to-date offensive rolling stats.
+          Null when no prior rolling offense row exists.
 
   - name: feature_pregame_park_features
     description: >
@@ -489,6 +571,101 @@ models:
           from has_full_data: odds are an optional feature block.
         tests:
           - not_null
+
+      - name: home_lineup_vs_away_starter_xwoba_adj
+        description: >
+          Weighted average of the away starter's prior-season xwOBA-against platoon splits,
+          weighted by the home lineup's handedness composition
+          (pct_rhb × xwoba_vs_rhb + pct_lhb × xwoba_vs_lhb). Captures the three-way
+          interaction of lineup composition × starter hand × platoon split that tree models
+          are unlikely to discover from the raw components alone. Null when away starter
+          platoon splits are null (debut pitcher, first-season gap) or when no lineup batters
+          have known handedness.
+
+      - name: home_lineup_vs_away_starter_k_pct_adj
+        description: >
+          Weighted average of the away starter's prior-season K% platoon splits, weighted by
+          home lineup handedness composition. Null when away starter platoon splits are null.
+
+      - name: home_lineup_vs_away_starter_bb_pct_adj
+        description: >
+          Weighted average of the away starter's prior-season BB% platoon splits, weighted by
+          home lineup handedness composition. Null when away starter platoon splits are null.
+
+      - name: away_lineup_vs_home_starter_xwoba_adj
+        description: >
+          Weighted average of the home starter's prior-season xwOBA-against platoon splits,
+          weighted by the away lineup's handedness composition
+          (pct_rhb × xwoba_vs_rhb + pct_lhb × xwoba_vs_lhb). Null when home starter
+          platoon splits are null or when no away lineup batters have known handedness.
+
+      - name: away_lineup_vs_home_starter_k_pct_adj
+        description: >
+          Weighted average of the home starter's prior-season K% platoon splits, weighted by
+          away lineup handedness composition. Null when home starter platoon splits are null.
+
+      - name: away_lineup_vs_home_starter_bb_pct_adj
+        description: >
+          Weighted average of the home starter's prior-season BB% platoon splits, weighted by
+          away lineup handedness composition. Null when home starter platoon splits are null.
+
+      - name: home_starter_avg_ip_last_3
+        description: >
+          Average decimal innings pitched by the home starter over their 3 most recent prior starts
+          (any season, strictly < game_date). Proxy for expected depth and bullpen workload —
+          a low value signals the bullpen is likely to throw more innings. Null when has_ip_history = false.
+
+      - name: home_starter_avg_ip_season
+        description: >
+          Season-to-date average decimal innings pitched per start for the home starter, using
+          only starts in the current season before this game. Stable seasonal baseline.
+          Null when the starter has no same-season prior starts.
+
+      - name: home_starter_has_ip_history
+        description: >
+          True when the home starter has at least one prior regular season start in the dataset.
+          False for debut starters; use to distinguish null avg_ip values from missing data.
+
+      - name: away_starter_avg_ip_last_3
+        description: >
+          Average decimal innings pitched by the away starter over their 3 most recent prior starts.
+          Null when has_ip_history = false.
+
+      - name: away_starter_avg_ip_season
+        description: >
+          Season-to-date average decimal innings pitched per start for the away starter.
+          Null when the starter has no same-season prior starts.
+
+      - name: away_starter_has_ip_history
+        description: >
+          True when the away starter has at least one prior regular season start in the dataset.
+          False for debut starters.
+
+      - name: is_day_game
+        description: >
+          True when the game is scheduled as a day game (day_night = 'day' from stg_statsapi_games).
+          False for night games. Null for a small number of games where day_night is unavailable.
+
+      - name: series_game_number
+        description: >
+          Position of this game within the current series (1, 2, 3, or 4+), from stg_statsapi_games.
+          Relevant for bullpen deployment modeling — games 2 and 3 of a series deplete bullpens
+          from prior outings. Non-null for all regular season games with schedule data.
+
+      - name: home_win_rate_trailing_3yr
+        description: >
+          Trailing 3-year MLB-wide home team win rate ending the day before this game (strictly <
+          game_date; leakage guard). Computed as avg(home_team_won) across all regular-season games
+          in mart_game_results in the 3-year window. Notebook 01 confirmed home win rate declined
+          from 0.548 (2020) to 0.519 (2023) — this rolling rate replaces any static 0.529 assumption.
+          Null for early 2015 games with insufficient trailing history. Expected range for 2024: 0.519–0.535.
+
+      - name: post_2022_rules
+        description: >
+          True for games in 2023 or later (game_year >= 2023). Flags the structural rule change era:
+          shift ban, pitch clock, and universal DH took effect in 2023, producing a ~0.64-run per game
+          scoring increase relative to 2022 (confirmed in Notebook 01). Use as an era interaction term
+          or stratification variable in models spanning the 2022–2023 boundary.
 
   - name: feature_pregame_odds_features
     description: >

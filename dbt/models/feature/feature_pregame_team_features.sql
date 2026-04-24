@@ -50,6 +50,10 @@ offense_ranked as (
     select
         g.game_pk,
         g.team_abbrev,
+        ro.games_7d,
+        ro.games_14d,
+        ro.games_30d,
+        ro.games_std,
         ro.runs_per_game_7d,
         ro.runs_per_game_14d,
         ro.runs_per_game_30d,
@@ -320,7 +324,17 @@ final as (
         be.xwoba_against_30d                    as bp_xwoba_against_30d,
         be.hard_hit_pct_30d                     as bp_hard_hit_pct_30d,
         be.whiff_rate_30d                       as bp_whiff_rate_30d,
-        be.innings_pitched_30d                  as bp_innings_pitched_30d
+        be.innings_pitched_30d                  as bp_innings_pitched_30d,
+
+        -- ── Momentum deltas: 7-day minus 30-day (positive = trending up) ─────
+        off.woba_7d - off.woba_30d                   as off_woba_7d_minus_30d,
+        pit.xwoba_against_7d - pit.xwoba_against_30d as pit_xwoba_7d_minus_30d,
+
+        -- ── Sample size flags: games played in each rolling window ────────────
+        off.games_7d                                 as off_games_played_7d,
+        off.games_14d                                as off_games_played_14d,
+        off.games_30d                                as off_games_played_30d,
+        off.games_std                                as off_games_played_std
 
     from games g
     left join offense_pre_game off

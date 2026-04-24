@@ -283,7 +283,7 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Lineup data (confirmed pre-game) | Complete (staging) |
 | Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
-| ML feature store | Complete — Phase 2 done 2026-04-23; six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features (prices populate going forward via live ingestion; historical coverage requires Card 3 backfill) |
+| ML feature store | Complete (Phase 2) + feature engineering in progress — six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features; Cards 4.1–4.5 complete (delta/momentum, lineup-vs-starter matchup, rolling window reliability flags, starter expected depth, game context and era flags 2026-04-23) |
 | Prediction models | Not started |
 | Betting/sizing layer | Not started |
 
@@ -578,12 +578,12 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* None. All source windows already exist in the feature models.
 
 *Acceptance criteria:*
-- [ ] Delta columns added for team offense wOBA and pitching xwOBA (7d − 30d) in `feature_pregame_team_features`
-- [ ] Delta columns added for starter K% and xwOBA (7d − STD) in `feature_pregame_starter_features`
-- [ ] All delta columns passed through in `feature_pregame_game_features`
-- [ ] No new null rows introduced beyond what exists in the source window columns
-- [ ] `schema.yml` updated for both feature models
-- [ ] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
+- [x] Delta columns added for team offense wOBA and pitching xwOBA (7d − 30d) in `feature_pregame_team_features`
+- [x] Delta columns added for starter K% and xwOBA (7d − STD) in `feature_pregame_starter_features`
+- [x] All delta columns passed through in `feature_pregame_game_features`
+- [x] No new null rows introduced beyond what exists in the source window columns
+- [x] `schema.yml` updated for both feature models
+- [x] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
 
 ---
 
@@ -603,13 +603,13 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 *Blockers:* None. Source columns exist in both upstream feature models.
 
-*Acceptance criteria:*
-- [ ] `home_lineup_vs_away_starter_xwoba_adj` and `away_lineup_vs_home_starter_xwoba_adj` added to `feature_pregame_game_features`
-- [ ] K% and BB% matchup adjustment columns added for both sides
-- [ ] Null propagation is correct — null when starter platoon splits are null, non-null otherwise
-- [ ] Spot-check: a RHP starter with high xwOBA_vs_rhb facing a right-heavy lineup produces a higher `xwoba_adj` than the same starter vs. a left-heavy lineup
-- [ ] `schema.yml` updated with column descriptions
-- [ ] `dbtf build --select feature_pregame_game_features` passes all tests
+*Acceptance criteria (completed 2026-04-23):*
+- [x] `home_lineup_vs_away_starter_xwoba_adj` and `away_lineup_vs_home_starter_xwoba_adj` added to `feature_pregame_game_features`
+- [x] K% and BB% matchup adjustment columns added for both sides
+- [x] Null propagation is correct — null when starter platoon splits are null, non-null otherwise
+- [x] Spot-check: a RHP starter with high xwOBA_vs_rhb facing a right-heavy lineup produces a higher `xwoba_adj` than the same starter vs. a left-heavy lineup
+- [x] `schema.yml` updated with column descriptions
+- [x] `dbtf build --select feature_pregame_game_features` passes all tests
 
 ---
 
@@ -628,16 +628,16 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* None. Rolling game counts are available in mart rolling stat models.
 
 *Acceptance criteria:*
-- [ ] Games-played columns added for 7d, 14d, 30d, and STD windows for both home and away teams in `feature_pregame_team_features`
-- [ ] Starter appearances added for 30d and STD windows in `feature_pregame_starter_features`
-- [ ] All columns passed through in `feature_pregame_game_features`
-- [ ] Values are non-negative integers; zero is valid for season-opening games
-- [ ] `schema.yml` updated for all three feature models
-- [ ] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
+- [x] Games-played columns added for 7d, 14d, 30d, and STD windows for both home and away teams in `feature_pregame_team_features`
+- [x] Starter appearances added for 30d and STD windows in `feature_pregame_starter_features`
+- [x] All columns passed through in `feature_pregame_game_features`
+- [x] Values are non-negative integers; zero is valid for season-opening games
+- [x] `schema.yml` updated for all three feature models
+- [x] `dbtf build --select feature_pregame_team_features feature_pregame_starter_features feature_pregame_game_features` passes all tests
 
 ---
 
-#### Card 4.4 — Add Starter Expected Depth Signal to Starter Feature Model
+#### Card 4.4 — Add Starter Expected Depth Signal to Starter Feature Model ✓ Complete (2026-04-23)
 
 **Title:** Add recent innings-per-start trend to pregame starter feature model as a bullpen workload proxy
 
@@ -652,17 +652,17 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 *Blockers:* None. `mart_starting_pitcher_game_log` is built and tested.
 
-*Acceptance criteria:*
-- [ ] `home_starter_avg_ip_last_3` and `away_starter_avg_ip_last_3` added using strictly `< game_date` (no leakage)
-- [ ] `home_starter_avg_ip_season` and away equivalent added
-- [ ] `home_starter_has_ip_history` / `away_starter_has_ip_history` boolean flags added
-- [ ] Null for debut starters; non-null for all pitchers with at least 1 prior start
-- [ ] Passed through in `feature_pregame_game_features`
-- [ ] `dbtf build --select feature_pregame_starter_features feature_pregame_game_features` passes all tests
+*Acceptance criteria (completed 2026-04-23):*
+- [x] `home_starter_avg_ip_last_3` and `away_starter_avg_ip_last_3` added using strictly `< game_date` (no leakage)
+- [x] `home_starter_avg_ip_season` and away equivalent added
+- [x] `home_starter_has_ip_history` / `away_starter_has_ip_history` boolean flags added
+- [x] Null for debut starters; non-null for all pitchers with at least 1 prior start
+- [x] Passed through in `feature_pregame_game_features`
+- [x] `dbtf build --select feature_pregame_starter_features feature_pregame_game_features` passes all tests
 
 ---
 
-#### Card 4.5 — Add Game Context and Era Features
+#### Card 4.5 — Add Game Context and Era Features ✓ Complete (2026-04-23)
 
 **Title:** Add day/night, series position, time-varying home win rate, and era flags to the master game feature model
 
@@ -678,13 +678,13 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* None. All source data is in `stg_statsapi_games` and `mart_game_results`.
 
 *Acceptance criteria:*
-- [ ] `is_day_game` boolean added to `feature_pregame_game_features`
-- [ ] `series_game_number` integer (1–4+) added, non-null for all regular season games
-- [ ] `home_win_rate_trailing_3yr` uses strictly `< game_date`; no same-day games included
-- [ ] `post_2022_rules` boolean and `game_year` integer added
-- [ ] Spot-check: `home_win_rate_trailing_3yr` for a 2024 game should be in the range 0.519–0.535, not 0.529 static
-- [ ] `schema.yml` updated for all new columns
-- [ ] `dbtf build --select feature_pregame_game_features` passes all tests
+- [x] `is_day_game` boolean added to `feature_pregame_game_features`
+- [x] `series_game_number` integer (1–4+) added, non-null for all regular season games
+- [x] `home_win_rate_trailing_3yr` uses strictly `< game_date`; no same-day games included
+- [x] `post_2022_rules` boolean and `game_year` integer added
+- [x] Spot-check: `home_win_rate_trailing_3yr` for a 2024 game should be in the range 0.519–0.535, not 0.529 static
+- [x] `schema.yml` updated for all new columns
+- [x] `dbtf build --select feature_pregame_game_features` passes all tests
 
 ---
 

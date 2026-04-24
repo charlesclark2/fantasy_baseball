@@ -76,6 +76,29 @@ odds as (
     select * from {{ ref('feature_pregame_odds_features') }}
 ),
 
+game_context as (
+    select
+        game_pk,
+        (day_night = 'day')::boolean    as is_day_game,
+        series_game_number
+    from {{ ref('stg_statsapi_games') }}
+),
+
+home_win_rate as (
+    select
+        spine.game_pk,
+        round(
+            avg(hist.home_team_won::integer)
+        , 4)                            as home_win_rate_trailing_3yr
+    from games spine
+    left join {{ ref('mart_game_results') }} hist
+        on  hist.game_type = 'R'
+        and hist.game_date::date >= dateadd('year', -3, spine.game_date)
+        and hist.game_date::date <  spine.game_date
+        and hist.home_team_won is not null
+    group by spine.game_pk
+),
+
 final as (
     select
 
@@ -87,6 +110,12 @@ final as (
         g.away_team,
         pk.venue_id,
         pk.venue_name,
+
+        -- ── Game context and era flags ────────────────────────────────────────
+        gc.is_day_game,
+        gc.series_game_number,
+        hwr.home_win_rate_trailing_3yr,
+        (g.game_year >= 2023)::boolean          as post_2022_rules,
 
         -- ── Data completeness flags ────────────────────────────────────────────
         -- has_full_data: both lineups confirmed, both starters have prior history,
@@ -201,6 +230,10 @@ final as (
         h_st.batter_chase_rate_std              as home_starter_batter_chase_rate_std,
         h_st.avg_fastball_velo_std              as home_starter_avg_fastball_velo_std,
         h_st.fastball_velo_trend                as home_starter_fastball_velo_trend,
+        h_st.k_pct_7d_minus_std                 as home_starter_k_pct_7d_minus_std,
+        h_st.xwoba_7d_minus_std                 as home_starter_xwoba_7d_minus_std,
+        h_st.appearances_30d                    as home_starter_appearances_30d,
+        h_st.appearances_std                    as home_starter_appearances_std,
         h_st.k_pct_vs_lhb                       as home_starter_k_pct_vs_lhb,
         h_st.bb_pct_vs_lhb                      as home_starter_bb_pct_vs_lhb,
         h_st.xwoba_vs_lhb                       as home_starter_xwoba_vs_lhb,
@@ -209,6 +242,9 @@ final as (
         h_st.bb_pct_vs_rhb                      as home_starter_bb_pct_vs_rhb,
         h_st.xwoba_vs_rhb                       as home_starter_xwoba_vs_rhb,
         h_st.whiff_rate_vs_rhb                  as home_starter_whiff_rate_vs_rhb,
+        h_st.avg_ip_last_3                      as home_starter_avg_ip_last_3,
+        h_st.avg_ip_season                      as home_starter_avg_ip_season,
+        h_st.has_ip_history                     as home_starter_has_ip_history,
 
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
@@ -249,6 +285,10 @@ final as (
         a_st.batter_chase_rate_std              as away_starter_batter_chase_rate_std,
         a_st.avg_fastball_velo_std              as away_starter_avg_fastball_velo_std,
         a_st.fastball_velo_trend                as away_starter_fastball_velo_trend,
+        a_st.k_pct_7d_minus_std                 as away_starter_k_pct_7d_minus_std,
+        a_st.xwoba_7d_minus_std                 as away_starter_xwoba_7d_minus_std,
+        a_st.appearances_30d                    as away_starter_appearances_30d,
+        a_st.appearances_std                    as away_starter_appearances_std,
         a_st.k_pct_vs_lhb                       as away_starter_k_pct_vs_lhb,
         a_st.bb_pct_vs_lhb                      as away_starter_bb_pct_vs_lhb,
         a_st.xwoba_vs_lhb                       as away_starter_xwoba_vs_lhb,
@@ -257,6 +297,9 @@ final as (
         a_st.bb_pct_vs_rhb                      as away_starter_bb_pct_vs_rhb,
         a_st.xwoba_vs_rhb                       as away_starter_xwoba_vs_rhb,
         a_st.whiff_rate_vs_rhb                  as away_starter_whiff_rate_vs_rhb,
+        a_st.avg_ip_last_3                      as away_starter_avg_ip_last_3,
+        a_st.avg_ip_season                      as away_starter_avg_ip_season,
+        a_st.has_ip_history                     as away_starter_has_ip_history,
 
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
@@ -355,6 +398,12 @@ final as (
         h_tm.consecutive_home_games             as home_consecutive_home_games,
         h_tm.consecutive_away_games             as home_consecutive_away_games,
         h_tm.tz_changed_from_last_game          as home_tz_changed_from_last_game,
+        h_tm.off_woba_7d_minus_30d              as home_off_woba_7d_minus_30d,
+        h_tm.pit_xwoba_7d_minus_30d             as home_pit_xwoba_7d_minus_30d,
+        h_tm.off_games_played_7d                as home_games_played_7d,
+        h_tm.off_games_played_14d               as home_games_played_14d,
+        h_tm.off_games_played_30d               as home_games_played_30d,
+        h_tm.off_games_played_std               as home_games_played_std,
 
         -- ── Away team context ─────────────────────────────────────────────────
         a_tm.wins                               as away_wins,
@@ -453,6 +502,62 @@ final as (
         a_tm.consecutive_home_games             as away_consecutive_home_games,
         a_tm.consecutive_away_games             as away_consecutive_away_games,
         a_tm.tz_changed_from_last_game          as away_tz_changed_from_last_game,
+        a_tm.off_woba_7d_minus_30d              as away_off_woba_7d_minus_30d,
+        a_tm.pit_xwoba_7d_minus_30d             as away_pit_xwoba_7d_minus_30d,
+        a_tm.off_games_played_7d                as away_games_played_7d,
+        a_tm.off_games_played_14d               as away_games_played_14d,
+        a_tm.off_games_played_30d               as away_games_played_30d,
+        a_tm.off_games_played_std               as away_games_played_std,
+
+        -- ── Lineup-vs-starter handedness matchup adjustments ─────────────────
+        -- Weighted average of the opposing starter's platoon splits, weighted by
+        -- the lineup's handedness composition (pct_rhb × split_vs_rhb + pct_lhb × split_vs_lhb).
+        -- Null when starter platoon splits are null (debut pitcher or first-season data gap).
+        -- Null when the lineup has zero batters with known handedness (nullif guard).
+
+        -- Home offense vs away starter
+        round(
+            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.xwoba_vs_rhb
+            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.xwoba_vs_lhb
+        , 3)                                    as home_lineup_vs_away_starter_xwoba_adj,
+
+        round(
+            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.k_pct_vs_rhb
+            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.k_pct_vs_lhb
+        , 3)                                    as home_lineup_vs_away_starter_k_pct_adj,
+
+        round(
+            (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.bb_pct_vs_rhb
+            + (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+                * a_st.bb_pct_vs_lhb
+        , 3)                                    as home_lineup_vs_away_starter_bb_pct_adj,
+
+        -- Away offense vs home starter
+        round(
+            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.xwoba_vs_rhb
+            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.xwoba_vs_lhb
+        , 3)                                    as away_lineup_vs_home_starter_xwoba_adj,
+
+        round(
+            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.k_pct_vs_rhb
+            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.k_pct_vs_lhb
+        , 3)                                    as away_lineup_vs_home_starter_k_pct_adj,
+
+        round(
+            (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.bb_pct_vs_rhb
+            + (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+                * h_st.bb_pct_vs_lhb
+        , 3)                                    as away_lineup_vs_home_starter_bb_pct_adj,
 
         -- ── Park features ─────────────────────────────────────────────────────
         pk.elevation_ft,
@@ -496,6 +601,10 @@ final as (
         on  pk.game_pk = g.game_pk
     left join odds od
         on  od.game_pk = g.game_pk
+    left join game_context gc
+        on  gc.game_pk = g.game_pk
+    left join home_win_rate hwr
+        on  hwr.game_pk = g.game_pk
 )
 
 select * from final

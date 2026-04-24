@@ -8,7 +8,7 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phase 2 — Pre-Game Feature Assembly** is complete. The full feature store is built and validated. Phase 3 (EDA) is next.
+**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is in progress — feature engineering Cards 4.1 (delta/momentum) and 4.2 (lineup-vs-starter matchup) complete.
 
 | Domain | Status |
 |---|---|
@@ -23,9 +23,9 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 | Ballpark context and run factors | Complete |
 | Betting odds (staging + mart) | Events backfilled 2021–present (72-76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
 | Schedule fatigue context | Complete |
-| ML feature store | Complete — Phase 2 done 2026-04-23; 25,146 game rows; ~23,444 training rows (2016–2025); betting odds features integrated (lowvig, live ingestion only until Card 3 backfill) |
-| EDA | In progress (Phase 3) |
-| Prediction models | Not started (Phase 4) |
+| ML feature store | Phase 2 complete (2026-04-23); feature engineering in progress — Card 4.1 done: delta/momentum features (2026-04-23); Card 4.2 done: lineup-vs-starter handedness matchup adjustments (2026-04-23) |
+| EDA | In progress (Phase 3) — findings in exploratory_data_analysis/betting_model_findings.md |
+| Prediction models | Feature engineering in progress — Cards 4.1 and 4.2 complete; Cards 4.3–4.5 next |
 | Betting application layer | Not started (Phase 6) |
 
 ---
