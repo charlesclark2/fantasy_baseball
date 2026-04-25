@@ -149,7 +149,7 @@ spec:
                 assert r.get('target') == 'total_runs', "Wrong target"
                 assert r.get('model') == 'ngboost', "Wrong model"
                 grid = r.get('grid_results', [])
-                assert len(grid) >= 4, f"Expected 4 grid combinations, got {len(grid)}"
+                assert len(grid) >= 6, f"Expected 6 grid combinations, got {len(grid)}"
                 dists = {g['dist'] for g in grid}
                 assert 'Normal' in dists, f"Missing Normal dist; got: {dists}"
                 assert 'LogNormal' in dists, f"Missing LogNormal dist; got: {dists}"

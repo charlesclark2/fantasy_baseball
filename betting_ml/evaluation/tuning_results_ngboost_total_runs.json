@@ -1,0 +1,45 @@
+{
+  "target": "total_runs",
+  "model": "ngboost",
+  "grid_results": [
+    {
+      "n_estimators": 200,
+      "dist": "Normal",
+      "cv_mae": 3.571800780774897,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 200,
+      "dist": "LogNormal",
+      "cv_mae": 3.582399267299471,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 500,
+      "dist": "Normal",
+      "cv_mae": 3.5771707472023087,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 500,
+      "dist": "LogNormal",
+      "cv_mae": 3.5723411179123477,
+      "viable": true,
+      "lognormal_note": null
+    }
+  ],
+  "best_n_estimators": 200,
+  "best_dist": "Normal",
+  "best_cv_mae": 3.571800780774897,
+  "persisted_models": [
+    {
+      "target": "total_runs",
+      "model_name": "ngboost_tuned",
+      "eval_year": 2026,
+      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_2026.pkl"
+    }
+  ]
+}

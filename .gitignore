@@ -20,3 +20,6 @@ betting_ml/models/**/*.pkl
 
 # OS
 .DS_Store
+
+# Snowflake DDL provisioned copy (contains real secret values — never commit)
+scripts/ddl/snowflake_task_dag_provisioned.sql

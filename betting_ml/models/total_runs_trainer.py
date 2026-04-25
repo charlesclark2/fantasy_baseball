@@ -80,6 +80,7 @@ def train_ngboost(
     y_train: pd.Series,
     X_eval: pd.DataFrame,
     dist: str = "Normal",
+    n_estimators: int = 300,
 ) -> dict:
     """Fit NGBRegressor with Normal or LogNormal distribution.
 
@@ -102,7 +103,7 @@ def train_ngboost(
     dist_class = Normal if dist == "Normal" else LogNormal
     model = NGBRegressor(
         Dist=dist_class,
-        n_estimators=300,
+        n_estimators=n_estimators,
         learning_rate=0.1,
         random_state=42,
         verbose=False,

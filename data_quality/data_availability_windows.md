@@ -15,7 +15,7 @@ Confirmed lineup coverage audited against `baseball_data.betting.stg_statsapi_li
 | Intercept offset (intercept_x, intercept_y) | 2023-07-14 | Present | Same coverage as bat tracking — swing-contact events only |
 | Confirmed batting lineups | 2015 (all seasons) | Present | 100% coverage for all completed regular season games |
 | Probable starting pitchers (Stats API) | 2015 (all seasons) | Present | 97–100% coverage for completed seasons; nulls expected for future games |
-| Odds data (The Odds API) | 2021 regular season | Present | Events backfilled 2021–present (~74-77% game coverage); odds data backfill partial (2023 + live 2026 only — credit exhaustion); see Odds Data section |
+| Odds data (The Odds API) | 2020 regular season | Present | Events backfilled 2020–present (68–79% game coverage; 2020: 67.8%, 2021–2025: 72–76%); odds data backfill partial (2023 + live 2026 only — credit exhaustion); see Odds Data section |
 
 ---
 
@@ -111,45 +111,68 @@ Regular season games only (`game_type = 'R'`). Total pitches ~7.5M across 12 sea
 
 ## Odds Data — Historical Backfill + Live Ingestion
 
-**Verified: 2026-04-23**
+**Verified: 2026-04-25**
 
 The Odds API ingestion has two components:
 
-- **Historical events backfill (Card 1 — complete):** `mlb_events_raw` contains 9,419 distinct events from 2021-04-01 through 2026-04-24. The Odds API covers approximately 74-77% of regular season games per season (not every game is listed by the API).
+- **Historical events backfill (Card 1 — complete):** `mlb_events_raw` contains 9,419 distinct events from 2020-07-23 through 2026-04-24. The Odds API covers approximately 68–79% of regular season games per season (not every game is listed by the API); 2020 coverage is lower at 67.8% due to the shortened COVID season.
 - **Historical odds backfill (Card 3 — partial):** `mlb_odds_raw` contains odds data for only 239 distinct events due to API credit exhaustion during the backfill. Coverage: 226 events from the 2023 season and 13 from live 2026 ingestion.
 - **Live ingestion (ongoing from 2026-04-23):** Both events and odds are ingested daily for upcoming games.
 
-### mart_game_odds_bridge — Per-Season Match Rate (audited 2026-04-23)
+### Coverage Hierarchy: game_pk → event_id → odds prices (audited 2026-04-25)
 
-`has_odds = true` means a matching event_id was found in `mart_odds_events` (not that odds prices exist in `mart_odds_outcomes`). The bridge joins on game_date + full team names; Odds API historical names are normalized to Stats API canonical names ("Cleveland Indians" → "Cleveland Guardians", "Oakland Athletics" → "Athletics").
+The Odds API data follows a strict hierarchy: a `game_pk` must match to an `event_id` before odds prices can be retrieved. The table below shows the full funnel per season, queried directly from Snowflake.
 
-| Season | Regular Season Games | Games with event_id | Match % | Improvement vs pre-fix |
-|--------|---------------------|---------------------|---------|------------------------|
-| 2015–2020 | ~14,631 | 0 | 0.0% | — |
-| 2021 | 2,429 | 1,758 | 72.4% | +8.9 pp (Cleveland Indians + Oakland Athletics both fixed) |
-| 2022 | 2,430 | 1,789 | 73.6% | +3.9 pp (Oakland Athletics fixed) |
-| 2023 | 2,430 | 1,802 | 74.2% | +3.9 pp (Oakland Athletics fixed) |
-| 2024 | 2,429 | 1,809 | 74.5% | +4.0 pp (Oakland Athletics fixed) |
-| 2025 | 2,430 | 1,844 | 75.9% | +3.2 pp (Oakland Athletics fixed) |
-| 2026 | 367 | 287 | 78.2% | — (live ingestion; no name mismatch) |
+| Season | game_pks (regular season) | → with event_id | → events in table | → with odds prices |
+|--------|--------------------------|-----------------|-------------------|--------------------|
+| 2015–2019 | ~12,202 | 0 (0%) | 0 | 0 |
+| 2020 | 898 | 609 (67.8%) | 591 | 591 (100%) |
+| 2021 | 2,429 | 1,758 (72.4%) | 1,815 | 1,752 (96.5%) |
+| 2022 | 2,430 | 1,789 (73.6%) | 1,799 | 1,799 (100%) |
+| 2023 | 2,430 | 1,802 (74.2%) | 1,812 | 1,191 (65.7%) |
+| 2024 | 2,429 | 1,809 (74.5%) | 1,828 | 1,826 (99.9%) |
+| 2025 | 2,430 | 1,844 (75.9%) | 1,863 | 1,863 (100%) |
+| 2026 | 376 | 296 (78.7%) | 316 | 316 (100%) |
 
-Audited 2026-04-23 after `dbtf build` of `mart_game_odds_bridge` with name normalization applied.
+**Column definitions:**
+- **game_pks**: distinct regular-season game_pks in `mart_game_results`
+- **with event_id**: game_pks where `has_odds = true` in `mart_game_odds_bridge` — a matching event was found and linked
+- **events in table**: distinct event_ids in `mart_odds_events` for that season (may exceed "with event_id" — see below)
+- **with odds prices**: event_ids in `mart_odds_events` that have at least one row in `mart_odds_outcomes`
 
-**Why not 100%?** The Odds API historical endpoint returns ~10 events per game-date vs ~13 actual games. Some games simply were not listed. This is an API coverage limitation, not a join logic bug.
+### Why "events in table" exceeds "game_pks with event_id"
 
-**Known name mismatches resolved by normalization:**
-- `Cleveland Indians` (Odds API, 2021 only) → `Cleveland Guardians` (Stats API, all years): ~135 events affected
-- `Oakland Athletics` (Odds API, 2021-2025) → `Athletics` (Stats API, all years): ~93-98 events per season affected
+In every season, `mart_odds_events` contains more event_ids than successfully matched game_pks. This was investigated on 2026-04-25 and has two root causes — **neither is a join logic bug**:
 
-**Odds prices (mart_odds_outcomes) coverage by season:**
+1. **Duplicate event_ids from the Odds API.** The Odds API sometimes issues two distinct event_ids for the same game across different ingestion runs. `mart_game_odds_bridge` deduplicates these on `(commence_date, home_team, away_team)`, keeping the most recently ingested event_id and assigning it to the game_pk. The other event_id is never orphaned from a game perspective — the game still has `has_odds = true` — it just doesn't appear in the bridge. This is correct behavior. The effect is most visible in 2021 (1,815 events for 1,758 matched games).
+
+2. **Postponed games.** The Odds API records events on the originally scheduled game date. When a game is postponed and replayed on a different date (e.g., the 2020-08-26/27 Jacob Blake protest boycott, during which multiple teams refused to play), the bridge join on `game_date = commence_date` fails because the Stats API records the actual played date. Those Odds API events will never match a game_pk under the current join logic. This affects a small number of games each season.
+
+### Why the ~25% coverage gap is a true API ceiling
+
+The bridge join logic was verified to be correct on 2026-04-25:
+
+- **Name normalization is not the problem.** The Stats API retroactively applies current franchise names to all historical games (e.g., Cleveland games in 2020 appear as "Cleveland Guardians" in `mart_game_results`). The bridge normalizes Odds API historical names to match: `Cleveland Indians` → `Cleveland Guardians`, `Oakland Athletics` → `Athletics`. These mappings are confirmed correct.
+- **The join is not dropping valid matches.** Direct inspection of unmatched events confirmed they are either dedup orphans (case 1 above) or postponed-game mismatches (case 2 above).
+- **The Odds API historical endpoint simply does not list all games.** The endpoint returns approximately 10 events per game-date against ~13 actual MLB games. Roughly 3 games per day were never listed. This is an inherent API coverage limitation — there is no workaround through more aggressive querying because the missing game_pks have no event_id in the source data to pass to the odds endpoint.
+
+**Once an event_id exists, odds prices are almost always present** (93–100% across seasons). The 2023 gap (65.7%) is the Card 3 credit-exhaustion issue, not a structural problem.
+
+### Known name mismatches resolved by normalization
+
+- `Cleveland Indians` (Odds API, 2020–2021) → `Cleveland Guardians` (Stats API, all years)
+- `Oakland Athletics` (Odds API, 2021–2025) → `Athletics` (Stats API, all years)
+
+### Odds prices (mart_odds_outcomes) coverage by season
 
 | Season | Events with Odds Prices | Notes |
 |--------|------------------------|-------|
-| 2021 | 0 | Card 3 backfill did not reach 2021 |
-| 2022 | 0 | Card 3 backfill did not reach 2022 |
-| 2023 | 226 | Partial — credit exhaustion stopped backfill mid-season |
-| 2024 | 0 | Card 3 backfill did not reach 2024 |
-| 2025 | 0 | Card 3 backfill did not reach 2025 (late-season gap noted by user) |
-| 2026 | 13 | Live ingestion only |
+| 2020 | 591 | Full coverage for matched events |
+| 2021 | 1,752 | 63 events missing prices (incomplete backfill) |
+| 2022 | 1,799 | Full coverage for matched events |
+| 2023 | 1,191 | Partial — Card 3 credit exhaustion stopped backfill mid-season |
+| 2024 | 1,826 | Near-full coverage (2 events missing) |
+| 2025 | 1,863 | Full coverage for matched events |
+| 2026 | 316 | Live ingestion; season in progress |
 
-**ML design implication:** Betting market features (implied probability, line movement) are not usable for historical model training until the historical odds backfill (Card 3) is completed with sufficient API credits. Historical event coverage (event_id linkage) is available for 2021-present and improves `mart_game_odds_bridge` match rates. Full odds-price backfill requires ~24,300 additional API requests (810 game-days × ~15 events/day × 2 markets).
+**ML design implication:** Betting market features (implied probability, line movement) are available for 2020–2022 and 2024–2026 matched events but not usable for full historical model training due to the 25% game_pk coverage ceiling. The ceiling is an API limitation and cannot be closed through improved ingestion logic. Historical event coverage (event_id linkage) is available for 2020–present. Full odds-price backfill for 2023 requires ~9,300 additional API requests for the ~621 missing events.

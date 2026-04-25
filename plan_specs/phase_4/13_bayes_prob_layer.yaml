@@ -62,7 +62,8 @@ metadata:
 spec:
   gateType: review
   description: >
-    Cards 4.9, 4.10, 4.11, and 4.12 must be complete before Card 4.13 begins.
+    Cards 4.9, 4.10, 4.11, 4.12a, 4.12b, 4.12c, 4.12d, and 4.12e must be
+    complete before Card 4.13 begins.
     Card 4.8 provides betting_ml/utils/feature_selection.py (load_retained_features)
     and betting_ml/utils/model_io.py (save_model / load_model).
     Card 4.9 provides betting_ml/models/total_runs_trainer.py with train_ngboost()
@@ -74,8 +75,24 @@ spec:
     model='ngboost_normal'.
     Card 4.11 provides baseline classification results in
     baseball_data.betting_ml.cv_results_win_outcome.
-    Card 4.12 provides hyperparameter-tuned XGBoost models via
-    betting_ml/evaluation/hyperparameter_tuning.md and serialized tuned models.
+    Cards 4.12a–4.12c provide hyperparameter-tuned XGBoost models (total_runs,
+    run_differential, home_win) documented in
+    betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md,
+    betting_ml/evaluation/hyperparameter_tuning_xgb_run_diff.md, and
+    betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md respectively,
+    with serialized models persisted via model_io.py. These tuned XGBoost models
+    are not consumed directly by Card 4.13 but must be complete to close out the
+    full hyperparameter phase before the probability layer begins; Phase 6 will
+    load the xgb_tuned and xgb_classifier_tuned models for ensemble use.
+    Cards 4.12d and 4.12e provide the best NGBoost hyperparameter configurations
+    for total_runs and run_differential via grid search, documented in
+    betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md and
+    betting_ml/evaluation/hyperparameter_tuning_ngboost_run_diff.md respectively,
+    with tuning results written to
+    betting_ml/evaluation/tuning_results_ngboost_total_runs.json and
+    betting_ml/evaluation/tuning_results_ngboost_run_diff.json. Card 4.13 loads
+    these JSON files to extract best_n_estimators and best_dist for each target
+    and passes them to train_ngboost() in the CV loop and final prediction step.
     The has_odds column must be present in the loaded feature DataFrame —
     validated by confirming that load_features() from betting_ml/utils/data_loader.py
     returns a DataFrame with 'has_odds'.
@@ -262,15 +279,34 @@ spec:
             y_runs = df['total_runs']
             y_diff = df['run_differential']
 
+            Load best NGBoost hyperparameters from Card 4.12d/4.12e tuning results:
+              import json
+              with open('betting_ml/evaluation/tuning_results_ngboost_total_runs.json') as f:
+                  ngb_total_runs_cfg = json.load(f)
+              ngb_total_runs_n_est = ngb_total_runs_cfg['best_n_estimators']
+              ngb_total_runs_dist  = ngb_total_runs_cfg['best_dist']   # 'Normal' or 'LogNormal'
+
+              with open('betting_ml/evaluation/tuning_results_ngboost_run_diff.json') as f:
+                  ngb_run_diff_cfg = json.load(f)
+              ngb_run_diff_n_est = ngb_run_diff_cfg['best_n_estimators']
+              ngb_run_diff_dist  = ngb_run_diff_cfg['best_dist']       # expected 'Normal'
+
+            Raise with a descriptive message if either JSON is missing or the
+            required keys (best_n_estimators, best_dist) are absent.
+
           CV α tuning loop — for each fold from all_season_splits(df, min_train_seasons=3):
             1. Build and fit imputation pipeline on X_train; transform X_train and X_eval.
-            2. train_ngboost(X_train_imp, y_runs_train, X_eval_imp, dist='Normal')
+            2. train_ngboost(X_train_imp, y_runs_train, X_eval_imp,
+                 dist=ngb_total_runs_dist, n_estimators=ngb_total_runs_n_est)
                → total runs dist_params; compute:
-               p_over_total = p_over_line('Normal', dist_params,
-                 total_line=df.loc[eval_idx, 'total_line'].values)
-            3. train_ngboost(X_train_imp, y_diff_train, X_eval_imp, dist='Normal')
+               p_over_total = p_over_line(ngb_total_runs_dist, dist_params,
+                 total_line=df.loc[eval_idx, 'total_line_consensus'].values)
+               (Use total_line_consensus — the only total line column in the
+               feature store; plain total_line does not exist in the DataFrame.)
+            3. train_ngboost(X_train_imp, y_diff_train, X_eval_imp,
+                 dist=ngb_run_diff_dist, n_estimators=ngb_run_diff_n_est)
                → run diff dist_params; compute:
-               p_home_win = p_over_line('Normal', dist_params, total_line=0)
+               p_home_win = p_over_line(ngb_run_diff_dist, dist_params, total_line=0)
                (scalar total_line=0 for P(run_diff > 0))
             4. Filter eval rows to has_odds=True AND home_win_prob_consensus is not null.
                These are the rows with usable market data for α tuning. If zero such rows
@@ -305,8 +341,11 @@ spec:
             Train on all pre-2026 rows (no eval fold — use full pre-2026 train set):
               X_train_final = X[df['game_year'] < 2026]; apply imputation pipeline.
               X_2026_imp = pipeline.transform(X[df['game_year'] == 2026])
-            Run train_ngboost on (X_train_final_imp, y_runs_pretrain, X_2026_imp) and
-            on (X_train_final_imp, y_diff_pretrain, X_2026_imp) to get 2026 predictions.
+            Run train_ngboost(X_train_final_imp, y_runs_pretrain, X_2026_imp,
+              dist=ngb_total_runs_dist, n_estimators=ngb_total_runs_n_est) and
+            train_ngboost(X_train_final_imp, y_diff_pretrain, X_2026_imp,
+              dist=ngb_run_diff_dist, n_estimators=ngb_run_diff_n_est)
+            to get 2026 predictions.
             Rows qualify for output when has_odds=True AND home_win_prob_consensus is not null
             (h2h market) or over_prob_consensus is not null (totals market).
             If no qualifying 2026 rows exist: write an empty parquet with

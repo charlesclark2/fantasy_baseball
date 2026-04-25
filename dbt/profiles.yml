@@ -9,4 +9,4 @@ baseball_betting_and_fantasy:
       database: baseball_data                 
       warehouse: COMPUTE_WH                
       schema: betting                      
-      private_key_path: /Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"

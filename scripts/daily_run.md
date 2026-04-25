@@ -1,5 +1,42 @@
 # Daily Ingestion Runbook
 
+## Snowflake Task DAG (unattended production runs)
+
+The Snowflake Task DAG (`task_savant_ingestion`, root task, 08:00 ET daily) runs the full ingestion sequence automatically in production. No manual action is needed on normal days.
+
+**DAG topology:**
+```
+task_savant_ingestion  (ROOT, CRON 0 8 * * * America/New_York)
+    → task_statsapi_schedule
+        → task_oddsapi_events
+            → task_oddsapi_odds
+                → task_github_actions_trigger  (dispatches dbt_daily_build.yml)
+```
+
+**Trigger a manual run** (e.g., after a missed day or for testing):
+```sql
+EXECUTE TASK baseball_data.config.task_savant_ingestion;
+```
+
+**Monitor task status:**
+```sql
+SELECT name, state, scheduled_time, completed_time, error_message
+FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY())
+ORDER BY scheduled_time DESC
+LIMIT 10;
+```
+
+**Check pipeline run log:**
+```sql
+SELECT * FROM baseball_data.config.pipeline_run_log ORDER BY run_ts DESC LIMIT 10;
+```
+
+If a task shows `FAILED`, fix the underlying issue and re-execute the root task. Each downstream procedure checks its predecessor's return value and writes `status = 'SKIPPED'` rather than cascading a failure — re-running after a fix will pick up where the DAG left off.
+
+The manual sequence below remains the canonical path for development, debugging, and one-off backfills.
+
+---
+
 Run these commands from the `scripts/` directory each day to keep all Snowflake source tables current. The order below matches data dependencies: Statcast and Stats API data feed the dbt mart layer, and odds data is independent.
 
 ## Prerequisites

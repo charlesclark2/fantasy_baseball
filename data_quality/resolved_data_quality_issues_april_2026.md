@@ -53,6 +53,43 @@ uv run ingest_statsapi.py schedule --start-date 2015-04-01
 
 ---
 
+## mart_game_odds_bridge — Odds coverage gap investigation (RESOLVED 2026-04-25)
+
+**Issue:** `mart_game_odds_bridge` matches only 68–79% of regular season game_pks to an Odds API event_id. Additionally, `mart_odds_events` contains more distinct event_ids per season than the bridge's matched game_pks, raising the question of whether the join logic was dropping valid matches.
+
+**Investigation (2026-04-25):** Queried the full game_pk → event_id → odds prices hierarchy directly in Snowflake. Two specific sub-questions were tested:
+
+1. *Is the ~25% coverage gap caused by broken join logic or missing name normalization?*
+2. *Why does `mart_odds_events` contain more event_ids than matched game_pks in the bridge?*
+
+**Root cause — coverage gap:** The ~25% gap is a confirmed Odds API coverage ceiling. The historical events endpoint returns approximately 10 events per game-date against ~13 actual MLB games. Roughly 3 games per day are simply not listed. Since the odds endpoint requires an event_id, games with no event_id can never have odds prices retrieved — the bottleneck is upstream of the odds call. No change to ingestion logic can close this gap.
+
+**Root cause — events > matched game_pks:** Two causes identified:
+
+- **Duplicate event_ids from the Odds API.** The Odds API sometimes issues two distinct event_ids for the same game across different ingestion runs. The bridge deduplicates on `(commence_date, home_team, away_team)` keeping the latest `ingestion_ts`, so one event_id is assigned to the game_pk and the other is orphaned in `mart_odds_events`. The game correctly receives `has_odds = true`; the orphaned event_id is a harmless artifact, not a missed match.
+
+- **Postponed games.** The Odds API records events on the originally scheduled date. When a game is postponed (e.g., 2020-08-26/27 Jacob Blake protest boycott — multiple games scheduled 2020-08-27 were replayed on 2020-08-25, 2020-08-26, 2020-08-29 etc.), the Stats API records the actual played date. The bridge joins on `game_date = commence_date`, so the event never matches a game_pk. Affects a small number of games each season.
+
+**Name normalization confirmed correct:** The Stats API retroactively applies current franchise names to all historical seasons (e.g., all Cleveland games in `mart_game_results` use "Cleveland Guardians" regardless of season). The bridge normalizations (`Cleveland Indians` → `Cleveland Guardians`, `Oakland Athletics` → `Athletics`) are confirmed accurate and are not causing missed matches.
+
+**Odds prices funnel (queried 2026-04-25):**
+
+| Season | game_pks | → with event_id | → events in table | → with odds prices |
+|--------|----------|-----------------|-------------------|--------------------|
+| 2020 | 898 | 609 (67.8%) | 591 | 591 (100%) |
+| 2021 | 2,429 | 1,758 (72.4%) | 1,815 | 1,752 (96.5%) |
+| 2022 | 2,430 | 1,789 (73.6%) | 1,799 | 1,799 (100%) |
+| 2023 | 2,430 | 1,802 (74.2%) | 1,812 | 1,191 (65.7%) |
+| 2024 | 2,429 | 1,809 (74.5%) | 1,828 | 1,826 (99.9%) |
+| 2025 | 2,430 | 1,844 (75.9%) | 1,863 | 1,863 (100%) |
+| 2026 | 376 | 296 (78.7%) | 316 | 316 (100%) |
+
+**Resolution:** No code changes required. The bridge join logic and name normalization are correct. The 25% gap is an accepted API limitation documented in `data_quality/data_availability_windows.md`. The 2023 odds prices gap (65.7%) is the existing Card 3 credit-exhaustion issue, unchanged.
+
+**Resolution date:** 2026-04-25
+
+---
+
 ## mart_pitch_game_context
 
 - [x] `accepted_values_mart_pitch_game_context_balls__0__1__2__3` — balls column contains values outside 0–3 (schema.yml:110)

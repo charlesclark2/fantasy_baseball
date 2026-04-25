@@ -1,0 +1,61 @@
+{
+  "target": "run_differential",
+  "model": "ngboost",
+  "grid_results": [
+    {
+      "n_estimators": 200,
+      "dist": "Normal",
+      "cv_mae": 3.436993841163752,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 200,
+      "dist": "LogNormal",
+      "cv_mae": null,
+      "viable": false,
+      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+    },
+    {
+      "n_estimators": 500,
+      "dist": "Normal",
+      "cv_mae": 3.419539069282937,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 500,
+      "dist": "LogNormal",
+      "cv_mae": null,
+      "viable": false,
+      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+    },
+    {
+      "n_estimators": 1000,
+      "dist": "Normal",
+      "cv_mae": 3.4225451283877804,
+      "viable": true,
+      "lognormal_note": null
+    },
+    {
+      "n_estimators": 1000,
+      "dist": "LogNormal",
+      "cv_mae": null,
+      "viable": false,
+      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+    }
+  ],
+  "best_n_estimators": 500,
+  "best_dist": "Normal",
+  "best_cv_mae": 3.419539069282937,
+  "lognormal_viable": false,
+  "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin).",
+  "persisted_models": [
+    {
+      "target": "run_differential",
+      "model_name": "ngboost_tuned",
+      "eval_year": 2026,
+      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/run_differential/ngboost_tuned_2026.pkl"
+    }
+  ]
+}

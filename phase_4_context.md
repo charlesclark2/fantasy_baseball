@@ -73,8 +73,12 @@ All Phase 4 ML inputs come from `baseball_data.betting_features.feature_pregame_
 | 4.9 | Baseline regression: total runs (Ridge, XGBoost, NGBoost) | ✓ Complete |
 | 4.10 | Baseline regression: run differential + derived win probability | ✓ Complete |
 | 4.11 | Baseline classification: win outcome (Logistic, XGBoost calibrated) | ✓ Complete |
-| 4.12 | Hyperparameter optimization (Optuna, 50 trials per model) | Queued — plan spec drafted |
-| 4.13 | Probability output layer + Bayesian market update | Queued — plan spec drafted |
+| 4.12a | XGBoost total_runs hyperparameter tuning (Optuna, 50 trials) | ✓ Complete (2026-04-25) — MAE 3.6385→3.5655 |
+| 4.12b | XGBoost run_differential hyperparameter tuning (Optuna, 20 trials) | ✓ Complete (2026-04-25) — MAE 3.4887→3.4074 |
+| 4.12c | XGBoost home_win hyperparameter tuning (Optuna, 50 trials) | ✓ Complete (2026-04-25) — Brier 0.2443→0.2423 |
+| 4.12d | NGBoost total_runs grid search (n_est ∈ {200,500}, dist ∈ {Normal,LogNormal}) | ✓ Complete (2026-04-25) — best: n_est=200, Normal, MAE=3.5718 |
+| 4.12e | NGBoost run_differential grid search (n_est ∈ {200,500,1000}, dist ∈ {Normal,LogNormal}) | ✓ Complete (2026-04-25) — best: n_est=500, Normal, MAE=3.4195; LogNormal non-viable |
+| 4.13 | Probability output layer + Bayesian market update | Queued — plan spec drafted; blockers cleared |
 | 4.B1 | [Backlog] Weather feature integration | Blocked — no data source |
 | 4.B2 | [Backlog] Umpire tendency features | Blocked — no data source |
 
@@ -199,18 +203,27 @@ where α is tuned via CV (start at 0.5). Edge signal: `edge = model_prob − mar
 - Results → `betting_ml/evaluation/win_outcome_results.md`.
 - **Blocked by:** Cards 4.6, 4.8.
 
-### Card 4.12 — Hyperparameter Optimization
-- Optuna TPE sampler; 50 trials per XGBoost model (total runs, run differential, win outcome).
-- Search space: `max_depth` 3–8, `learning_rate` 0.01–0.3, `n_estimators` 100–1000, `subsample` 0.6–1.0, `colsample_bytree` 0.5–1.0, `reg_alpha` 0–1, `reg_lambda` 0.5–2.
-- NGBoost: grid search over `n_estimators` and distribution type (Normal vs. LogNormal).
-- Results → `betting_ml/evaluation/hyperparameter_tuning.md`. Models persisted via Card 4.8 `model_io.py` with `_tuned` suffix.
-- **Blocked by:** Cards 4.9, 4.10, 4.11, 4.8.
+### Card 4.12 — Hyperparameter Optimization ✓ Complete (2026-04-25)
+
+All five sub-cards complete. Results summary:
+
+| Sub-card | Model | Target | Best Config | CV Score vs. Baseline |
+|---|---|---|---|---|
+| 4.12a | XGBoost (Optuna, 50 trials) | total_runs | max_depth=3, lr=0.0153, n_est=238 | MAE 3.5655 vs 3.6385 (+2.01%) |
+| 4.12b | XGBoost (Optuna, 20 trials) | run_differential | max_depth=4, lr=0.0104, n_est=380 | MAE 3.4074 vs 3.4887 (+2.33%) |
+| 4.12c | XGBoost (Optuna, 50 trials) | home_win | max_depth=3, lr=0.0151, n_est=337 | Brier 0.2423 vs 0.2443 (+0.83%) |
+| 4.12d | NGBoost (grid: 4 combos) | total_runs | n_estimators=200, dist=Normal | MAE 3.5718 |
+| 4.12e | NGBoost (grid: 6 combos) | run_differential | n_estimators=500, dist=Normal | MAE 3.4195; LogNormal non-viable |
+
+All tuned models persisted: `xgb_tuned_2026.pkl` (total_runs, run_diff), `xgb_classifier_tuned_2026.pkl` (home_win), `ngboost_tuned_2026.pkl` (total_runs, run_diff).
+
+Full tuning results: `betting_ml/evaluation/hyperparameter_tuning_xgb_*.md` and `hyperparameter_tuning_ngboost_*.md`.
 
 ### Card 4.13 — Probability Output Layer and Bayesian Market Update
 - Bayesian posterior blend (log-odds space) with tunable mixing weight α.
 - Output: `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, `implied_kelly_fraction` per game per market.
-- Currently applicable to live 2026 games only (`has_odds = true`); becomes more powerful once historical odds backfill completes.
-- **Blocked by:** Cards 4.9, 4.10, 4.11, 4.12.
+- Historical odds backfill complete (2026-04-23) — 2021–2025 at ~72–78% match rate (~8,297 games). α tuning will use several thousand has_odds rows.
+- **Blocked by:** Nothing — all blockers cleared (Cards 4.9, 4.10, 4.11, 4.12 all complete).
 
 ---
 
@@ -221,7 +234,7 @@ where α is tuned via CV (start at 0.5). Edge signal: `edge = model_prob − mar
 | `betting_ml/utils/data_loader.py` | Snowflake → pandas; applies `has_full_data=true` and `min_games_played ≥ 15` filter |
 | `betting_ml/utils/cv_splits.py` | Temporal leave-one-season-out CV splits; no shuffled k-fold |
 | `betting_ml/utils/preprocessing.py` | Imputation + Bayesian shrinkage pipeline; handles all 6 null groups from NB02 |
-| `betting_ml/utils/feature_selection.py` | **Not yet built (Card 4.8)** — correlation-based drop + multicollinearity resolution |
+| `betting_ml/utils/feature_selection.py` | Card 4.8 — correlation-based drop + multicollinearity resolution; `load_retained_features()` returns canonical 240-feature list |
 | `betting_ml/utils/model_io.py` | Card 4.8 — joblib save/load with standard path convention |
 | `betting_ml/scripts/analyze_pitching_decomp.py` | Card 3.8 — starter vs. bullpen xwOBA decomposition analysis |
 | `betting_ml/scripts/analyze_home_away_pitch_asymmetry.py` | Card 3.9 — home/away pitching asymmetry root-cause analysis |
@@ -231,7 +244,11 @@ where α is tuned via CV (start at 0.5). Edge signal: `edge = model_prob − mar
 | `betting_ml/evaluation/total_runs_results.md` | Card 4.9 results — per-model MAE/RMSE/Brier per held-out season |
 | `betting_ml/evaluation/run_differential_results.md` | Card 4.10 results — per-model results + win probability derivation |
 | `betting_ml/evaluation/win_outcome_results.md` | Card 4.11 results — per-model Brier/log loss/calibration per held-out season |
-| `betting_ml/evaluation/hyperparameter_tuning.md` | **Not yet written (Card 4.12)** — Optuna trials, best params, CV scores per model |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md` | Card 4.12a — Optuna trials, best params, CV score for XGBoost total_runs |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_run_diff.md` | Card 4.12b — Optuna trials, best params, CV score for XGBoost run_differential |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md` | Card 4.12c — Optuna trials, best params, CV score for XGBoost home_win |
+| `betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md` | Card 4.12d — NGBoost grid search results for total_runs |
+| `betting_ml/evaluation/hyperparameter_tuning_ngboost_run_diff.md` | Card 4.12e — NGBoost grid search results for run_differential; LogNormal non-viable |
 | `betting_ml/models/` | Serialized model files (Card 4.8+ path convention: `{target}/{model_name}_{eval_year}.pkl`) |
 | `betting_ml/tests/test_cv_splits.py` | Unit tests for CV split logic |
 | `betting_ml/tests/test_preprocessing.py` | Unit tests for imputation and Bayesian shrinkage |

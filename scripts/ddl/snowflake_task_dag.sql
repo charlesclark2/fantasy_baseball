@@ -6,8 +6,11 @@
 --
 -- PREREQUISITES (run manually before executing this file):
 --
---   1. EXECUTE TASK privilege (ACCOUNTADMIN required):
+--   1. EXECUTE TASK + EXECUTE MANAGED TASK privileges (ACCOUNTADMIN required):
 --      GRANT EXECUTE TASK ON ACCOUNT TO ROLE task_executor_role;
+--      GRANT EXECUTE MANAGED TASK ON ACCOUNT TO ROLE task_executor_role;
+--      (EXECUTE MANAGED TASK is required for serverless tasks that use
+--       USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE without specifying a warehouse.)
 --
 --   2. NETWORK RULE + EXTERNAL ACCESS INTEGRATION creation
 --      requires ACCOUNTADMIN — see Card 6.A.2 (already complete).
@@ -570,37 +573,45 @@ $$;
 
 
 -- ============================================================
--- SECTION 5: Task DAG
--- Run after all procedures above are created.
--- See Card 6.A.5 for full wiring — kept here as reference.
+-- SECTION 5: Task DAG (all tasks serverless)
+-- USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE sets the serverless
+-- compute hint — no named warehouse is bound; Snowflake bills
+-- by compute-second, not by warehouse-minute.
+-- Run after all procedures in Section 4 are created.
 -- ============================================================
 
--- CREATE OR REPLACE TASK baseball_data.config.task_savant_ingestion
---   SCHEDULE = 'USING CRON 0 8 * * * America/New_York'
---   USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
--- AS CALL baseball_data.config.proc_savant_ingestion();
---
--- CREATE OR REPLACE TASK baseball_data.config.task_statsapi_schedule
---   AFTER baseball_data.config.task_savant_ingestion
---   USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
--- AS CALL baseball_data.config.proc_statsapi_schedule();
---
--- CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_events
---   AFTER baseball_data.config.task_statsapi_schedule
---   USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
--- AS CALL baseball_data.config.proc_oddsapi_events();
---
--- CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_odds
---   AFTER baseball_data.config.task_oddsapi_events
---   USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
--- AS CALL baseball_data.config.proc_oddsapi_odds();
---
--- CREATE OR REPLACE TASK baseball_data.config.task_github_actions_trigger
---   AFTER baseball_data.config.task_oddsapi_odds
---   USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
--- AS CALL baseball_data.config.proc_github_actions_trigger();
---
--- ALTER TASK baseball_data.config.task_savant_ingestion RESUME;
+CREATE OR REPLACE TASK baseball_data.config.task_savant_ingestion
+  SCHEDULE = 'USING CRON 0 8 * * * America/New_York'
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_savant_ingestion();
+
+CREATE OR REPLACE TASK baseball_data.config.task_statsapi_schedule
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  AFTER baseball_data.config.task_savant_ingestion
+AS CALL baseball_data.config.proc_statsapi_schedule();
+
+CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_events
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  AFTER baseball_data.config.task_statsapi_schedule
+AS CALL baseball_data.config.proc_oddsapi_events();
+
+CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_odds
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  AFTER baseball_data.config.task_oddsapi_events
+AS CALL baseball_data.config.proc_oddsapi_odds();
+
+CREATE OR REPLACE TASK baseball_data.config.task_github_actions_trigger
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+  AFTER baseball_data.config.task_oddsapi_odds
+AS CALL baseball_data.config.proc_github_actions_trigger();
+
+-- Snowflake Tasks are created SUSPENDED by default.
+-- Child tasks must be resumed before the root task (they do not cascade from root).
+ALTER TASK baseball_data.config.task_statsapi_schedule RESUME;
+ALTER TASK baseball_data.config.task_oddsapi_events RESUME;
+ALTER TASK baseball_data.config.task_oddsapi_odds RESUME;
+ALTER TASK baseball_data.config.task_github_actions_trigger RESUME;
+ALTER TASK baseball_data.config.task_savant_ingestion RESUME;
 
 
 -- ============================================================
