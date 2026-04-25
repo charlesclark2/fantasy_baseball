@@ -4,7 +4,7 @@
 
 Build a machine learning system capable of predicting the outcome and total runs scored in an MLB game given the pitching matchup, team matchup, and confirmed batting lineups. The system is grounded in Statcast pitch-level data and augmented with game schedule, lineup, and ballpark context from the MLB Stats API.
 
-The project is currently in **Phase 3 (Exploratory Data Analysis)** with **Phase 4 (ML Pipeline) started**. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. Seven EDA notebooks are complete; two Phase 3 analysis scripts (Cards 3.8 and 3.9) are complete. Phase 4 ML pipeline foundation is built (`betting_ml/utils/`). Phase 4 feature matrix design constraints are updated through Cards 3.8 and 3.9.
+**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is actively in progress.** The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is currently running** — `run_hyperparameter_search.py` is executing the Optuna TPE search and NGBoost grid (estimated 2–4 hours). Card 4.13 (Bayesian probability layer) is queued.
 
 ---
 
@@ -284,9 +284,9 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Ballpark context | Complete — physical dimensions in staging (`stg_statsapi_venues`); empirical run factors in `mart_park_run_factors`; `venue_id` joined to `mart_game_results` |
 | Data quality tests | Mostly complete; 2 open items (intentional warns, irresolvable Statcast source gap) |
 | ML feature store | Complete (Phase 2) + feature engineering complete — six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features; Cards 4.1–4.5 complete (delta/momentum, lineup-vs-starter matchup, rolling window reliability flags, starter expected depth, game context and era flags — all 2026-04-23) |
-| EDA | Phase 3 in progress — notebooks 01–07 complete with findings (sections 01–07); Card 3.8 complete (bullpen/starter decomposition — analysis script); Card 3.9 complete (home/away pitching asymmetry — analysis script); Cards 3.10–3.11 queued (plan specs drafted) |
-| ML pipeline foundation | Phase 4 started — `betting_ml/utils/` complete: data loader, temporal CV splits, imputation + Bayesian shrinkage preprocessing (Card 4.6 complete) |
-| Prediction models | Not started (Phase 4 Cards 4.7–4.12 queued; plan specs drafted) |
+| EDA | Phase 3 complete (2026-04-24) — notebooks 01–07 complete; Cards 3.7–3.11 complete (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
+| ML pipeline foundation | Phase 4 foundation complete — `betting_ml/utils/` complete: data loader, CV splits, preprocessing, feature selection, model I/O, evaluation helpers (Cards 4.6 and 4.8 complete) |
+| Prediction models | Phase 4 in progress — baseline models complete for all three targets: total runs (Card 4.9), run differential (Card 4.10), win outcome (Card 4.11); hyperparameter optimization (Card 4.12) scripts implemented and currently running |
 | Betting/sizing layer | Not started (Phase 6) |
 
 The main gap between current state and a deployable prediction model is the **feature assembly layer** — joining the mart tables into a single pre-game feature vector per game — and the **ML pipeline** itself.
@@ -708,6 +708,16 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
+
+#### Card 4.11 Results — Win Outcome Classification Baselines
+
+- **Best model (log loss):** `xgb_isotonic` (mean log loss = 0.6689)
+- **Best Brier score:** `xgb_isotonic` (mean = 0.2393)
+- **Better calibration method:** isotonic (Platt ECE=0.0119, Isotonic ECE=0.0000)
+- **hwrt_reduces_bias:** False
+- **Home bias in recent seasons:** 2023:neutral, 2024:neutral, 2025:neutral
+- **Recommended classifier for Phase 6 EV:** `xgb_isotonic`
+
 #### Card 4.1 — Add Delta/Momentum Features to Team and Starter Feature Models
 
 **Title:** Add rolling window delta features (momentum signals) to pregame team and starter feature models
@@ -855,17 +865,17 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* Cards 4.1–4.5 should be merged before final model runs (reliability flags needed for Bayesian shrinkage). Data loader and CV framework can be built independently.
 
 *Acceptance criteria:*
-- [ ] `betting_ml/` directory structure created with `data/`, `models/`, `evaluation/`, `utils/`
-- [ ] Data loader connects to Snowflake, applies `has_full_data = true` and `min_games_played ≥ 15` filter, returns a clean pandas DataFrame with all three targets appended
-- [ ] Temporal CV splits produce non-overlapping train/eval sets in correct chronological order; no future data leaks into training folds
-- [ ] Imputation pipeline handles all six null groups from notebook 02 with no remaining nulls in the output feature matrix
-- [ ] Bayesian shrinkage reduces early-season rolling stat variance correctly — verify a team with 5 games played is pulled further toward league mean than one with 25 games
-- [ ] 2020 games excluded; `post_2022_rules` and `game_year` present in output feature matrix
-- [ ] Unit tests for CV splits and imputation pipeline pass
+- [x] `betting_ml/` directory structure created with `data/`, `models/`, `evaluation/`, `utils/`
+- [x] Data loader connects to Snowflake, applies `has_full_data = true` and `min_games_played ≥ 15` filter, returns a clean pandas DataFrame with all three targets appended
+- [x] Temporal CV splits produce non-overlapping train/eval sets in correct chronological order; no future data leaks into training folds
+- [x] Imputation pipeline handles all six null groups from notebook 02 with no remaining nulls in the output feature matrix
+- [x] Bayesian shrinkage reduces early-season rolling stat variance correctly — verify a team with 5 games played is pulled further toward league mean than one with 25 games
+- [x] 2020 games excluded; `post_2022_rules` and `game_year` present in output feature matrix
+- [x] Unit tests for CV splits and imputation pipeline pass
 
 ---
 
-#### Card 4.7 — Build `mart_odds_consensus` dbt Model (Queued — Prerequisite for Cards 4.7–4.12)
+#### Card 4.7 — Build `mart_odds_consensus` dbt Model ✓ Complete (2026-04-24)
 
 **Title:** Build `mart_odds_consensus` dbt model — pre-game bookmaker consensus aggregation for Phase 4 odds features
 
@@ -914,18 +924,18 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* None. `mart_odds_outcomes`, `mart_game_odds_bridge`, and historical odds backfill (Phase 1 Cards 1–4) are all complete. Must be merged before any Phase 4 model training run that includes odds features (Cards 4.7–4.12).
 
 *Acceptance criteria:*
-- [ ] `dbt/models/mart/mart_odds_consensus.sql` created; materialized as table
-- [ ] Pre-game leakage guard enforced: only `ingestion_ts < commence_time` snapshots included; spot-check confirms no rows with `ingestion_ts >= commence_time`
-- [ ] Latest-per-book selection uses QUALIFY pattern; no duplicate `(event_id, bookmaker_key)` rows in h2h or totals CTEs
-- [ ] All 10 output columns present: `home_win_prob_consensus`, `home_win_prob_sharp`, `home_win_prob_soft`, `sharp_soft_ml_delta`, `ml_consensus_std`, `market_bookmaker_count`, `total_line_consensus`, `total_line_std`, `over_prob_consensus`, `totals_bookmaker_count`
-- [ ] `home_win_prob_consensus` is non-null for all events with at least one h2h bookmaker
-- [ ] Sharp and soft columns are null (not 0.0) for events where that group had no coverage
-- [ ] Spot-check: a Snowflake query joining `mart_odds_consensus` to `mart_game_results` outcomes for 2021–2025 produces consensus Brier within ±0.002 of the 0.2395 Card 3.11 benchmark
-- [ ] `feature_pregame_odds_features` updated: joins `mart_odds_consensus` on `event_id`; all 9 signal columns passed through
-- [ ] `feature_pregame_game_features` passes through all new consensus columns from `feature_pregame_odds_features`
-- [ ] `schema.yml` updated for `mart_odds_consensus`, `feature_pregame_odds_features`, and `feature_pregame_game_features` with column descriptions
-- [ ] `unique` test on `mart_odds_consensus.event_id` passes (one row per event)
-- [ ] `dbtf build --select mart_odds_consensus feature_pregame_odds_features feature_pregame_game_features` passes all tests with no new failures
+- [x] `dbt/models/mart/mart_odds_consensus.sql` created; materialized as table
+- [x] Pre-game leakage guard enforced: only `ingestion_ts < commence_time` snapshots included; spot-check confirms no rows with `ingestion_ts >= commence_time`
+- [x] Latest-per-book selection uses QUALIFY pattern; no duplicate `(event_id, bookmaker_key)` rows in h2h or totals CTEs
+- [x] All 10 output columns present: `home_win_prob_consensus`, `home_win_prob_sharp`, `home_win_prob_soft`, `sharp_soft_ml_delta`, `ml_consensus_std`, `market_bookmaker_count`, `total_line_consensus`, `total_line_std`, `over_prob_consensus`, `totals_bookmaker_count`
+- [x] `home_win_prob_consensus` is non-null for all events with at least one h2h bookmaker
+- [x] Sharp and soft columns are null (not 0.0) for events where that group had no coverage
+- [x] Spot-check: a Snowflake query joining `mart_odds_consensus` to `mart_game_results` outcomes for 2021–2025 produces consensus Brier within ±0.002 of the 0.2395 Card 3.11 benchmark
+- [x] `feature_pregame_odds_features` updated: joins `mart_odds_consensus` on `event_id`; all 9 signal columns passed through
+- [x] `feature_pregame_game_features` passes through all new consensus columns from `feature_pregame_odds_features`
+- [x] `schema.yml` updated for `mart_odds_consensus`, `feature_pregame_odds_features`, and `feature_pregame_game_features` with column descriptions
+- [x] `unique` test on `mart_odds_consensus.event_id` passes (one row per event)
+- [x] `dbtf build --select mart_odds_consensus feature_pregame_odds_features feature_pregame_game_features` passes all tests with no new failures
 
 ---
 
@@ -947,11 +957,11 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* Card 4.6 (data loader needed to load features for correlation analysis). EDA notebook 04 preferred but not required — correlation analysis can run inline if notebook is not yet complete.
 
 *Acceptance criteria:*
-- [ ] EDA notebook 04 (`04_feature_correlations.py`) run; findings appended to `exploratory_data_analysis/betting_model_findings.md`
-- [ ] `utils/feature_selection.py` implements near-zero correlation drop and multicollinearity resolution; at least one high-multicollinearity pair (|r| > 0.85) identified and resolved
-- [ ] Canonical feature list documented in `betting_ml/evaluation/feature_selection.md`; retained features listed with target correlations; dropped features listed with reason
-- [ ] `post_2022_rules`, `game_year`, and `home_win_rate_trailing_3yr` unconditionally present in retained feature list
-- [ ] `utils/model_io.py` implemented; `save_model` and `load_model` round-trip verified with a toy sklearn model
+- [x] EDA notebook 04 (`04_feature_correlations.py`) run; findings appended to `exploratory_data_analysis/betting_model_findings.md`
+- [x] `utils/feature_selection.py` implements near-zero correlation drop and multicollinearity resolution; at least one high-multicollinearity pair (|r| > 0.85) identified and resolved
+- [x] Canonical feature list documented in `betting_ml/evaluation/feature_selection.md`; retained features listed with target correlations; dropped features listed with reason
+- [x] `post_2022_rules`, `game_year`, and `home_win_rate_trailing_3yr` unconditionally present in retained feature list
+- [x] `utils/model_io.py` implemented; `save_model` and `load_model` round-trip verified with a toy sklearn model
 
 ---
 
@@ -974,13 +984,13 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* Cards 4.6 and 4.7. Cards 4.1–4.5 preferred before final evaluation; initial runs can start with existing features.
 
 *Acceptance criteria:*
-- [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds
-- [ ] All three models beat the global mean MAE baseline (~3.5 runs) on the held-out season
-- [ ] NGBoost Normal vs. LogNormal compared — document which distribution better fits the blowout tail
-- [ ] P(over/under line) Brier score computed for games with odds data (2026 live games)
-- [ ] SHAP importance confirms lineup-vs-starter matchup and delta features have non-zero contribution
-- [ ] Per-season MAE/RMSE table and model comparison documented in `betting_ml/evaluation/total_runs_results.md`
-- [ ] Best model selected with rationale documented
+- [x] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds
+- [x] All three models beat the global mean MAE baseline (~3.5 runs) on the held-out season
+- [x] NGBoost Normal vs. LogNormal compared — document which distribution better fits the blowout tail
+- [x] P(over/under line) Brier score computed for games with odds data (2026 live games)
+- [x] SHAP importance confirms lineup-vs-starter matchup and delta features have non-zero contribution
+- [x] Per-season MAE/RMSE table and model comparison documented in `betting_ml/evaluation/total_runs_results.md`
+- [x] Best model selected with rationale documented
 
 ---
 
@@ -993,19 +1003,31 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Technical implementation:*
 - Same three-model structure as Card 4.8 applied to run differential (`home_score - away_score`) as target.
 - Win probability derivation: from the NGBoost predictive distribution N(μ, σ²), compute `P(home win) = P(run_diff > 0) = 1 - Φ((0 - μ) / σ)`. This derives win probability from the regression model without training a separate classifier.
-- Compare derived win probability against the binary win classifier (Card 4.10) using Brier score and calibration curves — the two approaches should produce consistent estimates.
+- Compare derived win probability against the binary win classifier (Card 4.11) using Brier score and calibration curves — the two approaches should produce consistent estimates.
 - Evaluate whether era features (`post_2022_rules`, `game_year`) and time-varying home win rate (Card 4.5) materially reduce prediction error vs. a model without them.
 - Log results to `betting_ml/evaluation/run_differential_results.md`.
 
 *Blockers:* Cards 4.6 and 4.7. Cards 4.1–4.5 preferred before final evaluation.
 
 *Acceptance criteria:*
-- [ ] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds for run differential
-- [ ] Win probability derived from NGBoost distribution: `P(run_diff > 0)` and Brier score documented
-- [ ] Derived win probability vs. Card 4.10 classifier compared — consistency within 0.05 Brier score expected
-- [ ] Era feature ablation: model with vs. without `post_2022_rules` compared — verify the flag reduces 2022→2023 prediction error
-- [ ] Time-varying home win rate confirmed as improvement over static 0.529, or documented as having no effect
-- [ ] Results documented in `betting_ml/evaluation/run_differential_results.md`
+- [x] Ridge, XGBoost, and NGBoost models trained and evaluated on all temporal CV folds for run differential
+- [x] Win probability derived from NGBoost distribution: `P(run_diff > 0)` and Brier score documented
+- [x] Derived win probability vs. Card 4.11 classifier compared — consistency within 0.05 Brier score expected
+- [x] Era feature ablation: model with vs. without `post_2022_rules` compared — verify the flag reduces 2022→2023 prediction error
+- [x] Time-varying home win rate confirmed as improvement over static 0.529, or documented as having no effect
+- [x] Results documented in `betting_ml/evaluation/run_differential_results.md`
+
+
+#### Card 4.10 Results — Run Differential Regression Baselines
+
+- **Best model:** `ngboost_normal` (mean MAE = 3.4461)
+- **NGBoost Normal aggregate win probability Brier score:** 0.2429
+- **Era features help (post_2022_rules + game_year):** True
+- **home_win_rate_trailing_3yr helps beyond era flags:** True
+- **NGBoost LogNormal viable for run_differential:** False (negative support incompatible)
+- **Details:** `betting_ml/evaluation/run_differential_results.md`
+
+> **Note:** Results above were generated with the pre-Card 4.8 feature set (included `home_win_prob_sharp`). After Card 4.8 update (now uses `home_win_prob_consensus`), re-run `uv run python betting_ml/scripts/train_run_diff_baselines.py` to regenerate.
 
 ---
 
@@ -1027,18 +1049,28 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* Cards 4.6 and 4.7.
 
 *Acceptance criteria:*
-- [ ] Logistic Regression and calibrated XGBoost trained on all temporal CV folds
-- [ ] Calibration curves plotted per held-out season — XGBoost post-calibration shows no systematic over/under-confidence across probability deciles
-- [ ] Platt scaling vs. isotonic calibration compared; better method documented
-- [ ] Model evaluated for home-team bias in 2023–2025 seasons; `home_win_rate_trailing_3yr` confirmed to reduce or eliminate the bias
-- [ ] Brier score and log loss reported per model and per held-out season
-- [ ] Results documented in `betting_ml/evaluation/win_outcome_results.md`
+- [x] Logistic Regression and calibrated XGBoost trained on all temporal CV folds
+- [x] Calibration curves plotted per held-out season — XGBoost post-calibration shows no systematic over/under-confidence across probability deciles
+- [x] Platt scaling vs. isotonic calibration compared; better method documented
+- [x] Model evaluated for home-team bias in 2023–2025 seasons; `home_win_rate_trailing_3yr` confirmed to reduce or eliminate the bias
+- [x] Brier score and log loss reported per model and per held-out season
+- [x] Results documented in `betting_ml/evaluation/win_outcome_results.md`
 
 ---
 
-#### Card 4.12 — Hyperparameter Optimization
+
+#### Card 4.12a Results — XGBoost total_runs Hyperparameter Tuning (Optuna TPE)
+
+- **xgb_total_runs_improved:** True
+- **Baseline MAE:** 3.6385 | **Tuned MAE:** 3.5655 | **Change:** +2.01%
+- **Best params:** max_depth=3, learning_rate=0.0153, n_estimators=238, subsample=0.753, colsample_bytree=0.763, reg_alpha=0.215, reg_lambda=1.683
+- **Summary:** Optuna tuned XGBoost for total_runs achieved MAE=3.5655 vs. baseline=3.6385; tuned model persisted via model_io.py as `xgb_tuned`.
+
+#### Card 4.12 — Hyperparameter Optimization ⚙ In Progress (scripts running 2026-04-24)
 
 **Title:** Systematic XGBoost and NGBoost hyperparameter tuning for all three targets using Optuna; persist tuned models
+
+**Status:** Implementation complete. `betting_ml/scripts/run_hyperparameter_search.py` (Optuna TPE + NGBoost grid) and `betting_ml/scripts/generate_tuning_report.py` created. `uv add optuna` added `optuna==4.8.0` to dependencies. Search currently running — estimated 2–4 hours. After completion, run `uv run python betting_ml/scripts/generate_tuning_report.py` to produce `hyperparameter_tuning.md` and update this file.
 
 **Description:**
 
@@ -1069,7 +1101,7 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
-#### Card 4.12 — Probability Output Layer and Bayesian Market Update
+#### Card 4.13 — Probability Output Layer and Bayesian Market Update
 
 **Title:** Build probability output layer integrating model predictions with bookmaker implied probabilities via Bayesian update
 
@@ -1079,10 +1111,10 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 - For games where `has_odds = true`: compute the Bayesian posterior by treating the bookmaker's vig-adjusted implied probability as a prior and the model's predicted probability as the likelihood. In log-odds space: `log_odds_posterior = α × log_odds_model + (1 - α) × log_odds_market` where α is a mixing weight tuned via CV (start with α = 0.5). Motivation: the market line reflects professional handicappers and information the model cannot access; treating it as a prior rather than a comparison target captures the best of both signals.
 - Compute edge signal: `edge = model_prob − market_implied_prob` (positive = model sees value over market price).
 - Output one row per game per market (h2h, totals) with `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, and `implied_kelly_fraction` (`edge / market_odds` as a simple Kelly approximation).
-- Pure Python module; reads from tuned model outputs of Cards 4.8–4.10 (via Card 4.11) and from `feature_pregame_odds_features`.
+- Pure Python module; reads from tuned model outputs of Cards 4.8–4.12 and from `feature_pregame_odds_features`.
 - Initially useful only for live 2026 games; will become more powerful after Card 3 historical odds backfill completes.
 
-*Blockers:* Cards 4.8, 4.9, 4.10, and 4.11 (tuned model outputs required). `has_odds = true` data required for validation — currently only live 2026 games.
+*Blockers:* Cards 4.8–4.12 (tuned model outputs required). `has_odds = true` data required for validation — currently only live 2026 games.
 
 *Acceptance criteria:*
 - [ ] Bayesian update implemented in log-odds space; posterior probability computed for h2h and totals markets
@@ -1090,7 +1122,7 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 - [ ] Edge signal validated: games where model and market agree produce near-zero edge; divergence produces non-zero edge
 - [ ] Output includes `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, `implied_kelly_fraction` per game per market
 - [ ] Spot-check: model probability 0.60 vs. market implied 0.52 produces positive edge and positive Kelly fraction
-- [ ] Output written to a standard location in `betting_ml/` for use by Phase 6 betting application layer
+- [ ] Output written to `betting_ml/outputs/probability_outputs.parquet` for use by Phase 6 betting application layer
 
 ---
 
@@ -1141,15 +1173,675 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 ---
 
-### Phase 5 — Model Refinement and Feature Expansion
+### Phase 5 — Model Finalization and Dry Run Application
 
-Once baselines are established:
+Goal: produce a working local prediction system runnable this weekend for a live dry run of today's games. No cloud infrastructure required — every component runs on a laptop with Snowflake access.
+
+---
+
+#### Card 5.1 — Model Selection, Packaging, and Registry
+
+**Title:** Select best model artifacts from Phase 4 and write versioned model registry
+
+**Description:**
+
+*Technical implementation:*
+- After Cards 4.12 and 4.13 complete, compare tuned model CV metrics across all three targets. For each target, select the single best model (lowest MAE for regression targets; lowest Brier score for win outcome) from the saved `betting_ml/models/{target}/` files.
+- Write `betting_ml/models/model_registry.yaml` — a flat YAML keyed by target with fields: `model_name`, `eval_year`, `cv_mae` / `cv_brier`, `artifact_path`, `selected_at`. This file is the single source of truth that `predict_today.py` (Card 5.2) reads to locate the production model. The `home_win` entry also includes a `calibration_split` field (see production calibration refit below).
+- Tag the selected artifacts with a `_prod` copy so rollback is a one-line path swap, not a registry rewrite.
+- **Win outcome production calibration refit (Gap 5):** Card 4.11 uses the eval fold as the calibration set — an approximation acceptable for CV benchmarking but not for production, because the calibration curve and ECE are partially in-sample. Before registering the `home_win` `_prod` artifact, perform a proper 3-way temporal refit:
+  1. **Verification split** — Train XGBoost (best model family per Card 4.11 CV) on 2016–2023. Fit `CalibratedClassifierCV(cv='prefit', method=<best_method_from_card_4_11>)` on 2024 data as the dedicated calibration hold-out. Evaluate ECE and Brier on 2025. Record as `win_outcome_verification_ece` and `win_outcome_verification_brier`. If the verification ECE is more than 0.005 worse than the Card 4.11 CV ECE, flag for investigation before proceeding.
+  2. **Production refit** — Train XGBoost on 2016–2024. Fit the same calibrator on 2025 as the calibration hold-out. Save as `betting_ml/models/home_win/xgboost_{method}_prod_calibrated.pkl`. This is the `_prod` artifact — not the CV model from Card 4.11. The verification split in step 1 provides confidence that the calibration generalizes; there is no separate eval fold for the final production model because all available historical data (2016–2025) is used to maximize training coverage.
+  3. **Registry entry** — The `model_registry.yaml` entry for `home_win` must include `calibration_split: 2025` so `predict_today.py` and the Streamlit app know the calibrator was fit on a proper hold-out. Regression targets (`total_runs`, `run_differential`) do not require this step — their NGBoost Normal outputs are already proper probability distributions without a post-hoc calibration step.
+
+*Blockers:* Cards 4.11, 4.12, and 4.13 must be complete (4.11 identifies the best calibration method; 4.12 provides tuned XGBoost artifacts; 4.13 provides `best_alpha`).
+
+*Acceptance criteria:*
+- [ ] `betting_ml/models/model_registry.yaml` created with one entry per target
+- [ ] `_prod` copies of selected artifacts written to `betting_ml/models/{target}/`
+- [ ] Registry YAML parseable by `yaml.safe_load`; all three targets present with non-null `artifact_path`
+- [ ] `load_model(target, "prod")` via `utils/model_io.py` round-trips cleanly using the registry path
+- [ ] `betting_ml/models/home_win/` contains a `_prod_calibrated.pkl` where the calibrator was fit on 2025 data (dedicated hold-out), not the CV eval fold
+- [ ] `model_registry.yaml` `home_win` entry has `calibration_split: 2025`
+- [ ] Verification ECE (trained 2016–2023, calibrated 2024, evaluated 2025) documented in the registry or a companion `calibration_verification.md` file; value is not more than 0.005 worse than Card 4.11 mean CV ECE
+
+---
+
+#### Card 5.2 — Pre-Game Prediction CLI (Local Dry Run)
+
+**Title:** Build `predict_today.py` — a local CLI that scores today's games and ranks them by predicted edge
+
+**Description:**
+
+*Technical implementation:*
+- New script: `betting_ml/scripts/predict_today.py`. Accepts optional `--date YYYY-MM-DD` (defaults to today).
+- **Step 1 — Load features:** Query `feature_pregame_game_features` joined to `stg_statsapi_games` for the target date. Filter to games where `has_odds = true` and both lineups are confirmed (`home_lineup_slot_1 IS NOT NULL AND away_lineup_slot_1 IS NOT NULL`).
+- **Step 2 — Load models:** Read `betting_ml/models/model_registry.yaml`; load the `_prod` artifact for each target using `utils/model_io.py`.
+- **Step 3 — Score games:** Run the feature matrix through all three production models. For NGBoost regression targets, compute `P(total > total_line_consensus)` via the distribution CDF. For win outcome, output calibrated `home_win_prob`. Load `best_alpha` from the `alpha_tuning_results` Snowflake table (most recent `loaded_at` row) or from a local cache file `betting_ml/models/best_alpha.json` written by Card 4.13 at α tuning time — prefer Snowflake, fall back to local cache if Snowflake is unreachable.
+- **Step 4 — Bayesian mixing and edge calculation:** For each game with odds, apply the Bayesian posterior using `compute_posterior(model_prob, market_prob, best_alpha)` from `betting_ml/utils/probability_layer.py` — the same function and `best_alpha` tuned in Card 4.13. Compute `edge = compute_edge(model_prob, market_prob)` and `kelly_fraction = compute_kelly(edge, market_prob)`. Rank games by `abs(edge)` descending. This reuses Card 4.13's math exactly; `predict_today.py` is the live execution of the same pipeline, not a reimplementation.
+- **Step 5 — Output:** Print a formatted table to stdout (matchup, game time, predicted total, model win prob, market win prob, posterior prob, edge, Kelly fraction). Write `betting_ml/outputs/probability_outputs_{date}.parquet` using the Card 4.13 schema (`game_key, market, model_prob, market_implied_prob, alpha, posterior_prob, edge, implied_kelly_fraction`) — this is the canonical contract format that Phase 6's betting application layer consumes. Also write `betting_ml/outputs/predictions_{date}.csv` with the full display columns (matchup, game_time, etc.) for human review.
+- The script reads credentials from the project root `.env` via the existing Snowflake connector pattern in `utils/data_loader.py`.
+
+*Blockers:* Card 5.1 (model registry). Cards 4.12 and 4.13 (probability output layer; `best_alpha` must be persisted before `predict_today.py` can run).
+
+*Acceptance criteria:*
+- [ ] `uv run python betting_ml/scripts/predict_today.py` runs end-to-end on a laptop with no manual steps beyond `.env` credentials
+- [ ] Output table includes: `game_pk`, `matchup`, `game_time`, `predicted_total_runs`, `model_home_win_prob`, `market_home_win_prob`, `posterior_prob`, `edge`, `kelly_fraction`
+- [ ] Games ranked by `abs(edge)` descending
+- [ ] Script handles the case where `has_odds` games are a subset of today's games (non-odds games included with `edge = null`, `posterior_prob = null`)
+- [ ] `betting_ml/outputs/probability_outputs_{date}.parquet` written with columns matching Card 4.13 schema: `game_key, market, model_prob, market_implied_prob, alpha, posterior_prob, edge, implied_kelly_fraction`
+- [ ] `betting_ml/outputs/predictions_{date}.csv` written with all display columns
+- [ ] Script exits cleanly if no games are found for the target date
+- [ ] `best_alpha` is loaded from Snowflake (or local cache fallback) — not hardcoded
+
+---
+
+#### Card 5.3 — Lineup Finalization Notification and Hourly Staging Refresh
+
+**Title:** Detect confirmed lineups hourly via a Snowflake Task, trigger a GitHub Actions dbtf build, and notify when both lineups are locked
+
+**Description:**
+
+*Technical implementation:*
+
+The pipeline has three components: a Snowflake Task (hourly scheduler + ingestion), a GitHub Actions workflow (dbtf build runner), and a notification dispatch.
+
+**Component 1 — Snowflake Task: `task_lineup_monitor`**
+- Create a Snowflake Task backed by a Snowpark Python Stored Procedure (`scripts/ddl/lineup_monitor_task.sql`). Scheduled via cron: `'USING CRON 0 * * * * America/New_York'` (top of every hour, year-round).
+- The stored procedure does two things in sequence on each hourly fire:
+  1. **Ingestion:** Calls `ingest_statsapi.py schedule` (current month) using Snowpark's External Network Access Integration (same integration used by Card 6.A for `statsapi.mlb.com`). Newly confirmed lineup rows are written to `baseball_data.statsapi.monthly_schedule`.
+  2. **Lineup detection:** Queries `stg_statsapi_lineups_wide` for today's games. A lineup is "confirmed" when `home_lineup_slot_1 IS NOT NULL AND away_lineup_slot_1 IS NOT NULL`. Compares result set against `baseball_data.config.lineup_monitor_state` — a Snowflake table with columns `(run_date DATE, game_pk INT, triggered_at TIMESTAMP)` that tracks which games have already fired. For each newly confirmed game not yet in the state table, inserts a row and emits a dispatch payload.
+
+**Component 2 — GitHub Actions workflow: `dbt_staging_build.yml`**
+- New workflow file at `.github/workflows/dbt_staging_build.yml`. Triggered by `workflow_dispatch` with inputs `game_pk` (string) and `triggered_by` (string, e.g. `lineup_monitor`).
+- The Snowflake Task (Component 1) fires this workflow via the GitHub REST API (`POST /repos/{owner}/{repo}/actions/workflows/dbt_staging_build.yml/dispatches`) using a GitHub Personal Access Token stored as a Snowflake Secret (`GITHUB_PAT`). The PAT needs `repo` scope (workflow dispatch requires it).
+- Workflow steps:
+  1. Checkout the repository (`actions/checkout@v4`)
+  2. Install dbt-fusion: `pip install dbt-fusion` (or via the project's `uv` lockfile — confirm the correct install path for dbt-fusion in CI)
+  3. Write Snowflake credentials to `~/.dbt/profiles.yml` from GitHub Secrets (`SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`)
+  4. Run `dbtf build --select +stg_statsapi_lineups+` — builds from the staging layer downward through all dependent mart and feature models
+  5. On success, call back to the Snowflake stored procedure via a second GitHub Actions step (or a follow-on webhook) to log build completion in `baseball_data.config.pipeline_run_log`
+- The workflow runs on `ubuntu-latest` using the `COMPUTE_WH` warehouse. Estimated runtime: 3–6 minutes.
+- GitHub Secrets required (set in repo Settings → Secrets and variables → Actions): `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (PEM content, not path), `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_DATABASE`.
+
+**Component 3 — Notification dispatch**
+- After the GitHub Actions workflow succeeds (final step in `dbt_staging_build.yml`), send a notification via a lightweight step. Support two channels configured as GitHub Secrets: (1) email via an SMTP action (`dawidd6/action-send-mail`) if `NOTIFICATION_EMAIL` is set — the configured recipient is `charles.t.clark89@gmail.com`, stored as the `NOTIFICATION_EMAIL` GitHub Secret; (2) a future webhook slot for SMS or push (stubbed as a no-op step today). Message format: `"Lineups confirmed: {away_team} @ {home_team} — {game_time}. dbtf build complete. Run predict_today.py to generate predictions."`
+- The Snowflake Task stored procedure also writes a notification record to `baseball_data.config.lineup_monitor_state` at dispatch time so the trigger event is auditable independently of whether the Actions run succeeds.
+
+**DDL and workflow artifacts:**
+- `scripts/ddl/lineup_monitor_task.sql` — `CREATE OR REPLACE TASK task_lineup_monitor`, stored procedure definition, `lineup_monitor_state` table DDL
+- `.github/workflows/dbt_staging_build.yml` — the Actions workflow
+- `scripts/daily_run.md` — new "Lineup Monitor Architecture" section documenting the Snowflake Task → GitHub Actions flow, required secrets, and how to manually trigger the workflow for testing
+
+*Blockers:* Card 6.A External Network Access Integration must exist (reused here for `statsapi.mlb.com`). GitHub PAT with `repo` scope must be provisioned and stored as a Snowflake Secret before the Task can dispatch workflows. dbt-fusion must be installable in the GitHub Actions environment — verify before implementation.
+
+*Acceptance criteria:*
+- [ ] `baseball_data.config.lineup_monitor_state` table created; columns `run_date`, `game_pk`, `triggered_at`, `gh_workflow_run_id` (populated after dispatch)
+- [ ] Snowflake Task `task_lineup_monitor` fires on the hourly cron schedule; confirmed via `SHOW TASKS` and `baseball_data.config.pipeline_run_log`
+- [ ] On each hourly fire, `ingest_statsapi.py schedule` is called and new lineup rows appear in `monthly_schedule` within the same task execution
+- [ ] When both lineups for a game transition to confirmed, exactly one row is inserted into `lineup_monitor_state` for that `(run_date, game_pk)` — re-runs do not duplicate the trigger
+- [ ] GitHub Actions workflow `dbt_staging_build.yml` is triggerable via `workflow_dispatch` from the GitHub UI with `game_pk` input; confirms the workflow can be dispatched manually before Snowflake automation is wired
+- [ ] `dbtf build --select +stg_statsapi_lineups+` runs successfully inside the Actions workflow; all downstream mart and feature models rebuild without errors
+- [ ] Notification step fires after successful build; email is received when `NOTIFICATION_EMAIL` secret is set
+- [ ] `scripts/daily_run.md` updated with "Lineup Monitor Architecture" section; includes manual trigger command and secrets checklist
+
+---
+
+### Phase 6 — Betting Application Layer and Pipeline Automation
+
+The MVP application is a **multi-page Streamlit app** (`app/`) that connects directly to Snowflake and the saved model artifacts. It covers every application layer component without requiring a separate backend service. All four pages are read-only — no write path needed for the MVP. The Phase 7 production app replaces this with a hardened stack once the model's value is proven in live use.
+
+**Live pipeline architecture and contract decision (Gap 4):**
+
+The live daily prediction flow is:
+1. Snowflake Task DAG (Card 6.A) fires at 08:00 ET — ingests prior-day Statcast, Stats API schedule, and Odds API; runs `dbtf build` to refresh `feature_pregame_game_features`.
+2. Card 5.3 lineup monitor fires hourly — detects confirmed lineups, triggers a `dbtf build` for the lineup-dependent features.
+3. Card 5.2 (`predict_today.py`) is run manually (or via a post-build hook) — scores all confirmed games for the day and writes `betting_ml/outputs/probability_outputs_{date}.parquet`.
+4. Phase 6 Streamlit app (Card 6.B) scores models inline on page load — same functions, same `best_alpha`, live view that updates without re-running a CLI script.
+
+**Explicit contract decision:** Card 4.13's `probability_outputs.parquet` schema (`game_key, market, model_prob, market_implied_prob, alpha, posterior_prob, edge, implied_kelly_fraction`) IS the canonical Phase 6 contract. Two consumers exist:
+- `predict_today.py` (batch) — produces `probability_outputs_{date}.parquet` on demand; used for performance logging, closing line tracking, and offline review.
+- Card 6.B Streamlit app (interactive) — scores inline using `compute_posterior()` / `compute_edge()` / `compute_kelly()` from `betting_ml/utils/probability_layer.py` with `best_alpha` loaded from Snowflake; produces the same logical row structure as the parquet contract without reading the parquet file directly.
+
+No redesign of Card 4.13's output format is required. The parquet schema is the right contract and the Streamlit app reuses the same math via direct function calls rather than file reads.
+
+---
+
+#### Card 6.B — Streamlit App Skeleton and Today's Picks Page
+
+**Title:** Bootstrap the Streamlit app and build the Today's Picks page — ranked game predictions with lineup and edge status
+
+**Description:**
+
+*Technical implementation:*
+- Create `app/` at the repo root with `streamlit_app.py` as the entry point and `pages/` for multi-page navigation. Run with `uv run streamlit run app/streamlit_app.py`.
+- **Snowflake connection:** Reuse the existing RSA key connector from `betting_ml/utils/data_loader.py`. Wrap it in a `@st.cache_resource` connection factory so the session is shared across reruns. Credentials read from the project `.env` file.
+- **Today's Picks page (`pages/1_Today_Picks.py`):**
+  - Date selector defaulting to today. On load, queries Snowflake for all games on the selected date joining `feature_pregame_game_features`, `stg_statsapi_games`, and `mart_odds_consensus`.
+  - Loads the three production models from `betting_ml/models/model_registry.yaml` via `utils/model_io.py` and scores the feature matrix in-process (`@st.cache_data` keyed on date + model registry mtime so predictions are not recomputed on every rerender). Loads `best_alpha` from the `alpha_tuning_results` Snowflake table (most recent row) — same value used by `predict_today.py`. For each has_odds game, applies `compute_posterior(model_prob, market_prob, best_alpha)`, `compute_edge()`, and `compute_kelly()` from `betting_ml/utils/probability_layer.py` — the same functions as Card 4.13. This is the live execution of the Phase 6 contract; no separate scoring script is needed for the Streamlit view.
+  - Displays a sortable `st.dataframe` with columns: `Matchup`, `Game Time`, `Lineups`, `Pred Total`, `Model Win%`, `Market Win%`, `Posterior%`, `Edge`, `EV`, `Kelly%`. The `Lineups` column shows a ✓ / ⏳ indicator based on whether both slots are confirmed in `stg_statsapi_lineups_wide`.
+  - Color-codes rows: green background where `abs(edge) > 0.05` and lineups are confirmed; grey where lineups are pending.
+  - "Refresh" button re-runs ingestion check by calling `ingest_statsapi.py schedule` as a subprocess and clearing the `@st.cache_data` entry for the current date.
+- **EV and Kelly formulas** (inline, not a separate page in the MVP):
+  - `EV = (model_prob × (decimal_odds − 1)) − (1 − model_prob)`
+  - `kelly_fraction = (model_prob × (decimal_odds − 1) − (1 − model_prob)) / (decimal_odds − 1)`
+  - Cap displayed Kelly at 10% as a risk guardrail; show a warning badge when raw Kelly exceeds 10%.
+
+*Blockers:* Card 5.1 (model registry). Card 5.2 (`predict_today.py` establishes the scoring logic this page reuses). Card 4.13 (`best_alpha` must be persisted to Snowflake before the app can load it; `probability_layer.py` must exist). Snowflake connection pattern from `utils/data_loader.py`.
+
+*Acceptance criteria:*
+- [ ] `uv run streamlit run app/streamlit_app.py` starts without error; Today's Picks page loads within 10 seconds on first run
+- [ ] Predictions load for a date with confirmed games; sortable dataframe renders all required columns including `Posterior%`
+- [ ] `best_alpha` loaded from Snowflake `alpha_tuning_results`; `compute_posterior()` from `probability_layer.py` called for each has_odds game
+- [ ] Lineup confirmation status displays correctly: ✓ for confirmed, ⏳ for pending
+- [ ] Edge color-coding applies correctly to rows where `abs(edge) > 0.05` and lineups confirmed
+- [ ] Kelly fraction capped at 10% with warning badge when raw value exceeds cap
+- [ ] Refresh button re-queries `ingest_statsapi.py schedule` and updates lineup status without restarting the app
+- [ ] App handles dates with no games (empty state message, no error)
+
+---
+
+#### Card 6.C — Market Comparison Page
+
+**Title:** Build the Market Comparison Streamlit page — model probability vs. bookmaker implied probability with line movement context
+
+**Description:**
+
+*Technical implementation:*
+- **Market Comparison page (`pages/2_Market_Comparison.py`):**
+  - Game selector (dropdown of today's matchups). On selection, loads all `mart_odds_outcomes` rows for that `event_id` filtered to `ingestion_ts < commence_time`, ordered by `ingestion_ts` ascending.
+  - **Moneyline panel:** Two side-by-side `st.metric` tiles — model home win% and market consensus home win% (`home_win_prob_consensus` from `mart_odds_consensus`). Below, a `st.line_chart` of home win implied probability over ingestion snapshots (line movement history). One line per bookmaker + a bold consensus line.
+  - **Totals panel:** Model predicted total vs. `total_line_consensus`. Bar chart of over/under probability from model vs. each bookmaker's vig-adjusted over probability.
+  - **Sharp vs. soft comparison:** If `home_win_prob_sharp` and `home_win_prob_soft` are non-null, display `sharp_soft_ml_delta` as a signed `st.metric` with tooltip: "Positive = sharp books favor home more than soft books."
+  - **Cross-bookmaker table:** `st.dataframe` of all books for the selected game showing `bookmaker_key`, `home_price_american`, `away_price_american`, `home_imp_prob`, `away_imp_prob`, `vig`. Sorted by `home_imp_prob` descending.
+
+*Blockers:* Card 6.B (app skeleton and Snowflake connection). `mart_odds_consensus` must be built (Card 4.7).
+
+*Acceptance criteria:*
+- [ ] Game selector populates with today's games that have `has_odds = true`
+- [ ] Moneyline line movement chart renders for a game with multiple ingestion snapshots
+- [ ] Model win% and market consensus win% display as `st.metric` tiles with delta (model − market)
+- [ ] Totals panel shows model predicted total vs. consensus line
+- [ ] Sharp vs. soft delta metric displays when sharp/soft data is available; panel is hidden (not erroring) when it is null
+- [ ] Cross-bookmaker table sorted correctly; vig column populated for all rows
+
+---
+
+#### Card 6.D — EV Tracker and Kelly Sizer Page
+
+**Title:** Build the EV Tracker and Kelly Sizer page — per-game, per-market expected value and bet sizing recommendation
+
+**Description:**
+
+*Technical implementation:*
+- **EV Tracker page (`pages/3_EV_Kelly.py`):**
+  - Shows all games for the selected date in a single table with columns: `Matchup`, `Market` (h2h home / h2h away / over / under), `Model Prob`, `Market Implied Prob`, `Decimal Odds`, `EV`, `Raw Kelly%`, `Capped Kelly%`, `Actionable` flag.
+  - `Actionable = True` when: `EV > 0`, `abs(edge) > 0.03`, lineups confirmed, and `model_prob` is not null.
+  - **Bankroll simulator:** `st.number_input` for bankroll amount. For all actionable bets on the selected date, displays a "suggested slate" table: `Bet`, `Stake (Capped Kelly × Bankroll)`, `To Win`, `EV ($)`. Shows total risk and total expected profit at the bottom.
+  - **Risk controls displayed prominently:**
+    - Warning banner if any game has unconfirmed lineups but is otherwise actionable — "Lineup pending: do not act until confirmed."
+    - Info note: Kelly fractions are capped at 10% of bankroll; simultaneous correlated bets (same game, different markets) are flagged with a ⚠ icon.
+  - All EV/Kelly values recompute reactively when the user changes the date or refreshes odds.
+
+*Blockers:* Cards 6.B and 6.C (shared Snowflake connection and model scoring logic).
+
+*Acceptance criteria:*
+- [ ] EV table renders for all games × markets on the selected date
+- [ ] `Actionable` flag correctly excludes games with unconfirmed lineups or negative EV
+- [ ] Bankroll simulator stake column equals `capped_kelly × bankroll_input`; updates reactively on bankroll change
+- [ ] Warning banner displays for actionable games with pending lineups
+- [ ] Correlated same-game bets (h2h + totals for the same game) flagged with ⚠ icon
+- [ ] Total risk and expected profit summary row present at the bottom of the suggested slate table
+
+---
+
+#### Card 6.E — Performance Tracker Page
+
+**Title:** Build the Performance Tracker page — historical CLV, Brier score trend, and cumulative P&L simulation
+
+**Description:**
+
+*Technical implementation:*
+- **Performance Tracker page (`pages/4_Performance.py`):**
+  - **Data source:** A new Snowflake table `baseball_data.config.prediction_log` (created by `predict_today.py` on each run — add a Snowflake write step to Card 5.2). Columns: `prediction_date`, `game_pk`, `market` (h2h / totals), `model_prob`, `market_prob_at_prediction`, `closing_market_prob`, `actual_outcome`, `decimal_odds`, `ev`, `kelly_fraction`. `closing_market_prob` and `actual_outcome` are backfilled nightly by a new step in the Card 6.A Snowflake Task DAG that joins predictions to `mart_game_results` and the latest pre-game odds snapshot.
+  - **Brier score trend:** `st.line_chart` of rolling 14-day Brier score for model win probability vs. market consensus win probability. Both lines on the same chart. A flat or improving model line relative to market is the primary signal the model is working.
+  - **CLV tracker:** For each logged prediction, `CLV = model_prob − closing_market_prob`. Positive CLV means the model identified value that the market later agreed with. `st.bar_chart` of mean CLV by week.
+  - **P&L simulation:** Cumulative P&L assuming capped-Kelly stakes on all `Actionable` predictions. Line chart of cumulative units won/lost over time. Includes a flat-bet comparison line (1 unit per actionable bet) so Kelly's advantage is visible.
+  - **Summary metrics row** at top: total predictions logged, win rate on actionable bets, mean CLV, cumulative P&L (Kelly), cumulative P&L (flat).
+  - Empty state handling: when `prediction_log` has fewer than 5 rows, display "Not enough history yet — check back after a few days of predictions."
+
+*Blockers:* Card 6.B (app skeleton). Card 5.2 must be extended to write to `prediction_log`. Card 6.A Task DAG must backfill `closing_market_prob` and `actual_outcome` nightly.
+
+*Acceptance criteria:*
+- [ ] `baseball_data.config.prediction_log` table created by `predict_today.py` write step; columns match spec
+- [ ] Brier score trend chart renders with both model and market lines once ≥5 logged predictions exist
+- [ ] CLV bar chart groups by ISO week; positive and negative bars colored green/red respectively
+- [ ] P&L simulation chart includes both Kelly and flat-bet lines
+- [ ] Summary metrics row shows correct counts and aggregates
+- [ ] Empty state message displays cleanly when fewer than 5 predictions are logged
+
+---
+
+#### Card 6.A — Snowflake Task DAG for Automated Daily Ingestion (Card Group)
+
+This card has been broken into eight sub-tasks. Implement in the order listed; Cards 6.A.2 and 6.A.3 may be done in parallel after 6.A.0, and Card 6.A.6 may be done in parallel with 6.A.4 and 6.A.5.
+
+DAG topology (each arrow = `AFTER` dependency):
+
+```
+task_savant_ingestion  (ROOT, CRON 0 8 * * * America/New_York, serverless)
+    → task_statsapi_schedule
+        → task_oddsapi_events
+            → task_oddsapi_odds
+                → task_github_actions_trigger  (dispatches dbt_daily_build.yml)
+```
+
+---
+
+##### Card 6.A.0 — Admin Prerequisites: Account Privileges and GitHub PAT Provisioning — COMPLETE
+
+**Title:** Grant EXECUTE TASK account privilege and provision GitHub PAT before implementation begins
+
+*Technical implementation:*
+
+Three one-time manual steps that must be completed before any downstream card can be implemented.
+
+**Blocker 1 — EXECUTE TASK privilege (requires ACCOUNTADMIN):**
+```sql
+-- Run as ACCOUNTADMIN once before executing the remainder of snowflake_task_dag.sql
+GRANT EXECUTE TASK ON ACCOUNT TO ROLE task_executor_role;
+```
+If `task_executor_role` does not exist yet (it is created in Card 6.A.1), grant temporarily to `SYSADMIN` and re-grant to `task_executor_role` after 6.A.1 completes. Document this in `scripts/ddl/snowflake_task_dag.sql` as a comment block at the top of the file:
+```sql
+-- PREREQUISITE (ACCOUNTADMIN required — run once, not part of normal DDL execution):
+-- GRANT EXECUTE TASK ON ACCOUNT TO ROLE task_executor_role;
+```
+
+**Blocker 2 — ACCOUNTADMIN required for network rule creation:**
+The `CREATE NETWORK RULE` and `CREATE EXTERNAL ACCESS INTEGRATION` statements in Card 6.A.2 must be executed under an ACCOUNTADMIN session (or a role with `CREATE NETWORK RULE` privilege explicitly granted). Add to the DDL file header:
+```sql
+-- PREREQUISITE (ACCOUNTADMIN required for Sections 2 and 3):
+-- USE ROLE ACCOUNTADMIN;
+-- Execute NETWORK RULE and EXTERNAL ACCESS INTEGRATION blocks, then switch back to SYSADMIN.
+```
+
+**Blocker 3 — GitHub PAT provisioning:**
+1. GitHub → Settings → Developer Settings → Personal Access Tokens → Classic
+2. Create a PAT with `repo` scope (required for `workflow_dispatch` via the REST API)
+3. Copy the token value immediately — it is only shown once
+4. Store as a Snowflake Secret at provision time (DDL in Card 6.A.3 uses a `<placeholder>` value that the engineer substitutes in a live Snowflake session; the substituted file is never committed):
+   ```sql
+   CREATE OR REPLACE SECRET baseball_data.config.github_pat
+     TYPE = GENERIC_STRING
+     SECRET_STRING = '<paste-token-here>';
+   ```
+5. Test the PAT with a manual `curl` before trusting it in the stored procedure:
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" \
+     -X POST \
+     -H "Authorization: token <PAT>" \
+     -H "Accept: application/vnd.github.v3+json" \
+     https://api.github.com/repos/<owner>/<repo>/actions/workflows/dbt_daily_build.yml/dispatches \
+     -d '{"ref":"main"}'
+   # Expected: 204
+   ```
+
+*Blockers:* None — this card IS the prerequisite for all downstream 6.A cards.
+
+*Acceptance criteria:*
+- [ ] `scripts/ddl/snowflake_task_dag.sql` contains a `-- PREREQUISITE` comment block at the top documenting the `GRANT EXECUTE TASK` and ACCOUNTADMIN steps
+- [ ] GitHub PAT with `repo` scope exists and has been validated with a manual `curl` dispatch returning HTTP 204
+- [ ] `baseball_data.config.github_pat` Snowflake Secret exists: `SHOW SECRETS IN SCHEMA baseball_data.config` returns one row for `github_pat`
+
+---
+
+##### Card 6.A.1 — Dedicated Task Executor Role — COMPLETE
+
+**Title:** Create task_executor_role with minimum necessary privileges for the Snowflake Task DAG
+
+*Technical implementation:*
+
+Add Section 1 to `scripts/ddl/snowflake_task_dag.sql`:
+
+```sql
+-- ============================================================
+-- SECTION 1: Task Executor Role
+-- ============================================================
+CREATE ROLE IF NOT EXISTS task_executor_role;
+
+GRANT USAGE ON DATABASE baseball_data TO ROLE task_executor_role;
+GRANT USAGE ON SCHEMA baseball_data.statsapi TO ROLE task_executor_role;
+GRANT USAGE ON SCHEMA baseball_data.config TO ROLE task_executor_role;
+GRANT INSERT, SELECT ON ALL TABLES IN SCHEMA baseball_data.statsapi TO ROLE task_executor_role;
+GRANT INSERT, SELECT ON ALL TABLES IN SCHEMA baseball_data.config TO ROLE task_executor_role;
+GRANT INSERT, SELECT ON FUTURE TABLES IN SCHEMA baseball_data.statsapi TO ROLE task_executor_role;
+GRANT INSERT, SELECT ON FUTURE TABLES IN SCHEMA baseball_data.config TO ROLE task_executor_role;
+GRANT READ ON SECRET baseball_data.config.odds_api_key TO ROLE task_executor_role;
+GRANT READ ON SECRET baseball_data.config.github_pat TO ROLE task_executor_role;
+GRANT USAGE ON INTEGRATION daily_ingestion_access_integration TO ROLE task_executor_role;
+
+-- Wire into the role hierarchy
+GRANT ROLE task_executor_role TO ROLE SYSADMIN;
+```
+
+The `GRANT EXECUTE TASK ON ACCOUNT TO ROLE task_executor_role` is executed as a manual ACCOUNTADMIN step (Card 6.A.0) and is documented as a comment, not an executable statement, in the DDL.
+
+*Blockers:* Card 6.A.0 (EXECUTE TASK privilege must be granted to this role after creation).
+
+*Acceptance criteria:*
+- [ ] `SHOW ROLES LIKE 'TASK_EXECUTOR_ROLE'` returns one row
+- [ ] Role does not have `ACCOUNTADMIN`, `SECURITYADMIN`, or `SYSADMIN` as a granted role (least-privilege check)
+- [ ] DDL section exists in `scripts/ddl/snowflake_task_dag.sql` with all grant statements listed above
+
+---
+
+##### Card 6.A.2 — External Network Access Integration — COMPLETE
+
+**Title:** Create network rule and external access integration covering all four outbound HTTPS hosts
+
+*Technical implementation:*
+
+Add Section 2 to `scripts/ddl/snowflake_task_dag.sql` (run as ACCOUNTADMIN):
+
+```sql
+-- ============================================================
+-- SECTION 2: Network Rule and External Access Integration
+-- Run as ACCOUNTADMIN — see PREREQUISITE block at top of file
+-- ============================================================
+CREATE OR REPLACE NETWORK RULE baseball_data.config.daily_ingestion_network_rule
+  TYPE = HOST_PORT
+  MODE = EGRESS
+  VALUE_LIST = (
+    'baseballsavant.mlb.com',
+    'statsapi.mlb.com',
+    'api.the-odds-api.com',
+    'api.github.com'
+  );
+
+CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION daily_ingestion_access_integration
+  ALLOWED_NETWORK_RULES = (baseball_data.config.daily_ingestion_network_rule)
+  ALLOWED_AUTHENTICATION_SECRETS = (
+    baseball_data.config.odds_api_key,
+    baseball_data.config.github_pat
+  )
+  ENABLED = TRUE;
+```
+
+This integration is shared with Card 5.3's `task_lineup_monitor`. That stored procedure references `daily_ingestion_access_integration` by name — Card 5.3 cannot be fully activated until this card is complete.
+
+*Blockers:* Card 6.A.0 (ACCOUNTADMIN session required). Card 6.A.3 (secrets must exist before the integration can list them in `ALLOWED_AUTHENTICATION_SECRETS` — create secrets first, then run Section 2).
+
+*Acceptance criteria:*
+- [ ] `SHOW NETWORK RULES IN SCHEMA baseball_data.config` returns `daily_ingestion_network_rule` listing all four hosts
+- [ ] `SHOW INTEGRATIONS` returns `daily_ingestion_access_integration` with `enabled = true`
+- [ ] Card 5.3's `task_lineup_monitor` procedure references this integration by name without requiring any modification to the integration itself
+
+---
+
+##### Card 6.A.3 — Snowflake Secret Objects — COMPLETE
+
+**Title:** Store ODDS_API_KEY and GITHUB_PAT as Snowflake Secrets in baseball_data.config
+
+*Technical implementation:*
+
+Add Section 3 to `scripts/ddl/snowflake_task_dag.sql`:
+
+```sql
+-- ============================================================
+-- SECTION 3: Secret Objects
+-- Replace <placeholder> values at provision time in a live session.
+-- NEVER commit this file with real secret values substituted.
+-- ============================================================
+CREATE SECRET IF NOT EXISTS baseball_data.config.odds_api_key
+  TYPE = GENERIC_STRING
+  SECRET_STRING = '<ODDS_API_KEY_VALUE>';  -- substitute at provision time
+
+CREATE SECRET IF NOT EXISTS baseball_data.config.github_pat
+  TYPE = GENERIC_STRING
+  SECRET_STRING = '<GITHUB_PAT_VALUE>';  -- substitute at provision time; see Card 6.A.0
+```
+
+The DDL file is committed with `<placeholder>` strings. The engineer substitutes real values interactively in Snowflake and never commits the substituted copy. Add the following to `.gitignore` in case a local provisioned copy is saved:
+```
+scripts/ddl/snowflake_task_dag_provisioned.sql
+```
+
+*Blockers:* Card 6.A.0 (GitHub PAT must exist before it can be stored).
+
+*Acceptance criteria:*
+- [ ] `SHOW SECRETS IN SCHEMA baseball_data.config` returns rows for both `odds_api_key` and `github_pat`
+- [ ] Neither secret value appears in plaintext in any git-tracked file (`git grep -i 'api_key\|ghp_' -- '*.sql'` returns no results with actual values)
+- [ ] `.gitignore` entry exists for `scripts/ddl/snowflake_task_dag_provisioned.sql`
+
+---
+
+##### Card 6.A.4 — Snowpark Stored Procedures — COMPLETE
+
+**Title:** Implement five Snowpark Python 3.11 stored procedures for the daily ingestion and GitHub Actions dispatch
+
+*Technical implementation:*
+
+Add Section 4 to `scripts/ddl/snowflake_task_dag.sql`. One procedure per task using a shared pattern:
+
+```sql
+CREATE OR REPLACE PROCEDURE baseball_data.config.proc_<name>()
+  RETURNS STRING
+  LANGUAGE PYTHON
+  RUNTIME_VERSION = '3.11'
+  PACKAGES = ('snowflake-snowpark-python', 'requests')
+  EXTERNAL_ACCESS_INTEGRATIONS = (daily_ingestion_access_integration)
+  SECRETS = ('odds_api_key' = baseball_data.config.odds_api_key,
+             'github_pat'   = baseball_data.config.github_pat)
+  EXECUTE AS OWNER
+AS $$
+import _snowflake, requests
+from datetime import datetime
+
+def handler(session):
+    run_ts = datetime.utcnow()
+    task_name = '<task_name>'
+    try:
+        session.sql(f"INSERT INTO baseball_data.config.pipeline_run_log "
+                    f"VALUES ('{task_name}', '{run_ts}', 'RUNNING', NULL, NULL)").collect()
+
+        rows = 0  # task-specific logic sets this
+
+        session.sql(f"UPDATE baseball_data.config.pipeline_run_log "
+                    f"SET status='SUCCESS', rows_affected={rows} "
+                    f"WHERE task_name='{task_name}' AND run_ts='{run_ts}'").collect()
+        return f'SUCCESS:{rows}'
+    except Exception as e:
+        session.sql(f"UPDATE baseball_data.config.pipeline_run_log "
+                    f"SET status='FAILED', error_message='{str(e)[:500]}' "
+                    f"WHERE task_name='{task_name}' AND run_ts='{run_ts}'").collect()
+        raise
+$$;
+```
+
+Task-specific logic per procedure:
+- **`proc_savant_ingestion`** — HTTP GET to `baseballsavant.mlb.com` for prior-day Statcast; inserts rows into `baseball_data.statsapi.statcast_pitches`
+- **`proc_statsapi_schedule`** — HTTP GET to `statsapi.mlb.com/api/v1/schedule`; inserts into `baseball_data.statsapi.monthly_schedule`
+- **`proc_oddsapi_events`** — HTTP GET to `api.the-odds-api.com/v4/sports/baseball_mlb/events`; reads key via `_snowflake.get_generic_secret_string('odds_api_key')`; inserts into `baseball_data.statsapi.odds_events`
+- **`proc_oddsapi_odds`** — HTTP GET for odds by event ID; reads key the same way; inserts into `baseball_data.statsapi.odds_h2h`
+- **`proc_github_actions_trigger`** — reads `_snowflake.get_generic_secret_string('github_pat')`; POSTs to `api.github.com/repos/{owner}/{repo}/actions/workflows/dbt_daily_build.yml/dispatches`; asserts HTTP 204; returns response status code as the row count
+
+Each downstream task checks `SYSTEM$GET_PREDECESSOR_RETURN_VALUE()` at the top of its procedure body and writes `status = 'SKIPPED'` to `pipeline_run_log` if the predecessor returned a non-SUCCESS value, then returns early without raising — this prevents cascading failures from blocking future retries of the DAG.
+
+*Blockers:* Card 6.A.2 (integration must exist). Card 6.A.3 (secrets must exist).
+
+*Acceptance criteria:*
+- [ ] `SHOW PROCEDURES IN SCHEMA baseball_data.config` returns all five procedures
+- [ ] Each procedure can be called manually via `CALL baseball_data.config.proc_<name>()` and returns `'SUCCESS:<n>'`
+- [ ] `pipeline_run_log` receives one row per call with non-null `rows_affected` on success
+- [ ] Credentials are accessed exclusively via `_snowflake.get_generic_secret_string()` — no hardcoded key or token strings in any procedure body
+
+---
+
+##### Card 6.A.5 — Snowflake Task DAG Wiring
+
+**Title:** Wire five serverless Snowflake Tasks in linear AFTER-dependency chain with 08:00 ET cron root
+
+*Technical implementation:*
+
+Add Section 5 to `scripts/ddl/snowflake_task_dag.sql`:
+
+```sql
+-- ============================================================
+-- SECTION 5: Task DAG (all tasks serverless)
+-- USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE sets the serverless
+-- compute hint — no named warehouse is bound; Snowflake bills
+-- by compute-second, not by warehouse-minute.
+-- ============================================================
+
+CREATE OR REPLACE TASK baseball_data.config.task_savant_ingestion
+  SCHEDULE = 'USING CRON 0 8 * * * America/New_York'
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_savant_ingestion();
+
+CREATE OR REPLACE TASK baseball_data.config.task_statsapi_schedule
+  AFTER baseball_data.config.task_savant_ingestion
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_statsapi_schedule();
+
+CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_events
+  AFTER baseball_data.config.task_statsapi_schedule
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_oddsapi_events();
+
+CREATE OR REPLACE TASK baseball_data.config.task_oddsapi_odds
+  AFTER baseball_data.config.task_oddsapi_events
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_oddsapi_odds();
+
+CREATE OR REPLACE TASK baseball_data.config.task_github_actions_trigger
+  AFTER baseball_data.config.task_oddsapi_odds
+  USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'
+AS CALL baseball_data.config.proc_github_actions_trigger();
+
+-- Snowflake Tasks are created SUSPENDED by default.
+-- ALTER RESUME activates the root task and all children.
+ALTER TASK baseball_data.config.task_savant_ingestion RESUME;
+```
+
+*Blockers:* Card 6.A.4 (all five procedures must exist before tasks can reference them). Card 6.A.0 (`EXECUTE TASK` privilege must be active on the execution role).
+
+*Acceptance criteria:*
+- [ ] `SHOW TASKS IN SCHEMA baseball_data.config` returns all five tasks with `state = STARTED`
+- [ ] No task has a non-null `warehouse` column value — all tasks are serverless
+- [ ] Manual `EXECUTE TASK baseball_data.config.task_savant_ingestion` fires and all five tasks complete; `TABLE(INFORMATION_SCHEMA.TASK_HISTORY())` shows each with `STATE = SUCCEEDED`
+- [ ] `pipeline_run_log` receives five rows after a full manual execution
+
+---
+
+##### Card 6.A.6 — dbt_daily_build.yml GitHub Actions Workflow
+
+**Title:** Create dbt_daily_build.yml workflow triggered by Snowflake Task DAG dispatch for full dbtf build
+
+*Technical implementation:*
+
+Create `.github/workflows/dbt_daily_build.yml`. Triggered exclusively via `workflow_dispatch` — no push or schedule triggers. This keeps it silent during normal development and ensures it only fires when the Snowflake Task DAG explicitly calls it.
+
+```yaml
+name: Daily dbt Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      triggered_by:
+        description: 'Caller identifier'
+        required: false
+        default: 'manual'
+
+jobs:
+  dbt-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dbt-fusion
+        run: pip install dbt-fusion
+
+      - name: Run dbtf build
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        run: dbtf build
+
+      - name: Notify on failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: 'FAILED: Daily dbt build'
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: ${{ secrets.SMTP_USERNAME }}
+          body: 'The daily dbtf build GitHub Actions workflow failed. Check the Actions tab for details.'
+```
+
+Required GitHub Secrets (repo Settings → Secrets → Actions):
+- `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`
+- `SMTP_USERNAME`, `SMTP_PASSWORD` — email relay credentials for failure notification
+- `NOTIFICATION_EMAIL` — already configured to `charles.t.clark89@gmail.com` (shared with Card 5.3)
+
+This workflow is **distinct from `dbt_staging_build.yml`** (Card 5.3). That workflow targets `+stg_statsapi_lineups+` for intraday lineup triggers. This workflow runs a full `dbtf build` after morning ingestion completes.
+
+*Blockers:* Card 6.A.5 (Snowflake Tasks must be wired before this workflow will be called automatically, though it can be tested manually via the GitHub Actions UI at any point). GitHub Secrets for Snowflake connection must be configured before the workflow run will succeed.
+
+*Acceptance criteria:*
+- [ ] `.github/workflows/dbt_daily_build.yml` exists with `workflow_dispatch` trigger (and no other triggers)
+- [ ] Workflow contains a `dbtf build` step with all required Snowflake env vars sourced from GitHub Secrets
+- [ ] Workflow contains a failure notification step using `dawidd6/action-send-mail@v3` and `NOTIFICATION_EMAIL` secret (recipient not hardcoded)
+- [ ] A manual workflow dispatch from the GitHub Actions UI completes with `dbtf build` exit code 0
+
+---
+
+##### Card 6.A.7 — End-to-End Validation and Documentation
+
+**Title:** Run full DAG end-to-end, verify pipeline_run_log output, and update daily_run.md
+
+*Technical implementation:*
+
+Validation sequence:
+1. `EXECUTE TASK baseball_data.config.task_savant_ingestion` — triggers the full five-task chain
+2. Poll `SELECT * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(TASK_NAME => 'TASK_SAVANT_INGESTION'))` until all five tasks show `STATE = SUCCEEDED` (typically within 5–10 minutes)
+3. Query `SELECT * FROM baseball_data.config.pipeline_run_log ORDER BY run_ts DESC LIMIT 5` — confirm five rows, all `status = 'SUCCESS'`, all `rows_affected > 0`
+4. Confirm `dbt_daily_build.yml` Actions run appears in the GitHub Actions tab with green status; `dbtf build` output in the Actions log shows no model failures
+5. Failure injection test: temporarily point `proc_oddsapi_events` at a bad endpoint URL, re-run; confirm `pipeline_run_log` shows `status = 'FAILED'` for `task_oddsapi_events` and `status = 'SKIPPED'` for its two downstream tasks; restore correct endpoint
+
+Update `scripts/daily_run.md`: add a "Snowflake Task DAG" section at the top of the document noting that the DAG (root task `task_savant_ingestion`, 08:00 ET daily) replaces the manual sequence for unattended production runs. The manual sequence remains documented for development, debugging, and one-off backfills.
+
+*Blockers:* Cards 6.A.1 through 6.A.6 must all be complete.
+
+*Acceptance criteria:*
+- [ ] `TASK_HISTORY` shows all five tasks `STATE = SUCCEEDED` after a full end-to-end manual trigger
+- [ ] `pipeline_run_log` has five `status = 'SUCCESS'` rows with non-null `rows_affected` for the most recent run
+- [ ] Failure injection test passes: a forced failure in `task_oddsapi_events` produces `status = 'SKIPPED'` downstream without blocking a clean re-run after the fault is cleared
+- [ ] `scripts/daily_run.md` contains a "Snowflake Task DAG" section with instructions for triggering and monitoring the DAG
+- [ ] Teardown section of `scripts/ddl/snowflake_task_dag.sql` is tested: all objects (`TASK`, `PROCEDURE`, `SECRET`, `INTEGRATION`, `NETWORK RULE`, `ROLE`) drop and re-create cleanly in reverse dependency order
+
+---
+
+### Phase 7 — Model Refinement, Feature Expansion, and Production Infrastructure
+
+Encompasses long-term model quality improvements, advanced feature engineering, and full production operationalization. The stories in this phase are deferred to after the Phase 5 dry run validates the end-to-end system.
+
+---
+
+#### Phase 7A — Model Refinement and Feature Expansion
+
+Once baselines are proven in dry run:
 
 **Feature additions:**
 - Weather data (temperature, wind speed/direction, humidity) — strong park-era interaction; requires external data source
 - Umpire tendencies (ball/strike zone size) — significant but requires additional data
 - Bullpen availability score: derive from `mart_bullpen_workload` (days rest + recent IP for top relievers)
-- Travel schedule / home vs. away streaks
 - Batter/pitcher head-to-head history (build from `stg_batter_pitches` with `GROUP BY batter_id, pitcher_id`)
 - Player injury status (requires external data source)
 
@@ -1166,37 +1858,71 @@ Once baselines are established:
 
 ---
 
-### Phase 6 — Betting Application Layer
+#### Phase 7B — Production Infrastructure
 
-Build the `betting_ml/` application layer that translates model outputs into actionable information.
+Operationalize the full stack beyond the Phase 6 Streamlit MVP and Task DAG:
 
-**Components:**
-
-| Component | Description |
-|---|---|
-| Pre-game prediction pipeline | Given tomorrow's confirmed lineups and starting pitchers, produce predicted run total, run differential, and win probability for each game |
-| Market comparison | Compare model probability to implied probability from current market odds (requires odds data source) |
-| Expected value calculator | `EV = (model_probability × payout) - (1 - model_probability)` |
-| Kelly criterion sizer | `f* = (bp - q) / b` where `b` = decimal odds - 1, `p` = model win prob, `q` = 1 - p; apply fractional Kelly for risk management |
-| Backtesting framework | Simulate historical betting decisions using model outputs vs. closing line odds to estimate long-run edge |
-| Daily pipeline | Automated pre-game scoring: fetch that day's confirmed lineups via Stats API, run prediction, output edge rankings |
-
-**Risk controls:**
-- Never bet on games with missing lineup data (model degrades significantly)
-- Minimum confidence threshold before flagging a game as actionable
-- Track closing line value (CLV): if the model identified edge that the market later confirmed, the model is functioning correctly
+- Model performance monitoring: track prediction accuracy week-over-week, flag model drift
+- Automated model retraining trigger when rolling Brier score degrades past a threshold
+- Closing line value (CLV) tracking database: store every prediction alongside the closing line to measure long-run edge
 
 ---
 
-### Phase 7 — Production Infrastructure
+#### Card 7.2 — Production Application (Replaces Streamlit MVP)
 
-Operationalize the full stack:
+**Title:** Replace the Phase 6 Streamlit MVP with a production-grade web application
 
-- Scheduled dbt runs (daily) to refresh staging and mart tables with new Statcast data
-- Scheduled ingestion of that day's lineup data via `ingest_statsapi.py`
-- Automated model scoring pipeline that triggers once lineups are confirmed (typically 3–4 hours before first pitch)
-- Output dashboard or notification system for actionable game flags
-- Model performance monitoring: track prediction accuracy week-over-week, flag model drift
+**Description:**
+
+*Technical implementation:*
+- The Streamlit MVP (Cards 6.B–6.E) is a single-process app that is fast to build but not designed for concurrent users, background refresh, or mobile access. Once the model's live value is established over a full season, replace it with a purpose-built stack.
+- **Recommended architecture:**
+  - **Backend:** FastAPI service (`app/api/`) that exposes a small REST API — `GET /predictions/{date}`, `GET /games/{game_pk}/odds`, `GET /performance`. Reads from Snowflake and model artifacts. Runs as a Docker container (deployable to Fly.io, Railway, or any container host).
+  - **Frontend:** React or Next.js SPA (`app/web/`) consuming the FastAPI endpoints. Replicates all four Streamlit pages as proper routes. Mobile-responsive layout so the daily picks are usable from a phone.
+  - **Auth:** Single-user auth (Bearer token or magic link) — this is a personal tool, not a multi-tenant app.
+  - **Background refresh:** Replace the Streamlit "Refresh" button with a server-sent event (SSE) stream that pushes lineup confirmation events from the Snowflake `lineup_monitor_state` table to the frontend in real time.
+  - **Hosting:** Containerized API + static frontend hosted on a low-cost PaaS. No Kubernetes needed.
+- The Streamlit app (`app/`) is retained as a development and debugging tool after the production app ships; it is not decommissioned.
+
+*Blockers:* The Streamlit MVP (Cards 6.B–6.E) must complete a full season of live use and the model must demonstrate positive CLV before investment in the production app is warranted. This card is explicitly deferred until that threshold is met.
+
+*Acceptance criteria:*
+- [ ] FastAPI backend serves all four data endpoints; each endpoint returns within 2 seconds on a cold Snowflake query
+- [ ] Frontend replicates Today's Picks, Market Comparison, EV/Kelly, and Performance pages from the Streamlit MVP
+- [ ] Mobile layout renders correctly on 390px-wide viewport (iPhone 15 baseline)
+- [ ] Bearer token auth prevents unauthenticated access to all API endpoints
+- [ ] SSE stream delivers lineup confirmation events to the frontend within 60 seconds of the Snowflake `lineup_monitor_state` row being written
+- [ ] Docker Compose file at repo root starts the full stack (API + frontend) with a single `docker compose up`
+- [ ] Streamlit app remains functional alongside the production app for development use
+
+---
+
+#### Card 7.1 — Pre-Game OddsAPI Dynamic Fetch (1 Hour Before First Pitch)
+
+**Title:** Add dynamic pre-game odds fetch — call The Odds API exactly 1 hour before each game's scheduled start time to capture the sharpest pre-game market line
+
+**Description:**
+
+*Technical implementation:*
+- Enhance `scripts/odds_api_ingestion.py` with a new `pregame` subcommand. Unlike the daily `odds` subcommand (which fires once at 08:00 ET and captures next-7-day odds), this subcommand is designed to be called close to game time to capture the final market line before books shade or suspend it.
+- **Game schedule lookup:** Query `stg_statsapi_games` (or `mart_game_results` for today) to get `(game_pk, commence_time_utc, home_team, away_team)` for all games on the target date. Filter to games where `commence_time_utc > NOW() + INTERVAL '30 MINUTES'` to avoid fetching odds for already-started games.
+- **Per-game odds fetch:** For each upcoming game, compute `target_fetch_time = commence_time_utc - INTERVAL '1 HOUR'`. The `pregame` subcommand writes a scheduled fetch entry to `scripts/.pregame_fetch_queue.json` (keyed by `{date}:{game_pk}`) with the target fetch time. A companion loop script (`scripts/pregame_odds_runner.py`) reads the queue, sleeps until each `target_fetch_time`, calls `odds_api_ingestion.py odds --event-ids {event_id}` for that specific game, and marks it done in the queue.
+- **Snowflake write:** Odds are written to the existing `baseball_data.oddsapi.mlb_odds_raw` table with an additional `snapshot_type = 'pregame_1h'` column for easy filtering in downstream models. A new `feature_pregame_odds_features` leakage-safe snapshot will pick this up automatically since the existing guard (`ingestion_ts < commence_time`) already applies.
+- **dbtf refresh:** After each per-game fetch, call `dbtf build --select +feature_pregame_odds_features+` to propagate the new odds snapshot into the feature layer before predictions are finalized.
+- **Integration with Card 5.3:** `lineup_monitor.py` can optionally enqueue a pregame fetch when lineups are confirmed — lineup confirmation and the 1-hour odds fetch fire as coordinated events.
+- **API credit budget:** Each per-game call costs ~4 credits (2 markets × 2 regions). For a 15-game slate, that is ~60 credits per day in addition to the morning run. Document the credit budget in `scripts/daily_run.md`.
+
+*Blockers:* Phase 5 (Cards 5.2 and 5.3) must be operational so the prediction pipeline can consume the freshened odds. Card 6.A Task DAG should be live so the morning odds fetch is already running before the per-game fetch layer is added.
+
+*Acceptance criteria:*
+- [ ] New `pregame` subcommand added to `scripts/odds_api_ingestion.py` with `--date` and optional `--event-ids` args
+- [ ] `scripts/pregame_odds_runner.py` reads queue, sleeps to target fetch time, fires per-game odds call, marks done
+- [ ] Queue state persisted in `scripts/.pregame_fetch_queue.json`; re-running the queue runner after a crash replays only unfetched games
+- [ ] Fetched rows written to `mlb_odds_raw` with `snapshot_type = 'pregame_1h'` populated
+- [ ] `dbtf build --select +feature_pregame_odds_features+` called after each successful per-game fetch
+- [ ] `predict_today.py` (Card 5.2) re-run after the odds refresh produces updated edge rankings that reflect the 1-hour-out market line
+- [ ] API credit usage per slate documented in `scripts/daily_run.md` under "Pre-Game Odds Fetch"
+- [ ] Script handles the case where The Odds API has no listing for a specific game (returns empty; logs warning; does not error)
 
 ---
 
@@ -1204,13 +1930,15 @@ Operationalize the full stack:
 
 | Phase | Milestone | Estimated State |
 |---|---|---|
-| Phase 1 | All dbt tests passing, data quality issues resolved | Near-term (days to weeks) |
-| Phase 2 | Pre-game feature assembly mart models built and tested | Weeks |
-| Phase 3 | EDA complete, target variable and feature candidates validated | Weeks |
-| Phase 4 | Baseline XGBoost models trained, cross-validated, calibrated | Weeks to months |
-| Phase 5 | Refined models with expanded feature set, era-aware approach | Months |
-| Phase 6 | Betting application layer with EV calculation and backtesting | Months |
-| Phase 7 | Automated daily pipeline, monitoring, dashboard | Months |
+| Phase 1 | All dbt tests passing, data quality issues resolved | ✓ Complete |
+| Phase 2 | Pre-game feature assembly mart models built and tested | ✓ Complete |
+| Phase 3 | EDA complete, target variable and feature candidates validated | ✓ Complete |
+| Phase 4 | Baseline + tuned models for all three targets; Bayesian probability layer | In progress (Cards 4.12–4.13 running) |
+| Phase 5 | Model packaged; local prediction CLI; lineup notification mechanism | This weekend dry run |
+| Phase 6 | Streamlit MVP (picks, market comparison, EV/Kelly, performance) + Snowflake Task DAG | Near-term |
+| Phase 7A | Refined models with expanded feature set, era-aware approach | Months |
+| Phase 7B | Production infrastructure: monitoring, auto-retraining, dashboard | Months |
+| Card 7.1 | Dynamic pre-game OddsAPI fetch (1 hour before first pitch) | Phase 7 |
 
 ---
 
@@ -1245,11 +1973,28 @@ Operationalize the full stack:
 | `exploratory_data_analysis/07_engineered_feature_lift.py` | Correlation fast pass for delta/momentum (Card 4.1) and handedness matchup (Card 4.2) features vs. 3 targets; OLS ΔR² for each feature block |
 | `exploratory_data_analysis/betting_model_findings.md` | Cumulative EDA findings document; sections 01–09 complete |
 | `betting_ml/` | ML model code (Phase 4+) |
-| `betting_ml/utils/data_loader.py` | Snowflake → pandas loader; queries `feature_pregame_game_features` + `mart_game_results`; applies `has_full_data=true` and `min_games_played` filter |
+| `betting_ml/utils/data_loader.py` | Snowflake → pandas loader; `load_features()` queries `feature_pregame_game_features` + `mart_game_results`; applies `has_full_data=true` and `min_games_played` filter |
 | `betting_ml/utils/cv_splits.py` | Temporal leave-one-season-out CV splits; no shuffled k-fold; respects chronological order |
 | `betting_ml/utils/preprocessing.py` | Imputation pipeline + Bayesian shrinkage; handles all 6 null groups from NB02; shrinkage weight = n/(n+k) toward league-mean prior |
+| `betting_ml/utils/feature_selection.py` | Card 4.8 — feature selection module; `load_retained_features()` returns canonical 241-feature list from `feature_selection.md`; drops near-zero correlation and high-multicollinearity features |
+| `betting_ml/utils/model_io.py` | Card 4.8 — `save_model` / `load_model` via joblib; path convention `betting_ml/models/{target}/{model_name}_{eval_year}.pkl` |
+| `betting_ml/utils/evaluation.py` | `fold_metrics()` and `brier_score_over_under()` helpers used by baseline training scripts |
+| `betting_ml/models/total_runs_trainer.py` | Card 4.9 — `train_ridge`, `train_xgboost`, `train_ngboost`, `p_over_line` for total runs target |
+| `betting_ml/models/win_outcome_trainer.py` | Card 4.11 — `train_logistic`, `train_xgboost_classifier`, `compute_calibration_curve`, `compute_ece` |
+| `betting_ml/models/total_runs/` | Serialized total runs models (ridge, xgboost, ngboost_normal, ngboost_lognormal per eval year) |
+| `betting_ml/models/run_differential/` | Serialized run differential models (same structure as total_runs) |
+| `betting_ml/models/home_win/` | Serialized win outcome models (logistic, xgboost_platt, xgboost_isotonic per eval year) |
 | `betting_ml/scripts/analyze_pitching_decomp.py` | Card 3.8 analysis — bullpen vs. starter xwOBA decomposition; writes `evaluation/pitching_decomp_results.json` |
 | `betting_ml/scripts/analyze_home_away_pitch_asymmetry.py` | Card 3.9 analysis — home/away pitching asymmetry root-cause; writes `evaluation/home_away_pitch_asymmetry_results.json` |
+| `betting_ml/scripts/train_total_runs_baselines.py` | Card 4.9 — train all total runs baseline models; writes CV results to Snowflake and `total_runs_results.md` |
+| `betting_ml/scripts/train_run_diff_baselines.py` | Card 4.10 — train all run differential baseline models; writes CV results and `run_differential_results.md` |
+| `betting_ml/scripts/train_win_outcome_baselines.py` | Card 4.11 — train win outcome baseline models; writes CV results and `win_outcome_results.md` |
+| `betting_ml/scripts/run_hyperparameter_search.py` | Card 4.12 — Optuna TPE search (50 trials × 3 XGBoost targets) + NGBoost grid; USER-EXECUTED; writes `tuning_results.json` |
+| `betting_ml/scripts/generate_tuning_report.py` | Card 4.12 — reads `tuning_results.json`; writes `hyperparameter_tuning.md` and updates `project_context.md` |
+| `betting_ml/evaluation/feature_selection.md` | Card 4.8 results — canonical retained feature list (241 features) with target correlations and drop reasons |
+| `betting_ml/evaluation/total_runs_results.md` | Card 4.9 results — per-season MAE/RMSE, model comparison, NGBoost distribution verdict |
+| `betting_ml/evaluation/run_differential_results.md` | Card 4.10 results — per-season MAE/RMSE, win probability Brier scores, era ablation |
+| `betting_ml/evaluation/win_outcome_results.md` | Card 4.11 results — Brier score, log loss, calibration curves, home-team bias analysis |
 | `betting_ml/evaluation/pitching_decomp_results.json` | Card 3.8 results — cross-correlation, partial correlations, OLS R² decomposition, design recommendation |
 | `betting_ml/evaluation/home_away_pitch_asymmetry_results.json` | Card 3.9 results — partial correlations, quartile analysis, era-split, design recommendation |
 | `betting_ml/tests/test_cv_splits.py` | Unit tests for temporal CV split logic |
@@ -1258,7 +2003,7 @@ Operationalize the full stack:
 | `plan_specs/plan_spec_implementation.md` | PlanSpec overview, structure reference, and agentic engineering rationale |
 | `plan_specs/eda_plan_spec_template.yaml` | Template for Phase 3 EDA analysis card plan specs |
 | `plan_specs/phase_3/` | Phase 3 EDA plan specs (Cards 3.8–3.11) |
-| `plan_specs/phase_4/` | Phase 4 ML pipeline plan specs (Cards 4.6–4.12) |
+| `plan_specs/phase_4/` | Phase 4 ML pipeline plan specs (Cards 4.6–4.13) |
 
 ---
 

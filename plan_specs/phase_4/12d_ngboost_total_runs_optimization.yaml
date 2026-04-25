@@ -1,0 +1,238 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ngboost-total-runs-hyperparameter-optimization
+  namespace: default
+spec:
+  description: >
+    Apply grid search hyperparameter tuning to NGBoost for the total_runs
+    prediction target using the temporal CV splits from Card 4.6. Grid covers
+    n_estimators ∈ {200, 500} and dist ∈ {Normal, LogNormal}. Persist
+    the best NGBoost model via model_io.py and log results to
+    betting_ml/evaluation/tuning_results_ngboost_total_runs.json and
+    betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md.
+  acceptanceCriteria:
+    - description: >
+        NGBoost grid search completed for total_runs across all 4 combinations
+        (2 n_estimators × 2 distributions); results recorded in
+        tuning_results_ngboost_total_runs.json
+    - description: >
+        Best viable NGBoost configuration identified and documented; grid
+        results include both Normal and LogNormal distributions
+    - description: >
+        Best NGBoost model persisted via save_model() with model_name='ngboost_tuned'
+        and target='total_runs'
+    - description: >
+        Grid results and best configuration documented in
+        betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md;
+        project_context.md Phase 4 section updated with Card 4.12d findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-8-complete-for-ngboost-total-runs
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.8 must be complete before Card 4.12d begins.
+    Card 4.8 provides betting_ml/utils/model_io.py (save_model / load_model via
+    joblib; path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl).
+    No Snowflake baseline comparison is required for NGBoost — the grid search
+    identifies the best config within its own results.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ngboost-total-runs-optimization-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-ngboost-total-runs-search runs the grid search and
+    persists the tuned model, writing tuning_results_ngboost_total_runs.json.
+    generate-ngboost-total-runs-report reads that JSON and produces
+    hyperparameter_tuning_ngboost_total_runs.md plus the project_context.md update.
+  goalRef:
+    name: ngboost-total-runs-hyperparameter-optimization
+  graph:
+    nodes:
+
+      - id: run-ngboost-total-runs-search
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/run_ngboost_total_runs_search.py. Runs a
+          grid search for NGBoost on total_runs, then persists the best model.
+
+          Setup:
+            Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Build CV folds via all_season_splits(df, min_train_seasons=3).
+            Feature matrices:
+              X = df[load_retained_features()]
+              y_total_runs = df['total_runs']
+
+          Grid search:
+            Grid: n_estimators ∈ [200, 500, 1000], dist ∈ ['Normal', 'LogNormal']
+            For each of the 6 combinations:
+              Import NGBRegressor and the appropriate distribution from
+              ngboost.distns (Normal, LogNormal).
+              For each fold: apply build_imputation_pipeline().fit(X_train).transform;
+              fit NGBRegressor(n_estimators=n, Dist=dist_cls) on X_train_imp;
+              predict on X_eval_imp; compute MAE.
+              Wrap in try/except: if LogNormal raises or produces NaN predictions,
+              record cv_mae=null, viable=false, and a note in lognormal_note.
+            Identify the best viable configuration (lowest mean CV MAE among
+            viable=true results).
+
+          Persist best model — retrain best NGBRegressor on the training data of
+          the last CV fold (max-index train split), then persist:
+            save_model(ngb_total_runs, target='total_runs',
+              model_name='ngboost_tuned', eval_year=<last_fold_eval_year>)
+          last_fold_eval_year is determined from game_year values in the last
+          fold's eval index: int(df.loc[last_eval_idx, 'game_year'].mode()[0]).
+
+          Print a summary table of grid results (n_estimators, dist, CV MAE, viable).
+
+          Write betting_ml/evaluation/tuning_results_ngboost_total_runs.json:
+            {
+              "target": "total_runs",
+              "model": "ngboost",
+              "grid_results": [
+                {"n_estimators": int, "dist": str,
+                 "cv_mae": float | null, "viable": bool,
+                 "lognormal_note": str | null},
+                ...
+              ],
+              "best_n_estimators": int,
+              "best_dist": str,
+              "best_cv_mae": float,
+              "persisted_models": [
+                {"target": "total_runs", "model_name": "ngboost_tuned",
+                 "eval_year": int, "path": str}
+              ]
+            }
+        dependsOn:
+          - card-4-8-complete-for-ngboost-total-runs
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: NGBoost total_runs search script
+            path: betting_ml/scripts/run_ngboost_total_runs_search.py
+          - type: manual
+            name: Search script runs to completion with exit code 0
+            description: >
+              USER-EXECUTED STEP — this script runs the NGBoost grid search
+              (6 combinations × full CV each). Do not run via Claude.
+              Execute from the project root:
+                uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
+              Verify the script exits 0 and that
+              tuning_results_ngboost_total_runs.json is written before marking
+              this criterion complete.
+          - type: artifact_exists
+            name: Tuning results JSON written
+            path: betting_ml/evaluation/tuning_results_ngboost_total_runs.json
+          - type: command_succeeds
+            name: tuning_results_ngboost_total_runs.json has required keys and grid coverage
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/tuning_results_ngboost_total_runs.json') as f:
+                    r = json.load(f)
+                assert r.get('target') == 'total_runs', "Wrong target"
+                assert r.get('model') == 'ngboost', "Wrong model"
+                grid = r.get('grid_results', [])
+                assert len(grid) >= 4, f"Expected 4 grid combinations, got {len(grid)}"
+                dists = {g['dist'] for g in grid}
+                assert 'Normal' in dists, f"Missing Normal dist; got: {dists}"
+                assert 'LogNormal' in dists, f"Missing LogNormal dist; got: {dists}"
+                n_est_values = {g['n_estimators'] for g in grid}
+                assert len(n_est_values) >= 2, f"Expected 2 n_estimators values; got: {n_est_values}"
+                assert 'best_n_estimators' in r, "Missing best_n_estimators"
+                assert 'best_cv_mae' in r, "Missing best_cv_mae"
+          - type: command_succeeds
+            name: Persisted ngboost_tuned model file exists for total_runs
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, os
+                with open('betting_ml/evaluation/tuning_results_ngboost_total_runs.json') as f:
+                    r = json.load(f)
+                models = r.get('persisted_models', [])
+                assert len(models) >= 1, "No persisted models recorded"
+                for m in models:
+                    assert os.path.exists(m['path']), f"Model file missing: {m['path']}"
+
+      - id: generate-ngboost-total-runs-report
+        kind: Task
+        description: >
+          Read tuning_results_ngboost_total_runs.json and write
+          betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md,
+          then update project_context.md with Card 4.12d findings.
+
+          hyperparameter_tuning_ngboost_total_runs.md must contain:
+
+          ## NGBoost total_runs Grid Search Results
+            Table: n_estimators | Dist | CV MAE | Viable
+            All 6 grid combinations listed.
+            State the best viable configuration.
+
+          ## Best NGBoost Configuration
+            State best_n_estimators and best_dist with the corresponding CV MAE.
+
+          ## Persisted Model
+            Table: Target | Model Name | Eval Year | Path.
+            Confirm the model saved successfully.
+
+          ## Notes on Distribution Choice
+            Comment on Normal vs. LogNormal viability for total_runs (total_runs
+            is non-negative so LogNormal may be viable here, unlike run_differential).
+
+          Update project_context.md: add a "Card 4.12d Results" subsection in
+          the Phase 4 tracking section containing: best_ngboost_config_total_runs
+          ({n_estimators, dist}), best CV MAE, and a one-sentence summary.
+        dependsOn:
+          - run-ngboost-total-runs-search
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: NGBoost total_runs tuning report
+            path: betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md
+          - type: command_succeeds
+            name: Report contains required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'ngboost', 'mae', 'n_estimators', 'normal', 'lognormal',
+                    'total_runs', 'viable', 'persisted', 'grid'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.12d results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.12d', 'ngboost']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.12d updates: {missing}'

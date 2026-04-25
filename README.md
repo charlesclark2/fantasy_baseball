@@ -8,7 +8,7 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is in progress — 7 notebooks complete with findings; analysis scripts for Cards 3.8 and 3.9 complete. **Phase 4 (ML Pipeline)** foundation started — data loader, CV splits, and preprocessing built.
+**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is complete (2026-04-24) — 7 Marimo notebooks and 4 analysis scripts (Cards 3.7–3.11) done. **Phase 4 (ML Pipeline)** is actively in progress — baseline models complete for all three targets (Cards 4.8–4.11); hyperparameter optimization (Card 4.12) currently running.
 
 | Domain | Status |
 |---|---|
@@ -24,9 +24,9 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 | Betting odds (staging + mart) | Events backfilled 2021–present (72–76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
 | Schedule fatigue context | Complete |
 | ML feature store | Phase 2 complete (2026-04-23); feature engineering complete — Cards 4.1–4.5 done (delta/momentum, handedness matchup, reliability flags, starter IP depth, era flags + game context) |
-| EDA | Phase 3 in progress — notebooks 01–07 complete; Card 3.7 done (engineered feature lift); Cards 3.8 done (bullpen/starter decomposition — script); Card 3.9 done (home/away pitching asymmetry — script); Cards 3.10–3.11 queued (plan specs drafted) |
-| ML pipeline foundation | Phase 4 started — `betting_ml/utils/` built: data loader, temporal CV splits, imputation + Bayesian shrinkage preprocessing (Card 4.6 complete) |
-| Prediction models | Phase 4 in progress; plan specs drafted for Cards 4.7–4.12 |
+| EDA | Phase 3 complete (2026-04-24) — notebooks 01–07; Cards 3.7–3.11 complete (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
+| ML pipeline foundation | Phase 4 foundation complete — `betting_ml/utils/` complete: data loader, CV splits, preprocessing, feature selection, model I/O (Cards 4.6, 4.8 complete) |
+| Prediction models | Phase 4 in progress — baselines complete: total runs (Card 4.9), run differential (Card 4.10), win outcome (Card 4.11); Card 4.12 (hyperparameter optimization) running |
 | Betting application layer | Not started (Phase 6) |
 
 ---
@@ -61,20 +61,33 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   └── betting_model_findings.md       # Cumulative EDA findings (sections 01–09)
 ├── betting_ml/                 # ML model code (Phase 4+)
 │   ├── utils/
-│   │   ├── data_loader.py      # Snowflake → pandas; applies has_full_data + games_played filters
+│   │   ├── data_loader.py      # Snowflake → pandas; load_features() with has_full_data + games_played filters
 │   │   ├── cv_splits.py        # Temporal leave-one-season-out CV splits
-│   │   └── preprocessing.py   # Imputation + Bayesian shrinkage pipeline
+│   │   ├── preprocessing.py    # Imputation + Bayesian shrinkage pipeline
+│   │   ├── feature_selection.py # load_retained_features() — canonical 241-feature list
+│   │   ├── model_io.py         # save_model / load_model via joblib
+│   │   └── evaluation.py       # fold_metrics, brier_score_over_under helpers
+│   ├── models/
+│   │   ├── total_runs_trainer.py   # train_ridge, train_xgboost, train_ngboost, p_over_line
+│   │   ├── win_outcome_trainer.py  # train_logistic, train_xgboost_classifier, compute_ece
+│   │   ├── total_runs/             # Serialized total runs models
+│   │   ├── run_differential/       # Serialized run differential models
+│   │   └── home_win/               # Serialized win outcome models
 │   ├── scripts/
-│   │   ├── analyze_pitching_decomp.py          # Card 3.8: bullpen vs. starter decomposition
+│   │   ├── train_total_runs_baselines.py        # Card 4.9: train all total runs baselines
+│   │   ├── train_run_diff_baselines.py          # Card 4.10: train all run diff baselines
+│   │   ├── train_win_outcome_baselines.py       # Card 4.11: train win outcome baselines
+│   │   ├── run_hyperparameter_search.py         # Card 4.12: Optuna search (USER-EXECUTED)
+│   │   ├── generate_tuning_report.py            # Card 4.12: report from tuning_results.json
+│   │   ├── analyze_pitching_decomp.py           # Card 3.8: bullpen vs. starter decomposition
 │   │   └── analyze_home_away_pitch_asymmetry.py # Card 3.9: home/away pitching asymmetry
-│   ├── evaluation/             # JSON results artifacts from analysis scripts
-│   ├── models/                 # Serialized model files (Phase 4+)
+│   ├── evaluation/             # Results: JSON + markdown reports per card
 │   └── tests/
 │       ├── test_cv_splits.py
 │       └── test_preprocessing.py
 ├── plan_specs/                 # Declarative PlanSpec YAML files for agentic execution
 │   ├── phase_3/                # EDA analysis cards (3.8–3.11)
-│   └── phase_4/                # ML pipeline cards (4.6–4.12)
+│   └── phase_4/                # ML pipeline cards (4.6–4.13)
 ├── .mcp.json                   # Snowflake MCP server config for Claude Code
 ├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)
 └── project_context.md          # Full architecture, data sources, roadmap

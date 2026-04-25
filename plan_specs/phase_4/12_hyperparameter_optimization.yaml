@@ -12,7 +12,7 @@ spec:
     n_estimators and distribution type via grid search for both regression targets.
     All tuning uses mean CV score (MAE for regression, Brier score for
     classification) as the optimization objective. Persist tuned models using the
-    model_io.py convention from Card 4.7. Log all trials and comparisons to
+    model_io.py convention from Card 4.8. Log all trials and comparisons to
     betting_ml/evaluation/hyperparameter_tuning.md.
   acceptanceCriteria:
     - description: >
@@ -20,13 +20,13 @@ spec:
         home_win; at least 50 trials per target logged with TPE sampler; all trial
         params and scores recorded in tuning_results.json
     - description: >
-        Tuned XGBoost mean CV MAE for total_runs meets or improves on the Card 4.8
+        Tuned XGBoost mean CV MAE for total_runs meets or improves on the Card 4.9
         baseline XGBoost mean CV MAE; tuned XGBoost mean CV MAE for run_differential
-        meets or improves on the Card 4.9 baseline; script exits non-zero if either
+        meets or improves on the Card 4.10 baseline; script exits non-zero if either
         tuned score regresses by more than 1% relative
     - description: >
         Tuned XGBoost mean CV Brier score for home_win meets or improves on the
-        Card 4.10 baseline XGBoost (Platt-calibrated) mean CV Brier score
+        Card 4.11 baseline XGBoost (Platt-calibrated) mean CV Brier score
     - description: >
         NGBoost grid search completed for total_runs and run_differential across
         n_estimators ∈ {200, 500, 1000} and dist ∈ {Normal, LogNormal}; best
@@ -39,25 +39,27 @@ spec:
     - description: >
         Best hyperparameters, per-trial scores, baseline vs. tuned comparison, and
         NGBoost grid results documented in betting_ml/evaluation/hyperparameter_tuning.md;
-        project_context.md Phase 4 section updated with Card 4.11 findings
+        project_context.md Phase 4 section updated with Card 4.12 findings
 
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Gate
 metadata:
-  name: cards-4-7-through-4-10-complete
+  name: cards-4-8-through-4-11-complete
   namespace: default
 spec:
   gateType: review
   description: >
-    Cards 4.7, 4.8, 4.9, and 4.10 must all be complete before Card 4.11 begins.
-    Card 4.7 provides betting_ml/utils/model_io.py (save_model / load_model via joblib;
+    Cards 4.8, 4.9, 4.10, and 4.11 must all be complete before Card 4.12 begins.
+    Card 4.8 provides betting_ml/utils/model_io.py (save_model / load_model via joblib;
     path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl).
-    Card 4.8 provides baseline XGBoost MAE for total_runs in cv_results.json.
-    Card 4.9 provides baseline XGBoost MAE for run_differential in cv_results_run_diff.json.
-    Card 4.10 provides baseline XGBoost Platt Brier score for home_win in
-    cv_results_win_outcome.json.
-    All four baseline result files are required at tuning start because the
+    Card 4.9 provides baseline XGBoost MAE for total_runs written to Snowflake table
+    baseball_data.betting_ml.cv_results_tot_runs (model='xgboost').
+    Card 4.10 provides baseline XGBoost MAE for run_differential written to Snowflake table
+    baseball_data.betting_ml.cv_results_run_diff (model='xgboost').
+    Card 4.11 provides baseline XGBoost Platt Brier score for home_win written to Snowflake
+    table baseball_data.betting_ml.cv_results_win_outcome (model='xgb_platt').
+    All three Snowflake result tables are required at tuning start because the
     improvement acceptance criteria load baseline scores from them.
   reviewers:
     - user:charlesclark
@@ -87,17 +89,26 @@ spec:
           search for regression targets, then persists the best models.
 
           Setup:
-            Load features via load_features(). Build CV folds via
-            all_season_splits(df, min_train_seasons=3).
-            Load baseline CV scores for comparison:
-              total_runs baseline XGBoost MAE: mean of mae across fold_results
-                where model='xgboost' from betting_ml/evaluation/cv_results.json
-              run_diff baseline XGBoost MAE: mean from cv_results_run_diff.json
-              win_outcome baseline Brier: mean of brier_score across fold_results
-                where model='xgb_platt' from cv_results_win_outcome.json
-            Feature matrices (same exclusion as in each baseline card):
-              X_reg = df.drop(columns=['total_runs', 'run_differential', 'home_win',
-                'total_line', 'has_odds'], errors='ignore')
+            Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Build CV folds via all_season_splits(df, min_train_seasons=3).
+            Load baseline CV scores for comparison via get_snowflake_connection()
+            from betting_ml/utils/data_loader.py (same RSA key and connection
+            parameters used for data loading). Query each table and compute the
+            mean score across all folds for the specified model:
+              total_runs baseline XGBoost MAE:
+                SELECT AVG(mae) FROM baseball_data.betting_ml.cv_results_tot_runs
+                WHERE model = 'xgboost'
+              run_diff baseline XGBoost MAE:
+                SELECT AVG(mae) FROM baseball_data.betting_ml.cv_results_run_diff
+                WHERE model = 'xgboost'
+              win_outcome baseline Brier:
+                SELECT AVG(brier_score) FROM baseball_data.betting_ml.cv_results_win_outcome
+                WHERE model = 'xgb_platt'
+            Feature matrices — use only the features listed in
+            betting_ml/evaluation/feature_selection.md; do not pass additional
+            columns to fit() calls:
+              X = df[load_retained_features()]
               y_total_runs = df['total_runs']
               y_run_diff = df['run_differential']
               y_home_win = df['home_win'].astype(int)
@@ -232,19 +243,20 @@ spec:
             OR tuned_xgb_mae_run_diff > baseline_xgb_mae_run_diff * 1.01
             OR tuned_xgb_brier_win_outcome > baseline_xgb_brier_win_outcome * 1.01
         dependsOn:
-          - cards-4-7-through-4-10-complete
+          - cards-4-8-through-4-11-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Hyperparameter search script
             path: betting_ml/scripts/run_hyperparameter_search.py
-          - type: command_succeeds
+          - type: manual
             name: Hyperparameter search runs to completion with exit code 0
-            command: uv
-            args:
-              - run
-              - python
-              - betting_ml/scripts/run_hyperparameter_search.py
-            timeout: 14400
+            description: >
+              USER-EXECUTED STEP — this script runs for up to 4 hours (3 Optuna
+              studies × 50 trials + NGBoost grid search). Do not run via Claude.
+              Execute from the project root:
+                uv run python betting_ml/scripts/run_hyperparameter_search.py
+              Verify the script exits 0 and that tuning_results.json is written
+              before marking this criterion complete.
           - type: artifact_exists
             name: Tuning results JSON written
             path: betting_ml/evaluation/tuning_results.json
@@ -321,7 +333,7 @@ spec:
         description: >
           Read tuning_results.json and write
           betting_ml/evaluation/hyperparameter_tuning.md, then update
-          project_context.md Phase 4 section with Card 4.11 findings.
+          project_context.md Phase 4 section with Card 4.12 findings.
 
           hyperparameter_tuning.md must contain these sections in order:
 
@@ -352,7 +364,7 @@ spec:
             Table: Target | Model Name | Eval Year | Path.
             Confirm all five models saved successfully.
 
-          Update project_context.md: add a "Card 4.11 Results" subsection in the
+          Update project_context.md: add a "Card 4.12 Results" subsection in the
           Phase 4 tracking section containing: xgb_total_runs_improved (bool),
           xgb_run_diff_improved (bool), xgb_win_outcome_improved (bool),
           best_ngboost_config for each regression target, and a one-sentence
@@ -382,7 +394,7 @@ spec:
                 missing = [kw for kw in required_keywords if kw not in content]
                 assert not missing, f'Missing sections/keywords in report: {missing}'
           - type: command_succeeds
-            name: project_context.md updated with Card 4.11 results
+            name: project_context.md updated with Card 4.12 results
             command: uv
             args:
               - run
@@ -391,6 +403,6 @@ spec:
               - |-
                 with open('project_context.md') as f:
                     content = f.read().lower()
-                required = ['card 4.11', 'optuna', 'tuned']
+                required = ['card 4.12', 'optuna', 'tuned']
                 missing = [kw for kw in required if kw not in content]
-                assert not missing, f'project_context.md missing Card 4.11 updates: {missing}'
+                assert not missing, f'project_context.md missing Card 4.12 updates: {missing}'

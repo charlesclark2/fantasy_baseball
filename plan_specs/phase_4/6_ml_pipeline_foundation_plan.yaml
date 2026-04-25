@@ -24,8 +24,12 @@ spec:
         chronological order across all folds; no eval-set game_year appears in
         any fold's training set
     - description: >
-        Imputation pipeline handles all six null groups from EDA notebook 02
-        with zero nulls remaining in the output feature matrix
+        Imputation pipeline handles all seven null groups (six from EDA notebook 02
+        plus consensus odds columns) with zero nulls remaining in the output feature
+        matrix; consensus odds columns (home_win_prob_consensus, total_line_consensus,
+        over_prob_consensus, ml_consensus_std, market_bookmaker_count) are filled with
+        training-set mean via the _FallbackImputer catch-all — no custom null group
+        or has_odds indicator is added
     - description: >
         Bayesian shrinkage with k=15 pulls a team at n=5 games played further
         toward league mean than one at n=25 games played; formula:
@@ -255,6 +259,36 @@ spec:
               weight = n / (n + k) where n = games_played_in_window and k is the
               shrinkage constant (default 15); imputed = weight * observed +
               (1 - weight) * league_mean_prior.
+          (7) Consensus odds columns (home_win_prob_consensus, total_line_consensus,
+              over_prob_consensus, ml_consensus_std, market_bookmaker_count) —
+              ~63% null rate (all 2016–2020 rows plus ~25% unmatched 2021–2025
+              events). These are handled by the existing _FallbackImputer catch-all,
+              which fills any remaining numeric nulls with their training-set mean.
+
+              EXPLICIT DECISION: fill with training-set mean (home_win_prob_consensus
+              ≈ 0.50, total_line_consensus ≈ 9.0). No custom null group, no
+              has_odds_features indicator column, and no exclusion from the primary
+              model. Rows without odds data receive an "average market" signal that
+              correctly conveys "no meaningful edge from market pricing."
+
+              Alternatives considered and rejected:
+              (a) Conditional enrichment with has_odds indicator + fill=0 —
+                  unnecessary complexity; the model already learns to down-weight
+                  these features via the mean imputation, and adding a binary
+                  indicator introduces correlated missingness structure that Bayesian
+                  shrinkage does not handle.
+              (b) Exclude consensus columns from the primary model entirely and
+                  use them only in Card 4.13's Bayesian mixing layer —
+                  conflicts with Card 3.11 finding that include_consensus_features
+                  = True improves the primary model beyond market odds alone. The
+                  Bayesian layer in Card 4.13 uses these as the market_implied_prob
+                  signal and operates only on has_odds rows; the primary model uses
+                  them as features across all rows with graceful degradation for
+                  non-odds rows via mean imputation.
+
+              No new code is required for this group; _FallbackImputer already
+              covers it. This decision is documented here so Card 4.8 does not
+              need to re-evaluate it.
         dependsOn:
           - implement-data-loader
           - cards-4-1-thru-4-5-merged
@@ -310,9 +344,58 @@ spec:
                 df = load_features()
                 X = df.drop(columns=['total_runs', 'run_differential', 'home_win'])
                 pipe = build_imputation_pipeline()
-                X_out = pd.DataFrame(pipe.fit_transform(X))
+                X_out = pd.DataFrame(pipe.fit_transform(X), columns=X.columns)
                 nulls = int(X_out.isnull().sum().sum())
                 assert nulls == 0, f'{nulls} nulls remain in output after imputation'
+          - type: command_succeeds
+            name: Consensus odds columns null-free after imputation (Group 7 decision)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                from betting_ml.utils.preprocessing import build_imputation_pipeline
+                import pandas as pd
+                df = load_features()
+                consensus_cols = [
+                    'home_win_prob_consensus', 'total_line_consensus',
+                    'over_prob_consensus', 'ml_consensus_std', 'market_bookmaker_count',
+                ]
+                present = [c for c in consensus_cols if c in df.columns]
+                if not present:
+                    print('SKIP: consensus columns not yet in feature view')
+                else:
+                    X = df.drop(columns=['total_runs', 'run_differential', 'home_win'])
+                    pipe = build_imputation_pipeline()
+                    X_out = pd.DataFrame(pipe.fit_transform(X), columns=X.columns)
+                    for col in present:
+                        nulls = int(X_out[col].isnull().sum())
+                        assert nulls == 0, (
+                            f'{col} has {nulls} nulls after imputation — '
+                            'check _FallbackImputer in build_imputation_pipeline()'
+                        )
+                    print(f'PASS: {len(present)} consensus cols null-free after imputation')
+          - type: command_succeeds
+            name: No has_odds_features indicator column added (decision — use mean imputation not indicator)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import load_features
+                from betting_ml.utils.preprocessing import build_imputation_pipeline
+                import pandas as pd
+                df = load_features()
+                X = df.drop(columns=['total_runs', 'run_differential', 'home_win'])
+                pipe = build_imputation_pipeline()
+                X_out = pd.DataFrame(pipe.fit_transform(X), columns=X.columns)
+                assert 'has_odds_features' not in X_out.columns, (
+                    'has_odds_features indicator column found — per Card 4.6 Group 7 decision, '
+                    'consensus nulls use mean imputation only; remove the indicator'
+                )
 
       - id: write-unit-tests
         kind: Task

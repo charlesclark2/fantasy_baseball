@@ -13,8 +13,17 @@ spec:
     and an implied Kelly fraction. Output one row per game per market (h2h, totals)
     to betting_ml/outputs/probability_outputs.parquet for use by the Phase 6
     betting application layer. Draws on the NGBoost probability outputs from
-    Cards 4.8 and 4.9; is initially useful for live 2026 games and will become
-    more powerful after historical odds backfill (Card 3) completes.
+    Cards 4.9 and 4.10.
+
+    Historical odds backfill (Cards 1–4) is complete as of 2026-04-23, covering
+    2021–2025 regular seasons at 72–78% game match rate (~8,297 matched games).
+    The consensus odds features (home_win_prob_consensus, over_prob_consensus) are
+    already vig-adjusted in mart_odds_consensus and are present in the loaded
+    feature DataFrame; the pipeline script should use these columns directly as
+    market_implied_prob rather than calling vig_adjust() on raw American odds price
+    columns (which are not in the feature matrix). α tuning in the CV loop will
+    collect thousands of has_odds rows from 2021–2025 folds, making it statistically
+    reliable rather than sample-limited.
   acceptanceCriteria:
     - description: >
         Bayesian posterior computed in log-odds space:
@@ -42,25 +51,64 @@ spec:
         Output written to betting_ml/outputs/probability_outputs.parquet;
         results summary and α tuning table documented in
         betting_ml/evaluation/probability_layer_results.md; project_context.md
-        Phase 4 section updated with Card 4.12 findings
+        Phase 4 section updated with Card 4.13 findings
 
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Gate
 metadata:
-  name: cards-4-7-4-8-4-9-complete
+  name: cards-4-9-through-4-12-complete
   namespace: default
 spec:
   gateType: review
   description: >
-    Cards 4.7, 4.8, and 4.9 must be complete before Card 4.12 begins.
-    Card 4.7 provides betting_ml/utils/model_io.py (save_model / load_model).
-    Card 4.8 provides betting_ml/models/total_runs_trainer.py with train_ngboost()
-    and p_over_line(), and betting_ml/utils/evaluation.py; cv_results.json must
-    exist. Card 4.9 provides betting_ml/scripts/train_run_diff_baselines.py
-    (confirms NGBoost run diff is viable) and cv_results_run_diff.json.
+    Cards 4.9, 4.10, 4.11, and 4.12 must be complete before Card 4.13 begins.
+    Card 4.8 provides betting_ml/utils/feature_selection.py (load_retained_features)
+    and betting_ml/utils/model_io.py (save_model / load_model).
+    Card 4.9 provides betting_ml/models/total_runs_trainer.py with train_ngboost()
+    and p_over_line(); Snowflake table baseball_data.betting_ml.cv_results_tot_runs
+    must contain rows for model='ngboost_normal'.
+    Card 4.10 provides betting_ml/scripts/train_run_diff_baselines.py (confirms
+    NGBoost run diff is viable); Snowflake table
+    baseball_data.betting_ml.cv_results_run_diff must contain rows for
+    model='ngboost_normal'.
+    Card 4.11 provides baseline classification results in
+    baseball_data.betting_ml.cv_results_win_outcome.
+    Card 4.12 provides hyperparameter-tuned XGBoost models via
+    betting_ml/evaluation/hyperparameter_tuning.md and serialized tuned models.
     The has_odds column must be present in the loaded feature DataFrame —
-    validated by checking load_features() returns a DataFrame with 'has_odds'.
+    validated by confirming that load_features() from betting_ml/utils/data_loader.py
+    returns a DataFrame with 'has_odds'.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: user-confirms-pipeline-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    USER CONFIRMATION GATE. This gate blocks generate-probability-results from
+    running until the user confirms that run_probability_layer.py has completed
+    successfully.
+
+    After manually running:
+      uv run python betting_ml/scripts/run_probability_layer.py
+
+    Confirm to the agent that ALL of the following are true before marking this
+    gate complete:
+      1. The script exited with code 0.
+      2. All three Snowflake tables are populated in schema baseball_data.betting_ml:
+           - probability_outputs (one row per 2026 has_odds game per market)
+           - alpha_tuning_results (one row per alpha candidate)
+           - probability_layer_summary (one summary row)
+      3. betting_ml/outputs/probability_outputs.parquet was written.
+
+    Send a message to the agent confirming these conditions. The agent will then
+    proceed to run generate-probability-results.
   reviewers:
     - user:charlesclark
 
@@ -72,11 +120,13 @@ metadata:
   namespace: default
 spec:
   description: >
-    Three-task DAG. implement-probability-layer-utils creates betting_ml/utils/
-    probability_layer.py with all core math functions. run-probability-layer-pipeline
-    implements and runs the end-to-end script: CV α tuning on has_odds games,
-    final predictions for 2026, and parquet output. generate-probability-results
-    produces the report and project_context.md update.
+    Three-task DAG with a user-confirmation gate. implement-probability-layer-utils
+    creates betting_ml/utils/probability_layer.py with all core math functions.
+    run-probability-layer-pipeline implements the end-to-end script (CV α tuning,
+    final predictions for 2026, parquet output, and Snowflake persistence); the
+    script is USER-EXECUTED — the agent waits at user-confirms-pipeline-complete
+    before proceeding. generate-probability-results queries Snowflake tables,
+    produces the report, and updates project_context.md.
   goalRef:
     name: bayesian-probability-layer
   graph:
@@ -137,10 +187,13 @@ spec:
             For each α: compute posterior for all games, measure sklearn log_loss
             (clip posteriors to [1e-7, 1-1e-7] before passing to log_loss).
             Returns (best_alpha, [{'alpha': float, 'log_loss': float}, ...]).
-            If fewer than 10 games are available for tuning, log a warning and
-            return (0.5, results) — default to equal weighting with small sample.
+            If fewer than 100 games are available for tuning, log a warning and
+            return (0.5, results) — default to equal weighting. With historical
+            odds backfill complete (2021–2025, ~8,297 matched games), the expected
+            tuning set is several thousand games; the small-sample path should be
+            rare and would only trigger if the backfill data is unavailable.
         dependsOn:
-          - cards-4-7-4-8-4-9-complete
+          - cards-4-9-through-4-12-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Probability layer utility module
@@ -187,20 +240,25 @@ spec:
         description: >
           Implement betting_ml/scripts/run_probability_layer.py. Runs the full
           pipeline: CV α tuning on has_odds games, final predictions on 2026
-          has_odds games, and output to parquet.
+          has_odds games, output to parquet, and result persistence to Snowflake.
 
           Setup:
-            Load features via load_features().
-            Verify 'has_odds' column is present; raise with descriptive message if not.
-            Identify odds price columns:
-              h2h_cols: columns whose names contain 'h2h' or 'moneyline' (case-insensitive)
-              totals_cols: columns whose names contain 'totals' or 'over_price' or 'under_price'
-              Print the detected odds column names for inspection.
-            Feature matrix for model training (same as Cards 4.8/4.9):
-              X = df.drop(columns=['total_runs', 'run_differential', 'home_win',
-                'total_line', 'has_odds'], errors='ignore')
-              Also drop any detected h2h_cols and totals_cols from X (odds data
-              not used as model features — would be leakage).
+            Load data via load_features() from betting_ml/utils/data_loader.py.
+            Load the canonical retained feature list via load_retained_features()
+            from betting_ml/utils/feature_selection.py.
+            Import train_ngboost and p_over_line from
+            betting_ml.models.total_runs_trainer — these functions are generic
+            NGBoost utilities used for both total_runs and run_differential targets.
+            Verify 'has_odds' column is present in df; raise with descriptive
+            message if not.
+            Verify 'home_win_prob_consensus' and 'over_prob_consensus' are present in df;
+            raise with descriptive message if not — these are the market_implied_prob
+            sources (already vig-adjusted from mart_odds_consensus; Card 4.7 complete).
+            Feature matrix for model training (same as Cards 4.9/4.10):
+              X = df[load_retained_features()]
+              (Consensus odds columns are IN the retained feature list per Card 4.8.
+              They are legitimate pre-game features and must NOT be dropped from X;
+              the model learns to combine market signals with non-market signals.)
             y_runs = df['total_runs']
             y_diff = df['run_differential']
 
@@ -214,22 +272,26 @@ spec:
                → run diff dist_params; compute:
                p_home_win = p_over_line('Normal', dist_params, total_line=0)
                (scalar total_line=0 for P(run_diff > 0))
-            4. Filter eval rows to has_odds=True. If zero such rows exist for this fold,
-               skip α tuning data collection for this fold (continue).
-            5. For h2h market on has_odds eval rows:
-               market_home_prob = vig_adjust(
-                 df.loc[has_odds_idx, 'h2h_home_price'],   # adapt column name as detected
-                 df.loc[has_odds_idx, 'h2h_away_price'],
-                 odds_format='american'
-               )[0]
-               Record model_prob=p_home_win[has_odds_mask], market_prob=market_home_prob,
-               outcome=df.loc[has_odds_idx, 'home_win'].astype(int).values.
-            6. For totals market on has_odds eval rows:
-               Record model_prob=p_over_total[has_odds_mask],
-               market_prob from vig_adjust on totals over/under prices,
-               outcome=(df.loc[has_odds_idx, 'total_runs'] >
-                 df.loc[has_odds_idx, 'total_line']).astype(int).values.
-            Accumulate all has_odds eval records across folds for α tuning.
+            4. Filter eval rows to has_odds=True AND home_win_prob_consensus is not null.
+               These are the rows with usable market data for α tuning. If zero such rows
+               exist for this fold, skip α tuning data collection for this fold (continue).
+               With historical backfill complete, folds 2021–2025 will typically have
+               hundreds of qualifying rows each.
+            5. For h2h market on qualifying eval rows:
+               market_home_prob = df.loc[qualifying_idx, 'home_win_prob_consensus'].values
+               (home_win_prob_consensus is already vig-adjusted in mart_odds_consensus;
+               do not call vig_adjust() on raw price columns — they are not in the
+               feature DataFrame.)
+               Record model_prob=p_home_win[qualifying_mask], market_prob=market_home_prob,
+               outcome=df.loc[qualifying_idx, 'home_win'].astype(int).values.
+            6. For totals market on eval rows where over_prob_consensus is not null:
+               Record model_prob=p_over_total[totals_mask],
+               market_prob=df.loc[totals_mask_idx, 'over_prob_consensus'].values,
+               outcome=(df.loc[totals_mask_idx, 'total_runs'] >
+                 df.loc[totals_mask_idx, 'total_line_consensus']).astype(int).values.
+               Use total_line_consensus (not total_line) since it is the consensus
+               market line already in the feature store.
+            Accumulate all qualifying eval records across folds for α tuning.
 
           After CV loop:
             Concatenate all accumulated has_odds records.
@@ -245,54 +307,63 @@ spec:
               X_2026_imp = pipeline.transform(X[df['game_year'] == 2026])
             Run train_ngboost on (X_train_final_imp, y_runs_pretrain, X_2026_imp) and
             on (X_train_final_imp, y_diff_pretrain, X_2026_imp) to get 2026 predictions.
-            If no 2026 rows with has_odds=True exist: write an empty parquet with
-            the correct schema, print a warning, and exit 0.
+            Rows qualify for output when has_odds=True AND home_win_prob_consensus is not null
+            (h2h market) or over_prob_consensus is not null (totals market).
+            If no qualifying 2026 rows exist: write an empty parquet with
+            the correct schema, skip Snowflake probability_outputs INSERT (leave table
+            empty but created), print a warning, and exit 0.
 
           Build output rows:
-            For each 2026 has_odds game, emit two rows:
-            Row 1 (h2h market):
+            For each qualifying 2026 game, emit one row per available market:
+            Row (h2h market) — emit when home_win_prob_consensus is not null:
               game_key: df index or unique game identifier column if present
               market: 'h2h'
               model_prob: p_home_win for this game
-              market_implied_prob: vig-adjusted home win prob from odds
+              market_implied_prob: df.loc[idx, 'home_win_prob_consensus']
+                (already vig-adjusted from mart_odds_consensus)
               alpha: best_alpha
               posterior_prob: compute_posterior(model_prob, market_implied_prob, best_alpha)
               edge: compute_edge(model_prob, market_implied_prob)
               implied_kelly_fraction: compute_kelly(edge, market_implied_prob)
-            Row 2 (totals market):
+            Row (totals market) — emit when over_prob_consensus is not null:
               game_key: same identifier
               market: 'totals'
               model_prob: p_over_total for this game
-              market_implied_prob: vig-adjusted over prob from totals odds
+              market_implied_prob: df.loc[idx, 'over_prob_consensus']
+                (already vig-adjusted from mart_odds_consensus)
               alpha: best_alpha
               posterior_prob, edge, implied_kelly_fraction: same pattern
 
           Create betting_ml/outputs/ directory if it does not exist.
           Write output rows as parquet: betting_ml/outputs/probability_outputs.parquet.
 
-          Write betting_ml/evaluation/probability_layer_results.json with structure:
-            {
-              "alpha_tuning": {
-                "n_tuning_games": int,
-                "alpha_scores": [{"alpha": float, "log_loss": float}, ...],
-                "best_alpha": float,
-                "small_sample_warning": bool
-              },
-              "output_summary": {
-                "n_games_2026_with_odds": int,
-                "n_output_rows": int,
-                "h2h_mean_edge": float | null,
-                "totals_mean_edge": float | null,
-                "h2h_positive_edge_pct": float | null,
-                "totals_positive_edge_pct": float | null
-              },
-              "edge_validation": {
-                "near_agreement_games": int,
-                "near_agreement_mean_abs_edge": float | null,
-                "high_divergence_games": int,
-                "high_divergence_mean_abs_edge": float | null
-              }
-            }
+          Write results to Snowflake after all steps complete. Use
+          get_snowflake_connection() from betting_ml/utils/data_loader.py (same
+          RSA key and connection parameters used for data loading). Target schema:
+          baseball_data.betting_ml. CREATE TABLE IF NOT EXISTS for each table;
+          TRUNCATE before INSERT to allow clean reruns.
+
+          Table baseball_data.betting_ml.probability_outputs:
+            game_key VARCHAR, market VARCHAR, model_prob FLOAT,
+            market_implied_prob FLOAT, alpha FLOAT, posterior_prob FLOAT,
+            edge FLOAT, implied_kelly_fraction FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per 2026 has_odds game per market from the output rows.
+
+          Table baseball_data.betting_ml.alpha_tuning_results:
+            alpha FLOAT, log_loss FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per alpha candidate from alpha_scores (11 rows for the
+          default grid [0.0, 0.1, ..., 1.0]).
+
+          Table baseball_data.betting_ml.probability_layer_summary:
+            n_tuning_games INTEGER, best_alpha FLOAT,
+            small_sample_warning BOOLEAN,
+            h2h_mean_edge FLOAT, totals_mean_edge FLOAT,
+            h2h_positive_edge_pct FLOAT, totals_positive_edge_pct FLOAT,
+            n_games_2026_with_odds INTEGER, n_output_rows INTEGER,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one summary row derived from the pipeline results.
 
           Print a summary table: market | n games | mean edge | % positive edge | mean Kelly.
           Script exits 0 on success.
@@ -302,66 +373,26 @@ spec:
           - type: artifact_exists
             name: Probability layer pipeline script
             path: betting_ml/scripts/run_probability_layer.py
-          - type: command_succeeds
+          - type: manual
             name: Pipeline script runs to completion with exit code 0
-            command: uv
-            args:
-              - run
-              - python
-              - betting_ml/scripts/run_probability_layer.py
-            timeout: 3600
-          - type: artifact_exists
-            name: Probability outputs parquet written
-            path: betting_ml/outputs/probability_outputs.parquet
-          - type: artifact_exists
-            name: Probability layer results JSON written
-            path: betting_ml/evaluation/probability_layer_results.json
-          - type: command_succeeds
-            name: probability_layer_results.json has all required keys and valid alpha
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                import json
-                with open('betting_ml/evaluation/probability_layer_results.json') as f:
-                    results = json.load(f)
-                assert 'alpha_tuning' in results, "Missing 'alpha_tuning'"
-                assert 'output_summary' in results, "Missing 'output_summary'"
-                assert 'edge_validation' in results, "Missing 'edge_validation'"
-                alpha = results['alpha_tuning']['best_alpha']
-                assert 0.0 <= alpha <= 1.0, f"best_alpha out of range: {alpha}"
-                scores = results['alpha_tuning']['alpha_scores']
-                assert len(scores) >= 2, f"Expected alpha_scores with ≥2 candidates, got {len(scores)}"
-          - type: command_succeeds
-            name: Output parquet has expected schema columns
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                import pandas as pd
-                df = pd.read_parquet('betting_ml/outputs/probability_outputs.parquet')
-                required_cols = {
-                    'market', 'model_prob', 'market_implied_prob',
-                    'alpha', 'posterior_prob', 'edge', 'implied_kelly_fraction'
-                }
-                missing = required_cols - set(df.columns)
-                assert not missing, f"Missing columns in output parquet: {missing}"
-                markets = set(df['market'].unique())
-                assert markets.issubset({'h2h', 'totals'}), (
-                    f"Unexpected market values: {markets - {'h2h', 'totals'}}"
-                )
-                print(f'Output parquet: {len(df)} rows, markets: {markets}')
+            description: >
+              USER-EXECUTED STEP — this script runs CV α tuning, final 2026
+              predictions, and Snowflake persistence (estimated ~30–60 minutes
+              depending on 2026 odds coverage). Do not run via Claude.
+              Execute from the project root:
+                uv run python betting_ml/scripts/run_probability_layer.py
+              Verify the script exits 0 and that all three Snowflake tables
+              (probability_outputs, alpha_tuning_results, probability_layer_summary)
+              are written and betting_ml/outputs/probability_outputs.parquet exists
+              before confirming user-confirms-pipeline-complete.
 
       - id: generate-probability-results
         kind: Task
         description: >
-          Read probability_layer_results.json and write
+          Query Snowflake tables (baseball_data.betting_ml.probability_outputs,
+          alpha_tuning_results, probability_layer_summary) and write
           betting_ml/evaluation/probability_layer_results.md, then update
-          project_context.md Phase 4 section with Card 4.12 findings.
+          project_context.md Phase 4 section with Card 4.13 findings.
 
           probability_layer_results.md must contain these sections in order:
 
@@ -376,10 +407,12 @@ spec:
           ## α Mixing Weight Tuning
             Table: α | Log-Loss | Δ vs. best.
             State the selected best_alpha, the validation game count, and whether
-            a small-sample warning was triggered (< 10 games). If small-sample
-            warning was triggered, state that α=0.5 was used as the default and
-            note that tuning will improve as historical odds backfill (Card 3)
-            completes.
+            a small-sample warning was triggered (< 100 games). If small-sample
+            warning was triggered, state that α=0.5 was used as the default.
+            Historical odds backfill (Cards 1–4) completed 2026-04-23 covering
+            2021–2025 at ~72–78% match rate; the expected tuning set is several
+            thousand games. A small-sample warning indicates a data availability
+            issue, not a design limitation.
 
           ## Output Summary
             State the number of 2026 has_odds games and the number of output rows.
@@ -395,19 +428,21 @@ spec:
             should be notably higher — confirms non-zero signal is detected.
 
           ## Known Limitations and Next Steps
-            Note that α tuning is based on a limited has_odds sample (currently
-            live 2026 games only). Historical odds backfill (Card 3) will
-            dramatically increase the tuning sample. Note that the Kelly fraction
-            is a simplified approximation (does not account for bankroll, simultaneous
-            bets, or market liquidity). Forward reference to Phase 6 betting
-            application layer which will consume probability_outputs.parquet.
+            α tuning uses historical has_odds games from 2021–2025 CV folds
+            (historical odds backfill complete as of 2026-04-23; ~8,297 matched games).
+            This provides a statistically reliable tuning sample. Remaining limitations:
+            the Kelly fraction is a simplified approximation (does not account for
+            bankroll, simultaneous bets, or market liquidity); α is tuned globally
+            across all seasons and may not capture drift in model vs. market accuracy
+            over time. Forward reference to Phase 6 betting application layer which
+            will consume probability_outputs.parquet.
 
-          Update project_context.md: add a "Card 4.12 Results" subsection in the
+          Update project_context.md: add a "Card 4.13 Results" subsection in the
           Phase 4 tracking section containing: best_alpha, n_tuning_games,
           small_sample_warning (bool), h2h_mean_edge, totals_mean_edge,
           and a one-sentence interpretation of the edge signal.
         dependsOn:
-          - run-probability-layer-pipeline
+          - user-confirms-pipeline-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Probability layer results report
@@ -426,12 +461,12 @@ spec:
                     'log-odds', 'posterior', 'bayesian', 'alpha', 'vig',
                     'market_implied_prob', 'model_prob', 'edge', 'kelly',
                     'h2h', 'totals', 'mixing weight', 'log loss',
-                    'small-sample', 'card 3', 'phase 6'
+                    'small-sample', 'phase 6', 'backfill'
                 ]
                 missing = [kw for kw in required_keywords if kw not in content]
                 assert not missing, f'Missing sections/keywords in report: {missing}'
           - type: command_succeeds
-            name: project_context.md updated with Card 4.12 results
+            name: project_context.md updated with Card 4.13 results
             command: uv
             args:
               - run
@@ -440,6 +475,66 @@ spec:
               - |-
                 with open('project_context.md') as f:
                     content = f.read().lower()
-                required = ['card 4.12', 'alpha', 'edge']
+                required = ['card 4.13', 'alpha', 'edge']
                 missing = [kw for kw in required if kw not in content]
-                assert not missing, f'project_context.md missing Card 4.12 updates: {missing}'
+                assert not missing, f'project_context.md missing Card 4.13 updates: {missing}'
+          - type: command_succeeds
+            name: Snowflake alpha_tuning_results has expected alpha candidates
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) FROM baseball_data.betting_ml.alpha_tuning_results"
+                )
+                count = cur.fetchone()[0]
+                conn.close()
+                assert count >= 2, (
+                    f'Expected at least 2 alpha candidate rows in alpha_tuning_results, got {count}'
+                )
+          - type: command_succeeds
+            name: Snowflake probability_layer_summary has required fields populated
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT best_alpha, n_tuning_games, small_sample_warning
+                    FROM baseball_data.betting_ml.probability_layer_summary
+                """)
+                row = cur.fetchone()
+                conn.close()
+                assert row is not None, 'probability_layer_summary is empty'
+                assert row[0] is not None, 'best_alpha is NULL in probability_layer_summary'
+                assert 0.0 <= row[0] <= 1.0, f'best_alpha out of range: {row[0]}'
+          - type: command_succeeds
+            name: Output parquet has expected schema columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                df = pd.read_parquet('betting_ml/outputs/probability_outputs.parquet')
+                required_cols = {
+                    'market', 'model_prob', 'market_implied_prob',
+                    'alpha', 'posterior_prob', 'edge', 'implied_kelly_fraction'
+                }
+                missing = required_cols - set(df.columns)
+                assert not missing, f"Missing columns in output parquet: {missing}"
+                markets = set(df['market'].unique()) if len(df) > 0 else set()
+                assert markets.issubset({'h2h', 'totals'}), (
+                    f"Unexpected market values: {markets - {'h2h', 'totals'}}"
+                )
+                print(f'Output parquet: {len(df)} rows, markets: {markets}')

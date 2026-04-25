@@ -9,7 +9,21 @@ spec:
     Consume EDA notebook 04 feature correlation findings; implement a programmatic
     feature selection module (utils/feature_selection.py) and model serialization
     convention (utils/model_io.py). The canonical feature list produced here is
-    the input contract for all downstream model cards (4.8–4.10).
+    the input contract for all downstream model cards (4.9–4.11).
+
+    Card 4.7 (mart_odds_consensus) is complete as of 2026-04-24. Five consensus
+    odds features are now present in feature_pregame_game_features and must be
+    treated as protected features: home_win_prob_consensus, total_line_consensus,
+    over_prob_consensus, ml_consensus_std, market_bookmaker_count. The sharp/soft
+    split columns (home_win_prob_sharp, home_win_prob_soft, sharp_soft_ml_delta)
+    are excluded from the candidate set per Card 3.11 (include_sharp_soft_features
+    = False). These consensus columns have ~63% null rate (all 2016–2020 rows plus
+    ~25% of 2021–2025 unmatched events). Null handling decision (documented in Card
+    4.6 Group 7, no re-evaluation needed here): fill with training-set mean via the
+    _FallbackImputer catch-all — no has_odds indicator column added, no exclusion
+    from the primary model. Imputed values (home_win_prob_consensus ~0.50,
+    total_line_consensus ~9.0) convey "no market edge" for non-odds rows and let the
+    model learn to down-weight these features when odds are absent.
   acceptanceCriteria:
     - description: >
         EDA notebook 04 (04_feature_correlations.py) has been run and findings
@@ -17,10 +31,16 @@ spec:
     - description: >
         utils/feature_selection.py drops features with |r| < 0.02 to all three
         targets and resolves multicollinear pairs (|r| > 0.85); post_2022_rules,
-        game_year, and home_win_rate_trailing_3yr are unconditionally retained
+        game_year, home_win_rate_trailing_3yr, home_win_prob_consensus,
+        total_line_consensus, over_prob_consensus, ml_consensus_std, and
+        market_bookmaker_count are unconditionally retained; home_win_prob_sharp,
+        home_win_prob_soft, and sharp_soft_ml_delta are unconditionally excluded
+        from the candidate set before any correlation or multicollinearity step
     - description: >
         Canonical feature list persisted to betting_ml/evaluation/feature_selection.md
-        with retained features and target correlations; dropped features with reason
+        with retained features and target correlations; dropped features with reason;
+        home_win_prob_consensus appears in the retained section and home_win_prob_sharp
+        does not appear in the retained section
     - description: >
         utils/model_io.py implements save_model / load_model using joblib;
         path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl
@@ -43,6 +63,28 @@ spec:
     run-eda-notebook-04 and implement-feature-selection may be started before
     this gate clears, but any task that calls load_features() requires Card 4.6
     infrastructure to be in place.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-7-mart-odds-consensus-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.7 (mart_odds_consensus dbt model) must be complete before feature
+    selection is run. Specifically: dbt/models/mart/mart_odds_consensus.sql must
+    exist and have been built; feature_pregame_game_features must contain
+    home_win_prob_consensus, total_line_consensus, over_prob_consensus,
+    ml_consensus_std, and market_bookmaker_count columns; the validation report
+    at betting_ml/evaluation/mart_odds_consensus_validation.md must show a Brier
+    score within ±0.002 of the 0.2395 Card 3.11 benchmark.
+
+    Status: Card 4.7 completed 2026-04-24. Brier = 0.23996 (PASS). This gate
+    is met.
   reviewers:
     - user:charlesclark
 
@@ -98,18 +140,36 @@ spec:
           dropped_with_reasons maps each dropped feature name to the reason string
           ("near_zero_correlation" or "multicollinearity:<retained_feature>").
           Logic:
+          (0) Exclude sharp/soft odds columns from the candidate set before any
+              correlation step: home_win_prob_sharp, home_win_prob_soft, and
+              sharp_soft_ml_delta must not appear in the retained list.
+              Rationale: Card 3.11 set include_sharp_soft_features = False. Without
+              explicit exclusion, home_win_prob_sharp (|r|=0.23 to home_win) beats
+              home_win_prob_consensus in multicollinearity resolution and displaces
+              the consensus signal we actually want. Define EXCLUDED_FEATURES as a
+              module-level frozenset and filter candidates before step (2).
           (1) Exclude all target column names from the candidate feature set.
           (2) Compute Pearson r between each feature and each target; drop features
               where |r| < corr_threshold for ALL three targets.
           (3) Compute feature-feature correlation matrix; for each pair where
               |r| > multicollinearity_threshold, drop the member with lower max |r|
               to any target.
-          (4) Unconditionally retain post_2022_rules, game_year, and
-              home_win_rate_trailing_3yr regardless of univariate correlation or
+          (4) Unconditionally retain post_2022_rules, game_year,
+              home_win_rate_trailing_3yr, home_win_prob_consensus,
+              total_line_consensus, over_prob_consensus, ml_consensus_std, and
+              market_bookmaker_count regardless of univariate correlation or
               multicollinearity status.
+              Rationale for consensus columns: Card 3.11 confirmed signal
+              (include_consensus_features = True; Brier = 0.2395); their ~63% null
+              rate suppresses computed correlation even though the signal is real.
+              Null handling: Card 4.6 Group 7 decision — training-set mean via
+              _FallbackImputer, no indicator column (see Card 4.6 for full
+              alternatives analysis). The model learns that missing odds = no market
+              signal via the ≈0.50 / ≈9.0 imputed values.
         dependsOn:
           - run-eda-notebook-04
           - card-4-6-complete
+          - card-4-7-mart-odds-consensus-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Feature selection module
@@ -147,13 +207,54 @@ spec:
                     'post_2022_rules': np.zeros(n),
                     'game_year': np.random.randint(2016, 2026, n),
                     'home_win_rate_trailing_3yr': np.full(n, 0.500),
+                    'home_win_prob_consensus': np.random.uniform(0.4, 0.6, n),
+                    'total_line_consensus': np.random.uniform(7.5, 11.5, n),
+                    'over_prob_consensus': np.random.uniform(0.4, 0.6, n),
+                    'ml_consensus_std': np.random.uniform(0, 0.05, n),
+                    'market_bookmaker_count': np.random.randint(1, 20, n),
                     'noise_a': np.random.randn(n) * 0.0001,
                 })
                 targets = ['total_runs', 'run_differential', 'home_win']
                 retained, dropped = select_features(df, targets)
-                protected = {'post_2022_rules', 'game_year', 'home_win_rate_trailing_3yr'}
+                protected = {
+                    'post_2022_rules', 'game_year', 'home_win_rate_trailing_3yr',
+                    'home_win_prob_consensus', 'total_line_consensus',
+                    'over_prob_consensus', 'ml_consensus_std', 'market_bookmaker_count',
+                }
                 missing = protected - set(retained)
                 assert not missing, f'Protected features missing from retained list: {missing}'
+          - type: command_succeeds
+            name: Sharp/soft columns excluded even when correlation is high
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd
+                import numpy as np
+                from betting_ml.utils.feature_selection import select_features
+                np.random.seed(42)
+                n = 200
+                # Give sharp columns artificially high correlation to verify they are still excluded
+                outcome = np.random.randint(0, 2, n).astype(float)
+                df = pd.DataFrame({
+                    'total_runs': np.random.randn(n),
+                    'run_differential': np.random.randn(n),
+                    'home_win': outcome,
+                    'home_win_prob_sharp': outcome + np.random.randn(n) * 0.1,
+                    'home_win_prob_soft': outcome + np.random.randn(n) * 0.15,
+                    'sharp_soft_ml_delta': np.random.randn(n) * 0.05,
+                    'home_win_prob_consensus': outcome + np.random.randn(n) * 0.2,
+                })
+                targets = ['total_runs', 'run_differential', 'home_win']
+                retained, dropped = select_features(df, targets)
+                excluded = {'home_win_prob_sharp', 'home_win_prob_soft', 'sharp_soft_ml_delta'}
+                present = excluded & set(retained)
+                assert not present, f'Excluded sharp/soft features found in retained list: {present}'
+                assert 'home_win_prob_consensus' in retained, (
+                    'home_win_prob_consensus should be retained even when sharp columns have higher r'
+                )
           - type: command_succeeds
             name: High-multicollinearity duplicate dropped; lower-corr member removed
             command: uv
@@ -257,8 +358,13 @@ spec:
           (2) Dropped (Near-Zero Correlation) — feature name and max |r| observed.
           (3) Dropped (Multicollinearity) — feature name and the retained feature
               it was redundant with.
-          This markdown file is the input contract for Cards 4.8–4.10: only
+          This markdown file is the input contract for Cards 4.9–4.11: only
           retained features may be passed to fit() calls in downstream model cards.
+
+          NOTE: After any change to PROTECTED_FEATURES or EXCLUDED_FEATURES in
+          feature_selection.py, this script must be re-run to regenerate
+          feature_selection.md. Cards 4.9–4.11 must also be re-run if the retained
+          feature set changes, because models were trained against the prior list.
         dependsOn:
           - implement-feature-selection
         acceptanceCriteria:
@@ -286,6 +392,37 @@ spec:
               - "-q"
               - "home_win_rate_trailing_3yr"
               - "betting_ml/evaluation/feature_selection.md"
+          - type: command_succeeds
+            name: home_win_prob_consensus retained and home_win_prob_sharp excluded
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/feature_selection.md') as f:
+                    content = f.read()
+                # Find retained section (before first '## 2.' or '## Dropped')
+                lines = content.split('\n')
+                retained_lines = []
+                in_retained = False
+                for line in lines:
+                    if '## 1. Retained' in line:
+                        in_retained = True
+                        continue
+                    if in_retained and line.startswith('## '):
+                        break
+                    if in_retained:
+                        retained_lines.append(line)
+                retained_text = '\n'.join(retained_lines)
+                assert 'home_win_prob_consensus' in retained_text, (
+                    'home_win_prob_consensus not found in Retained section — '
+                    'check PROTECTED_FEATURES in feature_selection.py'
+                )
+                assert 'home_win_prob_sharp' not in retained_text, (
+                    'home_win_prob_sharp found in Retained section — '
+                    'check EXCLUDED_FEATURES in feature_selection.py'
+                )
 
       - id: validate-integration
         kind: Task

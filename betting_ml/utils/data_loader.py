@@ -42,6 +42,14 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
     )
 
 
+def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
+    """Return an open Snowflake connection using the project RSA key.
+
+    Caller is responsible for closing the connection.
+    """
+    return _connect()
+
+
 def load_features(min_games_played: int = 15) -> pd.DataFrame:
     conn = _connect()
     try:

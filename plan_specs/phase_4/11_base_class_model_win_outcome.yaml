@@ -42,7 +42,7 @@ spec:
         Results documented in betting_ml/evaluation/win_outcome_results.md with
         per-season metrics table, calibration analysis, home bias analysis, and
         best-model rationale; project_context.md Phase 4 section updated with
-        Card 4.10 findings
+        Card 4.11 findings
 
 ---
 apiVersion: planspec.io/v1alpha1
@@ -53,14 +53,28 @@ metadata:
 spec:
   gateType: review
   description: >
-    Card 4.6 (ML Pipeline Foundation) must be complete before Card 4.10 begins.
-    Card 4.6 provides: load_features() (betting_ml/utils/data_loader.py),
-    all_season_splits() (betting_ml/utils/cv_splits.py), and
-    build_imputation_pipeline() (betting_ml/utils/preprocessing.py).
-    xgboost must be available in the project environment — it is installed in
-    Card 4.8; if Card 4.8 has not yet run, ensure pyproject.toml includes
-    xgboost and run `uv sync` before executing this plan.
-    Verified when betting_ml/scripts/validate_pipeline.py exits 0.
+    Card 4.6 (ML Pipeline Foundation) must be complete before model training
+    begins. Specifically: betting_ml/utils/data_loader.py, cv_splits.py, and
+    preprocessing.py must be implemented; betting_ml/scripts/validate_pipeline.py
+    must exit 0 with zero nulls across all 7 temporal CV folds and 2020 absent
+    from every fold.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-8-feature-selection-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.8 (Feature Selection and Model Serialization) must be complete
+    before model training begins. Specifically: betting_ml/utils/feature_selection.py
+    must expose load_retained_features(); betting_ml/utils/model_io.py must
+    expose save_model() and load_model(); betting_ml/evaluation/feature_selection.md
+    must exist as the canonical input contract for Cards 4.9–4.11.
   reviewers:
     - user:charlesclark
 
@@ -74,9 +88,9 @@ spec:
   description: >
     Three-task DAG. implement-win-outcome-trainer creates the classifier trainer
     module with calibration utilities. run-cv-evaluation-win-outcome executes all
-    CV folds, calibration comparison, and home bias ablation, writing
-    cv_results_win_outcome.json. generate-win-outcome-results produces the results
-    report and updates project_context.md.
+    CV folds, calibration comparison, and home bias ablation, writing results to
+    Snowflake. generate-win-outcome-results queries Snowflake, produces the results
+    report, and updates project_context.md.
   goalRef:
     name: win-outcome-classification-baselines
   graph:
@@ -104,7 +118,11 @@ spec:
             'isotonic'. Fit the calibrator on (X_eval, y_eval) — passed as the
             fourth positional argument y_eval. Note: using the eval fold as the
             calibration set is an approximation acceptable for CV comparison;
-            a production deployment would use a dedicated hold-out split.
+            a production deployment would use a dedicated hold-out split. The
+            production refit with a proper calibration hold-out is specified in
+            Card 5.1 (Model Selection and Packaging): train on 2016–2024, fit
+            calibrator on 2025 as the dedicated hold-out, and register the result
+            as the _prod artifact. Card 4.11 results are benchmarks only.
             Return dict with keys:
               y_pred_proba: np.ndarray of calibrated P(home win) on X_eval
               y_pred_proba_uncalibrated: np.ndarray of raw XGBoost P(home win)
@@ -153,11 +171,22 @@ spec:
           runs the home bias ablation for 2023–2025 folds.
 
           Setup:
-            Load features via load_features(). Target y = df['home_win'].astype(int).
+            Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Target y = df['home_win'].astype(int).
             Naive baseline: predict p_naive = y_train.mean() for all eval games.
-            Feature matrix X = df.drop(columns=['total_runs', 'run_differential',
-            'home_win', 'total_line', 'has_odds'], errors='ignore').
+            Feature matrix X = df[load_retained_features()] — use only the features
+            listed in betting_ml/evaluation/feature_selection.md; do not pass
+            additional columns to fit() calls.
             home_bias_col = 'home_win_rate_trailing_3yr'
+
+            Context: home_win_prob_consensus is now in the retained feature set (Card
+            4.7 complete; Card 4.8 protected it). The Card 3.11 consensus Brier
+            benchmark (0.2395) reflects the market's standalone predictive accuracy.
+            A win outcome classifier trained with consensus features should aim to
+            match or beat this benchmark; merely tying it is acceptable since the
+            model adds non-market signals (pitcher matchups, park, era flags) that
+            may improve calibration on games without odds coverage.
 
           Full CV loop — for each fold from all_season_splits(df, min_train_seasons=3):
             1. Apply build_imputation_pipeline().fit(X_train).transform(X_train/X_eval)
@@ -198,126 +227,136 @@ spec:
           Print a per-fold summary table showing fold label, eval row count, and
           for each model: log loss, Brier score, AUC-ROC, ECE.
 
-          Write betting_ml/evaluation/cv_results_win_outcome.json with structure:
-            {
-              "fold_results": [
-                {
-                  "fold": str,
-                  "model": str,
-                  "n_eval": int,
-                  "log_loss": float | null,
-                  "brier_score": float | null,
-                  "auc_roc": float | null,
-                  "ece": float | null,
-                  "calibration_curve": [
-                    {"bin_center": float, "mean_pred_prob": float,
-                     "actual_win_rate": float, "n_games": int},
-                    ...
-                  ] | null
-                },
-                ...
-              ],
-              "calibration_comparison": {
-                "fold_results_platt": [
-                  {"fold": str, "ece_calibrated": float, "ece_uncalibrated": float},
-                  ...
-                ],
-                "fold_results_isotonic": [{"fold": str, "ece": float}, ...],
-                "avg_ece_platt": float,
-                "avg_ece_isotonic": float,
-                "better_calibration_method": "platt" | "isotonic"
-              },
-              "home_bias_ablation": {
-                "folds_analyzed": ["2023", "2024", "2025"],
-                "results": [
-                  {
-                    "fold": str,
-                    "log_loss_with_hwrt": float,
-                    "log_loss_without_hwrt": float,
-                    "brier_with_hwrt": float,
-                    "brier_without_hwrt": float,
-                    "home_bias_direction": str
-                  },
-                  ...
-                ],
-                "hwrt_reduces_bias": bool
-              },
-              "summary": {
-                "best_log_loss_model": str,
-                "best_brier_model": str,
-                "best_auc_model": str,
-                "best_calibration_model": str,
-                "better_calibration_method": str,
-                "hwrt_reduces_bias": bool,
-                "home_bias_in_recent_seasons": str
-              }
-            }
+          Serialize models via save_model() from betting_ml/utils/model_io.py
+          after all folds complete. Save the final-fold model for each family:
+            save_model(lr_model,   target='home_win', model_name='logistic',         eval_year=final_fold_year)
+            save_model(xgb_platt,  target='home_win', model_name='xgboost_platt',    eval_year=final_fold_year)
+            save_model(xgb_iso,    target='home_win', model_name='xgboost_isotonic', eval_year=final_fold_year)
+          Files land at betting_ml/models/home_win/{model_name}_{eval_year}.pkl
+          per the Card 4.8 model_io.py path convention.
+
+          Write results to Snowflake after all folds complete. Use
+          get_snowflake_connection() from betting_ml/utils/data_loader.py (same
+          RSA key and connection parameters used for data loading). Target schema:
+          baseball_data.betting_ml. CREATE TABLE IF NOT EXISTS for each table;
+          TRUNCATE before INSERT to allow clean reruns.
+
+          Table baseball_data.betting_ml.cv_results_win_outcome:
+            fold VARCHAR, model VARCHAR, n_eval INTEGER,
+            log_loss FLOAT, brier_score FLOAT, auc_roc FLOAT, ece FLOAT,
+            calibration_curve VARIANT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per (fold, model). Serialize calibration_curve as a
+          JSON array string and cast to VARIANT via PARSE_JSON() on INSERT, or
+          use the Snowflake Python connector's json.dumps() binding.
+
+          Table baseball_data.betting_ml.cv_calibration_win_outcome:
+            fold VARCHAR, calibration_method VARCHAR,
+            ece FLOAT, ece_uncalibrated FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per (fold, calibration_method). For method='platt',
+          populate ece_uncalibrated from the raw XGBoost ECE; for method='isotonic'
+          leave ece_uncalibrated NULL.
+
+          Table baseball_data.betting_ml.cv_home_bias_win_outcome:
+            fold VARCHAR,
+            log_loss_with_hwrt FLOAT, log_loss_without_hwrt FLOAT,
+            brier_with_hwrt FLOAT, brier_without_hwrt FLOAT,
+            home_bias_direction VARCHAR,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per qualifying fold (2023, 2024, 2025).
+
+          Table baseball_data.betting_ml.cv_summary_win_outcome:
+            best_log_loss_model VARCHAR, best_brier_model VARCHAR,
+            best_auc_model VARCHAR, best_calibration_model VARCHAR,
+            better_calibration_method VARCHAR,
+            hwrt_reduces_bias BOOLEAN, home_bias_in_recent_seasons VARCHAR,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one summary row derived from aggregate CV results.
 
           Script exits 0 on success. Exits non-zero with a descriptive message
           if no trained model (excluding naive baseline) beats the naive baseline
           on log loss on the majority of folds.
         dependsOn:
           - implement-win-outcome-trainer
+          - card-4-8-feature-selection-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Win outcome CV evaluation script
             path: betting_ml/scripts/train_win_outcome_baselines.py
-          - type: command_succeeds
+          - type: manual
             name: CV evaluation script runs to completion with exit code 0
-            command: uv
-            args:
-              - run
-              - python
-              - betting_ml/scripts/train_win_outcome_baselines.py
-            timeout: 1800
-          - type: artifact_exists
-            name: Win outcome CV results JSON written
-            path: betting_ml/evaluation/cv_results_win_outcome.json
+            description: >
+              USER-EXECUTED STEP — this script trains Logistic Regression and
+              XGBoost (Platt + isotonic) across all CV folds and runs the home
+              bias ablation (estimated ~30 minutes). Do not run via Claude.
+              Execute from the project root:
+                uv run python betting_ml/scripts/train_win_outcome_baselines.py
+              Verify the script exits 0 and that all four Snowflake tables
+              (cv_results_win_outcome, cv_calibration_win_outcome,
+              cv_home_bias_win_outcome, cv_summary_win_outcome) are written
+              before marking this criterion complete.
           - type: command_succeeds
-            name: cv_results_win_outcome.json has expected top-level keys and all required models
+            name: Snowflake cv_results_win_outcome contains all required models
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
-                    results = json.load(f)
-                assert 'fold_results' in results, "Missing 'fold_results'"
-                assert 'calibration_comparison' in results, "Missing 'calibration_comparison'"
-                assert 'home_bias_ablation' in results, "Missing 'home_bias_ablation'"
-                assert 'summary' in results, "Missing 'summary'"
-                models = {r['model'] for r in results['fold_results']}
-                required_models = {'logistic', 'xgb_platt', 'xgb_isotonic', 'naive_baseline'}
-                missing = required_models - models
-                assert not missing, f'Missing required models in results: {missing}'
-                cal = results['calibration_comparison']
-                assert 'better_calibration_method' in cal, "Missing better_calibration_method"
-                assert 'avg_ece_platt' in cal, "Missing avg_ece_platt"
-                assert 'avg_ece_isotonic' in cal, "Missing avg_ece_isotonic"
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT DISTINCT model FROM baseball_data.betting_ml.cv_results_win_outcome"
+                )
+                models = {row[0] for row in cur.fetchall()}
+                conn.close()
+                required = {'logistic', 'xgb_platt', 'xgb_isotonic', 'naive_baseline'}
+                missing = required - models
+                assert not missing, f'Missing required models in cv_results_win_outcome: {missing}'
           - type: command_succeeds
-            name: Home bias ablation contains 2023 fold with required fields
+            name: Calibration comparison table contains both platt and isotonic entries
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
-                    results = json.load(f)
-                abl = results['home_bias_ablation']
-                folds = {r['fold'] for r in abl['results']}
-                assert '2023' in folds, f"Home bias ablation missing 2023 fold; got: {folds}"
-                assert 'hwrt_reduces_bias' in abl, "Missing hwrt_reduces_bias flag"
-                for fold_result in abl['results']:
-                    for key in ('log_loss_with_hwrt', 'log_loss_without_hwrt',
-                                'brier_with_hwrt', 'brier_without_hwrt',
-                                'home_bias_direction'):
-                        assert key in fold_result, (
-                            f"Missing '{key}' in fold {fold_result.get('fold')}"
-                        )
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT DISTINCT calibration_method
+                    FROM baseball_data.betting_ml.cv_calibration_win_outcome
+                """)
+                methods = {row[0] for row in cur.fetchall()}
+                conn.close()
+                assert 'platt' in methods, f'cv_calibration_win_outcome missing platt; got: {methods}'
+                assert 'isotonic' in methods, f'cv_calibration_win_outcome missing isotonic; got: {methods}'
+          - type: command_succeeds
+            name: Home bias ablation table contains 2023 fold with required fields
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT log_loss_with_hwrt, log_loss_without_hwrt,
+                           brier_with_hwrt, brier_without_hwrt, home_bias_direction
+                    FROM baseball_data.betting_ml.cv_home_bias_win_outcome
+                    WHERE fold = '2023'
+                """)
+                row = cur.fetchone()
+                conn.close()
+                assert row is not None, 'cv_home_bias_win_outcome missing fold 2023'
+                assert all(v is not None for v in row), (
+                    f'NULL values in 2023 home bias row: {row}'
+                )
           - type: command_succeeds
             name: Logistic regression has non-null log_loss in at least one fold
             command: uv
@@ -326,23 +365,25 @@ spec:
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_win_outcome.json') as f:
-                    results = json.load(f)
-                lr_folds = [
-                    r for r in results['fold_results']
-                    if r['model'] == 'logistic' and r.get('log_loss') is not None
-                ]
-                assert len(lr_folds) > 0, (
-                    'No Logistic Regression fold has a non-null log_loss'
-                )
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT COUNT(*) FROM baseball_data.betting_ml.cv_results_win_outcome
+                    WHERE model = 'logistic' AND log_loss IS NOT NULL
+                """)
+                count = cur.fetchone()[0]
+                conn.close()
+                assert count > 0, 'No Logistic Regression fold has a non-null log_loss'
 
       - id: generate-win-outcome-results
         kind: Task
         description: >
-          Read cv_results_win_outcome.json and write
+          Query Snowflake tables (baseball_data.betting_ml.cv_results_win_outcome,
+          cv_calibration_win_outcome, cv_home_bias_win_outcome,
+          cv_summary_win_outcome) and write
           betting_ml/evaluation/win_outcome_results.md, then update
-          project_context.md Phase 4 section with Card 4.10 findings.
+          project_context.md Phase 4 section with Card 4.11 Results.
 
           win_outcome_results.md must contain these sections in order:
 
@@ -380,12 +421,12 @@ spec:
             rationale covering: calibration quality as the primary criterion,
             log loss, Brier score, and whether the marginal ECE improvement from
             isotonic vs. Platt calibration justifies its added complexity.
-            Forward reference: in Card 4.11 stacking, this classifier's win
-            probability output will be combined with the regression-derived win
-            probability from NGBoost Normal (Card 4.9); the better-calibrated
-            model should anchor the ensemble.
+            Forward reference: in Card 4.13 probability output layer, this
+            classifier's win probability output will be compared against the
+            regression-derived win probability from NGBoost Normal (Card 4.10);
+            the better-calibrated model should anchor the downstream EV calculation.
 
-          Update project_context.md: add a "Card 4.10 Results" subsection in the
+          Update project_context.md: add a "Card 4.11 Results" subsection in the
           Phase 4 tracking section containing: best model name, best model mean
           log loss, best model mean Brier score, better_calibration_method,
           hwrt_reduces_bias (bool), and home_bias_in_recent_seasons description.
@@ -414,7 +455,7 @@ spec:
                 missing = [kw for kw in required_keywords if kw not in content]
                 assert not missing, f'Missing sections/keywords in report: {missing}'
           - type: command_succeeds
-            name: project_context.md updated with Card 4.10 results
+            name: project_context.md updated with Card 4.11 results
             command: uv
             args:
               - run
@@ -423,6 +464,6 @@ spec:
               - |-
                 with open('project_context.md') as f:
                     content = f.read().lower()
-                required = ['card 4.10', 'log loss', 'brier']
+                required = ['card 4.11', 'log loss', 'brier']
                 missing = [kw for kw in required if kw not in content]
-                assert not missing, f'project_context.md missing Card 4.10 updates: {missing}'
+                assert not missing, f'project_context.md missing Card 4.11 updates: {missing}'

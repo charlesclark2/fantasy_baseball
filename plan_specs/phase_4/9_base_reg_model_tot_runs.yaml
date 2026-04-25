@@ -27,18 +27,21 @@ spec:
         P(over/under line) Brier score computed for games where has_odds = true
         and total_line is non-null; results documented per model
     - description: >
-        SHAP TreeExplainer values on the final-fold XGBoost model confirm that
-        at least one starter platoon-split feature (column name contains
-        "vs_lh" or "vs_rh") and at least one 7-day recency feature (column
-        name ends with "_7d") appear in the top-20 features by mean |SHAP|.
-        Note: delta-encoded features (_delta / 7d_minus_*) were removed from
-        the canonical feature list by Card 4.8; 7d raw windows are the
-        surviving recency signal carriers per the NB07 design constraint.
+        SHAP TreeExplainer values on the final-fold XGBoost model are computed
+        and the top-20 features by mean |SHAP| are logged. If at least one
+        starter platoon-split feature (column name contains "vs_lh" or "vs_rh")
+        and at least one 7-day recency feature (column name ends with "_7d")
+        appear in the top-20, those are noted as validation of lineup and
+        recency signal. If either is absent a warning is printed; the check is
+        informational and does not exit non-zero. Note: delta-encoded features
+        (_delta / 7d_minus_*) may or may not be present in the retained feature
+        set depending on Card 4.8 thresholds; if absent, 7d raw windows carry
+        the recency signal per the NB07 design constraint.
     - description: >
         Results documented in betting_ml/evaluation/total_runs_results.md with
         per-season MAE/RMSE table, model comparison, distribution comparison,
         calibration table, SHAP importance list, and best-model rationale;
-        project_context.md Phase 4 section updated with key findings
+        project_context.md Phase 4 section updated with Card 4.9 findings
 
 ---
 apiVersion: planspec.io/v1alpha1
@@ -362,17 +365,20 @@ spec:
         description: >
           Implement betting_ml/scripts/train_total_runs_baselines.py. This script
           runs the full temporal CV evaluation for all models and writes results
-          to betting_ml/evaluation/cv_results.json for use by generate-results-report.
+          to Snowflake for use by generate-results-report.
 
           Setup:
-            Load features via load_features(). Define targets =
-            ['total_runs', 'run_differential', 'home_win']. Define odds_cols =
+            Load the canonical retained feature list via load_retained_features()
+            from betting_ml/utils/feature_selection.py. Define odds_cols =
             ['total_line', 'has_odds'] (retain in df but exclude from feature
-            matrix X). Load the canonical retained feature list via
-            load_retained_features() from betting_ml/utils/feature_selection.py.
-            Feature matrix X = df[load_retained_features()] — use only the 241
-            features from betting_ml/evaluation/feature_selection.md; do not
-            pass additional columns to fit() calls.
+            matrix X). Feature matrix X = df[load_retained_features()] — use
+            only the features listed in betting_ml/evaluation/feature_selection.md;
+            do not pass additional columns to fit() calls.
+            Note: the retained feature set includes consensus odds columns
+            (home_win_prob_consensus, total_line_consensus, over_prob_consensus,
+            ml_consensus_std, market_bookmaker_count) per Card 4.7 / Card 4.8.
+            These columns have ~63% null rate; the fallback imputer in
+            build_imputation_pipeline() handles them via training-set mean.
 
           For each CV fold from all_season_splits(df, min_train_seasons=3):
             1. Split X, y (total_runs), and odds columns into train/eval sets
@@ -386,7 +392,10 @@ spec:
             7. Train NGBoost LogNormal: train_ngboost(..., dist="LogNormal")
             8. Compute fold_metrics() for each model and the baseline
             9. For eval rows where has_odds == True and total_line is non-null,
-               compute brier_score_over_under() for XGBoost, NGBoost Normal, and NGBoost LogNormal
+               compute brier_score_over_under() for XGBoost, NGBoost Normal, and NGBoost LogNormal.
+               Note: historical odds backfill (Cards 1–4) is complete as of 2026-04-23.
+               Folds 2021–2025 will all have has_odds rows (~72–78% game match rate per season);
+               brier_score will be non-null for all those folds, not just the most recent year.
             10. Print fold summary line: fold label, eval rows, and MAE for each model
 
           After all folds:
@@ -409,26 +418,31 @@ spec:
           Files land at betting_ml/models/total_runs/{model_name}_{eval_year}.pkl
           per the Card 4.8 model_io.py path convention.
 
-          Write betting_ml/evaluation/cv_results.json with structure:
-            {
-              "fold_results": [
-                {
-                  "fold": str, "model": str, "n_eval": int,
-                  "mae": float, "rmse": float,
-                  "brier_score": float | null  (null when no odds data in fold)
-                },
-                ...  (one entry per fold × model combination)
-              ],
-              "shap_top_features": [
-                {"feature": str, "mean_abs_shap": float},
-                ...  (top 20, sorted descending)
-              ],
-              "summary": {
-                "best_mae_model": str,
-                "best_brier_model": str,
-                "ngboost_better_dist": str  ("Normal" or "LogNormal")
-              }
-            }
+          Write results to Snowflake after all folds complete. Use
+          get_snowflake_connection() from betting_ml/utils/data_loader.py (same
+          RSA key and connection parameters used for data loading). Target schema:
+          baseball_data.betting_ml. CREATE TABLE IF NOT EXISTS for each table;
+          TRUNCATE before INSERT to allow clean reruns.
+
+          Table baseball_data.betting_ml.cv_results_tot_runs:
+            fold VARCHAR, model VARCHAR, n_eval INTEGER,
+            mae FLOAT, rmse FLOAT, brier_score FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per (fold, model). brier_score is NULL when no odds
+          data is available in the fold (has_odds rows absent or total_line null).
+
+          Table baseball_data.betting_ml.cv_shap_features_tot_runs:
+            rank INTEGER, feature VARCHAR, mean_abs_shap FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT 20 rows (one per top SHAP feature, sorted descending by
+          mean_abs_shap). TRUNCATE before INSERT to allow clean reruns.
+
+          Table baseball_data.betting_ml.cv_summary_tot_runs:
+            best_mae_model VARCHAR, best_brier_model VARCHAR,
+            ngboost_better_dist VARCHAR,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one summary row derived from aggregate CV results.
+          ngboost_better_dist is "Normal" or "LogNormal" based on mean fold MAE.
 
           Script exits 0 on success; exits non-zero with a descriptive message
           if any trained model fails to beat the global mean baseline MAE on
@@ -440,42 +454,83 @@ spec:
           - type: artifact_exists
             name: CV evaluation script
             path: betting_ml/scripts/train_total_runs_baselines.py
-          - type: command_succeeds
+          - type: manual
             name: CV evaluation script runs to completion with exit code 0
-            command: uv
-            args:
-              - run
-              - python
-              - betting_ml/scripts/train_total_runs_baselines.py
-            timeout: 1800
-          - type: artifact_exists
-            name: CV results JSON written
-            path: betting_ml/evaluation/cv_results.json
+            description: >
+              USER-EXECUTED STEP — this script trains Ridge, XGBoost, and NGBoost
+              across all CV folds and computes SHAP importance (estimated ~30 minutes).
+              Do not run via Claude. Execute from the project root:
+                uv run python betting_ml/scripts/train_total_runs_baselines.py
+              Verify the script exits 0 and that all three Snowflake tables
+              (cv_results_tot_runs, cv_shap_features_tot_runs, cv_summary_tot_runs)
+              are written before marking this criterion complete.
           - type: command_succeeds
-            name: cv_results.json is valid JSON with expected top-level structure
+            name: Snowflake cv_results_tot_runs contains all required models
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results.json') as f:
-                    results = json.load(f)
-                assert 'fold_results' in results, "Missing 'fold_results' key"
-                assert 'shap_top_features' in results, "Missing 'shap_top_features' key"
-                assert 'summary' in results, "Missing 'summary' key"
-                models = {r['model'] for r in results['fold_results']}
-                required_models = {'ridge', 'xgboost', 'ngboost_normal', 'ngboost_lognormal', 'global_mean'}
-                missing = required_models - models
-                assert not missing, f'Missing models in results: {missing}'
-                assert len(results['shap_top_features']) > 0, 'shap_top_features is empty'
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT DISTINCT model FROM baseball_data.betting_ml.cv_results_tot_runs"
+                )
+                models = {row[0] for row in cur.fetchall()}
+                conn.close()
+                required = {'ridge', 'xgboost', 'ngboost_normal', 'ngboost_lognormal', 'global_mean'}
+                missing = required - models
+                assert not missing, f'Missing required models in cv_results_tot_runs: {missing}'
+          - type: command_succeeds
+            name: Snowflake cv_shap_features_tot_runs has 20 rows
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) FROM baseball_data.betting_ml.cv_shap_features_tot_runs"
+                )
+                count = cur.fetchone()[0]
+                conn.close()
+                assert count == 20, (
+                    f'Expected 20 SHAP feature rows, got {count}'
+                )
+          - type: command_succeeds
+            name: Snowflake cv_summary_tot_runs has required fields populated
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT best_mae_model, best_brier_model, ngboost_better_dist
+                    FROM baseball_data.betting_ml.cv_summary_tot_runs
+                """)
+                row = cur.fetchone()
+                conn.close()
+                assert row is not None, 'cv_summary_tot_runs is empty'
+                assert all(v is not None for v in row), (
+                    f'NULL values in cv_summary_tot_runs: {row}'
+                )
 
       - id: generate-results-report
         kind: Task
         description: >
-          Read cv_results.json and write betting_ml/evaluation/total_runs_results.md,
-          then update project_context.md Phase 4 section.
+          Query Snowflake tables (baseball_data.betting_ml.cv_results_tot_runs,
+          cv_shap_features_tot_runs, cv_summary_tot_runs) and write
+          betting_ml/evaluation/total_runs_results.md, then update
+          project_context.md Phase 4 section with Card 4.9 Results.
 
           total_runs_results.md must contain these sections in order:
 

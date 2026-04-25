@@ -15,5 +15,8 @@ venv/
 # Marimo session state (large JSON files with hash strings that trigger GitHub secret scanning)
 exploratory_data_analysis/__marimo__/
 
+# Trained model artifacts (large binaries — store via Git LFS or object storage)
+betting_ml/models/**/*.pkl
+
 # OS
 .DS_Store

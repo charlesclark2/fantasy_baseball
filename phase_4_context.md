@@ -69,10 +69,10 @@ All Phase 4 ML inputs come from `baseball_data.betting_features.feature_pregame_
 | 4.4 | Starter expected depth (avg IP last 3 starts, season avg IP) | ✓ Complete (2026-04-23) |
 | 4.5 | Game context and era flags (day/night, series position, time-varying home win rate, `post_2022_rules`) | ✓ Complete (2026-04-23) |
 | 4.6 | ML pipeline foundation (data loader, temporal CV splits, preprocessing/shrinkage) | ✓ Complete |
-| 4.8 | Feature selection and model serialization convention | Queued — plan spec drafted |
-| 4.9 | Baseline regression: total runs (Ridge, XGBoost, NGBoost) | Queued — plan spec drafted |
-| 4.10 | Baseline regression: run differential + derived win probability | Queued — plan spec drafted |
-| 4.11 | Baseline classification: win outcome (Logistic, XGBoost calibrated) | Queued — plan spec drafted |
+| 4.8 | Feature selection and model serialization convention | ✓ Complete |
+| 4.9 | Baseline regression: total runs (Ridge, XGBoost, NGBoost) | ✓ Complete |
+| 4.10 | Baseline regression: run differential + derived win probability | ✓ Complete |
+| 4.11 | Baseline classification: win outcome (Logistic, XGBoost calibrated) | ✓ Complete |
 | 4.12 | Hyperparameter optimization (Optuna, 50 trials per model) | Queued — plan spec drafted |
 | 4.13 | Probability output layer + Bayesian market update | Queued — plan spec drafted |
 | 4.B1 | [Backlog] Weather feature integration | Blocked — no data source |
@@ -222,15 +222,15 @@ where α is tuned via CV (start at 0.5). Edge signal: `edge = model_prob − mar
 | `betting_ml/utils/cv_splits.py` | Temporal leave-one-season-out CV splits; no shuffled k-fold |
 | `betting_ml/utils/preprocessing.py` | Imputation + Bayesian shrinkage pipeline; handles all 6 null groups from NB02 |
 | `betting_ml/utils/feature_selection.py` | **Not yet built (Card 4.8)** — correlation-based drop + multicollinearity resolution |
-| `betting_ml/utils/model_io.py` | **Not yet built (Card 4.8)** — joblib save/load with standard path convention |
+| `betting_ml/utils/model_io.py` | Card 4.8 — joblib save/load with standard path convention |
 | `betting_ml/scripts/analyze_pitching_decomp.py` | Card 3.8 — starter vs. bullpen xwOBA decomposition analysis |
 | `betting_ml/scripts/analyze_home_away_pitch_asymmetry.py` | Card 3.9 — home/away pitching asymmetry root-cause analysis |
 | `betting_ml/evaluation/pitching_decomp_results.json` | Card 3.8 results — cross-correlation, partial correlations, OLS R², design recommendation |
 | `betting_ml/evaluation/home_away_pitch_asymmetry_results.json` | Card 3.9 results — partial correlations, quartile analysis, era-split, design recommendation |
-| `betting_ml/evaluation/feature_selection.md` | **Not yet written (Card 4.8)** — canonical retained/dropped feature list |
-| `betting_ml/evaluation/total_runs_results.md` | **Not yet written (Card 4.9)** — per-model MAE/RMSE/Brier per held-out season |
-| `betting_ml/evaluation/run_differential_results.md` | **Not yet written (Card 4.10)** — per-model results + win probability derivation |
-| `betting_ml/evaluation/win_outcome_results.md` | **Not yet written (Card 4.11)** — per-model Brier/log loss/calibration per held-out season |
+| `betting_ml/evaluation/feature_selection.md` | Card 4.8 — canonical retained/dropped feature list (240 retained, 151 dropped) |
+| `betting_ml/evaluation/total_runs_results.md` | Card 4.9 results — per-model MAE/RMSE/Brier per held-out season |
+| `betting_ml/evaluation/run_differential_results.md` | Card 4.10 results — per-model results + win probability derivation |
+| `betting_ml/evaluation/win_outcome_results.md` | Card 4.11 results — per-model Brier/log loss/calibration per held-out season |
 | `betting_ml/evaluation/hyperparameter_tuning.md` | **Not yet written (Card 4.12)** — Optuna trials, best params, CV scores per model |
 | `betting_ml/models/` | Serialized model files (Card 4.8+ path convention: `{target}/{model_name}_{eval_year}.pkl`) |
 | `betting_ml/tests/test_cv_splits.py` | Unit tests for CV split logic |

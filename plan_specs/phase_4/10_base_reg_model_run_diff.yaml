@@ -38,25 +38,39 @@ spec:
         Results documented in betting_ml/evaluation/run_differential_results.md
         with per-season MAE/RMSE table, win probability Brier score, era ablation
         table, and best-model rationale; project_context.md Phase 4 section
-        updated with Card 4.9 findings
+        updated with Card 4.10 findings
 
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Gate
 metadata:
-  name: card-4-8-total-runs-baselines-complete
+  name: card-4-6-pipeline-foundation-complete
   namespace: default
 spec:
   gateType: review
   description: >
-    Card 4.8 (Total Runs Regression Baselines) must be complete before Card 4.9
-    begins. Card 4.8 creates shared infrastructure reused by Card 4.9:
-    betting_ml/models/total_runs_trainer.py (train_ridge, train_xgboost,
-    train_ngboost, p_over_line) and betting_ml/utils/evaluation.py
-    (fold_metrics, brier_score_over_under, calibration_table). The pyproject.toml
-    dependencies for xgboost, ngboost, shap, and scipy must also be installed.
-    Verified when betting_ml/evaluation/cv_results.json exists from a successful
-    run of train_total_runs_baselines.py.
+    Card 4.6 (ML Pipeline Foundation) must be complete before model training
+    begins. Specifically: betting_ml/utils/data_loader.py, cv_splits.py, and
+    preprocessing.py must be implemented; betting_ml/scripts/validate_pipeline.py
+    must exit 0 with zero nulls across all 7 temporal CV folds and 2020 absent
+    from every fold.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-8-feature-selection-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.8 (Feature Selection and Model Serialization) must be complete
+    before model training begins. Specifically: betting_ml/utils/feature_selection.py
+    must expose load_retained_features(); betting_ml/utils/model_io.py must
+    expose save_model() and load_model(); betting_ml/evaluation/feature_selection.md
+    must exist as the canonical input contract for Cards 4.9–4.11.
   reviewers:
     - user:charlesclark
 
@@ -85,12 +99,20 @@ spec:
           the NGBoost predictive distribution, and runs the era feature ablation.
 
           Setup:
-            Load features via load_features(). Target y = df['run_differential'].
+            Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Target y = df['run_differential'].
             Keep home_win column alongside (needed for Brier score) but exclude
             it from the feature matrix. Define era_cols = ['post_2022_rules',
             'game_year', 'home_win_rate_trailing_3yr']. Feature matrix X =
-            df.drop(columns=['total_runs', 'run_differential', 'home_win',
-            'total_line', 'has_odds'], errors='ignore').
+            df[load_retained_features()] — use only the features listed in
+            betting_ml/evaluation/feature_selection.md; do not pass additional
+            columns to fit() calls.
+            Note: the retained feature set includes consensus odds columns
+            (home_win_prob_consensus, total_line_consensus, over_prob_consensus,
+            ml_consensus_std, market_bookmaker_count) per Card 4.7 / Card 4.8.
+            These columns have ~63% null rate; the fallback imputer in
+            build_imputation_pipeline() handles them via training-set mean.
 
           Full CV loop — for each fold from all_season_splits(df, min_train_seasons=3):
             1. Apply build_imputation_pipeline().fit(X_train).transform(X_train/X_eval)
@@ -132,81 +154,83 @@ spec:
           Print a per-fold summary table during execution showing fold label,
           eval row count, MAE per model, and win probability Brier for NGBoost.
 
-          Write betting_ml/evaluation/cv_results_run_diff.json with structure:
-            {
-              "fold_results": [
-                {
-                  "fold": str,
-                  "model": str,
-                  "n_eval": int,
-                  "mae": float | null,
-                  "rmse": float | null,
-                  "win_prob_brier": float | null
-                },
-                ...
-              ],
-              "era_ablation": {
-                "fold_results_without_era": [
-                  {"fold": str, "mae": float, "rmse": float},
-                  ...
-                ],
-                "fold_2023_mae_with_era": float,
-                "fold_2023_mae_without_era": float,
-                "fold_2023_era_delta_mae": float,
-                "all_folds_avg_era_delta_mae": float,
-                "fold_2023_mae_without_hwrt": float,
-                "home_win_rate_delta_mae_2023": float
-              },
-              "summary": {
-                "best_mae_model": str,
-                "best_win_prob_brier_model": str,
-                "era_features_help": bool,
-                "home_win_rate_trailing_helps": bool,
-                "lognormal_viable": bool
-              }
-            }
+          Serialize models via save_model() from betting_ml/utils/model_io.py
+          after all folds complete. Save the final-fold model for each family:
+            save_model(ridge_model,   target='run_differential', model_name='ridge',             eval_year=final_fold_year)
+            save_model(xgb_model,     target='run_differential', model_name='xgboost',           eval_year=final_fold_year)
+            save_model(ngb_n_model,   target='run_differential', model_name='ngboost_normal',    eval_year=final_fold_year)
+            save_model(ngb_ln_model,  target='run_differential', model_name='ngboost_lognormal', eval_year=final_fold_year)
+          Only save ngboost_lognormal if lognormal_viable is True; skip otherwise.
+          Files land at betting_ml/models/run_differential/{model_name}_{eval_year}.pkl
+          per the Card 4.8 model_io.py path convention.
+
+          Write results to Snowflake after all folds complete. Use
+          get_snowflake_connection() from betting_ml/utils/data_loader.py (same
+          RSA key and connection parameters used for data loading). Target schema:
+          baseball_data.betting_ml. CREATE TABLE IF NOT EXISTS for each table;
+          TRUNCATE before INSERT to allow clean reruns.
+
+          Table baseball_data.betting_ml.cv_results_run_diff:
+            fold VARCHAR, model VARCHAR, n_eval INTEGER,
+            mae FLOAT, rmse FLOAT, win_prob_brier FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per (fold, model) from the full CV loop results.
+
+          Table baseball_data.betting_ml.cv_era_ablation_run_diff:
+            fold VARCHAR, mae_with_era FLOAT, mae_without_era FLOAT,
+            era_delta_mae FLOAT, mae_without_hwrt FLOAT,
+            home_win_rate_delta_mae FLOAT,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one row per fold. For the 2023 fold, populate mae_without_hwrt
+          and home_win_rate_delta_mae from the home win rate sub-ablation;
+          leave those columns NULL for all other folds.
+
+          Table baseball_data.betting_ml.cv_summary_run_diff:
+            best_mae_model VARCHAR, best_win_prob_brier_model VARCHAR,
+            era_features_help BOOLEAN, home_win_rate_trailing_helps BOOLEAN,
+            lognormal_viable BOOLEAN,
+            loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+          INSERT one summary row derived from aggregate CV results.
 
           Script exits 0 on success. Exits non-zero with a descriptive message
           if no trained model (excluding global mean and failed LogNormal) beats
           the global mean baseline MAE on the majority of folds.
         dependsOn:
-          - card-4-8-total-runs-baselines-complete
+          - card-4-6-pipeline-foundation-complete
+          - card-4-8-feature-selection-complete
         acceptanceCriteria:
           - type: artifact_exists
             name: Run differential CV evaluation script
             path: betting_ml/scripts/train_run_diff_baselines.py
-          - type: command_succeeds
+          - type: manual
             name: CV evaluation script runs to completion with exit code 0
-            command: uv
-            args:
-              - run
-              - python
-              - betting_ml/scripts/train_run_diff_baselines.py
-            timeout: 1800
-          - type: artifact_exists
-            name: Run differential CV results JSON written
-            path: betting_ml/evaluation/cv_results_run_diff.json
+            description: >
+              USER-EXECUTED STEP — this script trains Ridge, XGBoost, and NGBoost
+              across all CV folds and runs the era ablation (estimated ~30 minutes).
+              Do not run via Claude. Execute from the project root:
+                uv run python betting_ml/scripts/train_run_diff_baselines.py
+              Verify the script exits 0 and that all three Snowflake tables
+              (cv_results_run_diff, cv_era_ablation_run_diff, cv_summary_run_diff)
+              are written before marking this criterion complete.
           - type: command_succeeds
-            name: cv_results_run_diff.json has expected top-level keys and all required models
+            name: Snowflake cv_results_run_diff contains all required models
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
-                    results = json.load(f)
-                assert 'fold_results' in results, "Missing 'fold_results'"
-                assert 'era_ablation' in results, "Missing 'era_ablation'"
-                assert 'summary' in results, "Missing 'summary'"
-                models = {r['model'] for r in results['fold_results']}
-                required_models = {'ridge', 'xgboost', 'ngboost_normal', 'global_mean'}
-                missing = required_models - models
-                assert not missing, f'Missing required models in results: {missing}'
-                abl = results['era_ablation']
-                assert 'fold_2023_era_delta_mae' in abl, "Missing era ablation delta for 2023 fold"
-                assert 'home_win_rate_delta_mae_2023' in abl, "Missing home win rate ablation delta"
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT DISTINCT model FROM baseball_data.betting_ml.cv_results_run_diff"
+                )
+                models = {row[0] for row in cur.fetchall()}
+                conn.close()
+                required = {'ridge', 'xgboost', 'ngboost_normal', 'global_mean'}
+                missing = required - models
+                assert not missing, f'Missing required models in cv_results_run_diff: {missing}'
           - type: command_succeeds
             name: NGBoost Normal has non-null win_prob_brier in at least one fold
             command: uv
@@ -215,39 +239,48 @@ spec:
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
-                    results = json.load(f)
-                ngb_folds = [
-                    r for r in results['fold_results']
-                    if r['model'] == 'ngboost_normal' and r.get('win_prob_brier') is not None
-                ]
-                assert len(ngb_folds) > 0, (
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT COUNT(*) FROM baseball_data.betting_ml.cv_results_run_diff
+                    WHERE model = 'ngboost_normal' AND win_prob_brier IS NOT NULL
+                """)
+                count = cur.fetchone()[0]
+                conn.close()
+                assert count > 0, (
                     'No NGBoost Normal fold has a non-null win_prob_brier — '
                     'check that p_over_line is called with total_line=0'
                 )
           - type: command_succeeds
-            name: Era ablation records fold_2023 entry for XGBoost with and without era features
+            name: Era ablation table contains fold 2023 with era delta columns populated
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                import json
-                with open('betting_ml/evaluation/cv_results_run_diff.json') as f:
-                    results = json.load(f)
-                abl = results['era_ablation']
-                for key in ('fold_2023_mae_with_era', 'fold_2023_mae_without_era',
-                            'fold_2023_era_delta_mae', 'all_folds_avg_era_delta_mae'):
-                    assert abl.get(key) is not None, f"Era ablation missing key: {key}"
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT era_delta_mae, home_win_rate_delta_mae
+                    FROM baseball_data.betting_ml.cv_era_ablation_run_diff
+                    WHERE fold = '2023'
+                """)
+                row = cur.fetchone()
+                conn.close()
+                assert row is not None, 'cv_era_ablation_run_diff missing fold 2023'
+                assert row[0] is not None, 'era_delta_mae is NULL for fold 2023'
+                assert row[1] is not None, 'home_win_rate_delta_mae is NULL for fold 2023'
 
       - id: generate-run-diff-results
         kind: Task
         description: >
-          Read cv_results_run_diff.json and write
+          Query Snowflake tables (baseball_data.betting_ml.cv_results_run_diff,
+          cv_era_ablation_run_diff, cv_summary_run_diff) and write
           betting_ml/evaluation/run_differential_results.md, then update
-          project_context.md Phase 4 section with Card 4.9 findings.
+          project_context.md Phase 4 section with Card 4.10 Results.
 
           run_differential_results.md must contain these sections in order:
 
@@ -268,7 +301,7 @@ spec:
             Table: Fold | NGBoost Normal Win Prob Brier | N eval games.
             Aggregate Brier score across all folds.
             Forward reference: this Brier score will be compared against the
-            binary classifier from Card 4.10 once that card is complete. A
+            binary classifier from Card 4.11 once that card is complete. A
             regression-derived win probability that rivals a dedicated classifier
             would support using a single NGBoost model for both regression and
             classification targets.
@@ -290,13 +323,13 @@ spec:
             is absorbed by post_2022_rules + game_year.
 
           ## Best Model Selection
-            Recommended model for downstream use (Card 4.11 stacking and Card 4.12
+            Recommended model for downstream use (Card 4.11 comparison and Card 4.13
             betting strategy) with rationale covering: MAE vs. baseline, whether
             the probabilistic output quality justifies NGBoost's additional compute,
             and whether the derived win probability Brier score is competitive
             enough to substitute for a dedicated binary classifier.
 
-          Update project_context.md: add a "Card 4.9 Results" subsection in the
+          Update project_context.md: add a "Card 4.10 Results" subsection in the
           Phase 4 tracking section containing: best model name, best model mean
           MAE, era_features_help (bool), home_win_rate_trailing_helps (bool),
           aggregate NGBoost Normal win probability Brier score, and whether
@@ -325,7 +358,7 @@ spec:
                 missing = [kw for kw in required_keywords if kw not in content]
                 assert not missing, f'Missing sections/keywords in report: {missing}'
           - type: command_succeeds
-            name: project_context.md updated with Card 4.9 results
+            name: project_context.md updated with Card 4.10 results
             command: uv
             args:
               - run
@@ -334,6 +367,6 @@ spec:
               - |-
                 with open('project_context.md') as f:
                     content = f.read().lower()
-                required = ['card 4.9', 'mae', 'brier']
+                required = ['card 4.10', 'mae', 'brier']
                 missing = [kw for kw in required if kw not in content]
-                assert not missing, f'project_context.md missing Card 4.9 updates: {missing}'
+                assert not missing, f'project_context.md missing Card 4.10 updates: {missing}'

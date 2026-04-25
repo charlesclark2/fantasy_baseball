@@ -1,0 +1,524 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pre-game-prediction-cli
+  namespace: default
+spec:
+  description: >
+    Build betting_ml/scripts/predict_today.py — a local CLI that loads production
+    model artifacts, scores all confirmed games for a target date, applies the
+    Bayesian posterior probability layer, and writes ranked output files in the
+    canonical Phase 6 contract format (probability_outputs_{date}.parquet and
+    predictions_{date}.csv).
+  acceptanceCriteria:
+    - description: >
+        uv run python betting_ml/scripts/predict_today.py runs end-to-end on a
+        laptop with no manual steps beyond .env credentials
+    - description: >
+        Output parquet matches the Card 4.13 schema exactly:
+        game_key, market, model_prob, market_implied_prob, alpha,
+        posterior_prob, edge, implied_kelly_fraction
+    - description: >
+        has_odds games are ranked by abs(edge) descending; non-odds games appear
+        in the CSV with edge=null and posterior_prob=null
+    - description: >
+        best_alpha is loaded from Snowflake alpha_tuning_results (most recent row)
+        with fallback to betting_ml/models/best_alpha.json; it is never hardcoded
+    - description: >
+        Script exits cleanly (exit code 0) when no games are found for the target date
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-5-1-and-4-13-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 5.1 must be complete before this plan begins: model_registry.yaml must
+    exist with _prod artifacts for all three targets and betting_ml/utils/model_io.py
+    must be in place. Card 4.13 must also be complete: betting_ml/utils/probability_layer.py
+    with compute_posterior(), compute_edge(), and compute_kelly() must exist, and
+    best_alpha must be persisted to both Snowflake (alpha_tuning_results table) and
+    betting_ml/models/best_alpha.json. These are non-negotiable prerequisites —
+    predict_today.py reuses Card 4.13's math exactly rather than reimplementing it.
+    Card 5.1 transitively guarantees Cards 4.11–4.13 are done, but the Card 4.13
+    outputs (probability_layer.py and best_alpha.json) must be explicitly verified
+    on disk before implementation begins.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pre-game-prediction-cli-plan
+  namespace: default
+spec:
+  description: >
+    Five-task linear pipeline. create-script-scaffold is the root node and establishes
+    the argparse interface and output directory. implement-feature-loading queries
+    Snowflake for the target date. implement-scoring-and-mixing runs all three models
+    and applies the Bayesian layer. implement-output-writing persists the parquet and
+    CSV artifacts. validate-end-to-end-dry-run is the integration gate — it runs the
+    full script against a real historical date.
+  goalRef:
+    name: pre-game-prediction-cli
+  graph:
+    nodes:
+
+      - id: create-script-scaffold
+        kind: Task
+        description: >
+          Create betting_ml/scripts/predict_today.py with the argparse CLI skeleton.
+          One optional argument: --date YYYY-MM-DD (defaults to today via
+          datetime.date.today().isoformat()). The script body must be guarded by
+          if __name__ == "__main__" so individual functions can be imported and unit
+          tested without triggering the Snowflake pipeline. Create
+          betting_ml/outputs/ directory if it does not exist (os.makedirs with
+          exist_ok=True). Load .env credentials by reusing the existing pattern in
+          betting_ml/utils/data_loader.py — do not duplicate credential loading logic.
+          This task creates the skeleton only; prediction logic is added in subsequent
+          tasks.
+        dependsOn:
+          - cards-5-1-and-4-13-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: predict_today.py script exists
+            path: betting_ml/scripts/predict_today.py
+          - type: command_succeeds
+            name: Script help text exits 0 and mentions --date
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/predict_today.py
+              - "--help"
+          - type: command_succeeds
+            name: Script is importable as a module without triggering Snowflake I/O
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import importlib.util, sys
+                spec = importlib.util.spec_from_file_location(
+                    'predict_today', 'betting_ml/scripts/predict_today.py'
+                )
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                print('PASS: module imported cleanly without triggering pipeline')
+          - type: command_succeeds
+            name: outputs directory is referenced in the script
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'betting_ml/outputs' in src or "outputs" in src, (
+                    'Script does not reference the outputs directory'
+                )
+
+      - id: implement-feature-loading
+        kind: Task
+        description: >
+          Implement Step 1 (load features) and Step 2 (load models) inside
+          predict_today.py.
+
+          Step 1 — Feature loading:
+          Query feature_pregame_game_features joined to stg_statsapi_games for the
+          target date. Produce two DataFrames from a single Snowflake connection:
+          (a) scored_games — has_odds = true AND both lineups confirmed
+              (home_lineup_slot_1 IS NOT NULL AND away_lineup_slot_1 IS NOT NULL)
+          (b) all_games — all games for the date regardless of odds or lineup status,
+              used to populate the output CSV with non-odds rows (edge=null)
+          Reuse the Snowflake connector from betting_ml/utils/data_loader.py.
+          Do not open a second connection.
+
+          Step 2 — Model loading:
+          Load all three _prod artifacts via load_model() from
+          betting_ml/utils/model_io.py. All artifact paths come from the registry —
+          no hardcoded paths. Apply load_retained_features() from
+          betting_ml/utils/feature_selection.py to align the feature matrix to the
+          canonical 241-feature list in the correct column order before passing any
+          DataFrame to a model.
+        dependsOn:
+          - create-script-scaffold
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Script imports load_model from model_io
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'load_model' in src, (
+                    'predict_today.py does not call load_model — '
+                    'models must be loaded exclusively via model_io'
+                )
+                assert 'model_io' in src, (
+                    'predict_today.py does not import from model_io'
+                )
+          - type: command_succeeds
+            name: Script uses load_retained_features for feature alignment
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'load_retained_features' in src or 'retained_features' in src, (
+                    'predict_today.py does not use load_retained_features — '
+                    'feature column order must be aligned to the 241-feature canonical list'
+                )
+          - type: command_succeeds
+            name: Script filters on has_odds
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'has_odds' in src, (
+                    'predict_today.py does not filter on has_odds — '
+                    'scoring must be restricted to games with market data'
+                )
+          - type: command_succeeds
+            name: Script references lineup confirmation columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'lineup_slot_1' in src, (
+                    'predict_today.py does not reference lineup_slot_1 — '
+                    'must filter to confirmed lineups before scoring'
+                )
+
+      - id: implement-scoring-and-bayesian-mixing
+        kind: Task
+        description: >
+          Implement Steps 3 and 4 inside predict_today.py.
+
+          Step 3 — Score games:
+          Regression targets (total_runs, run_differential): call model.dist(X) on
+          the NGBoost model to get the predictive distribution, then .cdf(line_value)
+          to compute P(total > total_line_consensus). The line value comes from
+          mart_odds_consensus (total_line_consensus column). If the line is null for a
+          game, set model_prob=null for that row rather than erroring.
+          Win outcome (home_win): call model.predict_proba(X)[:, 1] to get calibrated
+          home win probability from the CalibratedClassifierCV _prod artifact.
+
+          best_alpha loading: query the Snowflake alpha_tuning_results table for the
+          most recent row (ORDER BY loaded_at DESC LIMIT 1) and extract the alpha
+          value. If Snowflake is unreachable (connection error, table not found, or
+          empty result), fall back to betting_ml/models/best_alpha.json written by
+          Card 4.13. Never hardcode alpha as a float literal in source. Raise a
+          descriptive RuntimeError if neither Snowflake nor the local cache is
+          available.
+
+          Step 4 — Bayesian mixing and edge calculation:
+          For each has_odds game with non-null model_prob and non-null market odds,
+          call compute_posterior(model_prob, market_prob, best_alpha),
+          compute_edge(model_prob, market_prob), and compute_kelly(edge, market_prob)
+          from betting_ml/utils/probability_layer.py. These are the same functions
+          tuned in Card 4.13 — predict_today.py is the live execution of that pipeline,
+          not a reimplementation. Rank has_odds games by abs(edge) descending.
+          Non-odds games pass through with edge=None and posterior_prob=None.
+        dependsOn:
+          - implement-feature-loading
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Script imports compute_posterior, compute_edge, compute_kelly from probability_layer
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                for fn in ['compute_posterior', 'compute_edge', 'compute_kelly']:
+                    assert fn in src, (
+                        f'predict_today.py does not call {fn} — '
+                        'must reuse Card 4.13 probability_layer.py functions'
+                    )
+          - type: command_succeeds
+            name: best_alpha is not hardcoded as a float literal
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import re
+                src = open('betting_ml/scripts/predict_today.py').read()
+                hardcoded = re.findall(r'\bbest_alpha\s*=\s*\d+\.\d+', src)
+                assert not hardcoded, (
+                    f'best_alpha appears hardcoded as a float: {hardcoded}'
+                )
+                assert 'alpha_tuning_results' in src, (
+                    'Script does not query alpha_tuning_results — alpha must be loaded from Snowflake'
+                )
+                assert 'best_alpha.json' in src, (
+                    'Script does not reference best_alpha.json local fallback'
+                )
+          - type: command_succeeds
+            name: Script uses NGBoost .dist() for regression probability
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert '.dist(' in src, (
+                    'predict_today.py does not call .dist() for NGBoost — '
+                    'regression targets need CDF-based over/under probability, not point predict'
+                )
+          - type: command_succeeds
+            name: Script sorts games by abs(edge) descending
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'sort_values' in src or 'sorted(' in src, (
+                    'predict_today.py does not appear to sort output — '
+                    'games must be ranked by abs(edge) descending'
+                )
+
+      - id: implement-output-writing
+        kind: Task
+        description: >
+          Implement Step 5 inside predict_today.py: stdout display and file writing.
+
+          Stdout: Print a formatted table (tabulate or equivalent) with columns:
+          matchup, game_time, predicted_total_runs, model_home_win_prob,
+          market_home_win_prob, posterior_prob, edge, kelly_fraction.
+          Non-odds games appear with edge and posterior_prob shown as "—".
+
+          Parquet output: Write betting_ml/outputs/probability_outputs_{date}.parquet
+          with exactly the Card 4.13 schema columns:
+          game_key, market, model_prob, market_implied_prob, alpha, posterior_prob,
+          edge, implied_kelly_fraction. Include only has_odds games. Write via
+          pandas.DataFrame.to_parquet(engine="pyarrow"). This file is the canonical
+          Phase 6 contract — column names must match exactly.
+
+          CSV output: Write betting_ml/outputs/predictions_{date}.csv with the full
+          display columns (game_pk, matchup, game_time, predicted_total_runs,
+          model_home_win_prob, market_home_win_prob, posterior_prob, edge,
+          kelly_fraction, home_team, away_team). Include all games for the date
+          (not just has_odds) so the CSV is a complete daily picture.
+
+          Early exit: if the feature query returns zero rows, print
+          "No games found for {date}." and exit with code 0 — not an error.
+        dependsOn:
+          - implement-scoring-and-bayesian-mixing
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Script references all required parquet column names
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                required = [
+                    'game_key', 'market', 'model_prob', 'market_implied_prob',
+                    'alpha', 'posterior_prob', 'edge', 'implied_kelly_fraction'
+                ]
+                for col in required:
+                    assert col in src, (
+                        f'predict_today.py does not reference required parquet column: {col}'
+                    )
+          - type: command_succeeds
+            name: Script references both output file path patterns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'probability_outputs_' in src, (
+                    'Script does not write probability_outputs_{date}.parquet'
+                )
+                assert 'predictions_' in src, (
+                    'Script does not write predictions_{date}.csv'
+                )
+          - type: command_succeeds
+            name: Script uses to_parquet with pyarrow engine
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'to_parquet' in src, (
+                    'Script does not call to_parquet — parquet output is required'
+                )
+                assert 'pyarrow' in src, (
+                    'Script does not specify engine="pyarrow" for parquet write'
+                )
+          - type: command_succeeds
+            name: Script handles zero-row result with clean exit
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert (
+                    'No games found' in src or
+                    'no games' in src.lower()
+                ), (
+                    'Script does not handle zero-row result — must exit cleanly with message'
+                )
+          - type: command_succeeds
+            name: Script exits 0 for off-season date with no games
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/predict_today.py
+              - --date
+              - "2023-01-15"
+
+      - id: validate-end-to-end-dry-run
+        kind: Task
+        description: >
+          Run predict_today.py against a real historical game date and verify the
+          output files are written with the correct schema. Use 2024-07-04 — a
+          high-volume MLB date with confirmed odds data in Snowflake. Verify the
+          parquet schema exactly matches the Card 4.13 contract (all 8 columns
+          present, zero extra columns without renaming). Verify that at least one
+          row has a non-null edge value (confirming the Bayesian mixing ran end to
+          end). Verify that game_pk and matchup appear in the CSV. Verify that the
+          alpha value stored in the parquet is a float in the range (0, 1) —
+          confirming it was loaded from Snowflake or local cache, not a sentinel.
+
+          If the Snowflake connection is unavailable during acceptance criteria
+          evaluation, the offline path (--date 2023-01-15 with clean exit) is
+          the minimum pass condition. The full end-to-end run with live data must
+          be completed at least once before this card is marked done on the board.
+        dependsOn:
+          - implement-output-writing
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Script exits 0 on a historical game date with Snowflake data
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/predict_today.py
+              - --date
+              - "2024-07-04"
+          - type: command_succeeds
+            name: Parquet output has exactly the Card 4.13 contract columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd, glob
+                files = (
+                    glob.glob('betting_ml/outputs/probability_outputs_2024-07-04.parquet') or
+                    glob.glob('betting_ml/outputs/probability_outputs_*.parquet')
+                )
+                assert files, 'No probability_outputs parquet found in betting_ml/outputs/'
+                df = pd.read_parquet(files[0])
+                required = {'game_key', 'market', 'model_prob', 'market_implied_prob',
+                            'alpha', 'posterior_prob', 'edge', 'implied_kelly_fraction'}
+                missing = required - set(df.columns)
+                assert not missing, f'Parquet missing required columns: {missing}'
+                print(f'PASS: {len(df)} rows, columns: {sorted(df.columns.tolist())}')
+          - type: command_succeeds
+            name: CSV output contains game_pk and matchup columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd, glob
+                files = (
+                    glob.glob('betting_ml/outputs/predictions_2024-07-04.csv') or
+                    glob.glob('betting_ml/outputs/predictions_*.csv')
+                )
+                assert files, 'No predictions CSV found in betting_ml/outputs/'
+                df = pd.read_csv(files[0])
+                for col in ['game_pk', 'matchup']:
+                    assert col in df.columns, f'Missing required CSV column: {col}'
+                print(f'PASS: CSV has {len(df)} rows and columns: {sorted(df.columns.tolist())}')
+          - type: command_succeeds
+            name: At least one has_odds row has non-null edge in parquet
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd, glob
+                files = glob.glob('betting_ml/outputs/probability_outputs_*.parquet')
+                if not files:
+                    print('SKIP: no parquet output — Snowflake may be offline')
+                else:
+                    df = pd.read_parquet(files[0])
+                    if len(df) == 0:
+                        print('SKIP: parquet has zero rows for this date')
+                    else:
+                        non_null = df['edge'].notna().sum()
+                        assert non_null > 0, (
+                            'All edge values are null — Bayesian mixing did not run'
+                        )
+                        print(f'PASS: {non_null}/{len(df)} rows have non-null edge')
+          - type: command_succeeds
+            name: Alpha values in parquet are in range (0, 1) — not hardcoded sentinel
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pandas as pd, glob
+                files = glob.glob('betting_ml/outputs/probability_outputs_*.parquet')
+                if not files:
+                    print('SKIP: no parquet output — Snowflake may be offline')
+                else:
+                    df = pd.read_parquet(files[0])
+                    if len(df) == 0 or df['alpha'].isna().all():
+                        print('SKIP: no alpha values to check')
+                    else:
+                        alpha_vals = df['alpha'].dropna().unique()
+                        for a in alpha_vals:
+                            assert 0 < a < 1, (
+                                f'Alpha value {a} is outside (0, 1) — check that alpha '
+                                'was loaded from Snowflake or best_alpha.json, not hardcoded'
+                            )
+                        print(f'PASS: alpha values {alpha_vals} are all in (0, 1)')
+          - type: command_succeeds
+            name: Script exits cleanly on off-season date with no games
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/predict_today.py
+              - --date
+              - "2023-01-15"

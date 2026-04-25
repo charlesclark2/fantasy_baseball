@@ -14,11 +14,57 @@ Algorithm:
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
+_FEATURE_SELECTION_MD = (
+    Path(__file__).resolve().parents[2] / "betting_ml" / "evaluation" / "feature_selection.md"
+)
+
+
+def load_retained_features() -> list[str]:
+    """Return the canonical retained feature list from feature_selection.md."""
+    features: list[str] = []
+    in_retained = False
+    with open(_FEATURE_SELECTION_MD) as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped == "## 1. Retained Features":
+                in_retained = True
+                continue
+            if in_retained and stripped.startswith("## "):
+                break
+            if in_retained and stripped.startswith("|") and "`" in stripped:
+                cell = stripped.split("|")[1].strip()
+                m = re.match(r"^`([^`]+)`\s*\*?$", cell)
+                if m and m.group(1) != "Feature":
+                    features.append(m.group(1))
+    return features
+
+# Per Card 3.11: sharp/soft split columns carry no incremental signal over consensus
+# (include_sharp_soft_features = False). Exclude them before any correlation step so
+# they cannot displace home_win_prob_consensus via multicollinearity resolution.
+EXCLUDED_FEATURES: frozenset[str] = frozenset(
+    {"home_win_prob_sharp", "home_win_prob_soft", "sharp_soft_ml_delta"}
+)
+
+# Per Card 3.11: consensus odds features confirmed signal-bearing (Brier = 0.2395).
+# Retain unconditionally so they survive the near-zero-correlation filter even for
+# seasons with no odds coverage (low computed r due to 63% null rate).
 PROTECTED_FEATURES: frozenset[str] = frozenset(
-    {"post_2022_rules", "game_year", "home_win_rate_trailing_3yr"}
+    {
+        "post_2022_rules",
+        "game_year",
+        "home_win_rate_trailing_3yr",
+        "home_win_prob_consensus",
+        "total_line_consensus",
+        "over_prob_consensus",
+        "ml_consensus_std",
+        "market_bookmaker_count",
+    }
 )
 
 
@@ -53,9 +99,12 @@ def select_features(
     target_set = set(targets)
     dropped: dict[str, str] = {}
 
-    # Candidate set: numeric columns that are not targets.
+    # Candidate set: numeric columns that are not targets and not excluded.
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-    candidates = [c for c in numeric_cols if c not in target_set]
+    candidates = [
+        c for c in numeric_cols
+        if c not in target_set and c not in EXCLUDED_FEATURES
+    ]
 
     # --- Step 1: near-zero correlation filter ---
     # Compute Pearson r to each target for all candidates.

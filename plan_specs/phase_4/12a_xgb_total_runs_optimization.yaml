@@ -1,0 +1,263 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: xgb-total-runs-hyperparameter-optimization
+  namespace: default
+spec:
+  description: >
+    Apply Optuna TPE hyperparameter tuning to XGBoost for the total_runs
+    prediction target using the temporal CV splits from Card 4.6. The tuned
+    model must meet or improve on the Card 4.9 baseline XGBoost MAE. Persist
+    the tuned model via model_io.py and log results to
+    betting_ml/evaluation/tuning_results_xgb_total_runs.json and
+    betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md.
+  acceptanceCriteria:
+    - description: >
+        Optuna tuning completed for XGBoost on total_runs; at least 50 trials
+        logged with TPE sampler; all trial params and scores recorded in
+        tuning_results_xgb_total_runs.json
+    - description: >
+        Tuned XGBoost mean CV MAE for total_runs meets or improves on the Card
+        4.9 baseline XGBoost mean CV MAE; script exits non-zero if tuned score
+        regresses by more than 1% relative
+    - description: >
+        Tuned XGBoost model persisted via save_model() with model_name='xgb_tuned'
+        and target='total_runs'
+    - description: >
+        Best hyperparameters, per-trial scores, baseline vs. tuned comparison
+        documented in betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md;
+        project_context.md Phase 4 section updated with Card 4.12a findings
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-4-8-through-4-9-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Cards 4.8 and 4.9 must be complete before Card 4.12a begins.
+    Card 4.8 provides betting_ml/utils/model_io.py (save_model / load_model via
+    joblib; path convention betting_ml/models/{target}/{model_name}_{eval_year}.pkl).
+    Card 4.9 provides baseline XGBoost MAE for total_runs written to Snowflake
+    table baseball_data.betting_ml.cv_results_tot_runs (model='xgboost').
+    The Snowflake result table is required at tuning start because the improvement
+    acceptance criterion loads the baseline score from it.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: xgb-total-runs-optimization-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. run-xgb-total-runs-search runs the Optuna study and persists
+    the tuned model, writing tuning_results_xgb_total_runs.json.
+    generate-xgb-total-runs-report reads that JSON and produces
+    hyperparameter_tuning_xgb_total_runs.md plus the project_context.md update.
+  goalRef:
+    name: xgb-total-runs-hyperparameter-optimization
+  graph:
+    nodes:
+
+      - id: run-xgb-total-runs-search
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/run_xgb_total_runs_search.py. Runs an
+          Optuna hyperparameter search for XGBoost on total_runs, then persists
+          the best model.
+
+          Setup:
+            Load the canonical retained feature list via
+            load_retained_features() from betting_ml/utils/feature_selection.py.
+            Build CV folds via all_season_splits(df, min_train_seasons=3).
+            Load the baseline CV score via get_snowflake_connection() from
+            betting_ml/utils/data_loader.py:
+              SELECT AVG(mae) FROM baseball_data.betting_ml.cv_results_tot_runs
+              WHERE model = 'xgboost'
+            Feature matrices:
+              X = df[load_retained_features()]
+              y_total_runs = df['total_runs']
+
+          Optuna search space:
+            max_depth: suggest_int 3–8
+            learning_rate: suggest_float 0.01–0.3 (log=True)
+            n_estimators: suggest_int 100–1000
+            subsample: suggest_float 0.6–1.0
+            colsample_bytree: suggest_float 0.5–1.0
+            reg_alpha: suggest_float 0.0–1.0
+            reg_lambda: suggest_float 0.5–2.0
+
+          Optuna objective:
+            Instantiate XGBRegressor(**trial_params).
+            For each fold: apply build_imputation_pipeline().fit(X_train).transform;
+            fit XGBRegressor on X_train_imp; predict on X_eval_imp; compute MAE.
+            Return mean MAE across all folds.
+            Create optuna.create_study(direction='minimize',
+              sampler=optuna.samplers.TPESampler(seed=42)).
+            Call study.optimize(objective, n_trials=50).
+            Suppress verbose per-trial logging with
+            optuna.logging.set_verbosity(optuna.logging.WARNING).
+
+          After the study completes, record:
+            best_params, best_cv_score, all trial (number, params, value) tuples.
+
+          Persist tuned model — retrain best model on the training data of the
+          last CV fold (max-index train split), then persist:
+            save_model(xgb_reg_total_runs, target='total_runs',
+              model_name='xgb_tuned', eval_year=<last_fold_eval_year>)
+          last_fold_eval_year is determined from game_year values in the last
+          fold's eval index: int(df.loc[last_eval_idx, 'game_year'].mode()[0]).
+
+          Print progress (study name and best value after optimize completes)
+          and a summary line showing tuned vs. baseline CV MAE.
+
+          Script exits non-zero with a descriptive message if:
+            tuned_xgb_mae_total_runs > baseline_xgb_mae_total_runs * 1.01
+
+          Write betting_ml/evaluation/tuning_results_xgb_total_runs.json:
+            {
+              "target": "total_runs",
+              "model": "xgboost",
+              "n_trials": int,
+              "best_params": {
+                "max_depth": int, "learning_rate": float,
+                "n_estimators": int, "subsample": float,
+                "colsample_bytree": float, "reg_alpha": float,
+                "reg_lambda": float
+              },
+              "best_cv_score": float,
+              "baseline_cv_score": float,
+              "metric": "mae",
+              "improved": bool,
+              "all_trials": [
+                {"trial_number": int, "params": {...}, "value": float},
+                ...
+              ],
+              "persisted_models": [
+                {"target": "total_runs", "model_name": "xgb_tuned",
+                 "eval_year": int, "path": str}
+              ]
+            }
+        dependsOn:
+          - cards-4-8-through-4-9-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: XGBoost total_runs search script
+            path: betting_ml/scripts/run_xgb_total_runs_search.py
+          - type: manual
+            name: Search script runs to completion with exit code 0
+            description: >
+              USER-EXECUTED STEP — this script runs for up to 90 minutes
+              (50 Optuna trials). Do not run via Claude.
+              Execute from the project root:
+                uv run python betting_ml/scripts/run_xgb_total_runs_search.py
+              Verify the script exits 0 and that
+              tuning_results_xgb_total_runs.json is written before marking
+              this criterion complete.
+          - type: artifact_exists
+            name: Tuning results JSON written
+            path: betting_ml/evaluation/tuning_results_xgb_total_runs.json
+          - type: command_succeeds
+            name: tuning_results_xgb_total_runs.json has required keys and ≥50 trials
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                with open('betting_ml/evaluation/tuning_results_xgb_total_runs.json') as f:
+                    r = json.load(f)
+                assert r.get('target') == 'total_runs', "Wrong target"
+                assert r.get('model') == 'xgboost', "Wrong model"
+                assert r.get('n_trials', 0) >= 50, f"Expected ≥50 trials, got {r.get('n_trials')}"
+                assert 'best_params' in r, "Missing best_params"
+                assert 'best_cv_score' in r, "Missing best_cv_score"
+                assert 'baseline_cv_score' in r, "Missing baseline_cv_score"
+                assert 'all_trials' in r and len(r['all_trials']) >= 50, "Missing or short all_trials"
+          - type: command_succeeds
+            name: Persisted xgb_tuned model file exists for total_runs
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, os
+                with open('betting_ml/evaluation/tuning_results_xgb_total_runs.json') as f:
+                    r = json.load(f)
+                models = r.get('persisted_models', [])
+                assert len(models) >= 1, "No persisted models recorded"
+                for m in models:
+                    assert os.path.exists(m['path']), f"Model file missing: {m['path']}"
+
+      - id: generate-xgb-total-runs-report
+        kind: Task
+        description: >
+          Read tuning_results_xgb_total_runs.json and write
+          betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md,
+          then update project_context.md with Card 4.12a findings.
+
+          hyperparameter_tuning_xgb_total_runs.md must contain:
+
+          ## XGBoost total_runs Hyperparameter Search Results
+            Table: Metric | Baseline CV Score | Tuned CV Score | Improvement (%) | Trials
+            Best hyperparameter values listed beneath the table.
+
+          ## Optuna Trial Convergence
+            State the trial number at which the best value was first achieved.
+            Comment on whether convergence was early (first 10 trials) or
+            required extended search.
+
+          ## Best Hyperparameter Configuration
+            Code block or table showing the full best_params dict.
+
+          ## Persisted Model
+            Table: Target | Model Name | Eval Year | Path.
+            Confirm the model saved successfully.
+
+          Update project_context.md: add a "Card 4.12a Results" subsection in
+          the Phase 4 tracking section containing: xgb_total_runs_improved (bool),
+          best_params summary, and a one-sentence summary of the tuning outcome.
+        dependsOn:
+          - run-xgb-total-runs-search
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: XGBoost total_runs tuning report
+            path: betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md
+          - type: command_succeeds
+            name: Report contains required sections and keywords
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md') as f:
+                    content = f.read().lower()
+                required_keywords = [
+                    'optuna', 'tpe', 'mae', 'baseline', 'tuned',
+                    'xgboost', 'total_runs', 'learning_rate', 'max_depth',
+                    'persisted', 'convergence'
+                ]
+                missing = [kw for kw in required_keywords if kw not in content]
+                assert not missing, f'Missing sections/keywords in report: {missing}'
+          - type: command_succeeds
+            name: project_context.md updated with Card 4.12a results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                with open('project_context.md') as f:
+                    content = f.read().lower()
+                required = ['card 4.12a', 'optuna', 'tuned']
+                missing = [kw for kw in required if kw not in content]
+                assert not missing, f'project_context.md missing Card 4.12a updates: {missing}'

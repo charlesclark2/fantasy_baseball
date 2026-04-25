@@ -1,0 +1,484 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: model-selection-registry
+  namespace: default
+spec:
+  description: >
+    Select the best Phase 4 model artifacts for each prediction target, perform a
+    proper 3-way temporal production calibration refit for the win outcome classifier,
+    and publish a versioned model_registry.yaml that serves as the single source of
+    truth for all downstream consumers (predict_today.py, Streamlit app).
+  acceptanceCriteria:
+    - description: >
+        betting_ml/models/model_registry.yaml exists with one entry per target
+        (total_runs, run_differential, home_win); all three artifact_path fields
+        are non-null and point to files that exist on disk
+    - description: >
+        _prod artifact copies are written to betting_ml/models/{target}/ for all
+        three targets; rollback is a one-line path swap in the registry
+    - description: >
+        The home_win _prod artifact is a CalibratedClassifierCV model fit on 2025
+        as a dedicated calibration hold-out — not the CV eval fold used in Card 4.11
+    - description: >
+        Verification ECE (trained 2016–2023, calibrated 2024, evaluated on 2025) is
+        documented in betting_ml/evaluation/calibration_verification.md and is not
+        more than 0.005 worse than the Card 4.11 mean CV ECE
+    - description: >
+        load_model(target, "prod") via betting_ml/utils/model_io.py round-trips
+        cleanly for all three targets using the registry path
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: cards-4-11-thru-4-13-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Cards 4.11, 4.12, and 4.13 must be complete before any task in this plan begins.
+    Card 4.11 identifies the best calibration method (isotonic vs. Platt) — its output
+    drives the calibrator choice in the win outcome production refit task.
+    Card 4.12 provides the tuned XGBoost artifacts in betting_ml/models/{target}/
+    that the artifact selection task reads.
+    Card 4.13 provides best_alpha and confirms that probability_layer.py is in place;
+    its output contract (probability_outputs.parquet schema) is the downstream
+    consumer that the model registry must satisfy.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: model-selection-registry-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG. create-model-io-utility is the root node — it is a shared
+    dependency for every other task. select-regression-artifacts and
+    refit-win-outcome-calibration are parallel after the root and the gate clears.
+    write-model-registry depends on both. validate-registry-roundtrip is the final
+    integration check.
+  goalRef:
+    name: model-selection-registry
+  graph:
+    nodes:
+
+      - id: create-model-io-utility
+        kind: Task
+        description: >
+          Implement betting_ml/utils/model_io.py. Public API:
+          load_model(target: str, variant: str = "prod") -> Any.
+          The function reads betting_ml/models/model_registry.yaml via yaml.safe_load,
+          looks up the entry for target, resolves the artifact_path for the requested
+          variant (e.g. "prod" maps to the _prod copy field in the registry entry),
+          and returns the deserialized object via joblib.load. Raise a descriptive
+          ValueError if target is not in the registry or the artifact file does not
+          exist on disk. No side effects — callers own the loaded object. This
+          function is the only sanctioned way for predict_today.py and the Streamlit
+          app to load model artifacts; hardcoded paths in consumer scripts are
+          prohibited.
+        dependsOn:
+          - cards-4-11-thru-4-13-complete
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: model_io module
+            path: betting_ml/utils/model_io.py
+          - type: command_succeeds
+            name: Module imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "from betting_ml.utils.model_io import load_model"
+          - type: command_succeeds
+            name: load_model signature accepts target and variant parameters
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import inspect
+                from betting_ml.utils.model_io import load_model
+                sig = inspect.signature(load_model)
+                assert 'target' in sig.parameters, 'missing target param'
+                assert 'variant' in sig.parameters, 'missing variant param'
+                assert sig.parameters['variant'].default == 'prod', (
+                    f"variant default should be 'prod', got {sig.parameters['variant'].default}"
+                )
+          - type: command_succeeds
+            name: load_model raises ValueError for unknown target
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                try:
+                    load_model('nonexistent_target')
+                    raise AssertionError('Expected ValueError for unknown target, got no exception')
+                except ValueError:
+                    pass
+
+      - id: select-regression-artifacts
+        kind: Task
+        description: >
+          Compare tuned CV metrics for total_runs and run_differential across all
+          saved artifacts in betting_ml/models/total_runs/ and
+          betting_ml/models/run_differential/. Selection criterion: lowest mean CV MAE
+          across all temporal folds (as recorded in betting_ml/evaluation/cv_results.json
+          or the equivalent results file written by Card 4.12). For each regression
+          target, copy the winning artifact to a _prod filename in the same directory
+          (e.g. ngboost_normal_prod.pkl). Do not delete the original artifact — the
+          _prod copy is an additive operation so rollback is a one-line path swap in
+          the registry. Write a selection_log.md in betting_ml/evaluation/ recording
+          for each target: all candidate model names, their mean CV MAE, and the
+          selected winner with the source artifact path.
+        dependsOn:
+          - create-model-io-utility
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: total_runs _prod artifact exists and is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, glob, os
+                candidates = glob.glob('betting_ml/models/total_runs/*_prod*.pkl')
+                assert candidates, 'No _prod artifact found in betting_ml/models/total_runs/'
+                model = joblib.load(candidates[0])
+                assert model is not None
+          - type: command_succeeds
+            name: run_differential _prod artifact exists and is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, glob
+                candidates = glob.glob('betting_ml/models/run_differential/*_prod*.pkl')
+                assert candidates, 'No _prod artifact found in betting_ml/models/run_differential/'
+                model = joblib.load(candidates[0])
+                assert model is not None
+          - type: artifact_exists
+            name: Selection log written to evaluation directory
+            path: betting_ml/evaluation/selection_log.md
+          - type: command_succeeds
+            name: Selection log references both regression targets
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                text = open('betting_ml/evaluation/selection_log.md').read()
+                assert 'total_runs' in text, 'total_runs not mentioned in selection_log.md'
+                assert 'run_differential' in text, 'run_differential not mentioned in selection_log.md'
+
+      - id: refit-win-outcome-production-calibration
+        kind: Task
+        description: >
+          Perform the 3-way temporal production calibration refit for the home_win
+          classifier. Card 4.11 uses the CV eval fold as the calibration set — an
+          approximation acceptable for benchmarking but not for production because
+          the calibration curve and ECE are partially in-sample. This task corrects
+          that.
+
+          Step 1 — Verification split:
+          Train XGBoost (the best model family identified by Card 4.11 CV) on
+          2016–2023 data. Fit CalibratedClassifierCV(cv="prefit",
+          method=<best_method_from_card_4_11>) on 2024 data as the dedicated
+          calibration hold-out. Evaluate ECE and Brier score on 2025. Record
+          win_outcome_verification_ece and win_outcome_verification_brier. If
+          verification ECE is more than 0.005 worse than the Card 4.11 mean CV ECE,
+          halt and flag for investigation — do not proceed to the production refit.
+
+          Step 2 — Production refit:
+          Train XGBoost on 2016–2024 data. Fit the same calibrator on 2025 data as
+          the calibration hold-out. Save as
+          betting_ml/models/home_win/xgboost_{method}_prod_calibrated.pkl using
+          joblib.dump. This is the _prod artifact. There is no separate eval fold
+          for the final production model — all available historical data (2016–2025)
+          is used to maximize training coverage. The verification split in Step 1
+          provides the generalization confidence.
+
+          Step 3 — Verification documentation:
+          Write betting_ml/evaluation/calibration_verification.md documenting:
+          the calibration method used, the Card 4.11 mean CV ECE, the verification
+          ECE and Brier score, the delta between them, a PASS / INVESTIGATE verdict,
+          and the training year ranges for both the verification and production refits.
+
+          Regression targets (total_runs, run_differential) do NOT require this step.
+          Their NGBoost Normal distribution outputs are already proper probability
+          distributions and do not require post-hoc calibration.
+        dependsOn:
+          - create-model-io-utility
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: home_win _prod_calibrated artifact exists and is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, glob
+                candidates = glob.glob('betting_ml/models/home_win/*_prod_calibrated*.pkl')
+                assert candidates, 'No _prod_calibrated artifact in betting_ml/models/home_win/'
+                model = joblib.load(candidates[0])
+                assert model is not None
+          - type: command_succeeds
+            name: _prod_calibrated artifact exposes predict_proba
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, glob
+                candidates = glob.glob('betting_ml/models/home_win/*_prod_calibrated*.pkl')
+                model = joblib.load(candidates[0])
+                assert hasattr(model, 'predict_proba'), (
+                    f'{type(model).__name__} does not expose predict_proba — '
+                    'expected CalibratedClassifierCV wrapper'
+                )
+          - type: artifact_exists
+            name: Calibration verification document
+            path: betting_ml/evaluation/calibration_verification.md
+          - type: command_succeeds
+            name: Verification doc contains required fields and PASS verdict
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                text = open('betting_ml/evaluation/calibration_verification.md').read().lower()
+                for field in ['verification_ece', 'cv ece', 'delta', 'pass']:
+                    assert field in text, (
+                        f'calibration_verification.md missing expected field: {field}'
+                    )
+          - type: command_succeeds
+            name: Verification ECE delta does not exceed 0.005 threshold
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import re
+                text = open('betting_ml/evaluation/calibration_verification.md').read()
+                # Expect a line like: delta: 0.0023  or  delta: -0.0010
+                match = re.search(r'delta[:\s]+([+-]?\d+\.\d+)', text, re.IGNORECASE)
+                assert match, 'Could not parse delta value from calibration_verification.md'
+                delta = abs(float(match.group(1)))
+                assert delta <= 0.005, (
+                    f'Verification ECE delta {delta:.4f} exceeds 0.005 threshold — '
+                    'halt and investigate before registering the home_win prod artifact'
+                )
+
+      - id: write-model-registry
+        kind: Task
+        description: >
+          Write betting_ml/models/model_registry.yaml — the flat YAML file that is
+          the single source of truth for all production model artifact locations.
+          One top-level key per target (total_runs, run_differential, home_win).
+          Required fields per entry:
+            model_name: str (e.g. "ngboost_normal", "xgboost_isotonic")
+            eval_year: int (last CV eval year used to select this model)
+            cv_mae: float (regression targets only; the mean CV MAE of the winner)
+            cv_brier: float (home_win only; the mean CV Brier score from Card 4.11)
+            artifact_path: str (relative path to the _prod artifact file)
+            selected_at: str (ISO 8601 timestamp of when the registry was written)
+          The home_win entry additionally requires:
+            calibration_method: str (isotonic or sigmoid — the method from Card 4.11)
+            calibration_split: int (must be 2025 — the year used as the calibration hold-out)
+          The artifact_path values must point to the _prod files written by the two
+          preceding tasks. The file is written once and treated as immutable by
+          downstream consumers — updates require a new registry write with an updated
+          selected_at timestamp.
+        dependsOn:
+          - select-regression-artifacts
+          - refit-win-outcome-production-calibration
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Model registry YAML
+            path: betting_ml/models/model_registry.yaml
+          - type: command_succeeds
+            name: Registry is parseable and contains all three targets
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                for target in ['total_runs', 'run_differential', 'home_win']:
+                    assert target in reg, f'Missing target in registry: {target}'
+                    assert reg[target].get('artifact_path'), (
+                        f'artifact_path is null or missing for target: {target}'
+                    )
+          - type: command_succeeds
+            name: All artifact_path values point to files that exist on disk
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml, os
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                for target, entry in reg.items():
+                    path = entry['artifact_path']
+                    assert os.path.exists(path), (
+                        f'Registry artifact_path does not exist on disk: {path} (target: {target})'
+                    )
+          - type: command_succeeds
+            name: home_win entry has calibration_split 2025
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                hw = reg['home_win']
+                assert hw.get('calibration_split') == 2025, (
+                    f"home_win calibration_split must be 2025, got: {hw.get('calibration_split')}"
+                )
+          - type: command_succeeds
+            name: home_win entry has calibration_method field
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                hw = reg['home_win']
+                assert hw.get('calibration_method') in ('isotonic', 'sigmoid'), (
+                    f"calibration_method must be 'isotonic' or 'sigmoid', got: {hw.get('calibration_method')}"
+                )
+          - type: command_succeeds
+            name: Regression targets have cv_mae; home_win has cv_brier
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                for target in ['total_runs', 'run_differential']:
+                    assert reg[target].get('cv_mae') is not None, (
+                        f'cv_mae missing for regression target: {target}'
+                    )
+                assert reg['home_win'].get('cv_brier') is not None, (
+                    'cv_brier missing for home_win entry'
+                )
+
+      - id: validate-registry-roundtrip
+        kind: Task
+        description: >
+          Smoke-test the full registry-to-model round-trip for all three targets
+          using load_model() from betting_ml/utils/model_io.py. For regression
+          targets, confirm the loaded object has a predict method and can accept a
+          small synthetic feature matrix without raising. For the home_win target,
+          confirm predict_proba is available and returns values in [0, 1] on a
+          synthetic input. This task does not require live Snowflake data — use a
+          small synthetic DataFrame with the correct column count from the feature
+          matrix. Also confirm that calling load_model with a nonexistent variant
+          raises ValueError rather than silently returning None.
+        dependsOn:
+          - write-model-registry
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: load_model round-trips for total_runs
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                model = load_model('total_runs', 'prod')
+                assert model is not None
+                assert hasattr(model, 'predict'), (
+                    f'{type(model).__name__} missing predict method'
+                )
+          - type: command_succeeds
+            name: load_model round-trips for run_differential
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                model = load_model('run_differential', 'prod')
+                assert model is not None
+                assert hasattr(model, 'predict'), (
+                    f'{type(model).__name__} missing predict method'
+                )
+          - type: command_succeeds
+            name: load_model round-trips for home_win and exposes predict_proba
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                model = load_model('home_win', 'prod')
+                assert model is not None
+                assert hasattr(model, 'predict_proba'), (
+                    f'{type(model).__name__} missing predict_proba — expected calibrated classifier'
+                )
+          - type: command_succeeds
+            name: load_model raises ValueError for unknown variant
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.model_io import load_model
+                try:
+                    load_model('total_runs', 'nonexistent_variant')
+                    raise AssertionError('Expected ValueError for unknown variant, got no exception')
+                except ValueError:
+                    pass
+          - type: command_succeeds
+            name: Registry YAML round-trip via model_io matches direct yaml.safe_load
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import yaml
+                from betting_ml.utils.model_io import load_model
+                with open('betting_ml/models/model_registry.yaml') as f:
+                    reg = yaml.safe_load(f)
+                # Confirm all three registry entries are reachable via load_model
+                for target in ['total_runs', 'run_differential', 'home_win']:
+                    model = load_model(target, 'prod')
+                    assert model is not None, f'load_model returned None for target: {target}'
+                print('PASS: all three targets round-trip via load_model')
