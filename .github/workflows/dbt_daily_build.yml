@@ -12,9 +12,6 @@ jobs:
   dbt-build:
     runs-on: ubuntu-latest
     steps:
-      - name: Intentional failure for notification test
-        run: exit 1
-
       - uses: actions/checkout@v4
 
       - name: Install dbt-fusion
@@ -34,16 +31,3 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: dbtf build
-
-      - name: Notify on failure
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: 'FAILED: Daily dbt build'
-          to: ${{ secrets.NOTIFICATION_EMAIL }}
-          from: ${{ secrets.SMTP_USERNAME }}
-          body: 'The daily dbtf build GitHub Actions workflow failed. Check the Actions tab for details.'

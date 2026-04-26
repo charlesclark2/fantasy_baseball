@@ -151,6 +151,76 @@ dbtf build --select +mart_odds_events+
 
 ---
 
+---
+
+## Lineup Monitor Architecture
+
+The lineup monitor is a separate, always-on hourly pipeline that watches for confirmed starting lineups and triggers an incremental dbt build when both lineups for a game are locked.
+
+**System diagram:**
+```
+Snowflake Task (CRON 0 * * * * ET)
+    → lineup_monitor_proc (Snowpark Python)
+        → stg_statsapi_lineups_wide  (reads confirmed game_pks)
+        → lineup_monitor_state       (deduplication guard)
+        → GitHub REST API POST /dispatches
+            → GitHub Actions: dbt_staging_build.yml
+                → dbtf build --select +stg_statsapi_lineups+
+```
+
+**Required GitHub Secrets** (same Snowflake credentials used by `dbt_daily_build.yml`):
+
+| Secret | Value / Source |
+|---|---|
+| `SNOWFLAKE_ACCOUNT` | Snowflake account identifier (e.g. `abc123.us-east-1`) |
+| `SNOWFLAKE_USER` | Snowflake service user (e.g. `dbt_user`) |
+| `SNOWFLAKE_PRIVATE_KEY` | RSA private key PEM content (no passphrase) |
+| `SNOWFLAKE_DATABASE` | `baseball_data` |
+| `SNOWFLAKE_WAREHOUSE` | `COMPUTE_WH` |
+| `SNOWFLAKE_ROLE` | Role with dbt model access (e.g. `transformer`) |
+
+**Manual trigger** (trigger for a specific game_pk without waiting for the hourly fire):
+```bash
+gh workflow run dbt_staging_build.yml -f game_pk=<game_pk> -f triggered_by=manual
+```
+
+**Suspend the task during off-season:**
+```sql
+ALTER TASK baseball_data.config.task_lineup_monitor SUSPEND;
+```
+
+**Re-enable for the season:**
+```sql
+ALTER TASK baseball_data.config.task_lineup_monitor RESUME;
+```
+
+**Check the last 24 hours of task run history:**
+```sql
+SELECT * FROM TABLE(
+  information_schema.task_history(
+    task_name=>'TASK_LINEUP_MONITOR',
+    scheduled_time_range_start=>DATEADD('hour', -24, CURRENT_TIMESTAMP)
+  )
+);
+```
+
+**Check recent dispatch state:**
+```sql
+SELECT * FROM baseball_data.config.lineup_monitor_state
+ORDER BY triggered_at DESC
+LIMIT 20;
+```
+
+**Check pipeline audit log for lineup monitor entries:**
+```sql
+SELECT * FROM baseball_data.config.pipeline_run_log
+WHERE task_name = 'lineup_monitor_proc'
+ORDER BY run_ts DESC
+LIMIT 20;
+```
+
+---
+
 ## Full daily sequence (copy-paste)
 
 ```bash
