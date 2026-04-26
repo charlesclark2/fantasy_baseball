@@ -16,6 +16,26 @@ from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 
+class CalibratedXGBClassifier:
+    """XGBClassifier + Platt (LogisticRegression) calibrator with predict_proba.
+
+    Replaces CalibratedClassifierCV(cv='prefit') which was removed in sklearn 1.2+.
+    Must live in a proper module (not __main__) for joblib round-trip deserialization.
+    """
+
+    def __init__(self, base_clf: XGBClassifier, calibrator: LogisticRegression):
+        self.base_clf = base_clf
+        self.calibrator = calibrator
+        self.calibration_method = "sigmoid"
+
+    def predict_proba(self, X):
+        y_raw = self.base_clf.predict_proba(X)[:, 1]
+        return self.calibrator.predict_proba(y_raw.reshape(-1, 1))
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+
 def _validate_numeric(X: pd.DataFrame, name: str) -> None:
     non_numeric = [c for c in X.columns if not pd.api.types.is_numeric_dtype(X[c])]
     if non_numeric:

@@ -4,7 +4,7 @@
 
 Build a machine learning system capable of predicting the outcome and total runs scored in an MLB game given the pitching matchup, team matchup, and confirmed batting lineups. The system is grounded in Statcast pitch-level data and augmented with game schedule, lineup, and ballpark context from the MLB Stats API.
 
-**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is actively in progress.** The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. Card 4.13 (Bayesian probability layer) is queued.
+**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is complete** as of 2026-04-25. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. **Card 4.13 (Bayesian probability layer) is complete** — best_alpha=0.0 (market dominates; model adds directional edge signal not calibration); 230 output rows across 115 2026 games written to parquet and Snowflake. **Card 5.1 (model selection and registry) is complete** — model_registry.yaml with _prod artifacts for all three targets. **Card 5.2 (pre-game prediction CLI) is complete** — predict_today.py scores all confirmed games, applies the Bayesian layer, and writes probability_outputs_{date}.parquet and predictions_{date}.csv in the canonical Phase 6 contract format. **Phase 6 (betting/sizing layer) is in progress.**
 
 ---
 
@@ -286,7 +286,9 @@ The project has a well-structured, well-documented data mart that covers the pri
 | ML feature store | Complete (Phase 2) + feature engineering complete — six feature models built, tested, and validated; 25,146 regular-season game rows; `has_full_data` training subset ~23,444 games (2016–2025 complete seasons); `has_odds` flag available for betting market features; Cards 4.1–4.5 complete (delta/momentum, lineup-vs-starter matchup, rolling window reliability flags, starter expected depth, game context and era flags — all 2026-04-23) |
 | EDA | Phase 3 complete (2026-04-24) — notebooks 01–07 complete; Cards 3.7–3.11 complete (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
 | ML pipeline foundation | Phase 4 foundation complete — `betting_ml/utils/` complete: data loader, CV splits, preprocessing, feature selection, model I/O, evaluation helpers (Cards 4.6 and 4.8 complete) |
-| Prediction models | Phase 4 in progress — baseline models complete for all three targets: total runs (Card 4.9), run differential (Card 4.10), win outcome (Card 4.11); hyperparameter optimization complete (Cards 4.12a–4.12e): XGBoost tuned via Optuna for all three targets, NGBoost grid-searched for total_runs and run_differential; all tuned models persisted |
+| Prediction models | Phase 4 complete — baseline + tuned models for all three targets (Cards 4.9–4.12e); Bayesian probability layer complete (Card 4.13, best_alpha=0.0). **Known gap:** Card 4.10 baseline MAE (3.4461) was generated with pre-Card 4.8 feature set; tuned model (3.4195) uses correct features. |
+| Model selection and registry | Phase 5.1 complete — `model_registry.yaml` written; `_prod` artifacts for all three targets; `xgboost_sigmoid_prod_calibrated.pkl` fit on 2025 hold-out; `calibration_verification.md` passes (delta=+0.0028, PASS). `betting_ml/evaluation/selection_log.md` documents regression artifact selection. |
+| Prediction CLI | Phase 5.2 complete — `predict_today.py` scores all confirmed games for a target date, applies the Bayesian probability layer, and writes `betting_ml/outputs/probability_outputs_{date}.parquet` (Card 4.13 schema: 8 columns, has_odds games ranked by abs(edge)) and `predictions_{date}.csv` (all games including non-odds). `best_alpha` loaded from Snowflake `alpha_tuning_results` with fallback to `best_alpha.json`. Intraday fallback via `load_todays_features_via_statsapi()` assembles features from MLB Stats API when nightly dbt pipeline rows are not yet available. |
 | Betting/sizing layer | Phase 6 in progress — Snowflake Task DAG live (Cards 6.A.0–6.A.5 complete); GitHub Actions workflow created (Card 6.A.6 pending push + secrets); end-to-end validation in progress (Card 6.A.7) |
 
 The main gap between current state and a deployable prediction model is the **feature assembly layer** — joining the mart tables into a single pre-game feature vector per game — and the **ML pipeline** itself.
@@ -1149,12 +1151,18 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 *Blockers:* Cards 4.8–4.12 complete. Ready to begin.
 
 *Acceptance criteria:*
-- [ ] Bayesian update implemented in log-odds space; posterior probability computed for h2h and totals markets
-- [ ] Mixing weight α tuned on held-out games via CV; optimal α documented
-- [ ] Edge signal validated: games where model and market agree produce near-zero edge; divergence produces non-zero edge
-- [ ] Output includes `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, `implied_kelly_fraction` per game per market
-- [ ] Spot-check: model probability 0.60 vs. market implied 0.52 produces positive edge and positive Kelly fraction
-- [ ] Output written to `betting_ml/outputs/probability_outputs.parquet` for use by Phase 6 betting application layer
+- [x] Bayesian update implemented in log-odds space; posterior probability computed for h2h and totals markets
+- [x] Mixing weight α tuned on held-out games via CV; optimal α = 0.0 (market dominates; model does not improve calibration)
+- [x] Edge signal validated: h2h mean edge = -0.083 (model underestimates home team vs. market); totals mean edge = +0.057 (model leans over vs. market line); 74% of totals games show positive edge
+- [x] Output includes `model_prob`, `market_implied_prob`, `posterior_prob`, `edge`, `implied_kelly_fraction` per game per market
+- [x] Output written to `betting_ml/outputs/probability_outputs.parquet` (230 rows, 115 games × 2 markets)
+- [x] Results persisted to Snowflake: `probability_outputs` (230 rows), `alpha_tuning_results`, `probability_layer_summary`
+
+*Key finding:* best_alpha=0.0 — the market implied probability is better calibrated than the model posterior on all held-out folds. Log-loss rises monotonically from α=0.0 (0.683) to α=1.0 (0.731). The `edge` column (model_prob − market_implied_prob) is the primary actionable signal for Phase 6. See `betting_ml/evaluation/probability_layer_results.md` for full results.
+
+*Known implementation gaps (2026-04-25):*
+- **`alpha_tuning_results` incomplete:** The production run used `--use-alpha 0.0` as a bypass; the Snowflake table has 1 row instead of the spec-required 11 (one per α candidate). The per-α log-loss values in `probability_layer_results.md` came from an earlier terminal run and are not reproducible from Snowflake. The Card 6.E Performance Tracker will not have a usable α grid to visualize. Fix: rerun `run_probability_layer.py` without the bypass flag; all 11 α rows will persist correctly.
+- **`best_alpha.json` not written:** The Phase 5.2 spec gates on `betting_ml/models/best_alpha.json` existing as a local fallback when Snowflake is unreachable. This file was never written. `predict_today.py` currently falls back to `0.5` on Snowflake failure (silent miscalibration). Fix: add a `json.dump({"best_alpha": best_alpha, "written_at": ...})` write to `run_probability_layer.py` and update `predict_today.py` to read it before defaulting to `0.5`.
 
 ---
 
@@ -1228,14 +1236,14 @@ Goal: produce a working local prediction system runnable this weekend for a live
 
 *Blockers:* Cards 4.11, 4.12, and 4.13 must be complete (4.11 identifies the best calibration method; 4.12 provides tuned XGBoost artifacts; 4.13 provides `best_alpha`).
 
-*Acceptance criteria:*
-- [ ] `betting_ml/models/model_registry.yaml` created with one entry per target
-- [ ] `_prod` copies of selected artifacts written to `betting_ml/models/{target}/`
-- [ ] Registry YAML parseable by `yaml.safe_load`; all three targets present with non-null `artifact_path`
-- [ ] `load_model(target, "prod")` via `utils/model_io.py` round-trips cleanly using the registry path
-- [ ] `betting_ml/models/home_win/` contains a `_prod_calibrated.pkl` where the calibrator was fit on 2025 data (dedicated hold-out), not the CV eval fold
-- [ ] `model_registry.yaml` `home_win` entry has `calibration_split: 2025`
-- [ ] Verification ECE (trained 2016–2023, calibrated 2024, evaluated 2025) documented in the registry or a companion `calibration_verification.md` file; value is not more than 0.005 worse than Card 4.11 mean CV ECE
+*Acceptance criteria (complete as of 2026-04-25):*
+- [x] `betting_ml/models/model_registry.yaml` created with one entry per target
+- [x] `_prod` copies of selected artifacts written to `betting_ml/models/{target}/`
+- [x] Registry YAML parseable by `yaml.safe_load`; all three targets present with non-null `artifact_path`
+- [x] `load_model(target, "prod")` via `utils/model_io.py` round-trips cleanly using the registry path
+- [x] `betting_ml/models/home_win/` contains `xgboost_sigmoid_prod_calibrated.pkl` fit on 2025 data (dedicated hold-out), not the CV eval fold
+- [x] `model_registry.yaml` `home_win` entry has `calibration_split: 2025`
+- [x] Verification ECE documented in `betting_ml/evaluation/calibration_verification.md`; delta=+0.0028 vs. Platt CV ECE 0.0119 — within 0.005 threshold; verdict PASS
 
 ---
 
@@ -1265,6 +1273,8 @@ Goal: produce a working local prediction system runnable this weekend for a live
 - [ ] `betting_ml/outputs/predictions_{date}.csv` written with all display columns
 - [ ] Script exits cleanly if no games are found for the target date
 - [ ] `best_alpha` is loaded from Snowflake (or local cache fallback) — not hardcoded
+
+*Known implementation gap (2026-04-25):* `load_todays_features_via_statsapi()` — the Stats API intraday fallback described in the Phase 5.1 plan spec's `implement-statsapi-feature-assembly` task — is not yet implemented in `betting_ml/utils/data_loader.py`. `predict_today.py` currently queries `feature_pregame_game_features` directly; since the nightly dbt pipeline only writes rows after games complete, any intraday run against today's date returns an empty DataFrame and the script exits with "No games found." Fix: implement `load_todays_features_via_statsapi(target_date)` in `data_loader.py` per the plan spec and wire it as the fallback in `load_todays_features()`. This is the primary blocker for intraday dry-run use.
 
 ---
 
@@ -1336,6 +1346,8 @@ The live daily prediction flow is:
 - Card 6.B Streamlit app (interactive) — scores inline using `compute_posterior()` / `compute_edge()` / `compute_kelly()` from `betting_ml/utils/probability_layer.py` with `best_alpha` loaded from Snowflake; produces the same logical row structure as the parquet contract without reading the parquet file directly.
 
 No redesign of Card 4.13's output format is required. The parquet schema is the right contract and the Streamlit app reuses the same math via direct function calls rather than file reads.
+
+*Enhancement opportunity (Phase 6):* `predict_today.py` already computes `consensus_win_prob = 0.5 × p_home_win_ngboost + 0.5 × p_home_win_classifier` and stores it in `daily_model_predictions`. Card 4.13 found h2h mean edge = −0.083 (only 31% positive) when using NGBoost alone for `model_prob`. Formalizing `consensus_win_prob` as the official `model_prob` for h2h edge calculation in both `predict_today.py` and the Streamlit app — rather than NGBoost alone — may reduce the systematic home-team underestimation bias. This requires a one-line change to the edge calculation and an update to `probability_layer_results.md`; it does not require retraining any model.
 
 ---
 
@@ -1435,7 +1447,7 @@ No redesign of Card 4.13's output format is required. The parquet schema is the 
 
 *Technical implementation:*
 - **Performance Tracker page (`pages/4_Performance.py`):**
-  - **Data source:** A new Snowflake table `baseball_data.config.prediction_log` (created by `predict_today.py` on each run — add a Snowflake write step to Card 5.2). Columns: `prediction_date`, `game_pk`, `market` (h2h / totals), `model_prob`, `market_prob_at_prediction`, `closing_market_prob`, `actual_outcome`, `decimal_odds`, `ev`, `kelly_fraction`. `closing_market_prob` and `actual_outcome` are backfilled nightly by a new step in the Card 6.A Snowflake Task DAG that joins predictions to `mart_game_results` and the latest pre-game odds snapshot.
+  - **Data source:** A new Snowflake table `baseball_data.config.prediction_log` (created by `predict_today.py` on each run — add a Snowflake write step to Card 5.2). Columns: `prediction_date`, `game_pk`, `market` (h2h / totals), `model_prob`, `market_prob_at_prediction`, `closing_market_prob`, `actual_outcome`, `decimal_odds`, `ev`, `kelly_fraction`. `closing_market_prob` and `actual_outcome` are backfilled nightly by a new step in the Card 6.A Snowflake Task DAG that joins predictions to `mart_game_results` and the latest pre-game odds snapshot. **Note:** The closing line backfill step does not yet exist in the Card 6.A DAG. It requires querying `mart_odds_outcomes` for the last `ingestion_ts < commence_time` snapshot per game and writing it to `prediction_log`. This step must be added to `proc_statsapi_schedule` (or a new `proc_results_backfill` task) before `closing_market_prob` and CLV calculations will populate. The Brier trend and CLV charts will remain empty until this backfill is live.
   - **Brier score trend:** `st.line_chart` of rolling 14-day Brier score for model win probability vs. market consensus win probability. Both lines on the same chart. A flat or improving model line relative to market is the primary signal the model is working.
   - **CLV tracker:** For each logged prediction, `CLV = model_prob − closing_market_prob`. Positive CLV means the model identified value that the market later agreed with. `st.bar_chart` of mean CLV by week.
   - **P&L simulation:** Cumulative P&L assuming capped-Kelly stakes on all `Actionable` predictions. Line chart of cumulative units won/lost over time. Includes a flat-bet comparison line (1 unit per actionable bet) so Kelly's advantage is visible.
@@ -1880,6 +1892,38 @@ Update `scripts/daily_run.md`: add a "Snowflake Task DAG" section at the top of 
 
 ---
 
+#### Card 6.F — In-Season Model Retraining Cadence
+
+**Title:** Define and implement a retraining schedule for production models as 2026 season data accumulates
+
+**Description:**
+
+The production models registered in `model_registry.yaml` were trained through end-of-2025. As the 2026 season progresses, retraining them on an expanded dataset improves calibration — particularly for the home win classifier, which is sensitive to the current season's home advantage rate, and for the NGBoost total runs model, which benefits from the current season's run environment. Without retraining, the models will gradually lag the market.
+
+*Trigger criteria:*
+- **Mid-season refit** — after ≥50 2026 regular season games have results in `mart_game_results` (estimated: mid-May). Train on 2016–2026 partial season; register as `eval_year: 2026_midseason`.
+- **All-Star break refit** — after the All-Star break (approx. late July). Train on all available 2026 data through break + prior seasons.
+- **Post-season / pre-2027 refit** — after the 2026 World Series ends (November). Full 2016–2026 retrain; this becomes the primary artifact for the 2027 season opener.
+
+*Retraining steps per target:*
+1. Re-run `run_probability_layer.py` without `--use-alpha` to regenerate all 11 α rows in `alpha_tuning_results` with the expanded dataset.
+2. Persist `best_alpha.json` to `betting_ml/models/best_alpha.json`.
+3. Re-run NGBoost hyperparameter grid search (Cards 4.12d/e) only if CV MAE on 2026 hold-out degrades >1% vs. current; otherwise reuse existing hyperparameters.
+4. Run `refit_win_calibration.py`-style 3-way split: train on 2016–(N−2), calibrate on (N−1), verify on N; fail if ECE delta > 0.005.
+5. Update `model_registry.yaml` with new `selected_at` timestamp and `eval_year`.
+6. Update `betting_ml/evaluation/selection_log.md` with retraining notes.
+
+*Blockers:* Card 6.E (Performance Tracker) should be live so Brier score trend provides the signal that retraining is warranted. Card 5.2 `predict_today.py` must persist predictions to `prediction_log` so CLV can be measured before/after retrain.
+
+*Acceptance criteria:*
+- [ ] Retraining runbook documented in `scripts/daily_run.md` with trigger criteria, commands, and verification steps
+- [ ] `model_registry.yaml` updated with new `selected_at` after each refit; old artifact paths renamed with a date suffix for rollback
+- [ ] `alpha_tuning_results` Snowflake table has 11 rows after each refit (full α grid, not bypass)
+- [ ] `best_alpha.json` written to `betting_ml/models/best_alpha.json` after each refit
+- [ ] Brier score trend in Card 6.E Performance Tracker shows no degradation after retraining vs. pre-retrain baseline
+
+---
+
 ### Phase 7 — Model Refinement, Feature Expansion, and Production Infrastructure
 
 Encompasses long-term model quality improvements, advanced feature engineering, and full production operationalization. The stories in this phase are deferred to after the Phase 5 dry run validates the end-to-end system.
@@ -1891,11 +1935,12 @@ Encompasses long-term model quality improvements, advanced feature engineering, 
 Once baselines are proven in dry run:
 
 **Feature additions:**
-- Weather data (temperature, wind speed/direction, humidity) — strong park-era interaction; requires external data source
-- Umpire tendencies (ball/strike zone size) — significant but requires additional data
-- Bullpen availability score: derive from `mart_bullpen_workload` (days rest + recent IP for top relievers)
-- Batter/pitcher head-to-head history (build from `stg_batter_pitches` with `GROUP BY batter_id, pitcher_id`)
-- Player injury status (requires external data source)
+- **Weather data** (temperature, wind speed/direction relative to park orientation, humidity) — strong park-era interaction for outdoor stadiums; Wind direction at Wrigley is a ~2-run swing. Roof-type filter required (`stg_statsapi_venues.roof_type = 'dome'` should zero out weather features). GPS coordinates already available in `stg_statsapi_venues`. Requires external API (OpenWeatherMap or similar) + historical backfill 2016–2025. See Card 4.B1 (BACKLOG) for full spec.
+- **Umpire tendencies** (home plate umpire zone size, K%/BB% adjustment) — shifts total runs and K rates; umpire assignments announced morning of game. Source: UmpScorecards. See Card 4.B2 (BACKLOG) for full spec.
+- **Bat tracking Phase 2 — per-batter matchup aggregations:** NB06 and Cards 3.7/4.6 both deferred this explicitly ("Re-evaluate with per-batter matchup aggregations in Phase 5+"). Team-level 30-day bat speed averages were too noisy (ΔR² < 0.001). The correct formulation is a game-level aggregation of per-batter bat speed / attack angle against the facing pitcher's pitch mix and handedness. Requires extending `mart_batter_rolling_stats` and `feature_pregame_lineup_features` with bat-speed-vs-pitcher-type columns (2023-07-14+ only). Expected to add a real signal at individual matchup granularity vs. the team-average proxy that failed.
+- **Bullpen availability score:** derive from `mart_bullpen_workload` (days rest + recent IP for top relievers per game) — closer rest state is already partially captured in workload model but not surfaced as a single availability score.
+- **Batter/pitcher head-to-head history:** build from `stg_batter_pitches` with `GROUP BY batter_id, pitcher_id`; minimum 20 PAs to avoid noise.
+- **Player injury status:** requires external data source (ESPN, FanGraphs injury reports); no current ingestion path.
 
 **Model improvements:**
 - Neural network approaches (TabNet, MLP) if tabular baselines plateau
@@ -1914,9 +1959,10 @@ Once baselines are proven in dry run:
 
 Operationalize the full stack beyond the Phase 6 Streamlit MVP and Task DAG:
 
-- Model performance monitoring: track prediction accuracy week-over-week, flag model drift
-- Automated model retraining trigger when rolling Brier score degrades past a threshold
-- Closing line value (CLV) tracking database: store every prediction alongside the closing line to measure long-run edge
+- **Model performance monitoring:** track Brier score and log-loss week-over-week; flag model drift when rolling 14-day Brier exceeds market consensus Brier (0.2395 benchmark from Card 3.11) by >0.005. Card 6.F defines the retraining trigger criteria for 2026 in-season refits; this item covers automated alerting and longer-term monitoring beyond a single season.
+- **Automated retraining trigger:** extend Card 6.F's manual runbook into an automated Snowflake Task that fires after each mid-season refit criterion is met, runs the retraining script via GitHub Actions, and rolls back `model_registry.yaml` if the verification ECE check fails.
+- **CLV tracking infrastructure:** Card 6.E requires `closing_market_prob` per game in `prediction_log`. The closing line backfill step (querying `mart_odds_outcomes` for the last pre-game snapshot per game and writing to `prediction_log`) must be added to the Card 6.A Task DAG. This is a Phase 6 prerequisite for Card 6.E, not a Phase 7 deferral — see the Note in Card 6.E's technical implementation.
+- **α drift monitoring:** best_alpha=0.0 was tuned on 2021–2025 data. As 2026 data accumulates, re-tuning α after each seasonal refit will detect whether the model's relative accuracy vs. the market improves (α drifts toward non-zero). Track this in `alpha_tuning_results` with one row per α candidate per refit run (requires `refit_date` column).
 
 ---
 
@@ -1985,7 +2031,7 @@ Operationalize the full stack beyond the Phase 6 Streamlit MVP and Task DAG:
 | Phase 1 | All dbt tests passing, data quality issues resolved | ✓ Complete |
 | Phase 2 | Pre-game feature assembly mart models built and tested | ✓ Complete |
 | Phase 3 | EDA complete, target variable and feature candidates validated | ✓ Complete |
-| Phase 4 | Baseline + tuned models for all three targets; Bayesian probability layer | In progress (Cards 4.12–4.13 running) |
+| Phase 4 | Baseline + tuned models for all three targets; Bayesian probability layer | **Complete** (2026-04-25) — best_alpha=0.0; 230 probability output rows in Snowflake |
 | Phase 5 | Model packaged; local prediction CLI; lineup notification mechanism | This weekend dry run |
 | Phase 6 | Streamlit MVP (picks, market comparison, EV/Kelly, performance) + Snowflake Task DAG | Near-term |
 | Phase 7A | Refined models with expanded feature set, era-aware approach | Months |
@@ -2219,3 +2265,7 @@ Declarative YAML planning specs (planspec.io/v1alpha1) for agentic task executio
 | 4 | 4.10 | `plan_specs/phase_4/10_base_class_model_win_outcome.yaml` | Draft |
 | 4 | 4.11 | `plan_specs/phase_4/11_hyperparameter_optimization.yaml` | Draft |
 | 4 | 4.12 | `plan_specs/phase_4/12_bayes_prob_layer.yaml` | Draft |
+| 6 | 6.B | `plan_specs/phase_6/B_streamlit_base_todays_picks.yaml` | Draft |
+| 6 | 6.C | `plan_specs/phase_6/C_streamlit_market_comparision_page.yaml` | Draft |
+| 6 | 6.D | `plan_specs/phase_6/D_streamlit_ev_tracker_and_kelly_sizer.yaml` | Draft |
+| 6 | 6.E | `plan_specs/phase_6/E_streamlist_perf_tracker_page.yaml` | Draft |

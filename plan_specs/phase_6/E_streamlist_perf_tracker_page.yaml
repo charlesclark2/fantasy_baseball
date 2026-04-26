@@ -1,0 +1,572 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: streamlit-performance-tracker-page
+  namespace: default
+spec:
+  description: >
+    Build the Performance Tracker page (app/pages/4_Performance.py) for the
+    Streamlit app. This page tracks historical prediction quality via Brier score
+    trend, Closing Line Value (CLV), and cumulative P&L simulation using both
+    Kelly and flat-bet staking strategies.
+
+    The page depends on a new Snowflake table baseball_data.config.prediction_log,
+    which is created and populated by predict_today.py (Card 5.2 extension). The
+    closing_market_prob and actual_outcome columns in prediction_log are backfilled
+    nightly by a step in the Card 6.A Snowflake Task DAG (joining predictions to
+    mart_game_results and the latest pre-game odds snapshot from mart_odds_outcomes).
+
+    Until at least 5 predictions are logged, the page displays an empty state
+    message instead of charts. This is a normal condition at launch — the page
+    becomes functional after the first few days of live predictions.
+
+    NOTE: The closing line backfill DAG step is a Phase 6 prerequisite for CLV
+    and Brier calculations to populate. Until that step is live in the Card 6.A
+    Task DAG, the Brier trend and CLV charts will remain empty even if
+    prediction_log has rows.
+  acceptanceCriteria:
+    - description: >
+        baseball_data.config.prediction_log table created by predict_today.py
+        write step with columns: prediction_date, game_pk, market, model_prob,
+        market_prob_at_prediction, closing_market_prob, actual_outcome,
+        decimal_odds, ev, kelly_fraction
+    - description: >
+        Brier score trend chart renders with both model and market lines once
+        5 or more logged predictions exist with non-null actual_outcome
+    - description: >
+        CLV bar chart groups predictions by ISO week; positive bars are green,
+        negative bars are red; mean CLV per week labeled on each bar
+    - description: >
+        P&L simulation chart includes both Kelly and flat-bet lines on the same
+        chart; flat-bet line uses 1 unit per Actionable prediction for comparison
+    - description: >
+        Summary metrics row at top shows: total predictions logged, win rate on
+        Actionable bets, mean CLV (across all logged predictions with non-null
+        closing_market_prob), cumulative Kelly P&L, cumulative flat-bet P&L
+    - description: >
+        Empty state message "Not enough history yet — check back after a few
+        days of predictions." displayed cleanly when fewer than 5 predictions
+        are logged; no Python exception or chart rendering error
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6b-complete-for-perf-page
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.B (Streamlit app skeleton and Today's Picks page) must be complete
+    before the Performance Tracker page is implemented.
+
+    Required artifacts:
+      - app/streamlit_app.py and app/pages/1_Today_Picks.py both exist and load
+        without error
+      - app/utils/db.py exports run_query() — used by the Performance Tracker
+        to query prediction_log and mart_game_results from Snowflake
+
+    The Performance Tracker page does not call model scoring functions; it only
+    reads from Snowflake. The app/utils/db.py connection factory is the only
+    6.B dependency this page relies on.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-5-2-prediction-log-write-step
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 5.2 (predict_today.py) must be extended to write each scoring run to
+    a Snowflake prediction_log table before the Performance Tracker page can
+    display any data.
+
+    Required changes to predict_today.py:
+      - After writing probability_outputs_{date}.parquet, connect to Snowflake
+        and CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log
+        with columns:
+          prediction_date   DATE NOT NULL,
+          game_pk           INTEGER NOT NULL,
+          market            VARCHAR(20) NOT NULL,   -- 'h2h' or 'totals'
+          model_prob        FLOAT,
+          market_prob_at_prediction FLOAT,
+          closing_market_prob       FLOAT,          -- backfilled nightly by DAG
+          actual_outcome            INTEGER,        -- 0/1; backfilled nightly
+          decimal_odds              FLOAT,
+          ev                        FLOAT,
+          kelly_fraction            FLOAT,
+          loaded_at         TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+      - INSERT one row per game × market from the current scoring run using
+        INSERT INTO ... SELECT from the in-memory output rows
+      - closing_market_prob and actual_outcome are inserted as NULL — they are
+        backfilled later by the Card 6.A DAG closing-line step
+      - Reruns for the same prediction_date must be idempotent:
+        DELETE FROM prediction_log WHERE prediction_date = '{date}' before INSERT
+
+    Confirm that predict_today.py has been run at least once and that:
+      SELECT COUNT(*) FROM baseball_data.config.prediction_log
+    returns a row count > 0 before marking this gate.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6a-closing-line-backfill-step
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The Card 6.A Snowflake Task DAG must include a closing-line backfill step
+    before CLV calculations and the Brier trend chart can populate in the
+    Performance Tracker.
+
+    Required DAG addition:
+      A new stored procedure (proc_results_backfill or an extension of
+      proc_statsapi_schedule) that runs nightly after games complete:
+        UPDATE baseball_data.config.prediction_log pl
+        SET
+          closing_market_prob = (
+            SELECT home_imp_prob
+            FROM baseball_data.betting.mart_odds_outcomes o
+            WHERE o.game_pk = pl.game_pk
+              AND o.market_key = 'h2h'
+              AND o.ingestion_ts < (
+                SELECT commence_time FROM baseball_data.statsapi.stg_statsapi_games
+                WHERE game_pk = pl.game_pk
+              )
+            ORDER BY o.ingestion_ts DESC
+            LIMIT 1
+          ),
+          actual_outcome = (
+            SELECT CASE WHEN home_score > away_score THEN 1 ELSE 0 END
+            FROM baseball_data.betting.mart_game_results
+            WHERE game_pk = pl.game_pk
+          )
+        WHERE pl.closing_market_prob IS NULL
+          AND pl.prediction_date < CURRENT_DATE()
+
+    NOTE: This gate is a prerequisite for the Brier trend and CLV charts to
+    show data, but the Performance Tracker page can be built and deployed before
+    this gate clears — the page will display the empty state message for those
+    charts until backfill is live. Mark this gate when the backfill procedure
+    has been added to the DAG and has run at least once successfully (confirmed
+    by non-null closing_market_prob in prediction_log for at least one past game).
+
+    This gate does NOT block the page implementation task — see dependsOn in the
+    Plan below.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: streamlit-performance-tracker-page-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG. create-prediction-log-table adds the CREATE TABLE DDL to
+    predict_today.py and creates the table in Snowflake. implement-performance-page
+    builds pages/4_Performance.py; it depends on the 6.B gate and the prediction
+    log write step gate, but NOT on the closing-line backfill gate — the page
+    handles missing backfill gracefully via empty state messaging. The closing-line
+    backfill gate is a live-data prerequisite, not a code prerequisite.
+  goalRef:
+    name: streamlit-performance-tracker-page
+  graph:
+    nodes:
+
+      - id: create-prediction-log-table
+        kind: Task
+        description: >
+          Extend betting_ml/scripts/predict_today.py to write each scoring run
+          to Snowflake. This task implements the prediction_log write step
+          described in the card-5-2-prediction-log-write-step gate.
+
+          Changes to predict_today.py:
+
+          1. After the existing parquet write step, add a write_prediction_log()
+             function (or inline block) that:
+               a. Calls get_snowflake_connection() from betting_ml/utils/data_loader.py
+               b. Creates the table if it does not exist:
+                    CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
+                      prediction_date   DATE        NOT NULL,
+                      game_pk           INTEGER     NOT NULL,
+                      market            VARCHAR(20) NOT NULL,
+                      model_prob        FLOAT,
+                      market_prob_at_prediction FLOAT,
+                      closing_market_prob       FLOAT,
+                      actual_outcome            INTEGER,
+                      decimal_odds              FLOAT,
+                      ev                        FLOAT,
+                      kelly_fraction            FLOAT,
+                      loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+                    )
+               c. Deletes existing rows for the current prediction_date to ensure
+                  idempotent reruns:
+                    DELETE FROM baseball_data.config.prediction_log
+                    WHERE prediction_date = '{prediction_date}'
+               d. Inserts one row per game × market from the in-memory output rows
+                  built during the scoring run. closing_market_prob and
+                  actual_outcome are inserted as NULL.
+               e. Prints a confirmation: "Wrote N rows to prediction_log for {date}"
+
+          2. The write step must not fail silently — any Snowflake error during
+             CREATE TABLE, DELETE, or INSERT must propagate as an exception that
+             terminates the script with a non-zero exit code.
+
+          3. Add a CLI flag --no-log-snowflake to skip the prediction_log write
+             step for dry runs. Default behavior (no flag) always writes.
+
+          Do NOT modify the parquet output logic — it must continue to write
+          probability_outputs_{date}.parquet as before.
+        dependsOn:
+          - card-6b-complete-for-perf-page
+          - card-5-2-prediction-log-write-step
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py still exits 0 with existing behavior intact
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                ast.parse(src)
+                print('predict_today.py syntax OK')
+          - type: command_succeeds
+            name: prediction_log CREATE TABLE statement present in predict_today.py
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'prediction_log' in src, (
+                    'prediction_log not referenced in predict_today.py'
+                )
+                assert 'CREATE TABLE IF NOT EXISTS' in src, (
+                    'CREATE TABLE IF NOT EXISTS not found — table creation step missing'
+                )
+                assert 'closing_market_prob' in src, (
+                    'closing_market_prob column not defined in CREATE TABLE'
+                )
+                assert 'actual_outcome' in src, (
+                    'actual_outcome column not defined in CREATE TABLE'
+                )
+                print('prediction_log DDL reference OK')
+          - type: command_succeeds
+            name: Idempotent DELETE before INSERT present
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'DELETE FROM' in src and 'prediction_log' in src, (
+                    'DELETE FROM prediction_log not found — reruns will duplicate rows'
+                )
+                print('Idempotent DELETE OK')
+          - type: command_succeeds
+            name: --no-log-snowflake flag present
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'no_log_snowflake' in src or 'no-log-snowflake' in src, (
+                    '--no-log-snowflake flag not found in predict_today.py'
+                )
+                print('--no-log-snowflake flag OK')
+          - type: command_succeeds
+            name: prediction_log table exists in Snowflake with correct schema
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT column_name
+                    FROM baseball_data.information_schema.columns
+                    WHERE table_schema = 'CONFIG'
+                      AND table_name = 'PREDICTION_LOG'
+                    ORDER BY ordinal_position
+                """)
+                cols = {row[0].lower() for row in cur.fetchall()}
+                conn.close()
+                required = {
+                    'prediction_date', 'game_pk', 'market', 'model_prob',
+                    'market_prob_at_prediction', 'closing_market_prob',
+                    'actual_outcome', 'decimal_odds', 'ev', 'kelly_fraction'
+                }
+                missing = required - cols
+                assert not missing, f'Missing columns in prediction_log: {missing}'
+                print(f'prediction_log schema OK: {sorted(cols)}')
+
+      - id: implement-performance-page
+        kind: Task
+        description: >
+          Create app/pages/4_Performance.py implementing the full Performance
+          Tracker page.
+
+          PAGE HEADER:
+            st.title("Performance Tracker")
+            st.caption("Historical prediction quality — Brier score trend,
+            Closing Line Value, and cumulative P&L simulation.")
+
+          DATA LOADING:
+            Query prediction_log for all rows with non-null actual_outcome:
+              SELECT
+                prediction_date,
+                game_pk,
+                market,
+                model_prob,
+                market_prob_at_prediction,
+                closing_market_prob,
+                actual_outcome,
+                decimal_odds,
+                ev,
+                kelly_fraction
+              FROM baseball_data.config.prediction_log
+              WHERE actual_outcome IS NOT NULL
+              ORDER BY prediction_date ASC
+
+            Wrap with @st.cache_data(ttl=3600) so it refreshes hourly.
+
+          EMPTY STATE CHECK:
+            n_rows = len(df)
+            If n_rows < 5:
+              st.info(
+                "Not enough history yet — check back after a few days of "
+                "predictions. Predictions are logged each time predict_today.py "
+                "runs; outcomes are backfilled nightly by the Snowflake Task DAG."
+              )
+              return  (exit the page function; render nothing else)
+
+          SUMMARY METRICS ROW (st.header("Summary")):
+            Five st.metric tiles in a single st.columns(5) row:
+              "Predictions Logged"   — n_rows (total rows in prediction_log,
+                                       not just those with actual_outcome)
+              "Win Rate (Actionable)"— proportion of rows where
+                                       actual_outcome == 1 AND ev > 0;
+                                       formatted "{:.1%}"
+              "Mean CLV"             — mean of (model_prob − closing_market_prob)
+                                       for rows with non-null closing_market_prob;
+                                       formatted "{:+.4f}"; show "—" if no CLV rows
+              "Cumulative P&L (Kelly)"— sum of kelly_pnl (see P&L section);
+                                       formatted "{:+.2f} units"
+              "Cumulative P&L (Flat)" — sum of flat_pnl (see P&L section);
+                                        formatted "{:+.2f} units"
+
+          BRIER SCORE TREND (st.header("Brier Score Trend")):
+            Compute rolling 14-day Brier score for each row:
+              brier_model  = (model_prob − actual_outcome)²
+              brier_market = (market_prob_at_prediction − actual_outcome)²
+            Group by prediction_date; rolling 14-day mean of both.
+            Build a two-column DataFrame: prediction_date, brier_model_14d,
+            brier_market_14d.
+            Render with st.line_chart(df_brier.set_index('prediction_date'),
+              use_container_width=True).
+            Add caption: "Lower Brier score = better calibration.
+            Market benchmark ≈ 0.2395 (Card 3.11 baseline)."
+            If fewer than 14 rows with actual_outcome: display the raw (non-rolling)
+            per-date Brier scores instead; note below chart: "Fewer than 14 days
+            of data — rolling average not yet meaningful."
+
+          CLV TRACKER (st.header("Closing Line Value (CLV)")):
+            Filter to rows with non-null closing_market_prob.
+            If none:
+              st.info("CLV data not yet available. The nightly Snowflake Task DAG
+              backfills closing_market_prob from mart_odds_outcomes. Check back
+              after the DAG has run.")
+            Else:
+              clv = model_prob − closing_market_prob
+              Group by ISO week (prediction_date.dt.isocalendar().week combined
+              with year for multi-year safety).
+              Compute mean CLV per week.
+              Build bar chart DataFrame: week_label (e.g. "2026-W18"), mean_clv.
+              Color bars: green for mean_clv > 0, red for mean_clv <= 0.
+              Use st.bar_chart is not capable of per-bar color — use
+              altair or plotly for this chart:
+                import altair as alt
+                chart = alt.Chart(df_clv).mark_bar().encode(
+                  x=alt.X('week_label:N', sort=None),
+                  y='mean_clv:Q',
+                  color=alt.condition(
+                    alt.datum.mean_clv > 0,
+                    alt.value('#28a745'),  # green
+                    alt.value('#dc3545')   # red
+                  )
+                ).properties(title='Mean CLV by Week')
+                st.altair_chart(chart, use_container_width=True)
+
+          P&L SIMULATION (st.header("Cumulative P&L Simulation")):
+            For each row where ev > 0 (Actionable proxy — ev > 0 is sufficient
+            since lineup confirmation can't be retroactively verified for history):
+              kelly_pnl_row = kelly_fraction × (actual_outcome × (decimal_odds - 1)
+                              - (1 - actual_outcome))
+              flat_pnl_row  = 1.0 × (actual_outcome × (decimal_odds - 1)
+                              - (1 - actual_outcome))
+            Sort by prediction_date; compute cumsum for both series.
+            Build DataFrame: prediction_date, kelly_cumulative, flat_cumulative.
+            Render with st.line_chart(df_pnl.set_index('prediction_date'),
+              use_container_width=True).
+            Caption: "Kelly staking uses the capped kelly_fraction logged at
+            prediction time. Flat staking uses 1 unit per actionable bet."
+
+          SIDEBAR CONTEXT:
+            Show: total rows in prediction_log (including those without
+            actual_outcome), rows with actual_outcome filled, rows with
+            closing_market_prob filled, and earliest/latest prediction_date.
+        dependsOn:
+          - create-prediction-log-table
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Performance Tracker page module
+            path: app/pages/4_Performance.py
+          - type: command_succeeds
+            name: Page module parses without syntax error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('app/pages/4_Performance.py').read_text()
+                ast.parse(src)
+                print('Syntax OK')
+          - type: command_succeeds
+            name: prediction_log queried with correct table reference
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert 'prediction_log' in src, (
+                    'prediction_log not referenced in Performance Tracker page'
+                )
+                print('prediction_log reference OK')
+          - type: command_succeeds
+            name: Empty state guard (< 5 rows) implemented before any chart rendering
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert '< 5' in src or 'n_rows < 5' in src or 'fewer than 5' in src.lower(), (
+                    'Empty state guard (< 5 rows) not found in Performance Tracker'
+                )
+                assert 'Not enough history' in src or 'not enough history' in src.lower(), (
+                    'Empty state message "Not enough history yet" not found'
+                )
+                print('Empty state guard OK')
+          - type: command_succeeds
+            name: Brier score computed for both model and market lines
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert 'brier' in src.lower(), (
+                    'brier not found in Performance Tracker — Brier score trend missing'
+                )
+                assert 'market_prob_at_prediction' in src, (
+                    'market_prob_at_prediction not referenced — market Brier line missing'
+                )
+                print('Brier trend references OK')
+          - type: command_succeeds
+            name: CLV computed as model_prob minus closing_market_prob
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert 'closing_market_prob' in src, (
+                    'closing_market_prob not referenced — CLV calculation missing'
+                )
+                assert 'clv' in src.lower() or 'closing line' in src.lower(), (
+                    'CLV not computed or labeled in Performance Tracker'
+                )
+                print('CLV reference OK')
+          - type: command_succeeds
+            name: P&L simulation includes both Kelly and flat-bet lines
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert 'kelly' in src.lower(), (
+                    'Kelly P&L line not found in Performance Tracker'
+                )
+                for flat_token in ['flat_pnl', 'flat_cumulative', 'flat staking', 'flat-bet']:
+                    if flat_token in src.lower():
+                        print(f'Flat-bet P&L line found via: {flat_token}')
+                        break
+                else:
+                    raise AssertionError(
+                        'Flat-bet P&L comparison line not found in Performance Tracker. '
+                        'Both Kelly and flat-bet cumulative P&L must be plotted.'
+                    )
+          - type: command_succeeds
+            name: CLV chart uses altair or plotly for per-bar color
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                has_color_lib = 'altair' in src or 'plotly' in src
+                assert has_color_lib, (
+                    'altair or plotly not imported — CLV bar chart requires per-bar '
+                    'color (green/red) which st.bar_chart cannot provide'
+                )
+                print('CLV chart color library OK')
+          - type: command_succeeds
+            name: CLV unavailable message handles null closing_market_prob gracefully
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/4_Performance.py').read()
+                assert 'closing_market_prob' in src, 'closing_market_prob not referenced'
+                has_null_guard = (
+                    'IS NULL' in src or 'isnull' in src.lower() or
+                    'notna' in src or 'CLV data not yet available' in src or
+                    'not yet available' in src.lower()
+                )
+                assert has_null_guard, (
+                    'No null guard for closing_market_prob found — page must handle '
+                    'the case where backfill has not run yet'
+                )
+                print('CLV null guard OK')

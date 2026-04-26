@@ -1,0 +1,368 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: streamlit-ev-tracker-kelly-sizer
+  namespace: default
+spec:
+  description: >
+    Build the EV Tracker and Kelly Sizer page (app/pages/3_EV_Kelly.py) for the
+    Streamlit app. This page provides a complete actionable betting decision
+    surface: a full game × market EV table, an Actionable flag that gates on EV,
+    edge magnitude, and lineup confirmation, a bankroll simulator, and risk
+    controls including lineup warnings and correlated-bet flagging.
+
+    The page depends on Cards 6.B and 6.C for the shared Snowflake connection
+    and model scoring logic. It reuses the in-memory scoring pattern established
+    in 1_Today_Picks.py (consensus_win_prob blend, compute_edge, compute_kelly,
+    compute_posterior from probability_layer.py) and extends it to cover all
+    four market rows per game: h2h home, h2h away, over, under.
+
+    EV formula:
+      EV = (model_prob × (decimal_odds − 1)) − (1 − model_prob)
+    Kelly formula:
+      kelly_fraction = (model_prob × (decimal_odds − 1) − (1 − model_prob))
+                       / (decimal_odds − 1)
+    Kelly is capped at 10% in all display and simulator columns.
+
+    Actionable = True when ALL of:
+      EV > 0
+      abs(edge) > 0.03
+      lineups confirmed (both_confirmed = True from stg_statsapi_lineups_wide)
+      model_prob is not null
+  acceptanceCriteria:
+    - description: >
+        EV table renders for all games × markets on the selected date with
+        columns: Matchup, Market, Model Prob, Market Implied Prob, Decimal Odds,
+        EV, Raw Kelly%, Capped Kelly%, Actionable
+    - description: >
+        Actionable flag correctly excludes games with unconfirmed lineups,
+        negative EV, abs(edge) <= 0.03, or null model_prob — verified by
+        inspecting a known game where one condition fails
+    - description: >
+        Bankroll simulator Stake column equals capped_kelly × bankroll_input;
+        value updates reactively when the bankroll number input changes without
+        a page reload
+    - description: >
+        Warning banner ("Lineup pending: do not act until confirmed") displays
+        for games that are otherwise Actionable but have unconfirmed lineups
+    - description: >
+        Correlated same-game bets (h2h + totals for the same game_pk) flagged
+        with a warning icon in the suggested slate table
+    - description: >
+        Total risk and expected profit summary row present at the bottom of
+        the suggested slate table; total_risk = sum of all stakes,
+        total_ev = sum of all EV($) values
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6b-complete-for-ev-page
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.B (Streamlit app skeleton and Today's Picks page) must be complete
+    before the EV Tracker page is implemented.
+
+    Required artifacts:
+      - app/streamlit_app.py and app/pages/1_Today_Picks.py both exist and load
+        without error
+      - app/utils/db.py exports get_snowflake_session(), run_query(),
+        and load_best_alpha()
+      - The model scoring pattern (load models from registry, apply imputation
+        pipeline, call compute_posterior / compute_edge / compute_kelly) is
+        validated working on a real date with games
+
+    The EV page imports from app/utils/db.py and reuses the same scoring
+    functions — both must be confirmed working before this page is built.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6c-complete-for-ev-page
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.C (Market Comparison page) must be complete before the EV Tracker
+    page is implemented, because the EV page reuses the odds query pattern
+    from the Market Comparison page and extends it to all four markets per game.
+
+    Required artifacts:
+      - app/pages/2_Market_Comparison.py exists and loads without error
+      - The mart_odds_outcomes query with the ingestion_ts < commence_time
+        leakage guard has been confirmed working against live Snowflake data
+      - The cross-bookmaker table (including vig column) renders correctly for
+        at least one game with multiple bookmakers
+
+    Confirm the Market Comparison page loads and displays all panels for a
+    recent game with odds data before marking this gate.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: streamlit-ev-tracker-kelly-sizer-plan
+  namespace: default
+spec:
+  description: >
+    Single-task plan. Both Card 6.B and Card 6.C gates must clear before
+    implement-ev-kelly-page begins. The task creates pages/3_EV_Kelly.py with
+    the full EV table, Actionable flag logic, bankroll simulator, lineup warning
+    banner, correlated-bet flagging, and total risk/EV summary row.
+  goalRef:
+    name: streamlit-ev-tracker-kelly-sizer
+  graph:
+    nodes:
+
+      - id: implement-ev-kelly-page
+        kind: Task
+        description: >
+          Create app/pages/3_EV_Kelly.py.
+
+          PAGE HEADER:
+            st.title("EV Tracker & Kelly Sizer")
+            st.caption("Expected value and bet sizing for all markets on the
+            selected date. Kelly fractions capped at 10% of bankroll.")
+
+          DATE SELECTOR:
+            date = st.date_input("Select date", value=datetime.date.today())
+            Sidebar: bankroll_input = st.number_input(
+              "Bankroll ($)", min_value=0.0, value=1000.0, step=50.0,
+              format="%.2f"
+            )
+
+          DATA LOADING:
+            Reuse the same Snowflake query and model scoring pattern as
+            1_Today_Picks.py. Wrap in @st.cache_data keyed on date string +
+            model registry mtime so scores are not recomputed on bankroll
+            changes (bankroll only affects the simulator display, not
+            probability calculations).
+
+            Extend the scoring to cover all four market rows per game:
+              h2h_home:
+                model_prob = consensus_win_prob
+                market_prob = home_win_prob_consensus
+                decimal_odds = 1.0 / home_win_prob_consensus
+              h2h_away:
+                model_prob = 1 - consensus_win_prob
+                market_prob = 1 - home_win_prob_consensus
+                decimal_odds = 1.0 / (1 - home_win_prob_consensus)
+              over:
+                model_prob = p_over_total
+                market_prob = over_prob_consensus
+                decimal_odds = 1.0 / over_prob_consensus
+              under:
+                model_prob = 1 - p_over_total
+                market_prob = 1 - over_prob_consensus
+                decimal_odds = 1.0 / (1 - over_prob_consensus)
+
+            For each row compute:
+              edge = compute_edge(model_prob, market_prob)
+              ev   = (model_prob * (decimal_odds - 1)) - (1 - model_prob)
+              kelly_raw  = ev / (decimal_odds - 1) if decimal_odds > 1 else 0.0
+              kelly_capped = min(max(kelly_raw, 0.0), 0.10)
+              kelly_exceeded_cap = kelly_raw > 0.10
+
+            Actionable flag (all conditions must hold):
+              ev > 0
+              abs(edge) > 0.03
+              both_confirmed == True  (from stg_statsapi_lineups_wide)
+              model_prob is not None/NaN
+
+            Only emit a market row when model_prob and market_prob are both
+            non-null (skip h2h rows for no-odds games; skip totals rows when
+            over_prob_consensus is null).
+
+          EV TABLE (st.subheader("All Markets")):
+            Build display DataFrame with columns:
+              Matchup       — "{away_abbrev} @ {home_abbrev}"
+              Market        — "h2h home" / "h2h away" / "over" / "under"
+              Model Prob    — formatted "{:.1%}"
+              Mkt Impl Prob — formatted "{:.1%}"
+              Decimal Odds  — formatted "{:.3f}"
+              EV            — formatted "{:+.4f}"
+              Raw Kelly%    — formatted "{:.2%}"
+              Capped Kelly% — formatted "{:.2%}" (hard cap 10%)
+              Actionable    — True / False
+
+            Render with st.dataframe(df_all_markets, use_container_width=True).
+
+          WARNING BANNER:
+            Identify rows where Actionable would be True except that lineups
+            are not yet confirmed (i.e., ev > 0 AND abs(edge) > 0.03 AND
+            model_prob is not null BUT both_confirmed == False).
+            If any such rows exist:
+              st.warning(
+                "⚠ Lineup pending — the following games have positive EV "
+                "but lineups are not yet confirmed. Do not act until lineups "
+                "are confirmed:\n" + ", ".join(pending_games)
+              )
+            Place this banner immediately above the EV table.
+
+          SUGGESTED SLATE (st.subheader("Suggested Slate")):
+            Filter df_all_markets to Actionable == True.
+            If the slate is empty:
+              st.info("No actionable bets for this date based on current
+              odds, edge threshold (>3%), and lineup confirmation status.")
+            Else:
+              Build suggested slate DataFrame:
+                Bet       — "{matchup} — {market}"
+                Stake ($) — capped_kelly × bankroll_input, formatted "{:.2f}"
+                To Win ($) — stake × (decimal_odds - 1), formatted "{:.2f}"
+                EV ($)    — ev × stake, formatted "{:+.2f}"
+                Correlated — True if another row in the slate shares the
+                             same game_pk (same game, different market);
+                             display as "⚠" when True else ""
+
+              Render st.dataframe(df_slate, use_container_width=True).
+
+              Summary row (rendered as st.metric tiles below the slate table):
+                Total Stake ($)   — sum of all Stake($) values
+                Total EV ($)      — sum of all EV($) values
+                Bets on Slate     — count of Actionable rows
+
+          CORRELATED BET INFO NOTE:
+            Below the slate table, render:
+              st.info(
+                "ℹ Kelly fractions are capped at 10% of bankroll. "
+                "Rows marked ⚠ share a game with another bet on this slate — "
+                "simultaneous correlated bets (same game, different markets) "
+                "overstate true edge; consider sizing down."
+              )
+            Always show this note when the slate has at least one row.
+
+          SIDEBAR CONTEXT:
+            Show: selected date, bankroll_input, number of games loaded,
+            number of Actionable bets, and best_alpha.
+
+        dependsOn:
+          - card-6b-complete-for-ev-page
+          - card-6c-complete-for-ev-page
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: EV Tracker page module
+            path: app/pages/3_EV_Kelly.py
+          - type: command_succeeds
+            name: Page module parses without syntax error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('app/pages/3_EV_Kelly.py').read_text()
+                ast.parse(src)
+                print('Syntax OK')
+          - type: command_succeeds
+            name: All four market rows defined (h2h home, h2h away, over, under)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                for market in ['h2h_home', 'h2h_away', 'over', 'under']:
+                    assert market in src or market.replace('_', ' ') in src, (
+                        f'Market "{market}" not found in page source — '
+                        'all four market rows must be computed'
+                    )
+                print('All four markets defined OK')
+          - type: command_succeeds
+            name: Actionable flag uses all four required conditions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                conditions = {
+                    'ev > 0': ['ev > 0', "ev>0"],
+                    'abs(edge) > 0.03': ['0.03', 'edge'],
+                    'both_confirmed': ['both_confirmed', 'lineup'],
+                    'model_prob not null': ['model_prob', 'null', 'isna', 'isnull', 'notna'],
+                }
+                for desc, tokens in conditions.items():
+                    found = any(t in src for t in tokens)
+                    assert found, (
+                        f'Actionable condition "{desc}" not found in page source. '
+                        f'Check one of: {tokens}'
+                    )
+                print('All Actionable conditions referenced OK')
+          - type: command_succeeds
+            name: Kelly capped at 10% in all display columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                assert '0.10' in src or '0.1)' in src, (
+                    'Kelly cap of 0.10 not found in EV page source'
+                )
+                assert 'kelly_capped' in src or 'capped_kelly' in src or 'Capped Kelly' in src, (
+                    'Capped Kelly column not found — cap must be applied before display'
+                )
+                print('Kelly cap OK')
+          - type: command_succeeds
+            name: Correlated bet flagging logic present
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                assert 'Correlated' in src or 'correlated' in src, (
+                    'Correlated bet column not found in page'
+                )
+                assert 'game_pk' in src, (
+                    'game_pk not referenced — correlated detection must compare game_pk values'
+                )
+                print('Correlated flagging reference OK')
+          - type: command_succeeds
+            name: Lineup pending warning banner implemented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                assert 'st.warning' in src, (
+                    'st.warning not found — lineup pending warning banner missing'
+                )
+                assert 'pending' in src.lower() or 'unconfirmed' in src.lower(), (
+                    'Lineup pending language not found in warning banner'
+                )
+                print('Warning banner OK')
+          - type: command_succeeds
+            name: Summary row metrics (total stake, total EV, bet count) present
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/3_EV_Kelly.py').read()
+                for term in ['Total Stake', 'Total EV', 'Bets on Slate', 'total_stake', 'total_ev']:
+                    if term in src:
+                        print(f'Found summary term: {term}')
+                        break
+                else:
+                    raise AssertionError(
+                        'Summary row metrics (total stake / total EV / bet count) '
+                        'not found in page source'
+                    )
+                print('Summary row OK')

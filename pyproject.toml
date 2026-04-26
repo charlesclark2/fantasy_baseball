@@ -16,6 +16,8 @@ dependencies = [
     "ngboost>=0.4",
     "shap>=0.44",
     "optuna>=4.8.0",
+    "pyarrow>=24.0.0",
+    "mlb-statsapi>=0.0.44",
 ]
 
 [build-system]

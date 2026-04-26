@@ -6,12 +6,14 @@ metadata:
   namespace: default
 spec:
   description: >
-    Build the three-component lineup monitoring pipeline: a Snowflake Task
-    (task_lineup_monitor) that fires hourly, ingests the Stats API schedule,
-    detects newly confirmed lineups, and dispatches a GitHub Actions workflow
+    Build the two-component lineup monitoring pipeline: a Snowflake Task
+    (task_lineup_monitor) that fires hourly, queries stg_statsapi_lineups_wide
+    for newly confirmed lineups, and dispatches a GitHub Actions workflow
     (dbt_staging_build.yml) that runs dbtf build for the lineup-dependent
-    feature models and sends an email notification to charles.t.clark89@gmail.com
-    when both lineups are locked for a game.
+    feature models when both lineups are locked for a game.
+
+    Note: email notification of lineup confirmation is a Phase 6 enhancement
+    (see Phase 6 pipeline spec) and is out of scope for this card.
   acceptanceCriteria:
     - description: >
         baseball_data.config.lineup_monitor_state table exists with columns
@@ -28,9 +30,6 @@ spec:
         workflow_dispatch from the GitHub UI with game_pk input; dbtf build
         --select +stg_statsapi_lineups+ runs successfully inside the workflow
     - description: >
-        Email notification is sent to charles.t.clark89@gmail.com after a
-        successful build when the NOTIFICATION_EMAIL secret is set
-    - description: >
         scripts/daily_run.md updated with a "Lineup Monitor Architecture"
         section that includes the manual trigger command and the full secrets
         checklist
@@ -44,28 +43,29 @@ metadata:
 spec:
   gateType: review
   description: >
-    Two prerequisites must be in place before implementation begins:
+    Two prerequisites must be in place before implementation begins. As of
+    2026-04-25 both are already satisfied per Cards 6.A.0–6.A.5:
 
-    1. Card 6.A's External Network Access Integration must exist in Snowflake
-    and be functional for statsapi.mlb.com. The Snowpark stored procedure
-    created in this card reuses that integration to call ingest_statsapi.py
-    schedule on each hourly fire. Without it, the stored procedure cannot reach
-    the Stats API and lineup ingestion will fail silently.
+    1. Card 6.A's External Network Access Integration
+       (daily_ingestion_access_integration) exists in Snowflake and is
+       functional for statsapi.mlb.com and api.github.com. The Snowpark stored
+       procedure created in this card reuses that integration to detect lineup
+       confirmations and dispatch the GitHub Actions workflow.
 
-    2. A GitHub Personal Access Token with repo scope must be provisioned and
-    stored as a Snowflake Secret (GITHUB_PAT) in the Snowflake account. The
-    stored procedure fires the dbt_staging_build.yml workflow via the GitHub
-    REST API POST /repos/{owner}/{repo}/actions/workflows/... — this call
-    requires the PAT. Without the secret in place, the dispatch step will fail
-    at runtime, not at DDL deployment time, making the failure hard to debug.
+    2. A GitHub Personal Access Token with repo scope is provisioned and stored
+       as a Snowflake Secret (baseball_data.config.github_pat) in the Snowflake
+       account. The stored procedure fires the dbt_staging_build.yml workflow via
+       the GitHub REST API POST /repos/{owner}/{repo}/actions/workflows/... —
+       this call requires the PAT.
 
     Additionally, confirm that dbt-fusion (dbtf) is installable in the GitHub
-    Actions ubuntu-latest environment before writing the workflow — if the
-    install command is wrong, every CI run will fail.
+    Actions ubuntu-latest environment via `pip install dbt-fusion` — this is
+    already confirmed by the existing dbt_daily_build.yml workflow.
 
-    These prerequisites cannot be verified programmatically from a local
-    machine; they require manual confirmation in the Snowflake and GitHub
-    consoles before this plan proceeds.
+    Verify both prerequisites are still active in the Snowflake and GitHub
+    consoles before starting implementation. If Card 6.A was the source of
+    these, they should be in place; this gate is a confirmation step, not a
+    blocker.
   reviewers:
     - user:charlesclark
 
@@ -112,6 +112,9 @@ spec:
                status STRING NOT NULL,
                details VARIANT
              );
+          Note: pipeline_run_log already exists from Card 6.A
+          (scripts/ddl/snowflake_task_dag.sql, Section 0). Use CREATE TABLE IF NOT EXISTS
+          to make this DDL file idempotent.
 
           3. Stub for CREATE OR REPLACE TASK task_lineup_monitor (placeholder
              body referencing the stored procedure name; the full Task definition
@@ -194,41 +197,65 @@ spec:
         description: >
           Write the Snowpark Python stored procedure body inside
           scripts/ddl/lineup_monitor_task.sql. The procedure is named
-          lineup_monitor_proc() and does two things in sequence on each
-          hourly fire:
+          lineup_monitor_proc() and does the following on each hourly fire:
 
-          Step A — Ingestion:
-          Call the current-month schedule ingestion via the External Network
-          Access Integration granted to statsapi.mlb.com (Card 6.A). The call
-          pattern inside Snowpark is:
-            import subprocess
-            subprocess.run(['python', 'ingest_statsapi.py', 'schedule', '--month', current_month])
-          or equivalent Snowpark-native HTTP call using the integration. Newly
-          confirmed lineup rows land in baseball_data.statsapi.monthly_schedule.
+          Step A — Lineup detection:
+          Query stg_statsapi_lineups_wide for CURRENT_DATE in Snowflake. A lineup
+          is confirmed when home_lineup_slot_1 IS NOT NULL AND away_lineup_slot_1
+          IS NOT NULL. Use session.sql(...).collect() to retrieve confirmed game_pks.
+          This view reflects the most recent dbtf build output — the stored procedure
+          does NOT re-ingest the Stats API directly (ingestion is handled by the
+          existing proc_statsapi_ingestion task in snowflake_task_dag.sql).
 
-          Step B — Lineup detection and deduplication:
-          Query stg_statsapi_lineups_wide for today's date (CURRENT_DATE in
-          Snowflake). A lineup is confirmed when home_lineup_slot_1 IS NOT NULL
-          AND away_lineup_slot_1 IS NOT NULL. Compare confirmed game_pks against
-          baseball_data.config.lineup_monitor_state for today's run_date. For
-          each newly confirmed game_pk NOT IN the state table:
+          Step B — Deduplication and dispatch:
+          Compare confirmed game_pks against baseball_data.config.lineup_monitor_state
+          for today's run_date. For each newly confirmed game_pk NOT IN the state table:
             1. INSERT a row into lineup_monitor_state (run_date, game_pk, triggered_at)
-               using INSERT OR IGNORE semantics (or a NOT EXISTS guard) to prevent
-               duplicate inserts on re-runs.
+               using a NOT EXISTS guard to prevent duplicate inserts on re-runs.
             2. Call the GitHub Actions workflow_dispatch endpoint via an HTTP
-               request using Snowflake's External Network Access Integration
-               (GITHUB_PAT secret): POST to
-               https://api.github.com/repos/{owner}/{repo}/actions/workflows/dbt_staging_build.yml/dispatches
-               with body {"ref": "main", "inputs": {"game_pk": "<game_pk>",
-               "triggered_by": "lineup_monitor"}}.
+               request using the External Access Integration and the GITHUB_PAT
+               Snowflake Secret. The correct pattern (matching the existing
+               scripts/ddl/snowflake_task_dag.sql style) is to use the `requests`
+               library within the Snowpark Python sandbox — subprocess.run() is
+               not available in the Snowflake execution environment:
+
+               import requests
+               from snowflake.snowpark import Session
+
+               secret_val = session.sql(
+                   "SELECT SYSTEM$GET_SECRET('baseball_data.config.github_pat')"
+               ).collect()[0][0]
+
+               resp = requests.post(
+                   'https://api.github.com/repos/{owner}/{repo}'
+                   '/actions/workflows/dbt_staging_build.yml/dispatches',
+                   headers={
+                       'Authorization': f'token {secret_val}',
+                       'Accept': 'application/vnd.github+json',
+                   },
+                   json={'ref': 'main', 'inputs': {
+                       'game_pk': str(game_pk),
+                       'triggered_by': 'lineup_monitor',
+                   }},
+               )
+
             3. If the dispatch call returns a 2xx status, update the
                lineup_monitor_state row with a placeholder gh_workflow_run_id
                (the actual run ID is populated by the callback step in the
                GitHub Actions workflow on success).
 
-          The procedure must handle the case where stg_statsapi_lineups_wide
-          returns zero rows (off-season or no games today) without raising an
-          exception — log a no-op record to pipeline_run_log and return.
+          Step C — Audit log:
+          Write one row to pipeline_run_log for every hourly fire, including
+          no-op runs where zero new lineups were detected. Follow the schema in
+          scripts/ddl/snowflake_task_dag.sql (columns: pipeline_name, run_at,
+          status, details VARIANT).
+
+          The procedure must handle zero confirmed games (off-season or no games
+          today) without raising an exception — log a no-op record and return.
+
+          Both the External Access Integration (daily_ingestion_access_integration)
+          and the Snowflake Secret (baseball_data.config.github_pat) are already
+          provisioned by Card 6.A and must be referenced in the procedure header.
         dependsOn:
           - create-infrastructure-ddl
         acceptanceCriteria:
@@ -290,11 +317,30 @@ spec:
                     'Stored procedure does not reference the GitHub Actions dispatch endpoint — '
                     'must POST to the workflow_dispatch endpoint to trigger the CI build'
                 )
-                assert 'GITHUB_PAT' in src, (
+                assert 'github_pat' in src.lower() or 'GITHUB_PAT' in src, (
                     'Stored procedure does not reference the GITHUB_PAT Snowflake Secret — '
                     'authentication for the GitHub REST API call requires the PAT'
                 )
-                print('PASS: GitHub Actions dispatch and GITHUB_PAT referenced in procedure')
+                print('PASS: GitHub Actions dispatch and github_pat referenced in procedure')
+          - type: command_succeeds
+            name: Procedure uses requests (not subprocess) for HTTP calls
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('scripts/ddl/lineup_monitor_task.sql').read()
+                assert 'import requests' in src or 'requests.post' in src or 'requests.get' in src, (
+                    'Stored procedure does not use the requests library for HTTP — '
+                    'subprocess.run() is not available in the Snowflake Snowpark sandbox; '
+                    'use requests via the External Access Integration instead'
+                )
+                assert 'subprocess' not in src, (
+                    'Stored procedure references subprocess — this will fail at runtime '
+                    'in the Snowflake Snowpark sandbox; use requests instead'
+                )
+                print('PASS: procedure uses requests for HTTP calls (not subprocess)')
           - type: command_succeeds
             name: Procedure references pipeline_run_log for run auditing
             command: uv
@@ -314,7 +360,12 @@ spec:
         kind: Task
         description: >
           Create .github/workflows/dbt_staging_build.yml — the GitHub Actions
-          workflow triggered by the Snowflake Task dispatch.
+          workflow triggered by the Snowflake Task dispatch for lineup-confirmed
+          games. This is a separate, narrower workflow from the existing
+          dbt_daily_build.yml (which runs a full dbtf build on the daily
+          schedule). dbt_staging_build.yml targets only the lineup-dependent
+          staging models (+stg_statsapi_lineups+) and accepts a game_pk input
+          so downstream steps know which game triggered the build.
 
           Trigger:
             on:
@@ -339,58 +390,31 @@ spec:
               with:
                 python-version: "3.11"
             - run: pip install dbt-fusion
-          (Confirm the correct install command for dbt-fusion in CI before
-          finalizing — if the project uses uv and a lockfile, prefer
-          `pip install dbt-fusion` as the simplest path for Actions without
-          requiring uv in the runner.)
+          (pip install dbt-fusion is the correct and confirmed install command
+          for dbt-fusion in CI — already validated by the existing dbt_daily_build.yml.)
 
-          Step 3 — Write dbt profiles.yml from GitHub Secrets:
+          Step 3 — Write Snowflake private key from GitHub Secrets:
             - run: |
-                mkdir -p ~/.dbt
-                cat > ~/.dbt/profiles.yml << EOF
-                baseball_betting:
-                  target: prod
-                  outputs:
-                    prod:
-                      type: snowflake
-                      account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-                      user: ${{ secrets.SNOWFLAKE_USER }}
-                      private_key: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
-                      database: ${{ secrets.SNOWFLAKE_DATABASE }}
-                      warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-                      role: ${{ secrets.SNOWFLAKE_ROLE }}
-                      schema: dbt_prod
-                      threads: 4
-                EOF
+                echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+                chmod 600 /tmp/snowflake_rsa_key.pem
 
-          Step 4 — Run dbtf build:
+          Step 4 — Run dbtf build targeting lineup-dependent models:
             - run: dbtf build --select +stg_statsapi_lineups+
               env:
-                DBT_PROFILES_DIR: ~/.dbt
+                SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+                SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+                SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+                SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
 
-          Step 5 — Send email notification (runs only on success of step 4):
-            - name: Notify lineup confirmed
-              if: success()
-              uses: dawidd6/action-send-mail@v3
-              with:
-                server_address: smtp.gmail.com
-                server_port: 465
-                username: ${{ secrets.SMTP_USERNAME }}
-                password: ${{ secrets.SMTP_PASSWORD }}
-                subject: >
-                  Lineups confirmed: ${{ github.event.inputs.game_pk }}
-                to: ${{ secrets.NOTIFICATION_EMAIL }}
-                from: Baseball Betting Pipeline
-                body: >
-                  Lineups confirmed for game_pk ${{ github.event.inputs.game_pk }}.
-                  dbtf build complete. Run predict_today.py to generate predictions.
-          The NOTIFICATION_EMAIL secret must be set to charles.t.clark89@gmail.com
-          in the repository's Settings → Secrets and variables → Actions.
+          Required GitHub Secrets (same set used by dbt_daily_build.yml):
+          SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY (PEM content),
+          SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE.
 
-          Required GitHub Secrets: SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER,
-          SNOWFLAKE_PRIVATE_KEY (PEM content), SNOWFLAKE_DATABASE,
-          SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE, SMTP_USERNAME, SMTP_PASSWORD,
-          NOTIFICATION_EMAIL.
+          Note: email notification of lineup confirmation is a Phase 6 enhancement
+          and is intentionally excluded from this workflow. See Phase 6 pipeline
+          spec for the notification step.
         dependsOn:
           - card-6a-network-access-and-github-pat-provisioned
         acceptanceCriteria:
@@ -408,7 +432,6 @@ spec:
                 import yaml
                 with open('.github/workflows/dbt_staging_build.yml') as f:
                     wf = yaml.safe_load(f)
-                assert 'on' in wf or True, 'Workflow missing trigger'
                 assert 'jobs' in wf, 'Workflow missing jobs section'
                 print('PASS: workflow YAML parses without error')
           - type: command_succeeds
@@ -447,24 +470,6 @@ spec:
                 )
                 print('PASS: dbtf build with stg_statsapi_lineups target present')
           - type: command_succeeds
-            name: Workflow includes notification step using dawidd6/action-send-mail
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                src = open('.github/workflows/dbt_staging_build.yml').read()
-                assert 'dawidd6/action-send-mail' in src, (
-                    'Workflow does not include the email notification step — '
-                    'dawidd6/action-send-mail must be used to send lineup confirmation emails'
-                )
-                assert 'NOTIFICATION_EMAIL' in src, (
-                    'Workflow does not reference the NOTIFICATION_EMAIL secret — '
-                    'the recipient address must come from the secret, not be hardcoded'
-                )
-                print('PASS: email notification step with NOTIFICATION_EMAIL secret present')
-          - type: command_succeeds
             name: Workflow references all required Snowflake secrets
             command: uv
             args:
@@ -493,7 +498,7 @@ spec:
             CREATE OR REPLACE TASK baseball_data.config.task_lineup_monitor
               WAREHOUSE = COMPUTE_WH
               SCHEDULE = 'USING CRON 0 * * * * America/New_York'
-              COMMENT = 'Hourly lineup monitor: ingests schedule, detects confirmed lineups, dispatches dbt_staging_build.yml'
+              COMMENT = 'Hourly lineup monitor: detects confirmed lineups, dispatches dbt_staging_build.yml'
             AS
               CALL baseball_data.config.lineup_monitor_proc();
 
@@ -597,7 +602,6 @@ spec:
                errors.
              - dbtf build --select +stg_statsapi_lineups+ exits 0 and no models
                show ERROR status.
-             - The email notification arrives at charles.t.clark89@gmail.com.
 
           2. Confirm the lineup_monitor_state deduplication works: trigger the
              same workflow_dispatch a second time with the same game_pk. Verify
@@ -607,13 +611,11 @@ spec:
 
           Documentation — update scripts/daily_run.md with a new
           "Lineup Monitor Architecture" section containing:
-          - System diagram: Snowflake Task → Snowpark Proc → GitHub REST API →
-            GitHub Actions → dbtf build → Email Notification
+          - System diagram: Snowflake Task (hourly) → Snowpark Proc →
+            GitHub REST API → GitHub Actions → dbtf build (+stg_statsapi_lineups+)
           - Required GitHub Secrets table with values/source for each secret:
             SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_PRIVATE_KEY (PEM),
-            SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE,
-            SMTP_USERNAME, SMTP_PASSWORD,
-            NOTIFICATION_EMAIL (value: charles.t.clark89@gmail.com)
+            SNOWFLAKE_DATABASE, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE
           - Manual trigger command:
             gh workflow run dbt_staging_build.yml -f game_pk=<game_pk> -f triggered_by=manual
           - How to suspend the task during off-season:
@@ -646,7 +648,7 @@ spec:
                 )
                 print('PASS: Lineup Monitor Architecture section present')
           - type: command_succeeds
-            name: daily_run.md contains the manual trigger command and secrets checklist
+            name: daily_run.md contains the manual trigger command
             command: uv
             args:
               - run
@@ -657,10 +659,7 @@ spec:
                 assert 'gh workflow run' in src or 'workflow_dispatch' in src, (
                     'daily_run.md does not include the manual trigger command'
                 )
-                assert 'NOTIFICATION_EMAIL' in src, (
-                    'daily_run.md does not reference NOTIFICATION_EMAIL in the secrets checklist'
-                )
-                print('PASS: manual trigger command and NOTIFICATION_EMAIL in secrets checklist present')
+                print('PASS: manual trigger command present')
           - type: command_succeeds
             name: lineup_monitor_state has no duplicate (run_date, game_pk) rows
             command: uv

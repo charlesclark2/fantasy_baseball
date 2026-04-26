@@ -482,3 +482,291 @@ spec:
                     model = load_model(target, 'prod')
                     assert model is not None, f'load_model returned None for target: {target}'
                 print('PASS: all three targets round-trip via load_model')
+
+      - id: implement-predict-today
+        kind: Task
+        description: >
+          Implement betting_ml/scripts/predict_today.py and add
+          load_todays_features(target_date) to betting_ml/utils/data_loader.py.
+          This script is the daily entry point: given a date (default today), it
+          scores all confirmed games with odds coverage and prints the picks table
+          and writes the canonical probability_outputs parquet.
+
+          Add to betting_ml/utils/data_loader.py:
+
+          load_todays_features(target_date: str) -> pd.DataFrame:
+            Queries feature_pregame_game_features for rows matching game_date =
+            target_date and game_type = 'R'. Does NOT join to mart_game_results —
+            today's scores do not exist yet. Does NOT apply has_full_data or
+            min_games_played filters — early-season games should not be excluded.
+            Returns a DataFrame with the same column names as load_features() minus
+            the result columns (total_runs, run_differential, home_win). If no rows
+            are returned, returns an empty DataFrame with no exception.
+
+          implement betting_ml/scripts/predict_today.py:
+
+          CLI:
+            argparse --date YYYY-MM-DD, default date.today().isoformat().
+            Print "Scoring games for {date}" on start.
+
+          Data loading:
+            Call load_todays_features(target_date) → df_today.
+            If df_today is empty: print "No games found for {date}." and exit 0.
+            Verify 'has_odds' and 'home_win_prob_consensus' columns exist in
+            df_today; raise with a descriptive message if not.
+            Call load_features(min_games_played=15) → df_hist for fitting the
+            imputation pipeline. Only the feature columns (no result columns) of
+            df_hist are used — the results are not needed here.
+
+          Feature matrix:
+            feature_cols = load_retained_features()
+            Filter feature_cols to those present in both df_hist and df_today
+            (warn on any missing columns).
+            X_hist = df_hist[[c for c in feature_cols if c in df_hist.columns]]
+            X_today = df_today[[c for c in feature_cols if c in df_today.columns]];
+            reindex to X_hist.columns, filling missing with NaN.
+            Build imputation pipeline: pipeline = build_imputation_pipeline();
+            pipeline.fit(X_hist); X_today_imp = pipeline.transform(X_today).
+            select_dtypes(include=[np.number]) and reindex to match X_hist columns.
+
+          Load models (read-only, no retraining):
+            ngb_total = load_model('total_runs', 'prod')   # NGBRegressor
+            ngb_diff  = load_model('run_differential', 'prod')  # NGBRegressor
+            clf_hw    = load_model('home_win', 'prod')     # CalibratedClassifierCV
+
+          Load dist names from tuning JSON files (same as run_probability_layer.py):
+            ngb_tot_dist from betting_ml/evaluation/tuning_results_ngboost_total_runs.json
+            ngb_diff_dist from betting_ml/evaluation/tuning_results_ngboost_run_diff.json
+
+          Load best_alpha from Snowflake:
+            conn = get_snowflake_connection()
+            SELECT best_alpha FROM baseball_data.betting_ml.probability_layer_summary
+            ORDER BY loaded_at DESC LIMIT 1
+            If the table is empty or the query fails, default best_alpha = 0.5 and
+            print a warning ("Could not load best_alpha from Snowflake; using 0.5").
+
+          Score today's games:
+            pred_dist_tot = ngb_total.pred_dist(X_today_imp.values)
+            loc_tot = pred_dist_tot.params['loc']; scale_tot = pred_dist_tot.params['scale']
+            p_over_total = p_over_line(ngb_tot_dist, {'loc': loc_tot, 'scale': scale_tot},
+              total_line=df_today['total_line_consensus'].values)
+
+            pred_dist_diff = ngb_diff.pred_dist(X_today_imp.values)
+            loc_diff = pred_dist_diff.params['loc']; scale_diff = pred_dist_diff.params['scale']
+            p_home_win_ngb = p_over_line(ngb_diff_dist, {'loc': loc_diff, 'scale': scale_diff},
+              total_line=0)
+
+            p_home_win_clf = clf_hw.predict_proba(X_today_imp)[:, 1]
+
+          Build output rows (one per game per available market, has_odds=True only):
+            h2h row — when home_win_prob_consensus is not null:
+              game_key (game_pk if present, else str index)
+              market: 'h2h'
+              model_prob: p_home_win_ngb[i]
+              market_implied_prob: home_win_prob_consensus[i]
+              alpha: best_alpha
+              posterior_prob: compute_posterior(model_prob, market_implied_prob, best_alpha)
+              edge: compute_edge(model_prob, market_implied_prob)
+              implied_kelly_fraction: compute_kelly(edge, market_implied_prob)
+              [display only] classifier_win_prob: p_home_win_clf[i]
+            totals row — when over_prob_consensus is not null:
+              market: 'totals'
+              model_prob: p_over_total[i]
+              market_implied_prob: over_prob_consensus[i]
+              posterior_prob, edge, implied_kelly_fraction: same pattern
+
+          Write parquet (Card 4.13 schema — no display-only columns):
+            out_path = PROJECT_ROOT / 'betting_ml' / 'outputs' /
+              f'probability_outputs_{target_date}.parquet'
+            Columns: game_key, market, model_prob, market_implied_prob,
+              alpha, posterior_prob, edge, implied_kelly_fraction
+            Create outputs/ directory if it does not exist.
+
+          Print picks table (all games, not just has_odds):
+            Columns: Matchup, Game Time, Pred Total, Model Win% (NGBoost),
+              Classifier Win%, Market Win%, Posterior%, Edge, Kelly%
+            Matchup = home_team_abbrev + ' vs ' + away_team_abbrev if those
+            columns exist, else game_key.
+            Game Time = game_datetime if present, else game_date.
+            Format probabilities as percentages with 1 decimal place.
+            For games without odds (has_odds=False or market prob null),
+            show '—' in market-dependent columns.
+
+          Print a one-line summary at the end:
+            "Wrote N output rows ({h} h2h, {t} totals) to {out_path}"
+
+          Script exits 0 on success.
+        dependsOn:
+          - validate-registry-roundtrip
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: predict_today script
+            path: betting_ml/scripts/predict_today.py
+          - type: command_succeeds
+            name: load_todays_features added to data_loader and imports cleanly
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import inspect
+                from betting_ml.utils.data_loader import load_todays_features
+                sig = inspect.signature(load_todays_features)
+                assert 'target_date' in sig.parameters, 'missing target_date param'
+          - type: command_succeeds
+            name: predict_today imports without error and accepts --date flag
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/predict_today.py
+              - --help
+          - type: manual
+            name: predict_today runs to completion for today's date
+            description: >
+              USER-EXECUTED STEP. Run from the project root:
+                uv run python betting_ml/scripts/predict_today.py
+              Verify: script exits 0, picks table prints to stdout, and
+              betting_ml/outputs/probability_outputs_{today}.parquet is written.
+              If no games are scheduled today, pass --date with the most recent
+              date that had games (check via Snowflake or the Stats API).
+              Confirm to the agent when complete.
+
+      - id: implement-statsapi-feature-assembly
+        kind: Task
+        description: >
+          Add MLB Stats API-based feature assembly as the fallback path for
+          load_todays_features when the target date has no rows in
+          feature_pregame_game_features (the typical case for today's games,
+          since the nightly dbt pipeline only loads data after games complete).
+
+          Background:
+            feature_pregame_game_features is populated by a nightly dbt pipeline
+            after games finish. Today's scheduled games are therefore never in the
+            table when predict_today.py runs intraday. The solution: hit the MLB
+            Stats API for the schedule, then pull the most recent home-team and
+            away-team feature rows from Snowflake and assemble game-level rows.
+
+          Step 1 — Add mlb-statsapi dependency:
+            Add 'mlb-statsapi>=0.0.44' to pyproject.toml and run uv lock.
+
+          Step 2 — _get_statsapi_team_abbrevs() -> dict[int, str]:
+            Private helper. Calls statsapi.get('teams', {'sportIds': 1}) and
+            returns a mapping from MLB team ID to abbreviation (e.g. 116 -> 'DET').
+
+          Step 3 — _load_latest_team_features(conn, home_abbrevs, away_abbrevs):
+            Private helper. Issues two Snowflake ROW_NUMBER() queries:
+              Query 1: most recent home game row for each team in home_abbrevs
+                (PARTITION BY home_team ORDER BY game_date DESC, game_pk DESC)
+              Query 2: most recent away game row for each team in away_abbrevs
+            Returns (home_rows_dict, away_rows_dict) keyed by abbreviation.
+            Excludes game_year = 2020 to match load_features() behavior.
+
+          Step 4 — load_todays_features_via_statsapi(target_date: str):
+            Public function. Calls statsapi.schedule(date=target_date, sportId=1),
+            maps team IDs to abbreviations, calls _load_latest_team_features, then
+            assembles one row per game:
+              - HOME_* columns from the home team's latest home game row
+              - AWAY_* columns from the away team's latest away game row
+              - Venue columns (elevation_ft, park dimensions, park_run_factor_3yr,
+                venue_id, venue_name) from home team's latest home game (correct:
+                home team always plays at their park); override venue_id/name from
+                statsapi where provided
+              - game_pk, game_date, game_year, home_team, away_team,
+                series_game_number, game_datetime from statsapi
+              - post_2022_rules = 1 (target year >= 2023)
+              - has_full_data = False, has_odds = False
+              - All odds/consensus columns left as NaN
+            Converts object columns to numeric. Returns empty DataFrame if no games.
+
+          Step 5 — Update load_todays_features to use statsapi as fallback:
+            1. First attempt direct Snowflake query for game_date = target_date.
+            2. If rows found, return them (handles historical dates and same-day
+               pipeline data if ever available before game time).
+            3. If no rows found, print fallback message and call
+               load_todays_features_via_statsapi(target_date).
+
+          Step 6 — Update predict_today.py picks table:
+            Add a "Pick" column showing which team the model favors and the
+            consensus win probability. Pick logic (average of NGBoost and
+            classifier probabilities):
+              consensus >= 55% -> "HOME (XX%)"
+              consensus <= 45% -> "AWAY (XX%)"
+              otherwise        -> "TOSS-UP"
+            Update the summary line to note when 0 rows were written due to
+            missing odds data rather than silently showing "0 rows".
+
+        dependsOn:
+          - implement-predict-today
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: mlb-statsapi is importable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "import statsapi; print('mlb-statsapi OK:', statsapi.__version__)"
+          - type: command_succeeds
+            name: load_todays_features_via_statsapi importable with correct signature
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import inspect
+                from betting_ml.utils.data_loader import load_todays_features_via_statsapi
+                sig = inspect.signature(load_todays_features_via_statsapi)
+                assert 'target_date' in sig.parameters, 'missing target_date param'
+          - type: command_succeeds
+            name: load_todays_features falls back gracefully for far-future date (no games)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import datetime, pandas as pd
+                future = (datetime.date.today() + datetime.timedelta(days=365)).isoformat()
+                from betting_ml.utils.data_loader import load_todays_features
+                df = load_todays_features(future)
+                assert isinstance(df, pd.DataFrame), 'expected DataFrame, not exception'
+          - type: manual
+            name: predict_today.py runs successfully for today using statsapi fallback
+            description: >
+              USER-EXECUTED STEP. Run from the project root:
+                uv run python betting_ml/scripts/predict_today.py
+              Confirm:
+                1. Output includes "assembling from Stats API schedule..." message
+                2. Picks table is printed with a "Pick" column showing HOME/AWAY/TOSS-UP
+                3. Script exits 0
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: user-confirms-first-predictions-run
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    USER CONFIRMATION GATE. Blocks after implement-predict-today.
+
+    After manually running:
+      uv run python betting_ml/scripts/predict_today.py
+
+    Confirm to the agent that ALL of the following are true:
+      1. The script exited with code 0.
+      2. A picks table was printed to stdout with at least one row.
+      3. betting_ml/outputs/probability_outputs_{date}.parquet was written.
+      4. The parquet contains the required schema columns:
+           game_key, market, model_prob, market_implied_prob,
+           alpha, posterior_prob, edge, implied_kelly_fraction.
+
+    If no games were available for today, confirm that the script exited 0
+    with the "No games found" message and that you verified the --date flag
+    works for a date with known games.
+  reviewers:
+    - user:charlesclark

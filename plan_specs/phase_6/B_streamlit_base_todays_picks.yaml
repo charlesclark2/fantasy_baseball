@@ -1,0 +1,511 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: streamlit-app-skeleton-todays-picks
+  namespace: default
+spec:
+  description: >
+    Bootstrap the multi-page Streamlit application at app/ and implement the
+    Today's Picks page (pages/1_Today_Picks.py). The app connects directly to
+    Snowflake via the existing RSA key connector and scores production models
+    in-process — no separate backend or batch scoring step is needed for the
+    Streamlit view.
+
+    The app entry point is app/streamlit_app.py; run with:
+      uv run streamlit run app/streamlit_app.py
+
+    The Today's Picks page queries Snowflake for all games on the selected date,
+    loads the three production models from model_registry.yaml via model_io.py,
+    scores the feature matrix in-process, loads best_alpha from the
+    alpha_tuning_results Snowflake table, and applies compute_posterior(),
+    compute_edge(), and compute_kelly() from betting_ml/utils/probability_layer.py
+    — the same functions and same best_alpha used by predict_today.py. This is
+    the live execution of the Phase 6 contract; no parquet file read is required.
+
+    The canonical model_prob for h2h edge calculation uses consensus_win_prob
+    (0.5 × p_home_win_ngboost + 0.5 × p_home_win_classifier) rather than
+    NGBoost alone to reduce the home-team underestimation bias identified in
+    Card 4.13 (h2h mean edge = −0.083 using NGBoost alone).
+  acceptanceCriteria:
+    - description: >
+        uv run streamlit run app/streamlit_app.py starts without error and the
+        Today's Picks page loads within 10 seconds on first run
+    - description: >
+        Predictions load for a date with confirmed games; sortable st.dataframe
+        renders all required columns: Matchup, Game Time, Lineups, Pred Total,
+        Model Win%, Market Win%, Posterior%, Edge, EV, Kelly%
+    - description: >
+        best_alpha loaded from Snowflake alpha_tuning_results (most recent row);
+        compute_posterior() from probability_layer.py called for each has_odds game
+    - description: >
+        Lineup confirmation status displays correctly — checkmark for confirmed,
+        hourglass for pending — sourced from stg_statsapi_lineups_wide
+    - description: >
+        Edge color-coding applies correctly: green background where
+        abs(edge) > 0.05 and lineups confirmed; grey where lineups are pending
+    - description: >
+        Kelly fraction capped at 10% in the display column; a warning badge
+        renders when the raw Kelly value exceeds the cap
+    - description: >
+        Refresh button re-runs ingest_statsapi.py schedule as a subprocess and
+        clears the @st.cache_data entry for the current date so predictions update
+        without restarting the app
+    - description: >
+        App handles a date with no games cleanly — empty state message displayed,
+        no Python exception or Streamlit error
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-5-1-model-registry-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 5.1 (model registry) must be complete before the Today's Picks page
+    can be implemented.
+
+    Required artifacts:
+      - betting_ml/models/model_registry.yaml must exist and contain entries for
+        all three production models: total_runs (NGBoost), run_differential
+        (NGBoost), and home_win (calibrated XGBoost classifier)
+      - Each entry must have: model_name, target, eval_year, artifact_path,
+        and selected_at fields
+      - All artifact_path values must resolve to existing .pkl files under
+        betting_ml/models/
+
+    The Today's Picks page loads models via load_model() from model_io.py using
+    the artifact_path values in this registry. If the registry is absent or
+    incomplete, the page cannot load predictions.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-5-2-predict-today-scoring-logic-established
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 5.2 (predict_today.py) must be implemented before the Today's Picks
+    page is built, because the Streamlit page reuses the same scoring logic.
+
+    Required artifacts:
+      - betting_ml/scripts/predict_today.py must exist and run without error
+      - The script must produce betting_ml/outputs/probability_outputs_{date}.parquet
+        with the canonical schema: game_key, market, model_prob,
+        market_implied_prob, alpha, posterior_prob, edge, implied_kelly_fraction
+      - consensus_win_prob (0.5 × p_home_win_ngboost + 0.5 × p_home_win_classifier)
+        must be used as model_prob for the h2h market — not NGBoost alone
+      - The scoring functions (load_features, preprocessing, model inference,
+        compute_posterior, compute_edge, compute_kelly) must be importable as
+        standalone functions so the Streamlit page can call them directly
+        rather than invoking the script as a subprocess
+
+    Confirm that predict_today.py has been run at least once for a date with
+    games and produced a non-empty parquet output before marking this gate.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-13-probability-layer-and-alpha-in-snowflake
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 4.13 (Bayesian probability layer) must be complete before the Streamlit
+    app loads best_alpha from Snowflake.
+
+    Required conditions:
+      - betting_ml/utils/probability_layer.py exists and exports compute_posterior(),
+        compute_edge(), and compute_kelly()
+      - Snowflake table baseball_data.betting_ml.alpha_tuning_results contains at
+        least one row with a non-null best_alpha value (confirm with:
+        SELECT best_alpha FROM baseball_data.betting_ml.alpha_tuning_results
+        ORDER BY loaded_at DESC LIMIT 1)
+      - best_alpha is in [0.0, 1.0]; best_alpha = 0.0 is valid and means the
+        app will use market probability as the posterior for h2h
+
+    The Today's Picks page reads best_alpha with:
+      SELECT alpha FROM baseball_data.betting_ml.alpha_tuning_results
+      ORDER BY loaded_at DESC LIMIT 1
+    and passes it to compute_posterior() for every has_odds game.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: streamlit-app-skeleton-todays-picks-plan
+  namespace: default
+spec:
+  description: >
+    Three-task DAG. bootstrap-app-skeleton creates the app/ directory structure
+    and entry point. implement-snowflake-connection adds the @st.cache_resource
+    Snowflake session factory shared across all pages. implement-todays-picks-page
+    builds the full Today's Picks page including model scoring, posterior
+    computation, edge color-coding, Kelly cap, and the refresh mechanism.
+    All three gates must clear before implement-todays-picks-page begins.
+  goalRef:
+    name: streamlit-app-skeleton-todays-picks
+  graph:
+    nodes:
+
+      - id: bootstrap-app-skeleton
+        kind: Task
+        description: >
+          Create the app/ directory at the repo root with the following structure:
+            app/
+              __init__.py           (empty)
+              streamlit_app.py      (entry point — see below)
+              pages/
+                __init__.py         (empty)
+
+          app/streamlit_app.py content:
+            - import streamlit as st
+            - st.set_page_config(page_title="Baseball Betting Dashboard",
+                layout="wide", initial_sidebar_state="expanded")
+            - Sidebar header with app title and today's date
+            - A short description: "MLB game predictions powered by NGBoost +
+              XGBoost with Bayesian market integration."
+            - Navigation note: "Use the sidebar to navigate between pages."
+            - The entry point must not import heavy dependencies (models, Snowflake)
+              at module level — those are lazy-loaded inside each page module.
+
+          Add streamlit as a project dependency via:
+            uv add streamlit
+          Confirm that uv run streamlit run app/streamlit_app.py starts the
+          server and renders the landing page without error before marking
+          this task done.
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: App entry point
+            path: app/streamlit_app.py
+          - type: artifact_exists
+            name: Pages directory init
+            path: app/pages/__init__.py
+          - type: command_succeeds
+            name: streamlit imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - "import streamlit; print(streamlit.__version__)"
+
+      - id: implement-snowflake-connection
+        kind: Task
+        description: >
+          Create app/utils/__init__.py and app/utils/db.py implementing a shared
+          Snowflake session factory for the Streamlit app.
+
+          app/utils/db.py must expose:
+
+          get_snowflake_session() -> snowflake.connector.connection.SnowflakeConnection:
+            Decorated with @st.cache_resource so the connection is created once
+            and reused across all reruns and all pages in the same Streamlit
+            server process.
+            Internally calls get_snowflake_connection() from
+            betting_ml/utils/data_loader.py — reuse the existing RSA key
+            connector exactly; do not duplicate connection logic.
+            The function must read credentials from the project .env file via
+            python-dotenv if present; fall back to the same defaults used by
+            data_loader.py (account IHUPICS-DP59975, user dbt_rw, RSA key at
+            ~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem).
+
+          run_query(sql: str, conn=None) -> pd.DataFrame:
+            Convenience wrapper that calls get_snowflake_session() if conn is None,
+            executes the SQL, and returns a pandas DataFrame via cursor.fetch_pandas_all().
+            Raises a descriptive RuntimeError if the query fails, including the
+            first 200 characters of the SQL for debugging context.
+
+          load_best_alpha() -> float:
+            Queries:
+              SELECT alpha FROM baseball_data.betting_ml.alpha_tuning_results
+              ORDER BY loaded_at DESC LIMIT 1
+            Returns the alpha float. Raises RuntimeError with a clear message if
+            the table is empty or the query returns no rows — instructs the user
+            to run run_probability_layer.py to populate the table.
+            Decorated with @st.cache_data(ttl=3600) so it refreshes hourly
+            rather than re-querying on every page rerender.
+        dependsOn:
+          - bootstrap-app-skeleton
+          - card-4-13-probability-layer-and-alpha-in-snowflake
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Database utility module
+            path: app/utils/db.py
+          - type: command_succeeds
+            name: db module imports and exposes expected functions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys; sys.path.insert(0, '.')
+                from app.utils.db import get_snowflake_session, run_query, load_best_alpha
+                import inspect
+                assert callable(get_snowflake_session)
+                assert callable(run_query)
+                assert callable(load_best_alpha)
+                print('app.utils.db imports OK')
+          - type: command_succeeds
+            name: run_query returns a DataFrame for a simple Snowflake query
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys; sys.path.insert(0, '.')
+                from app.utils.db import run_query
+                df = run_query("SELECT CURRENT_DATE() AS today")
+                assert len(df) == 1 and 'TODAY' in df.columns or 'today' in df.columns.str.lower().tolist()
+                print('run_query OK:', df.to_dict())
+          - type: command_succeeds
+            name: load_best_alpha returns a float in [0.0, 1.0]
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys; sys.path.insert(0, '.')
+                from app.utils.db import load_best_alpha
+                alpha = load_best_alpha()
+                assert isinstance(alpha, float), f'Expected float, got {type(alpha)}'
+                assert 0.0 <= alpha <= 1.0, f'alpha out of range: {alpha}'
+                print(f'best_alpha = {alpha}')
+
+      - id: implement-todays-picks-page
+        kind: Task
+        description: >
+          Create app/pages/1_Today_Picks.py implementing the full Today's Picks
+          page.
+
+          PAGE STRUCTURE:
+
+          Header and date selector:
+            st.title("Today's Picks")
+            date = st.date_input("Select date", value=datetime.date.today())
+
+          Data loading (all wrapped in @st.cache_data keyed on date string +
+          mtime of betting_ml/models/model_registry.yaml so predictions are not
+          recomputed on every rerender):
+
+            1. Query Snowflake for all games on the selected date:
+               SELECT
+                 g.game_pk,
+                 g.game_date,
+                 g.game_time_et,
+                 g.home_team_name,
+                 g.away_team_name,
+                 g.home_team_abbrev,
+                 g.away_team_abbrev,
+                 g.venue_name,
+                 f.*,
+                 o.home_win_prob_consensus,
+                 o.over_prob_consensus,
+                 o.total_line_consensus,
+                 o.home_price_american,
+                 o.away_price_american,
+                 o.has_odds
+               FROM baseball_data.betting_features.feature_pregame_game_features f
+               JOIN baseball_data.statsapi.stg_statsapi_games g ON f.game_pk = g.game_pk
+               LEFT JOIN baseball_data.betting.mart_odds_consensus o ON f.game_pk = o.game_pk
+               WHERE g.game_date = '{date}'
+               ORDER BY g.game_time_et ASC
+
+            2. Query lineup confirmation status:
+               SELECT game_pk,
+                 (home_lineup_confirmed AND away_lineup_confirmed) AS both_confirmed
+               FROM baseball_data.statsapi.stg_statsapi_lineups_wide
+               WHERE game_date = '{date}'
+               Join this to the games DataFrame on game_pk; default to False
+               for games without a matching lineups row.
+
+            3. Load production models:
+               Read betting_ml/models/model_registry.yaml.
+               For each model entry, call load_model(artifact_path) from
+               betting_ml/utils/model_io.py. Required models: the NGBoost
+               total_runs model, the NGBoost run_differential model, and the
+               calibrated home_win classifier. Raise a clear st.error() and
+               st.stop() if any model file is missing.
+
+            4. Score the feature matrix:
+               Build X using load_retained_features() from
+               betting_ml/utils/feature_selection.py.
+               Apply build_imputation_pipeline() from
+               betting_ml/utils/preprocessing.py; fit on X (no leakage —
+               all rows on the selected date are "prediction" rows only;
+               the pipeline must have been fit on historical data, not the
+               current day).
+               Compute:
+                 p_home_win_ngboost  — from run_differential NGBoost model
+                   (P(run_diff > 0) via p_over_line with total_line=0)
+                 p_home_win_classifier — from home_win XGBoost classifier
+                   predict_proba()[:, 1]
+                 consensus_win_prob = 0.5 × p_home_win_ngboost
+                                     + 0.5 × p_home_win_classifier
+                 p_over_total — from total_runs NGBoost model p_over_line
+                   using total_line_consensus values
+
+            5. For each has_odds game, apply the probability layer:
+               best_alpha = load_best_alpha()  (from app/utils/db.py)
+               model_prob = consensus_win_prob  (not NGBoost alone)
+               market_prob = home_win_prob_consensus
+               posterior_prob = compute_posterior(model_prob, market_prob, best_alpha)
+               edge = compute_edge(model_prob, market_prob)
+               decimal_odds = 1.0 / market_prob if market_prob > 0 else None
+               ev = (model_prob * (decimal_odds - 1)) - (1 - model_prob)
+               kelly_raw = (model_prob * (decimal_odds - 1) - (1 - model_prob)) \
+                           / (decimal_odds - 1)
+               kelly_capped = min(kelly_raw, 0.10)
+               kelly_exceeded_cap = kelly_raw > 0.10
+
+          DISPLAY TABLE:
+            Build a display DataFrame with columns:
+              Matchup        — "{away_abbrev} @ {home_abbrev}"
+              Game Time      — game_time_et formatted as "H:MM AM/PM ET"
+              Lineups        — "✓" if both_confirmed else "⏳"
+              Pred Total     — p_over_total formatted as "{:.1%}" if has_odds else "—"
+              Model Win%     — consensus_win_prob formatted as "{:.1%}"
+              Market Win%    — home_win_prob_consensus formatted as "{:.1%}" if has_odds else "—"
+              Posterior%     — posterior_prob formatted as "{:.1%}" if has_odds else "—"
+              Edge           — edge formatted as "{:+.3f}" if has_odds else "—"
+              EV             — ev formatted as "{:+.3f}" if has_odds else "—"
+              Kelly%         — kelly_capped formatted as "{:.1%}" + " ⚠" if
+                               kelly_exceeded_cap else kelly_capped formatted as "{:.1%}"
+                               if has_odds else "—"
+
+            Render with st.dataframe(df_display, use_container_width=True).
+
+          COLOR-CODING:
+            Use df.style.apply() to set row background:
+              Green (#d4edda) — has_odds AND abs(edge) > 0.05 AND both_confirmed
+              Light grey (#f0f0f0) — has_odds AND lineups not confirmed
+              White — all other rows (no odds or edge below threshold)
+            Apply style before passing to st.dataframe.
+
+          EMPTY STATE:
+            If the games query returns zero rows:
+              st.info(f"No games found for {date}. Check that ingestion has
+              run for this date.")
+              return  (do not attempt model scoring on empty data)
+
+          REFRESH BUTTON:
+            st.button("Refresh Lineups & Odds"):
+              On click: run subprocess.run(
+                ['uv', 'run', 'python', 'scripts/ingest_statsapi.py', 'schedule'],
+                capture_output=True, text=True
+              )
+              Clear @st.cache_data for the current date by calling
+              st.cache_data.clear().
+              Show st.success("Lineup data refreshed.") or st.error with stderr
+              on non-zero exit code.
+
+          SIDEBAR CONTEXT:
+            Show the selected date, number of games loaded, and best_alpha value
+            in the sidebar for quick sanity-checking.
+        dependsOn:
+          - implement-snowflake-connection
+          - card-5-1-model-registry-complete
+          - card-5-2-predict-today-scoring-logic-established
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Today's Picks page module
+            path: app/pages/1_Today_Picks.py
+          - type: command_succeeds
+            name: Page module imports without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('app/pages/1_Today_Picks.py').read_text()
+                ast.parse(src)
+                print('Syntax OK')
+          - type: command_succeeds
+            name: probability_layer functions imported inside the page
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/1_Today_Picks.py').read()
+                required = ['compute_posterior', 'compute_edge', 'compute_kelly']
+                missing = [fn for fn in required if fn not in src]
+                assert not missing, f'Missing probability_layer calls: {missing}'
+                print('probability_layer references OK')
+          - type: command_succeeds
+            name: consensus_win_prob blend (not NGBoost alone) used as model_prob
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/1_Today_Picks.py').read()
+                assert 'consensus_win_prob' in src, (
+                    'consensus_win_prob not found — page must blend NGBoost + '
+                    'classifier 50/50 for model_prob, not use NGBoost alone'
+                )
+                assert '0.5' in src, (
+                    '50/50 blend coefficient not found in page source'
+                )
+                print('consensus_win_prob blend OK')
+          - type: command_succeeds
+            name: Kelly cap at 10% present in page logic
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/1_Today_Picks.py').read()
+                assert '0.10' in src or '0.1)' in src, (
+                    'Kelly cap of 0.10 not found in page source'
+                )
+                print('Kelly cap reference OK')
+          - type: command_succeeds
+            name: Lineup confirmation sourced from stg_statsapi_lineups_wide
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/1_Today_Picks.py').read()
+                assert 'stg_statsapi_lineups_wide' in src, (
+                    'stg_statsapi_lineups_wide not referenced — lineup '
+                    'confirmation must come from this table'
+                )
+                print('lineup source OK')
+          - type: command_succeeds
+            name: Refresh button calls ingest_statsapi.py as subprocess
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/1_Today_Picks.py').read()
+                assert 'ingest_statsapi.py' in src, (
+                    'ingest_statsapi.py not referenced in refresh button logic'
+                )
+                assert 'subprocess' in src, (
+                    'subprocess not imported — refresh must call ingestion as subprocess'
+                )
+                print('refresh button subprocess OK')

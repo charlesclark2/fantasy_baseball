@@ -1,0 +1,334 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: streamlit-market-comparison-page
+  namespace: default
+spec:
+  description: >
+    Build the Market Comparison page (app/pages/2_Market_Comparison.py) for the
+    Streamlit app. This page gives a per-game deep-dive comparing model
+    probability to bookmaker implied probability, displaying line movement history,
+    sharp vs. soft book divergence, and a cross-bookmaker probability table.
+
+    The page depends on the app skeleton and Snowflake connection established by
+    Card 6.B. It reads from mart_odds_outcomes (raw per-bookmaker snapshots) and
+    mart_odds_consensus (vig-adjusted consensus lines) — both of which are built
+    by Card 4.7 dbt models. No new Snowflake tables are required.
+
+    All data displayed is read-only. The page does not call model scoring
+    functions — it reads model win% from the same in-memory scores computed and
+    cached by the Today's Picks page (or re-computes inline using the same
+    pattern if called independently). The shared Snowflake session from
+    app/utils/db.py is used for all queries.
+  acceptanceCriteria:
+    - description: >
+        Game selector populates with today's games that have has_odds = true;
+        dropdown label shows "{away_team} @ {home_team} — {game_time_et}"
+    - description: >
+        Moneyline line movement chart renders for a game with multiple ingestion
+        snapshots — one line per bookmaker plus a bold consensus line; x-axis
+        is ingestion_ts, y-axis is home win implied probability
+    - description: >
+        Model win% and market consensus win% display as st.metric tiles with
+        delta showing model_prob − market_prob (positive = model favors home
+        more than market)
+    - description: >
+        Totals panel shows model predicted total (mean of NGBoost total_runs
+        distribution) vs. total_line_consensus; bar chart shows over/under
+        probability from model vs. each bookmaker's vig-adjusted over probability
+    - description: >
+        Sharp vs. soft delta metric displays when home_win_prob_sharp and
+        home_win_prob_soft are non-null; the panel is hidden (not erroring)
+        when both values are null for the selected game
+    - description: >
+        Cross-bookmaker table sorted by home_imp_prob descending; vig column
+        populated for all rows; columns are bookmaker_key, home_price_american,
+        away_price_american, home_imp_prob, away_imp_prob, vig
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6b-app-skeleton-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.B (Streamlit app skeleton and Today's Picks page) must be complete
+    before the Market Comparison page is implemented.
+
+    Required artifacts and conditions:
+      - app/streamlit_app.py exists and runs without error
+      - app/pages/1_Today_Picks.py exists and the page loads for a date with games
+      - app/utils/db.py exists and exports get_snowflake_session(), run_query(),
+        and load_best_alpha()
+      - The @st.cache_resource Snowflake connection factory is working and reused
+        across page navigations (confirmed by no duplicate connection warnings
+        in the Streamlit server log)
+
+    The Market Comparison page imports from app/utils/db.py — if that module
+    does not exist, the page cannot connect to Snowflake.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-4-7-mart-odds-consensus-built
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    The mart_odds_consensus and mart_odds_outcomes dbt models (Card 4.7) must be
+    built and populated before the Market Comparison page can be implemented.
+
+    Verify by running:
+      SELECT COUNT(*) FROM baseball_data.betting.mart_odds_consensus;
+      SELECT COUNT(*) FROM baseball_data.betting.mart_odds_outcomes;
+
+    Both queries must return row counts > 0. mart_odds_consensus must have columns:
+      game_pk, home_win_prob_consensus, home_win_prob_sharp, home_win_prob_soft,
+      over_prob_consensus, total_line_consensus, sharp_soft_ml_delta,
+      market_bookmaker_count
+
+    mart_odds_outcomes must have columns:
+      event_id, game_pk, bookmaker_key, ingestion_ts, commence_time,
+      home_price_american, away_price_american, home_imp_prob, away_imp_prob, vig
+
+    These are the two source tables for all Market Comparison queries. If either
+    is absent, the page cannot render.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: streamlit-market-comparison-page-plan
+  namespace: default
+spec:
+  description: >
+    Single-task plan — the Market Comparison page is self-contained once its two
+    blockers (6.B app skeleton and mart_odds_consensus availability) are cleared.
+    The implement-market-comparison-page task creates pages/2_Market_Comparison.py
+    with the game selector, moneyline panel, totals panel, sharp/soft panel, and
+    cross-bookmaker table.
+  goalRef:
+    name: streamlit-market-comparison-page
+  graph:
+    nodes:
+
+      - id: implement-market-comparison-page
+        kind: Task
+        description: >
+          Create app/pages/2_Market_Comparison.py.
+
+          PAGE HEADER:
+            st.title("Market Comparison")
+            st.caption("Model probability vs. bookmaker implied probability with
+            line movement context.")
+
+          GAME SELECTOR:
+            Query Snowflake for today's games with has_odds = true:
+              SELECT
+                g.game_pk,
+                g.game_time_et,
+                g.home_team_name,
+                g.away_team_name,
+                o.home_win_prob_consensus,
+                o.over_prob_consensus,
+                o.total_line_consensus,
+                o.home_win_prob_sharp,
+                o.home_win_prob_soft,
+                o.sharp_soft_ml_delta,
+                o.market_bookmaker_count
+              FROM baseball_data.statsapi.stg_statsapi_games g
+              JOIN baseball_data.betting.mart_odds_consensus o
+                ON g.game_pk = o.game_pk
+              WHERE g.game_date = CURRENT_DATE()
+                AND o.home_win_prob_consensus IS NOT NULL
+              ORDER BY g.game_time_et ASC
+            Wrap with @st.cache_data(ttl=300) (5-minute TTL, refreshes without
+            a full page reload).
+            Build dropdown options as: "{away_team_name} @ {home_team_name} — {game_time_et}"
+            game_selector = st.selectbox("Select game", options=game_options)
+            If no has_odds games exist today:
+              st.info("No games with odds data found for today.")
+              return
+
+          MONEYLINE PANEL (st.header("Moneyline")):
+            Left column — st.metric tiles side by side:
+              "Model Win% (Home)"  — value = consensus_win_prob formatted as "{:.1%}"
+                                     computed the same way as 1_Today_Picks.py
+                                     (0.5 × NGBoost + 0.5 × classifier; re-use
+                                     cached result from session state if available,
+                                     else display "—" with a note to load Today's Picks first)
+              "Market Win% (Home)" — value = home_win_prob_consensus formatted as "{:.1%}"
+              Delta on market tile  = model_prob − market_prob as signed float;
+                                     st.metric delta_color="normal"
+
+            Line movement chart:
+              Query mart_odds_outcomes for the selected game_pk, filtered to
+              ingestion_ts < commence_time, ordered by ingestion_ts ASC:
+                SELECT bookmaker_key, ingestion_ts, home_imp_prob, away_imp_prob
+                FROM baseball_data.betting.mart_odds_outcomes
+                WHERE game_pk = {selected_game_pk}
+                  AND ingestion_ts < commence_time
+                ORDER BY ingestion_ts ASC
+              Pivot to wide format: index = ingestion_ts, one column per bookmaker_key.
+              Add a "consensus" column from mart_odds_consensus.home_win_prob_consensus
+              (flat line at consensus value for reference).
+              Render with st.line_chart(df_pivot, use_container_width=True).
+              If fewer than 2 snapshots exist:
+                st.info("Not enough ingestion snapshots for this game to show
+                line movement. Check back after more odds fetches have run.")
+
+          TOTALS PANEL (st.header("Totals")):
+            Two st.metric tiles:
+              "Model Predicted Total" — formatted to one decimal place;
+                this is the mean of the NGBoost total_runs predictive distribution
+                for the selected game (re-use cached Today's Picks value if
+                available; else display "—")
+              "Market Total Line"     — total_line_consensus formatted to one decimal
+
+            Bar chart (over/under probability per bookmaker):
+              Query mart_odds_outcomes for totals market:
+                SELECT bookmaker_key, over_imp_prob
+                FROM baseball_data.betting.mart_odds_outcomes
+                WHERE game_pk = {selected_game_pk}
+                  AND market_key = 'totals'
+                  AND ingestion_ts = (
+                    SELECT MAX(ingestion_ts) FROM baseball_data.betting.mart_odds_outcomes
+                    WHERE game_pk = {selected_game_pk}
+                      AND ingestion_ts < commence_time
+                  )
+              Append a "model" row with p_over_total for the selected game.
+              Render with st.bar_chart(df_over[['bookmaker_key', 'over_imp_prob']]
+              .set_index('bookmaker_key'), use_container_width=True).
+              If totals data is unavailable: st.info("No totals odds data for this game.")
+
+          SHARP VS. SOFT PANEL (conditionally rendered):
+            If home_win_prob_sharp IS NOT NULL AND home_win_prob_soft IS NOT NULL:
+              st.header("Sharp vs. Soft Books")
+              st.metric(
+                label="Sharp–Soft Home Win% Delta",
+                value=f"{sharp_soft_ml_delta:+.3f}",
+                help="Positive = sharp books favor home more than soft books. "
+                     "A large positive delta suggests sharp money is on the home team."
+              )
+              Two sub-columns:
+                "Sharp Home Win%" — home_win_prob_sharp formatted as "{:.1%}"
+                "Soft Home Win%"  — home_win_prob_soft formatted as "{:.1%}"
+            Else:
+              (panel is fully omitted — no st.header, no empty containers)
+
+          CROSS-BOOKMAKER TABLE (st.header("All Bookmakers")):
+            Query mart_odds_outcomes for the most recent snapshot before
+            commence_time:
+              SELECT
+                bookmaker_key,
+                home_price_american,
+                away_price_american,
+                home_imp_prob,
+                away_imp_prob,
+                vig
+              FROM baseball_data.betting.mart_odds_outcomes
+              WHERE game_pk = {selected_game_pk}
+                AND ingestion_ts = (
+                  SELECT MAX(ingestion_ts) FROM baseball_data.betting.mart_odds_outcomes
+                  WHERE game_pk = {selected_game_pk}
+                    AND ingestion_ts < commence_time
+                )
+              ORDER BY home_imp_prob DESC
+            Format home_imp_prob and away_imp_prob as "{:.1%}".
+            Format vig as "{:.3f}".
+            Render with st.dataframe(df_books, use_container_width=True).
+            If zero bookmaker rows returned:
+              st.info("No bookmaker data available for the most recent snapshot.")
+
+          SIDEBAR CONTEXT:
+            Show selected game name, game_pk, market_bookmaker_count, and the
+            ingestion snapshot count for the selected game.
+        dependsOn:
+          - card-6b-app-skeleton-complete
+          - card-4-7-mart-odds-consensus-built
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Market Comparison page module
+            path: app/pages/2_Market_Comparison.py
+          - type: command_succeeds
+            name: Page module parses without syntax error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('app/pages/2_Market_Comparison.py').read_text()
+                ast.parse(src)
+                print('Syntax OK')
+          - type: command_succeeds
+            name: mart_odds_outcomes and mart_odds_consensus both referenced
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/2_Market_Comparison.py').read()
+                for table in ['mart_odds_outcomes', 'mart_odds_consensus']:
+                    assert table in src, f'{table} not referenced in page SQL'
+                print('Both mart_odds tables referenced OK')
+          - type: command_succeeds
+            name: ingestion_ts < commence_time leakage guard present
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/2_Market_Comparison.py').read()
+                assert 'ingestion_ts < commence_time' in src, (
+                    'Leakage guard (ingestion_ts < commence_time) not found. '
+                    'All odds queries must filter to pre-game snapshots only.'
+                )
+                print('Leakage guard OK')
+          - type: command_succeeds
+            name: Sharp/soft panel conditionally rendered (not always shown)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/2_Market_Comparison.py').read()
+                assert 'home_win_prob_sharp' in src, (
+                    'home_win_prob_sharp not referenced — sharp/soft panel missing'
+                )
+                assert 'sharp_soft_ml_delta' in src, (
+                    'sharp_soft_ml_delta not referenced — sharp/soft metric missing'
+                )
+                # Confirm conditional rendering — must have an if-check before rendering
+                assert 'if' in src and 'sharp' in src, (
+                    'Sharp/soft panel must be conditionally rendered'
+                )
+                print('Sharp/soft panel conditional rendering OK')
+          - type: command_succeeds
+            name: Cross-bookmaker table sorted by home_imp_prob descending
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/pages/2_Market_Comparison.py').read()
+                assert 'home_imp_prob' in src, (
+                    'home_imp_prob not referenced in page'
+                )
+                assert 'DESC' in src or 'descending' in src.lower() or 'ascending=False' in src, (
+                    'Cross-bookmaker table must be sorted by home_imp_prob DESC'
+                )
+                print('Sort order reference OK')

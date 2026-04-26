@@ -1,0 +1,11 @@
+{
+  "best_alpha": 0.0,
+  "alpha_scores": [
+    {
+      "alpha": 0.0,
+      "log_loss": NaN
+    }
+  ],
+  "n_tuning_games": 0,
+  "small_sample_warning": true
+}

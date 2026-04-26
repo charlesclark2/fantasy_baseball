@@ -1,0 +1,22 @@
+total_runs:
+  model_name: ngboost_tuned
+  eval_year: 2026
+  cv_mae: 3.5718
+  artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+  selected_at: "2026-04-25T00:00:00Z"
+
+run_differential:
+  model_name: ngboost_tuned
+  eval_year: 2026
+  cv_mae: 3.4195
+  artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
+  selected_at: "2026-04-25T00:00:00Z"
+
+home_win:
+  model_name: xgboost_sigmoid
+  eval_year: 2026
+  cv_brier: 0.2443
+  calibration_method: sigmoid
+  calibration_split: 2025
+  artifact_path: betting_ml/models/home_win/xgboost_sigmoid_prod_calibrated.pkl
+  selected_at: "2026-04-25T00:00:00Z"

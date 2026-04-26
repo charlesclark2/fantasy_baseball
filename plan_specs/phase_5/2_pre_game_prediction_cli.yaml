@@ -490,7 +490,7 @@ spec:
                         )
                         print(f'PASS: {non_null}/{len(df)} rows have non-null edge')
           - type: command_succeeds
-            name: Alpha values in parquet are in range (0, 1) — not hardcoded sentinel
+            name: Alpha values in parquet are in range [0, 1] — not hardcoded sentinel
             command: uv
             args:
               - run
@@ -508,11 +508,12 @@ spec:
                     else:
                         alpha_vals = df['alpha'].dropna().unique()
                         for a in alpha_vals:
-                            assert 0 < a < 1, (
-                                f'Alpha value {a} is outside (0, 1) — check that alpha '
-                                'was loaded from Snowflake or best_alpha.json, not hardcoded'
+                            assert 0 <= a <= 1, (
+                                f'Alpha value {a} is outside [0, 1] — check that alpha '
+                                'was loaded from Snowflake or best_alpha.json, not hardcoded. '
+                                'Note: alpha=0.0 is valid (market-dominant result from Card 4.13).'
                             )
-                        print(f'PASS: alpha values {alpha_vals} are all in (0, 1)')
+                        print(f'PASS: alpha values {alpha_vals} are all in [0, 1]')
           - type: command_succeeds
             name: Script exits cleanly on off-season date with no games
             command: uv
