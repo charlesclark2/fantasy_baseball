@@ -19,11 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Python and dbt-fusion
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Install dbt-fusion
         run: pip install dbt-fusion
 

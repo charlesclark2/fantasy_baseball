@@ -19,12 +19,19 @@
 --   3. GitHub PAT secret: baseball_data.config.github_pat already exists (Card 6.A.0).
 --
 --   4. Schema-level grants for task_executor_role (run as ACCOUNTADMIN if not
---      already granted — the dbt_baseball schema was not covered by Card 6.A.1):
---      GRANT USAGE ON SCHEMA baseball_data.dbt_baseball TO ROLE task_executor_role;
---      GRANT SELECT ON ALL TABLES IN SCHEMA baseball_data.dbt_baseball TO ROLE task_executor_role;
---      GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.dbt_baseball TO ROLE task_executor_role;
---      GRANT SELECT ON ALL VIEWS IN SCHEMA baseball_data.dbt_baseball TO ROLE task_executor_role;
---      GRANT SELECT ON FUTURE VIEWS IN SCHEMA baseball_data.dbt_baseball TO ROLE task_executor_role;
+--      already granted — betting/betting_features were not covered by Card 6.A.1):
+--      stg + mart models build into baseball_data.betting:
+--      GRANT USAGE ON SCHEMA baseball_data.betting TO ROLE task_executor_role;
+--      GRANT SELECT ON ALL TABLES IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+--      GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+--      GRANT SELECT ON ALL VIEWS IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+--      GRANT SELECT ON FUTURE VIEWS IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+--      feature models build into baseball_data.betting_features:
+--      GRANT USAGE ON SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+--      GRANT SELECT ON ALL TABLES IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+--      GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+--      GRANT SELECT ON ALL VIEWS IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+--      GRANT SELECT ON FUTURE VIEWS IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
 --      -- config schema grants (pipeline_run_log + lineup_monitor_state):
 --      GRANT USAGE ON SCHEMA baseball_data.config TO ROLE task_executor_role;
 --      GRANT INSERT, SELECT, UPDATE ON ALL TABLES IN SCHEMA baseball_data.config TO ROLE task_executor_role;
@@ -97,7 +104,7 @@ def handler(session):
         # are populated. This view reflects the most recent dbtf build output.
         confirmed_rows = session.sql(f"""
             SELECT game_pk
-            FROM baseball_data.dbt_baseball.stg_statsapi_lineups_wide
+            FROM baseball_data.betting.stg_statsapi_lineups_wide
             WHERE game_date = '{today}'::date
               AND home_lineup_slot_1 IS NOT NULL
               AND away_lineup_slot_1 IS NOT NULL
