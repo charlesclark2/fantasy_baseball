@@ -4,7 +4,7 @@
 
 Build a machine learning system capable of predicting the outcome and total runs scored in an MLB game given the pitching matchup, team matchup, and confirmed batting lineups. The system is grounded in Statcast pitch-level data and augmented with game schedule, lineup, and ballpark context from the MLB Stats API.
 
-**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is complete** as of 2026-04-25. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. **Card 4.13 (Bayesian probability layer) is complete** — best_alpha=0.0 (market dominates; model adds directional edge signal not calibration); 230 output rows across 115 2026 games written to parquet and Snowflake. **Card 5.1 (model selection and registry) is complete** — model_registry.yaml with _prod artifacts for all three targets. **Card 5.2 (pre-game prediction CLI) is complete** — predict_today.py scores all confirmed games, applies the Bayesian layer, and writes probability_outputs_{date}.parquet and predictions_{date}.csv in the canonical Phase 6 contract format. **Card 5.3 (lineup monitor) is substantially complete (22/23 criteria done)** — `task_lineup_monitor` is live and STARTED in Snowflake, `lineup_monitor_proc` is deployed, `dbt_staging_build.yml` is validated end-to-end; one acceptance criterion (pipeline_run_log entry from an actual lineup dispatch) is pending until confirmed lineups are available in `stg_statsapi_lineups_wide`. **Phase 6 (betting/sizing layer) is in progress** — Snowflake Task DAG (6.A) and 2026 prediction backfill (6.G) complete; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28** — app skeleton, picks table, market movement expander, odds refresh button, and timezone fix all shipped; next: Cards 6.C–6.E.
+**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is complete** as of 2026-04-25. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. **Card 4.13 (Bayesian probability layer) is complete** — best_alpha=0.0 (market dominates; model adds directional edge signal not calibration); 230 output rows across 115 2026 games written to parquet and Snowflake. **Card 5.1 (model selection and registry) is complete** — model_registry.yaml with _prod artifacts for all three targets. **Card 5.2 (pre-game prediction CLI) is complete** — predict_today.py scores all confirmed games, applies the Bayesian layer, and writes probability_outputs_{date}.parquet and predictions_{date}.csv in the canonical Phase 6 contract format. **Card 5.3 (lineup monitor) is substantially complete (22/23 criteria done)** — `task_lineup_monitor` is live and STARTED in Snowflake, `lineup_monitor_proc` is deployed, `dbt_staging_build.yml` is validated end-to-end; one acceptance criterion (pipeline_run_log entry from an actual lineup dispatch) is pending until confirmed lineups are available in `stg_statsapi_lineups_wide`. **Phase 6 (betting/sizing layer) is in progress** — Snowflake Task DAG (6.A) and 2026 prediction backfill (6.G) complete; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28** — app skeleton, picks table, market movement expander, odds refresh button, and timezone fix all shipped; **Card 6.C (Market Comparison page) complete as of 2026-04-29** — game selector scoped by `event_id` to prevent cross-series data leakage, moneyline line movement chart with Plotly and game-start vline, totals O/U bar chart (model in orange), sharp/soft conditional panel, cross-bookmaker table, per-bookmaker deep-dive card, and post-game warning callouts all shipped; next: Cards 6.D–6.E.
 
 ---
 
@@ -290,7 +290,7 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Model selection and registry | Phase 5.1 complete — `model_registry.yaml` written; `_prod` artifacts for all three targets; `xgboost_sigmoid_prod_calibrated.pkl` fit on 2025 hold-out; `calibration_verification.md` passes (delta=+0.0028, PASS). `betting_ml/evaluation/selection_log.md` documents regression artifact selection. |
 | Prediction CLI | Phase 5.2 complete — `predict_today.py` scores all confirmed games for a target date, applies the Bayesian probability layer, and writes `betting_ml/outputs/probability_outputs_{date}.parquet` (Card 4.13 schema: 8 columns, has_odds games ranked by abs(edge)) and `predictions_{date}.csv` (all games including non-odds). `best_alpha` loaded from Snowflake `alpha_tuning_results` with fallback to `best_alpha.json`. Intraday fallback via `load_todays_features_via_statsapi()` assembles features from MLB Stats API when nightly dbt pipeline rows are not yet available. |
 | Lineup monitor | Phase 5.3 substantially complete (22/23) — `task_lineup_monitor` live and STARTED in Snowflake (serverless, hourly ET cron); `lineup_monitor_proc` reads `baseball_data.betting.stg_statsapi_lineups_wide`, deduplicates via `lineup_monitor_state`, dispatches `dbt_staging_build.yml` via GitHub REST API; workflow validated end-to-end; one criterion (real dispatch log entry) pending until confirmed lineups available. Email notification deferred to Phase 6. |
-| Betting/sizing layer | Phase 6 in progress — Snowflake Task DAG fully live (Cards 6.A.0–6.A.7 all complete); Card 6.G (2026 prediction backfill) complete — 31 dates, 400 rows in `daily_model_predictions`; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28**; next: Cards 6.C–6.E |
+| Betting/sizing layer | Phase 6 in progress — Snowflake Task DAG fully live (Cards 6.A.0–6.A.7 all complete); Card 6.G (2026 prediction backfill) complete — 31 dates, 400 rows in `daily_model_predictions`; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28**; **Card 6.C (Market Comparison page) complete as of 2026-04-29**; next: Cards 6.D–6.E |
 
 The main gap between current state and a deployable prediction model is the **feature assembly layer** — joining the mart tables into a single pre-game feature vector per game — and the **ML pipeline** itself.
 
@@ -1354,133 +1354,6 @@ No redesign of Card 4.13's output format is required. The parquet schema is the 
 
 ---
 
-#### Card 6.B — Streamlit App Skeleton and Today's Picks Page
-
-**Title:** Bootstrap the Streamlit app and build the Today's Picks page — ranked game predictions with lineup and edge status
-
-**Description:**
-
-*Technical implementation:*
-- Create `app/` at the repo root with `streamlit_app.py` as the entry point and `pages/` for multi-page navigation. Run with `uv run streamlit run app/streamlit_app.py`.
-- **Snowflake connection:** Reuse the existing RSA key connector from `betting_ml/utils/data_loader.py`. Wrap it in a `@st.cache_resource` connection factory so the session is shared across reruns. Credentials read from the project `.env` file.
-- **Today's Picks page (`pages/1_Today_Picks.py`):**
-  - Date selector defaulting to today. On load, queries Snowflake for all games on the selected date joining `feature_pregame_game_features`, `stg_statsapi_games`, and `mart_odds_consensus`.
-  - Loads the three production models from `betting_ml/models/model_registry.yaml` via `utils/model_io.py` and scores the feature matrix in-process (`@st.cache_data` keyed on date + model registry mtime so predictions are not recomputed on every rerender). Loads `best_alpha` from the `alpha_tuning_results` Snowflake table (most recent row) — same value used by `predict_today.py`. For each has_odds game, applies `compute_posterior(model_prob, market_prob, best_alpha)`, `compute_edge()`, and `compute_kelly()` from `betting_ml/utils/probability_layer.py` — the same functions as Card 4.13. This is the live execution of the Phase 6 contract; no separate scoring script is needed for the Streamlit view.
-  - Displays a sortable `st.dataframe` with columns: `Matchup`, `Game Time`, `Lineups`, `Pred Total`, `Model Win%`, `Market Win%`, `Posterior%`, `Edge`, `EV`, `Kelly%`. The `Lineups` column shows a ✓ / ⏳ indicator based on whether both slots are confirmed in `stg_statsapi_lineups_wide`.
-  - Color-codes rows: green background where `abs(edge) > 0.05` and lineups are confirmed; grey where lineups are pending.
-  - "Refresh" button re-runs ingestion check by calling `ingest_statsapi.py schedule` as a subprocess and clearing the `@st.cache_data` entry for the current date.
-- **EV and Kelly formulas** (inline, not a separate page in the MVP):
-  - `EV = (model_prob × (decimal_odds − 1)) − (1 − model_prob)`
-  - `kelly_fraction = (model_prob × (decimal_odds − 1) − (1 − model_prob)) / (decimal_odds − 1)`
-  - Cap displayed Kelly at 10% as a risk guardrail; show a warning badge when raw Kelly exceeds 10%.
-
-*Blockers:* Card 5.1 (model registry). Card 5.2 (`predict_today.py` establishes the scoring logic this page reuses). Card 4.13 (`best_alpha` must be persisted to Snowflake before the app can load it; `probability_layer.py` must exist). Snowflake connection pattern from `utils/data_loader.py`.
-
-*Acceptance criteria:*
-- [x] `uv run streamlit run app/streamlit_app.py` starts without error; Today's Picks page loads within 10 seconds on first run
-- [x] Predictions load for a date with confirmed games; sortable dataframe renders all required columns including `Posterior%`
-- [x] `best_alpha` loaded from Snowflake `alpha_tuning_results`; `compute_posterior()` from `probability_layer.py` called for each has_odds game
-- [x] Lineup confirmation status displays correctly: ✓ for confirmed, ⏳ for pending
-- [x] Edge color-coding applies correctly to rows where `abs(edge) > 0.05` and lineups confirmed
-- [x] Kelly fraction capped at 10% with warning badge when raw value exceeds cap
-- [x] Refresh button re-queries `ingest_statsapi.py schedule` and updates lineup status without restarting the app
-- [x] App handles dates with no games (empty state message, no error)
-
-*Implementation notes (deviations from spec):*
-- Scoring is precomputed by `predict_today.py` and read from `daily_model_predictions` rather than scored inline on page load. Functionally identical — same `probability_layer.py` functions and `best_alpha` from Snowflake.
-- `Pred Total` column replaced by `P(Over)` (model probability of over, derived from NGBoost total-runs distribution).
-- `Signal` column added (🟢/🟡/⚪/⛔) as a quick-scan indicator ahead of the matchup.
-- `Game Time` column added (first pitch in ET).
-- "Refresh" button expanded to also re-ingest odds (events + lines) and trigger `dbt_daily_build.yml` via GitHub Actions, not just lineup ingestion.
-- Rows with no Odds API coverage styled with ⛔ signal and greyed-out background to flag data gaps.
-- Market Movement expander added showing open → current line movement across intraday odds snapshots, with significant moves (≥15 pts) highlighted in blue.
-- Timezone fix: `mart_odds_outcomes` and `mart_odds_events` `commence_date` changed from ET to PT so late West Coast games are correctly attributed to the calendar date.
-
-**Status: Complete as of 2026-04-28.**
-
----
-
-#### Card 6.C — Market Comparison Page
-
-**Title:** Build the Market Comparison Streamlit page — model probability vs. bookmaker implied probability with line movement context
-
-**Description:**
-
-*Technical implementation:*
-- **Market Comparison page (`pages/2_Market_Comparison.py`):**
-  - Game selector (dropdown of today's matchups). On selection, loads all `mart_odds_outcomes` rows for that `event_id` filtered to `ingestion_ts < commence_time`, ordered by `ingestion_ts` ascending.
-  - **Moneyline panel:** Two side-by-side `st.metric` tiles — model home win% and market consensus home win% (`home_win_prob_consensus` from `mart_odds_consensus`). Below, a `st.line_chart` of home win implied probability over ingestion snapshots (line movement history). One line per bookmaker + a bold consensus line.
-  - **Totals panel:** Model predicted total vs. `total_line_consensus`. Bar chart of over/under probability from model vs. each bookmaker's vig-adjusted over probability.
-  - **Sharp vs. soft comparison:** If `home_win_prob_sharp` and `home_win_prob_soft` are non-null, display `sharp_soft_ml_delta` as a signed `st.metric` with tooltip: "Positive = sharp books favor home more than soft books."
-  - **Cross-bookmaker table:** `st.dataframe` of all books for the selected game showing `bookmaker_key`, `home_price_american`, `away_price_american`, `home_imp_prob`, `away_imp_prob`, `vig`. Sorted by `home_imp_prob` descending.
-
-*Blockers:* Card 6.B (app skeleton and Snowflake connection). `mart_odds_consensus` must be built (Card 4.7).
-
-*Acceptance criteria:*
-- [ ] Game selector populates with today's games that have `has_odds = true`
-- [ ] Moneyline line movement chart renders for a game with multiple ingestion snapshots
-- [ ] Model win% and market consensus win% display as `st.metric` tiles with delta (model − market)
-- [ ] Totals panel shows model predicted total vs. consensus line
-- [ ] Sharp vs. soft delta metric displays when sharp/soft data is available; panel is hidden (not erroring) when it is null
-- [ ] Cross-bookmaker table sorted correctly; vig column populated for all rows
-
----
-
-#### Card 6.D — EV Tracker and Kelly Sizer Page
-
-**Title:** Build the EV Tracker and Kelly Sizer page — per-game, per-market expected value and bet sizing recommendation
-
-**Description:**
-
-*Technical implementation:*
-- **EV Tracker page (`pages/3_EV_Kelly.py`):**
-  - Shows all games for the selected date in a single table with columns: `Matchup`, `Market` (h2h home / h2h away / over / under), `Model Prob`, `Market Implied Prob`, `Decimal Odds`, `EV`, `Raw Kelly%`, `Capped Kelly%`, `Actionable` flag.
-  - `Actionable = True` when: `EV > 0`, `abs(edge) > 0.03`, lineups confirmed, and `model_prob` is not null.
-  - **Bankroll simulator:** `st.number_input` for bankroll amount. For all actionable bets on the selected date, displays a "suggested slate" table: `Bet`, `Stake (Capped Kelly × Bankroll)`, `To Win`, `EV ($)`. Shows total risk and total expected profit at the bottom.
-  - **Risk controls displayed prominently:**
-    - Warning banner if any game has unconfirmed lineups but is otherwise actionable — "Lineup pending: do not act until confirmed."
-    - Info note: Kelly fractions are capped at 10% of bankroll; simultaneous correlated bets (same game, different markets) are flagged with a ⚠ icon.
-  - All EV/Kelly values recompute reactively when the user changes the date or refreshes odds.
-
-*Blockers:* Cards 6.B and 6.C (shared Snowflake connection and model scoring logic).
-
-*Acceptance criteria:*
-- [ ] EV table renders for all games × markets on the selected date
-- [ ] `Actionable` flag correctly excludes games with unconfirmed lineups or negative EV
-- [ ] Bankroll simulator stake column equals `capped_kelly × bankroll_input`; updates reactively on bankroll change
-- [ ] Warning banner displays for actionable games with pending lineups
-- [ ] Correlated same-game bets (h2h + totals for the same game) flagged with ⚠ icon
-- [ ] Total risk and expected profit summary row present at the bottom of the suggested slate table
-
----
-
-#### Card 6.E — Performance Tracker Page
-
-**Title:** Build the Performance Tracker page — historical CLV, Brier score trend, and cumulative P&L simulation
-
-**Description:**
-
-*Technical implementation:*
-- **Performance Tracker page (`pages/4_Performance.py`):**
-  - **Data source:** A new Snowflake table `baseball_data.config.prediction_log` (created by `predict_today.py` on each run — add a Snowflake write step to Card 5.2). Columns: `prediction_date`, `game_pk`, `market` (h2h / totals), `model_prob`, `market_prob_at_prediction`, `closing_market_prob`, `actual_outcome`, `decimal_odds`, `ev`, `kelly_fraction`. `closing_market_prob` and `actual_outcome` are backfilled nightly by a new step in the Card 6.A Snowflake Task DAG that joins predictions to `mart_game_results` and the latest pre-game odds snapshot. **Note:** The closing line backfill step does not yet exist in the Card 6.A DAG. It requires querying `mart_odds_outcomes` for the last `ingestion_ts < commence_time` snapshot per game and writing it to `prediction_log`. This step must be added to `proc_statsapi_schedule` (or a new `proc_results_backfill` task) before `closing_market_prob` and CLV calculations will populate. The Brier trend and CLV charts will remain empty until this backfill is live.
-  - **Brier score trend:** `st.line_chart` of rolling 14-day Brier score for model win probability vs. market consensus win probability. Both lines on the same chart. A flat or improving model line relative to market is the primary signal the model is working.
-  - **CLV tracker:** For each logged prediction, `CLV = model_prob − closing_market_prob`. Positive CLV means the model identified value that the market later agreed with. `st.bar_chart` of mean CLV by week.
-  - **P&L simulation:** Cumulative P&L assuming capped-Kelly stakes on all `Actionable` predictions. Line chart of cumulative units won/lost over time. Includes a flat-bet comparison line (1 unit per actionable bet) so Kelly's advantage is visible.
-  - **Summary metrics row** at top: total predictions logged, win rate on actionable bets, mean CLV, cumulative P&L (Kelly), cumulative P&L (flat).
-  - Empty state handling: when `prediction_log` has fewer than 5 rows, display "Not enough history yet — check back after a few days of predictions."
-
-*Blockers:* Card 6.B (app skeleton). Card 5.2 must be extended to write to `prediction_log`. Card 6.A Task DAG must backfill `closing_market_prob` and `actual_outcome` nightly.
-
-*Acceptance criteria:*
-- [ ] `baseball_data.config.prediction_log` table created by `predict_today.py` write step; columns match spec
-- [ ] Brier score trend chart renders with both model and market lines once ≥5 logged predictions exist
-- [ ] CLV bar chart groups by ISO week; positive and negative bars colored green/red respectively
-- [ ] P&L simulation chart includes both Kelly and flat-bet lines
-- [ ] Summary metrics row shows correct counts and aggregates
-- [ ] Empty state message displays cleanly when fewer than 5 predictions are logged
-
----
-
 #### Card 6.A — Snowflake Task DAG for Automated Daily Ingestion (Card Group)
 
 This card has been broken into eight sub-tasks. Implement in the order listed; Cards 6.A.2 and 6.A.3 may be done in parallel after 6.A.0, and Card 6.A.6 may be done in parallel with 6.A.4 and 6.A.5.
@@ -1907,6 +1780,141 @@ Update `scripts/daily_run.md`: add a "Snowflake Task DAG" section at the top of 
 
 ---
 
+#### Card 6.B — Streamlit App Skeleton and Today's Picks Page
+
+**Title:** Bootstrap the Streamlit app and build the Today's Picks page — ranked game predictions with lineup and edge status
+
+**Description:**
+
+*Technical implementation:*
+- Create `app/` at the repo root with `streamlit_app.py` as the entry point and `pages/` for multi-page navigation. Run with `uv run streamlit run app/streamlit_app.py`.
+- **Snowflake connection:** Reuse the existing RSA key connector from `betting_ml/utils/data_loader.py`. Wrap it in a `@st.cache_resource` connection factory so the session is shared across reruns. Credentials read from the project `.env` file.
+- **Today's Picks page (`pages/1_Today_Picks.py`):**
+  - Date selector defaulting to today. On load, queries Snowflake for all games on the selected date joining `feature_pregame_game_features`, `stg_statsapi_games`, and `mart_odds_consensus`.
+  - Loads the three production models from `betting_ml/models/model_registry.yaml` via `utils/model_io.py` and scores the feature matrix in-process (`@st.cache_data` keyed on date + model registry mtime so predictions are not recomputed on every rerender). Loads `best_alpha` from the `alpha_tuning_results` Snowflake table (most recent row) — same value used by `predict_today.py`. For each has_odds game, applies `compute_posterior(model_prob, market_prob, best_alpha)`, `compute_edge()`, and `compute_kelly()` from `betting_ml/utils/probability_layer.py` — the same functions as Card 4.13. This is the live execution of the Phase 6 contract; no separate scoring script is needed for the Streamlit view.
+  - Displays a sortable `st.dataframe` with columns: `Matchup`, `Game Time`, `Lineups`, `Pred Total`, `Model Win%`, `Market Win%`, `Posterior%`, `Edge`, `EV`, `Kelly%`. The `Lineups` column shows a ✓ / ⏳ indicator based on whether both slots are confirmed in `stg_statsapi_lineups_wide`.
+  - Color-codes rows: green background where `abs(edge) > 0.05` and lineups are confirmed; grey where lineups are pending.
+  - "Refresh" button re-runs ingestion check by calling `ingest_statsapi.py schedule` as a subprocess and clearing the `@st.cache_data` entry for the current date.
+- **EV and Kelly formulas** (inline, not a separate page in the MVP):
+  - `EV = (model_prob × (decimal_odds − 1)) − (1 − model_prob)`
+  - `kelly_fraction = (model_prob × (decimal_odds − 1) − (1 − model_prob)) / (decimal_odds − 1)`
+  - Cap displayed Kelly at 10% as a risk guardrail; show a warning badge when raw Kelly exceeds 10%.
+
+*Blockers:* Card 5.1 (model registry). Card 5.2 (`predict_today.py` establishes the scoring logic this page reuses). Card 4.13 (`best_alpha` must be persisted to Snowflake before the app can load it; `probability_layer.py` must exist). Snowflake connection pattern from `utils/data_loader.py`.
+
+*Acceptance criteria:*
+- [x] `uv run streamlit run app/streamlit_app.py` starts without error; Today's Picks page loads within 10 seconds on first run
+- [x] Predictions load for a date with confirmed games; sortable dataframe renders all required columns including `Posterior%`
+- [x] `best_alpha` loaded from Snowflake `alpha_tuning_results`; `compute_posterior()` from `probability_layer.py` called for each has_odds game
+- [x] Lineup confirmation status displays correctly: ✓ for confirmed, ⏳ for pending
+- [x] Edge color-coding applies correctly to rows where `abs(edge) > 0.05` and lineups confirmed
+- [x] Kelly fraction capped at 10% with warning badge when raw value exceeds cap
+- [x] Refresh button re-queries `ingest_statsapi.py schedule` and updates lineup status without restarting the app
+- [x] App handles dates with no games (empty state message, no error)
+
+*Implementation notes (deviations from spec):*
+- Scoring is precomputed by `predict_today.py` and read from `daily_model_predictions` rather than scored inline on page load. Functionally identical — same `probability_layer.py` functions and `best_alpha` from Snowflake.
+- `Pred Total` column replaced by `P(Over)` (model probability of over, derived from NGBoost total-runs distribution).
+- `Signal` column added (🟢/🟡/⚪/⛔) as a quick-scan indicator ahead of the matchup.
+- `Game Time` column added (first pitch in ET).
+- "Refresh" button expanded to also re-ingest odds (events + lines) and trigger `dbt_daily_build.yml` via GitHub Actions, not just lineup ingestion.
+- Rows with no Odds API coverage styled with ⛔ signal and greyed-out background to flag data gaps.
+- Market Movement expander added showing open → current line movement across intraday odds snapshots, with significant moves (≥15 pts) highlighted in blue.
+- Timezone fix: `mart_odds_outcomes` and `mart_odds_events` `commence_date` changed from ET to PT so late West Coast games are correctly attributed to the calendar date.
+
+**Status: Complete as of 2026-04-28.**
+
+---
+
+#### Card 6.C — Market Comparison Page
+
+**Title:** Build the Market Comparison Streamlit page — model probability vs. bookmaker implied probability with line movement context
+
+**Description:**
+
+*Technical implementation:*
+- **Market Comparison page (`pages/2_Market_Comparison.py`):**
+  - Game selector (dropdown of today's matchups). On selection, loads all `mart_odds_outcomes` rows for that `event_id` filtered to `ingestion_ts < commence_time`, ordered by `ingestion_ts` ascending.
+  - **Moneyline panel:** Two side-by-side `st.metric` tiles — model home win% and market consensus home win% (`home_win_prob_consensus` from `mart_odds_consensus`). Below, a `st.line_chart` of home win implied probability over ingestion snapshots (line movement history). One line per bookmaker + a bold consensus line.
+  - **Totals panel:** Model predicted total vs. `total_line_consensus`. Bar chart of over/under probability from model vs. each bookmaker's vig-adjusted over probability.
+  - **Sharp vs. soft comparison:** If `home_win_prob_sharp` and `home_win_prob_soft` are non-null, display `sharp_soft_ml_delta` as a signed `st.metric` with tooltip: "Positive = sharp books favor home more than soft books."
+  - **Cross-bookmaker table:** `st.dataframe` of all books for the selected game showing `bookmaker_key`, `home_price_american`, `away_price_american`, `home_imp_prob`, `away_imp_prob`, `vig`. Sorted by `home_imp_prob` descending.
+
+*Blockers:* Card 6.B (app skeleton and Snowflake connection). `mart_odds_consensus` must be built (Card 4.7).
+
+*Acceptance criteria:*
+- [x] Game selector populates with today's games that have `has_odds = true`
+- [x] Moneyline line movement chart renders for a game with multiple ingestion snapshots
+- [x] Model win% and market consensus win% display as `st.metric` tiles with delta (model − market)
+- [x] Totals panel shows model predicted total vs. consensus line
+- [x] Sharp vs. soft delta metric displays when sharp/soft data is available; panel is hidden (not erroring) when it is null
+- [x] Cross-bookmaker table sorted correctly; vig column populated for all rows
+
+*Completed as of 2026-04-29. Key implementation notes:*
+- All mart queries scoped by `event_id` (from The Odds API) to prevent cross-series data leakage when the same two teams play multiple series.
+- Leakage guard uses `game_datetime` from `daily_model_predictions` (reliable UTC) rather than `mart_odds_outcomes.commence_time` (timezone-ambiguous).
+- Plotly `add_vline` replaced with `add_shape` + `add_annotation` to avoid `sum()` type error on timezone-aware datetime axes.
+- Totals O/U bar chart uses orange for the model bar and blue for bookmakers; `st.caption` labels the color scheme.
+- Post-game warning callouts (`st.warning(..., icon="⚠️")`) explain when live in-game lines are being displayed instead of pre-game consensus.
+- Per-bookmaker deep-dive card (moneyline + totals sub-sections) added below the cross-bookmaker table.
+
+---
+
+#### Card 6.D — EV Tracker and Kelly Sizer Page
+
+**Title:** Build the EV Tracker and Kelly Sizer page — per-game, per-market expected value and bet sizing recommendation
+
+**Description:**
+
+*Technical implementation:*
+- **EV Tracker page (`pages/3_EV_Kelly.py`):**
+  - Shows all games for the selected date in a single table with columns: `Matchup`, `Market` (h2h home / h2h away / over / under), `Model Prob`, `Market Implied Prob`, `Decimal Odds`, `EV`, `Raw Kelly%`, `Capped Kelly%`, `Actionable` flag.
+  - `Actionable = True` when: `EV > 0`, `abs(edge) > 0.03`, lineups confirmed, and `model_prob` is not null.
+  - **Bankroll simulator:** `st.number_input` for bankroll amount. For all actionable bets on the selected date, displays a "suggested slate" table: `Bet`, `Stake (Capped Kelly × Bankroll)`, `To Win`, `EV ($)`. Shows total risk and total expected profit at the bottom.
+  - **Risk controls displayed prominently:**
+    - Warning banner if any game has unconfirmed lineups but is otherwise actionable — "Lineup pending: do not act until confirmed."
+    - Info note: Kelly fractions are capped at 10% of bankroll; simultaneous correlated bets (same game, different markets) are flagged with a ⚠ icon.
+  - All EV/Kelly values recompute reactively when the user changes the date or refreshes odds.
+
+*Blockers:* Cards 6.B and 6.C (shared Snowflake connection and model scoring logic).
+
+*Acceptance criteria:*
+- [ ] EV table renders for all games × markets on the selected date
+- [ ] `Actionable` flag correctly excludes games with unconfirmed lineups or negative EV
+- [ ] Bankroll simulator stake column equals `capped_kelly × bankroll_input`; updates reactively on bankroll change
+- [ ] Warning banner displays for actionable games with pending lineups
+- [ ] Correlated same-game bets (h2h + totals for the same game) flagged with ⚠ icon
+- [ ] Total risk and expected profit summary row present at the bottom of the suggested slate table
+
+---
+
+#### Card 6.E — Performance Tracker Page
+
+**Title:** Build the Performance Tracker page — historical CLV, Brier score trend, and cumulative P&L simulation
+
+**Description:**
+
+*Technical implementation:*
+- **Performance Tracker page (`pages/4_Performance.py`):**
+  - **Data source:** A new Snowflake table `baseball_data.config.prediction_log` (created by `predict_today.py` on each run — add a Snowflake write step to Card 5.2). Columns: `prediction_date`, `game_pk`, `market` (h2h / totals), `model_prob`, `market_prob_at_prediction`, `closing_market_prob`, `actual_outcome`, `decimal_odds`, `ev`, `kelly_fraction`. `closing_market_prob` and `actual_outcome` are backfilled nightly by a new step in the Card 6.A Snowflake Task DAG that joins predictions to `mart_game_results` and the latest pre-game odds snapshot. **Note:** The closing line backfill step does not yet exist in the Card 6.A DAG. It requires querying `mart_odds_outcomes` for the last `ingestion_ts < commence_time` snapshot per game and writing it to `prediction_log`. This step must be added to `proc_statsapi_schedule` (or a new `proc_results_backfill` task) before `closing_market_prob` and CLV calculations will populate. The Brier trend and CLV charts will remain empty until this backfill is live.
+  - **Brier score trend:** `st.line_chart` of rolling 14-day Brier score for model win probability vs. market consensus win probability. Both lines on the same chart. A flat or improving model line relative to market is the primary signal the model is working.
+  - **CLV tracker:** For each logged prediction, `CLV = model_prob − closing_market_prob`. Positive CLV means the model identified value that the market later agreed with. `st.bar_chart` of mean CLV by week.
+  - **P&L simulation:** Cumulative P&L assuming capped-Kelly stakes on all `Actionable` predictions. Line chart of cumulative units won/lost over time. Includes a flat-bet comparison line (1 unit per actionable bet) so Kelly's advantage is visible.
+  - **Summary metrics row** at top: total predictions logged, win rate on actionable bets, mean CLV, cumulative P&L (Kelly), cumulative P&L (flat).
+  - Empty state handling: when `prediction_log` has fewer than 5 rows, display "Not enough history yet — check back after a few days of predictions."
+
+*Blockers:* Card 6.B (app skeleton). Card 5.2 must be extended to write to `prediction_log`. Card 6.A Task DAG must backfill `closing_market_prob` and `actual_outcome` nightly.
+
+*Acceptance criteria:*
+- [ ] `baseball_data.config.prediction_log` table created by `predict_today.py` write step; columns match spec
+- [ ] Brier score trend chart renders with both model and market lines once ≥5 logged predictions exist
+- [ ] CLV bar chart groups by ISO week; positive and negative bars colored green/red respectively
+- [ ] P&L simulation chart includes both Kelly and flat-bet lines
+- [ ] Summary metrics row shows correct counts and aggregates
+- [ ] Empty state message displays cleanly when fewer than 5 predictions are logged
+
+---
+
 #### Card 6.F — In-Season Model Retraining Cadence
 
 **Title:** Define and implement a retraining schedule for production models as 2026 season data accumulates
@@ -2170,6 +2178,78 @@ After these fixes and a full dbt rebuild + prediction backfill, residual `has_od
 - [ ] Prioritized roadmap table (above) reviewed and ordering confirmed or updated based on consensus_win_prob measurement result
 - [ ] Post-mortem findings appended to `betting_ml/evaluation/postmortem_v0.md` (new file) covering all 10 gaps with quantified state and root-cause verdict
 - [ ] Phase 7 cards confirmed or updated in `project_context.md` based on post-mortem findings; any gap that changes priority order results in a card re-ordering or new card creation
+
+---
+
+#### Card 6.I — Application Branding and Landing Page Redesign
+
+**Title:** Give the Streamlit app a name and replace the placeholder landing page with a meaningful project overview
+
+**Status:** Not started.
+
+**Description:**
+
+The current application entry point (`app/streamlit_app.py`) displays a generic title in the sidebar ("streamlit_app" as set by the filename) and a minimal landing page with only two lines of text: "Use the sidebar to navigate between pages." and the model stack summary. For a tool used in a live daily workflow, this is insufficient — a new user (or even a returning one after time away) has no context for what the application does, what data powers it, or how to navigate it effectively.
+
+This card covers two tightly related changes:
+
+**1. Application Name**
+
+Rename the application to **"Diamond Edge"** — a name that connects the baseball diamond with the concept of finding a mathematical edge over the betting market. Update:
+- `st.set_page_config(page_title="Diamond Edge")` in `app/streamlit_app.py`
+- Sidebar header — render a styled title ("💎 Diamond Edge") using `st.sidebar.markdown`
+- `app/streamlit_app.py` app title on the landing page itself
+
+**2. Landing Page Redesign**
+
+Replace the placeholder landing page with a structured overview page covering:
+
+*Section 1 — What This Application Does (2–3 sentences)*
+A concise description of the system: MLB game predictions powered by NGBoost and XGBoost models trained on 2016–2025 historical data, integrated with live Odds API market lines via a Bayesian probability layer, designed to surface pre-game edges across moneyline and totals markets.
+
+*Section 2 — Page-by-Page Navigation Guide*
+
+A summary table or expander listing each page, what it shows, and when to use it:
+
+| Page | What It Shows | When to Use It |
+|---|---|---|
+| Today's Picks | Ranked game predictions with edge scores and Kelly fractions for today's slate | Every morning after lineups are confirmed |
+| Market Comparison | Model probability vs. all bookmaker lines with intraday line movement charts | To investigate a specific game's market dynamics |
+| EV Tracker | Expected value and Kelly sizing across all markets for the selected date | To generate a suggested bet slate with position sizing |
+| Performance Tracker | Historical Brier score trend, CLV, and cumulative P&L simulation | To monitor model performance over time |
+
+*Section 3 — Data Sources and Model Summary*
+
+A condensed fact sheet rendered using `st.columns` and `st.metric` tiles:
+- **Training data:** 23,444 regular season games, 2016–2025
+- **Total runs model:** NGBoost LogNormal — avg error 3.57 runs
+- **Win probability model:** XGBoost + Platt calibration — Brier 0.2393 (beats market benchmark 0.2395)
+- **Market integration:** Odds API covering ~79% of games; Bayesian mixing weight α = 0.0 (market probability used as prior)
+- **Last model update:** dynamically read from `model_registry.yaml` `selected_at` field
+
+*Section 4 — Daily Workflow Reminder*
+
+A collapsible `st.expander("How the daily pipeline works")` showing the operational sequence:
+1. 08:00 ET — Snowflake Task DAG ingests prior-day Statcast, schedule, and odds; triggers dbt build
+2. Hourly — Lineup monitor detects confirmed lineups; triggers lineup feature refresh
+3. After lineups lock — Navigate to Today's Picks and press Refresh to score the day's slate
+
+*Technical implementation:*
+- All changes confined to `app/streamlit_app.py`
+- Model registry read with `yaml.safe_load` to surface `selected_at` dynamically
+- No new Snowflake queries required; the landing page is fully static except for the model registry read
+- Keep page load time under 2 seconds (no heavy imports at landing page level)
+
+*Blockers:* Card 6.B must be complete (app skeleton and pages must exist before the landing page can link to them meaningfully in the navigation guide).
+
+*Acceptance criteria:*
+- [ ] `st.set_page_config(page_title="Diamond Edge")` set in `app/streamlit_app.py`
+- [ ] Sidebar displays "💎 Diamond Edge" as the app title
+- [ ] Landing page renders four sections: project description, page navigation guide, model fact sheet, daily workflow expander
+- [ ] Model fact sheet tiles read `selected_at` dynamically from `model_registry.yaml`; a missing or malformed registry shows a fallback warning rather than erroring
+- [ ] All four navigation page names in the guide match the actual page filenames in `app/pages/`
+- [ ] Landing page loads in under 2 seconds on first render (no model loading or Snowflake query at landing page level)
+- [ ] No references to "streamlit_app" remain as user-visible text in the sidebar or page titles
 
 ---
 
@@ -2515,6 +2595,6 @@ Declarative YAML planning specs (planspec.io/v1alpha1) for agentic task executio
 | 4 | 4.11 | `plan_specs/phase_4/11_hyperparameter_optimization.yaml` | Draft |
 | 4 | 4.12 | `plan_specs/phase_4/12_bayes_prob_layer.yaml` | Draft |
 | 6 | 6.B | `plan_specs/phase_6/B_streamlit_base_todays_picks.yaml` | Draft |
-| 6 | 6.C | `plan_specs/phase_6/C_streamlit_market_comparision_page.yaml` | Draft |
+| 6 | 6.C | `plan_specs/phase_6/C_streamlit_market_comparision_page.yaml` | Complete |
 | 6 | 6.D | `plan_specs/phase_6/D_streamlit_ev_tracker_and_kelly_sizer.yaml` | Draft |
 | 6 | 6.E | `plan_specs/phase_6/E_streamlist_perf_tracker_page.yaml` | Draft |

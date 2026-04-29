@@ -20,6 +20,7 @@ dependencies = [
     "mlb-statsapi>=0.0.44",
     "streamlit>=1.56.0",
     "python-dotenv>=1.0",
+    "plotly>=6.7.0",
 ]
 
 [build-system]

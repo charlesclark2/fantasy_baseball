@@ -1,0 +1,333 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: diamond-edge-branding-and-landing-page
+  namespace: default
+spec:
+  description: >
+    Give the Streamlit application a proper name and a meaningful landing page.
+
+    The current app entry point (app/streamlit_app.py) shows a generic sidebar
+    title and two lines of placeholder text on the landing page. This card
+    replaces both with production-quality branding and a structured overview.
+
+    Application name: "Diamond Edge" — connects the baseball diamond with the
+    concept of finding a mathematical edge over the betting market.
+
+    The redesigned landing page contains four sections:
+      1. Project description (what this system does and what models power it)
+      2. Page navigation guide (table mapping each page to its purpose and usage)
+      3. Model fact sheet (metric tiles sourced dynamically from model_registry.yaml)
+      4. Daily workflow reminder (collapsible expander with the operational sequence)
+
+    All changes are confined to app/streamlit_app.py. No new Snowflake queries,
+    no new pages, no model loading at the landing page level. Page load target
+    is under 2 seconds.
+  acceptanceCriteria:
+    - description: >
+        st.set_page_config(page_title="Diamond Edge") is set in app/streamlit_app.py;
+        the browser tab shows "Diamond Edge" when the app loads
+    - description: >
+        Sidebar displays "💎 Diamond Edge" as the styled app title via
+        st.sidebar.markdown
+    - description: >
+        Landing page renders four sections in order: project description,
+        page navigation guide (table), model fact sheet (metric tiles),
+        daily workflow expander
+    - description: >
+        Model fact sheet reads selected_at dynamically from
+        betting_ml/models/model_registry.yaml via yaml.safe_load; a missing
+        or malformed registry renders a warning rather than an unhandled exception
+    - description: >
+        All four page names in the navigation guide match the actual page
+        filenames in app/pages/ — no stale or placeholder entries
+    - description: >
+        Landing page loads in under 2 seconds on first render; no model
+        loading or Snowflake queries execute at landing page level
+    - description: >
+        No user-visible references to "streamlit_app" remain in the sidebar
+        title, page title, or browser tab
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6b-app-skeleton-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.B (Streamlit app skeleton and Today's Picks page) must be complete
+    before the landing page redesign begins, because the navigation guide on
+    the landing page references all four pages by name and purpose — those pages
+    must exist and be named correctly before the guide can be accurate.
+
+    Required conditions:
+      - app/streamlit_app.py exists and starts without error
+      - app/pages/1_Today_Picks.py exists
+      - app/pages/2_Market_Comparison.py exists (or is at minimum stubbed with
+        a title and "Coming soon" placeholder — the guide table entry must be accurate)
+      - app/pages/3_EV_Kelly.py and app/pages/4_Performance.py exist or are stubbed
+
+    Confirm by running:
+      uv run streamlit run app/streamlit_app.py
+    and verifying that all four pages appear in the sidebar without error.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: diamond-edge-branding-and-landing-page-plan
+  namespace: default
+spec:
+  description: >
+    Two-task sequence. update-app-name applies the "Diamond Edge" branding to
+    the page config and sidebar. implement-landing-page builds the four-section
+    landing page. Both tasks edit only app/streamlit_app.py. The gate ensures
+    the app skeleton (all four pages) is in place before the navigation guide
+    is written, so page names in the guide match reality.
+  goalRef:
+    name: diamond-edge-branding-and-landing-page
+  graph:
+    nodes:
+
+      - id: update-app-name
+        kind: Task
+        description: >
+          Update app/streamlit_app.py to apply the "Diamond Edge" application
+          name throughout.
+
+          Changes required:
+            1. st.set_page_config call:
+               - page_title = "Diamond Edge"
+               - page_icon = "💎"
+               - layout = "wide" (keep existing)
+               - initial_sidebar_state = "expanded" (keep existing)
+
+            2. Sidebar branding block (add near the top of streamlit_app.py,
+               before any page content):
+               st.sidebar.markdown("# 💎 Diamond Edge")
+               st.sidebar.markdown(
+                 "_MLB game predictions powered by NGBoost + XGBoost_"
+               )
+               st.sidebar.divider()
+
+            3. Landing page main title:
+               st.title("💎 Diamond Edge")
+
+          Remove any existing generic title text or placeholder sidebar headers
+          that referenced "streamlit_app" or the generic Streamlit default.
+
+          After applying changes, start the app and confirm:
+            - Browser tab shows "Diamond Edge"
+            - Sidebar header shows "💎 Diamond Edge" with the subtitle
+            - st.title on the landing page shows "💎 Diamond Edge"
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: page_title set to Diamond Edge in set_page_config
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                assert 'Diamond Edge' in src, 'Diamond Edge not found in streamlit_app.py'
+                assert 'set_page_config' in src, 'set_page_config not called'
+                print('Branding OK')
+          - type: command_succeeds
+            name: Sidebar markdown references Diamond Edge
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                assert 'sidebar' in src and 'Diamond Edge' in src, (
+                    'Sidebar Diamond Edge branding not found'
+                )
+                print('Sidebar branding OK')
+          - type: command_succeeds
+            name: No user-visible references to streamlit_app remain
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                # streamlit_app is OK in import paths / comments, but should not
+                # appear as a user-facing string in page_title or sidebar text
+                import re
+                user_facing = re.findall(
+                    r'(page_title|sidebar\.title|sidebar\.header|st\.title)\s*[=(][^)"\n]*streamlit_app',
+                    src
+                )
+                assert not user_facing, f'streamlit_app appears in user-facing text: {user_facing}'
+                print('No stale streamlit_app references in user-facing strings')
+
+      - id: implement-landing-page
+        kind: Task
+        description: >
+          Replace the placeholder landing page body in app/streamlit_app.py
+          with a four-section structured overview.
+
+          SECTION 1 — Project Description
+
+          Render immediately below the st.title call. Two to three sentences
+          using st.markdown:
+
+            "**Diamond Edge** is an MLB game prediction system that uses machine
+            learning models trained on 10 years of historical data to surface
+            pre-game edges against live betting market lines.
+
+            Models are powered by **NGBoost** (total runs and run differential)
+            and **XGBoost** (win probability, Platt-calibrated), integrated with
+            real-time Odds API market prices via a Bayesian probability layer.
+            Predictions are ranked by the gap between the model's probability
+            estimate and the market's implied probability — the edge signal."
+
+          SECTION 2 — Page Navigation Guide
+
+          Heading: st.subheader("What Each Page Does")
+
+          Render a static markdown table (st.markdown) mapping pages to purpose:
+
+            | Page | What It Shows | Best Used When |
+            |---|---|---|
+            | Today's Picks | Ranked game predictions with edge scores, Kelly fractions, and lineup status for today's slate | Every morning after lineups are confirmed (~2–3 hours before first pitch) |
+            | Market Comparison | Model probability vs. all bookmaker lines with intraday line movement charts | Investigating a specific game — checking if the model and sharp books agree |
+            | EV Tracker | Expected value and Kelly bet sizing across all markets; bankroll simulator | Building a suggested bet slate with position sizes for the day |
+            | Performance Tracker | Rolling Brier score vs. market, Closing Line Value by week, cumulative P&L | Monitoring model accuracy and bet performance over time |
+
+          SECTION 3 — Model Fact Sheet
+
+          Heading: st.subheader("Model Summary")
+
+          Read betting_ml/models/model_registry.yaml with:
+            import yaml, pathlib
+            registry_path = pathlib.Path('betting_ml/models/model_registry.yaml')
+            if registry_path.exists():
+                registry = yaml.safe_load(registry_path.read_text())
+                last_updated = registry.get('home_win', {}).get('selected_at', 'Unknown')
+            else:
+                registry = {}
+                last_updated = 'Registry not found'
+                st.warning("model_registry.yaml not found — model summary may be incomplete.")
+
+          Render using st.columns(4) with st.metric tiles:
+            Col 1: st.metric("Training Games", "23,444", "2016–2025")
+            Col 2: st.metric("Total Runs MAE", "3.57 runs", "NGBoost LogNormal")
+            Col 3: st.metric("Win Prob Brier", "0.2393", delta="beats market 0.2395",
+                              delta_color="normal")
+            Col 4: st.metric("Last Model Update", last_updated)
+
+          Below the metrics, add a single info callout:
+            st.info(
+                "Bayesian mixing weight α = 0.0: market implied probability is used "
+                "as the probability prior. Model edge signal = model prob − market prob."
+            )
+
+          SECTION 4 — Daily Workflow Reminder
+
+          Render as a collapsible expander (collapsed by default):
+            with st.expander("How the daily pipeline works", expanded=False):
+                st.markdown("""
+                **Step 1 — 08:00 ET (automated)**
+                The Snowflake Task DAG ingests prior-day Statcast, game schedule, and
+                Odds API lines. A GitHub Actions workflow triggers a full dbt build,
+                refreshing all feature tables including `feature_pregame_game_features`.
+
+                **Step 2 — Hourly (automated)**
+                The lineup monitor checks for confirmed starting lineups. When both home
+                and away lineups are official, it triggers a targeted dbt build for the
+                lineup-dependent feature models.
+
+                **Step 3 — Morning of game day (manual)**
+                Navigate to **Today's Picks**, select today's date, and press **Refresh**
+                to ingest the latest lineup and odds data. Predictions update automatically.
+                Games with confirmed lineups and abs(edge) > 5% are highlighted in green.
+
+                **Lineup lock timing:** Lineups typically go official 2–3 hours before
+                first pitch. Early games (1:00 PM ET) may lock as late as 10:30 AM ET.
+                Do not act on edge signals until the Lineups column shows ✓.
+                """)
+
+          IMPLEMENTATION NOTES:
+          - All four sections render sequentially in the body of streamlit_app.py
+            after the st.title call
+          - The model registry read is the only I/O operation; wrap it in a
+            try/except so a corrupted YAML file does not crash the landing page
+          - Do not import streamlit model loading functions (load_model, etc.)
+            at the landing page level — those are deferred to the page modules
+          - Keep the landing page body under ~80 lines of code
+        dependsOn:
+          - update-app-name
+          - card-6b-app-skeleton-complete
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: All four sections present in streamlit_app.py
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                checks = {
+                    'Project description': 'NGBoost' in src and 'XGBoost' in src,
+                    'Navigation table': 'Today\'s Picks' in src and 'Market Comparison' in src,
+                    'Model metrics': 'st.metric' in src and '23,444' in src,
+                    'Workflow expander': 'st.expander' in src and '08:00' in src,
+                }
+                failed = [k for k, v in checks.items() if not v]
+                assert not failed, f'Missing sections: {failed}'
+                print('All four sections present')
+          - type: command_succeeds
+            name: model_registry.yaml read is wrapped in try/except or exists check
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                has_guard = ('registry_path.exists()' in src or
+                             'try:' in src and 'model_registry' in src)
+                assert has_guard, (
+                    'model_registry.yaml read must be guarded against missing '
+                    'file or parse errors — wrap in exists() check or try/except'
+                )
+                print('Registry read is guarded OK')
+          - type: command_succeeds
+            name: No heavy model imports at landing page level
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('app/streamlit_app.py').read()
+                forbidden = ['load_model', 'NGBoost', 'xgboost', 'sklearn']
+                found = [f for f in forbidden if f in src]
+                assert not found, (
+                    f'Heavy imports found at landing page level: {found} — '
+                    'defer model loading to page modules'
+                )
+                print('No heavy imports at landing page level OK')
+          - type: command_succeeds
+            name: streamlit_app.py parses without syntax errors
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('app/streamlit_app.py').read_text()
+                ast.parse(src)
+                print('Syntax OK')
