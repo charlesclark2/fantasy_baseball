@@ -18,6 +18,10 @@ exploratory_data_analysis/__marimo__/
 # Trained model artifacts (large binaries — store via Git LFS or object storage)
 betting_ml/models/**/*.pkl
 
+# Daily prediction outputs (written by predict_today.py — tracked in Snowflake, not git)
+betting_ml/outputs/predictions*.csv
+betting_ml/outputs/probability_outputs*.parquet
+
 # OS
 .DS_Store
 

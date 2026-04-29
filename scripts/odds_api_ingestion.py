@@ -712,14 +712,20 @@ def run_historical_events(
         snapshot_dt  = first_game_utc - timedelta(hours=1)
         snapshot_str = format_iso_utc(snapshot_dt)
 
-        # Scope response to this calendar date in UTC
+        # Scope response to this calendar date in ET.
+        # MLB games can start as late as ~10 pm ET (03:00 UTC next day).
+        # Using UTC midnight-to-midnight would silently drop any game that
+        # starts after 00:00 UTC (i.e. after 8 pm ET in summer / 7 pm ET in
+        # winter). Extending day_end to 05:00 UTC the following day covers the
+        # full ET calendar day including the latest possible West Coast starts.
         day_start = datetime(
             game_date.year, game_date.month, game_date.day,
             0, 0, 0, tzinfo=timezone.utc,
         )
+        next_day = game_date + timedelta(days=1)
         day_end = datetime(
-            game_date.year, game_date.month, game_date.day,
-            23, 59, 59, tzinfo=timezone.utc,
+            next_day.year, next_day.month, next_day.day,
+            4, 59, 59, tzinfo=timezone.utc,
         )
 
         params: dict = {
@@ -827,6 +833,7 @@ def run_historical_odds(
     target: SnowflakeTarget,
     start_date: date,
     end_date: date,
+    force: bool = False,
 ) -> None:
     """
     Fetch historical odds for every regular-season game date in [start_date,
@@ -857,10 +864,14 @@ def run_historical_odds(
         )
         return
 
-    log.info("Checking for already-loaded (game_date, market) pairs ...")
-    already_loaded = fetch_already_loaded_odds_combos(conn, target, start_date, end_date)
-    if already_loaded:
-        log.info("  %d (game_date, market) pair(s) already loaded — will skip", len(already_loaded))
+    if force:
+        log.info("--force: skipping already-loaded check, all dates will be re-fetched")
+        already_loaded: set[tuple[date, str]] = set()
+    else:
+        log.info("Checking for already-loaded (game_date, market) pairs ...")
+        already_loaded = fetch_already_loaded_odds_combos(conn, target, start_date, end_date)
+        if already_loaded:
+            log.info("  %d (game_date, market) pair(s) already loaded — will skip", len(already_loaded))
 
     markets       = DEFAULT_MARKETS
     total_dates   = len(game_dates)
@@ -887,9 +898,10 @@ def run_historical_odds(
             game_date.year, game_date.month, game_date.day,
             0, 0, 0, tzinfo=timezone.utc,
         )
+        next_day = game_date + timedelta(days=1)
         day_end = datetime(
-            game_date.year, game_date.month, game_date.day,
-            23, 59, 59, tzinfo=timezone.utc,
+            next_day.year, next_day.month, next_day.day,
+            4, 59, 59, tzinfo=timezone.utc,
         )
 
         ingestion_ts = datetime.now(tz=timezone.utc)
@@ -903,6 +915,25 @@ def run_historical_odds(
                     call_num, total_calls, game_date, market,
                 )
                 continue
+
+            if force:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        f"""
+                        DELETE FROM {target.qualified_name}
+                        WHERE source_endpoint = %(endpoint)s
+                          AND commence_time::date = %(game_date)s::date
+                          AND request_params:markets::varchar = %(market)s
+                        """,
+                        {
+                            "endpoint":  HIST_ODDS_ENDPOINT,
+                            "game_date": game_date.isoformat(),
+                            "market":    market,
+                        },
+                    )
+                    deleted = cur.rowcount
+                if deleted:
+                    log.info("  --force: deleted %d existing row(s) for %s market=%s", deleted, game_date, market)
 
             params: dict = {
                 "date":             snapshot_str,
@@ -1076,6 +1107,12 @@ def build_parser() -> argparse.ArgumentParser:
             f"(default: {HIST_DEFAULT_END})."
         ),
     )
+    hist_odds_parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Re-fetch dates that are already present in the odds table (bypasses idempotency check).",
+    )
 
     odds_parser = sub.add_parser(
         "odds",
@@ -1146,6 +1183,7 @@ def main() -> None:
                 odds_target,
                 start_date = date.fromisoformat(args.start_date),
                 end_date   = date.fromisoformat(args.end_date),
+                force      = args.force,
             )
 
         elif args.command == "odds":

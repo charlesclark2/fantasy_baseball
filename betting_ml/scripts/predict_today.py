@@ -149,7 +149,19 @@ def _write_predictions_to_snowflake(
         if col not in df.columns:
             return None
         v = df.iloc[i][col]
-        return None if pd.isna(v) else v
+        if pd.isna(v):
+            return None
+        # Snowflake connector doesn't handle numpy scalars in %(name)s params;
+        # .item() converts np.int64 / np.float64 / etc. to native Python types.
+        return v.item() if hasattr(v, "item") else v
+
+    def _sanitize(row: dict) -> dict:
+        # Snowflake connector serializes Python float('nan') as the SQL literal NAN,
+        # which Snowflake rejects. Convert any remaining NaN floats to None.
+        return {
+            k: (None if isinstance(v, float) and v != v else v)
+            for k, v in row.items()
+        }
 
     rows: list[dict] = []
     score_date = date.fromisoformat(target_date)
@@ -189,7 +201,7 @@ def _write_predictions_to_snowflake(
             except Exception:
                 pass
 
-        rows.append({
+        rows.append(_sanitize({
             "model_version":          MODEL_VERSION,
             "inserted_at":            inserted_at,
             "score_date":             score_date,
@@ -221,7 +233,7 @@ def _write_predictions_to_snowflake(
             "totals_posterior_prob":  tot_post,
             "totals_edge":            tot_edge,
             "totals_kelly_fraction":  tot_kelly,
-        })
+        }))
 
     try:
         conn = get_snowflake_connection()

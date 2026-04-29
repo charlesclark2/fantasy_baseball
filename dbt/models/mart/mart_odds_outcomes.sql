@@ -38,7 +38,7 @@ select
     sport_key,
     sport_title,
     commence_time,
-    commence_time::date                                    as commence_date,
+    convert_timezone('UTC', 'America/Los_Angeles', commence_time)::date as commence_date,
     home_team,
     away_team,
 

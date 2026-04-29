@@ -18,6 +18,8 @@ dependencies = [
     "optuna>=4.8.0",
     "pyarrow>=24.0.0",
     "mlb-statsapi>=0.0.44",
+    "streamlit>=1.56.0",
+    "python-dotenv>=1.0",
 ]
 
 [build-system]

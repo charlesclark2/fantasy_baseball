@@ -1,0 +1,554 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: inseason-model-retraining-cadence
+  namespace: default
+spec:
+  description: >
+    Define and implement a retraining schedule for the three production models
+    (NGBoost total_runs, NGBoost run_differential, XGBoost isotonic home_win) as
+    2026 season data accumulates. Without retraining, models trained on 2016–2025
+    will gradually lag the current run environment and market calibration.
+
+    This card has three deliverables:
+
+    1. Pre-Phase 7 quick fixes — populate alpha_tuning_results with all 11 α rows
+       (currently has only 1 from the --use-alpha bypass in Card 4.13), and write
+       best_alpha.json as a local fallback so predict_today.py does not silently
+       default to alpha=0.5 on Snowflake outage.
+
+    2. Retraining runbook — a documented section in scripts/daily_run.md specifying
+       three trigger checkpoints (mid-season ≥50 games, All-Star break, post-season),
+       the exact commands to run at each trigger, and the verification steps to
+       confirm the retrained models are not degraded before promoting them to prod.
+
+    3. Retraining script — betting_ml/scripts/retrain_models.py that automates the
+       five retraining steps: re-run probability layer for full α grid, persist
+       best_alpha.json, conditionally re-run NGBoost hyperparameter grid search
+       (only if 2026 hold-out MAE degrades >1% vs. current), run the 3-way calibration
+       split with ECE guard, and update model_registry.yaml with new selected_at
+       and eval_year. Old artifact paths are renamed with a date suffix for rollback.
+
+    Trigger criteria:
+      mid-season refit    — after ≥50 2026 regular-season game results in mart_game_results
+      All-Star break refit — after All-Star break (~late July 2026)
+      post-season refit   — after 2026 World Series ends (November 2026);
+                            becomes primary artifact for 2027 opener
+  acceptanceCriteria:
+    - description: >
+        alpha_tuning_results Snowflake table contains exactly 11 rows (one per α
+        in [0.0, 0.1, ..., 1.0]) after re-running run_probability_layer.py without
+        the --use-alpha bypass flag
+    - description: >
+        betting_ml/models/best_alpha.json exists and contains a best_alpha key
+        with a float value in [0.0, 1.0]; predict_today.py reads this file as
+        a fallback before defaulting to alpha=0.5 when Snowflake is unreachable
+    - description: >
+        scripts/daily_run.md contains a "Model Retraining" section documenting
+        all three trigger checkpoints with commands and verification steps
+    - description: >
+        betting_ml/scripts/retrain_models.py exists, accepts --eval-year and
+        --targets flags, and exits 0 on a dry run (--dry-run flag skips all
+        Snowflake writes and model file mutations)
+    - description: >
+        retrain_models.py fails with a non-zero exit code and a descriptive error
+        message when the post-retrain ECE delta exceeds 0.005 — the calibration
+        guard prevents promoting a degraded model
+    - description: >
+        model_registry.yaml contains old artifact paths renamed with a date suffix
+        (e.g. xgb_isotonic_home_win_2025-12-01.pkl) after a retrain run, confirming
+        the rollback mechanism works
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-6e-performance-tracker-live
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 6.E (Performance Tracker page) should be live before the retraining
+    cadence is operationalized, because the rolling 14-day Brier score trend
+    is the primary signal used to determine whether retraining is warranted.
+
+    Required conditions:
+      - app/pages/4_Performance.py exists and the Brier score trend chart renders
+        with both model and market lines
+      - baseball_data.config.prediction_log is being populated by predict_today.py
+        on each daily run
+      - The Card 6.A DAG closing-line backfill step is live so actual_outcome
+        and closing_market_prob are backfilled nightly (required for Brier and CLV
+        to show data, not just empty state)
+
+    NOTE: This gate guards the operational use of the retraining cadence, not the
+    script implementation. retrain_models.py can be built and tested (dry-run)
+    before this gate clears. Mark this gate only when the Brier trend chart is
+    actively showing data so the retraining trigger signal is visible.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: card-5-2-prediction-log-for-retraining
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    Card 5.2 (predict_today.py prediction_log write step) must be complete before
+    CLV before/after retraining can be measured.
+
+    Required conditions:
+      - predict_today.py writes one row per game × market to
+        baseball_data.config.prediction_log after each scoring run
+      - The table has rows for at least the 2026 backfill dates (2026-03-27
+        through the current date) so there is a pre-retrain CLV baseline
+
+    This gate is a prerequisite for verifying that a retrained model does not
+    degrade CLV relative to the pre-retrain baseline. The retrain_models.py
+    script reads from prediction_log to compute hold-out CLV; if the table
+    is empty the script cannot perform this check.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: inseason-model-retraining-cadence-plan
+  namespace: default
+spec:
+  description: >
+    Three-task DAG. fix-alpha-and-best-alpha-json resolves the two pre-Phase 7
+    quick fixes: populating all 11 alpha_tuning_results rows and writing the
+    best_alpha.json local fallback. document-retraining-runbook adds the retraining
+    section to scripts/daily_run.md and can proceed in parallel with the script task
+    after fix-alpha-and-best-alpha-json completes. create-retraining-script builds
+    retrain_models.py and depends on both prior tasks. The two Gates (Performance
+    Tracker and prediction_log) guard operational use but do not block implementation
+    — the script can be built and dry-run tested before they clear.
+  goalRef:
+    name: inseason-model-retraining-cadence
+  graph:
+    nodes:
+
+      - id: fix-alpha-and-best-alpha-json
+        kind: Task
+        description: >
+          Two targeted fixes to resolve known gaps from Card 4.13 and Card 5.2
+          before the retraining runbook and script are built.
+
+          FIX 1 — Populate all 11 alpha_tuning_results rows:
+            Re-run run_probability_layer.py WITHOUT the --use-alpha bypass flag
+            so the full α grid [0.0, 0.1, ..., 1.0] is evaluated and all 11 rows
+            are persisted to Snowflake. The current table has only 1 row.
+
+            Command:
+              uv run python betting_ml/scripts/run_probability_layer.py \
+                --season 2026 \
+                --output-dir betting_ml/outputs
+
+            After running, confirm:
+              SELECT COUNT(*), MIN(alpha), MAX(alpha)
+              FROM baseball_data.betting_ml.alpha_tuning_results
+            returns COUNT=11, MIN=0.0, MAX=1.0.
+
+            The best_alpha value (expected to remain 0.0 based on Card 4.13 findings,
+            but verify from the new run) becomes the canonical value for all downstream
+            use. If best_alpha shifts away from 0.0, note the change in
+            betting_ml/evaluation/probability_layer_results.md.
+
+          FIX 2 — Write best_alpha.json local fallback:
+            After FIX 1 confirms the correct best_alpha, write it to disk:
+              {
+                "best_alpha": <confirmed_value>,
+                "written_at": "<ISO timestamp>",
+                "source": "run_probability_layer.py re-run after Card 6.G backfill"
+              }
+            Path: betting_ml/models/best_alpha.json
+
+            Update predict_today.py to read this file as the fallback before
+            defaulting to alpha=0.5:
+              try:
+                  alpha_row = conn.cursor().execute(
+                      "SELECT alpha FROM ... ORDER BY loaded_at DESC LIMIT 1"
+                  ).fetchone()
+                  best_alpha = float(alpha_row[0])
+              except Exception:
+                  fallback_path = Path('betting_ml/models/best_alpha.json')
+                  if fallback_path.exists():
+                      best_alpha = json.load(fallback_path.open())['best_alpha']
+                  else:
+                      best_alpha = 0.5  # last resort; log a warning
+
+            The change must not alter the parquet output schema or any other
+            predict_today.py behavior.
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: alpha_tuning_results has exactly 11 rows
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from betting_ml.utils.data_loader import get_snowflake_connection
+                conn = get_snowflake_connection()
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT COUNT(*), MIN(alpha), MAX(alpha)
+                    FROM baseball_data.betting_ml.alpha_tuning_results
+                """)
+                count, min_alpha, max_alpha = cur.fetchone()
+                conn.close()
+                assert count == 11, f'Expected 11 rows, got {count}'
+                assert abs(min_alpha - 0.0) < 0.001, f'MIN alpha = {min_alpha}, expected 0.0'
+                assert abs(max_alpha - 1.0) < 0.001, f'MAX alpha = {max_alpha}, expected 1.0'
+                print(f'alpha_tuning_results OK: {count} rows, alpha in [{min_alpha}, {max_alpha}]')
+          - type: artifact_exists
+            name: best_alpha.json local fallback file
+            path: betting_ml/models/best_alpha.json
+          - type: command_succeeds
+            name: best_alpha.json contains valid best_alpha float in [0.0, 1.0]
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json
+                data = json.load(open('betting_ml/models/best_alpha.json'))
+                assert 'best_alpha' in data, 'best_alpha key missing from JSON'
+                assert 'written_at' in data, 'written_at key missing from JSON'
+                alpha = data['best_alpha']
+                assert isinstance(alpha, float), f'best_alpha is not a float: {type(alpha)}'
+                assert 0.0 <= alpha <= 1.0, f'best_alpha out of range: {alpha}'
+                print(f'best_alpha.json OK: best_alpha={alpha}')
+          - type: command_succeeds
+            name: predict_today.py reads best_alpha.json as fallback before defaulting to 0.5
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/predict_today.py').read()
+                assert 'best_alpha.json' in src, (
+                    'best_alpha.json not referenced in predict_today.py — '
+                    'local fallback path not implemented'
+                )
+                assert 'json.load' in src or 'json.loads' in src, (
+                    'json.load not found — best_alpha.json is not being read'
+                )
+                print('best_alpha.json fallback reference OK')
+
+      - id: document-retraining-runbook
+        kind: Task
+        description: >
+          Add a "Model Retraining" section to scripts/daily_run.md immediately
+          after the existing "Snowflake Task DAG" section. The runbook must be
+          self-contained — an engineer (or the project owner returning after weeks
+          away) should be able to execute a full retrain from this document alone.
+
+          SECTION STRUCTURE:
+
+          ## Model Retraining
+
+          ### Trigger Checkpoints
+
+          | Checkpoint        | Condition                                              | Expected date (2026) |
+          |-------------------|--------------------------------------------------------|----------------------|
+          | Mid-season refit  | ≥50 regular-season game results in mart_game_results   | ~mid-May 2026        |
+          | All-Star break    | After All-Star break games complete                    | ~late July 2026      |
+          | Post-season refit | After 2026 World Series ends                           | ~November 2026       |
+
+          Check whether a retrain is warranted (run before each checkpoint):
+            SELECT COUNT(*) FROM baseball_data.betting.mart_game_results
+            WHERE game_type = 'R' AND season = 2026;
+          If COUNT ≥ trigger threshold, proceed.
+
+          ### Pre-Retrain Checks
+
+          1. Confirm the Performance Tracker Brier trend in the Streamlit app shows
+             model Brier is not improving relative to the market baseline (0.2395).
+             If model Brier is improving, retraining may not be urgent.
+
+          2. Record the current model artifacts for rollback reference:
+               grep 'artifact_path\|selected_at\|eval_year' \
+                 betting_ml/models/model_registry.yaml
+
+          ### Retraining Commands
+
+          Run retrain_models.py for all three targets:
+            uv run python betting_ml/scripts/retrain_models.py \
+              --eval-year 2026_midseason \
+              --targets total_runs run_differential home_win
+
+          For a dry run (no files mutated, no Snowflake writes):
+            uv run python betting_ml/scripts/retrain_models.py \
+              --eval-year 2026_midseason \
+              --targets total_runs run_differential home_win \
+              --dry-run
+
+          ### Post-Retrain Verification
+
+          1. Confirm alpha_tuning_results updated:
+               SELECT COUNT(*), best_alpha
+               FROM baseball_data.betting_ml.alpha_tuning_results
+               ORDER BY loaded_at DESC LIMIT 11;
+             Expected: 11 rows; note whether best_alpha shifted from prior run.
+
+          2. Confirm best_alpha.json updated:
+               python -c "import json; print(json.load(open('betting_ml/models/best_alpha.json')))"
+
+          3. Confirm model_registry.yaml updated:
+               grep 'selected_at\|eval_year' betting_ml/models/model_registry.yaml
+
+          4. Confirm old artifacts renamed with date suffix (rollback available):
+               ls betting_ml/models/*_2026-*.pkl
+
+          5. Run predict_today.py for today and confirm output parquet is non-empty:
+               uv run python betting_ml/scripts/predict_today.py --date $(date +%Y-%m-%d)
+               ls -la betting_ml/outputs/probability_outputs_$(date +%Y-%m-%d).parquet
+
+          6. Check Streamlit app Today's Picks page — confirm picks load and
+             Model Win% values are plausible (not all 0.5, not null).
+
+          ### Rollback Procedure
+
+          If post-retrain verification fails or Brier score degrades:
+            1. Identify the backup artifact:
+                 ls betting_ml/models/*_2026-*.pkl
+            2. Restore the artifact path in model_registry.yaml to the backup filename
+            3. Restore best_alpha.json to the pre-retrain value (check git history)
+            4. Re-run predict_today.py to confirm restored model scores cleanly
+        dependsOn:
+          - fix-alpha-and-best-alpha-json
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Model Retraining section exists in daily_run.md
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('scripts/daily_run.md').read()
+                assert 'Model Retraining' in content, (
+                    '"Model Retraining" section not found in scripts/daily_run.md'
+                )
+                print('Model Retraining section found')
+          - type: command_succeeds
+            name: All three trigger checkpoints documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('scripts/daily_run.md').read().lower()
+                for term in ['mid-season', 'all-star', 'post-season']:
+                    assert term in content, (
+                        f'Trigger checkpoint "{term}" not documented in daily_run.md'
+                    )
+                print('All three trigger checkpoints present')
+          - type: command_succeeds
+            name: Rollback procedure documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('scripts/daily_run.md').read().lower()
+                assert 'rollback' in content, (
+                    'Rollback procedure not documented in Model Retraining section'
+                )
+                print('Rollback procedure present')
+          - type: command_succeeds
+            name: retrain_models.py command present with --dry-run flag shown
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('scripts/daily_run.md').read()
+                assert 'retrain_models.py' in content, (
+                    'retrain_models.py command not shown in runbook'
+                )
+                assert '--dry-run' in content, (
+                    '--dry-run flag not documented in runbook'
+                )
+                print('retrain_models.py and --dry-run reference OK')
+
+      - id: create-retraining-script
+        kind: Task
+        description: >
+          Create betting_ml/scripts/retrain_models.py implementing the five-step
+          retraining process as a single CLI script.
+
+          CLI INTERFACE:
+            uv run python betting_ml/scripts/retrain_models.py \
+              --eval-year 2026_midseason \
+              --targets total_runs run_differential home_win \
+              [--dry-run]
+
+            --eval-year   STRING  Label written to model_registry.yaml (e.g.
+                                  "2026_midseason", "2026_allstar", "2026_postseason")
+            --targets     LIST    One or more of: total_runs, run_differential, home_win
+                                  Default: all three
+            --dry-run     FLAG    Print all planned actions but do not write any
+                                  files or Snowflake rows. Exits 0 if all checks pass.
+
+          STEP 1 — Re-run probability layer (full α grid):
+            Import and call the main function from run_probability_layer.py (or
+            invoke it as a subprocess) WITHOUT --use-alpha. Confirm that
+            alpha_tuning_results receives 11 rows for the current run.
+            Read the resulting best_alpha from the most recent alpha_tuning_results row.
+            Write best_alpha to betting_ml/models/best_alpha.json:
+              {"best_alpha": <value>, "written_at": "<ISO timestamp>",
+               "source": f"retrain_models.py --eval-year {eval_year}"}
+            If --dry-run: print planned α grid run but skip Snowflake write.
+
+          STEP 2 — Conditional NGBoost hyperparameter re-search:
+            For targets [total_runs, run_differential] only (home_win uses XGBoost):
+              Load the current production NGBoost artifact from model_registry.yaml.
+              Run a 3-fold CV on the 2026 hold-out year using the existing
+              hyperparameters. Compare CV MAE to the registered baseline MAE stored
+              in model_registry.yaml under cv_mae_baseline.
+              If hold_out_mae > cv_mae_baseline * 1.01 (>1% degradation):
+                Re-run the full NGBoost grid search (Card 4.12d/e pattern).
+                Print: "NGBoost grid search triggered for {target}: hold-out MAE
+                {hold_out_mae:.4f} vs baseline {cv_mae_baseline:.4f}"
+              Else:
+                Print: "NGBoost grid search skipped for {target}: hold-out MAE
+                {hold_out_mae:.4f} within 1% of baseline"
+                Reuse existing hyperparameters.
+            If --dry-run: print the comparison but skip the grid search.
+
+          STEP 3 — Calibration split and ECE guard:
+            For the home_win classifier (XGBoost isotonic):
+              Run the 3-way split: train on 2016–(N−2), calibrate on (N−1),
+              verify calibration on N (most recent full season).
+              Compute Expected Calibration Error (ECE) on the verify set.
+              Compare to baseline ECE stored in model_registry.yaml under ece_baseline.
+              If ece_delta = new_ece − ece_baseline > 0.005:
+                Print error: f"Calibration guard FAILED for home_win: ECE delta
+                {ece_delta:.4f} exceeds 0.005 threshold. Aborting retrain."
+                sys.exit(1) — DO NOT promote the new model.
+              Else:
+                Print: f"Calibration guard passed: ECE delta {ece_delta:.4f}"
+            If --dry-run: print the planned split but skip training.
+
+          STEP 4 — Persist new artifacts and update model registry:
+            For each successfully retrained model:
+              1. Rename the existing production artifact with a date suffix:
+                   <artifact_stem>_<today_YYYY-MM-DD>.pkl
+                 Example: xgb_isotonic_home_win.pkl → xgb_isotonic_home_win_2026-05-15.pkl
+              2. Write the new artifact to the canonical production path (no date suffix).
+              3. Update model_registry.yaml:
+                   selected_at: <ISO timestamp>
+                   eval_year: <--eval-year argument>
+                   cv_mae_baseline: <new CV MAE if NGBoost was re-searched>
+                   ece_baseline: <new ECE if calibration was re-run>
+            If --dry-run: print planned renames and registry updates; write nothing.
+
+          STEP 5 — Update selection log:
+            Append a dated entry to betting_ml/evaluation/selection_log.md:
+              ## Retrain — {eval_year} ({today})
+              - Targets retrained: {targets}
+              - best_alpha: {best_alpha} (prior: {prior_alpha})
+              - NGBoost grid search triggered: {True/False} per target
+              - ECE delta (home_win): {ece_delta:.4f}
+              - Old artifacts renamed: {list of renamed files}
+            If --dry-run: print the planned log entry but do not write it.
+
+          ERROR HANDLING:
+            - Any exception in Steps 1–5 must terminate the script with sys.exit(1)
+              and print the step name and error message. Partial retrain state
+              (e.g. new artifact written but registry not updated) must be detected
+              and reported — do not leave the system in a half-promoted state.
+            - The script must print a final "Retrain complete" or "Dry run complete"
+              summary showing which targets were retrained, the new best_alpha,
+              and any skipped steps.
+        dependsOn:
+          - fix-alpha-and-best-alpha-json
+          - document-retraining-runbook
+          - card-6e-performance-tracker-live
+          - card-5-2-prediction-log-for-retraining
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Retraining script
+            path: betting_ml/scripts/retrain_models.py
+          - type: command_succeeds
+            name: Script parses without syntax error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/retrain_models.py').read_text()
+                ast.parse(src)
+                print('retrain_models.py syntax OK')
+          - type: command_succeeds
+            name: Script accepts --dry-run and --eval-year flags
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/retrain_models.py
+              - "--help"
+          - type: command_succeeds
+            name: All five steps referenced in script
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/retrain_models.py').read().lower()
+                checks = {
+                    'alpha_tuning_results or run_probability_layer': (
+                        'alpha_tuning_results' in src or 'run_probability_layer' in src
+                    ),
+                    'best_alpha.json write': 'best_alpha.json' in src,
+                    'ECE guard (0.005 threshold)': '0.005' in src,
+                    'artifact rename with date suffix': 'strftime' in src or 'date' in src,
+                    'selection_log.md update': 'selection_log' in src,
+                }
+                failures = [k for k, v in checks.items() if not v]
+                assert not failures, f'Missing references in retrain_models.py: {failures}'
+                print('All five step references found')
+          - type: command_succeeds
+            name: ECE guard triggers sys.exit(1) on delta > 0.005
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                src = open('betting_ml/scripts/retrain_models.py').read()
+                assert 'sys.exit(1)' in src or 'raise SystemExit' in src, (
+                    'sys.exit(1) not found — ECE guard must terminate the script '
+                    'with a non-zero exit code on calibration failure'
+                )
+                assert '0.005' in src, (
+                    'ECE threshold 0.005 not found in script'
+                )
+                print('ECE guard sys.exit(1) OK')
+          - type: command_succeeds
+            name: --dry-run exits 0 without writing any files
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/scripts/retrain_models.py
+              - "--eval-year"
+              - "dry_run_test"
+              - "--dry-run"

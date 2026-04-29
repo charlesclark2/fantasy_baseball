@@ -102,12 +102,15 @@ def handler(session):
         # Step A — Lineup detection: query stg_statsapi_lineups_wide for today.
         # A lineup is confirmed when both home_lineup_slot_1 and away_lineup_slot_1
         # are populated. This view reflects the most recent dbtf build output.
+        # stg_statsapi_lineups_wide has one row per (game_pk, home_away) and
+        # already excludes rows where slot_1_player_id is null (i.e. no lineup yet).
+        # Both lineups are confirmed when both 'home' and 'away' rows exist for a game.
         confirmed_rows = session.sql(f"""
             SELECT game_pk
             FROM baseball_data.betting.stg_statsapi_lineups_wide
-            WHERE game_date = '{today}'::date
-              AND home_lineup_slot_1 IS NOT NULL
-              AND away_lineup_slot_1 IS NOT NULL
+            WHERE official_date = '{today}'::date
+            GROUP BY game_pk
+            HAVING COUNT(DISTINCT home_away) = 2
         """).collect()
 
         confirmed_game_pks = [row[0] for row in confirmed_rows]

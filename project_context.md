@@ -4,7 +4,7 @@
 
 Build a machine learning system capable of predicting the outcome and total runs scored in an MLB game given the pitching matchup, team matchup, and confirmed batting lineups. The system is grounded in Statcast pitch-level data and augmented with game schedule, lineup, and ballpark context from the MLB Stats API.
 
-**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is complete** as of 2026-04-25. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. **Card 4.13 (Bayesian probability layer) is complete** — best_alpha=0.0 (market dominates; model adds directional edge signal not calibration); 230 output rows across 115 2026 games written to parquet and Snowflake. **Card 5.1 (model selection and registry) is complete** — model_registry.yaml with _prod artifacts for all three targets. **Card 5.2 (pre-game prediction CLI) is complete** — predict_today.py scores all confirmed games, applies the Bayesian layer, and writes probability_outputs_{date}.parquet and predictions_{date}.csv in the canonical Phase 6 contract format. **Phase 6 (betting/sizing layer) is in progress.**
+**Phase 3 (EDA) is complete** as of 2026-04-24. **Phase 4 (ML Pipeline) is complete** as of 2026-04-25. The data mart (Phase 1) and pre-game feature store (Phase 2) are complete. All seven EDA notebooks and Phase 3 analysis scripts (Cards 3.7–3.11) are complete. The Phase 4 ML pipeline foundation, feature selection, and baseline models for all three targets are complete (Cards 4.6–4.11). **Card 4.12 (hyperparameter optimization) is complete** — all five sub-cards (12a–12e) finished: XGBoost tuned for all three targets (Optuna TPE) and NGBoost grid-searched for total_runs and run_differential; all tuned models persisted. **Card 4.13 (Bayesian probability layer) is complete** — best_alpha=0.0 (market dominates; model adds directional edge signal not calibration); 230 output rows across 115 2026 games written to parquet and Snowflake. **Card 5.1 (model selection and registry) is complete** — model_registry.yaml with _prod artifacts for all three targets. **Card 5.2 (pre-game prediction CLI) is complete** — predict_today.py scores all confirmed games, applies the Bayesian layer, and writes probability_outputs_{date}.parquet and predictions_{date}.csv in the canonical Phase 6 contract format. **Card 5.3 (lineup monitor) is substantially complete (22/23 criteria done)** — `task_lineup_monitor` is live and STARTED in Snowflake, `lineup_monitor_proc` is deployed, `dbt_staging_build.yml` is validated end-to-end; one acceptance criterion (pipeline_run_log entry from an actual lineup dispatch) is pending until confirmed lineups are available in `stg_statsapi_lineups_wide`. **Phase 6 (betting/sizing layer) is in progress** — Snowflake Task DAG (6.A) and 2026 prediction backfill (6.G) complete; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28** — app skeleton, picks table, market movement expander, odds refresh button, and timezone fix all shipped; next: Cards 6.C–6.E.
 
 ---
 
@@ -289,7 +289,8 @@ The project has a well-structured, well-documented data mart that covers the pri
 | Prediction models | Phase 4 complete — baseline + tuned models for all three targets (Cards 4.9–4.12e); Bayesian probability layer complete (Card 4.13, best_alpha=0.0). **Known gap:** Card 4.10 baseline MAE (3.4461) was generated with pre-Card 4.8 feature set; tuned model (3.4195) uses correct features. |
 | Model selection and registry | Phase 5.1 complete — `model_registry.yaml` written; `_prod` artifacts for all three targets; `xgboost_sigmoid_prod_calibrated.pkl` fit on 2025 hold-out; `calibration_verification.md` passes (delta=+0.0028, PASS). `betting_ml/evaluation/selection_log.md` documents regression artifact selection. |
 | Prediction CLI | Phase 5.2 complete — `predict_today.py` scores all confirmed games for a target date, applies the Bayesian probability layer, and writes `betting_ml/outputs/probability_outputs_{date}.parquet` (Card 4.13 schema: 8 columns, has_odds games ranked by abs(edge)) and `predictions_{date}.csv` (all games including non-odds). `best_alpha` loaded from Snowflake `alpha_tuning_results` with fallback to `best_alpha.json`. Intraday fallback via `load_todays_features_via_statsapi()` assembles features from MLB Stats API when nightly dbt pipeline rows are not yet available. |
-| Betting/sizing layer | Phase 6 in progress — Snowflake Task DAG live (Cards 6.A.0–6.A.5 complete); GitHub Actions workflow created (Card 6.A.6 pending push + secrets); end-to-end validation in progress (Card 6.A.7) |
+| Lineup monitor | Phase 5.3 substantially complete (22/23) — `task_lineup_monitor` live and STARTED in Snowflake (serverless, hourly ET cron); `lineup_monitor_proc` reads `baseball_data.betting.stg_statsapi_lineups_wide`, deduplicates via `lineup_monitor_state`, dispatches `dbt_staging_build.yml` via GitHub REST API; workflow validated end-to-end; one criterion (real dispatch log entry) pending until confirmed lineups available. Email notification deferred to Phase 6. |
+| Betting/sizing layer | Phase 6 in progress — Snowflake Task DAG fully live (Cards 6.A.0–6.A.7 all complete); Card 6.G (2026 prediction backfill) complete — 31 dates, 400 rows in `daily_model_predictions`; **Card 6.B (Streamlit Today's Picks page) complete as of 2026-04-28**; next: Cards 6.C–6.E |
 
 The main gap between current state and a deployable prediction model is the **feature assembly layer** — joining the mart tables into a single pre-game feature vector per game — and the **ML pipeline** itself.
 
@@ -1278,54 +1279,56 @@ Goal: produce a working local prediction system runnable this weekend for a live
 
 ---
 
-#### Card 5.3 — Lineup Finalization Notification and Hourly Staging Refresh
+#### Card 5.3 — Lineup Finalization Notification and Hourly Staging Refresh — SUBSTANTIALLY COMPLETE (22/23)
 
 **Title:** Detect confirmed lineups hourly via a Snowflake Task, trigger a GitHub Actions dbtf build, and notify when both lineups are locked
 
-**Description:**
+**Status as of 2026-04-27:** All infrastructure is live. One acceptance criterion (pipeline_run_log entry from a real lineup dispatch) is pending until confirmed lineups appear in `stg_statsapi_lineups_wide` for the current date. Email notification is explicitly deferred to Phase 6. See implementation notes below for deviations from the original spec.
 
-*Technical implementation:*
-
-The pipeline has three components: a Snowflake Task (hourly scheduler + ingestion), a GitHub Actions workflow (dbtf build runner), and a notification dispatch.
+**Implemented architecture:**
 
 **Component 1 — Snowflake Task: `task_lineup_monitor`**
-- Create a Snowflake Task backed by a Snowpark Python Stored Procedure (`scripts/ddl/lineup_monitor_task.sql`). Scheduled via cron: `'USING CRON 0 * * * * America/New_York'` (top of every hour, year-round).
-- The stored procedure does two things in sequence on each hourly fire:
-  1. **Ingestion:** Calls `ingest_statsapi.py schedule` (current month) using Snowpark's External Network Access Integration (same integration used by Card 6.A for `statsapi.mlb.com`). Newly confirmed lineup rows are written to `baseball_data.statsapi.monthly_schedule`.
-  2. **Lineup detection:** Queries `stg_statsapi_lineups_wide` for today's games. A lineup is "confirmed" when `home_lineup_slot_1 IS NOT NULL AND away_lineup_slot_1 IS NOT NULL`. Compares result set against `baseball_data.config.lineup_monitor_state` — a Snowflake table with columns `(run_date DATE, game_pk INT, triggered_at TIMESTAMP)` that tracks which games have already fired. For each newly confirmed game not yet in the state table, inserts a row and emits a dispatch payload.
+- `scripts/ddl/lineup_monitor_task.sql` defines the full pipeline: `lineup_monitor_state` table, `lineup_monitor_proc` stored procedure, `CREATE OR REPLACE TASK`, and `ALTER TASK RESUME`.
+- Task runs serverless (`USER_TASK_MANAGED_INITIAL_WAREHOUSE_SIZE = 'XSMALL'`) — consistent with all other tasks in the project. Cron: `'USING CRON 0 * * * * America/New_York'`.
+- Task is deployed and confirmed STARTED in Snowflake.
+- The stored procedure reads from `baseball_data.betting.stg_statsapi_lineups_wide` (stg + mart models build into `baseball_data.betting`; feature models build into `baseball_data.betting_features`). It does NOT re-call `ingest_statsapi.py` directly — ingestion is handled by the existing 8am `task_statsapi_schedule` in `snowflake_task_dag.sql`. The proc reads the already-materialized dbt table.
+- Lineup confirmation check: `COUNT(DISTINCT home_away) = 2` grouped by `game_pk` on `official_date = CURRENT_DATE`. This is correct because `stg_statsapi_lineups_wide` already excludes rows where `slot_1_player_id IS NULL`, so any row present means that side's lineup is confirmed.
+- Deduplication: `UNIQUE (run_date, game_pk)` constraint on `lineup_monitor_state` plus a `NOT EXISTS` guard in the INSERT. Every hourly fire (including no-ops) writes one row to `pipeline_run_log` with `task_name = 'lineup_monitor_proc'`.
+- Secret access uses `_snowflake.get_generic_secret_string('github_pat')` via `SECRETS = ('github_pat' = baseball_data.config.github_pat)` — consistent with the existing procedures in `snowflake_task_dag.sql`.
+
+**Required RBAC grants (applied 2026-04-27, run as ACCOUNTADMIN):**
+```sql
+GRANT USAGE ON SCHEMA baseball_data.betting TO ROLE task_executor_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+GRANT SELECT ON ALL VIEWS IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+GRANT SELECT ON FUTURE VIEWS IN SCHEMA baseball_data.betting TO ROLE task_executor_role;
+GRANT USAGE ON SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.betting_features TO ROLE task_executor_role;
+```
 
 **Component 2 — GitHub Actions workflow: `dbt_staging_build.yml`**
-- New workflow file at `.github/workflows/dbt_staging_build.yml`. Triggered by `workflow_dispatch` with inputs `game_pk` (string) and `triggered_by` (string, e.g. `lineup_monitor`).
-- The Snowflake Task (Component 1) fires this workflow via the GitHub REST API (`POST /repos/{owner}/{repo}/actions/workflows/dbt_staging_build.yml/dispatches`) using a GitHub Personal Access Token stored as a Snowflake Secret (`GITHUB_PAT`). The PAT needs `repo` scope (workflow dispatch requires it).
-- Workflow steps:
-  1. Checkout the repository (`actions/checkout@v4`)
-  2. Install dbt-fusion: `pip install dbt-fusion` (or via the project's `uv` lockfile — confirm the correct install path for dbt-fusion in CI)
-  3. Write Snowflake credentials to `~/.dbt/profiles.yml` from GitHub Secrets (`SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`)
-  4. Run `dbtf build --select +stg_statsapi_lineups+` — builds from the staging layer downward through all dependent mart and feature models
-  5. On success, call back to the Snowflake stored procedure via a second GitHub Actions step (or a follow-on webhook) to log build completion in `baseball_data.config.pipeline_run_log`
-- The workflow runs on `ubuntu-latest` using the `COMPUTE_WH` warehouse. Estimated runtime: 3–6 minutes.
-- GitHub Secrets required (set in repo Settings → Secrets and variables → Actions): `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (PEM content, not path), `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_DATABASE`.
+- `.github/workflows/dbt_staging_build.yml` — `workflow_dispatch` trigger with `game_pk` (required) and `triggered_by` (optional, default `manual`) inputs.
+- dbt-fusion install uses the curl script pattern (consistent with `dbt_daily_build.yml`): `curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update` followed by `echo "$HOME/.local/bin" >> $GITHUB_PATH`.
+- Build command: `dbt build --select +stg_statsapi_lineups+ --project-dir dbt`.
+- Validated end-to-end via manual `workflow_dispatch` from the GitHub UI.
+- Required GitHub Secrets (same set as `dbt_daily_build.yml`): `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (PEM content), `SNOWFLAKE_DATABASE`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`.
 
 **Component 3 — Notification dispatch**
-- After the GitHub Actions workflow succeeds (final step in `dbt_staging_build.yml`), send a notification via a lightweight step. Support two channels configured as GitHub Secrets: (1) email via an SMTP action (`dawidd6/action-send-mail`) if `NOTIFICATION_EMAIL` is set — the configured recipient is `charles.t.clark89@gmail.com`, stored as the `NOTIFICATION_EMAIL` GitHub Secret; (2) a future webhook slot for SMS or push (stubbed as a no-op step today). Message format: `"Lineups confirmed: {away_team} @ {home_team} — {game_time}. dbtf build complete. Run predict_today.py to generate predictions."`
-- The Snowflake Task stored procedure also writes a notification record to `baseball_data.config.lineup_monitor_state` at dispatch time so the trigger event is auditable independently of whether the Actions run succeeds.
+- Email notification is **deferred to Phase 6** (out of scope for this card per plan spec). The `dbt_staging_build.yml` workflow does not include a notification step.
 
-**DDL and workflow artifacts:**
-- `scripts/ddl/lineup_monitor_task.sql` — `CREATE OR REPLACE TASK task_lineup_monitor`, stored procedure definition, `lineup_monitor_state` table DDL
-- `.github/workflows/dbt_staging_build.yml` — the Actions workflow
-- `scripts/daily_run.md` — new "Lineup Monitor Architecture" section documenting the Snowflake Task → GitHub Actions flow, required secrets, and how to manually trigger the workflow for testing
-
-*Blockers:* Card 6.A External Network Access Integration must exist (reused here for `statsapi.mlb.com`). GitHub PAT with `repo` scope must be provisioned and stored as a Snowflake Secret before the Task can dispatch workflows. dbt-fusion must be installable in the GitHub Actions environment — verify before implementation.
+**Documentation:**
+- `scripts/daily_run.md` updated with "Lineup Monitor Architecture" section: system diagram, secrets table, manual trigger command (`gh workflow run dbt_staging_build.yml -f game_pk=<game_pk>`), suspend/resume SQL, and task history query.
 
 *Acceptance criteria:*
-- [ ] `baseball_data.config.lineup_monitor_state` table created; columns `run_date`, `game_pk`, `triggered_at`, `gh_workflow_run_id` (populated after dispatch)
-- [ ] Snowflake Task `task_lineup_monitor` fires on the hourly cron schedule; confirmed via `SHOW TASKS` and `baseball_data.config.pipeline_run_log`
-- [ ] On each hourly fire, `ingest_statsapi.py schedule` is called and new lineup rows appear in `monthly_schedule` within the same task execution
-- [ ] When both lineups for a game transition to confirmed, exactly one row is inserted into `lineup_monitor_state` for that `(run_date, game_pk)` — re-runs do not duplicate the trigger
-- [ ] GitHub Actions workflow `dbt_staging_build.yml` is triggerable via `workflow_dispatch` from the GitHub UI with `game_pk` input; confirms the workflow can be dispatched manually before Snowflake automation is wired
-- [ ] `dbtf build --select +stg_statsapi_lineups+` runs successfully inside the Actions workflow; all downstream mart and feature models rebuild without errors
-- [ ] Notification step fires after successful build; email is received when `NOTIFICATION_EMAIL` secret is set
-- [ ] `scripts/daily_run.md` updated with "Lineup Monitor Architecture" section; includes manual trigger command and secrets checklist
+- [x] `baseball_data.config.lineup_monitor_state` table created; columns `run_date`, `game_pk`, `triggered_at`, `gh_workflow_run_id`
+- [x] Snowflake Task `task_lineup_monitor` fires on the hourly cron schedule; confirmed via `SHOW TASKS` (state = STARTED) and `pipeline_run_log`
+- [x] When both lineups for a game are confirmed, exactly one row is inserted into `lineup_monitor_state` for that `(run_date, game_pk)` — deduplication verified via manual dispatch test
+- [x] GitHub Actions workflow `dbt_staging_build.yml` is triggerable via `workflow_dispatch` from the GitHub UI with `game_pk` input; validated end-to-end
+- [x] `dbtf build --select +stg_statsapi_lineups+` runs successfully inside the Actions workflow
+- [x] `scripts/daily_run.md` updated with "Lineup Monitor Architecture" section; includes manual trigger command and secrets checklist
+- [ ] `pipeline_run_log` has ≥1 entry from an actual lineup dispatch (rows_affected > 0) — **pending**: proc runs correctly and logs no-op SUCCESS entries; will self-complete on next day with confirmed lineups in `stg_statsapi_lineups_wide`
 
 ---
 
@@ -1374,14 +1377,26 @@ No redesign of Card 4.13's output format is required. The parquet schema is the 
 *Blockers:* Card 5.1 (model registry). Card 5.2 (`predict_today.py` establishes the scoring logic this page reuses). Card 4.13 (`best_alpha` must be persisted to Snowflake before the app can load it; `probability_layer.py` must exist). Snowflake connection pattern from `utils/data_loader.py`.
 
 *Acceptance criteria:*
-- [ ] `uv run streamlit run app/streamlit_app.py` starts without error; Today's Picks page loads within 10 seconds on first run
-- [ ] Predictions load for a date with confirmed games; sortable dataframe renders all required columns including `Posterior%`
-- [ ] `best_alpha` loaded from Snowflake `alpha_tuning_results`; `compute_posterior()` from `probability_layer.py` called for each has_odds game
-- [ ] Lineup confirmation status displays correctly: ✓ for confirmed, ⏳ for pending
-- [ ] Edge color-coding applies correctly to rows where `abs(edge) > 0.05` and lineups confirmed
-- [ ] Kelly fraction capped at 10% with warning badge when raw value exceeds cap
-- [ ] Refresh button re-queries `ingest_statsapi.py schedule` and updates lineup status without restarting the app
-- [ ] App handles dates with no games (empty state message, no error)
+- [x] `uv run streamlit run app/streamlit_app.py` starts without error; Today's Picks page loads within 10 seconds on first run
+- [x] Predictions load for a date with confirmed games; sortable dataframe renders all required columns including `Posterior%`
+- [x] `best_alpha` loaded from Snowflake `alpha_tuning_results`; `compute_posterior()` from `probability_layer.py` called for each has_odds game
+- [x] Lineup confirmation status displays correctly: ✓ for confirmed, ⏳ for pending
+- [x] Edge color-coding applies correctly to rows where `abs(edge) > 0.05` and lineups confirmed
+- [x] Kelly fraction capped at 10% with warning badge when raw value exceeds cap
+- [x] Refresh button re-queries `ingest_statsapi.py schedule` and updates lineup status without restarting the app
+- [x] App handles dates with no games (empty state message, no error)
+
+*Implementation notes (deviations from spec):*
+- Scoring is precomputed by `predict_today.py` and read from `daily_model_predictions` rather than scored inline on page load. Functionally identical — same `probability_layer.py` functions and `best_alpha` from Snowflake.
+- `Pred Total` column replaced by `P(Over)` (model probability of over, derived from NGBoost total-runs distribution).
+- `Signal` column added (🟢/🟡/⚪/⛔) as a quick-scan indicator ahead of the matchup.
+- `Game Time` column added (first pitch in ET).
+- "Refresh" button expanded to also re-ingest odds (events + lines) and trigger `dbt_daily_build.yml` via GitHub Actions, not just lineup ingestion.
+- Rows with no Odds API coverage styled with ⛔ signal and greyed-out background to flag data gaps.
+- Market Movement expander added showing open → current line movement across intraday odds snapshots, with significant moves (≥15 pts) highlighted in blue.
+- Timezone fix: `mart_odds_outcomes` and `mart_odds_events` `commence_date` changed from ET to PT so late West Coast games are correctly attributed to the calendar date.
+
+**Status: Complete as of 2026-04-28.**
 
 ---
 
@@ -1790,7 +1805,7 @@ ALTER TASK baseball_data.config.task_savant_ingestion RESUME;
 
 ---
 
-##### Card 6.A.6 — dbt_daily_build.yml GitHub Actions Workflow
+##### Card 6.A.6 — dbt_daily_build.yml GitHub Actions Workflow - COMPLETE
 
 **Title:** Create dbt_daily_build.yml workflow triggered by Snowflake Task DAG dispatch for full dbtf build
 
@@ -1860,13 +1875,13 @@ This workflow is **distinct from `dbt_staging_build.yml`** (Card 5.3). That work
 
 *Acceptance criteria:*
 - [x] `.github/workflows/dbt_daily_build.yml` exists with `workflow_dispatch` trigger (and no other triggers)
-- [x] Workflow contains a `dbtf build` step with all required Snowflake env vars sourced from GitHub Secrets
-- [x] Workflow contains a failure notification step using `dawidd6/action-send-mail@v3` and `NOTIFICATION_EMAIL` secret (recipient not hardcoded)
-- [ ] A manual workflow dispatch from the GitHub Actions UI completes with `dbtf build` exit code 0 *(pending: push workflow file to GitHub + configure Actions secrets)*
+- [x] Workflow contains a `dbt build --project-dir dbt` step with all required Snowflake env vars sourced from GitHub Secrets. Note: dbt-fusion is installed via the official curl installer (`https://public.cdn.getdbt.com/fs/install/install.sh`) rather than pip, as it is not distributed on PyPI. The binary installs as `dbt` (not `dbtf`); `$HOME/.local/bin` is appended to `$GITHUB_PATH` so it is available to subsequent steps.
+- [x] Failure notification confirmed working via GitHub's native Actions failure emails rather than `dawidd6/action-send-mail@v3`. The SMTP approach was dropped because Gmail SMTP setup requires app password provisioning and adds three secrets (`SMTP_USERNAME`, `SMTP_PASSWORD`, `NOTIFICATION_EMAIL`) with no meaningful benefit over what GitHub already provides for free. A controlled test (intentional `exit 1` step) confirmed that GitHub sends a failure email to `ctcb57@gmail.com` within ~1 minute of a workflow failure. The `Notify on failure` step was removed from the workflow entirely.
+- [x] A manual workflow dispatch from the GitHub Actions UI completes with `dbt build` exit code 0 — confirmed 2026-04-25.
 
 ---
 
-##### Card 6.A.7 — End-to-End Validation and Documentation
+##### Card 6.A.7 — End-to-End Validation and Documentation — COMPLETE
 
 **Title:** Run full DAG end-to-end, verify pipeline_run_log output, and update daily_run.md
 
@@ -1884,11 +1899,11 @@ Update `scripts/daily_run.md`: add a "Snowflake Task DAG" section at the top of 
 *Blockers:* Cards 6.A.1 through 6.A.6 must all be complete.
 
 *Acceptance criteria:*
-- [ ] `TASK_HISTORY` shows all five tasks `STATE = SUCCEEDED` after a full end-to-end manual trigger *(pending: blocked by Card 6.A.6 GitHub workflow not yet live)*
-- [ ] `pipeline_run_log` has five `status = 'SUCCESS'` rows with non-null `rows_affected` for the most recent run *(pending: same blocker — 4 of 5 procedures confirm SUCCESS; github trigger will succeed once workflow is pushed)*
-- [ ] Failure injection test passes: a forced failure in `task_oddsapi_events` produces `status = 'SKIPPED'` downstream without blocking a clean re-run after the fault is cleared
-- [x] `scripts/daily_run.md` contains a "Snowflake Task DAG" section with instructions for triggering and monitoring the DAG
-- [ ] Teardown section of `scripts/ddl/snowflake_task_dag.sql` is tested: all objects (`TASK`, `PROCEDURE`, `SECRET`, `INTEGRATION`, `NETWORK RULE`, `ROLE`) drop and re-create cleanly in reverse dependency order
+- [x] `TASK_HISTORY` shows all five tasks `STATE = SUCCEEDED` after a full end-to-end manual trigger — confirmed 2026-04-25.
+- [x] `pipeline_run_log` has five `status = 'SUCCESS'` rows with non-null `rows_affected` for the most recent run — confirmed 2026-04-25 (all five procedures including `proc_github_actions_trigger` succeeded once Card 6.A.6 went live).
+- [x] Failure injection test passes: a forced failure in `task_oddsapi_events` produces `status = 'SKIPPED'` downstream without blocking a clean re-run after the fault is cleared — confirmed 2026-04-25.
+- [x] `scripts/daily_run.md` contains a "Snowflake Task DAG" section with instructions for triggering and monitoring the DAG.
+- [~] Teardown section of `scripts/ddl/snowflake_task_dag.sql` deferred — the DROP statements exist and are documented in the correct reverse-dependency order. Executing them against a live working pipeline carries unnecessary risk for a solo project with no current DR or migration need. Revisit if migrating to a new Snowflake account or onboarding a second engineer.
 
 ---
 
@@ -1921,6 +1936,240 @@ The production models registered in `model_registry.yaml` were trained through e
 - [ ] `alpha_tuning_results` Snowflake table has 11 rows after each refit (full α grid, not bypass)
 - [ ] `best_alpha.json` written to `betting_ml/models/best_alpha.json` after each refit
 - [ ] Brier score trend in Card 6.E Performance Tracker shows no degradation after retraining vs. pre-retrain baseline
+
+---
+
+#### Card 6.G — 2026 Season Prediction Backfill
+
+**Title:** Backfill `predict_today.py` for all completed 2026 regular-season dates to enable model vs. market performance analysis
+
+**Description:**
+
+The production models were registered and validated on historical data through 2025. Before Card 6.E (Performance Tracker) can display meaningful Brier score trends, CLV charts, or P&L simulations, `daily_model_predictions` must be populated with retroactive scores for every 2026 game date that has already been played. This card covers both the one-time backfill and the prerequisite Snowflake write bug fix in `predict_today.py`.
+
+*Technical implementation:*
+
+**Prerequisite fix — Snowflake write bug in `predict_today.py`:**
+The `_s()` helper inside `_write_predictions_to_snowflake` returned raw pandas/numpy scalar values (e.g. `np.int64` for `game_pk`) that the Snowflake Python connector cannot bind in `%(name)s`-style parameterized queries. The connector emits the numpy type as a pseudo-function call (`NP.INT64(...)`) which Snowflake rejects with `Unknown user-defined function NP.INT64`. Fix: call `.item()` on numpy scalars in `_s()` to convert to native Python types before binding. This is a one-line change — see `betting_ml/scripts/predict_today.py`.
+
+**Backfill script (`betting_ml/scripts/backfill_predictions_2026.py`):**
+- Queries `baseball_data.betting.mart_game_results` for all distinct `game_date` values in 2026 regular season (`game_type = 'R'`) where `game_date < CURRENT_DATE()` — these are the dates with finalized results.
+- Checks `daily_model_predictions` for dates already scored and skips them by default (use `--force` to reprocess).
+- Calls `uv run python betting_ml/scripts/predict_today.py --date {date}` as a subprocess for each unscored date, inheriting stdout so progress is visible.
+- Accepts `--start-date YYYY-MM-DD` (default `2026-03-27`, Opening Day) and `--force` CLI flags.
+- Reports a per-date success/failure summary; exits non-zero if any date fails.
+
+*Output of the backfill:*
+- One parquet file per date in `betting_ml/outputs/probability_outputs_{date}.parquet` (Card 4.13 schema).
+- One CSV file per date in `betting_ml/outputs/predictions_{date}.csv`.
+- One row per game in `baseball_data.betting_ml.daily_model_predictions` (model scores, probability layer outputs, market implied probs).
+
+*Blockers:* Snowflake write bug fix must be applied before backfill runs (already done). `feature_pregame_game_features` must have rows for the target dates (populated by the dbt pipeline for historical games). Odds data for 2026 games must be available in `mart_odds_outcomes` for market-facing columns (`has_odds`, `h2h_market_implied_prob`, etc.) to populate — games without odds coverage will have `has_odds = false` and null market columns.
+
+*Acceptance criteria:*
+- [x] `predict_today.py` Snowflake write succeeds without the `NP.INT64` / `NAN` errors — two-stage fix applied: `_s()` calls `.item()` to convert numpy scalars; `_sanitize()` converts remaining `float('nan')` → `None` before binding; confirmed working 2026-04-27.
+- [x] `backfill_predictions_2026.py --start-date 2026-03-27` ran to completion — 31 distinct `score_date` values in `daily_model_predictions` covering 2026-03-27 through 2026-04-27; 400 total rows.
+- [x] Parquet and CSV files written per date in `betting_ml/outputs/`.
+- [x] Dates already in `daily_model_predictions` are skipped by default; `--force` re-runs them.
+- [x] 315/400 rows (78.8%) have `has_odds = true` with non-null `h2h_market_implied_prob` and `h2h_edge`; remaining 85 rows have `has_odds = false` and null market columns (confirmed Odds API coverage ceiling, not a data bug).
+
+---
+
+#### Card 6.H — Post-v0 Model Post-Mortem: Weakness Audit and Phase 7 Prioritization
+
+**Title:** Conduct a structured post-mortem of the v0 model system; catalog weaknesses, root-cause each gap, and produce a prioritized improvement roadmap for Phase 7
+
+**Status:** Not started.
+
+**Description:**
+
+The v0 system (Phases 1–6 through Card 6.G) is the first end-to-end running implementation: data mart → feature store → trained models → daily predictions → Snowflake output. Card 6.G's backfill produced 400 scored game-rows covering 2026-03-27 through 2026-04-27. Before investing in Phase 7 feature and model work, a structured post-mortem is needed to identify where the v0 system falls short, why, and what changes have the highest expected lift. This card is a pure analysis and documentation deliverable — no new code is merged as a result of completing it.
+
+---
+
+**Known gaps going into this card (catalogued from project context):**
+
+The following weaknesses are already partially documented across Cards 4.13, 5.1, and 5.2 notes. This card formalizes them with root-cause analysis, quantified impact, and a Phase 7 priority ranking.
+
+---
+
+**Gap 1 — Model does not improve on market calibration (best_alpha = 0.0)**
+
+*What:* Card 4.13 found best_alpha = 0.0 — the Bayesian mixing weight that minimizes log-loss on all held-out CV folds. This means the market implied probability is a better-calibrated predictor of game outcomes than any convex combination of the model posterior and the market prior. Log-loss rises monotonically from α = 0.0 (0.683) to α = 1.0 (0.731). The model adds no calibration value over simply trusting the market line.
+
+*Root cause candidates:*
+- The feature set may not carry information unavailable to the market (market consensus Brier = 0.2395 vs. best model Brier = 0.2423 — model is meaningfully worse, not just equivalent).
+- The training window (2016–2025) includes eras with structurally different run environments; even with `post_2022_rules` flag, the model may be misaligned on the 2026 run environment.
+- The v0 feature set excludes weather, umpires, and current-season injury status — all of which the market incorporates in real time.
+- Bayesian shrinkage for early-season rolling stats may not be aggressive enough; alpha=0.0 result holds across the full season, not just April.
+
+*Impact:* High. The entire Kelly sizing and EV framework relies on `edge = model_prob − market_implied_prob` producing positive expected value. If the model is systematically less accurate than the market, the edge signal identifies noise rather than value.
+
+*Phase 7 path:* Feature additions (weather, umpires, injury status, per-batter bat tracking matchups) are the primary levers. Secondary lever: retrain after 50+ 2026 games accumulate to align the model with the current season's run environment (see Card 6.F).
+
+*Note on odds data completeness (2026-04-28):* The alpha tuning in Card 4.13 used only games with `has_odds = true` (matched rows in `mart_game_odds_bridge`). The two pipeline bugs documented in Gap 9 — the UTC/ET timezone mismatch and the `commenceTimeTo` cutoff — caused all late West Coast games to be excluded from `has_odds = true` throughout the historical backfill. This means the alpha tuning dataset was systematically missing late-game West Coast matchups (which tend to be higher-profile, higher-attendance games with sharper market lines). It is possible that `best_alpha = 0.0` was partly an artifact of this incomplete odds set rather than a true reflection of the model's inability to add calibration value. **Action item (pre-Phase 7):** Re-run `run_probability_layer.py` after the corrected odds backfill and dbt rebuild complete, and compare the new per-α log-loss grid to the Card 4.13 values. If best_alpha shifts away from 0.0, update `alpha_tuning_results` and `predict_today.py` accordingly.
+
+---
+
+**Gap 2 — Systematic home-team underestimation in h2h edge**
+
+*What:* Card 4.13 documented mean h2h edge = −0.083 (only 31% of has_odds rows show positive edge). The model systematically under-predicts home team win probability relative to the market across 2026 games.
+
+*Root cause candidates:*
+- The v0 model uses NGBoost run_differential predictions to derive win probability. Card 4.10 found that the NGBoost Normal distribution's aggregate win probability Brier score was 0.2429 — below market (0.2395). For h2h edge calculation specifically, NGBoost alone is the weaker choice.
+- The `consensus_win_prob` enhancement noted in the Phase 6 contract decision section (0.5 × NGBoost + 0.5 × XGBoost isotonic classifier) was identified as a likely improvement but not yet formalized as the official `model_prob` for h2h edge. The enhancement note states: "Formalizing `consensus_win_prob` as the official `model_prob` for h2h edge calculation in both `predict_today.py` and the Streamlit app — rather than NGBoost alone — may reduce the systematic home-team underestimation bias."
+- `home_win_rate_trailing_3yr` is included as a feature and Card 4.11 confirmed it reduces home bias in 2023–2025 (hwrt_reduces_bias = False, but home bias neutral in 2023–2025). The structural decline from 0.548 to 0.519 is captured; bias may still exist for specific ballpark/schedule contexts.
+
+*Impact:* High. Systematic negative edge on the h2h market means the model cannot be used for moneyline betting decisions without a systematic correction. Totals edge (mean +0.057, 74% positive) does not share this problem.
+
+*Phase 7 path (in priority order):*
+1. Implement `consensus_win_prob = 0.5 × NGBoost + 0.5 × XGBoost isotonic` as the official h2h model_prob. One-line change to edge calculation; measure impact on mean h2h edge across the 315 has_odds rows in `daily_model_predictions`.
+2. Investigate whether the bias is concentrated in specific contexts (road favorites, high-run-environment parks, afternoon games) using the 2026 backfill data.
+3. If consensus_win_prob does not sufficiently reduce the bias, evaluate a logistic recalibration layer trained specifically on 2026 edge residuals once ≥100 game results are available.
+
+---
+
+**Gap 3 — Total runs MAE barely improves over the naive baseline**
+
+*What:* The naive global mean predictor achieves MAE ≈ 3.5 runs (NB01 baseline). The best tuned model (NGBoost Normal, n_estimators=200) achieves CV MAE = 3.5718. The tuned XGBoost achieves 3.5655. These represent a ~0.7–1% improvement over predicting the mean for every game — a very thin margin.
+
+*Root cause candidates:*
+- Total runs is a high-variance, low-predictability target. Park factor (r = 0.122) and elevation (r = 0.111) are the strongest features; no feature exceeds r = 0.13. The signal ceiling in the current feature set may be genuinely low.
+- Weather is excluded and is directly relevant to outdoor park run totals (wind direction at Wrigley Field is documented as a ~2-run swing). This is the highest-expected-lift missing feature for the totals model.
+- Umpire zone tendency (k%/bb% adjustment) affects total runs through strikeout and walk rates.
+- The away pitching asymmetry (Card 3.9: r = 0.008 for away_pit_xwoba_against_30d vs. total_runs, vs. r = 0.075 for home pitching) means the model is heavily underweighting away team pitching quality for the totals target.
+
+*Impact:* Medium-high. The totals model's edge signal (mean +0.057) is the most promising market-facing output of the v0 system. Improving the underlying MAE by 0.2–0.5 runs would materially improve the P(over) Brier score and the edge signal quality.
+
+*Phase 7 path:*
+1. Add weather features (Card 4.B1): temperature, wind speed/direction relative to park orientation, humidity for outdoor parks. GPS coordinates already in `stg_statsapi_venues`. Priority: highest single expected lift for totals.
+2. Investigate the away pitching asymmetry further. Card 3.9 found the asymmetry is era-specific (pre-juiced: 5.8×, modern: 18.2×) and park-quartile-persistent. Consider a totals-only model trained exclusively on 2022+ data where the asymmetry is most extreme, to verify whether the era flag is adequately correcting for it or a structural fix is needed.
+3. Add umpire tendencies (Card 4.B2) once a data source is secured.
+
+---
+
+**Gap 4 — alpha_tuning_results table is incomplete (1 row instead of 11)**
+
+*What:* The production Card 4.13 run used `--use-alpha 0.0` as a bypass. The Snowflake `alpha_tuning_results` table has 1 row instead of the spec-required 11 (one per α candidate 0.0, 0.1, ..., 1.0). The per-α log-loss values in `probability_layer_results.md` were recorded from an earlier terminal run but are not reproducible from Snowflake. Card 6.E's Performance Tracker will have no α grid to visualize when built.
+
+*Root cause:* Implementation shortcut taken at Card 4.13 completion time; bypass flag was added to accelerate delivery.
+
+*Impact:* Low-medium. Does not affect daily prediction quality (best_alpha = 0.0 is correct and hardcoded). Blocks Card 6.E's α grid visualization and prevents auditable verification that 0.0 is the true optimum on the full dataset.
+
+*Fix (simple, pre-Phase 7):* Rerun `run_probability_layer.py` without the `--use-alpha` bypass flag. All 11 α rows will persist correctly. This is a one-command fix with no model changes.
+
+---
+
+**Gap 5 — best_alpha.json local fallback not written**
+
+*What:* `predict_today.py` loads `best_alpha` from the `alpha_tuning_results` Snowflake table (most recent `loaded_at` row) with a fallback to a local `betting_ml/models/best_alpha.json` file. That file was never written. If Snowflake is unreachable, the script silently defaults to `alpha = 0.5` — a significant miscalibration relative to the tuned value of 0.0.
+
+*Root cause:* Noted as a known gap in Card 4.13 (second bullet under "Known implementation gaps").
+
+*Impact:* Low in practice (Snowflake is reliable), but a silent miscalibration on failure is a correctness risk.
+
+*Fix (simple, pre-Phase 7):* Add `json.dump({"best_alpha": 0.0, "written_at": "<timestamp>"}, ...)` to `run_probability_layer.py` after α tuning completes, and update `predict_today.py` to read it as the fallback before defaulting to 0.5.
+
+---
+
+**Gap 6 — Intraday feature assembly fallback not implemented**
+
+*What:* `predict_today.py` queries `feature_pregame_game_features` in Snowflake for the target date. The nightly dbt pipeline only refreshes this table after morning ingestion completes (~08:30 ET). Any intraday run against today's date before the nightly pipeline has refreshed returns an empty DataFrame and the script exits with "No games found." The Card 5.2 spec called for a `load_todays_features_via_statsapi()` fallback that assembles features directly from the MLB Stats API when dbt rows are not yet available.
+
+*Root cause:* Noted as a known gap in Card 5.2. The fallback is complex (requires assembling rolling stats inline without dbt) and was deferred to avoid scope creep during Phase 5 delivery.
+
+*Impact:* Medium. Limits the prediction CLI to use after ~08:30 ET only (after the dbt build completes). Reduces usability for morning lineup-lock prediction runs where the Streamlit app would be consulted before the dbt pipeline finishes.
+
+*Phase 7 path:* Implement `load_todays_features_via_statsapi(target_date)` in `data_loader.py`. The function should call `ingest_statsapi.py schedule` for the target date, read the latest confirmed lineups from `stg_statsapi_lineups_wide`, and assemble a minimal feature vector using cached rolling stat snapshots from the prior day's dbt build. This is a medium-complexity engineering task but high usability value once the Streamlit app is live.
+
+---
+
+**Gap 7 — Feature set excludes highest-signal missing information**
+
+*What:* Three categories of pre-game information are incorporated by the market but absent from the v0 feature set:
+
+| Missing feature | Expected impact | Current status |
+|---|---|---|
+| Weather (temperature, wind, humidity) | Highest single expected lift for totals; ~2-run swing for wind at outdoor parks | Backlogged (Card 4.B1); GPS coordinates available |
+| Umpire zone tendency (k%/bb% adj) | Affects total runs via strikeout/walk rates; umpire assignments announced morning of game | Backlogged (Card 4.B2); no data source yet |
+| Player injury/lineup status | Affects team offense and pitching quality; not captured by rolling stats which lag by a day | No ingestion path; external API required (ESPN, FanGraphs) |
+| Per-batter bat tracking matchup | Per-batter bat speed vs. pitcher pitch mix; team-level average was too noisy (NB06 ΔR² < 0.001) | Deferred to Phase 5+ (NB06, Card 4.6 verdict) |
+
+*Impact:* High collectively. The consensus from Phase 3 EDA is that the v0 feature ceiling is genuinely limited — the best individual feature correlation is r = 0.122 (park run factor). Adding weather and umpires would add 2–3 features with r > 0.05.
+
+*Phase 7 path:* Implement in priority order: weather (highest expected impact, data source exists) → umpires (medium expected impact, open-source data) → per-batter bat tracking (data in hand; engineering effort to formulate correctly) → injury status (requires data source commitment).
+
+---
+
+**Gap 8 — Model is not retrained on 2026 data**
+
+*What:* All production models in `model_registry.yaml` were trained on 2016–2025 data and calibrated on 2025. As of 2026-04-27, 31 dates of 2026 game results are available in `mart_game_results`. The model has not been retrained to incorporate 2026 run environment, roster construction, and rule application patterns.
+
+*Root cause:* Card 6.F defines the retraining cadence (mid-season trigger: ≥50 2026 games). As of the post-mortem date, the trigger has not yet been met but is approaching.
+
+*Impact:* Medium and growing. The structural shift at the 2022→2023 rule boundary (Card 3.10) shows how quickly run environment can change. The 2026 season run environment (pitch clock year 3, shift ban year 3) may exhibit further drift from the 2023–2025 calibration window.
+
+*Phase 7 path:* Execute the Card 6.F mid-season refit once 50 2026 regular season games complete (estimated mid-May 2026). Track Brier score trend in Card 6.E Performance Tracker as the leading indicator.
+
+---
+
+**Gap 9 — Odds API coverage ceiling leaves ~21% of games unscored**
+
+*What:* The Odds API covers approximately 10–11 of 13 daily games (~79% match rate for 2026 in `mart_game_odds_bridge`). Of the 400 backfilled rows in `daily_model_predictions`, 85 (21.2%) have `has_odds = false` and null market columns. These games cannot be evaluated for edge or Kelly sizing.
+
+*Root cause:* **Partially revised (2026-04-28).** The original attribution ("confirmed coverage ceiling — not a pipeline bug") was incorrect. Investigation found two pipeline bugs that together account for a significant fraction of the missing odds:
+
+1. **UTC/ET timezone mismatch in `mart_odds_events`:** `commence_date` was computed from the raw UTC timestamp (`commence_time::date`) instead of the ET calendar date (`convert_timezone('UTC', 'America/New_York', commence_time)::date`). MLB `game_date` uses the local (ET) calendar date. Any game starting after 8 pm ET (midnight UTC) in summer — typically the late West Coast slate — had its `commence_date` bucketed one calendar day ahead, breaking the date-based join in `mart_game_odds_bridge`. **Fixed:** `mart_odds_events.sql` and `mart_odds_outcomes.sql` updated to use ET timezone conversion.
+
+2. **`commenceTimeTo` cutoff too early in ingestion script:** `scripts/odds_api_ingestion.py` `run_historical_events()` and `run_historical_odds()` both used `commenceTimeTo = YYYY-MM-DD 23:59:59Z` (UTC midnight), which silently excluded any game starting after midnight UTC (8 pm ET+). Late West Coast games were never ingested. **Fixed:** `day_end` extended to `next_day 04:59:59 UTC`, covering the full ET calendar day including the latest possible West Coast starts. Historical events and odds for 2026-03-27 → 2026-04-21 re-ingested with the corrected window using `--force`.
+
+After these fixes and a full dbt rebuild + prediction backfill, residual `has_odds = false` games represent the true API coverage ceiling — games the Odds API genuinely does not list.
+
+*Impact:* Low-medium for the residual gap. The pipeline fixes meaningfully reduce the `has_odds = false` count; the remaining gap is not actionable without changing the odds data provider or supplementing with a second source.
+
+*Note on Bayesian analysis impact:* See Gap 1 note below — the odds data incompleteness from these bugs likely biased the alpha tuning dataset.
+
+*Phase 7 path:* Evaluate supplementary odds sources. Pinnacle is the canonical sharp book with near-100% MLB game coverage. Adding Pinnacle as a second source would also improve the `home_win_prob_sharp` calculation (currently reliant on lowvig, betonlineag, bovada).
+
+---
+
+**Gap 10 — No closing line data; CLV tracking and Performance Tracker are blocked**
+
+*What:* Card 6.E (Performance Tracker) requires `closing_market_prob` per game in `prediction_log` — the final odds snapshot before game start, against which opening-line predictions are compared to compute Closing Line Value. The closing line backfill step does not yet exist in the Card 6.A Task DAG and `prediction_log` itself has not been created (it is created by `predict_today.py` as part of the Card 6.E implementation, which has not started).
+
+*Root cause:* Card 6.E is not yet started; the prediction_log table creation and closing line backfill are in-scope for that card.
+
+*Impact:* Medium. CLV is the primary diagnostic for whether the model is identifying genuine pre-game value. Without it, the Performance Tracker shows only P&L simulation — useful but not a root-cause diagnostic.
+
+*Phase 7 path:* Implement Card 6.E (Performance Tracker) to unblock CLV tracking. The closing line backfill step should be added to `proc_statsapi_schedule` or a new `proc_results_backfill` task so it runs automatically each morning.
+
+---
+
+**Prioritized improvement roadmap for Phase 7:**
+
+| Priority | Gap | Type | Estimated effort | Expected impact |
+|---|---|---|---|---|
+| 1 | Gap 2 (h2h home bias) — implement `consensus_win_prob` as official h2h model_prob | Bug fix / one-line change | < 1 hour | High — may resolve 31% → 50%+ positive h2h edge rate |
+| 2 | Gap 4 (alpha_tuning_results) — rerun probability layer without bypass | One command | < 15 min | Low (correctness / auditability) |
+| 3 | Gap 5 (best_alpha.json) — write local fallback file | One-line code fix | < 30 min | Low (correctness on Snowflake failure) |
+| 4 | Gap 10 (Card 6.E Performance Tracker) — implement prediction_log and CLV tracking | Medium engineering | 2–4 hours | High — enables CLV-based model validation |
+| 5 | Gap 7a (weather features) — Card 4.B1 implementation | High engineering | 1–2 days | Highest expected lift for totals model MAE |
+| 6 | Gap 8 (2026 mid-season refit) — Card 6.F execution | Run existing refit script | 1–2 hours | Medium — aligns model to current season |
+| 7 | Gap 7b (umpire features) — Card 4.B2 implementation | Medium engineering | 1 day | Medium — affects total runs and K% |
+| 8 | Gap 3 (away pitching asymmetry) — totals-only era-split investigation | Analysis | 2–4 hours | Medium — may reveal structural model fix |
+| 9 | Gap 6 (intraday fallback) — implement Stats API feature assembly | High engineering | 1–2 days | Medium — usability improvement for Streamlit |
+| 10 | Gap 7c (per-batter bat tracking) — Phase 7A feature expansion | High engineering | 3–5 days | Medium (2023+ only, 26% of training data) |
+| 11 | Gap 9 (odds coverage) — evaluate Pinnacle or secondary odds source | Research + integration | 1–3 days | Low-medium — marginally improves coverage |
+| 12 | Gap 1 (model vs. market calibration) — feature expansion to close the gap | Multiple cards | Months | High if successful — fundamental model quality |
+
+---
+
+*Acceptance criteria:*
+- [ ] Each of the 10 gaps above documented with: (a) current quantified state from `daily_model_predictions` or existing evaluation files, (b) root cause verdict (confirmed/candidate/unknown), (c) recommended fix or Phase 7 card reference
+- [ ] Consensus_win_prob h2h edge impact measured: compute mean h2h edge using `consensus_win_prob = 0.5 × p_home_win_ngboost + 0.5 × p_home_win_classifier` across all 315 has_odds rows in `daily_model_predictions`; compare to current mean edge of −0.083
+- [ ] Prioritized roadmap table (above) reviewed and ordering confirmed or updated based on consensus_win_prob measurement result
+- [ ] Post-mortem findings appended to `betting_ml/evaluation/postmortem_v0.md` (new file) covering all 10 gaps with quantified state and root-cause verdict
+- [ ] Phase 7 cards confirmed or updated in `project_context.md` based on post-mortem findings; any gap that changes priority order results in a card re-ordering or new card creation
 
 ---
 
