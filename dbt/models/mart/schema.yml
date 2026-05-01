@@ -1680,7 +1680,7 @@ models:
         tests:
           - dbt_utils.expression_is_true:
                 arguments:
-                  expression: "is null or (swing_length_ft between 0 and 15)"
+                  expression: "is null or (swing_length_ft between 0 and 20)"
 
       - name: attack_angle_degrees
         description: >

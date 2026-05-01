@@ -117,8 +117,8 @@ final as (
         -- ── Error detection from plate_appearance_description ─────────────────────
         -- MLB Gameday descriptions use consistent phrasing for errors.
         -- We detect presence, type, and the position that committed the error.
-        (
-            lower(plate_appearance_description) like '%error%'
+        COALESCE(
+            lower(plate_appearance_description) like '%error%', false
         )::boolean                                              as error_on_play,
             -- True when any error (fielding or throwing) is mentioned
 
