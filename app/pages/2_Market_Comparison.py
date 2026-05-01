@@ -391,9 +391,12 @@ _game_datetime_utc: str | None = None
 _gdt_raw = selected_row.get("game_datetime")
 if _gdt_raw is not None:
     _commence_ts = pd.Timestamp(_gdt_raw)
-    if _commence_ts.tzinfo is None:
-        _commence_ts = _commence_ts.tz_localize("UTC")
-    _game_datetime_utc = _commence_ts.strftime("%Y-%m-%d %H:%M:%S")
+    if pd.isna(_commence_ts):
+        _commence_ts = None
+    else:
+        if _commence_ts.tzinfo is None:
+            _commence_ts = _commence_ts.tz_localize("UTC")
+        _game_datetime_utc = _commence_ts.strftime("%Y-%m-%d %H:%M:%S")
 
 # Extract event_id — scopes all mart_odds_outcomes queries to this specific game,
 # preventing cross-series collisions when the same teams play multiple series.

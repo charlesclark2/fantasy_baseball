@@ -301,6 +301,146 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
+_CREATE_PREDICTION_LOG = """
+CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
+    prediction_date           DATE        NOT NULL,
+    game_pk                   INTEGER     NOT NULL,
+    market                    VARCHAR(20) NOT NULL,
+    model_prob                FLOAT,
+    market_prob_at_prediction FLOAT,
+    closing_market_prob       FLOAT,
+    actual_outcome            INTEGER,
+    decimal_odds              FLOAT,
+    ev                        FLOAT,
+    kelly_fraction            FLOAT,
+    loaded_at                 TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+_INSERT_PREDICTION_LOG = """
+INSERT INTO baseball_data.config.prediction_log (
+    prediction_date, game_pk, market, model_prob, market_prob_at_prediction,
+    closing_market_prob, actual_outcome, decimal_odds, ev, kelly_fraction
+) VALUES (
+    %(prediction_date)s, %(game_pk)s, %(market)s, %(model_prob)s,
+    %(market_prob_at_prediction)s, %(closing_market_prob)s, %(actual_outcome)s,
+    %(decimal_odds)s, %(ev)s, %(kelly_fraction)s
+)
+"""
+
+
+def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None:
+    rows = []
+    pred_date = date.fromisoformat(prediction_date)
+    for r in output_rows:
+        mkt_prob = r.get("market_implied_prob")
+        model_prob = r.get("model_prob")
+        if mkt_prob and mkt_prob > 0:
+            decimal_odds = 1.0 / mkt_prob
+            ev = model_prob * (decimal_odds - 1) - (1 - model_prob) if model_prob is not None else None
+        else:
+            decimal_odds = None
+            ev = None
+        try:
+            game_pk = int(r["game_key"])
+        except (ValueError, TypeError):
+            game_pk = None
+        rows.append({
+            "prediction_date":           pred_date,
+            "game_pk":                   game_pk,
+            "market":                    r.get("market"),
+            "model_prob":                r.get("model_prob"),
+            "market_prob_at_prediction": mkt_prob,
+            "closing_market_prob":       None,
+            "actual_outcome":            None,
+            "decimal_odds":              decimal_odds,
+            "ev":                        ev,
+            "kelly_fraction":            r.get("implied_kelly_fraction"),
+        })
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_CREATE_PREDICTION_LOG)
+        cur.execute(
+            f"DELETE FROM baseball_data.config.prediction_log "
+            f"WHERE prediction_date = '{prediction_date}'"
+        )
+        if rows:
+            cur.executemany(_INSERT_PREDICTION_LOG, rows)
+        conn.commit()
+        print(f"\nWrote {len(rows)} rows to prediction_log for {prediction_date}")
+    finally:
+        conn.close()
+
+
+_BACKFILL_H2H_SQL = """
+MERGE INTO baseball_data.config.prediction_log pl
+USING (
+    SELECT game_pk, home_team_won
+    FROM baseball_data.betting.mart_game_results
+    WHERE home_team_won IS NOT NULL
+) gr
+ON pl.game_pk = gr.game_pk
+   AND pl.actual_outcome IS NULL
+   AND pl.market IN ('h2h home', 'h2h away')
+WHEN MATCHED THEN UPDATE SET
+    actual_outcome = CASE
+        WHEN pl.market = 'h2h home' THEN IFF(gr.home_team_won, 1, 0)
+        WHEN pl.market = 'h2h away' THEN IFF(NOT gr.home_team_won, 1, 0)
+    END
+"""
+
+_BACKFILL_TOTALS_SQL = """
+MERGE INTO baseball_data.config.prediction_log pl
+USING (
+    SELECT
+        gr.game_pk,
+        gr.home_final_score + gr.away_final_score   AS total_runs,
+        MEDIAN(o.outcome_point)                      AS consensus_line
+    FROM baseball_data.betting.mart_game_results gr
+    JOIN (
+        SELECT game_pk, home_team, away_team, score_date
+        FROM baseball_data.betting_ml.daily_model_predictions
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) = 1
+    ) dmp ON gr.game_pk = dmp.game_pk
+    JOIN baseball_data.betting.mart_odds_events e
+        ON dmp.home_team = e.home_team
+        AND dmp.away_team = e.away_team
+        AND e.commence_date = dmp.score_date
+    JOIN baseball_data.betting.mart_odds_outcomes o
+        ON e.event_id = o.event_id
+        AND o.market_key = 'totals'
+        AND o.outcome_name = 'Over'
+    WHERE gr.home_final_score IS NOT NULL
+      AND gr.away_final_score IS NOT NULL
+    GROUP BY gr.game_pk, total_runs
+) totals
+ON pl.game_pk = totals.game_pk
+   AND pl.actual_outcome IS NULL
+   AND pl.market IN ('over', 'under')
+WHEN MATCHED THEN UPDATE SET
+    actual_outcome = CASE
+        WHEN pl.market = 'over'  THEN IFF(totals.total_runs > totals.consensus_line, 1, 0)
+        WHEN pl.market = 'under' THEN IFF(totals.total_runs < totals.consensus_line, 1, 0)
+    END
+"""
+
+
+def _backfill_outcomes() -> None:
+    """Update actual_outcome for settled games from mart_game_results."""
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_BACKFILL_H2H_SQL)
+        h2h_n = cur.rowcount
+        cur.execute(_BACKFILL_TOTALS_SQL)
+        tot_n = cur.rowcount
+        conn.commit()
+        print(f"Backfilled outcomes: {h2h_n} h2h rows, {tot_n} totals rows updated")
+    finally:
+        conn.close()
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Score today's MLB games using the Phase 5 production models."
@@ -310,6 +450,12 @@ def _parse_args() -> argparse.Namespace:
         metavar="YYYY-MM-DD",
         default=date.today().isoformat(),
         help="Target game date (default: today)",
+    )
+    parser.add_argument(
+        "--no-log-snowflake",
+        action="store_true",
+        default=False,
+        help="Skip writing to prediction_log (dry-run mode)",
     )
     return parser.parse_args()
 
@@ -497,20 +643,6 @@ def main() -> None:
     # Rank has_odds games by abs(edge) descending (highest-conviction bets first).
     output_rows.sort(key=lambda r: abs(r.get("edge") or 0.0), reverse=True)
 
-    # ------------------------------------------------------------------
-    # Write parquet
-    # ------------------------------------------------------------------
-    out_dir = PROJECT_ROOT / "betting_ml" / "outputs"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"probability_outputs_{target_date}.parquet"
-
-    if output_rows:
-        pd.DataFrame(output_rows).to_parquet(out_path, index=False, engine="pyarrow")
-    else:
-        pd.DataFrame(columns=[
-            "game_key", "market", "model_prob", "market_implied_prob",
-            "alpha", "posterior_prob", "edge", "implied_kelly_fraction",
-        ]).to_parquet(out_path, index=False, engine="pyarrow")
 
     # ------------------------------------------------------------------
     # Print picks table (all games, not just has_odds)
@@ -542,7 +674,6 @@ def main() -> None:
     picks_list: list[str] = []
 
     rows_table = []
-    csv_rows: list[dict] = []
     for i in range(len(df_today)):
         has_odds = has_odds_col.iloc[i]
         ngb_win = float(p_home_win_ngb[i])
@@ -580,22 +711,6 @@ def main() -> None:
             "Kelly%":             f"{_kelly_v*100:.2f}%" if _kelly_v is not None else "—",
         })
 
-        _row = df_today.iloc[i]
-        _home = _row.get("home_name") or _row.get("home_team") or ""
-        _away = _row.get("away_name") or _row.get("away_team") or ""
-        csv_rows.append({
-            "game_pk":               _row.get("game_pk"),
-            "matchup":               _matchup(i),
-            "game_time":             _game_time(i),
-            "predicted_total_runs":  float(pred_total[i]),
-            "model_home_win_prob":   float(p_home_win_ngb[i]),
-            "market_home_win_prob":  _h2h_v,
-            "posterior_prob":        _post_v,
-            "edge":                  _edge_v,
-            "kelly_fraction":        _kelly_v,
-            "home_team":             _home,
-            "away_team":             _away,
-        })
 
     df_table = pd.DataFrame(rows_table)
     print("\n" + df_table.to_string(index=False))
@@ -650,16 +765,16 @@ Column Definitions
     n_h2h = sum(1 for r in output_rows if r["market"] == "h2h")
     n_tot = sum(1 for r in output_rows if r["market"] == "totals")
     if output_rows:
-        print(f"\nWrote {len(output_rows)} output rows ({n_h2h} h2h, {n_tot} totals) to {out_path}")
+        print(f"\n{len(output_rows)} output rows ({n_h2h} h2h, {n_tot} totals) ready for Snowflake logging.")
     else:
-        print(f"\nWrote 0 output rows (no odds available — picks table above uses model probabilities only) to {out_path}")
+        print("\n0 output rows (no odds available — picks table above uses model probabilities only).")
 
     # ------------------------------------------------------------------
-    # Write predictions CSV (all games — canonical Phase 6 daily snapshot)
+    # Write prediction_log to Snowflake
     # ------------------------------------------------------------------
-    csv_path = out_dir / f"predictions_{target_date}.csv"
-    pd.DataFrame(csv_rows).to_csv(csv_path, index=False)
-    print(f"Wrote {len(csv_rows)} game(s) to {csv_path}")
+    if not args.no_log_snowflake:
+        _write_prediction_log(output_rows, target_date)
+        _backfill_outcomes()
 
     # ------------------------------------------------------------------
     # Write predictions to Snowflake

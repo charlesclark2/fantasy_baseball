@@ -310,9 +310,10 @@ spec:
           4. Confirm old artifacts renamed with date suffix (rollback available):
                ls betting_ml/models/*_2026-*.pkl
 
-          5. Run predict_today.py for today and confirm output parquet is non-empty:
+          5. Run predict_today.py for today and confirm rows logged to Snowflake:
                uv run python betting_ml/scripts/predict_today.py --date $(date +%Y-%m-%d)
-               ls -la betting_ml/outputs/probability_outputs_$(date +%Y-%m-%d).parquet
+               # Verify rows exist in prediction_log for today's date:
+               # SELECT COUNT(*) FROM baseball_data.config.prediction_log WHERE prediction_date = CURRENT_DATE
 
           6. Check Streamlit app Today's Picks page — confirm picks load and
              Model Win% values are plausible (not all 0.5, not null).

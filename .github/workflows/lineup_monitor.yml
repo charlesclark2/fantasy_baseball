@@ -50,7 +50,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select stg_statsapi_lineups stg_statsapi_lineups_wide --project-dir dbt
+        run: dbt build --select stg_statsapi_lineups stg_statsapi_lineups_wide --project-dir dbt --profiles-dir dbt
 
       - name: Check for newly confirmed lineups
         id: lineup_check
@@ -72,4 +72,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select +stg_statsapi_lineups+ --project-dir dbt
+        run: dbt build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt

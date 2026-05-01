@@ -117,4 +117,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ --project-dir dbt
+        run: dbt build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ --project-dir dbt --profiles-dir dbt
