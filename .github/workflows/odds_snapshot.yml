@@ -1,0 +1,120 @@
+name: Odds Snapshot
+
+# Re-ingests odds every ~5-6 hours on top of the 08:00 UTC morning run in
+# daily_ingestion.yml, giving 4 snapshots per game day for line-movement tracking.
+#
+# Schedule (all UTC → EDT offset -4):
+#   17:00 UTC = 1:00 PM EDT   — pre-afternoon games
+#   22:00 UTC = 6:00 PM EDT   — pre-evening games
+#   03:00 UTC = 11:00 PM EDT  — late-game / closing lines
+
+on:
+  schedule:
+    - cron: '0 17 * * *'
+    - cron: '0 22 * * *'
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dbt-fusion
+        run: |
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Write Snowflake private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+          chmod 600 /tmp/snowflake_rsa_key.pem
+
+      - name: Check for games scheduled today
+        id: games_check
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          uv run python - <<'EOF'
+          import os, sys
+          from datetime import date
+          import snowflake.connector
+          from cryptography.hazmat.backends import default_backend
+          from cryptography.hazmat.primitives.serialization import (
+              Encoding, NoEncryption, PrivateFormat, load_pem_private_key,
+          )
+
+          key_path = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
+          with open(key_path, "rb") as f:
+              pem = f.read()
+          key = load_pem_private_key(pem, password=None, backend=default_backend())
+          private_key_bytes = key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+
+          conn = snowflake.connector.connect(
+              account=os.environ["SNOWFLAKE_ACCOUNT"],
+              user=os.environ["SNOWFLAKE_USER"],
+              warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+              role=os.environ.get("SNOWFLAKE_ROLE", ""),
+              database="baseball_data",
+              private_key=private_key_bytes,
+          )
+          cur = conn.cursor()
+          cur.execute(
+              "SELECT COUNT(*) FROM baseball_data.betting.stg_statsapi_games "
+              "WHERE official_date = %s AND game_type = 'R'",
+              [date.today().isoformat()],
+          )
+          count = cur.fetchone()[0]
+          cur.close()
+          conn.close()
+
+          gho = os.environ.get("GITHUB_OUTPUT", "")
+          result = f"has_games={'true' if count > 0 else 'false'}\n"
+          if gho:
+              with open(gho, "a") as out:
+                  out.write(result)
+          print(result.strip())
+          EOF
+
+      - name: Ingest Odds API events
+        if: steps.games_check.outputs.has_games == 'true'
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: uv run odds_api_ingestion.py events
+
+      - name: Ingest Odds API odds
+        if: steps.games_check.outputs.has_games == 'true'
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: uv run odds_api_ingestion.py odds
+
+      - name: Rebuild odds dbt models
+        if: steps.games_check.outputs.has_games == 'true'
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        run: dbt build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ --project-dir dbt

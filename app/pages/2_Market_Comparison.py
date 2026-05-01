@@ -107,6 +107,8 @@ def _games_sql(date_str: str) -> str:
         p.away_team                    AS away_team_abbrev,
         g.home_team_name,
         g.away_team_name,
+        g.double_header,
+        g.game_number,
         e.event_id,
         p.consensus_win_prob,
         p.h2h_market_implied_prob,
@@ -134,6 +136,7 @@ def _games_sql(date_str: str) -> str:
     LEFT JOIN baseball_data.betting.mart_odds_consensus c
         ON c.event_id = e.event_id
     WHERE p._rn = 1
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY p.game_pk ORDER BY e.event_id NULLS LAST) = 1
     ORDER BY p.game_datetime ASC
     """
 
@@ -340,7 +343,10 @@ def load_books_current(event_id: str | None, home_team: str, away_team: str, dat
 st.title("Market Comparison")
 st.caption("Model probability vs. bookmaker implied probability with line movement context.")
 
-selected_date = st.date_input("Date", value=datetime.date.today())
+if "selected_date" not in st.session_state:
+    st.session_state["selected_date"] = datetime.date.today()
+selected_date = st.date_input("Date", value=st.session_state["selected_date"])
+st.session_state["selected_date"] = selected_date
 date_str = selected_date.isoformat()
 
 # ---------------------------------------------------------------------------
@@ -362,7 +368,13 @@ game_options: list[str] = []
 game_rows: dict[str, pd.Series] = {}
 
 for _, row in df_games.iterrows():
-    label = f"{row['away_team_name']} @ {row['home_team_name']} — {_fmt_game_time(row['game_datetime'])}"
+    dh = str(row.get("double_header", "N") or "N").upper()
+    gn = row.get("game_number")
+    dh_suffix = f" (Game {gn})" if dh != "N" and gn else ""
+    label = f"{row['away_team_name']} @ {row['home_team_name']} — {_fmt_game_time(row['game_datetime'])}{dh_suffix}"
+    # Deduplicate labels in the unlikely case two games share identical display text
+    if label in game_rows:
+        label = f"{label} [PK {row['game_pk']}]"
     game_options.append(label)
     game_rows[label] = row
 

@@ -261,32 +261,56 @@ st.set_page_config(
 # Controls
 # ---------------------------------------------------------------------------
 
-selected_date = st.date_input("Select date", value=datetime.date.today())
+if "selected_date" not in st.session_state:
+    st.session_state["selected_date"] = datetime.date.today()
+selected_date = st.date_input("Select date", value=st.session_state["selected_date"])
+st.session_state["selected_date"] = selected_date
 date_str = selected_date.isoformat()
 is_today = selected_date == datetime.date.today()
 
 title = "Today's Picks" if is_today else f"{selected_date.strftime('%B %d, %Y')} Picks"
 st.title(title)
 
+_DBT_BIN = str(Path.home() / ".local" / "bin" / "dbt")
+_DBT_DIR = str(_PROJECT_ROOT / "dbt")
+
 col_r1, col_r2 = st.columns([1, 1])
 with col_r1:
     if st.button("Refresh Predictions"):
-        result = subprocess.run(
-            ["uv", "run", "python", "betting_ml/scripts/predict_today.py", "--date", date_str],
-            capture_output=True,
-            text=True,
-            cwd=str(_PROJECT_ROOT),
-        )
+        with st.spinner("Running predict_today.py…"):
+            result = subprocess.run(
+                ["uv", "run", "python", "betting_ml/scripts/predict_today.py", "--date", date_str],
+                capture_output=True,
+                text=True,
+                cwd=str(_PROJECT_ROOT),
+            )
         st.cache_data.clear()
         if result.returncode == 0:
-            st.success("Predictions refreshed.")
+            _no_games = (
+                "No games found" in result.stdout
+                or "No games with confirmed lineups" in result.stdout
+            )
+            if _no_games:
+                st.warning(
+                    f"No games with confirmed lineups for {date_str} — predictions not updated. "
+                    "Use 'Refresh Lineups & Odds Only' first if lineups are now available."
+                )
+            else:
+                st.success("Predictions refreshed.")
         else:
             st.error(f"predict_today.py failed (exit {result.returncode}):\n{result.stderr[:500]}")
 with col_r2:
     if st.button("Refresh Lineups & Odds Only"):
         _scripts_dir = str(_PROJECT_ROOT / "scripts")
+        # Pass --start-date for the prior month so retroactive lineup confirmations
+        # (e.g. yesterday's games when today is the 1st) are picked up.
+        _today = datetime.date.today()
+        _first_of_month = _today.replace(day=1)
+        _prior_month = (_first_of_month - datetime.timedelta(days=1)).replace(day=1)
+        _prior_month_str = _prior_month.isoformat()
         _ingest_steps = [
-            ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule"], _scripts_dir),
+            ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule",
+                         "--start-date", _prior_month_str], _scripts_dir),
             ("Odds events", ["uv", "run", "python", "odds_api_ingestion.py", "events"], _scripts_dir),
             ("Odds lines", ["uv", "run", "python", "odds_api_ingestion.py", "odds"], _scripts_dir),
         ]
@@ -299,20 +323,47 @@ with col_r2:
                 _failed = True
                 break
         if not _failed:
-            with st.spinner("Triggering dbt build (GitHub Actions)…"):
+            # Rebuild just the lineup + odds models synchronously so results are
+            # immediately visible — no need to wait for a GHA workflow to finish.
+            _dbt_select = " ".join([
+                "stg_statsapi_lineups", "stg_statsapi_lineups_wide",
+                "stg_oddsapi_events", "stg_oddsapi_odds",
+                "mart_odds_events", "mart_odds_outcomes",
+                "feature_pregame_lineup_features", "feature_pregame_odds_features",
+                "feature_pregame_game_features",
+            ])
+            with st.spinner("Rebuilding dbt lineup + odds models…"):
                 _r = subprocess.run(
-                    ["gh", "workflow", "run", "dbt_daily_build.yml",
-                     "--repo", "charlesclark2/fantasy_baseball"],
+                    [_DBT_BIN, "build", "--select", _dbt_select,
+                     "--project-dir", _DBT_DIR, "--profiles-dir", _DBT_DIR],
                     capture_output=True, text=True,
                 )
             if _r.returncode != 0:
-                st.error(f"Failed to trigger dbt workflow:\n{_r.stderr[:500]}")
-            else:
-                st.cache_data.clear()
-                st.success(
-                    "Ingestion complete. dbt build dispatched to GitHub Actions — "
-                    "mart tables will be updated in ~2 minutes."
+                st.error(f"dbt build failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+                _failed = True
+        if not _failed:
+            with st.spinner("Refreshing predictions with confirmed lineup data…"):
+                _r = subprocess.run(
+                    ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
+                     "--date", date_str],
+                    capture_output=True, text=True,
+                    cwd=str(_PROJECT_ROOT),
                 )
+            if _r.returncode != 0:
+                st.error(f"predict_today.py failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+            else:
+                _no_games = (
+                    "No games found" in _r.stdout
+                    or "No games with confirmed lineups" in _r.stdout
+                )
+                st.cache_data.clear()
+                if _no_games:
+                    st.warning(
+                        "Ingestion and dbt rebuild complete, but no confirmed lineups yet — "
+                        "predictions not updated. Try again once lineups post."
+                    )
+                else:
+                    st.success("Lineups, odds, and predictions refreshed.")
 
 # ---------------------------------------------------------------------------
 # Load data
