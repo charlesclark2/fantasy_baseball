@@ -8,23 +8,36 @@ spec:
   description: >
     Conduct a structured post-mortem of the v0 model system (Phases 1–6 through
     Card 6.G) and produce a prioritized Phase 7 improvement roadmap. The v0 system
-    produced 400 scored game rows across 31 dates (2026-03-27 through 2026-04-27);
-    this card formalizes what was learned before Phase 7 investment begins.
+    has produced 1,098 scored game rows across 36 dates (2026-03-27 through
+    2026-05-01); this card formalizes what was learned before Phase 7 investment
+    begins.
+
+    IMPORTANT FRAMING: The v0 model is not currently beating the market. The mean
+    h2h edge is −0.036 (NGBoost alone) or −0.017 (consensus_win_prob blend), and
+    only ~35% of predictions show positive edge. This means periodic model
+    retraining is not a meaningful near-term investment — the architecture and
+    feature set need fundamental improvement first. The Phase 7 roadmap should
+    be oriented toward closing that gap, not scheduling retraining of the current
+    model.
 
     This card has two code changes and two documentation deliverables:
 
     CODE CHANGES (pre-Phase 7 quick fixes):
 
     1. Implement consensus_win_prob as the official model_prob for h2h edge
-       calculation in predict_today.py and the Streamlit app. Card 4.13 found
-       mean h2h edge = −0.083 (31% positive) using NGBoost alone; the 50/50 blend
-       with the XGBoost isotonic classifier (consensus_win_prob) is expected to
-       reduce the systematic home-team underestimation bias. This is a one-line
-       change to the edge calculation with no model retraining required.
+       calculation in predict_today.py. Currently line ~178 uses ngb_win alone:
+         h2h_edge = compute_edge(ngb_win, h2h_mkt_v)
+       Replace with:
+         h2h_edge = compute_edge(cons_win, h2h_mkt_v)
+         h2h_post = compute_posterior(cons_win, h2h_mkt_v, best_alpha)
+         h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
+       cons_win is already computed at line ~173 (0.5 * ngb_win + 0.5 * clf_win).
+       This is not a model retrain — it changes which probability feeds the edge
+       formula, improving mean edge from −0.036 to an expected −0.017.
 
-    2. Measure the impact on mean h2h edge across the 315 has_odds rows in
-       daily_model_predictions after the consensus_win_prob change is applied.
-       Document the before/after comparison in betting_ml/evaluation/selection_log.md.
+    2. Measure the actual before/after impact on mean h2h edge across the 1,023
+       has_odds rows in daily_model_predictions (as of 2026-05-01). Document the
+       before/after comparison in betting_ml/evaluation/selection_log.md.
 
     DOCUMENTATION DELIVERABLES:
 
@@ -35,40 +48,44 @@ spec:
 
     4. Phase 7 roadmap — a prioritized improvement list appended to
        betting_ml/evaluation/postmortem_v0.md as a separate "Phase 7 Roadmap"
-       section, ordered by expected lift / implementation cost ratio.
+       section, ordered by expected lift / implementation cost ratio. The roadmap
+       must be grounded in closing the model-vs-market gap (improving edge
+       distribution and calibration), not on operational cadence like retraining.
 
     The consensus_win_prob fix (deliverable 1) must be applied to predict_today.py
     before the gap audit (deliverable 3) is written, so the audit reflects the
-    corrected h2h edge distribution rather than the NGBoost-alone baseline.
+    corrected h2h edge distribution.
 
     This is primarily an analysis and documentation card. No model retraining,
     no new Snowflake tables, and no new page builds are part of this card.
   acceptanceCriteria:
     - description: >
-        predict_today.py and the Streamlit Today's Picks page both use
-        consensus_win_prob (0.5 × p_home_win_ngboost + 0.5 × p_home_win_classifier)
-        as model_prob for h2h edge calculation — not NGBoost alone
+        predict_today.py uses consensus_win_prob (cons_win = 0.5 × ngb_win + 0.5
+        × clf_win) as the model_prob input to compute_edge, compute_posterior, and
+        compute_kelly for the h2h market — not NGBoost alone
     - description: >
-        betting_ml/evaluation/selection_log.md contains a dated entry showing
-        mean h2h edge before (NGBoost alone, ~−0.083) and after (consensus_win_prob)
-        the fix, computed across the 315 has_odds rows in daily_model_predictions
+        betting_ml/evaluation/selection_log.md contains a dated Card 6.H entry
+        showing mean h2h edge before (NGBoost alone, ~−0.036) and after
+        (consensus_win_prob, ~−0.017) the fix, computed across the has_odds rows
+        in daily_model_predictions
     - description: >
         betting_ml/evaluation/postmortem_v0.md exists and contains a structured
         analysis of all seven known gaps (Gap 1 through Gap 7) each with quantified
         impact, root-cause analysis, and a P1/P2/P3 priority ranking
     - description: >
         postmortem_v0.md contains a "Phase 7 Roadmap" section listing improvement
-        initiatives ordered by expected lift / implementation cost ratio with a
-        one-paragraph justification for the top three P1 items
+        initiatives ordered by expected lift / implementation cost ratio, with the
+        roadmap focused on closing the model-vs-market gap rather than operational
+        retraining cadence
     - description: >
-        Gap 1 analysis in postmortem_v0.md reflects the re-run alpha_tuning_results
-        (11 rows, not the bypass) and notes whether best_alpha shifted from 0.0
-        after the corrected odds backfill — this is the revised evidence base for
-        the "model does not improve on market calibration" finding
+        Gap 1 analysis in postmortem_v0.md references the current alpha_tuning_results
+        state (1 row, log_loss NULL — Card 6.F fix still pending as of writing)
+        and notes that best_alpha cannot be validated until the full 11-row grid
+        is re-run with corrected odds data
     - description: >
         Gap 2 analysis in postmortem_v0.md quantifies the actual before/after
         mean h2h edge change from the consensus_win_prob fix using live data from
-        daily_model_predictions, not just a theoretical projection
+        daily_model_predictions (1,023 has_odds rows as of 2026-05-01)
 
 ---
 apiVersion: planspec.io/v1alpha1
@@ -80,25 +97,22 @@ spec:
   gateType: review
   description: >
     Card 6.G (2026 season prediction backfill) must be complete before the
-    post-mortem analysis can be performed. The post-mortem uses the 315 has_odds
-    rows in daily_model_predictions as its primary evidence base.
+    post-mortem analysis can be performed.
 
-    Required conditions (all confirmed complete as of 2026-04-27):
-      - backfill_predictions_2026.py has run to completion for 2026-03-27 through
-        2026-04-27: 31 distinct score_date values, 400 total rows in
-        baseball_data.betting_ml.daily_model_predictions
-      - 315/400 rows have has_odds = true with non-null h2h_market_implied_prob
-        and h2h_edge
-      - Parquet and CSV files exist in betting_ml/outputs/ for each backfill date
+    Required conditions (confirmed as of 2026-05-01):
+      - daily_model_predictions contains rows for all scored dates from 2026-03-27
+        onward, with daily ingestion keeping it current
+      - As of 2026-05-01: 1,098 total rows, 1,023 has_odds rows, 36 distinct dates
+      - has_odds rows have non-null h2h_market_implied_prob and h2h_edge
 
     Verify with:
-      SELECT COUNT(*), COUNT(CASE WHEN has_odds THEN 1 END) AS odds_rows
+      SELECT COUNT(*), COUNT(CASE WHEN has_odds THEN 1 END) AS odds_rows,
+             MIN(score_date), MAX(score_date), COUNT(DISTINCT score_date)
       FROM baseball_data.betting_ml.daily_model_predictions
       WHERE YEAR(score_date) = 2026
-    Expected: total ≈ 400, odds_rows ≈ 315.
+    Expected: total >= 1098, odds_rows >= 1023.
 
-    NOTE: This gate is already satisfied as of the Card 6.G completion date
-    (2026-04-27). Mark it immediately upon starting this card.
+    NOTE: This gate is already satisfied. Mark it immediately upon starting this card.
   reviewers:
     - user:charlesclark
 
@@ -116,6 +130,12 @@ spec:
     reflect the re-run α grid (all 11 rows) and verify whether best_alpha shifts
     from 0.0 after the corrected odds backfill.
 
+    CURRENT STATE (as of 2026-05-01): alpha_tuning_results has only 1 row
+    (alpha=0.0, log_loss=NULL) — the 6.F fix is NOT yet complete. This gate is
+    blocking the gap-audit-and-phase7-roadmap task. If this gate cannot be
+    satisfied before post-mortem writing begins, the Gap 1 section must explicitly
+    document this as an open issue (best_alpha unvalidated, full grid not yet run).
+
     Required conditions:
       - alpha_tuning_results contains 11 rows (one per α in [0.0, 0.1, ..., 1.0])
         from a run after the odds pipeline bugs documented in Gap 9 were fixed
@@ -126,10 +146,9 @@ spec:
       FROM baseball_data.betting_ml.alpha_tuning_results
       ORDER BY loaded_at DESC
       LIMIT 11;
+    Expected: COUNT = 11, log_loss NOT NULL.
 
-    This gate can be satisfied by completing the fix-alpha-and-best-alpha-json
-    task from Card 6.F before the gap-audit-and-phase7-roadmap task begins.
-    The consensus-win-prob-fix task does NOT depend on this gate — it can proceed
+    The consensus-win-prob-fix task does NOT depend on this gate and can proceed
     immediately.
   reviewers:
     - user:charlesclark
@@ -143,15 +162,19 @@ metadata:
 spec:
   description: >
     Three-task DAG. consensus-win-prob-fix applies the one-line code change to
-    predict_today.py and the Streamlit app, then measures the before/after h2h
-    edge impact using daily_model_predictions. It depends only on the 6.G backfill
-    gate and can start immediately. gap-audit-and-phase7-roadmap writes
-    postmortem_v0.md covering all seven gaps with quantified impact; it depends on
-    consensus-win-prob-fix (so Gap 2 reflects corrected data) and the 6.F alpha
-    fix gate (so Gap 1 reflects the full 11-row α grid). update-selection-log
-    records the consensus_win_prob before/after comparison in selection_log.md
-    and can proceed in parallel with gap-audit-and-phase7-roadmap after
-    consensus-win-prob-fix completes.
+    predict_today.py (~line 178: swap ngb_win for cons_win in compute_edge /
+    compute_posterior / compute_kelly calls), then measures the before/after h2h
+    edge impact using the 1,023 has_odds rows in daily_model_predictions. It
+    depends only on the 6.G backfill gate and can start immediately.
+
+    gap-audit-and-phase7-roadmap writes postmortem_v0.md covering all seven gaps
+    with quantified impact; it depends on consensus-win-prob-fix (so Gap 2
+    reflects corrected data) and the 6.F alpha fix gate (so Gap 1 reflects the
+    full 11-row α grid — or explicitly documents that the grid is pending).
+
+    update-selection-log records the consensus_win_prob before/after comparison
+    in selection_log.md and can proceed in parallel with gap-audit-and-phase7-roadmap
+    after consensus-win-prob-fix completes.
   goalRef:
     name: postv0-model-postmortem
   graph:
@@ -163,85 +186,81 @@ spec:
           Apply the consensus_win_prob fix to make it the official model_prob for
           h2h edge calculation, then measure and document the impact.
 
-          CHANGE 1 — predict_today.py:
-            Find the line that computes model_prob for the h2h market. Currently
-            it uses p_home_win_ngboost (NGBoost run_differential P(home win)) alone.
-            Replace with:
-              model_prob_h2h = 0.5 * row['p_home_win_ngboost'] \
-                             + 0.5 * row['p_home_win_classifier']
-            This is the same consensus_win_prob already computed and stored in
-            daily_model_predictions; it is NOT a new quantity. The change is to use
-            it as model_prob in the edge calculation rather than NGBoost alone.
+          CHANGE — predict_today.py (around line 178):
+            Currently:
+              h2h_edge  = compute_edge(ngb_win, h2h_mkt_v)
+              h2h_post  = compute_posterior(ngb_win, h2h_mkt_v, best_alpha)
+              h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
+            Replace ngb_win with cons_win (already computed at ~line 173):
+              h2h_edge  = compute_edge(cons_win, h2h_mkt_v)
+              h2h_post  = compute_posterior(cons_win, h2h_mkt_v, best_alpha)
+              h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
 
-            After the change, re-run predict_today.py for a single recent date to
-            confirm the parquet output is structurally identical (same columns,
-            same row count) with updated h2h_edge values.
+            Also update the DDL comment at ~line 82 to reflect the new formula:
+              h2h_edge  FLOAT,   -- consensus_win_prob - h2h_market_implied_prob
 
-          CHANGE 2 — Streamlit Today's Picks page (app/pages/1_Today_Picks.py):
-            The page already references consensus_win_prob (per Card 6.B spec).
-            Verify the page uses consensus_win_prob — not p_home_win_ngboost alone —
-            as model_prob for the edge calculation. If it does not, apply the same
-            0.5 × NGBoost + 0.5 × classifier blend. No structural page changes
-            are needed if Card 6.B was implemented per spec.
+            Note: the Streamlit Today's Picks page (app/pages/1_Today_Picks.py)
+            reads h2h_edge directly from daily_model_predictions — it does not
+            recompute edge inline — so no Streamlit change is needed. The page
+            will automatically reflect the corrected values once new predictions
+            are written.
 
           MEASURE IMPACT — query daily_model_predictions to compute before/after:
-            The existing 400 rows used NGBoost alone for model_prob. To compute
-            what the corrected edge would have been, run:
+            The 1,023 has_odds rows already have both p_home_win_ngboost and
+            consensus_win_prob stored, so the counterfactual edge can be computed
+            without re-running predict_today.py:
 
               SELECT
-                AVG(h2h_model_prob - h2h_market_implied_prob) AS current_mean_edge,
+                AVG(p_home_win_ngboost - h2h_market_implied_prob) AS current_mean_edge,
                 AVG(consensus_win_prob - h2h_market_implied_prob) AS corrected_mean_edge,
-                SUM(CASE WHEN consensus_win_prob > h2h_market_implied_prob THEN 1 ELSE 0 END)
-                  / COUNT(*) AS corrected_pct_positive
+                SUM(CASE WHEN consensus_win_prob > h2h_market_implied_prob
+                         THEN 1 ELSE 0 END)::FLOAT / COUNT(*) AS corrected_pct_positive
               FROM baseball_data.betting_ml.daily_model_predictions
               WHERE has_odds = TRUE
                 AND h2h_market_implied_prob IS NOT NULL
 
-            Record the three values for the selection_log entry (update-selection-log task).
-            If corrected_mean_edge > current_mean_edge, the fix is validated.
-            If corrected_mean_edge is still strongly negative (< −0.05), note this
-            as a Phase 7 priority in the gap audit.
+            Known baseline (2026-03-27 through 2026-05-01, 1,023 rows):
+              current_mean_edge    ≈ −0.036
+              corrected_mean_edge  ≈ −0.017
+              corrected_pct_positive ≈ 35.4%
+
+            Record the actual query results (not these estimates) for the
+            selection_log entry. Even after the fix, edge is still negative —
+            note this as the primary motivation for Phase 7 fundamental model work.
         dependsOn:
           - card-6g-backfill-complete
         acceptanceCriteria:
           - type: command_succeeds
-            name: predict_today.py uses consensus_win_prob for h2h model_prob
+            name: predict_today.py uses consensus_win_prob (cons_win) for h2h edge
             command: uv
             args:
               - run
               - python
               - "-c"
               - |-
-                src = open('betting_ml/scripts/predict_today.py').read()
-                assert 'consensus_win_prob' in src, (
-                    'consensus_win_prob not found in predict_today.py — '
-                    'h2h model_prob must use the 50/50 blend, not NGBoost alone'
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                # Check that compute_edge is not called with ngb_win alone — look
+                # for the h2h edge assignment and verify cons_win is the argument
+                found_cons = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Assign):
+                        for t in node.targets:
+                            if isinstance(t, ast.Name) and t.id == 'h2h_edge':
+                                call = node.value
+                                if isinstance(call, ast.Call):
+                                    # First arg should reference cons_win
+                                    arg0 = call.args[0] if call.args else None
+                                    if isinstance(arg0, ast.Name) and arg0.id == 'cons_win':
+                                        found_cons = True
+                assert found_cons, (
+                    'h2h_edge is not assigned from compute_edge(cons_win, ...) — '
+                    'consensus_win_prob fix not applied in predict_today.py'
                 )
-                assert '0.5' in src, (
-                    '0.5 blend coefficient not found — 50/50 blend not implemented'
-                )
-                print('consensus_win_prob blend present in predict_today.py')
+                print('consensus_win_prob (cons_win) used for h2h edge — OK')
           - type: command_succeeds
-            name: Streamlit Today's Picks page uses consensus_win_prob for h2h edge
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                import pathlib
-                page_path = pathlib.Path('app/pages/1_Today_Picks.py')
-                if not page_path.exists():
-                    print('SKIP: 1_Today_Picks.py not yet built (Card 6.B pending)')
-                else:
-                    src = page_path.read_text()
-                    assert 'consensus_win_prob' in src, (
-                        'consensus_win_prob not in 1_Today_Picks.py — '
-                        'h2h edge must use the 50/50 blend'
-                    )
-                    print('consensus_win_prob present in 1_Today_Picks.py')
-          - type: command_succeeds
-            name: predict_today.py syntax still valid after change
+            name: predict_today.py syntax valid after change
             command: uv
             args:
               - run
@@ -253,7 +272,7 @@ spec:
                 ast.parse(src)
                 print('predict_today.py syntax OK after consensus_win_prob change')
           - type: command_succeeds
-            name: Impact query runs and returns numeric before/after values
+            name: Impact query returns numeric before/after values
             command: uv
             args:
               - run
@@ -265,7 +284,7 @@ spec:
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT
-                      AVG(h2h_model_prob - h2h_market_implied_prob) AS current_mean_edge,
+                      AVG(p_home_win_ngboost - h2h_market_implied_prob) AS current_mean_edge,
                       AVG(consensus_win_prob - h2h_market_implied_prob) AS corrected_mean_edge,
                       SUM(CASE WHEN consensus_win_prob > h2h_market_implied_prob
                                THEN 1 ELSE 0 END)::FLOAT / COUNT(*) AS corrected_pct_positive
@@ -278,12 +297,11 @@ spec:
                 current_edge, corrected_edge, pct_positive = row
                 assert current_edge is not None, 'current_mean_edge is NULL — no has_odds rows found'
                 assert corrected_edge is not None, (
-                    'corrected_mean_edge is NULL — consensus_win_prob column may be null; '
-                    'check daily_model_predictions schema'
+                    'corrected_mean_edge is NULL — consensus_win_prob column may be null'
                 )
-                print(f'current h2h mean edge (NGBoost alone): {current_edge:.4f}')
-                print(f'corrected h2h mean edge (consensus_win_prob): {corrected_edge:.4f}')
-                print(f'corrected pct positive edge: {pct_positive:.1%}')
+                print(f'current h2h mean edge (NGBoost alone):    {current_edge:.4f}')
+                print(f'corrected h2h mean edge (consensus_win):  {corrected_edge:.4f}')
+                print(f'corrected pct positive edge:              {pct_positive:.1%}')
 
       - id: update-selection-log
         kind: Task
@@ -297,23 +315,26 @@ spec:
 
           **Change:** Replaced NGBoost-alone model_prob with 50/50 blend of
           NGBoost run_differential win probability and XGBoost isotonic classifier
-          for h2h edge calculation in predict_today.py and Streamlit app.
+          for h2h edge calculation in predict_today.py.
 
-          **Before (NGBoost alone, 315 has_odds rows, 2026-03-27 to 2026-04-27):**
+          **Before (NGBoost alone, {N} has_odds rows, 2026-03-27 to {last_date}):**
           - Mean h2h edge: {current_mean_edge:.4f}
           - % positive edge: {current_pct_positive:.1%}
 
-          **After (consensus_win_prob, same 315 rows retroactively):**
+          **After (consensus_win_prob, same {N} rows retroactively):**
           - Mean h2h edge: {corrected_mean_edge:.4f}
           - % positive edge: {corrected_pct_positive:.1%}
 
-          **Interpretation:** {one sentence — did the fix improve the edge
-          distribution, and by how much? Note if the edge is still negative and
-          what that implies for Phase 7.}
+          **Interpretation:** Edge improved by ~{delta:.3f} but remains negative
+          (−0.017). The model is not beating the market. Phase 7 must address
+          fundamental feature/architecture gaps — periodic retraining of the current
+          model is not a useful investment until calibration improves.
 
-          Populate the numeric values from the impact query in the
-          consensus-win-prob-fix task. Use the actual query results — do not
-          use the projected values from project_context.md (those were estimates).
+          Note: The Streamlit app reads h2h_edge from daily_model_predictions and
+          does not recompute inline, so no Streamlit code change was required.
+
+          Populate the numeric values from the actual query results in the
+          consensus-win-prob-fix task.
         dependsOn:
           - consensus-win-prob-fix
         acceptanceCriteria:
@@ -340,7 +361,6 @@ spec:
               - |-
                 import re
                 content = open('betting_ml/evaluation/selection_log.md').read()
-                # Look for a signed float near the Card 6.H section
                 matches = re.findall(r'[-+]?\d+\.\d{3,4}', content)
                 assert len(matches) >= 2, (
                     f'Expected at least 2 numeric edge values in selection_log.md, '
@@ -352,8 +372,9 @@ spec:
         kind: Task
         description: >
           Create betting_ml/evaluation/postmortem_v0.md containing the full
-          structured post-mortem. Use the 2026 backfill data and the corrected
-          h2h edge distribution (from consensus-win-prob-fix) as the evidence base.
+          structured post-mortem. Use the 2026 data (1,098 rows, 1,023 has_odds,
+          36 dates through 2026-05-01) and the corrected h2h edge distribution
+          from consensus-win-prob-fix as the evidence base.
 
           FILE: betting_ml/evaluation/postmortem_v0.md
 
@@ -363,9 +384,13 @@ spec:
 
           ## Overview
           One paragraph: what the v0 system covers (Phases 1–6 through Card 6.G),
-          the evidence base (400 scored game rows, 315 has_odds, 2026-03-27 to
-          2026-04-27), and the purpose of this document (identify weaknesses before
-          Phase 7 investment).
+          the evidence base (1,098 scored game rows, 1,023 has_odds, 36 dates from
+          2026-03-27 through 2026-05-01), and the central finding: the model is not
+          beating the market (mean h2h edge ~−0.017 after the consensus fix, ~35%
+          positive). The purpose of this document is to identify the highest-impact
+          architectural and feature improvements before Phase 7 investment begins.
+          Periodic retraining of the current model is not on the roadmap — model
+          quality must improve first.
 
           ## Known Gaps — Analysis
 
@@ -384,47 +409,49 @@ spec:
           GAP CONTENT REQUIREMENTS:
 
           Gap 1 — Model does not improve on market calibration (best_alpha = 0.0)
-            Evidence must include the updated log-loss values from the re-run
-            alpha_tuning_results (11 rows post-odds-fix), not the Card 4.13 bypass
-            values. Note whether best_alpha shifted. Quantify: model Brier vs.
-            market Brier from daily_model_predictions (compute from has_odds rows
-            if actual_outcome is available; otherwise state the Card 4.13 values
-            as the last confirmed baseline and note they require refresh after
-            live-season data accumulates). Priority: P1.
+            Evidence must state the current alpha_tuning_results status: as of
+            2026-05-01, the table has only 1 row (alpha=0.0, log_loss=NULL) because
+            the Card 6.F full-grid re-run is pending. best_alpha cannot be validated
+            against corrected odds data. Note: even if best_alpha remains 0.0 after
+            the re-run, this may mean the model needs better probability calibration
+            (ECE) rather than a different Bayesian blend weight. Priority: P1.
 
           Gap 2 — Systematic home-team underestimation in h2h edge
             Evidence must use the before/after values from the consensus_win_prob
-            fix (from update-selection-log). State corrected mean h2h edge and
-            % positive after the fix. If edge is still < −0.03 after the fix,
-            mark as P1; if improved to near zero, mark as P2. Priority: based on
-            measured outcome.
+            fix (from update-selection-log): current ≈ −0.036 (NGBoost alone),
+            corrected ≈ −0.017 (consensus blend), ~35% positive. The fix halves the
+            negative bias but edge is still significantly negative — the model
+            systematically underpredicts home win probability relative to the market.
+            Priority: P1 (edge still clearly negative, ~35% positive after fix).
 
           Gap 3 — Total runs MAE barely improves over naive baseline
-            Evidence: current CV MAE from model_registry.yaml vs. naive global
-            mean baseline. Quantify the expected lift from weather features using
-            the Card 3.9 / Card 4.12 EDA findings (park factor r = 0.122, elevation
-            r = 0.111, away pitching asymmetry). Priority: P1 (weather) / P2 (umpires).
+            Evidence: current CV MAE from model_registry.yaml vs. naive global mean
+            baseline. Quantify the expected lift from weather features using the
+            Card 3.9 / Card 4.12 EDA findings (park factor r=0.122, elevation
+            r=0.111, away pitching asymmetry). Priority: P1 (weather) / P2 (umpires).
 
-          Gap 4 — alpha_tuning_results table incomplete (1 row vs. 11)
-            Evidence: fixed by Card 6.F fix-alpha-and-best-alpha-json task.
-            State the current status: whether the table now has 11 rows and whether
-            best_alpha changed. Priority: RESOLVED (if fix is complete) or P1 (if not).
+          Gap 4 — alpha_tuning_results table incomplete (1 row vs. 11 needed)
+            Evidence: as of 2026-05-01, table has 1 row (alpha=0.0, log_loss=NULL).
+            Card 6.F fix is not yet complete. Priority: P1 (blocking calibration
+            validation).
 
           Gap 5 — best_alpha.json local fallback not written
-            Evidence: fixed by Card 6.F fix-alpha-and-best-alpha-json task.
-            Priority: RESOLVED (if fix is complete) or P2 (if not).
+            Evidence: tied to Gap 4 / Card 6.F fix status. Priority: P1 if not
+            resolved; link to Gap 4.
 
-          Gap 6 — Intraday feature assembly fallback not implemented
+          Gap 6 — Intraday feature assembly fallback not fully reliable
             Evidence: describe the window during which predict_today.py returns
-            "No games found" (before ~08:30 ET dbt build). Estimate frequency of
-            impact based on typical morning usage pattern. Priority: P2.
+            "No games found." Note: with GHA `daily_ingestion.yml` now triggering
+            dbt immediately after ingestion (via workflow_call), the dbt build
+            completes ~08:30–09:00 ET — narrowing but not eliminating the gap.
+            Priority: P2.
 
           Gap 7 — Feature set excludes highest-signal missing inputs
             Evidence: reproduce the Card 3.9 / Card 4.12 correlation table for
             weather, umpires, and injury status. Estimate expected MAE improvement
-            for each (weather: ~0.2–0.3 runs based on Wrigley documented swing;
-            umpires: literature suggests ~0.1 runs; injury status: market-facing,
-            hard to quantify). Priority: weather=P1, umpires=P2, injury=P2.
+            for each (weather: ~0.2–0.3 runs; umpires: ~0.1 runs; injury status:
+            market-facing, hard to quantify). Priority: weather=P1, umpires=P2,
+            injury=P2.
 
           ## Phase 7 Roadmap
 
@@ -437,19 +464,25 @@ spec:
           three P1 items.
 
           REQUIRED P1 ITEMS (minimum; add others if gap analysis surfaces new P1s):
+          - Re-run probability layer (full 11-row α grid) with corrected odds data
+            to validate best_alpha — blocking calibration validation (Gaps 1, 4, 5)
           - Feature additions: weather (temperature, wind, humidity) for outdoor parks
-          - consensus_win_prob as official h2h model_prob (if not already applied
-            per the consensus-win-prob-fix task — mark as COMPLETE if done)
-          - Re-run probability layer with corrected odds data to validate best_alpha
+            — highest-signal missing feature based on EDA (park r=0.122, Wrigley swing)
+          - Home-team probability calibration — model systematically underpredicts
+            home win probability; investigate classifier calibration curve and
+            consider Platt re-scaling or isotonic recalibration with 2026 season data
 
           REQUIRED P2 ITEMS (minimum):
           - Intraday feature fallback (load_todays_features_via_statsapi)
           - Umpire tendency features
-          - Injury status features
+          - Injury status features (sourced from MLB Stats API or external feed)
 
           REQUIRED P3 ITEMS (minimum):
-          - Post-season / pre-2027 retrain (Card 6.F milestone)
           - Production web app to replace Streamlit MVP (Phase 7 app card)
+          - Model retraining — only after P1 calibration and feature work is complete
+            and edge distribution shows meaningful improvement; retraining the current
+            architecture on more data without fixing the feature/calibration gaps is
+            not expected to produce market-beating predictions
 
           Close with a one-sentence summary: the single most impactful Phase 7
           investment based on this analysis.
@@ -519,7 +552,7 @@ spec:
                 )
                 print('consensus_win_prob reference in postmortem OK')
           - type: command_succeeds
-            name: Gap 1 references updated alpha_tuning_results (11 rows)
+            name: Gap 1 references alpha_tuning_results pending state
             command: uv
             args:
               - run
@@ -530,17 +563,16 @@ spec:
                 has_alpha_ref = (
                     'alpha_tuning_results' in content or
                     '11 rows' in content or
-                    'full α grid' in content or
-                    'full alpha grid' in content
+                    'full alpha grid' in content or
+                    'full α grid' in content
                 )
                 assert has_alpha_ref, (
-                    'Gap 1 does not reference the updated alpha_tuning_results '
-                    '(11 rows) — post-mortem must use the corrected α evidence, '
-                    'not the Card 4.13 bypass values'
+                    'Gap 1 does not reference alpha_tuning_results status — '
+                    'post-mortem must acknowledge the pending 11-row grid re-run'
                 )
-                print('alpha_tuning_results 11-row reference present in postmortem')
+                print('alpha_tuning_results reference present in postmortem')
           - type: command_succeeds
-            name: Weather features identified as P1 in Phase 7 Roadmap
+            name: Weather features identified in Phase 7 Roadmap
             command: uv
             args:
               - run
@@ -556,3 +588,23 @@ spec:
                     'No P1 items in Phase 7 Roadmap section'
                 )
                 print('Weather features and P1 label present in Phase 7 Roadmap')
+          - type: command_succeeds
+            name: Roadmap correctly deprioritizes periodic model retraining
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('betting_ml/evaluation/postmortem_v0.md').read()
+                roadmap_section = content[content.find('Phase 7 Roadmap'):]
+                # Retraining should appear in P3, not P1
+                import re
+                p1_block = re.search(r'P1.*?(?=P2|Phase 7|$)', roadmap_section, re.S)
+                if p1_block:
+                    p1_text = p1_block.group(0).lower()
+                    assert 'retrain' not in p1_text, (
+                        'Model retraining appears in P1 items — it should be P3 '
+                        'until fundamental feature/calibration gaps are closed'
+                    )
+                print('Retraining correctly placed outside P1 items')

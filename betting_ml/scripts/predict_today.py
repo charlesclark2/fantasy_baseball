@@ -373,70 +373,137 @@ def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None
         conn.close()
 
 
-_BACKFILL_H2H_SQL = """
-MERGE INTO baseball_data.config.prediction_log pl
-USING (
-    SELECT game_pk, home_team_won
-    FROM baseball_data.betting.mart_game_results
-    WHERE home_team_won IS NOT NULL
-) gr
-ON pl.game_pk = gr.game_pk
-   AND pl.actual_outcome IS NULL
-   AND pl.market IN ('h2h home', 'h2h away')
-WHEN MATCHED THEN UPDATE SET
-    actual_outcome = CASE
-        WHEN pl.market = 'h2h home' THEN IFF(gr.home_team_won, 1, 0)
-        WHEN pl.market = 'h2h away' THEN IFF(NOT gr.home_team_won, 1, 0)
-    END
+_BACKFILL_OUTCOME_H2H_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET actual_outcome = CASE WHEN mgr.home_team_won THEN 1.0 ELSE 0.0 END
+FROM baseball_data.betting.mart_game_results mgr
+WHERE pl.game_pk = mgr.game_pk
+  AND pl.market = 'h2h'
+  AND pl.actual_outcome IS NULL
 """
 
-_BACKFILL_TOTALS_SQL = """
-MERGE INTO baseball_data.config.prediction_log pl
-USING (
-    SELECT
-        gr.game_pk,
-        gr.home_final_score + gr.away_final_score   AS total_runs,
-        MEDIAN(o.outcome_point)                      AS consensus_line
-    FROM baseball_data.betting.mart_game_results gr
+_BACKFILL_OUTCOME_TOTALS_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET actual_outcome = CASE
+    WHEN (mgr.home_final_score + mgr.away_final_score) > fpof.total_line_consensus THEN 1.0
+    WHEN (mgr.home_final_score + mgr.away_final_score) < fpof.total_line_consensus THEN 0.0
+    ELSE NULL
+END
+FROM baseball_data.betting.mart_game_results mgr
+JOIN baseball_data.betting_features.feature_pregame_odds_features fpof
+    ON mgr.game_pk = fpof.game_pk
+WHERE pl.game_pk = mgr.game_pk
+  AND pl.market = 'totals'
+  AND pl.actual_outcome IS NULL
+  AND fpof.total_line_consensus IS NOT NULL
+"""
+
+_BACKFILL_CLOSING_H2H_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET closing_market_prob = c.closing_prob
+FROM (
+    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
+    FROM baseball_data.betting.mart_odds_outcomes moe
+    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
     JOIN (
-        SELECT game_pk, home_team, away_team, score_date
-        FROM baseball_data.betting_ml.daily_model_predictions
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) = 1
-    ) dmp ON gr.game_pk = dmp.game_pk
-    JOIN baseball_data.betting.mart_odds_events e
-        ON dmp.home_team = e.home_team
-        AND dmp.away_team = e.away_team
-        AND e.commence_date = dmp.score_date
-    JOIN baseball_data.betting.mart_odds_outcomes o
-        ON e.event_id = o.event_id
-        AND o.market_key = 'totals'
-        AND o.outcome_name = 'Over'
-    WHERE gr.home_final_score IS NOT NULL
-      AND gr.away_final_score IS NOT NULL
-    GROUP BY gr.game_pk, total_runs
-) totals
-ON pl.game_pk = totals.game_pk
-   AND pl.actual_outcome IS NULL
-   AND pl.market IN ('over', 'under')
-WHEN MATCHED THEN UPDATE SET
-    actual_outcome = CASE
-        WHEN pl.market = 'over'  THEN IFF(totals.total_runs > totals.consensus_line, 1, 0)
-        WHEN pl.market = 'under' THEN IFF(totals.total_runs < totals.consensus_line, 1, 0)
-    END
+        SELECT bridge2.game_pk, MAX(moe2.ingestion_ts) AS last_ts
+        FROM baseball_data.betting.mart_odds_outcomes moe2
+        JOIN baseball_data.betting.mart_game_odds_bridge bridge2 ON moe2.event_id = bridge2.event_id
+        WHERE moe2.market_key = 'h2h'
+          AND moe2.ingestion_ts < moe2.commence_time
+        GROUP BY bridge2.game_pk
+    ) ls ON bridge.game_pk = ls.game_pk AND moe.ingestion_ts = ls.last_ts
+    WHERE moe.market_key = 'h2h'
+      AND moe.is_home_outcome = TRUE
+      AND moe.outcome_price_decimal > 0
+    GROUP BY bridge.game_pk
+) c
+WHERE pl.game_pk = c.game_pk
+  AND pl.market = 'h2h'
+  AND pl.closing_market_prob IS NULL
+"""
+
+_BACKFILL_CLOSING_TOTALS_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET closing_market_prob = c.closing_prob
+FROM (
+    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
+    FROM baseball_data.betting.mart_odds_outcomes moe
+    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
+    JOIN (
+        SELECT bridge2.game_pk, MAX(moe2.ingestion_ts) AS last_ts
+        FROM baseball_data.betting.mart_odds_outcomes moe2
+        JOIN baseball_data.betting.mart_game_odds_bridge bridge2 ON moe2.event_id = bridge2.event_id
+        WHERE moe2.market_key = 'totals'
+          AND moe2.ingestion_ts < moe2.commence_time
+        GROUP BY bridge2.game_pk
+    ) ls ON bridge.game_pk = ls.game_pk AND moe.ingestion_ts = ls.last_ts
+    WHERE moe.market_key = 'totals'
+      AND moe.outcome_name = 'Over'
+      AND moe.outcome_price_decimal > 0
+    GROUP BY bridge.game_pk
+) c
+WHERE pl.game_pk = c.game_pk
+  AND pl.market = 'totals'
+  AND pl.closing_market_prob IS NULL
+"""
+
+_BACKFILL_CLOSING_H2H_FALLBACK_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET closing_market_prob = c.closing_prob
+FROM (
+    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
+    FROM baseball_data.betting.mart_odds_outcomes moe
+    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
+    WHERE moe.market_key = 'h2h'
+      AND moe.is_home_outcome = TRUE
+      AND moe.outcome_price_decimal > 0
+    GROUP BY bridge.game_pk
+) c
+WHERE pl.game_pk = c.game_pk
+  AND pl.market = 'h2h'
+  AND pl.closing_market_prob IS NULL
+"""
+
+_BACKFILL_CLOSING_TOTALS_FALLBACK_SQL = """
+UPDATE baseball_data.config.prediction_log pl
+SET closing_market_prob = c.closing_prob
+FROM (
+    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
+    FROM baseball_data.betting.mart_odds_outcomes moe
+    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
+    WHERE moe.market_key = 'totals'
+      AND moe.outcome_name = 'Over'
+      AND moe.outcome_price_decimal > 0
+    GROUP BY bridge.game_pk
+) c
+WHERE pl.game_pk = c.game_pk
+  AND pl.market = 'totals'
+  AND pl.closing_market_prob IS NULL
 """
 
 
 def _backfill_outcomes() -> None:
-    """Update actual_outcome for settled games from mart_game_results."""
+    """Backfill actual_outcome and closing_market_prob for settled games.
+
+    Idempotent — only touches rows where the target column IS NULL.
+    For retroactive --date runs the outcomes are already in mart tables
+    so they populate immediately. For today's games, 0 rows are updated.
+    """
+    steps = [
+        ("actual_outcome h2h",              _BACKFILL_OUTCOME_H2H_SQL),
+        ("actual_outcome totals",           _BACKFILL_OUTCOME_TOTALS_SQL),
+        ("closing_market_prob h2h",         _BACKFILL_CLOSING_H2H_SQL),
+        ("closing_market_prob totals",      _BACKFILL_CLOSING_TOTALS_SQL),
+        ("closing_market_prob h2h fallback",    _BACKFILL_CLOSING_H2H_FALLBACK_SQL),
+        ("closing_market_prob totals fallback", _BACKFILL_CLOSING_TOTALS_FALLBACK_SQL),
+    ]
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
-        cur.execute(_BACKFILL_H2H_SQL)
-        h2h_n = cur.rowcount
-        cur.execute(_BACKFILL_TOTALS_SQL)
-        tot_n = cur.rowcount
-        conn.commit()
-        print(f"Backfilled outcomes: {h2h_n} h2h rows, {tot_n} totals rows updated")
+        for label, sql in steps:
+            cur.execute(sql)
+            print(f"  Backfill [{label}]: {cur.rowcount or 0} row(s) updated")
     finally:
         conn.close()
 

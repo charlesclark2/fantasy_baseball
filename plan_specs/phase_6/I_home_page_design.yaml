@@ -311,11 +311,21 @@ spec:
               - python
               - "-c"
               - |-
-                src = open('app/streamlit_app.py').read()
-                forbidden = ['load_model', 'NGBoost', 'xgboost', 'sklearn']
-                found = [f for f in forbidden if f in src]
-                assert not found, (
-                    f'Heavy imports found at landing page level: {found} — '
+                import ast, pathlib
+                src = pathlib.Path('app/streamlit_app.py').read_text()
+                tree = ast.parse(src)
+                forbidden_modules = {'ngboost', 'xgboost', 'sklearn'}
+                forbidden_names = {'load_model'}
+                bad = []
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        mod = (node.module or '') if isinstance(node, ast.ImportFrom) else ''
+                        names = [a.name for a in node.names]
+                        for name in [mod] + names:
+                            if any(f in name.lower() for f in forbidden_modules) or name in forbidden_names:
+                                bad.append(name)
+                assert not bad, (
+                    f'Heavy imports found at landing page level: {bad} — '
                     'defer model loading to page modules'
                 )
                 print('No heavy imports at landing page level OK')

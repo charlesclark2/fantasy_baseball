@@ -11,18 +11,13 @@ on:
         default: manual
 
 jobs:
-  ingest-and-build:
+  ingest:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
-
-      - name: Install dbt-fusion
-        run: |
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Write Snowflake private key
         run: |
@@ -71,12 +66,33 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: uv run odds_api_ingestion.py odds
 
-      - name: Run dbtf build
+  dbt-build:
+    needs: ingest
+    uses: ./.github/workflows/dbt_daily_build.yml
+    secrets: inherit
+    with:
+      triggered_by: 'daily_ingestion'
+
+  backfill:
+    needs: dbt-build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Write Snowflake private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+          chmod 600 /tmp/snowflake_rsa_key.pem
+
+      - name: Backfill prediction_log outcomes and CLV
+        working-directory: scripts
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --project-dir dbt --profiles-dir dbt
+        run: uv run backfill_prediction_log.py

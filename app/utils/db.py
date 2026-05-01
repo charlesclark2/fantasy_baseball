@@ -17,9 +17,12 @@ def get_snowflake_session():
     """Return a cached Snowflake connection (created once per Streamlit process).
 
     Delegates to the existing RSA key connector in betting_ml/utils/data_loader.py.
+    Disables Snowflake's server-side result cache so every query hits current data.
     """
     from betting_ml.utils.data_loader import get_snowflake_connection
-    return get_snowflake_connection()
+    conn = get_snowflake_connection()
+    conn.cursor().execute("ALTER SESSION SET USE_CACHED_RESULT = FALSE")
+    return conn
 
 
 def run_query(sql: str, conn=None) -> pd.DataFrame:

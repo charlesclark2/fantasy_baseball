@@ -23,7 +23,8 @@ from app.utils.db import run_query
 _PICKS_SQL = """
 SELECT
     p.*,
-    COALESCE(l.both_confirmed, FALSE) AS both_confirmed
+    COALESCE(l.both_confirmed, FALSE) AS both_confirmed,
+    g.game_date AS stg_game_date
 FROM (
     SELECT *,
            ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
@@ -38,6 +39,11 @@ LEFT JOIN (
     WHERE official_date = '{date}'
     GROUP BY game_pk
 ) l ON p.game_pk = l.game_pk
+LEFT JOIN (
+    SELECT game_pk, game_date
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE official_date = '{date}'
+) g ON p.game_pk = g.game_pk
 WHERE p._rn = 1
 ORDER BY p.home_team ASC
 """
@@ -142,14 +148,36 @@ def load_outcomes(date_str: str) -> pd.DataFrame:
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def _fmt_game_time(val) -> str:
+_TZ_OPTIONS: dict[str, str] = {
+    "Eastern (ET)":  "America/New_York",
+    "Central (CT)":  "America/Chicago",
+    "Mountain (MT)": "America/Denver",
+    "Pacific (PT)":  "America/Los_Angeles",
+    "Arizona (AZ)":  "America/Phoenix",
+    "Alaska (AKT)":  "America/Anchorage",
+    "Hawaii (HST)":  "Pacific/Honolulu",
+}
+_TZ_ABBREVS: dict[str, str] = {
+    "America/New_York":    "ET",
+    "America/Chicago":     "CT",
+    "America/Denver":      "MT",
+    "America/Los_Angeles": "PT",
+    "America/Phoenix":     "AZ",
+    "America/Anchorage":   "AKT",
+    "Pacific/Honolulu":    "HST",
+}
+
+
+def _fmt_game_time(val, tz: str = "America/New_York") -> str:
     if val is None:
         return "—"
     try:
         ts = pd.Timestamp(val)
         if ts.tzinfo is None:
             ts = ts.tz_localize("UTC")
-        return ts.tz_convert("America/New_York").strftime("%-I:%M %p ET")
+        local = ts.tz_convert(tz)
+        abbrev = _TZ_ABBREVS.get(tz, tz)
+        return local.strftime("%-I:%M %p") + f" {abbrev}"
     except Exception:
         return "—"
 
@@ -206,9 +234,9 @@ _STYLE_VISIBLE_COLS = [
 ]
 
 _COL_HELP = {
-    "Signal": "🟢 positive edge + confirmed lineups  |  🟡 positive edge, lineups pending  |  ⚪ no edge  |  ⛔ no odds data (Odds API gap)",
+    "Signal": "🟢 positive edge (moneyline or totals) + confirmed lineups  |  🟡 positive edge, lineups pending  |  ⚪ no edge in either market  |  ⛔ no odds data (Odds API gap)",
     "Matchup": "Away team @ Home team",
-    "Game Time": "Scheduled first pitch (Eastern Time)",
+    "Game Time": "Scheduled first pitch — timezone set in sidebar",
     "Lineups": "✓ both starting lineups confirmed  |  ⏳ lineups not yet posted",
     "P(Over)": "Model probability of total runs exceeding the consensus over/under line",
     "Model Win%": "Blended home-win probability (50% NGBoost run-differential + 50% XGBoost classifier)",
@@ -308,13 +336,31 @@ with col_r2:
         _first_of_month = _today.replace(day=1)
         _prior_month = (_first_of_month - datetime.timedelta(days=1)).replace(day=1)
         _prior_month_str = _prior_month.isoformat()
-        _ingest_steps = [
-            ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule",
-                         "--start-date", _prior_month_str], _scripts_dir),
-            ("Odds events", ["uv", "run", "python", "odds_api_ingestion.py", "events"], _scripts_dir),
-            ("Odds lines", ["uv", "run", "python", "odds_api_ingestion.py", "odds"], _scripts_dir),
-        ]
+        _is_historical = not is_today
+
+        if _is_historical:
+            _ingest_steps = [
+                ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule",
+                             "--start-date", _prior_month_str], _scripts_dir),
+                ("Odds events (historical)", ["uv", "run", "python", "odds_api_ingestion.py",
+                                              "historical-events",
+                                              "--start-date", date_str,
+                                              "--end-date", date_str], _scripts_dir),
+                ("Odds lines (historical)", ["uv", "run", "python", "odds_api_ingestion.py",
+                                             "historical-odds",
+                                             "--start-date", date_str,
+                                             "--end-date", date_str], _scripts_dir),
+            ]
+        else:
+            _ingest_steps = [
+                ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule",
+                             "--start-date", _prior_month_str], _scripts_dir),
+                ("Odds events", ["uv", "run", "python", "odds_api_ingestion.py", "events"], _scripts_dir),
+                ("Odds lines", ["uv", "run", "python", "odds_api_ingestion.py", "odds"], _scripts_dir),
+            ]
+
         _failed = False
+        _new_hist_odds_rows: int | None = None
         for _label, _cmd, _cwd in _ingest_steps:
             with st.spinner(f"{_label}…"):
                 _r = subprocess.run(_cmd, capture_output=True, text=True, cwd=_cwd)
@@ -322,48 +368,63 @@ with col_r2:
                 st.error(f"{_label} failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
                 _failed = True
                 break
+            if _is_historical and "lines" in _label:
+                for _line in _r.stdout.splitlines():
+                    if _line.startswith("rows_inserted="):
+                        try:
+                            _new_hist_odds_rows = int(_line.split("=", 1)[1].strip())
+                        except ValueError:
+                            pass
+
         if not _failed:
-            # Rebuild just the lineup + odds models synchronously so results are
-            # immediately visible — no need to wait for a GHA workflow to finish.
-            _dbt_select = " ".join([
-                "stg_statsapi_lineups", "stg_statsapi_lineups_wide",
-                "stg_oddsapi_events", "stg_oddsapi_odds",
-                "mart_odds_events", "mart_odds_outcomes",
-                "feature_pregame_lineup_features", "feature_pregame_odds_features",
-                "feature_pregame_game_features",
-            ])
-            with st.spinner("Rebuilding dbt lineup + odds models…"):
-                _r = subprocess.run(
-                    [_DBT_BIN, "build", "--select", _dbt_select,
-                     "--project-dir", _DBT_DIR, "--profiles-dir", _DBT_DIR],
-                    capture_output=True, text=True,
+            if _is_historical and (_new_hist_odds_rows is None or _new_hist_odds_rows == 0):
+                st.info(
+                    f"Historical odds for {selected_date.strftime('%B %d, %Y')} are already "
+                    "up to date — no new data was found in The Odds API. "
+                    "The dbt models and predictions were not rebuilt."
                 )
-            if _r.returncode != 0:
-                st.error(f"dbt build failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
-                _failed = True
-        if not _failed:
-            with st.spinner("Refreshing predictions with confirmed lineup data…"):
-                _r = subprocess.run(
-                    ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
-                     "--date", date_str],
-                    capture_output=True, text=True,
-                    cwd=str(_PROJECT_ROOT),
-                )
-            if _r.returncode != 0:
-                st.error(f"predict_today.py failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
             else:
-                _no_games = (
-                    "No games found" in _r.stdout
-                    or "No games with confirmed lineups" in _r.stdout
-                )
-                st.cache_data.clear()
-                if _no_games:
-                    st.warning(
-                        "Ingestion and dbt rebuild complete, but no confirmed lineups yet — "
-                        "predictions not updated. Try again once lineups post."
+                # Rebuild just the lineup + odds models synchronously so results are
+                # immediately visible — no need to wait for a GHA workflow to finish.
+                _dbt_select = " ".join([
+                    "stg_statsapi_lineups", "stg_statsapi_lineups_wide",
+                    "stg_oddsapi_events", "stg_oddsapi_odds",
+                    "mart_odds_events", "mart_odds_outcomes",
+                    "feature_pregame_lineup_features", "feature_pregame_odds_features",
+                    "feature_pregame_game_features",
+                ])
+                with st.spinner("Rebuilding dbt lineup + odds models…"):
+                    _r = subprocess.run(
+                        [_DBT_BIN, "build", "--select", _dbt_select,
+                         "--project-dir", _DBT_DIR, "--profiles-dir", _DBT_DIR],
+                        capture_output=True, text=True,
                     )
+                if _r.returncode != 0:
+                    st.error(f"dbt build failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
                 else:
-                    st.success("Lineups, odds, and predictions refreshed.")
+                    with st.spinner("Refreshing predictions with confirmed lineup data…"):
+                        _r = subprocess.run(
+                            ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
+                             "--date", date_str],
+                            capture_output=True, text=True,
+                            cwd=str(_PROJECT_ROOT),
+                        )
+                    if _r.returncode != 0:
+                        st.error(f"predict_today.py failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+                    else:
+                        _no_games = (
+                            "No games found" in _r.stdout
+                            or "No games with confirmed lineups" in _r.stdout
+                        )
+                        st.cache_data.clear()
+                        if _no_games:
+                            st.warning(
+                                "Ingestion and dbt rebuild complete, but no confirmed lineups yet — "
+                                "predictions not updated. Try again once lineups post."
+                            )
+                        else:
+                            _date_label = "Historical odds and predictions" if _is_historical else "Lineups, odds, and predictions"
+                            st.success(f"{_date_label} refreshed.")
 
 # ---------------------------------------------------------------------------
 # Load data
@@ -406,6 +467,12 @@ with st.sidebar:
         min_value=0.01, max_value=0.15, value=0.05, step=0.01,
         format="%.2f",
     )
+    selected_tz_label = st.selectbox(
+        "Game time timezone",
+        options=list(_TZ_OPTIONS.keys()),
+        index=0,
+    )
+    selected_tz = _TZ_OPTIONS[selected_tz_label]
 
 # ---------------------------------------------------------------------------
 # Main picks table
@@ -419,7 +486,10 @@ for _, r in df.iterrows():
     both = bool(r.get("both_confirmed", False))
 
     h2h_edge = _safe_float(r.get("h2h_edge"))
-    sig = _signal(has_odds, h2h_edge, both, edge_threshold)
+    totals_edge_for_sig = _safe_float(r.get("totals_edge"))
+    _all_edges = [e for e in [h2h_edge, totals_edge_for_sig] if e is not None]
+    _max_abs_edge = max((abs(e) for e in _all_edges), default=None)
+    sig = _signal(has_odds, _max_abs_edge, both, edge_threshold)
 
     p_over = _safe_float(r.get("p_over_ngboost"))
     kelly_capped = _safe_float(r.get("kelly_capped"))
@@ -435,7 +505,7 @@ for _, r in df.iterrows():
     display_rows.append({
         "Signal": sig,
         "Matchup": matchup,
-        "Game Time": _fmt_game_time(r.get("game_datetime")),
+        "Game Time": _fmt_game_time(r.get("game_datetime") or r.get("stg_game_date"), selected_tz),
         "Lineups": "✓" if both else "⏳",
         "P(Over)": _fmt_pct(p_over) if has_odds and p_over is not None else "—",
         "Model Win%": _fmt_pct(_safe_float(r.get("consensus_win_prob"))),

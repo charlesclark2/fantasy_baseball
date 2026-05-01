@@ -1,6 +1,12 @@
 name: Daily dbt Build
 
 on:
+  workflow_call:
+    inputs:
+      triggered_by:
+        type: string
+        required: false
+        default: 'caller'
   workflow_dispatch:
     inputs:
       triggered_by:
@@ -11,6 +17,15 @@ on:
 jobs:
   dbt-build:
     runs-on: ubuntu-latest
+
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,12 +39,27 @@ jobs:
           echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
           chmod 600 /tmp/snowflake_rsa_key.pem
 
-      - name: Run dbtf build
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
-          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+      - name: Determine build mode
+        id: mode
+        run: |
+          day_of_week=$(date +%u)   # 1=Mon … 7=Sun
+          day_of_month=$(date +%-d)
+          if [ "$day_of_week" = "7" ]; then
+            echo "mode=full_refresh" >> $GITHUB_OUTPUT
+          elif [ $(( day_of_month % 2 )) -eq 1 ]; then
+            echo "mode=build" >> $GITHUB_OUTPUT
+          else
+            echo "mode=run" >> $GITHUB_OUTPUT
+          fi
+
+      - name: dbt build (odd day)
+        if: steps.mode.outputs.mode == 'build' || github.event_name == 'workflow_dispatch'
         run: dbt build --project-dir dbt --profiles-dir dbt
+
+      - name: dbt run (even day)
+        if: steps.mode.outputs.mode == 'run'
+        run: dbt run --project-dir dbt --profiles-dir dbt
+
+      - name: dbt build --full-refresh (Sunday)
+        if: steps.mode.outputs.mode == 'full_refresh'
+        run: dbt build --full-refresh --project-dir dbt --profiles-dir dbt

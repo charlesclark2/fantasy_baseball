@@ -1021,6 +1021,7 @@ def run_historical_odds(
         "Historical odds ingest complete — %d date(s), %d call(s), %d row(s)  load_id=%s",
         total_dates, call_num, rows_inserted, load_id,
     )
+    print(f"rows_inserted={rows_inserted}", flush=True)
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────────
