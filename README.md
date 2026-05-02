@@ -8,7 +8,9 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phase 2 (Feature Store)** is complete. **Phase 3 (EDA)** is complete (2026-04-24) — 7 Marimo notebooks and 4 analysis scripts (Cards 3.7–3.11) done. **Phase 4 (ML Pipeline)** is actively in progress — baseline models complete for all three targets (Cards 4.8–4.11); hyperparameter optimization (Card 4.12) currently running.
+**Phases 1–6 are complete as of 2026-05-01.** The active phase is **Phase 7 — Model Refinement and Production Infrastructure.**
+
+The Phase 6 post-mortem (Card 6.H) established the v0 model baseline: mean h2h edge −0.036 (NGBoost alone) / −0.017 (consensus blend), ~35% positive-edge predictions. The model is not yet beating the market. Phase 7A focuses on feature expansion and recalibration before any production infrastructure work (Phase 7B).
 
 | Domain | Status |
 |---|---|
@@ -23,29 +25,48 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 | Ballpark context and run factors | Complete |
 | Betting odds (staging + mart) | Events backfilled 2021–present (72–76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
 | Schedule fatigue context | Complete |
-| ML feature store | Phase 2 complete (2026-04-23); feature engineering complete — Cards 4.1–4.5 done (delta/momentum, handedness matchup, reliability flags, starter IP depth, era flags + game context) |
-| EDA | Phase 3 complete (2026-04-24) — notebooks 01–07; Cards 3.7–3.11 complete (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
-| ML pipeline foundation | Phase 4 foundation complete — `betting_ml/utils/` complete: data loader, CV splits, preprocessing, feature selection, model I/O (Cards 4.6, 4.8 complete) |
-| Prediction models | Phase 4 in progress — baselines complete: total runs (Card 4.9), run differential (Card 4.10), win outcome (Card 4.11); Card 4.12 (hyperparameter optimization) running |
-| Betting application layer | Not started (Phase 6) |
+| ML feature store | Complete (Phase 2, 2026-04-23) — delta/momentum, handedness matchup, reliability flags, starter IP depth, era flags + game context |
+| EDA | Complete (Phase 3, 2026-04-24) — 7 Marimo notebooks; Cards 3.7–3.11 (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
+| ML pipeline + models | Complete (Phase 4, 2026-04-25) — baselines, hyperparameter optimization (Optuna), Bayesian probability layer (best_alpha=0.0) |
+| Model registry + prediction CLI | Complete (Phase 5) — `model_registry.yaml`, `predict_today.py`, lineup monitor (22/23 ACs) |
+| Betting application layer | Complete (Phase 6, 2026-05-01) — Diamond Edge Streamlit app: Today's Picks, Market Comparison, EV Tracker, Model Performance |
+| Model quality / market edge | Phase 7A in progress — v0 baseline: mean h2h edge −0.017 (consensus blend), ~35% positive |
 
 ---
 
 ## Repo Structure
 
 ```
+├── app/                        # Diamond Edge — Streamlit application (Phase 6)
+│   ├── streamlit_app.py        # st.navigation() dispatcher; app entry point
+│   ├── home.py                 # Landing page: description, nav guide, model fact sheet, pipeline diagram
+│   ├── utils/
+│   │   └── db.py               # Snowflake session factory (cached)
+│   └── pages/
+│       ├── 1_Today_Picks.py    # Today's picks table + market movement expander
+│       ├── 2_Market_Comparison.py  # Line movement, totals chart, bookmaker deep-dive
+│       ├── 3_EV_Kelly.py       # All Markets EV table + Kelly Suggested Slate + interactive sizing
+│       └── 4_Model_Performance.py  # Brier trend, CLV chart, P&L simulation, summary metrics
 ├── dbt/                        # dbt-fusion project (all SQL transforms)
 │   ├── models/
 │   │   ├── staging/            # Type-cast and normalize raw sources (6 models)
 │   │   ├── mart/               # Feature-domain mart tables (22 models)
 │   │   └── feature/            # Pre-game feature assembly — Phase 2 complete (6 models)
 │   └── seeds/                  # ref_teams static reference
-├── scripts/                    # Python ingestion scripts
+├── scripts/                    # Python ingestion + prediction scripts
 │   ├── savant_ingestion.py     # Baseball Savant (Statcast) — daily
 │   ├── ingest_statsapi.py      # MLB Stats API schedule + venues
 │   ├── odds_api_ingestion.py   # The Odds API events + odds
-│   ├── daily_run.md            # Step-by-step daily ingestion runbook
+│   ├── predict_today.py        # Pre-game prediction CLI — scores all confirmed games
+│   ├── backfill_prediction_log.py  # Backfills actual_outcome + closing_market_prob (CLV) into prediction_log
+│   ├── daily_run.md            # Step-by-step daily runbook (ingestion + prediction)
 │   └── date_utils.py           # UTC date helpers (used by odds ingestion)
+├── .github/workflows/          # GitHub Actions CI/CD
+│   ├── daily_ingestion.yml     # Cron 08:00 EDT — ingest → dbt-build → backfill (3-job chain)
+│   ├── dbt_daily_build.yml     # Reusable workflow — odd=build, even=run, Sunday=full-refresh
+│   ├── lineup_monitor.yml      # Hourly — re-ingest Stats API + detect confirmed lineups
+│   ├── odds_snapshot.yml       # 13:00/18:00/23:00 EDT — intraday odds re-ingestion
+│   └── dbt_staging_build.yml   # workflow_dispatch — lineup-scoped dbt build (game_pk input)
 ├── data_quality/
 │   ├── open_data_quality_issues.md           # Unresolved issues
 │   ├── resolved_data_quality_issues_april_2026.md
@@ -66,7 +87,8 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   │   ├── preprocessing.py    # Imputation + Bayesian shrinkage pipeline
 │   │   ├── feature_selection.py # load_retained_features() — canonical 241-feature list
 │   │   ├── model_io.py         # save_model / load_model via joblib
-│   │   └── evaluation.py       # fold_metrics, brier_score_over_under helpers
+│   │   ├── evaluation.py       # fold_metrics, brier_score_over_under helpers
+│   │   └── probability_layer.py # compute_posterior(), compute_edge(), compute_kelly()
 │   ├── models/
 │   │   ├── total_runs_trainer.py   # train_ridge, train_xgboost, train_ngboost, p_over_line
 │   │   ├── win_outcome_trainer.py  # train_logistic, train_xgboost_classifier, compute_ece
@@ -78,16 +100,22 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 │   │   ├── train_run_diff_baselines.py          # Card 4.10: train all run diff baselines
 │   │   ├── train_win_outcome_baselines.py       # Card 4.11: train win outcome baselines
 │   │   ├── run_hyperparameter_search.py         # Card 4.12: Optuna search (USER-EXECUTED)
+│   │   ├── run_probability_layer.py             # Card 4.13: Bayesian probability layer + alpha tuning
 │   │   ├── generate_tuning_report.py            # Card 4.12: report from tuning_results.json
 │   │   ├── analyze_pitching_decomp.py           # Card 3.8: bullpen vs. starter decomposition
 │   │   └── analyze_home_away_pitch_asymmetry.py # Card 3.9: home/away pitching asymmetry
 │   ├── evaluation/             # Results: JSON + markdown reports per card
+│   │   └── postmortem_v0.md    # Phase 6 post-mortem findings (Card 6.H)
 │   └── tests/
 │       ├── test_cv_splits.py
 │       └── test_preprocessing.py
 ├── plan_specs/                 # Declarative PlanSpec YAML files for agentic execution
 │   ├── phase_3/                # EDA analysis cards (3.8–3.11)
-│   └── phase_4/                # ML pipeline cards (4.6–4.13)
+│   ├── phase_4/                # ML pipeline cards (4.6–4.13)
+│   ├── phase_6/                # Betting application cards (6.B–6.I) — all complete
+│   └── phase_7/                # Model refinement + production infra (active)
+│       └── D_model_retraining_cadence.yaml  # Blocked until Phase 7A produces mean edge > +0.01
+├── model_registry.yaml         # Canonical _prod model artifacts for all three targets
 ├── .mcp.json                   # Snowflake MCP server config for Claude Code
 ├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)
 └── project_context.md          # Full architecture, data sources, roadmap
@@ -95,18 +123,51 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ---
 
-## Daily Ingestion
+## Daily Pipeline
 
-See [`scripts/daily_run.md`](scripts/daily_run.md) for the full runbook. Quick summary:
+Ingestion and transformation run automatically via GitHub Actions — no manual steps required during the season.
+
+| Workflow | Schedule | What it does |
+|---|---|---|
+| `daily_ingestion.yml` | 08:00 EDT (cron) | Ingests Statcast + Stats API + Odds API, then chains `dbt_daily_build.yml`, then runs `backfill_prediction_log.py` |
+| `dbt_daily_build.yml` | Called by `daily_ingestion.yml` or manually | `dbt build` (odd days), `dbt run` (even days), `dbt build --full-refresh` (Sundays) |
+| `lineup_monitor.yml` | Every hour (cron) | Re-ingests Stats API schedule; detects newly confirmed lineups; conditionally rebuilds lineup feature models |
+| `odds_snapshot.yml` | 13:00 / 18:00 / 23:00 EDT | Intraday odds re-ingestion on game days (skips off-days) |
+| `dbt_staging_build.yml` | `workflow_dispatch` (game_pk input) | Lineup-scoped `dbt build --select +stg_statsapi_lineups+` dispatched by Snowflake lineup monitor |
+
+For ad-hoc backfills or manual reruns, see [`scripts/daily_run.md`](scripts/daily_run.md).
 
 ```bash
+# Ad-hoc: run ingestion manually (auto-detects gap from last loaded date)
 cd scripts/
-uv run savant_ingestion.py batter_pitches          # Statcast — auto-detects gap
-uv run ingest_statsapi.py schedule                 # Stats API — current month only
-uv run odds_api_ingestion.py events                # Odds API events — 7-day window
-uv run odds_api_ingestion.py odds                  # Odds API odds — h2h + totals
-cd ../dbt && dbtf build                            # Refresh all mart models
+uv run savant_ingestion.py batter_pitches
+uv run ingest_statsapi.py schedule
+uv run odds_api_ingestion.py events && uv run odds_api_ingestion.py odds
+
+# Ad-hoc: rebuild dbt models
+dbtf build
+
+# Ad-hoc: run today's predictions
+uv run predict_today.py
 ```
+
+---
+
+## Diamond Edge App
+
+The Phase 6 Streamlit app (`app/`) is the primary interface for daily betting analysis.
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+| Page | Description |
+|---|---|
+| 🏠 Home | Project overview, model fact sheet, pipeline diagram |
+| ⚾ Today's Picks | Model predictions for all confirmed games; market movement expander |
+| 📊 Market Comparison | Line movement chart, totals chart, bookmaker deep-dive |
+| 💰 EV Tracker | All Markets EV table + Kelly Suggested Slate with interactive bet sizing |
+| 📈 Model Performance | Brier score trend, CLV chart, cumulative P&L simulation |
 
 ---
 

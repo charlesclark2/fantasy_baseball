@@ -2,51 +2,54 @@
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: inseason-model-retraining-cadence
+  name: model-retraining-cadence
   namespace: default
 spec:
   description: >
     Define and implement a retraining schedule for the three production models
-    (NGBoost total_runs, NGBoost run_differential, XGBoost isotonic home_win) as
-    2026 season data accumulates. Without retraining, models trained on 2016–2025
-    will gradually lag the current run environment and market calibration.
+    (NGBoost total_runs, NGBoost run_differential, XGBoost isotonic home_win) once
+    the model has demonstrated positive edge in live use.
 
-    This card has three deliverables:
+    IMPORTANT PREREQUISITE: This card should not be executed until the model is
+    actually beating the market. As of the Phase 6 post-mortem (Card 6.H), mean
+    h2h edge is approximately −0.017 (consensus_win_prob blend) with only ~35%
+    positive-edge predictions. Retraining the current architecture on more data
+    will not close that gap — the Phase 7A feature and calibration work (weather
+    features, home-win probability recalibration, alpha grid validation) must come
+    first. This card is Phase 7B: operationalize retraining once Phase 7A work has
+    produced a model that demonstrably adds value over the market.
 
-    1. Pre-Phase 7 quick fixes — populate alpha_tuning_results with all 11 α rows
-       (currently has only 1 from the --use-alpha bypass in Card 4.13), and write
-       best_alpha.json as a local fallback so predict_today.py does not silently
-       default to alpha=0.5 on Snowflake outage.
+    This card has two deliverables:
 
-    2. Retraining runbook — a documented section in scripts/daily_run.md specifying
-       three trigger checkpoints (mid-season ≥50 games, All-Star break, post-season),
-       the exact commands to run at each trigger, and the verification steps to
-       confirm the retrained models are not degraded before promoting them to prod.
+    1. Retraining runbook — a documented section in scripts/daily_run.md specifying
+       the trigger criteria (performance-based, not purely calendar-based), the exact
+       commands to run, and the verification steps to confirm the retrained models
+       are not degraded before promoting them to prod.
 
-    3. Retraining script — betting_ml/scripts/retrain_models.py that automates the
+    2. Retraining script — betting_ml/scripts/retrain_models.py that automates the
        five retraining steps: re-run probability layer for full α grid, persist
        best_alpha.json, conditionally re-run NGBoost hyperparameter grid search
-       (only if 2026 hold-out MAE degrades >1% vs. current), run the 3-way calibration
-       split with ECE guard, and update model_registry.yaml with new selected_at
-       and eval_year. Old artifact paths are renamed with a date suffix for rollback.
+       (only if 2026 hold-out MAE degrades >1% vs. current), run the 3-way
+       calibration split with ECE guard, and update model_registry.yaml with new
+       selected_at and eval_year. Old artifact paths are renamed with a date suffix
+       for rollback.
 
-    Trigger criteria:
-      mid-season refit    — after ≥50 2026 regular-season game results in mart_game_results
-      All-Star break refit — after All-Star break (~late July 2026)
-      post-season refit   — after 2026 World Series ends (November 2026);
-                            becomes primary artifact for 2027 opener
+    Trigger criteria (all must be satisfied before retraining is warranted):
+      performance gate  — model shows positive mean h2h edge (> +0.01) across at
+                          least 50 has_odds games in daily_model_predictions
+      data volume gate  — at least 50 2026 regular-season game results exist in
+                          mart_game_results for hold-out evaluation
+      calendar gate     — at or after the All-Star break (~late July 2026), OR
+                          after the 2026 World Series ends (~November 2026) for
+                          the post-season refit that becomes the 2027 artifact
+
+    If the performance gate is not met by the All-Star break, defer retraining
+    until Phase 7A improvements have been implemented and validated.
   acceptanceCriteria:
     - description: >
-        alpha_tuning_results Snowflake table contains exactly 11 rows (one per α
-        in [0.0, 0.1, ..., 1.0]) after re-running run_probability_layer.py without
-        the --use-alpha bypass flag
-    - description: >
-        betting_ml/models/best_alpha.json exists and contains a best_alpha key
-        with a float value in [0.0, 1.0]; predict_today.py reads this file as
-        a fallback before defaulting to alpha=0.5 when Snowflake is unreachable
-    - description: >
         scripts/daily_run.md contains a "Model Retraining" section documenting
-        all three trigger checkpoints with commands and verification steps
+        the performance-based trigger criteria (positive mean h2h edge > +0.01
+        across ≥50 has_odds games), the data volume gate, and the calendar gate
     - description: >
         betting_ml/scripts/retrain_models.py exists, accepts --eval-year and
         --targets flags, and exits 0 on a dry run (--dry-run flag skips all
@@ -57,35 +60,72 @@ spec:
         guard prevents promoting a degraded model
     - description: >
         model_registry.yaml contains old artifact paths renamed with a date suffix
-        (e.g. xgb_isotonic_home_win_2025-12-01.pkl) after a retrain run, confirming
+        (e.g. xgb_isotonic_home_win_2026-07-15.pkl) after a retrain run, confirming
         the rollback mechanism works
 
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Gate
 metadata:
-  name: card-6e-performance-tracker-live
+  name: model-demonstrates-positive-edge
   namespace: default
 spec:
   gateType: review
   description: >
-    Card 6.E (Performance Tracker page) should be live before the retraining
-    cadence is operationalized, because the rolling 14-day Brier score trend
-    is the primary signal used to determine whether retraining is warranted.
+    The model must demonstrate positive mean h2h edge before retraining is a
+    meaningful investment. Retraining a model that is not beating the market
+    on more data produces a better-calibrated bad model, not a good model.
 
-    Required conditions:
-      - app/pages/4_Performance.py exists and the Brier score trend chart renders
-        with both model and market lines
-      - baseball_data.config.prediction_log is being populated by predict_today.py
-        on each daily run
-      - The Card 6.A DAG closing-line backfill step is live so actual_outcome
-        and closing_market_prob are backfilled nightly (required for Brier and CLV
-        to show data, not just empty state)
+    Required conditions (all must be met):
+      - Mean h2h edge (consensus_win_prob - h2h_market_implied_prob) > +0.01
+        across at least 50 has_odds rows in daily_model_predictions
+      - At least 40% of has_odds rows show positive edge (baseline after Phase 6
+        post-mortem fix is ~35%; target > 40% to confirm consistent directional
+        accuracy gained from Phase 7A work)
+      - The improvement is attributable to Phase 7A feature/calibration work,
+        not to a lucky stretch of correct predictions
 
-    NOTE: This gate guards the operational use of the retraining cadence, not the
-    script implementation. retrain_models.py can be built and tested (dry-run)
-    before this gate clears. Mark this gate only when the Brier trend chart is
-    actively showing data so the retraining trigger signal is visible.
+    Verify with:
+      SELECT
+        COUNT(*) AS odds_rows,
+        AVG(consensus_win_prob - h2h_market_implied_prob) AS mean_edge,
+        SUM(CASE WHEN consensus_win_prob > h2h_market_implied_prob
+                 THEN 1 ELSE 0 END)::FLOAT / COUNT(*) AS pct_positive
+      FROM baseball_data.betting_ml.daily_model_predictions
+      WHERE has_odds = TRUE
+        AND h2h_market_implied_prob IS NOT NULL
+        AND score_date >= <phase_7a_completion_date>
+    Expected: odds_rows >= 50, mean_edge > 0.01, pct_positive > 0.40.
+
+    If this gate cannot be cleared, revisit Phase 7A priority items rather than
+    proceeding with retraining.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: phase-7a-feature-work-complete
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    At minimum, the highest-priority Phase 7A improvements (weather features,
+    home-win probability recalibration, and the full α grid re-run) must be
+    complete before retraining is executed. Retraining on the Phase 6 feature
+    set will produce the same underperforming model with more data.
+
+    Required conditions (Phase 7A minimum bar):
+      - Weather features (temperature, wind) integrated into the feature store
+        and used in all three production models
+      - Home-win classifier recalibrated (ECE reduced relative to Phase 6 baseline)
+      - alpha_tuning_results contains 11 rows with non-null log_loss from a run
+        using the corrected odds data and Phase 7A feature set
+      - best_alpha confirmed and best_alpha.json written to betting_ml/models/
+
+    This gate exists to prevent retraining from being treated as a substitute
+    for the more impactful feature and calibration improvements.
   reviewers:
     - user:charlesclark
 
@@ -104,13 +144,11 @@ spec:
     Required conditions:
       - predict_today.py writes one row per game × market to
         baseball_data.config.prediction_log after each scoring run
-      - The table has rows for at least the 2026 backfill dates (2026-03-27
-        through the current date) so there is a pre-retrain CLV baseline
+      - The table has rows covering the Phase 7A evaluation window so there is
+        a pre-retrain CLV baseline to compare against
 
-    This gate is a prerequisite for verifying that a retrained model does not
-    degrade CLV relative to the pre-retrain baseline. The retrain_models.py
-    script reads from prediction_log to compute hold-out CLV; if the table
-    is empty the script cannot perform this check.
+    The retrain_models.py script reads from prediction_log to compute hold-out
+    CLV; if the table is empty the script cannot perform this verification check.
   reviewers:
     - user:charlesclark
 
@@ -118,132 +156,22 @@ spec:
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: inseason-model-retraining-cadence-plan
+  name: model-retraining-cadence-plan
   namespace: default
 spec:
   description: >
-    Three-task DAG. fix-alpha-and-best-alpha-json resolves the two pre-Phase 7
-    quick fixes: populating all 11 alpha_tuning_results rows and writing the
-    best_alpha.json local fallback. document-retraining-runbook adds the retraining
-    section to scripts/daily_run.md and can proceed in parallel with the script task
-    after fix-alpha-and-best-alpha-json completes. create-retraining-script builds
-    retrain_models.py and depends on both prior tasks. The two Gates (Performance
-    Tracker and prediction_log) guard operational use but do not block implementation
-    — the script can be built and dry-run tested before they clear.
+    Two-task DAG, gated on Phase 7A completion and model demonstrating positive
+    edge. document-retraining-runbook adds the retraining section to
+    scripts/daily_run.md with performance-based (not purely calendar-based) trigger
+    criteria. create-retraining-script builds retrain_models.py and depends on the
+    runbook task. Both gates (phase-7a-feature-work-complete and
+    model-demonstrates-positive-edge) must clear before implementation begins —
+    there is no value in building retraining infrastructure for a model that is
+    not beating the market.
   goalRef:
-    name: inseason-model-retraining-cadence
+    name: model-retraining-cadence
   graph:
     nodes:
-
-      - id: fix-alpha-and-best-alpha-json
-        kind: Task
-        description: >
-          Two targeted fixes to resolve known gaps from Card 4.13 and Card 5.2
-          before the retraining runbook and script are built.
-
-          FIX 1 — Populate all 11 alpha_tuning_results rows:
-            Re-run run_probability_layer.py WITHOUT the --use-alpha bypass flag
-            so the full α grid [0.0, 0.1, ..., 1.0] is evaluated and all 11 rows
-            are persisted to Snowflake. The current table has only 1 row.
-
-            Command:
-              uv run python betting_ml/scripts/run_probability_layer.py \
-                --season 2026 \
-                --output-dir betting_ml/outputs
-
-            After running, confirm:
-              SELECT COUNT(*), MIN(alpha), MAX(alpha)
-              FROM baseball_data.betting_ml.alpha_tuning_results
-            returns COUNT=11, MIN=0.0, MAX=1.0.
-
-            The best_alpha value (expected to remain 0.0 based on Card 4.13 findings,
-            but verify from the new run) becomes the canonical value for all downstream
-            use. If best_alpha shifts away from 0.0, note the change in
-            betting_ml/evaluation/probability_layer_results.md.
-
-          FIX 2 — Write best_alpha.json local fallback:
-            After FIX 1 confirms the correct best_alpha, write it to disk:
-              {
-                "best_alpha": <confirmed_value>,
-                "written_at": "<ISO timestamp>",
-                "source": "run_probability_layer.py re-run after Card 6.G backfill"
-              }
-            Path: betting_ml/models/best_alpha.json
-
-            Update predict_today.py to read this file as the fallback before
-            defaulting to alpha=0.5:
-              try:
-                  alpha_row = conn.cursor().execute(
-                      "SELECT alpha FROM ... ORDER BY loaded_at DESC LIMIT 1"
-                  ).fetchone()
-                  best_alpha = float(alpha_row[0])
-              except Exception:
-                  fallback_path = Path('betting_ml/models/best_alpha.json')
-                  if fallback_path.exists():
-                      best_alpha = json.load(fallback_path.open())['best_alpha']
-                  else:
-                      best_alpha = 0.5  # last resort; log a warning
-
-            The change must not alter the parquet output schema or any other
-            predict_today.py behavior.
-        acceptanceCriteria:
-          - type: command_succeeds
-            name: alpha_tuning_results has exactly 11 rows
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                from betting_ml.utils.data_loader import get_snowflake_connection
-                conn = get_snowflake_connection()
-                cur = conn.cursor()
-                cur.execute("""
-                    SELECT COUNT(*), MIN(alpha), MAX(alpha)
-                    FROM baseball_data.betting_ml.alpha_tuning_results
-                """)
-                count, min_alpha, max_alpha = cur.fetchone()
-                conn.close()
-                assert count == 11, f'Expected 11 rows, got {count}'
-                assert abs(min_alpha - 0.0) < 0.001, f'MIN alpha = {min_alpha}, expected 0.0'
-                assert abs(max_alpha - 1.0) < 0.001, f'MAX alpha = {max_alpha}, expected 1.0'
-                print(f'alpha_tuning_results OK: {count} rows, alpha in [{min_alpha}, {max_alpha}]')
-          - type: artifact_exists
-            name: best_alpha.json local fallback file
-            path: betting_ml/models/best_alpha.json
-          - type: command_succeeds
-            name: best_alpha.json contains valid best_alpha float in [0.0, 1.0]
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                import json
-                data = json.load(open('betting_ml/models/best_alpha.json'))
-                assert 'best_alpha' in data, 'best_alpha key missing from JSON'
-                assert 'written_at' in data, 'written_at key missing from JSON'
-                alpha = data['best_alpha']
-                assert isinstance(alpha, float), f'best_alpha is not a float: {type(alpha)}'
-                assert 0.0 <= alpha <= 1.0, f'best_alpha out of range: {alpha}'
-                print(f'best_alpha.json OK: best_alpha={alpha}')
-          - type: command_succeeds
-            name: predict_today.py reads best_alpha.json as fallback before defaulting to 0.5
-            command: uv
-            args:
-              - run
-              - python
-              - "-c"
-              - |-
-                src = open('betting_ml/scripts/predict_today.py').read()
-                assert 'best_alpha.json' in src, (
-                    'best_alpha.json not referenced in predict_today.py — '
-                    'local fallback path not implemented'
-                )
-                assert 'json.load' in src or 'json.loads' in src, (
-                    'json.load not found — best_alpha.json is not being read'
-                )
-                print('best_alpha.json fallback reference OK')
 
       - id: document-retraining-runbook
         kind: Task
@@ -257,49 +185,72 @@ spec:
 
           ## Model Retraining
 
-          ### Trigger Checkpoints
+          ### Trigger Criteria
 
-          | Checkpoint        | Condition                                              | Expected date (2026) |
-          |-------------------|--------------------------------------------------------|----------------------|
-          | Mid-season refit  | ≥50 regular-season game results in mart_game_results   | ~mid-May 2026        |
-          | All-Star break    | After All-Star break games complete                    | ~late July 2026      |
-          | Post-season refit | After 2026 World Series ends                           | ~November 2026       |
+          Retraining is only warranted when ALL of the following are true:
 
-          Check whether a retrain is warranted (run before each checkpoint):
+          **Performance gate (must clear first):**
+            SELECT
+              COUNT(*) AS odds_rows,
+              AVG(consensus_win_prob - h2h_market_implied_prob) AS mean_edge,
+              SUM(CASE WHEN consensus_win_prob > h2h_market_implied_prob
+                       THEN 1 ELSE 0 END)::FLOAT / COUNT(*) AS pct_positive
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE has_odds = TRUE AND h2h_market_implied_prob IS NOT NULL
+              AND score_date >= '<phase_7a_completion_date>';
+          Expected: odds_rows >= 50, mean_edge > 0.01, pct_positive > 0.40.
+          If this query returns mean_edge <= 0.01, do NOT retrain — revisit Phase 7A.
+
+          **Data volume gate:**
             SELECT COUNT(*) FROM baseball_data.betting.mart_game_results
             WHERE game_type = 'R' AND season = 2026;
-          If COUNT ≥ trigger threshold, proceed.
+          Minimum: 50 regular-season game results for hold-out evaluation.
+
+          **Calendar gates:**
+
+          | Checkpoint         | Condition                                           | Approx. date   |
+          |--------------------|-----------------------------------------------------|----------------|
+          | All-Star break     | After All-Star break games complete                 | Late July 2026 |
+          | Post-season refit  | After 2026 World Series ends                        | Nov 2026       |
+
+          If the performance gate is not met by the All-Star break, skip that
+          refit and revisit after further Phase 7A improvements.
 
           ### Pre-Retrain Checks
 
           1. Confirm the Performance Tracker Brier trend in the Streamlit app shows
-             model Brier is not improving relative to the market baseline (0.2395).
-             If model Brier is improving, retraining may not be urgent.
+             model Brier improving relative to the market baseline (0.2395).
+             If model Brier is not improving, retraining is unlikely to help.
 
           2. Record the current model artifacts for rollback reference:
                grep 'artifact_path\|selected_at\|eval_year' \
                  betting_ml/models/model_registry.yaml
 
+          3. Confirm alpha_tuning_results has 11 rows from the Phase 7A re-run:
+               SELECT COUNT(*), MIN(log_loss), MAX(log_loss)
+               FROM baseball_data.betting_ml.alpha_tuning_results;
+             Expected: COUNT = 11, log_loss NOT NULL.
+
           ### Retraining Commands
 
           Run retrain_models.py for all three targets:
             uv run python betting_ml/scripts/retrain_models.py \
-              --eval-year 2026_midseason \
+              --eval-year 2026_allstar \
               --targets total_runs run_differential home_win
 
           For a dry run (no files mutated, no Snowflake writes):
             uv run python betting_ml/scripts/retrain_models.py \
-              --eval-year 2026_midseason \
+              --eval-year 2026_allstar \
               --targets total_runs run_differential home_win \
               --dry-run
 
           ### Post-Retrain Verification
 
           1. Confirm alpha_tuning_results updated:
-               SELECT COUNT(*), best_alpha
+               SELECT COUNT(*), MIN(log_loss) AS best_log_loss
                FROM baseball_data.betting_ml.alpha_tuning_results
                ORDER BY loaded_at DESC LIMIT 11;
-             Expected: 11 rows; note whether best_alpha shifted from prior run.
+             Expected: 11 rows, log_loss NOT NULL.
 
           2. Confirm best_alpha.json updated:
                python -c "import json; print(json.load(open('betting_ml/models/best_alpha.json')))"
@@ -312,8 +263,6 @@ spec:
 
           5. Run predict_today.py for today and confirm rows logged to Snowflake:
                uv run python betting_ml/scripts/predict_today.py --date $(date +%Y-%m-%d)
-               # Verify rows exist in prediction_log for today's date:
-               # SELECT COUNT(*) FROM baseball_data.config.prediction_log WHERE prediction_date = CURRENT_DATE
 
           6. Check Streamlit app Today's Picks page — confirm picks load and
              Model Win% values are plausible (not all 0.5, not null).
@@ -327,7 +276,8 @@ spec:
             3. Restore best_alpha.json to the pre-retrain value (check git history)
             4. Re-run predict_today.py to confirm restored model scores cleanly
         dependsOn:
-          - fix-alpha-and-best-alpha-json
+          - phase-7a-feature-work-complete
+          - model-demonstrates-positive-edge
         acceptanceCriteria:
           - type: command_succeeds
             name: Model Retraining section exists in daily_run.md
@@ -343,7 +293,7 @@ spec:
                 )
                 print('Model Retraining section found')
           - type: command_succeeds
-            name: All three trigger checkpoints documented
+            name: Performance gate query documented in runbook
             command: uv
             args:
               - run
@@ -351,11 +301,27 @@ spec:
               - "-c"
               - |-
                 content = open('scripts/daily_run.md').read().lower()
-                for term in ['mid-season', 'all-star', 'post-season']:
+                assert 'mean_edge' in content or 'mean edge' in content, (
+                    'Performance gate (mean_edge > 0.01) not documented in runbook'
+                )
+                assert '0.01' in content, (
+                    'Edge threshold 0.01 not documented in runbook'
+                )
+                print('Performance gate documented')
+          - type: command_succeeds
+            name: Calendar trigger checkpoints documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                content = open('scripts/daily_run.md').read().lower()
+                for term in ['all-star', 'post-season']:
                     assert term in content, (
                         f'Trigger checkpoint "{term}" not documented in daily_run.md'
                     )
-                print('All three trigger checkpoints present')
+                print('Calendar trigger checkpoints present')
           - type: command_succeeds
             name: Rollback procedure documented
             command: uv
@@ -370,7 +336,7 @@ spec:
                 )
                 print('Rollback procedure present')
           - type: command_succeeds
-            name: retrain_models.py command present with --dry-run flag shown
+            name: retrain_models.py command with --dry-run shown
             command: uv
             args:
               - run
@@ -394,12 +360,12 @@ spec:
 
           CLI INTERFACE:
             uv run python betting_ml/scripts/retrain_models.py \
-              --eval-year 2026_midseason \
+              --eval-year 2026_allstar \
               --targets total_runs run_differential home_win \
               [--dry-run]
 
             --eval-year   STRING  Label written to model_registry.yaml (e.g.
-                                  "2026_midseason", "2026_allstar", "2026_postseason")
+                                  "2026_allstar", "2026_postseason", "2027_preseason")
             --targets     LIST    One or more of: total_runs, run_differential, home_win
                                   Default: all three
             --dry-run     FLAG    Print all planned actions but do not write any
@@ -449,7 +415,7 @@ spec:
             For each successfully retrained model:
               1. Rename the existing production artifact with a date suffix:
                    <artifact_stem>_<today_YYYY-MM-DD>.pkl
-                 Example: xgb_isotonic_home_win.pkl → xgb_isotonic_home_win_2026-05-15.pkl
+                 Example: xgb_isotonic_home_win.pkl → xgb_isotonic_home_win_2026-07-15.pkl
               2. Write the new artifact to the canonical production path (no date suffix).
               3. Update model_registry.yaml:
                    selected_at: <ISO timestamp>
@@ -477,9 +443,7 @@ spec:
               summary showing which targets were retrained, the new best_alpha,
               and any skipped steps.
         dependsOn:
-          - fix-alpha-and-best-alpha-json
           - document-retraining-runbook
-          - card-6e-performance-tracker-live
           - card-5-2-prediction-log-for-retraining
         acceptanceCriteria:
           - type: artifact_exists

@@ -1,0 +1,833 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: fangraphs-ingestion-pipeline
+  namespace: default
+spec:
+  description: >
+    Stand up a complete FanGraphs ingestion layer that populates Snowflake raw tables,
+    shared ingestion utilities, dbt staging/mart models, and integrates pre-season
+    ZiPS projections and Stuff+ leaderboard data as early-season feature anchors.
+
+    BACKGROUND: The model has no stable early-season signal. In April/early May,
+    rolling stats are built on 5–15 starts and carry near-zero predictive power —
+    yet the market uses ZiPS/Steamer as its primary calibration input for the first
+    4–6 weeks. Additionally, Stuff+ measures per-pitch arsenal quality independent
+    of outcomes and is a leading indicator in the first 30–40 IP before ERA stabilizes.
+    Both data sets are publicly available via the FanGraphs API and pybaseball.
+
+    This card consolidates 11 previously-defined stories into a single tracked pipeline
+    deliverable with clear dependency ordering:
+
+      1. Snowflake DDL — raw tables in baseball_data.fangraphs for all four feeds
+      2. Shared utilities — reusable API client and Snowflake append loader
+      3. ZiPS pitching ingestion script
+      4. ZiPS hitting ingestion script
+      5. Stuff+ pitching leaderboard ingestion script
+      6. Hitting leaderboard rolling-window ingestion script (7d/14d/30d/season)
+      7. dbt sources — register all fangraphs raw tables
+      8. dbt staging models — extract typed fields from raw JSON
+      9. dbt mart models — analytics-ready pitching and hitting views
+      10. schema.yml documentation
+      11. End-to-end pipeline validation
+
+    Source: Gap 8 from betting_ml/evaluation/postmortem_v0.md; Cards 7.E and 7.F
+    from project_context.md Phase 7 roadmap. Expected effort: 2–3 days.
+
+  acceptanceCriteria:
+    - description: >
+        Four raw tables exist in baseball_data.fangraphs: fg_stuff_plus_raw,
+        fg_zips_pitching_raw, fg_zips_hitting_raw, fg_hitting_leaderboard_raw.
+        Each has ingestion_ts, raw_json (VARIANT), source_endpoint, request_params,
+        load_id, and http_status_code columns.
+    - description: >
+        Shared utilities fangraphs_client.py and snowflake_loader.py exist under
+        scripts/utils/ and are imported (not duplicated) by all four ingestion scripts.
+    - description: >
+        All four ingestion scripts run without error and append rows to their
+        respective raw tables. ZiPS pitching ≥400 pitchers; ZiPS hitting ≥700 batters;
+        Stuff+ ≥350 starters with non-null stuff_plus; hitting leaderboard has rows
+        for all four window types.
+    - description: >
+        dbt sources.yml includes all four fangraphs raw tables. dbt staging models
+        stg_fangraphs_stuff_plus, stg_fangraphs_zips_pitching, stg_fangraphs_zips_hitting,
+        and stg_fangraphs_hitting_leaderboard all build cleanly with no duplicate-key
+        violations and typed non-JSON columns.
+    - description: >
+        Mart models fct_fangraphs_pitching_analytics and fct_fangraphs_hitting_analytics
+        build cleanly and are documented in schema.yml with column-level descriptions.
+    - description: >
+        End-to-end validation script confirms row counts, column coverage, and
+        MLBAM ID join rate ≥95% for ZiPS projections matched to ref_players.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: fangraphs-ingestion-plan
+  namespace: default
+spec:
+  description: >
+    11-task DAG implementing the FanGraphs ingestion pipeline end-to-end.
+    Tasks 1–2 have no upstream dependencies and can run in parallel.
+    Tasks 3–6 depend on tasks 1 and 2 and can run in parallel with each other.
+    Tasks 7–8 depend on tasks 3–6 (raw tables must be populated before sources/staging).
+    Tasks 9–10 depend on task 8. Task 11 depends on all prior tasks.
+  goalRef:
+    name: fangraphs-ingestion-pipeline
+  graph:
+    nodes:
+
+      - id: create-snowflake-ddl
+        kind: Task
+        description: >
+          Create Snowflake raw tables and save DDL scripts for all four FanGraphs feeds.
+
+          Create a dedicated directory scripts/ddl/fangraphs/ and write one DDL file per
+          table. All tables live in baseball_data.fangraphs schema. Each table supports
+          append-based ingestion (no primary key constraint) with the following common columns:
+            - load_id VARCHAR NOT NULL — UUID generated per script invocation
+            - ingestion_ts TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            - source_endpoint VARCHAR — full URL or pybaseball function name called
+            - request_params VARIANT — JSON blob of query parameters used
+            - http_status_code INTEGER — HTTP response code or NULL for library calls
+            - raw_json VARIANT NOT NULL — full parsed API/CSV response payload
+
+          Table-specific grain columns (added BEFORE the common columns for readability):
+
+          fg_stuff_plus_raw:
+            - season INTEGER
+            - pitcher_name VARCHAR
+            - fg_pitcher_id VARCHAR
+
+          fg_zips_pitching_raw:
+            - season INTEGER
+            - pitcher_name VARCHAR
+            - fg_pitcher_id VARCHAR
+            - projection_type VARCHAR  -- 'rzips' or 'steamer'
+
+          fg_zips_hitting_raw:
+            - season INTEGER
+            - batter_name VARCHAR
+            - fg_batter_id VARCHAR
+            - projection_type VARCHAR  -- 'rzips' or 'steamer'
+
+          fg_hitting_leaderboard_raw:
+            - season INTEGER
+            - window_type VARCHAR  -- '7d', '14d', '30d', 'season'
+            - window_start DATE
+            - window_end DATE
+
+          Also create the schema if it does not exist:
+            CREATE SCHEMA IF NOT EXISTS baseball_data.fangraphs;
+
+          Run all DDL in Snowflake via mcp__snowflake__run_snowflake_query.
+          Save each DDL as a .sql file in scripts/ddl/fangraphs/ for version control.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL directory exists
+            path: scripts/ddl/fangraphs/
+          - type: artifact_exists
+            name: Stuff+ DDL file
+            path: scripts/ddl/fangraphs/fg_stuff_plus_raw.sql
+          - type: artifact_exists
+            name: ZiPS pitching DDL file
+            path: scripts/ddl/fangraphs/fg_zips_pitching_raw.sql
+          - type: artifact_exists
+            name: ZiPS hitting DDL file
+            path: scripts/ddl/fangraphs/fg_zips_hitting_raw.sql
+          - type: artifact_exists
+            name: Hitting leaderboard DDL file
+            path: scripts/ddl/fangraphs/fg_hitting_leaderboard_raw.sql
+          - type: command_succeeds
+            name: All four tables exist in Snowflake
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import subprocess, json
+                # Verified via Snowflake MCP — run manually and confirm output
+                print("Verify via Snowflake: SELECT table_name FROM information_schema.tables WHERE table_schema = 'FANGRAPHS';")
+                print("Expected: FG_STUFF_PLUS_RAW, FG_ZIPS_PITCHING_RAW, FG_ZIPS_HITTING_RAW, FG_HITTING_LEADERBOARD_RAW")
+
+      - id: create-shared-utilities
+        kind: Task
+        description: >
+          Create shared Python utilities for FanGraphs API requests and Snowflake raw-table
+          loading so all four ingestion scripts use a common pattern.
+
+          Create scripts/utils/ directory if it does not exist.
+
+          File 1 — scripts/utils/fangraphs_client.py:
+            - Function fetch_fangraphs_leaderboard(endpoint_name, params, season) → dict
+            - Wraps pybaseball calls or direct HTTP GET to FanGraphs CSV/JSON endpoints
+            - Returns {"data": [...], "source_endpoint": str, "request_params": dict,
+                       "http_status_code": int, "load_id": str (uuid4)}
+            - Retry logic: up to 3 attempts with exponential backoff (2s, 4s, 8s)
+            - On final failure: raises FangraphsClientError with full context logged
+
+          File 2 — scripts/utils/snowflake_loader.py:
+            - Function append_raw_rows(table_fqn, rows, conn) → int (rows inserted)
+            - Accepts list of dicts; serializes raw_json to JSON string for VARIANT insert
+            - Uses MERGE-free INSERT INTO (append-only; no upsert needed for raw layer)
+            - Logs: table_fqn, row_count, load_id, elapsed_ms at INFO level
+            - On Snowflake error: raises SnowflakeLoadError with table_fqn and load_id
+
+          Both files must import cleanly with no circular dependencies.
+          Neither file should contain business logic specific to any one FanGraphs feed.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: fangraphs_client.py
+            path: scripts/utils/fangraphs_client.py
+          - type: artifact_exists
+            name: snowflake_loader.py
+            path: scripts/utils/snowflake_loader.py
+          - type: command_succeeds
+            name: fangraphs_client.py imports cleanly
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/utils/fangraphs_client.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                found_retry = False
+                found_fetch = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef):
+                        if 'fetch' in node.name.lower():
+                            found_fetch = True
+                    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                        if node.value in (2, 4, 8, 3):
+                            found_retry = True
+                assert found_fetch, 'No fetch function found in fangraphs_client.py'
+                print('fangraphs_client.py syntax OK and fetch function present')
+          - type: command_succeeds
+            name: snowflake_loader.py imports cleanly
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/utils/snowflake_loader.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                found_append = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef):
+                        if 'append' in node.name.lower() or 'load' in node.name.lower():
+                            found_append = True
+                assert found_append, 'No append/load function found in snowflake_loader.py'
+                print('snowflake_loader.py syntax OK and load function present')
+
+      - id: build-zips-pitching-ingestion
+        kind: Task
+        description: >
+          Create scripts/ingest_fangraphs_zips_pitching.py to pull FanGraphs ZiPS pitching
+          projections and append to fg_zips_pitching_raw.
+
+          Endpoint pattern: pybaseball.fg_pitcher_leaders() with stat_columns='pit' or
+          direct FanGraphs CSV endpoint type=rzips for pitching stats.
+          projection_type: 'rzips' for ZiPS in-season, 'steamer' for Steamer pre-season.
+
+          Script CLI interface:
+            python scripts/ingest_fangraphs_zips_pitching.py --season 2026 [--projection-type rzips] [--dry-run]
+
+          Behavior:
+            - Fetches projection data for --season using fangraphs_client.fetch_fangraphs_leaderboard()
+            - Dry-run mode: prints row count and sample row; does not write to Snowflake
+            - Live mode: appends all rows to baseball_data.fangraphs.fg_zips_pitching_raw
+              using snowflake_loader.append_raw_rows()
+            - Logs: "Loaded N ZiPS pitching rows for season=YYYY, projection_type=TYPE"
+            - On failure: exits with non-zero code; logs full traceback
+
+          Request failure handling: inherited from fangraphs_client (retry + raise on final failure).
+          Do not silently swallow failed requests.
+        dependsOn:
+          - create-snowflake-ddl
+          - create-shared-utilities
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ZiPS pitching script
+            path: scripts/ingest_fangraphs_zips_pitching.py
+          - type: command_succeeds
+            name: Script syntax valid and imports shared utilities
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_fangraphs_zips_pitching.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                imports = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        imports.add(ast.dump(node))
+                found_client = any('fangraphs_client' in i for i in imports)
+                found_loader = any('snowflake_loader' in i for i in imports)
+                assert found_client, 'fangraphs_client not imported in ZiPS pitching script'
+                assert found_loader, 'snowflake_loader not imported in ZiPS pitching script'
+                print('ZiPS pitching script OK — shared utilities imported')
+          - type: command_succeeds
+            name: Dry-run executes without error
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_fangraphs_zips_pitching.py
+              - "--season"
+              - "2026"
+              - "--dry-run"
+
+      - id: build-zips-hitting-ingestion
+        kind: Task
+        description: >
+          Create scripts/ingest_fangraphs_zips_hitting.py to pull FanGraphs ZiPS hitting
+          projections and append to fg_zips_hitting_raw.
+
+          Endpoint pattern: pybaseball.fg_batting_leaders() or FanGraphs CSV with type=rzips
+          and batting stats. projection_type: 'rzips' for ZiPS, 'steamer' for Steamer.
+
+          Script CLI interface:
+            python scripts/ingest_fangraphs_zips_hitting.py --season 2026 [--projection-type rzips] [--dry-run]
+
+          Behavior mirrors ingest_fangraphs_zips_pitching.py exactly, targeting
+          fg_zips_hitting_raw and logging batter counts.
+
+          Request and load failures are logged and script exits non-zero.
+        dependsOn:
+          - create-snowflake-ddl
+          - create-shared-utilities
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ZiPS hitting script
+            path: scripts/ingest_fangraphs_zips_hitting.py
+          - type: command_succeeds
+            name: Script syntax valid and imports shared utilities
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_fangraphs_zips_hitting.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                imports = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        imports.add(ast.dump(node))
+                found_client = any('fangraphs_client' in i for i in imports)
+                found_loader = any('snowflake_loader' in i for i in imports)
+                assert found_client, 'fangraphs_client not imported in ZiPS hitting script'
+                assert found_loader, 'snowflake_loader not imported in ZiPS hitting script'
+                print('ZiPS hitting script OK — shared utilities imported')
+          - type: command_succeeds
+            name: Dry-run executes without error
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_fangraphs_zips_hitting.py
+              - "--season"
+              - "2026"
+              - "--dry-run"
+
+      - id: build-stuff-plus-ingestion
+        kind: Task
+        description: >
+          Create scripts/ingest_fangraphs_stuff_plus.py to pull the FanGraphs Stuff+
+          pitching leaderboard and append to fg_stuff_plus_raw.
+
+          Endpoint: pybaseball.fg_pitcher_leaders() with stat_columns='stf' (Stuff+
+          leaderboard columns) or the FanGraphs leaderboard CSV endpoint filtered to
+          Stuff+ metrics (stuff_plus, location_plus, pitching_plus per pitch type).
+
+          Script CLI interface:
+            python scripts/ingest_fangraphs_stuff_plus.py --season 2026 [--dry-run]
+
+          Behavior:
+            - Fetches full-season Stuff+ leaderboard for --season
+            - Dry-run mode: prints count and sample row; no Snowflake write
+            - Live mode: appends to fg_stuff_plus_raw via snowflake_loader
+            - Logs: "Loaded N Stuff+ rows for season=YYYY"
+            - On failure: non-zero exit; full traceback logged
+
+          Key metrics to preserve in raw_json at minimum:
+            stuff_plus, location_plus, pitching_plus, primary_pitch_type,
+            fastball_pct, breaking_pct, offspeed_pct, ip (innings pitched)
+        dependsOn:
+          - create-snowflake-ddl
+          - create-shared-utilities
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Stuff+ script
+            path: scripts/ingest_fangraphs_stuff_plus.py
+          - type: command_succeeds
+            name: Script syntax valid and imports shared utilities
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_fangraphs_stuff_plus.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                imports = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        imports.add(ast.dump(node))
+                found_client = any('fangraphs_client' in i for i in imports)
+                found_loader = any('snowflake_loader' in i for i in imports)
+                assert found_client, 'fangraphs_client not imported in Stuff+ script'
+                assert found_loader, 'snowflake_loader not imported in Stuff+ script'
+                print('Stuff+ script OK — shared utilities imported')
+          - type: command_succeeds
+            name: Dry-run executes without error
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_fangraphs_stuff_plus.py
+              - "--season"
+              - "2026"
+              - "--dry-run"
+
+      - id: build-hitting-leaderboard-ingestion
+        kind: Task
+        description: >
+          Create scripts/ingest_fangraphs_hitting_leaderboard.py to iterate over rolling
+          windows and append all payloads to fg_hitting_leaderboard_raw.
+
+          Window types: '7d', '14d', '30d', 'season'
+          For '7d', '14d', '30d': iterate from season start through season end date,
+          advancing by the window size to generate non-overlapping snapshots.
+          For 'season': one request per season (start=season_start, end=season_end).
+
+          Season date defaults:
+            - Season start: April 1 of --season
+            - Season end: October 1 of --season (or today if current season)
+
+          Script CLI interface:
+            python scripts/ingest_fangraphs_hitting_leaderboard.py \
+              --season 2026 \
+              [--window-types 7d,14d,30d,season] \
+              [--dry-run]
+
+          Behavior:
+            - For each window_type × window_start/end combination: fetch leaderboard,
+              store window metadata as grain columns (season, window_type, window_start,
+              window_end) alongside raw_json
+            - Dry-run mode: prints total request count and first window params; no writes
+            - Live mode: appends each window result to fg_hitting_leaderboard_raw
+            - Logs progress: "Window 7d 2026-04-01→2026-04-07: N rows"
+            - On any single-window failure: logs warning and continues remaining windows;
+              failed windows are written to a local error log (ingest_errors.json)
+
+          The process must be rerunnable for a full season without changing code logic.
+        dependsOn:
+          - create-snowflake-ddl
+          - create-shared-utilities
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Hitting leaderboard script
+            path: scripts/ingest_fangraphs_hitting_leaderboard.py
+          - type: command_succeeds
+            name: Script syntax valid and imports shared utilities
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_fangraphs_hitting_leaderboard.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                imports = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        imports.add(ast.dump(node))
+                found_client = any('fangraphs_client' in i for i in imports)
+                found_loader = any('snowflake_loader' in i for i in imports)
+                assert found_client, 'fangraphs_client not imported in hitting leaderboard script'
+                assert found_loader, 'snowflake_loader not imported in hitting leaderboard script'
+                # Check that all four window types are referenced
+                found_7d = False; found_14d = False; found_30d = False; found_season = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if '7d' in node.value: found_7d = True
+                        if '14d' in node.value: found_14d = True
+                        if '30d' in node.value: found_30d = True
+                        if 'season' in node.value.lower(): found_season = True
+                assert found_7d and found_14d and found_30d and found_season, \
+                    'Not all four window types (7d, 14d, 30d, season) found in script'
+                print('Hitting leaderboard script OK — all four window types present')
+          - type: command_succeeds
+            name: Dry-run prints window plan without writing
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_fangraphs_hitting_leaderboard.py
+              - "--season"
+              - "2026"
+              - "--dry-run"
+
+      - id: create-dbt-sources
+        kind: Task
+        description: >
+          Update dbt/models/sources.yml (or create dbt/models/fangraphs/sources.yml)
+          to register all four FanGraphs raw tables in the baseball_data.fangraphs schema.
+
+          Source block structure:
+            - name: fangraphs
+              database: baseball_data
+              schema: fangraphs
+              tables:
+                - name: fg_stuff_plus_raw
+                  description: >
+                    Raw append-only table for FanGraphs Stuff+ pitching leaderboard.
+                    Grain: one row per ingestion run × pitcher. Full API response stored
+                    in raw_json VARIANT.
+                - name: fg_zips_pitching_raw
+                  description: >
+                    Raw append-only table for FanGraphs ZiPS pitching projections.
+                    Grain: one row per ingestion run × pitcher × projection_type.
+                - name: fg_zips_hitting_raw
+                  description: >
+                    Raw append-only table for FanGraphs ZiPS hitting projections.
+                    Grain: one row per ingestion run × batter × projection_type.
+                - name: fg_hitting_leaderboard_raw
+                  description: >
+                    Raw append-only table for FanGraphs hitting leaderboard snapshots.
+                    Grain: one row per ingestion run × window_type × window date range.
+
+          Run dbtf parse to confirm source compilation succeeds after adding.
+        dependsOn:
+          - build-zips-pitching-ingestion
+          - build-zips-hitting-ingestion
+          - build-stuff-plus-ingestion
+          - build-hitting-leaderboard-ingestion
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbt sources compile cleanly
+            command: dbtf
+            args:
+              - parse
+          - type: command_succeeds
+            name: All four fangraphs sources registered in sources.yml
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, yaml
+                # Find the sources file containing fangraphs sources
+                candidates = list(pathlib.Path('dbt').rglob('sources.yml'))
+                fangraphs_found = False
+                tables_found = set()
+                expected = {
+                    'fg_stuff_plus_raw',
+                    'fg_zips_pitching_raw',
+                    'fg_zips_hitting_raw',
+                    'fg_hitting_leaderboard_raw',
+                }
+                for c in candidates:
+                    content = yaml.safe_load(c.read_text())
+                    for src in content.get('sources', []):
+                        if src.get('name') == 'fangraphs':
+                            fangraphs_found = True
+                            for tbl in src.get('tables', []):
+                                tables_found.add(tbl['name'])
+                assert fangraphs_found, 'fangraphs source block not found in any sources.yml'
+                missing = expected - tables_found
+                assert not missing, f'Missing tables in fangraphs source: {missing}'
+                print(f'All four fangraphs raw tables registered in sources.yml')
+
+      - id: build-dbt-staging-models
+        kind: Task
+        description: >
+          Create four dbt staging models in dbt/models/staging/fangraphs/ that extract
+          typed fields from raw_json, standardize names, and retain ingestion metadata.
+
+          Model naming: stg_fangraphs__<feed_name> (double-underscore convention).
+
+          stg_fangraphs__stuff_plus:
+            Source: fg_stuff_plus_raw (latest load_id per pitcher × season)
+            Extracted columns: fg_pitcher_id, pitcher_name, season, ip,
+              stuff_plus, location_plus, pitching_plus,
+              primary_pitch_type, fastball_pct, breaking_pct, offspeed_pct,
+              ingestion_ts, load_id
+
+          stg_fangraphs__zips_pitching:
+            Source: fg_zips_pitching_raw (latest load_id per pitcher × season × projection_type)
+            Extracted columns: fg_pitcher_id, pitcher_name, season, projection_type,
+              proj_fip, proj_xfip, proj_era, proj_k_pct, proj_bb_pct, proj_ip,
+              ingestion_ts, load_id
+
+          stg_fangraphs__zips_hitting:
+            Source: fg_zips_hitting_raw (latest load_id per batter × season × projection_type)
+            Extracted columns: fg_batter_id, batter_name, season, projection_type,
+              proj_wrc_plus, proj_obp, proj_slg, proj_k_pct, proj_bb_pct, proj_pa,
+              ingestion_ts, load_id
+
+          stg_fangraphs__hitting_leaderboard:
+            Source: fg_hitting_leaderboard_raw (all loads; keep window metadata as grain)
+            Extracted columns: fg_batter_id, batter_name, season, window_type,
+              window_start, window_end, wrc_plus, obp, slg, k_pct, bb_pct, pa,
+              ingestion_ts, load_id
+
+          Each model must use {{ source('fangraphs', '<table_name>') }} references.
+          Deduplication for snapshot sources: use ROW_NUMBER() OVER (PARTITION BY grain
+          ORDER BY ingestion_ts DESC) = 1 to select the most-recent load.
+
+          Run dbtf build --select tag:fangraphs to verify all models build cleanly.
+        dependsOn:
+          - create-dbt-sources
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Stuff+ staging model
+            path: dbt/models/staging/fangraphs/stg_fangraphs__stuff_plus.sql
+          - type: artifact_exists
+            name: ZiPS pitching staging model
+            path: dbt/models/staging/fangraphs/stg_fangraphs__zips_pitching.sql
+          - type: artifact_exists
+            name: ZiPS hitting staging model
+            path: dbt/models/staging/fangraphs/stg_fangraphs__zips_hitting.sql
+          - type: artifact_exists
+            name: Hitting leaderboard staging model
+            path: dbt/models/staging/fangraphs/stg_fangraphs__hitting_leaderboard.sql
+          - type: command_succeeds
+            name: All staging models use source() references (not direct table refs)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                staging_dir = pathlib.Path('dbt/models/staging/fangraphs')
+                files = list(staging_dir.glob('stg_fangraphs__*.sql'))
+                assert len(files) == 4, f'Expected 4 staging models, found {len(files)}'
+                for f in files:
+                    content = f.read_text()
+                    assert "source('fangraphs'" in content, \
+                        f"{f.name} does not use source('fangraphs', ...) reference"
+                    assert 'ROW_NUMBER()' in content or 'row_number()' in content or \
+                        'QUALIFY' in content or 'qualify' in content, \
+                        f"{f.name} lacks deduplication logic (ROW_NUMBER or QUALIFY)"
+                print('All 4 staging models use source() refs and have deduplication logic')
+          - type: command_succeeds
+            name: dbt staging models build cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "stg_fangraphs__*"
+
+      - id: build-dbt-mart-models
+        kind: Task
+        description: >
+          Create two dbt mart models in dbt/models/marts/fangraphs/ that join staging
+          models and produce analytics-ready views for pitching and hitting.
+
+          fct_fangraphs_pitching_analytics:
+            Joins: stg_fangraphs__stuff_plus + stg_fangraphs__zips_pitching
+            Join key: fg_pitcher_id × season
+            Output columns: fg_pitcher_id, pitcher_name, season,
+              stuff_plus, location_plus, pitching_plus,
+              proj_fip, proj_xfip, proj_era, proj_k_pct, proj_bb_pct, proj_ip,
+              primary_pitch_type, fastball_pct, breaking_pct, offspeed_pct
+            Grain: one row per pitcher × season (LEFT JOIN — Stuff+ as base,
+              ZiPS as enrichment; not all pitchers will have ZiPS projections)
+
+          fct_fangraphs_hitting_analytics:
+            Joins: stg_fangraphs__zips_hitting + stg_fangraphs__hitting_leaderboard
+            Join key: fg_batter_id × season
+            Output columns: fg_batter_id, batter_name, season,
+              proj_wrc_plus, proj_obp, proj_slg, proj_k_pct, proj_bb_pct, proj_pa,
+              rolling_wrc_plus_7d, rolling_wrc_plus_14d, rolling_wrc_plus_30d,
+              season_wrc_plus
+            Grain: one row per batter × season; rolling columns from most-recent
+              window snapshot per type
+
+          Both models should be tagged with meta: {source: fangraphs} in schema.yml
+          for downstream feature layer discoverability.
+        dependsOn:
+          - build-dbt-staging-models
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Pitching analytics mart
+            path: dbt/models/marts/fangraphs/fct_fangraphs_pitching_analytics.sql
+          - type: artifact_exists
+            name: Hitting analytics mart
+            path: dbt/models/marts/fangraphs/fct_fangraphs_hitting_analytics.sql
+          - type: command_succeeds
+            name: Mart models build cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "fct_fangraphs_*"
+
+      - id: document-schema-yml
+        kind: Task
+        description: >
+          Create or update schema.yml files for all FanGraphs staging and mart models
+          with column-level descriptions.
+
+          File locations:
+            dbt/models/staging/fangraphs/schema.yml
+            dbt/models/marts/fangraphs/schema.yml
+
+          Each model entry must include:
+            - model description (1–2 sentences: grain + purpose)
+            - column descriptions for every non-obvious column
+            - data_tests on key columns:
+                - stg_fangraphs__stuff_plus: unique (fg_pitcher_id, season)
+                - stg_fangraphs__zips_pitching: unique (fg_pitcher_id, season, projection_type)
+                - stg_fangraphs__zips_hitting: unique (fg_batter_id, season, projection_type)
+                - stg_fangraphs__hitting_leaderboard: unique (fg_batter_id, season, window_type, window_start)
+                - fct_fangraphs_pitching_analytics: unique (fg_pitcher_id, season)
+                - fct_fangraphs_hitting_analytics: unique (fg_batter_id, season)
+              All key columns: not_null test
+
+          Run dbtf test --select stg_fangraphs__* fct_fangraphs__* to verify tests pass.
+        dependsOn:
+          - build-dbt-staging-models
+          - build-dbt-mart-models
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Staging schema.yml
+            path: dbt/models/staging/fangraphs/schema.yml
+          - type: artifact_exists
+            name: Mart schema.yml
+            path: dbt/models/marts/fangraphs/schema.yml
+          - type: command_succeeds
+            name: schema.yml files cover all six models
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, yaml
+                expected_models = {
+                    'stg_fangraphs__stuff_plus',
+                    'stg_fangraphs__zips_pitching',
+                    'stg_fangraphs__zips_hitting',
+                    'stg_fangraphs__hitting_leaderboard',
+                    'fct_fangraphs_pitching_analytics',
+                    'fct_fangraphs_hitting_analytics',
+                }
+                found = set()
+                for schema_path in [
+                    pathlib.Path('dbt/models/staging/fangraphs/schema.yml'),
+                    pathlib.Path('dbt/models/marts/fangraphs/schema.yml'),
+                ]:
+                    content = yaml.safe_load(schema_path.read_text())
+                    for model in content.get('models', []):
+                        found.add(model['name'])
+                missing = expected_models - found
+                assert not missing, f'Models missing from schema.yml: {missing}'
+                print(f'All 6 FanGraphs models documented in schema.yml')
+          - type: command_succeeds
+            name: dbt tests pass for all FanGraphs models
+            command: dbtf
+            args:
+              - test
+              - "--select"
+              - "stg_fangraphs__* fct_fangraphs_*"
+
+      - id: validate-end-to-end-pipeline
+        kind: Task
+        description: >
+          Run a full end-to-end validation of the FanGraphs pipeline and document results.
+
+          Validation steps (implement as scripts/validate_fangraphs_pipeline.py):
+
+          Step 1 — Row count checks (via Snowflake MCP or direct query):
+            SELECT COUNT(*) FROM baseball_data.fangraphs.fg_stuff_plus_raw;      -- expect ≥350
+            SELECT COUNT(*) FROM baseball_data.fangraphs.fg_zips_pitching_raw;   -- expect ≥400
+            SELECT COUNT(*) FROM baseball_data.fangraphs.fg_zips_hitting_raw;    -- expect ≥700
+            SELECT COUNT(*) FROM baseball_data.fangraphs.fg_hitting_leaderboard_raw; -- expect ≥4 window types
+
+          Step 2 — MLBAM ID join coverage:
+            Join fg_zips_pitching_raw.fg_pitcher_id to ref_players.fg_pitcher_id.
+            Assert ≥95% of ZiPS pitchers match a ref_players row.
+            Log any unmatched pitcher names for manual ID resolution.
+
+          Step 3 — Staging model row validation:
+            SELECT COUNT(*), COUNT(CASE WHEN stuff_plus IS NULL THEN 1 END) AS null_stuff
+            FROM baseball_data.dbt.stg_fangraphs__stuff_plus WHERE season = 2026;
+            Assert: null_stuff / COUNT(*) < 0.10 (less than 10% null Stuff+)
+
+          Step 4 — No duplicate grain check on mart models:
+            SELECT fg_pitcher_id, season, COUNT(*) AS cnt
+            FROM baseball_data.dbt.fct_fangraphs_pitching_analytics
+            GROUP BY 1, 2 HAVING cnt > 1;
+            Assert: 0 rows returned.
+
+          Document results in betting_ml/evaluation/fangraphs_validation.md:
+            - Date of validation run
+            - Row counts for each raw table
+            - MLBAM join rate
+            - Null rate for key metrics
+            - Any known gaps or unmatched players
+
+          Add ingest_fangraphs_*.py scripts to daily_ingestion.yml with conditional
+          step logic (ZiPS/Steamer: runs February 1 and July 1 only; Stuff+: weekly;
+          hitting leaderboard: daily during season).
+        dependsOn:
+          - document-schema-yml
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Validation script
+            path: scripts/validate_fangraphs_pipeline.py
+          - type: artifact_exists
+            name: Validation results documented
+            path: betting_ml/evaluation/fangraphs_validation.md
+          - type: command_succeeds
+            name: daily_ingestion.yml references FanGraphs ingestion steps
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                candidates = list(pathlib.Path('.').rglob('daily_ingestion.yml'))
+                assert candidates, 'daily_ingestion.yml not found'
+                content = candidates[0].read_text()
+                assert 'ingest_fangraphs' in content, \
+                    'No fangraphs ingestion step found in daily_ingestion.yml'
+                assert 'zips' in content.lower() or 'stuff' in content.lower(), \
+                    'ZiPS or Stuff+ step not found in daily_ingestion.yml'
+                print(f'daily_ingestion.yml references FanGraphs steps — found in {candidates[0]}')
+          - type: command_succeeds
+            name: Validation script runs cleanly
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/validate_fangraphs_pipeline.py
+              - "--season"
+              - "2026"

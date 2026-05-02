@@ -1,17 +1,21 @@
 name: Odds Snapshot
 
-# Re-ingests odds every ~5-6 hours on top of the 08:00 UTC morning run in
-# daily_ingestion.yml, giving 4 snapshots per game day for line-movement tracking.
+# Re-ingests odds on top of the 08:00 UTC morning run in daily_ingestion.yml,
+# giving 6 snapshots per game day for line-movement tracking and T-1h pre-bet quality.
 #
 # Schedule (all UTC → EDT offset -4):
 #   17:00 UTC = 1:00 PM EDT   — pre-afternoon games
+#   18:30 UTC = 2:30 PM EDT   — T-1h for afternoon first pitches (1:10pm, 3:10pm starts)
 #   22:00 UTC = 6:00 PM EDT   — pre-evening games
-#   03:00 UTC = 11:00 PM EDT  — late-game / closing lines
+#   23:30 UTC = 7:30 PM EDT   — T-~30min to T-1h for evening first pitches (7:08pm–7:10pm starts)
+#   03:00 UTC = 11:00 PM EDT  — late-game / closing lines (covers west coast 9pm–10pm ET starts)
 
 on:
   schedule:
     - cron: '0 17 * * *'
+    - cron: '30 18 * * *'
     - cron: '0 22 * * *'
+    - cron: '30 23 * * *'
     - cron: '0 3 * * *'
   workflow_dispatch: {}
 

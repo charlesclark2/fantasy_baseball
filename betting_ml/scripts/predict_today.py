@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     -- H2H (moneyline) market — NULL when has_odds = FALSE
     h2h_market_implied_prob FLOAT,   -- consensus vig-adjusted P(home wins)
     h2h_posterior_prob      FLOAT,   -- Bayesian blend of model and market
-    h2h_edge                FLOAT,   -- p_home_win_ngboost - h2h_market_implied_prob
+    h2h_edge                FLOAT,   -- consensus_win_prob - h2h_market_implied_prob
     h2h_kelly_fraction      FLOAT,   -- full Kelly fraction (positive = bet home)
 
     -- Totals market — NULL when has_odds = FALSE
@@ -175,8 +175,8 @@ def _write_predictions_to_snowflake(
         # H2H market values
         h2h_mkt_v  = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
-            h2h_edge  = compute_edge(ngb_win, h2h_mkt_v)
-            h2h_post  = compute_posterior(ngb_win, h2h_mkt_v, best_alpha)
+            h2h_edge  = compute_edge(cons_win, h2h_mkt_v)
+            h2h_post  = compute_posterior(cons_win, h2h_mkt_v, best_alpha)
             h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
         else:
             h2h_edge = h2h_post = h2h_kelly = None

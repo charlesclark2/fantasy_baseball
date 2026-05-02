@@ -131,6 +131,8 @@ uv run odds_api_ingestion.py odds --markets h2h totals spreads --regions us us2 
 
 **API credit note:** Each `odds` run costs multiple API credits (one per market × region combination; default: 2 markets × 2 regions = 4 calls). Check remaining credits in the log output (`x_requests_remaining`) or in the raw tables. Budget roughly 8–12 credits per full daily run.
 
+**Intraday snapshot budget (odds_snapshot.yml):** The GHA workflow runs 5 additional snapshots per game day (17:00, 18:30, 22:00, 23:30, 03:00 UTC), plus the morning run in `daily_ingestion.yml` — 6 total. At ~15 credits per snapshot on a full slate, budget ~90 credits/day on active game days. The games-check step skips all ingestion on off-days, so off-season burn is zero.
+
 ---
 
 ## Step 4 — Refresh dbt mart layer

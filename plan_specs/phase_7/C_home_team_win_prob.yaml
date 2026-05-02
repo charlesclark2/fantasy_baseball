@@ -1,0 +1,496 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: home-win-probability-calibration
+  namespace: default
+spec:
+  description: >
+    Diagnose and correct systematic home-team underprediction in the h2h win
+    probability model by applying in-season recalibration on 2026 game results,
+    persisting the calibrator as an artifact, and wiring calibrated_win_prob
+    into predict_today.py.
+
+    BACKGROUND: After the consensus_win_prob fix in Card 6.H (cons_win now passed
+    to compute_edge() instead of ngb_win), only 35.39% of predictions show
+    positive h2h edge. The model systematically underestimates home win
+    probability. The production home_win artifact is
+    betting_ml/models/home_win/xgboost_sigmoid_prod_calibrated.pkl — a XGBoost
+    classifier with sigmoid (Platt) post-hoc calibration trained through the
+    2025 season. The model's cv_brier is 0.2443 vs. the market's 0.2395 (from
+    postmortem_v0.md). This is a calibration deficiency in 2026 in-season
+    conditions, not a model architecture problem; a targeted recalibration on
+    live 2026 results is the appropriate fix before committing to a full retrain.
+
+    This card has three deliverables:
+
+    1. Diagnostic analysis — query daily_model_predictions for all 2026 rows
+       with non-null actual_outcome, compute a reliability diagram for
+       consensus_win_prob across 10 probability bins, and document whether the
+       bias is uniform or concentrated in specific contexts (road favorites,
+       high-run parks, afternoon starts).
+
+    2. In-season calibrator — fit Platt scaling (logistic regression) or isotonic
+       regression on the 2026 in-season results, whichever produces lower ECE.
+       Persist as betting_ml/models/home_win/calibrator.joblib. The calibrator
+       wraps consensus_win_prob → calibrated_win_prob; it does not replace the
+       underlying XGBoost model.
+
+    3. Pipeline integration — update predict_today.py to apply the calibrator and
+       write calibrated_win_prob to daily_model_predictions. Use calibrated_win_prob
+       (not consensus_win_prob) as the input to compute_edge() and compute_kelly().
+
+    BLOCKER: Requires ≥100 completed 2026 games with non-null actual_outcome in
+    daily_model_predictions. As of 2026-05-01 approximately 35–40 results exist.
+    The data volume gate below must clear before any implementation begins. At
+    the current pace of ~7 games/day (with the data-accumulation gate targeting
+    2026-05-25), do not begin implementation until the gate query confirms ≥100
+    rows. Source: Gap 2 from betting_ml/evaluation/postmortem_v0.md.
+  acceptanceCriteria:
+    - description: >
+        Reliability diagram plotted for consensus_win_prob across 10 bins. Bias
+        documented as either uniform (across all bins) or context-specific (road
+        favorites, high-run parks, afternoon starts). Findings written to
+        betting_ml/evaluation/postmortem_v0.md or a new
+        betting_ml/evaluation/calibration_analysis_v1.md.
+    - description: >
+        betting_ml/models/home_win/calibrator.joblib exists and loads cleanly
+        via joblib.load(). The calibrator accepts a 1D array of win probabilities
+        and returns a 1D array of calibrated probabilities in [0, 1].
+    - description: >
+        ECE (Expected Calibration Error) for calibrated_win_prob is strictly
+        less than ECE for consensus_win_prob on the held-out 2026 game results
+        used for evaluation. Both ECE values are documented.
+    - description: >
+        Mean h2h edge recomputed using calibrated_win_prob across the 2026
+        has_odds sample and compared to the v0 baseline (−0.017 consensus,
+        −0.036 NGBoost alone). Result documented in postmortem_v0.md with the
+        number of games evaluated.
+    - description: >
+        predict_today.py applies calibrator.joblib at inference time and writes
+        calibrated_win_prob to daily_model_predictions. compute_edge() and
+        compute_kelly() use calibrated_win_prob as input. consensus_win_prob
+        is retained as an auditing column but is not the live edge input.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: sufficient-2026-results-accumulated
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    DATA VOLUME GATE — calibration on fewer than 100 results produces an
+    overfit calibrator that will degrade out-of-sample. Do not begin any
+    implementation task until this query clears.
+
+    Run the following via Snowflake MCP or directly in Snowflake:
+
+      SELECT
+        COUNT(*)                                                  AS total_has_odds,
+        SUM(CASE WHEN actual_outcome IS NOT NULL THEN 1 ELSE 0 END) AS with_outcome,
+        MIN(score_date)                                           AS earliest,
+        MAX(score_date)                                           AS latest
+      FROM baseball_data.betting_ml.daily_model_predictions
+      WHERE has_odds = TRUE
+        AND season = 2026;
+
+    Required to proceed: with_outcome >= 100.
+
+    Expected unblock date: approximately 2026-05-25 at the current pace of
+    ~7 completed games per day from 2026-05-01.
+
+    Also confirm that consensus_win_prob is non-null for the majority of rows —
+    if there is a data pipeline gap, fix it before fitting the calibrator.
+
+      SELECT
+        COUNT(*)                                                           AS rows,
+        SUM(CASE WHEN consensus_win_prob IS NULL THEN 1 ELSE 0 END)       AS null_cons_win,
+        SUM(CASE WHEN actual_outcome IS NOT NULL THEN 1 ELSE 0 END)       AS has_outcome
+      FROM baseball_data.betting_ml.daily_model_predictions
+      WHERE has_odds = TRUE AND season = 2026;
+
+    Expected: null_cons_win = 0 (or very low), has_outcome >= 100.
+
+    This gate clears when the user confirms the query returns with_outcome >= 100
+    and consensus_win_prob is populated for the evaluation rows.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: home-win-calibration-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential DAG, all gated on the data volume gate clearing.
+    Task 1 (diagnostic analysis) must complete before Task 2 (calibrator
+    training) because the diagnostic determines which calibration method to
+    use — Platt scaling for linear bias, isotonic for non-linear. Task 3
+    (pipeline integration) depends on Task 2 producing a valid calibrator.joblib.
+  goalRef:
+    name: home-win-probability-calibration
+  graph:
+    nodes:
+
+      - id: diagnostic-analysis
+        kind: Task
+        description: >
+          Query 2026 game results and produce a reliability diagram for
+          consensus_win_prob. Document the nature and context of the bias before
+          any calibration code is written.
+
+          STEP 1 — Pull evaluation data from Snowflake:
+            SELECT
+              game_pk,
+              score_date,
+              home_team,
+              away_team,
+              consensus_win_prob,
+              actual_outcome,       -- 1 = home win, 0 = away win
+              h2h_market_implied_prob,
+              venue_id
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE has_odds = TRUE
+              AND season = 2026
+              AND actual_outcome IS NOT NULL
+            ORDER BY score_date;
+
+          STEP 2 — Reliability diagram (10 bins):
+            Bin consensus_win_prob into deciles (0.0–0.1, 0.1–0.2, … 0.9–1.0).
+            For each bin compute: mean predicted probability, fraction of home wins,
+            and count of games. Plot fraction_home_wins vs. mean_predicted. A
+            perfectly calibrated model lies on the diagonal.
+
+          STEP 3 — Compute ECE (baseline):
+            ECE = Σ (|bin_count| / N) × |mean_predicted − fraction_wins| across all bins.
+            Record this as the consensus_win_prob ECE baseline.
+
+          STEP 4 — Context breakdown:
+            Segment the bias by:
+              a) Road favorites: rows where h2h_market_implied_prob < 0.50
+                 (market favors the away team) but consensus_win_prob > 0.50
+              b) High-run parks: venue_id IN (Coors, Great American, other 30+
+                 run-environment parks from feature_pregame_park_features)
+              c) Afternoon games (game_datetime_utc hour < 20 UTC, ~4pm ET)
+
+            For each segment compute: count, mean consensus_win_prob, fraction home wins,
+            mean h2h edge. Identify whether bias is uniform or context-concentrated.
+
+          STEP 5 — Document findings:
+            Write a new section "## Card 7.C Calibration Diagnostic" in
+            betting_ml/evaluation/postmortem_v0.md (or create a separate
+            betting_ml/evaluation/calibration_analysis_v1.md if the file is
+            already large). Include:
+              - The reliability diagram data (bin midpoint, mean_predicted,
+                fraction_wins, count) as a markdown table
+              - ECE baseline value
+              - Context breakdown table
+              - Recommended calibration method: Platt (logistic regression) if
+                bias is roughly linear; isotonic regression if bin curve is
+                non-monotone or highly non-linear
+
+          OUTPUT: The diagnostic section must be committed before Task 2 begins.
+          The choice of Platt vs. isotonic must be documented in the analysis.
+        dependsOn:
+          - sufficient-2026-results-accumulated
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Calibration analysis document exists
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                candidates = [
+                    pathlib.Path('betting_ml/evaluation/postmortem_v0.md'),
+                    pathlib.Path('betting_ml/evaluation/calibration_analysis_v1.md'),
+                ]
+                found = [p for p in candidates if p.exists() and 'calibration diagnostic' in p.read_text().lower()]
+                assert found, (
+                    'No calibration diagnostic section found in postmortem_v0.md '
+                    'or calibration_analysis_v1.md'
+                )
+                print(f'Calibration diagnostic found in: {found[0]}')
+          - type: command_succeeds
+            name: Reliability diagram table present in analysis doc
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                candidates = [
+                    pathlib.Path('betting_ml/evaluation/postmortem_v0.md'),
+                    pathlib.Path('betting_ml/evaluation/calibration_analysis_v1.md'),
+                ]
+                docs = [p.read_text() for p in candidates if p.exists()]
+                combined = '\n'.join(docs).lower()
+                checks = {
+                    'reliability diagram or bin table': 'bin' in combined and ('fraction' in combined or 'reliability' in combined),
+                    'ECE baseline value': 'ece' in combined,
+                    'calibration method recommendation': 'platt' in combined or 'isotonic' in combined,
+                }
+                failures = [k for k, v in checks.items() if not v]
+                assert not failures, f'Missing in calibration analysis: {failures}'
+                print('Reliability diagram, ECE, and method recommendation all present')
+
+      - id: train-calibrator
+        kind: Task
+        description: >
+          Fit a post-hoc calibrator on 2026 in-season results using the method
+          recommended by the diagnostic analysis, and persist it as
+          betting_ml/models/home_win/calibrator.joblib.
+
+          IMPLEMENTATION:
+
+          Use a train/eval split on the 2026 results:
+            - Train calibrator on the first 80% of results (chronological order)
+            - Evaluate on the remaining 20% (held-out)
+            Do not use a random split — temporal ordering is critical to prevent
+            future data leaking into calibration training.
+
+          For Platt scaling (if recommended by diagnostic):
+            from sklearn.linear_model import LogisticRegression
+            import numpy as np
+
+            cal = LogisticRegression(C=1.0)
+            # X is (N, 1) — consensus_win_prob reshaped
+            cal.fit(X_train.reshape(-1, 1), y_train)
+            calibrated_probs = cal.predict_proba(X_eval.reshape(-1, 1))[:, 1]
+
+          For isotonic regression (if recommended by diagnostic):
+            from sklearn.isotonic import IsotonicRegression
+
+            cal = IsotonicRegression(out_of_bounds='clip')
+            cal.fit(X_train, y_train)
+            calibrated_probs = cal.predict(X_eval)
+
+          ECE comparison:
+            Compute ECE for both consensus_win_prob and calibrated_win_prob on
+            the held-out eval set. Confirm ECE(calibrated) < ECE(consensus).
+            If the improvement is less than 0.002 ECE units, document this —
+            the calibrator may not be worth the added inference complexity.
+
+          Persist:
+            import joblib, pathlib
+            out_path = pathlib.Path('betting_ml/models/home_win/calibrator.joblib')
+            joblib.dump(cal, out_path)
+            print(f'Calibrator saved to {out_path}')
+            print(f'ECE before: {ece_before:.4f}  ECE after: {ece_after:.4f}')
+
+          Also write a brief metadata sidecar:
+            betting_ml/models/home_win/calibrator_meta.json:
+            {
+              "method": "platt" | "isotonic",
+              "train_n": <int>,
+              "eval_n": <int>,
+              "ece_before": <float>,
+              "ece_after": <float>,
+              "train_date_range": ["YYYY-MM-DD", "YYYY-MM-DD"],
+              "fitted_at": "<ISO timestamp>"
+            }
+        dependsOn:
+          - diagnostic-analysis
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: calibrator.joblib exists
+            path: betting_ml/models/home_win/calibrator.joblib
+          - type: artifact_exists
+            name: calibrator_meta.json exists
+            path: betting_ml/models/home_win/calibrator_meta.json
+          - type: command_succeeds
+            name: calibrator.joblib loads and produces valid probabilities
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, numpy as np, pathlib
+                cal = joblib.load('betting_ml/models/home_win/calibrator.joblib')
+                test_probs = np.array([0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70])
+                try:
+                    calibrated = cal.predict_proba(test_probs.reshape(-1, 1))[:, 1]
+                except AttributeError:
+                    calibrated = cal.predict(test_probs)
+                assert calibrated.shape == test_probs.shape, 'Output shape mismatch'
+                assert all(0.0 <= p <= 1.0 for p in calibrated), f'Probabilities out of [0,1]: {calibrated}'
+                assert not np.allclose(calibrated, test_probs), 'Calibrator appears to be identity — did it actually fit?'
+                print(f'calibrator.joblib OK — sample input: {test_probs}, output: {np.round(calibrated, 4)}')
+          - type: command_succeeds
+            name: calibrator_meta.json parses and confirms ECE improvement
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, pathlib
+                meta = json.loads(pathlib.Path('betting_ml/models/home_win/calibrator_meta.json').read_text())
+                required_keys = {'method', 'train_n', 'eval_n', 'ece_before', 'ece_after', 'fitted_at'}
+                missing = required_keys - meta.keys()
+                assert not missing, f'Missing keys in calibrator_meta.json: {missing}'
+                assert meta['method'] in ('platt', 'isotonic'), f"Invalid method: {meta['method']}"
+                assert meta['ece_after'] < meta['ece_before'], (
+                    f"ECE did not improve: before={meta['ece_before']:.4f}, after={meta['ece_after']:.4f}"
+                )
+                assert meta['eval_n'] >= 20, f"Eval set too small: {meta['eval_n']} rows"
+                print(f"calibrator_meta.json OK — method={meta['method']}, ECE {meta['ece_before']:.4f} → {meta['ece_after']:.4f}")
+
+      - id: integrate-calibrated-win-prob
+        kind: Task
+        description: >
+          Update predict_today.py to load calibrator.joblib at startup, apply it
+          to consensus_win_prob at inference time, write calibrated_win_prob to
+          daily_model_predictions, and use it as the input to compute_edge() and
+          compute_kelly().
+
+          STEP 1 — Load calibrator at startup:
+            At the top of predict_today.py (after existing imports), add:
+
+              import joblib, numpy as np
+
+              _CALIBRATOR_PATH = pathlib.Path('betting_ml/models/home_win/calibrator.joblib')
+
+              def _load_calibrator():
+                  if _CALIBRATOR_PATH.exists():
+                      return joblib.load(_CALIBRATOR_PATH)
+                  print('[WARN] calibrator.joblib not found — using consensus_win_prob uncalibrated')
+                  return None
+
+              _calibrator = _load_calibrator()
+
+          STEP 2 — Apply calibrator per-game at inference:
+            After consensus_win_prob is computed for each row, apply:
+
+              if _calibrator is not None:
+                  raw = np.array([consensus_win_prob])
+                  try:
+                      calibrated_win_prob = float(
+                          _calibrator.predict_proba(raw.reshape(-1, 1))[0, 1]
+                      )
+                  except AttributeError:
+                      calibrated_win_prob = float(_calibrator.predict(raw)[0])
+              else:
+                  calibrated_win_prob = consensus_win_prob
+
+          STEP 3 — Use calibrated_win_prob in edge and Kelly calculations:
+            Replace the existing compute_edge() and compute_kelly() call sites:
+              - compute_edge(consensus_win_prob, ...) → compute_edge(calibrated_win_prob, ...)
+              - compute_kelly(consensus_win_prob, ...) → compute_kelly(calibrated_win_prob, ...)
+
+            Retain consensus_win_prob as a written column in daily_model_predictions
+            for auditing — do not remove it.
+
+          STEP 4 — Add calibrated_win_prob column to daily_model_predictions write:
+            In the Snowflake INSERT or UPDATE that persists predictions, add:
+              calibrated_win_prob: <value>
+            If the column does not exist in the table yet, add a DDL migration:
+              ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+              ADD COLUMN calibrated_win_prob FLOAT;
+            Add the DDL to scripts/ddl/ following existing conventions.
+
+          STEP 5 — Update model_registry.yaml:
+            Add a calibrator entry under the home_win block:
+              home_win:
+                ...existing fields...
+                calibrator_path: betting_ml/models/home_win/calibrator.joblib
+                calibrator_method: platt   # or isotonic
+                calibrator_fitted_at: "<ISO timestamp from calibrator_meta.json>"
+                calibrator_ece_before: <float>
+                calibrator_ece_after: <float>
+        dependsOn:
+          - train-calibrator
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py references calibrator.joblib (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                found = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'calibrator.joblib' in node.value:
+                            found = True
+                            break
+                assert found, "'calibrator.joblib' path not found in predict_today.py"
+                print('calibrator.joblib reference found in predict_today.py')
+          - type: command_succeeds
+            name: predict_today.py uses calibrated_win_prob in edge/kelly calls (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                checks = {
+                    'calibrated_win_prob assigned': 'calibrated_win_prob' in src,
+                    'compute_edge uses calibrated prob': (
+                        'compute_edge(calibrated_win_prob' in src or
+                        'compute_edge(calibrated' in src
+                    ),
+                    'consensus_win_prob retained as audit column': 'consensus_win_prob' in src,
+                }
+                failures = [k for k, v in checks.items() if not v]
+                assert not failures, f'predict_today.py integration issues: {failures}'
+                print('calibrated_win_prob integration verified in predict_today.py')
+          - type: command_succeeds
+            name: predict_today.py syntax is valid after changes
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                ast.parse(src)
+                print('predict_today.py syntax OK')
+          - type: command_succeeds
+            name: DDL migration file for calibrated_win_prob column exists
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                ddl_files = list(pathlib.Path('scripts/ddl').glob('*.sql'))
+                found = any('calibrated_win_prob' in f.read_text() for f in ddl_files)
+                assert found, (
+                    'No DDL migration adding calibrated_win_prob column found in scripts/ddl/. '
+                    'Add ALTER TABLE daily_model_predictions ADD COLUMN calibrated_win_prob FLOAT'
+                )
+                print('calibrated_win_prob DDL migration found in scripts/ddl/')
+          - type: command_succeeds
+            name: model_registry.yaml references calibrator
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/models/model_registry.yaml').read_text()
+                assert 'calibrator_path' in content, (
+                    'calibrator_path not added to model_registry.yaml home_win block'
+                )
+                assert 'calibrator.joblib' in content, (
+                    'calibrator.joblib path not referenced in model_registry.yaml'
+                )
+                print('model_registry.yaml includes calibrator entry')

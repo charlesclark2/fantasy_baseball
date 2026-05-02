@@ -1,0 +1,647 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: weather-features
+  namespace: default
+spec:
+  description: >
+    Add temperature, wind, and humidity features to the pre-game feature store
+    for outdoor stadiums, and retrain the totals model to validate a measurable
+    MAE improvement over the 3.5718 baseline.
+
+    BACKGROUND: Weather is the highest-signal missing feature for the totals
+    model. Wind at outdoor parks (Wrigley, Fenway, Coors) produces ~2-run swings.
+    Park factor (r=0.122) and elevation (r=0.111) are the strongest existing
+    features — weather sits in the same signal range and is uncorrelated with
+    current features. GPS coordinates are already available in stg_statsapi_venues.
+    Expected MAE improvement: 0.2–0.3 runs. Source: Gaps 3 and 7 from
+    betting_ml/evaluation/postmortem_v0.md.
+
+    This card has six sequential deliverables:
+
+    1. Park reference data — add park_facing_degrees (direction from home plate
+       to center field) and roof_type to a new dbt/seeds/ref_venues.csv seed.
+       This static lookup is required before any wind component can be computed.
+
+    2. Snowflake DDL — create baseball_data.statsapi.weather_raw table
+       (game_pk × venue_id × game_datetime grain) to store raw API payloads.
+
+    3. Ingestion script — scripts/ingest_weather.py fetches game-day weather
+       per outdoor park via GPS coordinate + game date from OpenWeatherMap.
+       USER GATE: the user must obtain an OpenWeatherMap API key and configure
+       it as a GitHub Actions secret before this task can be run in CI.
+
+    4. dbt feature model — feature_pregame_weather_features (one row per game_pk)
+       with columns: temp_f, wind_speed_mph, wind_direction_deg, wind_component_mph,
+       humidity_pct, is_dome. Dome parks receive NULL wind_component_mph.
+
+    5. Feature store integration — join weather columns into
+       feature_pregame_game_features via game_pk; add to daily_ingestion.yml
+       after odds ingestion and before dbt-build.
+
+    6. Historical backfill + retrain — run ingest_weather.py for 2016–2025 to
+       populate training data, retrain NGBoost totals model, and confirm
+       total_runs CV MAE < 3.55.
+  acceptanceCriteria:
+    - description: >
+        baseball_data.statsapi.weather_raw exists with ≥1 row per outdoor-park
+        game from 2026-03-27 onward. Dome parks (roof_type NOT IN ('open',
+        'convertible')) have no rows in weather_raw — weather is not fetched for
+        them.
+    - description: >
+        feature_pregame_weather_features builds cleanly in dbt. Dome parks have
+        NULL wind_component_mph. Outdoor parks have non-null wind_component_mph.
+        Verify with: SELECT is_dome, COUNT(*), COUNT(wind_component_mph)
+        FROM baseball_data.feature.feature_pregame_weather_features
+        GROUP BY is_dome;
+    - description: >
+        wind_component_mph has a plausible range of −30 to +30 mph across all
+        outdoor parks. Spot-check at least one known Wrigley Field game with
+        strong reported wind and confirm the sign and magnitude are correct
+        (positive = wind out toward CF, negative = wind in toward home plate).
+    - description: >
+        feature_pregame_game_features includes all weather columns (temp_f,
+        wind_speed_mph, wind_direction_deg, wind_component_mph, humidity_pct,
+        is_dome). dbtf build passes all schema tests.
+    - description: >
+        Historical weather backfill complete for ≥3 training seasons (2022–2024
+        minimum; 2016–2025 preferred). The has_full_data flag in the feature
+        store is unchanged — weather nulls for dome parks are handled by league-
+        average imputation in preprocessing, not by dropping rows.
+    - description: >
+        After retraining NGBoost with weather features, total_runs CV MAE < 3.55
+        (improvement over the 3.5718 baseline). Result documented in
+        betting_ml/evaluation/postmortem_v0.md with the new MAE value and the
+        weather features used.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: openweathermap-api-key-configured
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    USER ACTION REQUIRED — an OpenWeatherMap API key must be obtained and
+    configured before ingest_weather.py can be tested locally or run in CI.
+    Claude cannot retrieve API keys or set GitHub secrets.
+
+    Step 1 — Sign up for OpenWeatherMap (free tier is sufficient for development;
+    the "One Call API 3.0" plan covers historical and forecast endpoints):
+      https://openweathermap.org/api
+
+    Step 2 — Obtain your API key from the OpenWeatherMap dashboard.
+      Free tier allows 1,000 calls/day. At ~30 outdoor MLB parks × 1 call/game-day,
+      the daily ingestion is well within the free quota.
+
+    Step 3 — Set the environment variable locally for testing:
+      export OPENWEATHERMAP_API_KEY=<your-key>
+      uv run python scripts/ingest_weather.py --date $(date +%Y-%m-%d) --dry-run
+
+    Step 4 — Add the key as a GitHub Actions repository secret:
+      Repository → Settings → Secrets and variables → Actions → New repository secret
+      Name: OPENWEATHERMAP_API_KEY
+      Value: <your-key>
+
+    Step 5 — Confirm the secret is visible in the Actions secrets list
+      (the value will be masked, but the name should appear).
+
+    This gate clears when the user confirms Steps 1–5 are complete and a local
+    --dry-run of ingest_weather.py returns weather data for at least one park.
+
+    FALLBACK: If OpenWeatherMap is not suitable, NOAA's Climate Data Online API
+    (https://www.ncdc.noaa.gov/cdo-web/webservices/v2) is a free alternative
+    that requires a separate token request. The ingestion script should be
+    written to support both via a --source flag (default: openweathermap).
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: weather-features-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG. Tasks 1 and 2 (park reference data and Snowflake DDL) are
+    independent and can run in parallel. Task 3 (ingestion script) depends on
+    both and is gated on the API key being configured. Task 4 (dbt model)
+    depends on Task 3 producing at least one row in weather_raw. Task 5
+    (feature store integration, historical backfill, and retrain) depends on
+    Task 4 building cleanly.
+  goalRef:
+    name: weather-features
+  graph:
+    nodes:
+
+      - id: create-park-reference-data
+        kind: Task
+        description: >
+          Create dbt/seeds/ref_venues.csv with one row per MLB venue. This seed
+          provides the two static columns required for weather feature computation
+          that are not available in stg_statsapi_venues: park_facing_degrees and
+          roof_type.
+
+          COLUMNS REQUIRED:
+
+            venue_id           INTEGER   MLB Stats API venue ID (join key to stg_statsapi_venues)
+            venue_name         TEXT      Human-readable name (for QA)
+            roof_type          TEXT      One of: 'open', 'convertible', 'fixed'
+            park_facing_degrees INTEGER  Direction from home plate to center field
+                                         (compass bearing, 0=North, 90=East, 180=South, 270=West)
+                                         NULL for fixed-roof parks (wind is irrelevant)
+
+          PARK FACING DEGREES REFERENCE (compass bearing, home plate → CF):
+            Wrigley Field (CHC)     — ~90° (faces east; wind off Lake Michigan from NE/E)
+            Fenway Park (BOS)       — ~60° (faces NE)
+            Coors Field (COL)       — ~335° (faces NNW)
+            Oracle Park (SF)        — ~5°  (faces N; McCovey Cove wind tunnel)
+            Dodger Stadium (LAD)    — ~25° (faces NNE)
+            Camden Yards (BAL)      — ~355° (faces N)
+            PNC Park (PIT)          — ~5°  (faces N)
+            Guaranteed Rate (CWS)   — ~5°  (faces N)
+            Target Field (MIN)      — ~10° (faces N)
+            Kauffman Stadium (KC)   — ~340°
+            Angel Stadium (LAA)     — ~355°
+            Globe Life Field (TEX)  — fixed roof → NULL
+            T-Mobile Park (SEA)     — convertible → include degrees
+            American Family Field   — convertible → include degrees
+            Tropicana Field (TB)    — fixed → NULL
+            loanDepot park (MIA)    — fixed → NULL
+            Chase Field (AZ)        — convertible → include degrees
+            Minute Maid Park (HOU)  — fixed → NULL
+            Great American (CIN)    — ~25°
+            Busch Stadium (STL)     — ~340°
+            Nationals Park (WSH)    — ~5°
+            Citi Field (NYM)        — ~350°
+            Yankee Stadium (NYY)    — ~30°
+            LoanDepot Park (MIA)    — fixed → NULL
+            Petco Park (SD)         — ~340°
+            Citizens Bank (PHI)     — ~350°
+            Progressive Field (CLE) — ~355°
+            Comerica Park (DET)     — ~335°
+            Truist Park (ATL)       — ~350°
+            Oakland Coliseum (OAK)  — ~5°
+            Sutter Health Park (SAC)— ~355°
+            (add any 2026 expansion venues)
+
+          NOTE: Verify each bearing against satellite imagery (Google Maps overhead
+          view works well) before committing. An error in park_facing_degrees flips
+          the wind component sign and corrupts the feature for that park.
+
+          Also create dbt/seeds/schema.yml entry for ref_venues (if one does not
+          already exist) with not_null tests on venue_id and roof_type, and an
+          accepted_values test on roof_type (['open', 'convertible', 'fixed']).
+
+          IMPORTANT: Do not add park_facing_degrees to ref_teams.csv — venues and
+          teams are not the same entity (teams move; Wrigley has hosted one team
+          for 110 years but the venue ID is what matters for weather lookup).
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ref_venues.csv seed file
+            path: dbt/seeds/ref_venues.csv
+          - type: command_succeeds
+            name: ref_venues.csv has required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import csv, pathlib
+                rows = list(csv.DictReader(pathlib.Path('dbt/seeds/ref_venues.csv').open()))
+                assert len(rows) >= 25, f'Expected ≥25 venue rows, got {len(rows)}'
+                required = {'venue_id', 'venue_name', 'roof_type', 'park_facing_degrees'}
+                actual = set(rows[0].keys())
+                missing = required - actual
+                assert not missing, f'Missing columns in ref_venues.csv: {missing}'
+                print(f'ref_venues.csv OK — {len(rows)} rows, columns: {sorted(actual)}')
+          - type: command_succeeds
+            name: roof_type values are valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import csv, pathlib
+                valid = {'open', 'convertible', 'fixed'}
+                rows = list(csv.DictReader(pathlib.Path('dbt/seeds/ref_venues.csv').open()))
+                bad = [r for r in rows if r['roof_type'] not in valid]
+                assert not bad, f'Invalid roof_type values: {[(r["venue_name"], r["roof_type"]) for r in bad]}'
+                print(f'All roof_type values valid: {sorted({r["roof_type"] for r in rows})}')
+          - type: command_succeeds
+            name: park_facing_degrees is NULL only for fixed-roof parks
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import csv, pathlib
+                rows = list(csv.DictReader(pathlib.Path('dbt/seeds/ref_venues.csv').open()))
+                errors = []
+                for r in rows:
+                    degrees = r['park_facing_degrees'].strip()
+                    roof = r['roof_type']
+                    if roof == 'fixed' and degrees not in ('', 'NULL', 'null'):
+                        errors.append(f"{r['venue_name']}: fixed roof but park_facing_degrees={degrees}")
+                    if roof in ('open', 'convertible') and degrees in ('', 'NULL', 'null'):
+                        errors.append(f"{r['venue_name']}: {roof} roof but park_facing_degrees is NULL")
+                assert not errors, 'park_facing_degrees inconsistencies:\n' + '\n'.join(errors)
+                print('park_facing_degrees NULL-consistency check passed')
+
+      - id: create-weather-raw-ddl
+        kind: Task
+        description: >
+          Create the Snowflake DDL for baseball_data.statsapi.weather_raw and
+          add it to scripts/ddl/.
+
+          TABLE: baseball_data.statsapi.weather_raw
+          GRAIN: one row per game_pk × venue_id × fetched_at
+
+            game_pk             INTEGER    NOT NULL  — MLB Stats API game identifier
+            venue_id            INTEGER    NOT NULL  — MLB Stats API venue identifier
+            game_datetime_utc   TIMESTAMP  NOT NULL  — scheduled first pitch (UTC)
+            fetch_offset_hours  INTEGER              — hours before first pitch when fetched
+                                                       (negative = fetched after game started)
+            temp_f              FLOAT                — temperature at first pitch (°F)
+            wind_speed_mph      FLOAT                — wind speed (mph)
+            wind_direction_deg  INTEGER              — meteorological wind direction (degrees,
+                                                       0/360=from North, 90=from East)
+            humidity_pct        INTEGER              — relative humidity (%)
+            condition_text      TEXT                 — API weather condition description
+            api_source          TEXT                 — 'openweathermap' or 'noaa'
+            loaded_at           TIMESTAMP  DEFAULT CURRENT_TIMESTAMP
+
+          PRIMARY KEY / UNIQUE CONSTRAINT: (game_pk, venue_id, fetched_at) —
+          allows multiple fetches per game (intraday refresh) without duplicates.
+
+          Create the DDL file at scripts/ddl/weather_raw.sql following the
+          existing DDL file conventions in that directory. The table must be
+          created in the STATSAPI schema (not BETTING_ML) because it is raw
+          source data that will be transformed by dbt.
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: weather_raw DDL file
+            path: scripts/ddl/weather_raw.sql
+          - type: command_succeeds
+            name: DDL file references correct schema and required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/weather_raw.sql').read_text().lower()
+                required_terms = [
+                    'weather_raw',
+                    'game_pk',
+                    'venue_id',
+                    'game_datetime',
+                    'wind_speed_mph',
+                    'wind_direction_deg',
+                    'humidity_pct',
+                    'temp_f',
+                    'loaded_at',
+                ]
+                missing = [t for t in required_terms if t not in sql]
+                assert not missing, f'Missing terms in weather_raw.sql: {missing}'
+                assert 'statsapi' in sql, 'DDL must target baseball_data.statsapi schema'
+                print('weather_raw.sql references all required columns and correct schema')
+
+      - id: create-weather-ingestion-script
+        kind: Task
+        description: >
+          Create scripts/ingest_weather.py to fetch game-day weather per outdoor
+          park and write to baseball_data.statsapi.weather_raw.
+
+          CLI INTERFACE:
+            uv run python scripts/ingest_weather.py --date YYYY-MM-DD [--dry-run] [--source openweathermap|noaa]
+
+            --date    DATE  Game date to fetch (default: today)
+            --dry-run FLAG  Print planned API calls and row inserts; write nothing
+            --source  TEXT  Weather API to use (default: openweathermap)
+
+          LOGIC:
+
+          Step 1 — Query today's scheduled outdoor games:
+            SELECT g.game_pk, g.venue_id, g.game_datetime_utc,
+                   v.latitude, v.longitude, rv.roof_type
+            FROM baseball_data.statsapi.stg_statsapi_schedule g
+            JOIN baseball_data.statsapi.stg_statsapi_venues v ON g.venue_id = v.venue_id
+            JOIN baseball_data.statsapi.ref_venues rv ON g.venue_id = rv.venue_id
+            WHERE g.game_date = '<date>'
+              AND rv.roof_type IN ('open', 'convertible')
+              AND g.game_status != 'Final'
+            ORDER BY g.game_datetime_utc;
+
+            Skip any game_pk that already has a row in weather_raw with
+            fetch_offset_hours < -1 (already fetched close to first pitch).
+
+          Step 2 — Fetch weather from OpenWeatherMap One Call API:
+            Endpoint: https://api.openweathermap.org/data/3.0/onecall
+            Parameters: lat, lon, dt (Unix timestamp of first pitch), appid
+            Extract: temp (convert Kelvin → °F), wind_speed (m/s → mph),
+            wind_deg (meteorological), humidity.
+
+          Step 3 — Upsert to weather_raw:
+            INSERT INTO baseball_data.statsapi.weather_raw
+              (game_pk, venue_id, game_datetime_utc, fetch_offset_hours,
+               temp_f, wind_speed_mph, wind_direction_deg, humidity_pct,
+               condition_text, api_source, loaded_at)
+            VALUES (...)
+            ON CONFLICT (game_pk, venue_id) DO UPDATE SET ...
+            (use MERGE INTO for Snowflake syntax)
+
+          ENVIRONMENT VARIABLE: OPENWEATHERMAP_API_KEY (required unless --dry-run)
+
+          ERROR HANDLING:
+            - Log a warning and continue if a single park's API call fails;
+              do not abort the entire run for one missing venue.
+            - Print a summary at the end: "Fetched weather for N/M outdoor parks"
+            - Exit non-zero only if zero parks succeeded (total failure).
+
+          HISTORICAL BACKFILL MODE:
+            uv run python scripts/ingest_weather.py --date YYYY-MM-DD
+            Running for a past date should use the OpenWeatherMap historical
+            endpoint (timemachine) rather than the forecast endpoint. The script
+            must detect whether --date is in the past and switch endpoints
+            automatically.
+        dependsOn:
+          - create-park-reference-data
+          - create-weather-raw-ddl
+          - openweathermap-api-key-configured
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ingest_weather.py script
+            path: scripts/ingest_weather.py
+          - type: command_succeeds
+            name: ingest_weather.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_weather.py').read_text()
+                ast.parse(src)
+                print('ingest_weather.py syntax OK')
+          - type: command_succeeds
+            name: Script accepts --dry-run, --date, and --source flags
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_weather.py
+              - "--help"
+          - type: command_succeeds
+            name: Script references roof_type filter and wind conversion (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_weather.py').read_text()
+                tree = ast.parse(src)
+                checks = {
+                    'roof_type filter present': 'roof_type' in src,
+                    'Kelvin to Fahrenheit conversion': '273' in src or 'kelvin' in src.lower() or '32' in src,
+                    'm/s to mph conversion': '2.237' in src or 'mph' in src.lower(),
+                    'weather_raw table reference': 'weather_raw' in src,
+                    'OPENWEATHERMAP_API_KEY env var': 'OPENWEATHERMAP_API_KEY' in src,
+                }
+                failures = [k for k, v in checks.items() if not v]
+                assert not failures, f'Missing references in ingest_weather.py: {failures}'
+                print('All required references found in ingest_weather.py')
+          - type: command_succeeds
+            name: Dry run executes without error (no API key required)
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_weather.py
+              - "--date"
+              - "2026-05-01"
+              - "--dry-run"
+
+      - id: create-weather-dbt-model
+        kind: Task
+        description: >
+          Create dbt model feature_pregame_weather_features and extend
+          feature_pregame_game_features to include all weather columns.
+
+          FILE: dbt/models/feature/feature_pregame_weather_features.sql
+
+          GRAIN: one row per game_pk (same as all other feature_pregame_* models)
+
+          LOGIC:
+            WITH weather AS (
+              SELECT
+                game_pk,
+                venue_id,
+                temp_f,
+                wind_speed_mph,
+                wind_direction_deg,
+                humidity_pct,
+                -- Wind component: positive = wind out toward CF, negative = wind in
+                -- Formula: wind_speed_mph × cos(wind_direction_deg − park_facing_deg)
+                -- cos() in SQL takes radians; convert degrees with * PI() / 180
+                CASE
+                  WHEN rv.roof_type IN ('open', 'convertible')
+                    THEN ROUND(
+                      wind_speed_mph * COS(
+                        (wind_direction_deg - rv.park_facing_degrees) * PI() / 180
+                      ), 2)
+                  ELSE NULL
+                END AS wind_component_mph,
+                CASE WHEN rv.roof_type = 'fixed' THEN TRUE ELSE FALSE END AS is_dome
+              FROM {{ ref('stg_weather_raw') }} w
+              LEFT JOIN {{ ref('ref_venues') }} rv USING (venue_id)
+              QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY game_pk
+                ORDER BY ABS(fetch_offset_hours) ASC  -- prefer fetch closest to first pitch
+              ) = 1
+            )
+            SELECT * FROM weather
+
+          Also create dbt/models/staging/stg_weather_raw.sql that reads from
+          baseball_data.statsapi.weather_raw and casts/renames columns to match
+          dbt conventions.
+
+          EXTEND feature_pregame_game_features.sql:
+            Add a LEFT JOIN to feature_pregame_weather_features on game_pk.
+            Add all weather columns to the SELECT list:
+              wpf.temp_f,
+              wpf.wind_speed_mph,
+              wpf.wind_direction_deg,
+              wpf.wind_component_mph,
+              wpf.humidity_pct,
+              wpf.is_dome
+
+          Update dbt/models/feature/schema.yml to add column descriptions and
+          not_null tests for is_dome. Add a range test for wind_component_mph
+          where is_dome = FALSE (values should be between −35 and +35).
+
+          Dome-park imputation note: do NOT impute in the dbt model. Imputation
+          (league-average fill for dome parks) belongs in the Python preprocessing
+          layer (betting_ml/utils/feature_pipeline.py or equivalent) so it can
+          be consistently applied at both train and inference time.
+        dependsOn:
+          - create-weather-ingestion-script
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: stg_weather_raw dbt model
+            path: dbt/models/staging/stg_weather_raw.sql
+          - type: artifact_exists
+            name: feature_pregame_weather_features dbt model
+            path: dbt/models/feature/feature_pregame_weather_features.sql
+          - type: command_succeeds
+            name: feature_pregame_weather_features references wind_component formula
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_weather_features.sql').read_text()
+                checks = {
+                    'wind_component_mph column': 'wind_component_mph' in sql,
+                    'COS() wind formula': 'COS(' in sql or 'cos(' in sql,
+                    'is_dome column': 'is_dome' in sql,
+                    'roof_type filter': 'roof_type' in sql or 'ref_venues' in sql.lower(),
+                    'QUALIFY dedup on fetch_offset_hours': 'fetch_offset_hours' in sql and 'QUALIFY' in sql.upper(),
+                }
+                failures = [k for k, v in checks.items() if not v]
+                assert not failures, f'Missing in feature_pregame_weather_features.sql: {failures}'
+                print('feature_pregame_weather_features.sql references all required logic')
+          - type: command_succeeds
+            name: feature_pregame_game_features includes weather columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+                weather_cols = ['temp_f', 'wind_speed_mph', 'wind_component_mph', 'humidity_pct', 'is_dome']
+                missing = [c for c in weather_cols if c not in sql]
+                assert not missing, f'Missing weather columns in feature_pregame_game_features.sql: {missing}'
+                print(f'feature_pregame_game_features.sql includes all weather columns')
+
+      - id: backfill-and-integrate
+        kind: Task
+        description: >
+          Run historical weather backfill for training data, add ingest_weather.py
+          to the daily CI pipeline, and retrain the NGBoost totals model to confirm
+          MAE improvement.
+
+          STEP 1 — Historical backfill (2022–2025 minimum; 2016–2025 preferred):
+            Run ingest_weather.py for each past season. The script's historical
+            mode (--date in the past) uses the OpenWeatherMap timemachine endpoint.
+            A convenience backfill loop:
+
+              for year in 2022 2023 2024 2025; do
+                # iterate game dates for that season
+                uv run python scripts/ingest_weather.py --season $year --backfill
+              done
+
+            Add a --season / --backfill mode to ingest_weather.py if it does not
+            already exist, or run date-by-date via a wrapper script.
+            Target: ≥3 seasons of outdoor-park weather rows in weather_raw.
+
+          STEP 2 — Add to daily_ingestion.yml:
+            Add a new step after "Ingest Odds API odds" and before "dbt-build":
+
+              - name: Ingest weather for today's outdoor games
+                working-directory: scripts
+                env:
+                  SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                  SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+                  SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                  SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+                  SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+                  OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
+                run: uv run ingest_weather.py --date $(date +%Y-%m-%d)
+
+          STEP 3 — Retrain NGBoost totals model with weather features:
+            Follow the existing training pipeline to retrain ngboost_total_runs.pkl
+            with the weather columns included. Confirm that the model sees non-null
+            wind_component_mph for outdoor parks and league-average imputed values
+            for dome parks.
+            Record the new CV MAE in betting_ml/evaluation/postmortem_v0.md.
+
+          STEP 4 — Update model_registry.yaml:
+            Update the ngboost_total_runs entry with the new selected_at timestamp,
+            eval_year, and cv_mae_baseline.
+        dependsOn:
+          - create-weather-dbt-model
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: daily_ingestion.yml includes weather ingestion step with API key secret
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                yml = pathlib.Path('.github/workflows/daily_ingestion.yml').read_text()
+                assert 'ingest_weather.py' in yml, 'ingest_weather.py not added to daily_ingestion.yml'
+                assert 'OPENWEATHERMAP_API_KEY' in yml, 'OPENWEATHERMAP_API_KEY secret not wired in CI'
+                print('daily_ingestion.yml includes weather ingestion step')
+          - type: command_succeeds
+            name: weather_raw has ≥3 seasons of backfill data (Snowflake check — run manually)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Placeholder — run the actual check via Snowflake MCP:
+                # SELECT YEAR(game_datetime_utc) AS season, COUNT(*) AS rows
+                # FROM baseball_data.statsapi.weather_raw
+                # GROUP BY 1 ORDER BY 1;
+                # Expected: rows for at least 2022, 2023, 2024, 2025
+                print('Run Snowflake check manually: SELECT YEAR(game_datetime_utc), COUNT(*) FROM baseball_data.statsapi.weather_raw GROUP BY 1 ORDER BY 1')
+          - type: command_succeeds
+            name: model_registry.yaml updated with new ngboost_total_runs entry
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, datetime
+                content = pathlib.Path('betting_ml/models/model_registry.yaml').read_text()
+                assert 'ngboost_total_runs' in content, 'ngboost_total_runs not in model_registry.yaml'
+                # Confirm selected_at is in 2026 (post-weather retrain)
+                assert '2026' in content, 'model_registry.yaml does not reflect a 2026 retrain'
+                print('model_registry.yaml references ngboost_total_runs with 2026 selected_at')
+          - type: command_succeeds
+            name: postmortem_v0.md updated with new MAE result
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                doc = pathlib.Path('betting_ml/evaluation/postmortem_v0.md').read_text()
+                assert 'weather' in doc.lower(), 'Weather features not mentioned in postmortem_v0.md'
+                # Check that a MAE value lower than baseline appears
+                import re
+                maes = [float(m) for m in re.findall(r'MAE[^\d]*(\d+\.\d+)', doc)]
+                assert any(m < 3.57 for m in maes), (
+                    f'No post-weather MAE < 3.57 found in postmortem_v0.md. Found: {maes}'
+                )
+                print(f'postmortem_v0.md updated with weather MAE result: {[m for m in maes if m < 3.57]}')

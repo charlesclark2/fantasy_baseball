@@ -76,6 +76,10 @@ odds as (
     select * from {{ ref('feature_pregame_odds_features') }}
 ),
 
+weather as (
+    select * from {{ ref('feature_pregame_weather_features') }}
+),
+
 game_context as (
     select
         game_pk,
@@ -599,7 +603,16 @@ final as (
         od.market_bookmaker_count,
         od.total_line_consensus,
         od.total_line_std,
-        od.over_prob_consensus
+        od.over_prob_consensus,
+
+        -- ── Weather features ──────────────────────────────────────────────────
+        -- NULL for dome parks; imputation applied in Python preprocessing layer.
+        wpf.temp_f,
+        wpf.wind_speed_mph,
+        wpf.wind_direction_deg,
+        wpf.wind_component_mph,
+        wpf.humidity_pct,
+        wpf.is_dome
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -616,6 +629,8 @@ final as (
         on  gc.game_pk = g.game_pk
     left join home_win_rate hwr
         on  hwr.game_pk = g.game_pk
+    left join weather wpf
+        on  wpf.game_pk = g.game_pk
 )
 
 select * from final

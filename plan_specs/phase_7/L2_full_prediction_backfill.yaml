@@ -1,0 +1,260 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: full-prediction-backfill
+  phase: "7"
+  card: "7.L2"
+  priority: P2
+  blocker: "Card 7.L1 (historical feature backfill) must complete first"
+spec:
+  description: |
+    Batch re-score all game dates from 2021-04-01 through the current date using
+    the v1 model and the full Phase 7 feature set. Store results alongside existing
+    v0 predictions (never overwrite). Compile multi-year performance metrics by
+    season and compare to v0 baseline.
+
+    Why the full historical range matters: the 2026-only backfill (36 game dates)
+    is too small to reliably measure mean h2h edge or % positive edge — a few bad
+    weeks can swamp the signal. Scoring 2021–2026 gives 4–5 full seasons and
+    hundreds of games per evaluation period, making metric comparisons statistically
+    meaningful. The Model Performance page (6.E) also becomes far more useful with
+    a multi-year trend.
+
+    Two new columns on daily_model_predictions:
+      model_version   — identifies the model weights used (e.g., 'v0', 'v1')
+      feature_version — identifies feature completeness ('v1_full' for seasons
+                        where all Phase 7 features are populated, 'v1_partial'
+                        for seasons with higher null rates per 7.L1 audit)
+
+    Existing v0 rows must never be modified. All backfill writes are INSERT only.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: full-prediction-backfill-plan
+  phase: "7"
+  card: "7.L2"
+spec:
+  goal:
+    name: full-prediction-backfill
+
+  tasks:
+
+    - id: extend-predict-script
+      name: Add batch flags and versioning columns to predict_today.py
+      description: |
+        Modify betting_ml/predict_today.py (or its entrypoint) to support batch
+        re-scoring over a historical date range.
+
+        Changes required:
+
+        1. CLI flags:
+             --start-date   YYYY-MM-DD   First game date to score (inclusive)
+             --end-date     YYYY-MM-DD   Last game date to score (inclusive)
+             --model-version            String tag written to model_version column
+                                          (default: 'v1')
+             --feature-version          String tag written to feature_version column
+                                          (default: 'v1_full'); operator overrides
+                                          to 'v1_partial' for seasons flagged in 7.L1
+                                          coverage audit
+             --dry-run                  Print date range and game count; skip writes
+
+           When --start-date and --end-date are provided, iterate over each unique
+           game_date in that range that has games in the schedule (skip off-days).
+           Process dates sequentially; print progress: "Scoring YYYY-MM-DD (N games)".
+
+        2. Schema changes — add columns to daily_model_predictions if they do not
+           exist:
+             ALTER TABLE baseball_data.statsapi.daily_model_predictions
+                 ADD COLUMN IF NOT EXISTS model_version   VARCHAR(20);
+             ALTER TABLE baseball_data.statsapi.daily_model_predictions
+                 ADD COLUMN IF NOT EXISTS feature_version VARCHAR(20);
+
+           Backfill existing v0 rows:
+             UPDATE baseball_data.statsapi.daily_model_predictions
+             SET model_version = 'v0', feature_version = 'v0'
+             WHERE model_version IS NULL;
+
+        3. Write path: use INSERT INTO (not MERGE) to avoid touching existing rows.
+           Deduplicate guard: before inserting for a game_pk, check whether a row
+           with the same game_pk AND model_version already exists. If so, skip
+           (idempotent re-run safety).
+
+        4. Null feature handling: if Phase 7 feature columns are null for a game,
+           the model must still produce a prediction using only the available features.
+           Confirm that the trained model's feature pipeline handles nulls via
+           imputation (median fill or model-native null handling) and does not
+           error on sparse rows.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('betting_ml/predict_today.py').read_text()
+            tree = ast.parse(src)
+            # Check for required CLI flags
+            for flag in ['start_date', 'end_date', 'model_version', 'feature_version', 'dry_run']:
+                assert flag in src, f"CLI flag '{flag}' not found in predict_today.py"
+            print('predict_today.py: all required CLI flags present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'betting_ml/predict_today.py',
+                 '--start-date', '2024-04-01', '--end-date', '2024-04-02',
+                 '--model-version', 'v1', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"predict_today.py dry-run failed:\n{result.stderr}"
+            print('predict_today.py: historical date range dry-run succeeded')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            # Confirm v0 rows were backfilled with model_version = 'v0'
+            # Actual verification via mcp__snowflake__run_snowflake_query:
+            # SELECT COUNT(*) FROM daily_model_predictions
+            # WHERE model_version IS NULL
+            # Expected: 0 rows with NULL model_version after backfill
+            print('MANUAL CHECK: verify no NULL model_version rows remain after v0 backfill UPDATE')
+            EOF
+
+    - id: run-full-backfill
+      name: Execute batch re-score for 2021–2026
+      description: |
+        Run the full historical prediction backfill in seasonal batches to manage
+        runtime and allow partial restarts if a batch fails.
+
+        Recommended execution order (each is idempotent):
+          # Seasons where Phase 7 features are confirmed partial (per 7.L1 audit)
+          python3 betting_ml/predict_today.py \
+              --start-date 2021-04-01 --end-date 2022-10-31 \
+              --model-version v1 --feature-version v1_partial
+
+          python3 betting_ml/predict_today.py \
+              --start-date 2023-04-01 --end-date 2023-10-31 \
+              --model-version v1 --feature-version v1_partial
+
+          # Seasons where full Phase 7 feature coverage is confirmed
+          python3 betting_ml/predict_today.py \
+              --start-date 2024-04-01 --end-date 2024-10-31 \
+              --model-version v1 --feature-version v1_full
+
+          python3 betting_ml/predict_today.py \
+              --start-date 2025-04-01 --end-date 2025-10-31 \
+              --model-version v1 --feature-version v1_full
+
+          python3 betting_ml/predict_today.py \
+              --start-date 2026-04-01 --end-date <today> \
+              --model-version v1 --feature-version v1_full
+
+        Note: adjust feature_version tags based on the recommendations in
+        betting_ml/evaluation/historical_feature_coverage.md (7.L1 output).
+
+        Post-run verification:
+          SELECT model_version, feature_version, MIN(game_date), MAX(game_date), COUNT(*)
+          FROM baseball_data.statsapi.daily_model_predictions
+          GROUP BY model_version, feature_version
+          ORDER BY model_version, feature_version
+
+        Expected: v0 rows present for 2026 dates; v1 rows present for 2021–2026.
+        No game_pk should have two v1 rows (deduplicate guard from Task 1).
+
+      dependsOn:
+        - extend-predict-script
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Verify no duplicate v1 rows per game_pk
+            # Actual check via mcp__snowflake__run_snowflake_query:
+            # SELECT game_pk, COUNT(*) as n
+            # FROM daily_model_predictions
+            # WHERE model_version = 'v1'
+            # GROUP BY game_pk HAVING n > 1
+            # Expected: 0 rows
+            print('MANUAL CHECK: verify no duplicate v1 rows per game_pk in daily_model_predictions')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Verify v0 rows untouched
+            # SELECT COUNT(*) FROM daily_model_predictions WHERE model_version = 'v0'
+            # Compare to pre-backfill count; should be unchanged
+            print('MANUAL CHECK: verify v0 row count unchanged after backfill run')
+            EOF
+
+    - id: document-multi-year-metrics
+      name: Compile multi-year performance metrics and update postmortem
+      description: |
+        Compute performance metrics for the v1 model by season and compare to v0 baseline.
+
+        Metric definitions (consistent with existing Model Performance page in 6.E):
+          mean_h2h_edge   — average (model_win_prob - consensus_win_prob) where has_odds = TRUE
+          pct_positive    — % of predictions where model_win_prob > consensus_win_prob
+          brier_score     — mean((model_win_prob - actual_outcome)^2)
+          totals_mae      — mean absolute error on predicted total vs. actual total (where available)
+
+        Compute for each combination of: season × model_version × feature_version.
+
+        V0 baseline (from postmortem_v0.md):
+          mean_h2h_edge = −0.017
+          pct_positive  = 35.39%
+          (measured over 2026 game dates only)
+
+        Comparison rule for v1 evaluation:
+          Primary evaluation window: 2024–2026 (seasons with full or near-full
+          feature coverage per 7.L1 audit). Earlier seasons (2021–2023) reported
+          separately as context, not as the primary pass/fail metric.
+
+        Report must include:
+          1. Year-by-year table: season, n_games, mean_h2h_edge, pct_positive,
+             brier_score, totals_mae, feature_version
+          2. Aggregate 2024–2026 summary row vs. v0 baseline
+          3. If v1 aggregate mean_h2h_edge (2024–2026) does not exceed −0.017:
+             required root-cause note covering at least two hypotheses from the
+             postmortem_v0.md 8-gap analysis
+          4. Null-feature impact analysis: compare brier_score for v1_full vs.
+             v1_partial rows to quantify the cost of missing Phase 7 features
+          5. Recommendation: which model_version to use for live scoring going
+             forward (should be v1 if any metric improves; flag if v0 is still
+             preferred on any market)
+
+        Append all of the above as a new section "Phase 7 v1 Model Performance" in
+        betting_ml/evaluation/postmortem_v0.md.
+
+      dependsOn:
+        - run-full-backfill
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/postmortem_v0.md').read_text()
+            assert 'Phase 7 v1 Model Performance' in report, \
+                "New v1 performance section missing from postmortem_v0.md"
+            for section in ['mean_h2h_edge', 'pct_positive', 'brier_score',
+                            'v1_full', 'v1_partial', '2024']:
+                assert section.lower() in report.lower(), \
+                    f"Required content '{section}' missing from postmortem section"
+            print('postmortem_v0.md: Phase 7 v1 performance section present with all required content')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/postmortem_v0.md').read_text()
+            # Confirm root-cause note is present when mean edge does not improve
+            # (The note may not be needed if v1 does improve — but section must exist
+            #  either way with a clear pass/fail declaration)
+            assert any(kw in report for kw in ['root-cause', 'root cause', 'hypothesis',
+                                                'recommendation', 'live scoring']), \
+                "Postmortem missing root-cause or recommendation section"
+            print('postmortem_v0.md: root-cause / recommendation content present')
+            EOF

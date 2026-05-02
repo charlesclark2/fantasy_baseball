@@ -1,5 +1,6 @@
 {
   "best_alpha": 0.0,
-  "source": "alpha_tuning_results",
-  "written_at": "2026-04-25"
+  "log_loss": 0.6832632713006547,
+  "run_ts": "2026-05-02T04:35:47.540751Z",
+  "source": "run_probability_layer.py"
 }

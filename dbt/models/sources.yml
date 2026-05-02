@@ -113,6 +113,48 @@ sources:
             description: Calendar date on which this venue record was last ingested.
             tests: [not_null]
 
+      - name: weather_raw
+        description: >
+          One row per game_pk × venue_id. Stores weather conditions at or near
+          first pitch for outdoor-park MLB games. Ingested via
+          scripts/ingest_weather.py using the Open-Meteo API (no key required)
+          or OpenWeatherMap (OPENWEATHERMAP_API_KEY required). Dome parks
+          (roof_type = 'fixed') are excluded at ingest time and have no rows.
+          The grain allows multiple fetches per game (intraday refresh);
+          a PRIMARY KEY constraint on (game_pk, venue_id) ensures the most
+          recent fetch is retained via MERGE INTO upsert.
+        columns:
+          - name: game_pk
+            description: MLB Stats API game identifier.
+            tests: [not_null]
+          - name: venue_id
+            description: MLB Stats API venue identifier.
+            tests: [not_null]
+          - name: game_datetime_utc
+            description: Scheduled first pitch in UTC.
+            tests: [not_null]
+          - name: fetch_offset_hours
+            description: >
+              Hours before first pitch when the weather was fetched. Negative
+              values indicate the fetch occurred after the scheduled start.
+          - name: temp_f
+            description: Temperature at first pitch (degrees Fahrenheit).
+          - name: wind_speed_mph
+            description: Wind speed (mph).
+          - name: wind_direction_deg
+            description: >
+              Meteorological wind direction (degrees). 0/360 = wind from North,
+              90 = wind from East. Note: this is the direction the wind is
+              blowing FROM, not toward.
+          - name: humidity_pct
+            description: Relative humidity (percent).
+          - name: condition_text
+            description: Human-readable weather condition description from the API.
+          - name: api_source
+            description: "'open-meteo' or 'openweathermap'."
+          - name: loaded_at
+            description: UTC timestamp when the row was last written to Snowflake.
+
   - name: savant
     database: baseball_data
     schema: savant

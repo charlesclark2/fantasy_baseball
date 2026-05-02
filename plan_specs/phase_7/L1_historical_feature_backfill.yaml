@@ -1,0 +1,330 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: historical-feature-backfill
+  phase: "7"
+  card: "7.L1"
+  priority: P2
+  blocker: |
+    All Phase 7 feature cards (7.B, 7.E, 7.F, 7.H, 7.I, 7.J, 7.K) must be complete
+    so that ingestion scripts and dbt models exist before historical runs are attempted.
+spec:
+  description: |
+    Populate all Phase 7 feature pipelines for historical game dates 2021–2025.
+
+    The v1 model includes features (weather, FanGraphs Stuff+/projections, umpire
+    tendencies, injury status, pitch archetype, pitcher clusters) that were never
+    computed for pre-2026 dates. Running prediction scoring on those dates with null
+    features produces a degraded hybrid that obscures true model improvement. This card
+    ensures the 7.L2 prediction backfill evaluates the real v1 feature set.
+
+    Architecture:
+      Each Phase 7 ingestion script is re-run with a historical date range.
+      dbt models (which derive from the ingested raw data) are rebuilt via dbtf.
+      A final coverage audit queries null rates across all Phase 7 feature columns
+      per season and flags any column × year combination with null rate > 25%.
+
+    Leakage guard: no changes to training data or model weights in this card —
+    features only. All feature computation remains point-in-time safe.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: historical-feature-backfill-plan
+  phase: "7"
+  card: "7.L1"
+spec:
+  goal:
+    name: historical-feature-backfill
+
+  tasks:
+
+    - id: backfill-weather-and-umpire
+      name: Backfill weather features and confirm umpire data for 2021–2025
+      description: |
+        Weather (Card 7.B):
+          Run the weather ingestion script for the full historical date range:
+            python3 scripts/ingest_weather.py --start-date 2021-04-01 --end-date 2025-10-31
+
+          The script should already support a date range from Card 7.B implementation.
+          If it does not, add --start-date / --end-date flags that iterate over each
+          game date in the range and call the weather API per game_pk.
+
+          After ingestion completes:
+            dbtf build --select feature_pregame_weather_features --target dev
+
+          Expected row count: all game_pks from 2021–2025 regular season and postseason
+          in feature_pregame_weather_features. Null rate for temperature and wind columns
+          should be < 10% (some dome games will be null by design).
+
+        Umpire tendencies (Card 7.H):
+          UmpScorecards historical data covers 2015+. Confirm 2021–2025 game rows are
+          present in the umpire source table:
+            SELECT MIN(game_date), MAX(game_date), COUNT(DISTINCT game_pk)
+            FROM baseball_data.umpscorecards.umpire_game_scores
+            WHERE game_date BETWEEN '2021-04-01' AND '2025-10-31'
+
+          If rows are missing for any season, re-run the UmpScorecards ingestion for
+          that season's date range. Then rebuild umpire feature model:
+            dbtf build --select feature_pregame_umpire_features --target dev
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'scripts/ingest_weather.py',
+                 '--start-date', '2021-04-01', '--end-date', '2025-10-31', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"Weather backfill dry-run failed:\n{result.stderr}"
+            print('Weather ingestion script: dry-run accepts historical date range')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'feature_pregame_weather_features', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('feature_pregame_weather_features: dbtf build succeeded')
+            EOF
+
+    - id: backfill-fangraphs-features
+      name: Backfill FanGraphs Stuff+ and pre-season projections for 2021–2025
+      description: |
+        FanGraphs Stuff+ (Card 7.F):
+          Run the FanGraphs Stuff+ ingestion script for each season 2021–2025:
+            for season in 2021 2022 2023 2024 2025; do
+                python3 scripts/ingest_fangraphs_stuff.py --season $season
+            done
+
+          Each run fetches Stuff+ data for that season and loads it into
+          baseball_data.fangraphs.fg_stuff_plus_raw. The script should accept
+          --season as implemented in Card 7.F. After all seasons loaded:
+            dbtf build --select stg_fangraphs__pitcher_arsenal fct_fangraphs_pitcher_arsenal_wide --target dev
+
+          Verify: fct_fangraphs_pitcher_arsenal_wide has rows for seasons 2021–2025.
+          Minimum 300 pitchers per season (FanGraphs coverage is lower for earlier years).
+
+        FanGraphs pre-season projections (Card 7.E):
+          Run the FanGraphs projections ingestion script for each season 2021–2025:
+            for season in 2021 2022 2023 2024 2025; do
+                python3 scripts/ingest_fangraphs_projections.py --season $season
+            done
+
+          After all seasons loaded, rebuild projection-derived features:
+            dbtf build --select fct_fangraphs_hitter_projections fct_fangraphs_pitcher_projections --target dev
+
+          Note: FanGraphs may not have historical projection snapshots for all seasons.
+          If pre-2023 projections are unavailable, document the gap in the coverage
+          audit report and accept nulls for those seasons with explanation.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            # Test that the ingestion script accepts --season flag
+            result = subprocess.run(
+                ['python3', 'scripts/ingest_fangraphs_stuff.py', '--season', '2023', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"FanGraphs Stuff+ dry-run failed:\n{result.stderr}"
+            print('FanGraphs Stuff+ ingestion: --season flag accepted')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select',
+                 'fct_fangraphs_pitcher_arsenal_wide', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('fct_fangraphs_pitcher_arsenal_wide: dbtf build succeeded')
+            EOF
+
+    - id: backfill-injury-transactions
+      name: Backfill injury transactions for 2021–2025
+      description: |
+        Card 7.I implemented ingest_transactions.py which fetches MLB Stats API
+        transactions (IL placements, activations) for a given date window.
+
+        Run the ingestion for the full historical range:
+          python3 scripts/ingest_transactions.py \
+              --start-date 2021-04-01 \
+              --end-date 2025-10-31
+
+        The script merges on transaction_id so re-running is idempotent. This will be
+        a large API call — the script should batch requests by month to avoid timeouts.
+        If it does not already batch, add monthly chunking:
+          Iterate: start_date + 0mo → end_date, step by 1 calendar month.
+
+        After ingestion:
+          dbtf build --select stg_statsapi_transactions stg_statsapi_player_injury_status --target dev
+
+        Verify: stg_statsapi_player_injury_status has rows for game_years 2021–2025
+        and covers both IL placements and activations. Check at least one known
+        multi-month IL stint is correctly captured as a single interval.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'scripts/ingest_transactions.py',
+                 '--start-date', '2021-04-01', '--end-date', '2021-04-30', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"Transaction ingestion dry-run failed:\n{result.stderr}"
+            print('ingest_transactions.py: accepts historical date range, dry-run ok')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select',
+                 'stg_statsapi_transactions stg_statsapi_player_injury_status',
+                 '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('injury transaction dbt models: dbtf build succeeded')
+            EOF
+
+    - id: backfill-pitcher-clusters
+      name: Run pitcher clustering for seasons 2021–2025
+      description: |
+        Card 7.K implemented cluster_pitchers.py which fits k-means on the arsenal
+        vector for a given season and persists assignments to pitcher_clusters.
+
+        Run clustering for each historical season:
+          for season in 2021 2022 2023 2024 2025; do
+              python3 betting_ml/scripts/pitcher_clustering/cluster_pitchers.py \
+                  --season $season
+          done
+
+        Each run MERGEs into baseball_data.statsapi.pitcher_clusters on
+        pitcher_id + season, so re-running is idempotent.
+
+        Note: mart_pitcher_arsenal_summary must have data for each season before
+        clustering can run. If the mart is empty for a season (e.g., FanGraphs
+        Stuff+ not available), clustering falls back to Statcast-only columns —
+        this is acceptable; document the fallback in the coverage report.
+
+        After all seasons complete:
+          SELECT season, COUNT(*) AS n_pitchers
+          FROM baseball_data.statsapi.pitcher_clusters
+          WHERE season BETWEEN 2021 AND 2025
+          GROUP BY season
+          ORDER BY season
+
+        Assert: each season has ≥ 300 pitchers. (300 rather than 350 for earlier
+        seasons where smaller Statcast coverage reduces eligible pitchers.)
+
+      dependsOn:
+        - backfill-fangraphs-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'betting_ml/scripts/pitcher_clustering/cluster_pitchers.py',
+                 '--season', '2023', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"Cluster script dry-run failed:\n{result.stderr}"
+            print('cluster_pitchers.py: historical --season dry-run succeeded')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Verify at least 4 of 5 seasons have >= 300 pitchers
+            # Actual check via mcp__snowflake__run_snowflake_query at runtime
+            # Acceptance: SELECT season, COUNT(*) FROM pitcher_clusters
+            # WHERE season BETWEEN 2021 AND 2025 GROUP BY season
+            # All rows should show n_pitchers >= 300
+            print('MANUAL CHECK: run Snowflake query to verify >=300 pitchers per season 2021-2025')
+            EOF
+
+    - id: run-feature-coverage-audit
+      name: Audit Phase 7 feature null rates across 2021–2025
+      description: |
+        After all feature pipelines have completed their historical backfills, run a
+        null-rate audit across all Phase 7 feature columns in feature_pregame_game_features
+        for each season 2021–2025.
+
+        Audit query pattern (run per Phase 7 column group):
+          SELECT
+              game_year,
+              COUNT(*)                                              AS total_games,
+              -- Weather
+              SUM(CASE WHEN home_temperature_f IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_weather,
+              -- Stuff+
+              SUM(CASE WHEN home_starter_stuff_plus IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_stuff_plus,
+              -- Umpire
+              SUM(CASE WHEN home_ump_k_rate IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_umpire,
+              -- Injury
+              SUM(CASE WHEN home_injured_player_count IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_injury,
+              -- Archetype matchup
+              SUM(CASE WHEN home_lineup_woba_vs_starter_archetype IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_archetype,
+              -- Cluster matchup
+              SUM(CASE WHEN home_lineup_avg_woba_vs_cluster IS NULL THEN 1 ELSE 0 END) / COUNT(*) AS null_rate_cluster
+          FROM feature_pregame_game_features
+          WHERE game_year BETWEEN 2021 AND 2025
+          GROUP BY game_year
+          ORDER BY game_year
+
+        Thresholds:
+          null rate ≤ 0.10 — green (expected: weather on dome games)
+          null rate 0.10–0.25 — yellow (flag in report, acceptable with explanation)
+          null rate > 0.25 — red (must explain or fix before 7.L2 prediction scoring)
+
+        Create betting_ml/evaluation/historical_feature_coverage.md with:
+          - Null rate table: rows = season (2021–2025), columns = each Phase 7 feature group
+          - Color-coded status (green/yellow/red) per cell
+          - Explanation for any yellow or red cells (e.g., "FanGraphs projections unavailable
+            before 2023", "pitcher clusters require ≥200 pitches — lower coverage in 2021")
+          - Overall recommendation: which seasons are safe for full v1 evaluation vs.
+            which should use feature_version = 'v1_partial'
+
+      dependsOn:
+        - backfill-weather-and-umpire
+        - backfill-fangraphs-features
+        - backfill-injury-transactions
+        - backfill-pitcher-clusters
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/historical_feature_coverage.md').read_text()
+            for section in ['null rate', 'weather', 'stuff_plus', 'cluster', '2021', '2025']:
+                assert section.lower() in report.lower(), \
+                    f"Coverage report missing expected content: '{section}'"
+            print('historical_feature_coverage.md: all required sections present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            # Confirm feature_pregame_game_features dbtf build covers 2021+ game records
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'feature_pregame_game_features', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('feature_pregame_game_features: dbtf build succeeded across full historical range')
+            EOF

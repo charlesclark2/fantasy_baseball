@@ -905,3 +905,80 @@ models:
           Average vig-adjusted over probability across all bookmakers with
           pre-game totals prices. Null when no bookmaker has totals coverage.
           Source: mart_odds_consensus.
+
+      - name: temp_f
+        description: >
+          Temperature at scheduled first pitch (degrees Fahrenheit).
+          Sourced from feature_pregame_weather_features. Null for dome parks
+          and games with no weather row in weather_raw.
+
+      - name: wind_speed_mph
+        description: >
+          Wind speed at first pitch (mph). Null for dome parks and games
+          with no weather data.
+
+      - name: wind_direction_deg
+        description: >
+          Meteorological wind direction (degrees). 0/360 = wind from North,
+          90 = wind from East. Null for dome parks.
+
+      - name: wind_component_mph
+        description: >
+          Wind component along the home-plate-to-center-field axis (mph).
+          Positive = wind blowing out toward CF (favors offense, increases runs).
+          Negative = wind blowing in toward home plate (suppresses scoring).
+          Computed as wind_speed_mph × cos(wind_direction_deg − park_facing_degrees).
+          Null for dome parks (is_dome = true).
+
+      - name: humidity_pct
+        description: >
+          Relative humidity at first pitch (percent). Null for dome parks
+          and games with no weather data.
+
+      - name: is_dome
+        description: >
+          True for games played in permanently enclosed dome parks (roof_type =
+          'fixed'). False for open-air and convertible-roof parks. Used to
+          distinguish NULL wind columns (dome) from genuinely missing weather
+          data (outdoor parks with no row in weather_raw).
+
+  - name: feature_pregame_weather_features
+    description: >
+      Pre-game weather features for MLB outdoor parks. Grain: one row per
+      game_pk (games in weather_raw only). Dome parks have is_dome = TRUE
+      and NULL wind_component_mph. Outdoor and convertible-roof parks have
+      non-null wind_component_mph when coordinates and weather data are
+      available. The fetch closest to first pitch is selected via QUALIFY
+      on abs(fetch_offset_hours).
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+          - unique
+
+      - name: venue_id
+        tests:
+          - not_null
+
+      - name: temp_f
+        description: Temperature at first pitch (°F).
+
+      - name: wind_speed_mph
+        description: Wind speed (mph).
+
+      - name: wind_direction_deg
+        description: Meteorological wind direction (degrees). 0/360=from North.
+
+      - name: wind_component_mph
+        description: >
+          Wind component along home-plate → CF axis. Positive = out (offense
+          favored). Null for dome parks. Expected range −35 to +35 mph.
+
+      - name: humidity_pct
+        description: Relative humidity (percent).
+
+      - name: is_dome
+        description: True for fixed-roof dome parks; False for open/convertible.
+        tests:
+          - not_null

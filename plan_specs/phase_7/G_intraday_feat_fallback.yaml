@@ -1,0 +1,311 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: intraday-feature-fallback
+  namespace: default
+spec:
+  description: >
+    Ensure predict_today.py produces tagged, auditable predictions before the
+    nightly dbt pipeline completes so early-morning lineup-lock runs are reliable.
+
+    BACKGROUND: predict_today.py returns "No games found" before the
+    daily_ingestion.yml → dbt_daily_build.yml chain completes (~08:30–09:00 ET).
+    Morning lineup-lock windows fall inside this gap, making early-day predictions
+    unreliable. Gap 6 from betting_ml/evaluation/postmortem_v0.md.
+
+    CURRENT STATE (as of 2026-05-01): The fallback function
+    load_todays_features_via_statsapi() already exists in betting_ml/utils/data_loader.py
+    (line 279) and load_todays_features() already calls it when the feature table
+    returns empty rows for the target date (line 426). The two-tier resolution
+    (feature store → statsapi fallback) is working.
+
+    REMAINING GAP: daily_model_predictions has no data_source column, so there is no
+    way to distinguish feature-store rows from intraday-fallback rows in the Streamlit
+    app or downstream queries. Additionally, the intraday path currently silently drops
+    the lineup filter (gracefully skipped when lineup columns are absent) with no
+    printed warning — making it hard to know at runtime whether lineups were factored in.
+
+    This card has two deliverables:
+
+      1. DDL migration — add data_source VARCHAR column to daily_model_predictions.
+         Write 'feature_store' when rows came from the nightly dbt build; write
+         'intraday_fallback' when rows came from load_todays_features_via_statsapi().
+         DDL saved to scripts/ddl/daily_model_predictions_add_data_source.sql.
+
+      2. Source tag wiring — detect which path was used in load_todays_features() and
+         surface it as a column on the returned DataFrame so predict_today.py can pass
+         it through to the INSERT without re-detecting the path.
+
+    Source: Gap 6 from betting_ml/evaluation/postmortem_v0.md.
+    Expected effort: ~2 hours.
+
+  acceptanceCriteria:
+    - description: >
+        daily_model_predictions has a data_source VARCHAR column. DDL migration script
+        exists at scripts/ddl/daily_model_predictions_add_data_source.sql.
+    - description: >
+        load_todays_features() returns a DataFrame with a data_source column set to
+        'feature_store' when the Snowflake feature table had rows, and 'intraday_fallback'
+        when load_todays_features_via_statsapi() was called.
+    - description: >
+        predict_today.py passes data_source through to _write_predictions_to_snowflake()
+        and writes it to daily_model_predictions for every inserted row.
+    - description: >
+        When the intraday fallback path is used, predict_today.py prints a clearly
+        visible warning: "[WARN] Intraday fallback active — lineup features unavailable;
+        predictions scored on team rolling stats only."
+    - description: >
+        AST check confirms data_source is referenced in both data_loader.py and
+        predict_today.py.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: intraday-feature-fallback-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential DAG. Task 1 writes the DDL migration and applies it.
+    Task 2 updates data_loader.py to stamp the data_source column. Task 3 wires
+    the column through predict_today.py into the Snowflake INSERT.
+  goalRef:
+    name: intraday-feature-fallback
+  graph:
+    nodes:
+
+      - id: add-data-source-column-ddl
+        kind: Task
+        description: >
+          Write a DDL migration script and apply it to daily_model_predictions.
+
+          File: scripts/ddl/daily_model_predictions_add_data_source.sql
+
+          Content:
+            -- Migration: add data_source column to daily_model_predictions
+            -- Applied: <date>
+            -- Purpose: distinguish feature-store rows from intraday-fallback rows
+            ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+            ADD COLUMN IF NOT EXISTS data_source VARCHAR(50);
+
+          Apply via mcp__snowflake__run_snowflake_query. Confirm the column exists:
+            SELECT column_name, data_type
+            FROM baseball_data.information_schema.columns
+            WHERE table_schema = 'BETTING_ML'
+              AND table_name   = 'DAILY_MODEL_PREDICTIONS'
+              AND column_name  = 'DATA_SOURCE';
+
+          Also update the _CREATE_PREDICTIONS_TABLE DDL string inside
+          betting_ml/scripts/predict_today.py to include the new column in the
+          CREATE TABLE IF NOT EXISTS block, so new environments get it on first run:
+            data_source  VARCHAR(50)   -- 'feature_store' or 'intraday_fallback'
+
+          Read the existing _CREATE_PREDICTIONS_TABLE string (lines ~44–93) before
+          editing to confirm placement and indentation.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL migration script
+            path: scripts/ddl/daily_model_predictions_add_data_source.sql
+          - type: command_succeeds
+            name: DDL migration script contains ALTER TABLE statement
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/daily_model_predictions_add_data_source.sql').read_text().lower()
+                assert 'alter table' in sql, 'ALTER TABLE not found in migration script'
+                assert 'data_source' in sql, 'data_source column not in migration script'
+                assert 'daily_model_predictions' in sql, 'daily_model_predictions not in migration script'
+                print('DDL migration script contains required ALTER TABLE statement')
+          - type: command_succeeds
+            name: predict_today.py CREATE TABLE includes data_source
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                found = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'data_source' in node.value and 'CREATE TABLE' in node.value:
+                            found = True
+                            break
+                assert found, 'data_source column not found in _CREATE_PREDICTIONS_TABLE string in predict_today.py'
+                print('predict_today.py CREATE TABLE includes data_source column')
+
+      - id: stamp-data-source-in-loader
+        kind: Task
+        description: >
+          Update betting_ml/utils/data_loader.py so that load_todays_features()
+          returns a data_source column on the DataFrame.
+
+          Read data_loader.py lines 402–427 before editing to confirm the current
+          two-tier resolution logic.
+
+          Current logic (approximately):
+            conn = _connect()
+            try:
+                rows = cur.fetchall()
+                if rows:
+                    df = pd.DataFrame(rows, columns=columns)
+                    return _numeric_convert(df)
+            finally:
+                conn.close()
+
+            print("  No rows in feature table ...")
+            return load_todays_features_via_statsapi(target_date)
+
+          Required change — add data_source stamp to both return paths:
+
+            Path A (feature store):
+              df = pd.DataFrame(rows, columns=columns)
+              df["data_source"] = "feature_store"
+              return _numeric_convert(df)
+
+            Path B (intraday fallback):
+              print("  No rows in feature table for {target_date}; assembling from Stats API schedule...")
+              print("[WARN] Intraday fallback active — lineup features unavailable; predictions scored on team rolling stats only.")
+              df = load_todays_features_via_statsapi(target_date)
+              if not df.empty:
+                  df["data_source"] = "intraday_fallback"
+              return df
+
+          The WARN print must appear on its own line, prefixed with [WARN], and mention
+          that lineup features are unavailable — so the operator knows at a glance that
+          the run used degraded data.
+
+          Do not change load_todays_features_via_statsapi() itself — it is also called
+          directly by backfill scripts and must remain side-effect-free.
+        dependsOn:
+          - add-data-source-column-ddl
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: data_loader.py stamps data_source in both return paths
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/utils/data_loader.py').read_text()
+                tree = ast.parse(src)
+                found_feature_store = False
+                found_intraday_fallback = False
+                found_warn = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if node.value == 'feature_store':
+                            found_feature_store = True
+                        if node.value == 'intraday_fallback':
+                            found_intraday_fallback = True
+                        if '[WARN]' in node.value and 'lineup' in node.value.lower():
+                            found_warn = True
+                assert found_feature_store, "'feature_store' string not found in data_loader.py'
+                assert found_intraday_fallback, "'intraday_fallback' string not found in data_loader.py'
+                assert found_warn, '[WARN] lineup message not found in data_loader.py'
+                print('data_loader.py stamps data_source in both paths and emits WARN')
+          - type: command_succeeds
+            name: data_loader.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/utils/data_loader.py').read_text()
+                ast.parse(src)
+                print('data_loader.py syntax OK')
+
+      - id: wire-data-source-through-predict
+        kind: Task
+        description: >
+          Update betting_ml/scripts/predict_today.py to pass data_source through to
+          the Snowflake INSERT so every prediction row is tagged.
+
+          Step 1 — Read _INSERT_PREDICTION (lines ~95–123) and _write_predictions_to_snowflake
+          (lines ~126–243) before making any edits.
+
+          Step 2 — Add data_source to _INSERT_PREDICTION:
+            In the column list: add data_source after model_version
+            In the VALUES clause: add %(data_source)s in the matching position
+
+          Step 3 — Add data_source parameter to _write_predictions_to_snowflake():
+            Function signature: add data_source: str parameter
+            Row dict construction: add "data_source": data_source to every row dict
+              built inside the function (or pass it as a per-row value from df_today)
+
+          Step 4 — Propagate data_source from df_today in main():
+            After df_today = load_todays_features(target_date), extract:
+              data_source = df_today["data_source"].iloc[0] if "data_source" in df_today.columns else "feature_store"
+            Pass data_source to _write_predictions_to_snowflake().
+
+          Step 5 — If data_source == "intraday_fallback", print the warning again at
+          the top of main() after loading features (in addition to the print in data_loader.py)
+          so the operator sees it in the predict_today.py output stream.
+
+          Do not change the column order of _INSERT_PREDICTION relative to the
+          CREATE TABLE schema — the two must stay in sync. Verify by reading both
+          the DDL string and the INSERT string side by side before committing.
+        dependsOn:
+          - stamp-data-source-in-loader
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py references data_source in INSERT and function signature
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                found_insert_col = False
+                found_intraday = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'data_source' in node.value and ('INSERT' in node.value or 'VALUES' in node.value):
+                            found_insert_col = True
+                        if 'intraday_fallback' in node.value:
+                            found_intraday = True
+                assert found_insert_col, 'data_source not found in INSERT statement in predict_today.py'
+                assert found_intraday, "'intraday_fallback' value not found in predict_today.py"
+                print('predict_today.py: data_source wired into INSERT and intraday_fallback value present')
+          - type: command_succeeds
+            name: predict_today.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                ast.parse(src)
+                print('predict_today.py syntax OK')
+          - type: command_succeeds
+            name: data_source column present in Snowflake table
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Manual verification via Snowflake MCP
+                print("Verify via Snowflake MCP:")
+                print("SELECT column_name FROM baseball_data.information_schema.columns")
+                print("WHERE table_schema = 'BETTING_ML'")
+                print("  AND table_name = 'DAILY_MODEL_PREDICTIONS'")
+                print("  AND column_name = 'DATA_SOURCE';")
+                print("Expected: 1 row returned.")

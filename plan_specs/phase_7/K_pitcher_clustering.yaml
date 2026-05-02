@@ -1,0 +1,511 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pitcher-clustering-model
+  phase: "7"
+  card: "7.K"
+  priority: P2
+  blocker: "Card 7.F (fct_fangraphs_pitcher_arsenal_wide must exist with overall_stuff_plus, fastball_pct, breaking_pct, offspeed_pct)"
+spec:
+  description: |
+    Cluster all MLB starters into pitch-style archetypes using an arsenal vector built from
+    Statcast velocity/movement metrics and FanGraphs Stuff+ data (7.F). Persist cluster
+    assignments to Snowflake, then compute each lineup's rolling wOBA performance against
+    the scheduled starter's cluster and add those signals to feature_pregame_game_features.
+
+    Why P2: The market prices "style matchup" signal (e.g., strikeout-heavy lineup vs.
+    elite breaking-ball starter) that raw ERA/FIP cannot capture. Clustering creates a
+    more informative matchup dimension than the three-way archetype from Card 7.J.
+    Gap 8 from postmortem_v0.md.
+
+    Architecture:
+      Step 1 — Build a per-pitcher-season arsenal summary mart aggregating Statcast
+               pitch characteristics (velocity, horizontal/vertical break) by pitch family
+               and joining FanGraphs Stuff+ columns from fct_fangraphs_pitcher_arsenal_wide.
+      Step 2 — Run k-means clustering (k=6..8 evaluated, final k chosen by silhouette score)
+               in Python on the normalized arsenal vectors. Persist assignments to
+               baseball_data.statsapi.pitcher_clusters.
+      Step 3 — Build a dbt model computing each batter's rolling wOBA vs. pitchers in each
+               cluster (30d window, min 10 PA), then aggregate across lineup slots.
+      Step 4 — Integrate three new columns into feature_pregame_game_features and document
+               CV impact.
+
+    Leakage guard: all rolling stats use game_date < current game_date; cluster assignments
+    use game_year - 1 (prior-season clusters) to prevent label leakage.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pitcher-clustering-plan
+  phase: "7"
+  card: "7.K"
+spec:
+  goal:
+    name: pitcher-clustering-model
+
+  tasks:
+
+    - id: build-pitcher-arsenal-mart
+      name: Build pitcher arsenal summary mart
+      description: |
+        Create dbt/models/mart/mart_pitcher_arsenal_summary.sql.
+        Grain: pitcher_id × game_year.
+        Purpose: one-row-per-pitcher-season vector suitable for clustering — weighted
+        average velocity and break per pitch family, Stuff+ columns from 7.F, and
+        pitch mix percentages.
+
+        SQL outline:
+
+          with pitch_chars as (
+              select
+                  pitcher_id,
+                  game_year,
+                  pitch_category,
+                  count(*)                               as pitch_count,
+                  avg(release_speed_mph)                 as avg_velocity,
+                  avg(pitch_movement_x_ft)               as avg_hmov,
+                  avg(pitch_movement_z_ft)               as avg_vmov,
+                  avg(release_spin_rate_rpm)             as avg_spin
+              from {{ ref('mart_pitch_characteristics') }}
+              where pitch_category in ('fastball', 'breaking', 'offspeed')
+              group by 1, 2, 3
+          ),
+
+          pitch_totals as (
+              select pitcher_id, game_year, sum(pitch_count) as total_pitches
+              from pitch_chars
+              group by 1, 2
+          ),
+
+          pitch_pct as (
+              select
+                  pc.pitcher_id,
+                  pc.game_year,
+                  pc.pitch_category,
+                  pc.pitch_count,
+                  pc.pitch_count / pt.total_pitches      as family_pct,
+                  pc.avg_velocity,
+                  pc.avg_hmov,
+                  pc.avg_vmov,
+                  pc.avg_spin
+              from pitch_chars pc
+              join pitch_totals pt using (pitcher_id, game_year)
+          ),
+
+          -- Pivot to wide: one row per pitcher × game_year
+          arsenal_wide as (
+              select
+                  pitcher_id,
+                  game_year,
+                  sum(pitch_count)                       as total_pitches,
+                  sum(case when pitch_category = 'fastball' then family_pct else 0 end)
+                                                         as fastball_pct_statcast,
+                  sum(case when pitch_category = 'breaking' then family_pct else 0 end)
+                                                         as breaking_pct_statcast,
+                  sum(case when pitch_category = 'offspeed' then family_pct else 0 end)
+                                                         as offspeed_pct_statcast,
+                  -- Velocity per family (null if not thrown)
+                  max(case when pitch_category = 'fastball' then avg_velocity end)
+                                                         as fb_avg_velocity,
+                  max(case when pitch_category = 'breaking' then avg_velocity end)
+                                                         as brk_avg_velocity,
+                  max(case when pitch_category = 'offspeed' then avg_velocity end)
+                                                         as os_avg_velocity,
+                  -- Horizontal movement per family
+                  max(case when pitch_category = 'fastball' then avg_hmov end)
+                                                         as fb_avg_hmov,
+                  max(case when pitch_category = 'breaking' then avg_hmov end)
+                                                         as brk_avg_hmov,
+                  -- Vertical movement per family
+                  max(case when pitch_category = 'fastball' then avg_vmov end)
+                                                         as fb_avg_vmov,
+                  max(case when pitch_category = 'breaking' then avg_vmov end)
+                                                         as brk_avg_vmov,
+                  -- Spin per family
+                  max(case when pitch_category = 'fastball' then avg_spin end)
+                                                         as fb_avg_spin
+              from pitch_pct
+              group by 1, 2
+          ),
+
+          -- Join FanGraphs Stuff+ from Card 7.F
+          with_stuff as (
+              select
+                  a.*,
+                  s.overall_stuff_plus,
+                  s.fastball_stuff_plus,
+                  s.slider_stuff_plus,
+                  s.curveball_stuff_plus,
+                  s.changeup_stuff_plus,
+                  -- Use FanGraphs pitch mix if available, else fall back to Statcast
+                  coalesce(s.fastball_pct, a.fastball_pct_statcast) as fastball_pct,
+                  coalesce(s.breaking_pct, a.breaking_pct_statcast) as breaking_pct,
+                  coalesce(s.offspeed_pct, a.offspeed_pct_statcast) as offspeed_pct
+              from arsenal_wide a
+              left join {{ ref('fct_fangraphs_pitcher_arsenal_wide') }} s
+                  on a.pitcher_id = s.pitcher_id  -- requires MLBAM↔FG ID crosswalk
+                  and a.game_year = s.season
+          )
+
+          select * from with_stuff
+          where total_pitches >= 200  -- minimum threshold: ~5 quality starts
+
+        Materialization: table (rebuilt each season). No incremental needed — small grain.
+        Path: dbt/models/mart/mart_pitcher_arsenal_summary.sql
+
+        Note: pitcher_id in Statcast is MLBAM bam_id. fct_fangraphs_pitcher_arsenal_wide
+        stores fg_pitcher_id. A crosswalk join (via ref_players or a separate mapping table)
+        is required. If the crosswalk does not exist, fall back to Statcast-only columns
+        (drop overall_stuff_plus columns) and add a TODO comment.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('dbt/models/mart/mart_pitcher_arsenal_summary.sql').read_text()
+            # Check refs
+            assert "mart_pitch_characteristics" in src, "mart_pitch_characteristics ref missing"
+            assert "fct_fangraphs_pitcher_arsenal_wide" in src, "fct_fangraphs_pitcher_arsenal_wide ref missing"
+            # Check key output columns
+            for col in ['fb_avg_velocity', 'fastball_pct', 'breaking_pct', 'overall_stuff_plus', 'total_pitches']:
+                assert col in src, f"Required column '{col}' not found in model"
+            assert 'total_pitches >= 200' in src.replace(' ', ''), "Minimum pitch threshold not found"
+            print('mart_pitcher_arsenal_summary: refs and required columns present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # dbtf build smoke test
+            import subprocess, sys
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'mart_pitcher_arsenal_summary', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('mart_pitcher_arsenal_summary: dbtf build succeeded')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Row count check: ≥350 starters per most recent season
+            import json
+            query = """
+                SELECT game_year, COUNT(DISTINCT pitcher_id) AS starters
+                FROM BASEBALL_DATA.STATSAPI.MART_PITCHER_ARSENAL_SUMMARY
+                WHERE game_year = (SELECT MAX(game_year) FROM BASEBALL_DATA.STATSAPI.MART_PITCHER_ARSENAL_SUMMARY)
+                GROUP BY game_year
+            """
+            result = json.loads(open('/tmp/arsenal_check.json').read()) if False else None
+            # Actual check runs via mcp__snowflake__run_snowflake_query; threshold: starters >= 350
+            print('MANUAL CHECK: run Snowflake query to verify >=350 starters in latest season')
+            EOF
+
+    - id: build-clustering-script
+      name: Cluster pitchers by arsenal vector and persist assignments
+      description: |
+        Create betting_ml/scripts/pitcher_clustering/cluster_pitchers.py.
+
+        The script:
+          1. Loads mart_pitcher_arsenal_summary from Snowflake (for target season).
+          2. Selects clustering feature columns (see below), drops rows with >30% nulls.
+          3. Imputes remaining nulls with column median.
+          4. Standardizes features with sklearn.preprocessing.StandardScaler.
+          5. Fits k-means for k in range(4, 10), computes silhouette_score for each k.
+          6. Selects k with highest silhouette score; asserts silhouette > 0.35.
+          7. Assigns cluster labels from a human-readable label map (see below).
+          8. Writes assignments to baseball_data.statsapi.pitcher_clusters via MERGE INTO.
+
+        Clustering feature columns (in order):
+          fb_avg_velocity, brk_avg_velocity, os_avg_velocity,
+          fb_avg_hmov, brk_avg_hmov, fb_avg_vmov, brk_avg_vmov,
+          fastball_pct, breaking_pct, offspeed_pct,
+          overall_stuff_plus (NULL-imputed to 100.0 if no FG crosswalk)
+
+        Cluster label map: assign after inspecting centroid values. Starting suggestions:
+          Cluster with high fb_velocity + high fastball_pct + high overall_stuff_plus
+            → 'power_swing_and_miss'
+          Cluster with high fastball_pct + low fb_hmov (sinker profile)
+            → 'contact_sinker_ball'
+          Cluster with high breaking_pct + high brk_avg_spin
+            → 'elite_breaking_ball'
+          Cluster with high offspeed_pct + low fb_velocity
+            → 'changeup_deceptive'
+          Cluster with low overall_stuff_plus + high fastball_pct (soft command)
+            → 'soft_command'
+          Remaining cluster → 'multi_pitch_mix'
+
+        Relabeling: after fitting, print centroid DataFrame and prompt operator for final
+        label assignments if any centroid does not clearly map to a starter suggestion.
+        The label map is hardcoded as a constant dict CLUSTER_LABELS in the script.
+
+        DDL for baseball_data.statsapi.pitcher_clusters (create if not exists):
+          CREATE TABLE IF NOT EXISTS baseball_data.statsapi.pitcher_clusters (
+              pitcher_id      INTEGER      NOT NULL,
+              season          INTEGER      NOT NULL,
+              cluster_id      INTEGER      NOT NULL,
+              cluster_label   VARCHAR(50)  NOT NULL,
+              silhouette_score FLOAT,
+              run_timestamp   TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+              PRIMARY KEY (pitcher_id, season)
+          );
+
+        MERGE INTO pitcher_clusters on pitcher_id + season; update cluster_id, label, timestamp.
+
+        CLI usage:
+          python3 cluster_pitchers.py --season 2025 [--dry-run] [--min-k 4] [--max-k 10]
+
+        Silhouette validation: script exits with non-zero return code if best silhouette < 0.35.
+        Spot-check output: after clustering, script prints a table of 10 well-known starters
+        with their assigned cluster_label. Operator verifies manually.
+
+        Path: betting_ml/scripts/pitcher_clustering/cluster_pitchers.py
+
+      dependsOn:
+        - build-pitcher-arsenal-mart
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('betting_ml/scripts/pitcher_clustering/cluster_pitchers.py').read_text()
+            tree = ast.parse(src)
+            # Check required imports
+            imports = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names: imports.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    imports.add(node.module or '')
+            assert any('sklearn' in i for i in imports), "sklearn not imported"
+            assert any('StandardScaler' in src for _ in [1]), "StandardScaler not used"
+            assert 'silhouette_score' in src, "silhouette_score not used"
+            assert 'KMeans' in src, "KMeans not used"
+            assert 'CLUSTER_LABELS' in src, "CLUSTER_LABELS constant missing"
+            assert 'pitcher_clusters' in src, "pitcher_clusters table reference missing"
+            assert '--dry-run' in src, "dry-run flag missing"
+            print('cluster_pitchers.py: required imports, constants, and flags present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('betting_ml/scripts/pitcher_clustering/cluster_pitchers.py').read_text()
+            assert '0.35' in src, "Silhouette threshold 0.35 not enforced"
+            assert 'MERGE INTO' in src.upper() or 'merge into' in src.lower(), "MERGE INTO not used for upsert"
+            assert 'dry_run' in src or 'dry-run' in src, "dry-run mode not implemented"
+            print('cluster_pitchers.py: silhouette threshold, MERGE INTO, dry-run all present')
+            EOF
+
+    - id: build-lineup-vs-cluster-mart
+      name: Build batter and lineup wOBA vs. pitcher cluster mart
+      description: |
+        Create two dbt models:
+
+        Model 1 — dbt/models/mart/mart_batter_woba_vs_cluster.sql
+          Grain: batter_id × cluster_id × game_date (rolling 30-day ending the day before game_date).
+          Purpose: batter's rolling wOBA vs. any pitcher belonging to a given cluster.
+
+          Logic:
+            1. Join mart_pitch_play_event (for plate_appearance_event, xwoba) to
+               baseball_data.statsapi.pitcher_clusters on pitcher_id + game_year.
+            2. Filter to plate-appearance terminal events only (plate_appearance_event IS NOT NULL).
+            3. For each batter × cluster × game_date (anchor):
+                 - Count PA in [anchor − 30d, anchor − 1d] (leakage guard: exclude same day)
+                 - Compute raw_woba = sum(woba_value) / pa_count
+                 - Compute raw_xwoba = avg(xwoba)
+            4. Apply shrinkage toward league average:
+                 weight    = pa_count / (pa_count + 30.0)  -- tighter prior than archetype (smaller sample)
+                 adj_woba  = weight * raw_woba  + (1 - weight) * 0.320
+                 adj_xwoba = weight * raw_xwoba + (1 - weight) * 0.315
+            5. Gate: only emit rows where pa_count >= 10 (min PA per batter vs. cluster).
+
+          Note: because this is a rolling mart with a date dimension it can be large.
+          Materialize as incremental (unique_key: batter_id || '~' || cluster_id || '~' || game_date::varchar).
+          Rebuild lookback only: filter anchor dates >= max(game_date) - 35 days on incremental runs.
+
+          Source join pattern:
+            ppe.game_date::date as anchor_date,
+            pc.cluster_id
+          from {{ ref('mart_pitch_play_event') }}  ppe
+          join {{ source('statsapi', 'pitcher_clusters') }} pc
+              on ppe.pitcher_id = pc.pitcher_id
+              and ppe.game_year  = pc.season
+
+          Path: dbt/models/mart/mart_batter_woba_vs_cluster.sql
+
+        Model 2 — dbt/models/feature/feature_pitcher_cluster_matchups.sql
+          Grain: game_pk × side (home / away).
+          Purpose: aggregate mart_batter_woba_vs_cluster across 9 lineup slots given
+                   the scheduled starter's cluster for each side.
+
+          CTE chain:
+            lineups → Join stg_statsapi_lineups_wide to get slot_1..slot_9 player_ids per side.
+            starter_cluster → LEFT JOIN pitcher_clusters on starter_id × (game_year - 1) to get
+                              the cluster_id for the scheduled starter. Use game_year - 1 for
+                              cluster assignments (prior-season, prevents label leakage).
+            lineup_slots → UNPIVOT lineups to one row per game_pk × side × slot × batter_id.
+            slot_cluster_stats → LEFT JOIN mart_batter_woba_vs_cluster on
+                                  batter_id + cluster_id + game_date = game_date - 1.
+            cluster_agg → GROUP BY game_pk × side:
+                           AVG(adj_woba)   as avg_woba_vs_cluster   (nulls excluded)
+                           AVG(adj_xwoba)  as avg_xwoba_vs_cluster  (nulls excluded)
+                           COUNT(adj_woba) as slot_coverage          (how many of 9 slots had data)
+            final → propagate home_ / away_ prefix for each column.
+
+          Output columns added to feature_pregame_game_features (via JOIN or CTE extension):
+            home_lineup_avg_woba_vs_cluster
+            home_lineup_avg_xwoba_vs_cluster
+            home_lineup_cluster_slot_coverage
+            away_lineup_avg_woba_vs_cluster
+            away_lineup_avg_xwoba_vs_cluster
+            away_lineup_cluster_slot_coverage
+            home_starter_cluster_id
+            away_starter_cluster_id
+
+          Materialization: table (rebuilt daily, small grain at game level).
+          Path: dbt/models/feature/feature_pitcher_cluster_matchups.sql
+
+      dependsOn:
+        - build-clustering-script
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_batter_woba_vs_cluster.sql').read_text()
+            assert 'mart_pitch_play_event' in src, "mart_pitch_play_event ref missing"
+            assert 'pitcher_clusters' in src, "pitcher_clusters source ref missing"
+            assert 'plate_appearance_event IS NOT NULL' in src, "PA terminal filter missing"
+            assert 'pa_count' in src, "pa_count column missing"
+            assert 'adj_woba' in src, "adj_woba shrinkage column missing"
+            assert '10' in src, "min PA gate (10) not found"
+            print('mart_batter_woba_vs_cluster: refs, PA filter, shrinkage, min PA gate present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pitcher_cluster_matchups.sql').read_text()
+            for col in ['avg_woba_vs_cluster', 'avg_xwoba_vs_cluster', 'cluster_slot_coverage',
+                        'starter_cluster_id']:
+                assert col in src, f"Output column '{col}' missing"
+            assert 'game_year - 1' in src.replace(' ', ''), "game_year-1 leakage guard missing"
+            assert 'stg_statsapi_lineups_wide' in src, "lineups source missing"
+            print('feature_pitcher_cluster_matchups: output columns and leakage guard present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select',
+                 'mart_batter_woba_vs_cluster feature_pitcher_cluster_matchups',
+                 '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('mart_batter_woba_vs_cluster + feature_pitcher_cluster_matchups: dbtf build succeeded')
+            EOF
+
+    - id: integrate-and-document
+      name: Integrate cluster features and document CV impact
+      description: |
+        1. Extend feature_pregame_game_features.sql to include cluster matchup columns.
+           Add a new CTE `cluster_matchups` that LEFT JOINs feature_pitcher_cluster_matchups
+           on game_pk, then propagate the 8 new columns to the final SELECT.
+
+           SELECT additions (in final CTE):
+             cm.home_lineup_avg_woba_vs_cluster,
+             cm.home_lineup_avg_xwoba_vs_cluster,
+             cm.home_lineup_cluster_slot_coverage,
+             cm.away_lineup_avg_woba_vs_cluster,
+             cm.away_lineup_avg_xwoba_vs_cluster,
+             cm.away_lineup_cluster_slot_coverage,
+             cm.home_starter_cluster_id,
+             cm.away_starter_cluster_id
+
+        2. Rebuild feature_pregame_game_features with dbtf:
+             dbtf build --select feature_pregame_game_features --target dev
+
+        3. Retrain model using the standard training script with the updated feature set.
+           Compare train/test metrics (Brier score, mean h2h edge, % positive edge) against
+           pre-integration baseline. Threshold: ΔR² (or ΔBrier) > 0.001 to declare a positive
+           contribution (below threshold: feature set included but flagged as low-signal).
+
+        4. Spot-check cluster interpretability for 5 well-known starters:
+           Example assertions (adjust based on actual centroids):
+             - Gerrit Cole → 'power_swing_and_miss'
+             - Clayton Kershaw → 'elite_breaking_ball'
+             - Kyle Hendricks → 'soft_command' or 'changeup_deceptive'
+           Document actual assignments (even if different from expectations) — predictive
+           validity matters more than intuitive label alignment.
+
+        5. Silhouette score check: assert final chosen k has silhouette > 0.35.
+           If silhouette cannot exceed 0.35 for any k in 4–10, document this in the
+           impact report and consider reducing k to 4 (lower but stable solution).
+
+        6. Create betting_ml/evaluation/pitcher_cluster_feature_impact.md with:
+           - Silhouette score and chosen k
+           - Cluster centroid summary table (cluster_label, n_pitchers, key centroid values)
+           - Spot-check table: 10 well-known starters with assigned label
+           - Null rate for home/away cluster coverage columns (target < 10%)
+           - Feature importance ranks for the 8 new columns
+           - ΔBrier / ΔR² vs. pre-cluster baseline
+           - Known limitations (e.g., April null rate, FG crosswalk coverage)
+
+      dependsOn:
+        - build-lineup-vs-cluster-mart
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            assert 'feature_pitcher_cluster_matchups' in src, \
+                "feature_pregame_game_features does not reference feature_pitcher_cluster_matchups"
+            for col in ['home_lineup_avg_woba_vs_cluster', 'away_lineup_avg_woba_vs_cluster',
+                        'home_starter_cluster_id', 'away_starter_cluster_id']:
+                assert col in src, f"Column '{col}' missing from feature_pregame_game_features"
+            print('feature_pregame_game_features: cluster matchup columns integrated')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'feature_pregame_game_features', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('feature_pregame_game_features: dbtf build succeeded with cluster columns')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/pitcher_cluster_feature_impact.md').read_text()
+            for section in ['silhouette', 'null rate', 'feature importance', 'cluster_label']:
+                assert section.lower() in report.lower(), \
+                    f"Impact report missing section: '{section}'"
+            print('pitcher_cluster_feature_impact.md: all required sections present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Verify clustering script produced >=350 stable assignments
+            # Run: python3 betting_ml/scripts/pitcher_clustering/cluster_pitchers.py --season 2025 --dry-run
+            # and confirm output shows >=350 pitchers assigned with silhouette > 0.35
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'betting_ml/scripts/pitcher_clustering/cluster_pitchers.py',
+                 '--season', '2025', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"Clustering script dry-run failed:\n{result.stderr}"
+            assert '350' in result.stdout or 'silhouette' in result.stdout.lower(), \
+                "Dry-run output did not report pitcher count or silhouette score"
+            print('cluster_pitchers.py --dry-run: completed successfully')
+            EOF

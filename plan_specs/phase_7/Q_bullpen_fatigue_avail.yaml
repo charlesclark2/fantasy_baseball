@@ -1,0 +1,327 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bullpen-fatigue-availability-features
+  phase: "7"
+  card: "7.Q"
+  priority: P2
+  blocker: none (unblocked)
+spec:
+  description: |
+    Add IP-based short-window bullpen workload features to the feature store by
+    extending the existing mart_bullpen_workload model — without creating a new
+    model or duplicating existing infrastructure.
+
+    What already exists and must NOT be duplicated:
+      - mart_bullpen_workload (grain: pitching_team × game_pk) — tracks pitch counts
+        and closer/high-leverage usage at 1d, 3d, 7d windows; already joined into
+        feature_pregame_team_features → feature_pregame_game_features.
+      - mart_bullpen_effectiveness — tracks quality metrics (K%, BB%, xwOBA, IP)
+        over 14d and 30d windows; already joined into feature_pregame_team_features.
+      - In feature_pregame_game_features: home/away_bullpen_pitches_prev_1d/3d/7d,
+        home/away_pitchers_used_prev_3d/7d, home/away_reliever_appearances_prev_3d/7d,
+        home/away_high_leverage_used_prev_2d, home/away_closer_used_prev_1d/2d.
+      - Already retained by training correlation filter (r ≥ 0.02):
+        away_bullpen_pitches_prev_7d/3d, home_bullpen_pitches_prev_3d,
+        away/home_closer_used_prev_2d, away_closer_used_prev_1d.
+
+    Net-new additions (3 columns in mart_bullpen_workload → 6 in feature store):
+      bullpen_ip_prev_1d     — reliever innings pitched in preceding 1 calendar day
+      bullpen_ip_prev_2d     — reliever innings pitched in preceding 2 calendar days
+      pitchers_used_prev_2d  — distinct relievers used in preceding 2 calendar days
+
+    Hypothesis: IP-normalized workload features carry stronger signal than pitch-count
+    equivalents because they account for pitcher efficiency (10 pitches over 1/3 inning
+    vs 10 pitches over 2 innings represents very different bullpen stress). The
+    correlation filter dropped home_bullpen_pitches_prev_1d (r=0.0137) and
+    home_closer_used_prev_1d (r=0.0157); IP-based versions may clear the r ≥ 0.02
+    threshold. Expected strongest effect on the totals model (depleted pen → more
+    late-inning offense).
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bullpen-fatigue-availability-features-plan
+  phase: "7"
+  card: "7.Q"
+spec:
+  goal:
+    name: bullpen-fatigue-availability-features
+
+  tasks:
+
+    - id: extend-bullpen-workload-model
+      name: Add outs_recorded tracking and IP/2d-window columns to mart_bullpen_workload
+      description: |
+        mart_bullpen_workload currently tracks only pitches_thrown at the
+        pitcher-game level. To compute IP we need outs_recorded.
+
+        Changes to dbt/models/mart/mart_bullpen_workload.sql:
+
+        1. In the `bullpen_pitcher_game` CTE, add outs_recorded using the same
+           plate_appearance_event list used in mart_bullpen_effectiveness:
+
+             sum(case when plate_appearance_event in (
+                 'strikeout', 'strikeout_double_play',
+                 'field_out', 'force_out',
+                 'grounded_into_double_play', 'double_play', 'triple_play',
+                 'sac_fly', 'sac_fly_double_play',
+                 'sac_bunt', 'sac_bunt_double_play',
+                 'fielders_choice_out',
+                 'caught_stealing_2b', 'caught_stealing_3b', 'caught_stealing_home',
+                 'pickoff_1b', 'pickoff_2b', 'pickoff_3b',
+                 'other_out'
+             ) then 1 else 0 end)  as outs_recorded
+
+           Note: mart_bullpen_workload joins stg_batter_pitches but currently only
+           selects inning, pitcher_id, home_team, away_team, pitching_team from
+           the pitches CTE. The plate_appearance_event column must be added to the
+           `pitches` CTE select list for this calculation.
+
+        2. In the `game_bullpen` CTE, add:
+             sum(outs_recorded)  as outs_recorded
+
+        3. In the `date_bullpen` CTE, add:
+             sum(outs_recorded)  as outs_recorded
+
+        4. In the `rolling` CTE, add three new window computations:
+
+             -- Innings pitched: prior 1 day
+             round(
+                 coalesce(sum(outs_recorded) over (
+                     partition by pitching_team
+                     order by game_date
+                     range between interval '1 day' preceding
+                               and interval '1 day' preceding
+                 ), 0) / 3.0, 1
+             )  as bullpen_ip_prev_1d,
+
+             -- Innings pitched: prior 2 days
+             round(
+                 coalesce(sum(outs_recorded) over (
+                     partition by pitching_team
+                     order by game_date
+                     range between interval '2 days' preceding
+                               and interval '1 day'  preceding
+                 ), 0) / 3.0, 1
+             )  as bullpen_ip_prev_2d,
+
+             -- Pitchers used: prior 2 days (3d and 7d already exist; 2d is new)
+             sum(pitchers_used) over (
+                 partition by pitching_team
+                 order by game_date
+                 range between interval '2 days' preceding
+                           and interval '1 day'  preceding
+             )  as pitchers_used_prev_2d
+
+        5. In the final SELECT, add:
+             r.bullpen_ip_prev_1d,
+             r.bullpen_ip_prev_2d,
+             r.pitchers_used_prev_2d
+
+        Verify the out-event list is identical to mart_bullpen_effectiveness to
+        keep definitions consistent. Do not change any existing columns or windows.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib, ast
+            src = pathlib.Path('dbt/models/mart/mart_bullpen_workload.sql').read_text()
+            for col in ['bullpen_ip_prev_1d', 'bullpen_ip_prev_2d', 'pitchers_used_prev_2d']:
+                assert col in src, f"Expected column '{col}' not found in mart_bullpen_workload.sql"
+            assert 'outs_recorded' in src, \
+                "outs_recorded not added to mart_bullpen_workload.sql"
+            assert 'plate_appearance_event' in src, \
+                "plate_appearance_event not included in pitches CTE select list"
+            print('mart_bullpen_workload.sql: all new columns present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_bullpen_workload.sql').read_text()
+            # Confirm existing columns still present (no regressions)
+            existing = [
+                'bullpen_pitches_prev_1d', 'bullpen_pitches_prev_3d', 'bullpen_pitches_prev_7d',
+                'pitchers_used_prev_3d', 'pitchers_used_prev_7d',
+                'closer_used_prev_1d', 'closer_used_prev_2d',
+                'high_leverage_used_prev_2d',
+            ]
+            for col in existing:
+                assert col in src, f"Existing column '{col}' was removed — regression"
+            print('mart_bullpen_workload.sql: all existing columns preserved')
+            EOF
+
+    - id: expose-in-team-features
+      name: Add new columns to feature_pregame_team_features
+      description: |
+        In dbt/models/feature/feature_pregame_team_features.sql:
+
+        Find the block where mart_bullpen_workload columns are selected
+        (currently lines ~296–305, select block with bw.bullpen_pitches_prev_1d etc.)
+        and add the three new columns:
+
+          bw.bullpen_ip_prev_1d,
+          bw.bullpen_ip_prev_2d,
+          bw.pitchers_used_prev_2d,
+
+        Keep them adjacent to the existing bw.* workload block for readability.
+        No JOIN changes needed — mart_bullpen_workload is already joined.
+
+      dependsOn:
+        - extend-bullpen-workload-model
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_team_features.sql').read_text()
+            for col in ['bw.bullpen_ip_prev_1d', 'bw.bullpen_ip_prev_2d', 'bw.pitchers_used_prev_2d']:
+                assert col in src, f"'{col}' not found in feature_pregame_team_features.sql"
+            print('feature_pregame_team_features.sql: new bullpen columns present')
+            EOF
+
+    - id: expose-in-game-features
+      name: Add home/away-prefixed columns to feature_pregame_game_features
+      description: |
+        In dbt/models/feature/feature_pregame_game_features.sql:
+
+        Find the block that selects h_tm.* bullpen workload columns for home team
+        (currently lines ~377–390) and add:
+
+          h_tm.bullpen_ip_prev_1d              as home_bullpen_ip_prev_1d,
+          h_tm.bullpen_ip_prev_2d              as home_bullpen_ip_prev_2d,
+          h_tm.pitchers_used_prev_2d           as home_pitchers_used_prev_2d,
+
+        Find the equivalent away block (lines ~481–490) and add:
+
+          a_tm.bullpen_ip_prev_1d              as away_bullpen_ip_prev_1d,
+          a_tm.bullpen_ip_prev_2d              as away_bullpen_ip_prev_2d,
+          a_tm.pitchers_used_prev_2d           as away_pitchers_used_prev_2d,
+
+        No JOIN changes needed — feature_pregame_team_features is already the source.
+
+      dependsOn:
+        - expose-in-team-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            new_cols = [
+                'home_bullpen_ip_prev_1d', 'home_bullpen_ip_prev_2d',
+                'home_pitchers_used_prev_2d',
+                'away_bullpen_ip_prev_1d', 'away_bullpen_ip_prev_2d',
+                'away_pitchers_used_prev_2d',
+            ]
+            for col in new_cols:
+                assert col in src, f"'{col}' not found in feature_pregame_game_features.sql"
+            print('feature_pregame_game_features.sql: all 6 new home/away columns present')
+            EOF
+
+    - id: build-and-validate
+      name: Run dbtf build and spot-check IP values
+      description: |
+        From the dbt/ directory:
+
+          dbtf build --select +mart_bullpen_workload+
+
+        This rebuilds mart_bullpen_workload, feature_pregame_team_features, and
+        feature_pregame_game_features downstream.
+
+        After build, run the Snowflake spot-check query via the Snowflake MCP:
+
+          SELECT
+              game_date,
+              pitching_team,
+              bullpen_ip_prev_1d,
+              bullpen_ip_prev_2d,
+              pitchers_used_prev_2d,
+              bullpen_pitches_prev_1d   -- for sanity cross-check
+          FROM baseball_data.betting.mart_bullpen_workload
+          WHERE game_date BETWEEN '2024-07-15' AND '2024-07-20'
+            AND bullpen_pitches_prev_1d > 30    -- teams with heavy prior-day usage
+          ORDER BY bullpen_ip_prev_1d DESC
+          LIMIT 20;
+
+        Verify:
+          - bullpen_ip_prev_1d is non-zero for rows where bullpen_pitches_prev_1d > 30
+          - bullpen_ip_prev_1d ≤ 9.0 (no team uses more than 9 relief IP in a day)
+          - pitchers_used_prev_2d ≥ pitchers_used_prev_3d is NOT required (2d window
+            is strictly shorter), but pitchers_used_prev_2d should be ≤ pitchers_used_prev_3d
+          - Null rate for 2024–2026 regular season < 5% (early-season first games of
+            a team will have null; that is expected and acceptable)
+
+        Also confirm feature_pregame_game_features null rate:
+
+          SELECT
+              COUNT(*) as total,
+              SUM(CASE WHEN home_bullpen_ip_prev_1d IS NULL THEN 1 ELSE 0 END) as null_home_ip_1d,
+              SUM(CASE WHEN home_pitchers_used_prev_2d IS NULL THEN 1 ELSE 0 END) as null_home_pit_2d
+          FROM baseball_data.betting.feature_pregame_game_features
+          WHERE game_year IN (2024, 2025, 2026) AND game_type = 'R';
+
+      dependsOn:
+        - expose-in-game-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # dbtf build is run manually; this AC confirms the build completed.
+            # Operator verification: check dbtf output for errors before marking done.
+            print('MANUAL CHECK: dbtf build --select +mart_bullpen_workload+ must complete without errors')
+            print('MANUAL CHECK: run Snowflake spot-check queries described in task description')
+            EOF
+
+    - id: document-cv-impact
+      name: Retrain and document correlation filter results and CV impact
+      description: |
+        After the dbt build, retrain the model and check whether the new IP columns
+        survive the r ≥ 0.02 correlation filter in feature_selection.py.
+
+        Run the full training pipeline. Check feature_selection.md for:
+          - home_bullpen_ip_prev_1d: does it exceed the r=0.0137 of its pitch-count
+            analogue (home_bullpen_pitches_prev_1d, which was dropped)?
+          - away_bullpen_ip_prev_1d: does it exceed the r=0.0081 of its analogue?
+          - home/away_pitchers_used_prev_2d: compared to prev_3d analogues
+
+        Document findings in betting_ml/evaluation/feature_notes.md:
+          - For each new column: max |r|, retained or dropped, and which target
+            drove the max correlation
+          - Whether IP normalization improved correlation vs pitch-count equivalent
+          - CV impact: Brier score and mean h2h edge before and after adding the
+            new retained columns (compare to baseline from postmortem_v0.md)
+          - Feature importance from XGBoost (SHAP or gain) for any retained new cols
+
+        If no new IP column survives the correlation filter (all r < 0.02):
+          Document this result and note that the workload signal is likely captured
+          adequately by the existing pitch-count columns already retained. No further
+          work needed on this card.
+
+      dependsOn:
+        - build-and-validate
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            notes = pathlib.Path('betting_ml/evaluation/feature_notes.md')
+            assert notes.exists(), 'betting_ml/evaluation/feature_notes.md not found'
+            text = notes.read_text()
+            for kw in ['bullpen_ip_prev_1d', 'pitchers_used_prev_2d', 'correlation']:
+                assert kw in text, f"'{kw}' not documented in feature_notes.md"
+            print('feature_notes.md: new bullpen IP feature correlation results documented')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            notes = pathlib.Path('betting_ml/evaluation/feature_notes.md').read_text()
+            assert any(kw in notes.lower() for kw in ['cv impact', 'brier', 'retained', 'dropped']), \
+                'feature_notes.md missing CV impact or retain/drop declaration'
+            print('feature_notes.md: CV impact and retain/drop result present')
+            EOF

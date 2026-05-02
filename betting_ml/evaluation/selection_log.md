@@ -51,3 +51,27 @@ Among viable (NGBoost Normal) candidates, `ngboost_tuned` improves over the base
 
 **_prod artifact:** `betting_ml/models/run_differential/ngboost_tuned_prod.pkl`
 (additive copy of `ngboost_tuned_2026.pkl`; original retained for rollback)
+
+---
+
+## consensus_win_prob fix — 2026-05-01 (Card 6.H)
+
+**Change:** Replaced NGBoost-alone model_prob with 50/50 blend of NGBoost
+run_differential win probability and XGBoost isotonic classifier for h2h edge
+calculation in `predict_today.py`.
+
+**Before (NGBoost alone, 941 has_odds rows, 2026-03-27 to 2026-05-01):**
+- Mean h2h edge: −0.0361
+- % positive edge: 22.95%
+
+**After (consensus_win_prob, same 941 rows retroactively):**
+- Mean h2h edge: −0.0166
+- % positive edge: 35.39%
+
+**Interpretation:** Edge improved by ~0.019 but remains negative (−0.017). The
+model is not beating the market. Phase 7 must address fundamental
+feature/architecture gaps — periodic retraining of the current model is not a
+useful investment until calibration improves.
+
+Note: The Streamlit app reads `h2h_edge` from `daily_model_predictions` and does
+not recompute inline, so no Streamlit code change was required.

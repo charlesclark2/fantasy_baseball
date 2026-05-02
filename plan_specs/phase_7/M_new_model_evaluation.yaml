@@ -1,0 +1,553 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: model-selection-evaluation
+  namespace: default
+spec:
+  description: >
+    Run a rigorous walk-forward cross-validation harness across candidate model
+    architectures on the full Phase 7 feature set to determine whether XGBoost
+    and NGBoost remain the best choices, or whether LightGBM, CatBoost, or a
+    calibrated ensemble produces meaningfully better predictions.
+
+    BACKGROUND: XGBoost and NGBoost were selected early in the project without
+    a comparative evaluation. The Phase 6 postmortem confirmed the model is not
+    beating the market (mean h2h edge = −0.017 after consensus fix). Phase 7
+    cards 7.A–7.K add material new features (weather, Stuff+, umpire tendencies,
+    injury status, pitch-archetype matchups, pitcher clusters). Model selection
+    on an incomplete feature set is fragile — the architecture that performs best
+    on today's features is not guaranteed to be best on the full Phase 7 feature
+    set, particularly because the P2 features (7.F–7.K) introduce high-cardinality
+    categoricals (pitch_archetype, cluster_id) where LightGBM and CatBoost have
+    structural advantages over XGBoost.
+
+    TRIGGER: Run this evaluation after all Phase 7 P2 feature cards (7.A–7.K)
+    are merged into the feature store — or at end of the 2026 regular season
+    (whichever comes first). The time-based fallback prevents indefinite deferral
+    if any P2 card stalls.
+
+    CANDIDATE MODELS:
+      1. XGBoost + NGBoost (current — the baseline to beat)
+      2. LightGBM (gradient boosting with faster training, leaf-wise splits,
+         native handling of missing values and categoricals)
+      3. CatBoost (ordered boosting, native categorical encoding via target
+         statistics — most relevant for pitch_archetype, cluster_id, park)
+      4. Stacked ensemble (XGBoost + LightGBM + CatBoost as base estimators →
+         ridge regression or logistic regression meta-learner)
+      5. Isotonic recalibration layer (applied on top of the best base model;
+         re-maps raw probability outputs to better-calibrated probabilities
+         using sklearn CalibratedClassifierCV with method='isotonic')
+
+    EVALUATION PROTOCOL:
+      Walk-forward cross-validation with four folds (time-series aware;
+      no future data leaks into training):
+        Fold 1: train 2016–2021, test 2022
+        Fold 2: train 2016–2022, test 2023
+        Fold 3: train 2016–2023, test 2024
+        Fold 4: train 2016–2024, test 2025
+      All folds use identical feature sets and train/test indices so model
+      comparisons are directly apples-to-apples.
+
+    PRIMARY METRICS (betting-context priority order):
+      1. Brier score — probability calibration; primary metric for model selection
+      2. Mean h2h edge vs. market — business metric (target: improve from −0.017)
+      3. % positive-edge games — target: improve from 35.39%
+      4. Log-loss — consistent with alpha-tuning methodology (Card 7.A)
+      5. Totals MAE — for the runs total target
+
+    SELECTION DECISION RULE:
+      A challenger model beats the baseline if it achieves lower mean Brier score
+      across all four folds with a Cohen's d effect size ≥ 0.10 (small but
+      consistent effect). If no challenger clears this bar, retain XGBoost/NGBoost
+      and document the result as a confirmed negative finding.
+
+    Source: Phase 7 planning, sequenced after 7.K. Expected effort: ~1.5 days.
+
+  acceptanceCriteria:
+    - description: >
+        cv_harness.py exists; produces fold results for all candidate models
+        using identical train/test indices. Output parquet files written to
+        betting_ml/evaluation/model_evaluation/.
+    - description: >
+        All five candidate models (XGBoost baseline, LightGBM, CatBoost,
+        stacked ensemble, isotonic recalibration) evaluated on all four folds.
+        Brier score, log-loss, and totals MAE recorded per fold per model.
+    - description: >
+        betting_ml/evaluation/model_selection_v1.md documents: per-fold metrics
+        for all candidates, the selection decision with reasoning, known
+        limitations, and the Cohen's d effect size for the winner vs. baseline.
+    - description: >
+        If a challenger model is selected: training scripts updated to use the
+        new model class; model_version tag updated; isotonic calibration layer
+        applied if not already built into the chosen model.
+    - description: >
+        dbtf parse succeeds and all existing tests pass after any changes to
+        training scripts.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: model-selection-evaluation-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential DAG. Task 1 builds the walk-forward CV harness shared
+    across all models. Task 2 trains and scores all candidate models across all
+    folds. Task 3 applies and evaluates isotonic recalibration on the best base
+    model. Task 4 selects the winner, updates training scripts if needed, and
+    produces the selection report.
+  goalRef:
+    name: model-selection-evaluation
+  graph:
+    nodes:
+
+      - id: build-cv-harness
+        kind: Task
+        description: >
+          Write betting_ml/scripts/model_evaluation/cv_harness.py — a reusable
+          walk-forward fold generator and metric evaluator shared across all
+          candidate models.
+
+          PREREQUISITES: confirm the full Phase 7 feature set is available in
+          feature_pregame_game_features by running via Snowflake MCP:
+            SELECT COUNT(*) as rows,
+                   COUNT(home_weather_temp_f) as has_weather,
+                   COUNT(home_lineup_woba_vs_starter_archetype) as has_archetype,
+                   COUNT(home_lineup_wrc_vs_cluster) as has_cluster
+            FROM baseball_data.betting_ml.feature_pregame_game_features
+            WHERE game_year >= 2022;
+          If any of the three Phase 7 feature columns are NULL-dominant (< 10%
+          coverage), note the gap in the report but proceed — the harness should
+          be built on whatever feature set is available at run time.
+
+          FOLD DEFINITIONS (hardcode; these must never change between runs):
+            FOLDS = [
+                {"name": "fold_2022", "train_years": range(2016, 2022), "test_year": 2022},
+                {"name": "fold_2023", "train_years": range(2016, 2023), "test_year": 2023},
+                {"name": "fold_2024", "train_years": range(2016, 2024), "test_year": 2024},
+                {"name": "fold_2025", "train_years": range(2016, 2025), "test_year": 2025},
+            ]
+
+          DATA LOADING:
+            Load from Snowflake via snowflake-connector-python (same pattern as
+            existing training scripts). Pull only rows where has_full_data = true
+            and game_type = 'R'. Separate feature matrices and targets:
+              X — all numeric feature columns (exclude game identifiers, targets,
+                  dates, team names, model_version, any _flag columns)
+              y_win  — home_win (binary classification target)
+              y_runs — total_runs (regression target)
+            Write X, y_win, y_runs as parquet to
+              betting_ml/evaluation/model_evaluation/features_{fold_name}.parquet
+              betting_ml/evaluation/model_evaluation/targets_{fold_name}.parquet
+            so that all candidate model scripts read identical data (no re-fetching).
+
+          METRIC FUNCTIONS (implement in cv_harness.py, import in model scripts):
+            def brier_score(y_true, y_prob) -> float
+            def mean_h2h_edge(y_prob, market_implied_prob) -> float
+              -- market_implied_prob from consensus_win_prob column in feature data
+            def pct_positive_edge(y_prob, market_implied_prob,
+                                  threshold=0.0) -> float
+            def log_loss_score(y_true, y_prob) -> float
+            def totals_mae(y_true, y_pred) -> float
+
+          CLI:
+            python betting_ml/scripts/model_evaluation/cv_harness.py --prepare-folds
+            -- loads data, writes fold parquet files, prints fold sizes
+            python betting_ml/scripts/model_evaluation/cv_harness.py --check
+            -- verifies all fold parquet files exist and prints column counts
+
+          Do NOT train any models in this script — it is data preparation only.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: cv_harness.py
+            path: betting_ml/scripts/model_evaluation/cv_harness.py
+          - type: command_succeeds
+            name: cv_harness.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/cv_harness.py').read_text()
+                ast.parse(src)
+                print('cv_harness.py syntax OK')
+          - type: command_succeeds
+            name: cv_harness.py defines all required metric functions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/cv_harness.py').read_text()
+                tree = ast.parse(src)
+                fn_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+                required = {'brier_score', 'mean_h2h_edge', 'pct_positive_edge',
+                            'log_loss_score', 'totals_mae'}
+                missing = required - fn_names
+                assert not missing, f'Missing metric functions: {missing}'
+                print(f'cv_harness.py defines all required metric functions: {required}')
+          - type: command_succeeds
+            name: cv_harness.py defines four walk-forward folds
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/cv_harness.py').read_text()
+                assert 'fold_2022' in src, 'fold_2022 not defined in FOLDS'
+                assert 'fold_2023' in src, 'fold_2023 not defined in FOLDS'
+                assert 'fold_2024' in src, 'fold_2024 not defined in FOLDS'
+                assert 'fold_2025' in src, 'fold_2025 not defined in FOLDS'
+                print('cv_harness.py defines all four walk-forward folds')
+
+      - id: evaluate-candidate-models
+        kind: Task
+        description: >
+          Train and score all candidate model architectures on the four CV folds
+          from Task 1. Each model is a separate script; all share the fold parquet
+          files and metric functions from cv_harness.py.
+
+          FILE STRUCTURE:
+            betting_ml/scripts/model_evaluation/
+              eval_xgboost_ngboost.py    -- baseline (current production model)
+              eval_lightgbm.py
+              eval_catboost.py
+              eval_ensemble_stacked.py
+
+          SCRIPT CONTRACT (each evaluation script must follow this pattern):
+            1. Load fold parquet files from betting_ml/evaluation/model_evaluation/
+            2. For each fold: fit on train split, predict on test split
+            3. Compute all five metrics (brier_score, mean_h2h_edge, pct_positive_edge,
+               log_loss_score, totals_mae) using functions imported from cv_harness
+            4. Write results to:
+                 betting_ml/evaluation/model_evaluation/results_{model_name}.parquet
+               Schema: fold_name, model_name, brier_score, log_loss, mean_h2h_edge,
+                       pct_positive_edge, totals_mae, train_rows, test_rows,
+                       fit_time_seconds
+            5. Print a per-fold summary table to stdout
+
+          MODEL CONFIGURATIONS:
+
+            eval_xgboost_ngboost.py (BASELINE):
+              Use the exact hyperparameters from the current production training
+              scripts. Read the existing training scripts to extract them before
+              writing this file.
+
+            eval_lightgbm.py:
+              LGBMClassifier for win probability (use_label_encoder=False,
+              verbose=-1, n_estimators=500, learning_rate=0.05, num_leaves=63,
+              min_child_samples=20, colsample_bytree=0.8, subsample=0.8,
+              categorical_feature='auto' for any string/category columns)
+              LGBMRegressor for total runs (same hyperparams, objective='regression')
+              Use early stopping on a 10% internal validation split (no fold leakage).
+
+            eval_catboost.py:
+              CatBoostClassifier for win probability (iterations=500,
+              learning_rate=0.05, depth=6, loss_function='Logloss',
+              eval_metric='Logloss', verbose=0,
+              cat_features=[list of categorical column indices])
+              CatBoostRegressor for total runs (same, loss_function='RMSE')
+              Categorical columns: pitch_archetype, cluster_id (if present),
+              home_team_abbrev, away_team_abbrev, park_name — detect by dtype
+              (object or category) at fit time.
+
+            eval_ensemble_stacked.py:
+              Base estimators: XGBoost, LightGBM, CatBoost (from above configs)
+              Meta-learner:
+                - Win prob: LogisticRegression(C=1.0) on out-of-fold base predictions
+                - Totals: Ridge(alpha=1.0) on out-of-fold base predictions
+              Use 5-fold inner CV to generate out-of-fold predictions for meta-learner
+              training. Ensure inner folds respect temporal ordering (use time-based
+              split within the outer training window, not random k-fold).
+
+          HYPERPARAMETER NOTE: Do NOT tune hyperparameters per fold. Use the
+          fixed configurations above. The goal is architecture comparison, not
+          hyperparameter sensitivity. A single hyperparameter tuning pass on the
+          selected model is a separate (optional) step documented in Task 4.
+        dependsOn:
+          - build-cv-harness
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: all four evaluation scripts exist and have valid syntax
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                scripts = [
+                    'betting_ml/scripts/model_evaluation/eval_xgboost_ngboost.py',
+                    'betting_ml/scripts/model_evaluation/eval_lightgbm.py',
+                    'betting_ml/scripts/model_evaluation/eval_catboost.py',
+                    'betting_ml/scripts/model_evaluation/eval_ensemble_stacked.py',
+                ]
+                for path in scripts:
+                    src = pathlib.Path(path).read_text()
+                    ast.parse(src)
+                    print(f'{path}: syntax OK')
+                print('All evaluation scripts valid')
+          - type: command_succeeds
+            name: all evaluation scripts import from cv_harness
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                scripts = [
+                    'betting_ml/scripts/model_evaluation/eval_xgboost_ngboost.py',
+                    'betting_ml/scripts/model_evaluation/eval_lightgbm.py',
+                    'betting_ml/scripts/model_evaluation/eval_catboost.py',
+                    'betting_ml/scripts/model_evaluation/eval_ensemble_stacked.py',
+                ]
+                for path in scripts:
+                    src = pathlib.Path(path).read_text()
+                    tree = ast.parse(src)
+                    imports = []
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.ImportFrom) and node.module and 'cv_harness' in node.module:
+                            imports.append(node.module)
+                        if isinstance(node, ast.Import):
+                            for alias in node.names:
+                                if 'cv_harness' in alias.name:
+                                    imports.append(alias.name)
+                    assert imports, f'{path}: does not import from cv_harness'
+                print('All evaluation scripts import from cv_harness')
+          - type: command_succeeds
+            name: result parquet files exist for all four models
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                results_dir = pathlib.Path('betting_ml/evaluation/model_evaluation')
+                expected = [
+                    'results_xgboost_ngboost.parquet',
+                    'results_lightgbm.parquet',
+                    'results_catboost.parquet',
+                    'results_ensemble_stacked.parquet',
+                ]
+                for f in expected:
+                    assert (results_dir / f).exists(), f'Missing results file: {f}'
+                print('All model result parquet files exist')
+
+      - id: evaluate-isotonic-calibration
+        kind: Task
+        description: >
+          Apply isotonic recalibration on top of each base model's win probability
+          predictions and measure Brier score improvement.
+
+          Isotonic recalibration post-processes raw model probability outputs to
+          improve calibration (reliability) without changing the ranking of
+          predictions. It fits a monotone step function mapping raw scores to
+          calibrated probabilities using sklearn's IsotonicRegression.
+
+          IMPLEMENTATION — write betting_ml/scripts/model_evaluation/eval_calibration.py:
+
+            For each base model (xgboost_ngboost, lightgbm, catboost, ensemble_stacked):
+              Load the fold parquet results from Task 2.
+              For each fold:
+                1. Split the test set into two halves (first half = calibration set,
+                   second half = hold-out evaluation set). Use temporal ordering
+                   (earlier games in test year → calibration; later games → eval).
+                2. Fit IsotonicRegression on (raw_prob, y_win) from calibration half.
+                3. Apply to hold-out half. Compute Brier score before and after.
+                4. Record: fold_name, model_name, brier_before, brier_after,
+                   brier_delta, calibration_set_size, eval_set_size.
+
+          Write results to:
+            betting_ml/evaluation/model_evaluation/results_calibration.parquet
+
+          IMPORTANT LIMITATION: The calibration set is carved from the test set,
+          so hold-out evaluation sample is smaller than other models' test sets.
+          Document this limitation clearly — isotonic calibration results should
+          be interpreted directionally, not as a head-to-head Brier score comparison
+          against the uncalibrated models (different sample sizes).
+
+          Print a summary table to stdout:
+            model | fold | brier_before | brier_after | delta
+          A negative delta means calibration improved the score. Flag any fold
+          where calibration made the score worse (possible with small samples).
+
+          SELECTION GUIDANCE FOR TASK 4:
+            If avg(brier_delta) across folds < −0.002 for any model: apply
+            calibration to the selected model as a mandatory step.
+            If avg(brier_delta) is between −0.002 and 0: apply as an optional
+            improvement.
+            If avg(brier_delta) > 0: isotonic calibration is not recommended
+            for this dataset; document as a confirmed negative finding.
+        dependsOn:
+          - evaluate-candidate-models
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: calibration evaluation script
+            path: betting_ml/scripts/model_evaluation/eval_calibration.py
+          - type: command_succeeds
+            name: eval_calibration.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/eval_calibration.py').read_text()
+                ast.parse(src)
+                print('eval_calibration.py syntax OK')
+          - type: command_succeeds
+            name: eval_calibration.py uses IsotonicRegression and temporal split
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/eval_calibration.py').read_text()
+                tree = ast.parse(src)
+                found_isotonic = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'IsotonicRegression' in node.value:
+                            found_isotonic = True
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Attribute) and node.attr == 'IsotonicRegression':
+                        found_isotonic = True
+                    if isinstance(node, ast.Name) and node.id == 'IsotonicRegression':
+                        found_isotonic = True
+                assert found_isotonic, 'IsotonicRegression not used in eval_calibration.py'
+                print('eval_calibration.py uses IsotonicRegression')
+          - type: artifact_exists
+            name: calibration results parquet
+            path: betting_ml/evaluation/model_evaluation/results_calibration.parquet
+
+      - id: select-and-document
+        kind: Task
+        description: >
+          Compile all fold results, apply the selection decision rule, update
+          training scripts if a challenger wins, and produce the final selection
+          report.
+
+          STEP 1 — Compile comparison table.
+          Write a short script (or inline in the report) that loads all four
+          results_{model}.parquet files and computes:
+            - mean Brier score across folds (primary sort key)
+            - mean log-loss across folds
+            - mean h2h edge across folds
+            - mean % positive edge across folds
+            - mean totals MAE across folds
+          Print the table sorted by mean Brier score ascending (lower = better).
+
+          STEP 2 — Apply selection decision rule.
+          A challenger beats the baseline if:
+            (baseline_brier - challenger_brier) / baseline_brier_std >= 0.10
+            (Cohen's d-equivalent: effect size ≥ 0.10)
+          If multiple challengers clear the bar, select the one with the lowest
+          mean Brier score. In case of tie on Brier score (< 0.001 difference),
+          prefer the simpler model (LightGBM > CatBoost > Stacked Ensemble) to
+          minimize operational complexity.
+
+          STEP 3 — If a challenger is selected:
+            a. Update the primary training script (confirm path from project_context.md
+               or betting_ml/ directory) to use the new model class.
+               - Replace the XGBoost/NGBoost model instantiation with the new class.
+               - If isotonic calibration was beneficial (results_calibration.parquet
+                 shows avg brier_delta < −0.002), wrap the model with a
+                 CalibratedClassifierCV(method='isotonic', cv='prefit') step.
+            b. Update model_version in the training script or config to reflect
+               the new model (e.g., 'v2_lgbm' or 'v2_catboost').
+            c. Run both training scripts on the full 2016–2025 training set to
+               produce updated model artifacts.
+
+          STEP 4 — Create betting_ml/evaluation/model_selection_v1.md with sections:
+
+            ## Evaluation Summary
+            Full comparison table (all models × all metrics × all folds).
+
+            ## Selection Decision
+            Which model was selected and why. Cohen's d effect size vs. baseline.
+            If no challenger beat the baseline: document as a confirmed negative
+            finding — "XGBoost/NGBoost retained; challenger models did not clear
+            the Brier score improvement threshold (Cohen's d ≥ 0.10)."
+
+            ## Calibration Analysis
+            Summary of isotonic recalibration results per model.
+            Whether calibration is applied to the selected model.
+
+            ## Hyperparameter Tuning (optional)
+            If time permits: run Optuna or RandomizedSearchCV on the selected model
+            with 50 trials on fold_2025 only. Document best params. Apply if
+            CV Brier score improves by > 0.001.
+
+            ## Known Limitations
+            - Fixed hyperparameters were used for fairness; the winning model may
+              improve further with tuning.
+            - Isotonic calibration was evaluated on a split test set (smaller
+              hold-out); Brier improvements should be verified on full 2026 season.
+            - Annual feature snapshots (archetype, cluster assignment) mean
+              early-season predictions rely on prior-year data; this affects all
+              candidate models equally.
+
+            ## Next Steps
+            - Run Card 7.L (prediction backfill) with the selected model to
+              measure real-season impact on mean h2h edge.
+            - Re-evaluate after a full 2026 season of live predictions to confirm
+              or update the selection.
+        dependsOn:
+          - evaluate-isotonic-calibration
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: model selection report
+            path: betting_ml/evaluation/model_selection_v1.md
+          - type: command_succeeds
+            name: model_selection_v1.md contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/model_selection_v1.md').read_text().lower()
+                assert 'evaluation summary' in text or 'comparison' in text, \
+                    'Evaluation summary section not found'
+                assert 'selection decision' in text or 'selected' in text, \
+                    'Selection decision section not found'
+                assert 'calibration' in text, \
+                    'Calibration analysis section not found'
+                assert 'known limitations' in text or 'limitations' in text, \
+                    'Known limitations section not found'
+                print('model_selection_v1.md contains all required sections')
+          - type: command_succeeds
+            name: training scripts reference the selected model (not a stale import)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib, glob
+                # Confirm the selected model's import is present in at least one training script
+                training_scripts = glob.glob('betting_ml/scripts/train_*.py')
+                assert training_scripts, 'No training scripts found matching betting_ml/scripts/train_*.py'
+                combined = ' '.join(
+                    pathlib.Path(p).read_text() for p in training_scripts
+                )
+                # Must reference at least one of: xgboost, lightgbm, catboost
+                has_model = any(lib in combined.lower()
+                                for lib in ['xgboost', 'lightgbm', 'catboost'])
+                assert has_model, 'No recognizable model library import found in training scripts'
+                print(f'Training scripts reference a model library. Scripts checked: {training_scripts}')

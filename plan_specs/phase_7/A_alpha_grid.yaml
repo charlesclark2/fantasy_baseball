@@ -1,0 +1,300 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: alpha-grid-rerun
+  namespace: default
+spec:
+  description: >
+    Populate the full 11-row α tuning grid in Snowflake with corrected odds data
+    and write best_alpha.json so predict_today.py uses the validated mixing weight.
+
+    BACKGROUND: alpha_tuning_results currently has 1 row (alpha=0.0, log_loss=NULL)
+    instead of 11. The original α tuning ran against a biased odds sample that
+    excluded all late West Coast games due to two fixed pipeline bugs: a UTC/ET
+    timezone mismatch and a commenceTimeTo cutoff. Until the full grid re-runs
+    against the corrected odds data, it is unknown whether best_alpha stays 0.0
+    or shifts. Additionally, best_alpha.json was never written to disk;
+    predict_today.py silently falls back to alpha=0.5 on Snowflake failure — a
+    material miscalibration relative to whatever the grid actually selects.
+
+    This card has three deliverables:
+
+    1. Script execution — run run_probability_layer.py without --use-alpha to
+       trigger the full 11-candidate grid (α = 0.0, 0.1, …, 1.0) against the
+       corrected 2026 odds data. USER GATE: the user must execute this step and
+       confirm Snowflake results before implementation tasks proceed.
+
+    2. best_alpha.json writer — add json.dump logic to run_probability_layer.py
+       so that after the grid completes, the best α and its log_loss are written
+       to betting_ml/models/best_alpha.json.
+
+    3. Fallback fix — update predict_today.py to read best_alpha.json before
+       defaulting to alpha=0.5, so that even when Snowflake is unavailable the
+       script uses the validated mixing weight.
+
+    Source: Gaps 1, 4, and 5 from betting_ml/evaluation/postmortem_v0.md.
+    Expected effort: ~15 minutes for script execution + 30–60 minutes for code fixes.
+  acceptanceCriteria:
+    - description: >
+        alpha_tuning_results has exactly 11 rows and all log_loss values are non-null.
+        Verify with: SELECT COUNT(*), SUM(CASE WHEN log_loss IS NULL THEN 1 ELSE 0 END)
+        AS null_count FROM baseball_data.config.alpha_tuning_results;
+        Expected: COUNT=11, null_count=0.
+    - description: >
+        MIN(log_loss) and MAX(log_loss) are both between 0.60 and 0.80, indicating
+        the grid ran against realistic game data and not a degenerate sample.
+        Verify with: SELECT MIN(log_loss), MAX(log_loss)
+        FROM baseball_data.config.alpha_tuning_results;
+    - description: >
+        betting_ml/models/best_alpha.json exists and parses as a JSON object with
+        keys best_alpha (float in [0.0, 1.0]) and log_loss (float).
+    - description: >
+        predict_today.py reads best_alpha.json as its primary fallback when
+        Snowflake is unavailable — alpha=0.5 is only used if the file is also missing.
+    - description: >
+        If best_alpha shifted away from 0.0, betting_ml/evaluation/postmortem_v0.md
+        (or a new probability_layer_results.md) is updated with the new grid results
+        and a note on the directional change.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: alpha-grid-script-executed
+  namespace: default
+spec:
+  gateType: review
+  description: >
+    USER ACTION REQUIRED — the α grid script must be executed by the user before
+    any code changes are made. This gate exists because the script run takes
+    ~15 minutes and writes directly to Snowflake; Claude cannot execute it.
+
+    Step 1 — Truncate the stale row in alpha_tuning_results so the grid starts clean:
+      Run in Snowflake (or via Snowflake MCP):
+        TRUNCATE TABLE baseball_data.config.alpha_tuning_results;
+      Confirm: SELECT COUNT(*) FROM baseball_data.config.alpha_tuning_results;
+      Expected: 0 rows.
+
+    Step 2 — Execute the probability layer script WITHOUT --use-alpha:
+      From the project root:
+        uv run python betting_ml/scripts/run_probability_layer.py
+
+      Do NOT pass --use-alpha. The script must run the full 11-candidate grid
+      (α = 0.0, 0.1, 0.2, … 1.0) and write results to alpha_tuning_results.
+
+    Step 3 — Confirm results in Snowflake:
+      SELECT alpha, log_loss
+      FROM baseball_data.config.alpha_tuning_results
+      ORDER BY alpha;
+      Expected: 11 rows with non-null log_loss values ranging from ~0.60 to ~0.80.
+
+    Step 4 — Note the best alpha:
+      SELECT alpha, log_loss
+      FROM baseball_data.config.alpha_tuning_results
+      ORDER BY log_loss ASC
+      LIMIT 1;
+      Record the result — it determines whether the code fixes in the next tasks
+      change the mixing weight or confirm that alpha=0.0 was already correct.
+
+    This gate clears when the user confirms Steps 1–4 are complete and the
+    Snowflake query in Step 3 returns 11 rows with non-null log_loss.
+  reviewers:
+    - user:charlesclark
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: alpha-grid-rerun-plan
+  namespace: default
+spec:
+  description: >
+    Two-task DAG gated on the user executing the α grid script. The first task
+    adds best_alpha.json writing to run_probability_layer.py. The second task
+    updates predict_today.py to read that file as its primary fallback. Both
+    tasks depend on the alpha-grid-script-executed gate — the script must run
+    and produce 11 non-null rows before any code is written, so the json.dump
+    logic can be validated against the actual Snowflake output.
+  goalRef:
+    name: alpha-grid-rerun
+  graph:
+    nodes:
+
+      - id: write-best-alpha-json
+        kind: Task
+        description: >
+          Add best_alpha.json persistence to run_probability_layer.py.
+
+          After the grid search loop completes and the best alpha is identified,
+          add the following logic:
+
+            import json, pathlib, datetime
+
+            best_alpha_path = pathlib.Path('betting_ml/models/best_alpha.json')
+            best_alpha_path.parent.mkdir(parents=True, exist_ok=True)
+            best_alpha_path.write_text(json.dumps({
+                "best_alpha": float(best_alpha),
+                "log_loss": float(best_log_loss),
+                "run_ts": datetime.datetime.utcnow().isoformat() + "Z",
+                "source": "run_probability_layer.py",
+            }, indent=2))
+            print(f"Wrote best_alpha.json: alpha={best_alpha}, log_loss={best_log_loss:.6f}")
+
+          The file must be written AFTER the Snowflake insert of all 11 rows
+          completes — do not write it inside the per-alpha loop. This ensures
+          the file is only present when the full grid completed successfully.
+
+          Locate the exact variable names for best_alpha and best_log_loss by
+          reading the end of the main grid loop in run_probability_layer.py before
+          writing any code.
+        dependsOn:
+          - alpha-grid-script-executed
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: best_alpha.json written by script
+            path: betting_ml/models/best_alpha.json
+          - type: command_succeeds
+            name: best_alpha.json is valid JSON with required keys
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, pathlib
+                p = pathlib.Path('betting_ml/models/best_alpha.json')
+                assert p.exists(), 'betting_ml/models/best_alpha.json does not exist'
+                d = json.loads(p.read_text())
+                assert 'best_alpha' in d, 'Missing key: best_alpha'
+                assert 'log_loss' in d, 'Missing key: log_loss'
+                assert isinstance(d['best_alpha'], (int, float)), 'best_alpha must be numeric'
+                assert 0.0 <= d['best_alpha'] <= 1.0, f"best_alpha out of range: {d['best_alpha']}"
+                assert isinstance(d['log_loss'], (int, float)), 'log_loss must be numeric'
+                assert 0.5 < d['log_loss'] < 1.0, f"log_loss implausible: {d['log_loss']}"
+                print(f"best_alpha.json OK — alpha={d['best_alpha']}, log_loss={d['log_loss']:.6f}")
+          - type: command_succeeds
+            name: run_probability_layer.py writes best_alpha.json (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/run_probability_layer.py').read_text()
+                tree = ast.parse(src)
+                found_json_dump = False
+                found_best_alpha_json = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'best_alpha.json' in node.value:
+                            found_best_alpha_json = True
+                    if isinstance(node, (ast.Call, ast.Attribute)):
+                        s = ast.dump(node)
+                        if 'json' in s and ('dump' in s or 'dumps' in s):
+                            found_json_dump = True
+                assert found_best_alpha_json, "'best_alpha.json' path not found in run_probability_layer.py"
+                assert found_json_dump, 'json.dump / json.dumps call not found in run_probability_layer.py'
+                print('best_alpha.json write logic found via AST check')
+
+      - id: fix-predict-today-fallback
+        kind: Task
+        description: >
+          Update predict_today.py to read best_alpha.json as its primary fallback
+          before defaulting to alpha=0.5.
+
+          Current fallback (approximately line ~178 in predict_today.py):
+            except Exception:
+                alpha = 0.5  # hard-coded fallback
+
+          Target behavior — replace with a three-tier resolution:
+            1. Snowflake query for best alpha succeeds → use that value
+            2. Snowflake fails but betting_ml/models/best_alpha.json exists → use file value
+            3. Both fail → warn and fall back to 0.5
+
+          Implementation pattern:
+            import json, pathlib
+
+            BEST_ALPHA_PATH = pathlib.Path('betting_ml/models/best_alpha.json')
+
+            def load_best_alpha() -> float:
+                """Three-tier resolution: Snowflake → best_alpha.json → 0.5 default."""
+                try:
+                    # Tier 1: Snowflake
+                    alpha = <existing Snowflake query logic>
+                    return alpha
+                except Exception as e:
+                    print(f"[WARN] Snowflake alpha lookup failed: {e}")
+
+                # Tier 2: local file
+                if BEST_ALPHA_PATH.exists():
+                    try:
+                        d = json.loads(BEST_ALPHA_PATH.read_text())
+                        alpha = float(d['best_alpha'])
+                        print(f"[INFO] Using best_alpha.json fallback: alpha={alpha}")
+                        return alpha
+                    except Exception as fe:
+                        print(f"[WARN] best_alpha.json read failed: {fe}")
+
+                # Tier 3: hard-coded default
+                print("[WARN] Falling back to alpha=0.5 — run run_probability_layer.py")
+                return 0.5
+
+          Read the current fallback logic in predict_today.py before writing any
+          code to confirm the exact variable names and exception-handling structure.
+        dependsOn:
+          - write-best-alpha-json
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py references best_alpha.json (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                found = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'best_alpha.json' in node.value:
+                            found = True
+                            break
+                assert found, "'best_alpha.json' path not referenced in predict_today.py"
+                print('best_alpha.json fallback reference found in predict_today.py')
+          - type: command_succeeds
+            name: predict_today.py has three-tier fallback (AST check)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                found_file_check = False
+                found_warn_05 = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'best_alpha.json' in node.value:
+                            found_file_check = True
+                        if '0.5' in node.value and ('warn' in node.value.lower() or 'fallback' in node.value.lower()):
+                            found_warn_05 = True
+                assert found_file_check, 'best_alpha.json file-based fallback not found'
+                print('Three-tier fallback structure present in predict_today.py')
+          - type: command_succeeds
+            name: predict_today.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/predict_today.py').read_text()
+                ast.parse(src)
+                print('predict_today.py syntax OK')

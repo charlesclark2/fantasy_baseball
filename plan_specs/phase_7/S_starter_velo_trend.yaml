@@ -1,0 +1,295 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: starter-velocity-trend-features
+  phase: "7"
+  card: "7.S"
+  priority: P2
+  blocker: none (unblocked)
+spec:
+  description: |
+    Add a start-count-based fastball velocity delta (last 3 starts vs. season avg)
+    as a per-starter fatigue/injury leading indicator — by extending
+    feature_pregame_starter_features, without creating a new model.
+
+    What already exists and must NOT be duplicated:
+      - mart_pitcher_rolling_stats exposes avg_fastball_velo_7d / 14d / 30d / std
+        (calendar-day rolling windows) — already joined in feature_pregame_starter_features.
+      - feature_pregame_starter_features already exposes:
+          fastball_velo_trend  = avg_fastball_velo_7d - avg_fastball_velo_30d
+          avg_fastball_velo_7d / 14d / 30d / std
+      - feature_pregame_game_features already has home/away_starter_fastball_velo_trend.
+      - mart_starting_pitcher_game_log has per-start avg_fastball_velo (FF/SI/FC mean).
+        Starter definition: first pitcher for the team who threw ≥20 pitches OR
+        appeared in ≥3 distinct innings. Do not redefine this threshold.
+      - feature_pregame_starter_features already joins mart_starting_pitcher_game_log
+        via ip_starts / ip_stats CTEs to compute avg_ip_last_3 and avg_ip_season.
+
+    Why velo_delta_3start is not a duplicate of fastball_velo_trend:
+      fastball_velo_trend (7d - 30d) uses calendar-day windows. A 7-day window
+      may cover only 1 start or span a 6-day rest. A start-count window (last 3
+      actual outings) is independent of days elapsed — it captures the velocity
+      trajectory across the pitcher's 3 most recent performances regardless of
+      calendar gaps, making it more robust to IL returns, skipped starts, and
+      6-man rotations.
+
+    Net-new additions (2 columns in feature_pregame_starter_features → 2 in
+    feature_pregame_game_features):
+      velo_delta_3start             — avg velocity last 3 starts minus season avg
+      (intermediate: avg_fastball_velo_3start is computed but not surfaced directly)
+
+    Final feature store columns:
+      home_starter_velo_delta_3start
+      away_starter_velo_delta_3start
+
+    Formula:
+      avg_fastball_velo_3start = avg(avg_fastball_velo) over last ≤3 prior starts
+                                 where avg_fastball_velo is not null
+      velo_delta_3start = round(avg_fastball_velo_3start - avg_fastball_velo_std, 1)
+
+    NULL guard: NULL when pitcher has no prior starts with valid fastball velo data.
+    Impute velo_delta_3start → 0.0 in ML preprocessing (no trend signal).
+    Expected range: −3.0 to +3.0 mph for ≥99% of rows.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: starter-velocity-trend-features-plan
+  phase: "7"
+  card: "7.S"
+spec:
+  goal:
+    name: starter-velocity-trend-features
+
+  tasks:
+
+    - id: extend-starter-features
+      name: Add velo_starts / velo_stats CTEs and velo_delta_3start to feature_pregame_starter_features
+      description: |
+        File: dbt/models/feature/feature_pregame_starter_features.sql
+
+        CHANGE 1 — Add two CTEs immediately after the ip_starts / ip_stats block,
+        following the exact same pattern:
+
+            velo_starts as (
+                select
+                    pp.game_pk,
+                    pp.pitcher_id,
+                    gl.avg_fastball_velo,
+                    row_number() over (
+                        partition by pp.game_pk, pp.pitcher_id
+                        order by gl.game_date::date desc
+                    )  as recency_rank
+                from probable_pitchers pp
+                inner join {{ ref('mart_starting_pitcher_game_log') }} gl
+                    on  gl.pitcher_id       = pp.pitcher_id
+                    and gl.game_date::date  < pp.game_date   -- LEAKAGE GUARD
+                    and gl.avg_fastball_velo is not null
+            ),
+
+            velo_stats as (
+                select
+                    game_pk,
+                    pitcher_id,
+                    round(
+                        avg(case when recency_rank <= 3 then avg_fastball_velo end),
+                    1)  as avg_fastball_velo_3start
+                from velo_starts
+                group by game_pk, pitcher_id
+            ),
+
+        Note: avg_fastball_velo_3start is an average over up to 3 starts —
+        it will be non-null after 1 valid start (consistent with avg_ip_last_3).
+        The LEAKAGE GUARD (gl.game_date::date < pp.game_date) is identical to
+        the ip_starts / prior_start CTEs — must not be weakened to <=.
+
+        CHANGE 2 — Add a LEFT JOIN to velo_stats in the final CTE:
+
+            left join velo_stats vs
+                on  vs.game_pk      = pp.game_pk
+                and vs.pitcher_id   = pp.pitcher_id
+
+        CHANGE 3 — Add two columns to the final SELECT, adjacent to the
+        existing fastball_velo_trend / k_pct_7d_minus_std block:
+
+            vs.avg_fastball_velo_3start,
+            round(
+                vs.avg_fastball_velo_3start - pgr.avg_fastball_velo_std,
+                1
+            )  as velo_delta_3start,
+
+        Negative = velocity trending down; positive = trending up.
+        NULL when avg_fastball_velo_3start is NULL (no prior starts with velo data)
+        or when avg_fastball_velo_std is NULL (no prior appearances at all).
+
+        Do not change fastball_velo_trend or any other existing column.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_starter_features.sql').read_text()
+            for col in ['velo_starts', 'velo_stats', 'avg_fastball_velo_3start', 'velo_delta_3start']:
+                assert col in src, f"'{col}' not found in feature_pregame_starter_features.sql"
+            assert 'gl.game_date::date  < pp.game_date' in src or \
+                   'gl.game_date::date < pp.game_date' in src, \
+                "LEAKAGE GUARD missing on velo_starts CTE"
+            print('feature_pregame_starter_features.sql: velo CTEs and columns present with leakage guard')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_starter_features.sql').read_text()
+            # Confirm existing columns not removed
+            for col in ['fastball_velo_trend', 'avg_fastball_velo_7d', 'avg_fastball_velo_std',
+                        'avg_ip_last_3', 'avg_ip_season', 'has_ip_history']:
+                assert col in src, f"Existing column '{col}' was removed — regression"
+            print('feature_pregame_starter_features.sql: all existing columns preserved')
+            EOF
+
+    - id: expose-in-game-features
+      name: Add home/away_starter_velo_delta_3start to feature_pregame_game_features
+      description: |
+        File: dbt/models/feature/feature_pregame_game_features.sql
+
+        Find the home starter block where fastball_velo_trend is aliased
+        (currently: h_st.fastball_velo_trend as home_starter_fastball_velo_trend)
+        and add immediately after:
+
+            h_st.velo_delta_3start          as home_starter_velo_delta_3start,
+
+        Find the equivalent away starter block
+        (a_st.fastball_velo_trend as away_starter_fastball_velo_trend)
+        and add immediately after:
+
+            a_st.velo_delta_3start          as away_starter_velo_delta_3start,
+
+        No JOIN changes needed — feature_pregame_starter_features is already the source.
+        The existing fastball_velo_trend columns must not be removed or moved.
+
+      dependsOn:
+        - extend-starter-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            for col in ['home_starter_velo_delta_3start', 'away_starter_velo_delta_3start']:
+                assert col in src, f"'{col}' not found in feature_pregame_game_features.sql"
+            # Confirm existing velocity trend columns untouched
+            for col in ['home_starter_fastball_velo_trend', 'away_starter_fastball_velo_trend']:
+                assert col in src, f"Existing column '{col}' was removed — regression"
+            print('feature_pregame_game_features.sql: both velo_delta_3start columns present; existing trend columns preserved')
+            EOF
+
+    - id: build-and-validate
+      name: Run dbtf build and spot-check velocity delta values in Snowflake
+      description: |
+        From the dbt/ directory:
+
+          dbtf build --select +feature_pregame_starter_features+
+
+        This rebuilds feature_pregame_starter_features and feature_pregame_game_features
+        downstream. mart_starting_pitcher_game_log and mart_pitcher_rolling_stats are
+        upstream sources and do not need to be rebuilt.
+
+        Spot-check query 1 — value range and null rate:
+          SELECT
+              COUNT(*)                                                  as total_rows,
+              SUM(CASE WHEN home_starter_velo_delta_3start IS NULL
+                       THEN 1 ELSE 0 END)                             as null_home,
+              SUM(CASE WHEN ABS(home_starter_velo_delta_3start) > 3.0
+                       THEN 1 ELSE 0 END)                             as out_of_range,
+              MIN(home_starter_velo_delta_3start)                      as min_val,
+              MAX(home_starter_velo_delta_3start)                      as max_val,
+              AVG(home_starter_velo_delta_3start)                      as avg_val
+          FROM baseball_data.betting.feature_pregame_game_features
+          WHERE game_year IN (2024, 2025, 2026)
+            AND game_type = 'R';
+
+        Expected:
+          - avg_val ≈ 0.0 (symmetric around zero)
+          - out_of_range < 1% of total_rows
+          - null_home < 5% (early-season debuts only)
+
+        Spot-check query 2 — identify a known velocity-drop IL case:
+        Pick any pitcher who went on IL in 2024 due to arm fatigue and
+        verify velo_delta_3start was negative in the 2-3 starts before the IL date.
+        Example starter to check: look for any pitcher with velo_delta_3start < -1.5
+        in the 3 starts before an IL stint.
+
+          SELECT
+              g.game_date,
+              g.home_starter_pitcher_id,
+              g.home_starter_velo_delta_3start,
+              g.home_starter_fastball_velo_trend
+          FROM baseball_data.betting.feature_pregame_game_features g
+          WHERE game_year = 2024
+            AND home_starter_velo_delta_3start < -1.5
+          ORDER BY game_date
+          LIMIT 20;
+
+        Expected: velo_delta_3start and fastball_velo_trend will not always agree —
+        that confirms the start-count window captures different signal.
+
+      dependsOn:
+        - expose-in-game-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            print('MANUAL CHECK: dbtf build --select +feature_pregame_starter_features+ must complete without errors')
+            print('MANUAL CHECK: run Snowflake spot-check queries described in task description')
+            print('MANUAL CHECK: verify avg_val ≈ 0.0 and out_of_range < 1% for 2024-2026 regular season')
+            EOF
+
+    - id: add-imputation-and-document
+      name: Add 0.0 imputation to ML preprocessing and document CV impact
+      description: |
+        File: betting_ml/utils/preprocessing.py
+
+        Add imputation for the two new columns in the appropriate group
+        (likely the "starter stats" or "miscellaneous numeric" group):
+          - home_starter_velo_delta_3start: NULL → 0.0 (no trend signal)
+          - away_starter_velo_delta_3start: NULL → 0.0 (no trend signal)
+
+        After imputation is added, retrain the model and document in
+        betting_ml/evaluation/feature_notes.md:
+          - Max |r| for each column vs. the three targets (total_runs,
+            run_differential, home_win)
+          - Whether columns survive the r ≥ 0.02 correlation filter
+          - Comparison vs. fastball_velo_trend (7d - 30d, already in model):
+            does velo_delta_3start add incremental signal or is it redundant?
+            (Check |r(velo_delta_3start, fastball_velo_trend)| — if < 0.85,
+            both can coexist; if ≥ 0.85, prefer the retained one)
+          - CV impact: Brier score and mean h2h edge before and after
+
+      dependsOn:
+        - build-and-validate
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('betting_ml/utils/preprocessing.py').read_text()
+            assert 'velo_delta_3start' in src, \
+                "'velo_delta_3start' imputation not found in preprocessing.py"
+            print('preprocessing.py: velo_delta_3start imputation present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            notes = pathlib.Path('betting_ml/evaluation/feature_notes.md')
+            assert notes.exists(), 'betting_ml/evaluation/feature_notes.md not found'
+            text = notes.read_text()
+            for kw in ['velo_delta_3start', 'fastball_velo_trend', 'multicollinear']:
+                assert kw.lower() in text.lower(), \
+                    f"'{kw}' not documented in feature_notes.md"
+            print('feature_notes.md: velo_delta_3start correlation and multicollinearity results documented')
+            EOF

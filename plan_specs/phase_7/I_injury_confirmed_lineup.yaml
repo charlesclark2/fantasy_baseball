@@ -1,0 +1,575 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: injury-confirmed-lineup-features
+  namespace: default
+spec:
+  description: >
+    Ingest MLB player transaction history to derive pre-game injury status,
+    then add injury-adjusted lineup quality features to feature_pregame_lineup_features
+    so the model can discount lineups with IL-absent players.
+
+    BACKGROUND: v0 rolls up batting stats across all nine lineup slots without
+    checking whether those players are actually available. A team with a star
+    hitter on the IL still shows their rolling wOBA in the lineup aggregate,
+    overstating true lineup strength. The market adjusts for IL absences in
+    real time; the model does not. Gap 7 from betting_ml/evaluation/postmortem_v0.md.
+
+    DATA SOURCE — MLB Stats API transactions endpoint:
+      https://statsapi.mlb.com/api/v1/transactions?sportId=1
+        &startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+      Returns an array of roster transaction events per player: IL placements
+      (10-Day IL, 60-Day IL, 7-Day IL), activations, reinstatements, and
+      other roster moves. Each transaction has a unique `transactionId`, a
+      `person.id` (MLBAM player_id), a `type.code`, and `date`/`effectiveDate`.
+
+      EVALUATION NOTE: FanGraphs roster-resource injury report
+      (https://www.fangraphs.com/roster-resource/injury-report) provides a
+      human-readable current-day injury list but requires HTML scraping and
+      does not offer a stable JSON API. Use the Stats API transactions endpoint
+      as the authoritative machine-readable source for automated ingestion.
+
+    ARCHITECTURAL NUANCE — two availability signals, different scopes:
+      1. Transactions (IL status): authoritative for multi-day absences.
+         Captured before lineups are posted. Best for training-time adjustment
+         and early-morning prediction windows.
+      2. Confirmed lineup (stg_statsapi_lineups_wide): authoritative for
+         same-day scratches not yet reflected in transactions (e.g., late
+         rest days, minor illness). Once lineup is confirmed, it supersedes
+         the transactions-derived status.
+      Both signals are additive: injury_adjusted features use transactions;
+      has_full_lineup already captures same-day lineup gaps.
+
+    POINT-IN-TIME STATUS DERIVATION:
+      For each player × game_date, the most recent transaction strictly before
+      game_date determines status:
+        - IL placement codes → is_injured = true
+        - Activation/reinstatement codes → is_injured = false
+        - No transaction history → is_injured = false (assume available)
+      Implemented as a dbt staging model (stg_statsapi_player_injury_status)
+      using a LEAD() window function to bound each status interval.
+
+    INJURY-ADJUSTED LINEUP QUALITY:
+      Extend feature_pregame_lineup_features with:
+        - injury_adjusted_avg_woba_30d: SUM(woba_30d for non-injured slots) / 9.0
+          — dividing by 9 (not active count) so injured slots impose a penalty
+        - injury_adjusted_avg_xwoba_30d: same, using xwoba_30d
+        - injured_player_count: number of lineup slots where player is on IL
+      These three columns are added to both home and away sides in
+      feature_pregame_game_features via the existing pivot pattern.
+
+    Source: Gap 7 from postmortem, Card 7.I. Expected effort: ~1 day.
+
+  acceptanceCriteria:
+    - description: >
+        baseball_data.statsapi.player_transactions table exists with the
+        correct schema. DDL script at scripts/ddl/player_transactions.sql.
+    - description: >
+        scripts/ingest_transactions.py ingests transactions for a given date
+        range and writes to player_transactions via MERGE INTO on transaction_id.
+        Script added to the Snowflake task DAG to run daily before dbt build.
+    - description: >
+        stg_statsapi_transactions.sql deduplicates raw rows and casts all
+        columns. stg_statsapi_player_injury_status.sql derives point-in-time
+        injury status per player_id × effective_date interval.
+    - description: >
+        feature_pregame_lineup_features.sql adds injury_adjusted_avg_woba_30d,
+        injury_adjusted_avg_xwoba_30d, and injured_player_count per game × side.
+        feature_pregame_game_features.sql exposes home_ and away_ prefixed
+        versions of these three columns.
+    - description: >
+        Both training scripts retrained. betting_ml/evaluation/injury_feature_impact.md
+        documents IL coverage rate (pct of game-days with ≥1 IL player per team)
+        and feature importance shift.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: injury-confirmed-lineup-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential DAG. Task 1 creates the raw Snowflake table. Task 2
+    builds the daily ingestion script and wires it into the task DAG. Task 3
+    builds dbt staging models for deduplication and point-in-time status.
+    Task 4 integrates injury features into the lineup and game feature models,
+    retrains, and produces an impact report.
+  goalRef:
+    name: injury-confirmed-lineup-features
+  graph:
+    nodes:
+
+      - id: create-transactions-ddl
+        kind: Task
+        description: >
+          Create the DDL for baseball_data.statsapi.player_transactions and
+          write it to scripts/ddl/player_transactions.sql.
+
+          Schema:
+
+            CREATE TABLE IF NOT EXISTS baseball_data.statsapi.player_transactions (
+                transaction_id       VARCHAR(30)     NOT NULL,
+                player_id            INTEGER         NOT NULL,
+                player_name          VARCHAR(120),
+                team_id              INTEGER,
+                team_name            VARCHAR(100),
+                transaction_date     DATE            NOT NULL,
+                effective_date       DATE,
+                resolution_date      DATE,
+                type_code            VARCHAR(60)     NOT NULL,
+                type_description     VARCHAR(255),
+                description          VARCHAR(2000),
+                ingestion_ts         TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+                load_id              VARCHAR(36)     NOT NULL DEFAULT gen_random_uuid(),
+                raw_json             VARIANT,
+                PRIMARY KEY (transaction_id)
+            );
+
+          Apply via mcp__snowflake__run_snowflake_query. Confirm the table exists:
+            SELECT table_name
+            FROM baseball_data.information_schema.tables
+            WHERE table_schema = 'STATSAPI'
+              AND table_name   = 'PLAYER_TRANSACTIONS';
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL script
+            path: scripts/ddl/player_transactions.sql
+          - type: command_succeeds
+            name: DDL script contains CREATE TABLE and required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/player_transactions.sql').read_text().lower()
+                assert 'create table' in sql, 'CREATE TABLE not found'
+                assert 'player_transactions' in sql, 'table name not found'
+                assert 'transaction_id' in sql, 'transaction_id column not found'
+                assert 'type_code' in sql, 'type_code column not found'
+                assert 'player_id' in sql, 'player_id column not found'
+                print('DDL script contains required CREATE TABLE statement')
+
+      - id: build-transactions-ingestion
+        kind: Task
+        description: >
+          Write scripts/ingest_transactions.py to fetch player transactions from
+          the MLB Stats API and upsert into baseball_data.statsapi.player_transactions.
+
+          CLI interface:
+            python scripts/ingest_transactions.py --start-date YYYY-MM-DD --end-date YYYY-MM-DD [--dry-run]
+
+          Step 1 — Fetch transactions:
+            GET https://statsapi.mlb.com/api/v1/transactions
+              ?sportId=1&startDate={start_date}&endDate={end_date}
+            Response: { "transactions": [ { ... }, ... ] }
+            Each transaction object has:
+              - id (integer) → cast to str for transaction_id
+              - person.id → player_id (integer)
+              - person.fullName → player_name
+              - toTeam.id / toTeam.name → team_id, team_name
+              - date → transaction_date (YYYY-MM-DD)
+              - effectiveDate → effective_date
+              - resolutionDate → resolution_date
+              - type.code → type_code
+              - type.description → type_description
+              - description → description
+              - full object → raw_json (stored as JSON string)
+
+          Step 2 — Print all unique type_code values seen during the fetch to stdout
+          so the operator can identify IL-specific codes on first run. This is
+          necessary because the exact code strings (e.g., "IL10" vs "10-Day IL"
+          vs "DL10") must be confirmed against actual API responses before hardcoding
+          them in the dbt staging model.
+
+          Step 3 — MERGE INTO on transaction_id (upsert, not append):
+            MERGE INTO baseball_data.statsapi.player_transactions AS t
+            USING (SELECT ... FROM VALUES (...)) AS s (transaction_id, ...)
+              ON t.transaction_id = s.transaction_id
+            WHEN NOT MATCHED THEN INSERT (...)
+            WHEN MATCHED THEN UPDATE SET ...;
+
+          Use snowflake-connector-python (same pattern as ingest_statsapi.py).
+          Use requests with a 30-second timeout and a single retry on 5xx.
+          Log row counts: fetched, inserted, updated, skipped.
+
+          Step 4 — Add to Snowflake task DAG (scripts/ddl/snowflake_task_dag.sql):
+            Read the existing DAG file first to confirm the last task before the
+            dbt build dispatch. Add a new proc_transactions_ingestion procedure
+            and task_transactions_ingestion Snowflake Task that runs after
+            task_odds_ingestion (or the equivalent predecessor) and before the
+            dbt build trigger. The new task should call
+              python scripts/ingest_transactions.py
+                --start-date {CURRENT_DATE - 7}   -- 7-day lookback for retroactive changes
+                --end-date   {CURRENT_DATE}
+            (7-day window catches retroactive IL placements that post-date game day.)
+
+          If --dry-run is passed, print fetched records to stdout but skip all writes.
+        dependsOn:
+          - create-transactions-ddl
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: ingestion script
+            path: scripts/ingest_transactions.py
+          - type: command_succeeds
+            name: ingest_transactions.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_transactions.py').read_text()
+                ast.parse(src)
+                print('ingest_transactions.py syntax OK')
+          - type: command_succeeds
+            name: ingest_transactions.py uses MERGE INTO, not INSERT
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_transactions.py').read_text()
+                tree = ast.parse(src)
+                found_merge = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'MERGE INTO' in node.value.upper():
+                            found_merge = True
+                            break
+                assert found_merge, 'MERGE INTO not found in ingest_transactions.py'
+                print('ingest_transactions.py uses MERGE INTO upsert pattern')
+          - type: command_succeeds
+            name: ingest_transactions.py accepts --start-date and --end-date args
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_transactions.py').read_text()
+                tree = ast.parse(src)
+                found_start = False
+                found_end = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'start-date' in node.value or 'start_date' in node.value:
+                            found_start = True
+                        if 'end-date' in node.value or 'end_date' in node.value:
+                            found_end = True
+                assert found_start, '--start-date argument not found'
+                assert found_end, '--end-date argument not found'
+                print('ingest_transactions.py CLI arguments OK')
+
+      - id: build-injury-dbt-models
+        kind: Task
+        description: >
+          Build two dbt staging models: one that deduplicates raw transactions,
+          and one that derives point-in-time injury status per player.
+
+          MODEL 1 — dbt/models/staging/statsapi/stg_statsapi_transactions.sql
+          Grain: one row per transaction_id (deduplicated from player_transactions).
+          Deduplication: ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY ingestion_ts DESC) = 1.
+          Columns to expose (cast and rename as needed):
+            transaction_id, player_id, player_name, team_id, team_name,
+            transaction_date, effective_date, resolution_date,
+            type_code, type_description, description, ingestion_ts
+
+          MODEL 2 — dbt/models/staging/statsapi/stg_statsapi_player_injury_status.sql
+          Grain: one row per player_id × status interval (status_start_date, status_end_date).
+          Purpose: allows a point-in-time join — "was player X on IL as of game_date Y?"
+
+          Injury placement codes (IL placements → is_injured = true):
+            IMPORTANT: the exact type_code values must be confirmed from the first
+            ingestion run (ingest_transactions.py prints unique codes). The model
+            should use a CASE WHEN list. Common expected codes (verify against actual):
+              '10-Day IL', '60-Day IL', '7-Day IL', 'IL10', 'IL60', 'IL7',
+              'DL10', 'DL60', 'DL7', 'Bereavement List', 'Paternity List',
+              'Family Medical Emergency List'
+          Activation codes (IL exits → is_injured = false):
+              'Activated', 'Reinstated', 'Recalled From Minors', 'Returned From Rehab'
+          Skip rows where type_code is not in either list (roster moves, trades, etc.).
+
+          Full CTE structure:
+
+            with transactions as (
+                select * from {{ ref('stg_statsapi_transactions') }}
+            ),
+
+            status_classified as (
+                select
+                    player_id,
+                    player_name,
+                    coalesce(effective_date, transaction_date) as event_date,
+                    type_code,
+                    case
+                        when type_code in (
+                            '10-Day IL', '60-Day IL', '7-Day IL',
+                            'IL10', 'IL60', 'IL7',
+                            'DL10', 'DL60', 'DL7',
+                            'Bereavement List', 'Paternity List',
+                            'Family Medical Emergency List'
+                        ) then true
+                        when type_code in (
+                            'Activated', 'Reinstated',
+                            'Recalled From Minors', 'Returned From Rehab'
+                        ) then false
+                        else null
+                    end                                         as is_injured
+                from transactions
+            ),
+
+            filtered as (
+                select * from status_classified
+                where is_injured is not null
+            ),
+
+            with_next_event as (
+                select
+                    player_id,
+                    player_name,
+                    event_date           as status_start_date,
+                    lead(event_date) over (
+                        partition by player_id
+                        order by event_date
+                    )                    as status_end_date,   -- null = still current
+                    type_code,
+                    is_injured
+                from filtered
+            )
+
+            select * from with_next_event
+
+          POINT-IN-TIME JOIN PATTERN (for use in feature model):
+            left join stg_statsapi_player_injury_status inj
+                on  inj.player_id          = ls.batter_id
+                and inj.status_start_date  <= ls.official_date
+                and (
+                        inj.status_end_date  > ls.official_date
+                        or inj.status_end_date is null
+                    )
+
+          Add both models to dbt/models/staging/statsapi/sources.yml under the
+          existing statsapi source block.
+
+          Run dbtf parse to confirm both models compile without errors.
+        dependsOn:
+          - build-transactions-ingestion
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: stg_statsapi_transactions model
+            path: dbt/models/staging/statsapi/stg_statsapi_transactions.sql
+          - type: artifact_exists
+            name: stg_statsapi_player_injury_status model
+            path: dbt/models/staging/statsapi/stg_statsapi_player_injury_status.sql
+          - type: command_succeeds
+            name: stg_statsapi_transactions uses ROW_NUMBER deduplication
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/staging/statsapi/stg_statsapi_transactions.sql').read_text().lower()
+                assert 'row_number' in sql, 'ROW_NUMBER deduplication not found in stg_statsapi_transactions'
+                assert 'transaction_id' in sql, 'transaction_id not found in stg_statsapi_transactions'
+                print('stg_statsapi_transactions.sql deduplication OK')
+          - type: command_succeeds
+            name: stg_statsapi_player_injury_status uses LEAD window and is_injured column
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/staging/statsapi/stg_statsapi_player_injury_status.sql').read_text().lower()
+                assert 'lead(' in sql, 'LEAD window function not found in injury status model'
+                assert 'is_injured' in sql, 'is_injured column not found'
+                assert 'status_start_date' in sql, 'status_start_date not found'
+                assert 'status_end_date' in sql, 'status_end_date not found'
+                print('stg_statsapi_player_injury_status.sql structure OK')
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args:
+              - parse
+              - --project-dir
+              - dbt
+
+      - id: integrate-injury-lineup-features
+        kind: Task
+        description: >
+          Extend feature_pregame_lineup_features.sql with injury-adjusted columns,
+          propagate them to feature_pregame_game_features.sql, retrain both models,
+          and produce an impact report.
+
+          PART A — Update dbt/models/feature/feature_pregame_lineup_features.sql
+
+          Read lines 64–205 before editing to confirm the current CTE chain:
+            lineups → lineup_slots → slot_stats_ranked → slot_pre_game →
+            lineup_agg → slot_platoon → final
+
+          Step 1 — Add a new CTE after slot_pre_game that joins each slot to
+          its pre-game injury status:
+
+            slot_injury as (
+                select
+                    sp.game_pk,
+                    sp.official_date,
+                    sp.home_away,
+                    sp.slot,
+                    sp.batter_id,
+                    coalesce(inj.is_injured, false)  as is_injured
+                from slot_pre_game sp
+                left join {{ ref('stg_statsapi_player_injury_status') }} inj
+                    on  inj.player_id         = sp.batter_id
+                    and inj.status_start_date <= sp.official_date  -- LEAKAGE GUARD
+                    and (
+                            inj.status_end_date  > sp.official_date
+                            or inj.status_end_date is null
+                        )
+            ),
+
+          Step 2 — Add a new CTE that aggregates injury-adjusted metrics:
+
+            injury_agg as (
+                select
+                    si.game_pk,
+                    si.official_date,
+                    si.home_away,
+                    count(case when si.is_injured then 1 end)       as injured_player_count,
+                    round(
+                        sum(case when not si.is_injured
+                                 then coalesce(sp.woba_30d,  0) else 0 end
+                        ) / 9.0, 3
+                    )                                               as injury_adj_avg_woba_30d,
+                    round(
+                        sum(case when not si.is_injured
+                                 then coalesce(sp.xwoba_30d, 0) else 0 end
+                        ) / 9.0, 3
+                    )                                               as injury_adj_avg_xwoba_30d
+                from slot_injury si
+                left join slot_pre_game sp
+                    on  sp.game_pk    = si.game_pk
+                    and sp.home_away  = si.home_away
+                    and sp.slot       = si.slot
+                group by si.game_pk, si.official_date, si.home_away
+            ),
+
+          Step 3 — LEFT JOIN injury_agg into the final CTE (same pattern as lineup_agg
+          and slot_platoon joins). Add three new output columns to the SELECT:
+            ia.injured_player_count,
+            ia.injury_adj_avg_woba_30d,
+            ia.injury_adj_avg_xwoba_30d
+
+          Verify row count is unchanged after the edit by running:
+            SELECT COUNT(*) FROM {{ this }}
+          (manual check; document in impact report).
+
+          PART B — Update dbt/models/feature/feature_pregame_game_features.sql
+
+          Read the existing home/away pivot pattern for feature_pregame_lineup_features
+          (look for the existing LEFT JOIN on feature_pregame_lineup_features with
+          home_away = 'home' and home_away = 'away' aliases). Add the three new columns
+          to the home and away SELECT lists, prefixed appropriately:
+            home side: home_injured_player_count,
+                       home_injury_adj_avg_woba_30d,
+                       home_injury_adj_avg_xwoba_30d
+            away side: away_injured_player_count,
+                       away_injury_adj_avg_woba_30d,
+                       away_injury_adj_avg_xwoba_30d
+
+          PART C — Streamlit warning indicator
+          Read betting_ml/streamlit/app.py (or the relevant Today's Picks page file)
+          to find where game-level feature data is displayed. Add a small warning
+          badge or st.warning() call when home_injured_player_count > 0 or
+          away_injured_player_count > 0. Example display text:
+            "⚠ {team_name}: {n} IL player(s) in projected lineup"
+          Display only if the column exists in the feature data (guard with
+          `if 'home_injured_player_count' in df.columns`).
+
+          PART D — Retrain and document
+          Run both training scripts (check project_context.md or betting_ml/ for
+          the canonical script paths). Create betting_ml/evaluation/injury_feature_impact.md
+          with these sections:
+            1. IL Coverage: pct of training game-days with ≥1 IL player per team
+            2. Feature Importance: change in SHAP or permutation importance for
+               injury_adj_avg_woba_30d vs avg_woba_30d
+            3. Row Count Verification: feature_pregame_lineup_features row count
+               before and after the edit (must be equal)
+            4. Known Limitations:
+               - type_code list is provisional; confirm against live API output
+               - Transactions endpoint may lag same-day IL placements by several hours
+               - Confirmed lineups (has_full_lineup) supersede IL status for game-day predictions
+
+          Run dbtf parse before training to confirm both feature models compile.
+        dependsOn:
+          - build-injury-dbt-models
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_lineup_features.sql references stg_statsapi_player_injury_status
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_lineup_features.sql').read_text()
+                assert 'stg_statsapi_player_injury_status' in sql, \
+                    'stg_statsapi_player_injury_status ref not found in feature_pregame_lineup_features'
+                assert 'injury_adj_avg_woba_30d' in sql, \
+                    'injury_adj_avg_woba_30d column not found'
+                assert 'injured_player_count' in sql, \
+                    'injured_player_count column not found'
+                print('feature_pregame_lineup_features.sql injury columns OK')
+          - type: command_succeeds
+            name: feature_pregame_game_features.sql exposes home/away injury columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+                assert 'home_injured_player_count' in sql, \
+                    'home_injured_player_count not found in feature_pregame_game_features'
+                assert 'away_injured_player_count' in sql, \
+                    'away_injured_player_count not found in feature_pregame_game_features'
+                assert 'home_injury_adj_avg_woba_30d' in sql, \
+                    'home_injury_adj_avg_woba_30d not found in feature_pregame_game_features'
+                print('feature_pregame_game_features.sql home/away injury columns OK')
+          - type: command_succeeds
+            name: feature_pregame_lineup_features.sql LEAKAGE GUARD on injury join
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_lineup_features.sql').read_text().lower()
+                assert 'status_start_date' in sql, 'status_start_date not found — injury join may be missing'
+                assert 'status_end_date'   in sql, 'status_end_date not found — LEAD bound not applied'
+                print('LEAKAGE GUARD columns present in feature_pregame_lineup_features.sql')
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args:
+              - parse
+              - --project-dir
+              - dbt
+          - type: artifact_exists
+            name: injury feature impact report
+            path: betting_ml/evaluation/injury_feature_impact.md

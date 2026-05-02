@@ -1,0 +1,252 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: oddsapi-historical-snapshot-dry-run
+  phase: "7"
+  card: "7.P1"
+  priority: P2
+  blocker: none (unblocked)
+spec:
+  description: |
+    Validate that the OddsAPI historical endpoint returns meaningfully different odds
+    across intraday timestamps before committing to a full historical backfill (7.P2)
+    or feature engineering work (7.P3).
+
+    The line movement feature (7.P3) requires that historical snapshots show real
+    intraday variation. The OddsAPI historical endpoint supports timestamp-parameterized
+    queries, but it is unknown whether it stores enough resolution to show meaningful
+    movement for past dates. A dry-run across 10–15 sample game dates is the
+    prerequisite gate for the entire line movement track.
+
+    Gate rule:
+      - PROCEED to 7.P2 if ≥50% of sampled games show ≥1 percentage point of
+        implied-probability movement from earliest to latest snapshot.
+      - CLOSE the line movement track (cancel 7.P2 and 7.P3) if fewer than 50%
+        of sampled games clear this threshold. Document the reason in the output
+        report and mark 7.P2/7.P3 as cancelled in project_context.md.
+
+    Note: The OddsAPI historical endpoint requires a paid plan tier. Verify current
+    plan access before executing.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: oddsapi-historical-snapshot-dry-run-plan
+  phase: "7"
+  card: "7.P1"
+spec:
+  goal:
+    name: oddsapi-historical-snapshot-dry-run
+
+  tasks:
+
+    - id: write-dry-run-script
+      name: Write scripts/oddsapi_historical_dry_run.py
+      description: |
+        Create a standalone script that queries the OddsAPI historical endpoint at
+        multiple intraday timestamps for a set of sample game dates and reports
+        whether meaningful line movement exists.
+
+        Script interface:
+          uv run oddsapi_historical_dry_run.py \
+              --dates 2024-05-10,2024-06-15,2024-07-20,...  \
+              --timestamps 12:00,17:00,23:00                \
+              [--bookmaker draftkings]                       \
+              [--dry-run]   # print dates/timestamps, skip API calls
+
+        Behavior:
+          1. For each date × timestamp combination, call:
+               GET /v4/historical/sports/baseball_mlb/odds
+                   ?apiKey=<ODDS_API_KEY>
+                   &date=<YYYY-MM-DDThh:mm:ssZ>
+                   &regions=us
+                   &markets=h2h
+                   &oddsFormat=american
+             Read ODDS_API_KEY from environment (same .env pattern as odds_api_ingestion.py).
+
+          2. For each game (identified by home_team + away_team + commence_time date),
+             collect the h2h outcome prices at each timestamp. Convert American odds to
+             implied win probability: p = 100 / (|odds| + 100) when odds < 0,
+             p = 100 / (odds + 100) when odds > 0.
+
+          3. Compute per-game movement:
+               abs_movement = |home_win_prob_latest - home_win_prob_earliest|
+             For games where a timestamp returned no data (game not found at that
+             snapshot), mark as missing — do not impute.
+
+          4. Aggregate across all games:
+               - n_games_sampled: total games with ≥2 valid snapshots
+               - mean_abs_movement: mean of abs_movement across qualifying games
+               - pct_above_1pp: % of qualifying games where abs_movement ≥ 0.01
+               - recommend: "proceed" if pct_above_1pp ≥ 0.50, else "close"
+
+          5. Print per-game results table and aggregate summary to stdout.
+
+          6. Write `betting_ml/evaluation/oddsapi_historical_dry_run.md` with:
+               - Methodology: dates sampled, timestamps queried, bookmaker
+               - Per-game table: date, home_team, away_team, earliest_prob,
+                 latest_prob, abs_movement, meets_threshold
+               - Aggregate summary table: n_games, mean_abs_movement, pct_above_1pp
+               - Recommendation header: **PROCEED** or **CLOSE** in bold, followed
+                 by one-sentence rationale
+
+        Error handling:
+          - 401/403: print message explaining paid plan is required; exit 1
+          - 429: print rate limit message; exit 1 with partial results saved
+          - Per-timestamp 404 or empty result: log as missing; continue
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib, ast
+            src = pathlib.Path('scripts/oddsapi_historical_dry_run.py').read_text()
+            tree = ast.parse(src)
+            for flag in ['dates', 'timestamps', 'dry_run']:
+                assert flag in src, f"CLI flag '{flag}' not found in dry_run script"
+            print('oddsapi_historical_dry_run.py: required CLI flags present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'scripts/oddsapi_historical_dry_run.py',
+                 '--dates', '2024-05-10,2024-06-15',
+                 '--timestamps', '12:00,17:00,23:00',
+                 '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, \
+                f"dry-run flag failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            print('oddsapi_historical_dry_run.py: --dry-run exits cleanly')
+            EOF
+
+    - id: select-sample-dates
+      name: Choose 10–15 sample game dates spanning 2024 and 2025 seasons
+      description: |
+        Pick a representative sample of game dates to query. Requirements:
+          - At least 5 dates from the 2024 season (April–October 2024)
+          - At least 5 dates from the 2025 season (April–October 2025)
+          - Spread across early-season, mid-season, and late-season to catch
+            any seasonal variation in API data retention
+          - Prefer dates known to have large slates (10+ games) so each
+            query returns enough game matchups to compute reliable statistics
+
+        Suggested dates (adjust if games data confirms off-days):
+          2024: 2024-04-15, 2024-05-10, 2024-06-20, 2024-07-25, 2024-08-30,
+                2024-09-20, 2024-10-01
+          2025: 2025-04-10, 2025-05-15, 2025-06-25, 2025-07-20, 2025-08-28,
+                2025-09-15, 2025-10-02
+
+        Verify dates are regular season game days using:
+          SELECT official_date, COUNT(*) as n_games
+          FROM baseball_data.betting.stg_statsapi_games
+          WHERE official_date IN (<dates>)
+            AND game_type = 'R'
+          GROUP BY official_date
+          ORDER BY official_date;
+
+      dependsOn:
+        - write-dry-run-script
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Placeholder: actual verification done via Snowflake query above.
+            # This AC confirms the dates list is documented before API calls are made.
+            import pathlib
+            report_dir = pathlib.Path('betting_ml/evaluation')
+            report_dir.mkdir(parents=True, exist_ok=True)
+            notes = report_dir / 'oddsapi_dry_run_dates.txt'
+            if not notes.exists():
+                # Operator must create this file with chosen dates before running
+                print('MANUAL STEP: write chosen sample dates to betting_ml/evaluation/oddsapi_dry_run_dates.txt')
+            else:
+                lines = [l.strip() for l in notes.read_text().splitlines() if l.strip()]
+                assert len(lines) >= 10, f'Need ≥10 dates, found {len(lines)}'
+                print(f'Sample dates confirmed: {len(lines)} dates')
+            EOF
+
+    - id: execute-dry-run
+      name: Run the dry-run script against the live OddsAPI historical endpoint
+      description: |
+        Execute the script with the chosen sample dates and timestamps. The three
+        timestamps (12:00 UTC, 17:00 UTC, 23:00 UTC) correspond to:
+          - 12:00 UTC = 8:00 AM EDT (opening / early-morning line)
+          - 17:00 UTC = 1:00 PM EDT (pre-afternoon games)
+          - 23:00 UTC = 7:00 PM EDT (pre-evening games / near-closing line)
+
+        Command:
+          cd scripts
+          uv run oddsapi_historical_dry_run.py \
+              --dates 2024-04-15,2024-05-10,...  \
+              --timestamps 12:00,17:00,23:00
+
+        Watch the log output for:
+          - 401/403: API plan does not include historical access — stop, upgrade plan
+          - 429: rate limit — add --sleep-seconds 2 flag or run in smaller batches
+          - Zero games returned for a date: log expected; continue
+
+        After the run, verify the output Markdown was written and contains a
+        PROCEED or CLOSE recommendation.
+
+      dependsOn:
+        - select-sample-dates
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/oddsapi_historical_dry_run.md')
+            assert report.exists(), 'oddsapi_historical_dry_run.md not found'
+            text = report.read_text()
+            assert any(kw in text for kw in ['PROCEED', 'CLOSE']), \
+                'Report missing PROCEED or CLOSE recommendation'
+            assert 'pct_above_1pp' in text or 'pct' in text.lower(), \
+                'Report missing percentage-above-threshold metric'
+            assert 'mean' in text.lower() and 'movement' in text.lower(), \
+                'Report missing mean movement metric'
+            print('oddsapi_historical_dry_run.md: present with required metrics and recommendation')
+            EOF
+
+    - id: act-on-recommendation
+      name: Apply proceed/close gate and update project_context.md
+      description: |
+        Based on the recommendation in `oddsapi_historical_dry_run.md`:
+
+        IF PROCEED:
+          - Add a note to the top of Cards 7.P2 and 7.P3 in project_context.md:
+            "7.P1 dry-run result: PROCEED (pct_above_1pp = XX.X%, mean_abs_movement = X.Xpp)"
+          - Move Card 7.P2 from BLOCKED to the active work queue (unblock it).
+          - Mark Card 7.P1 as COMPLETE in project_context.md.
+
+        IF CLOSE:
+          - Add a note to Cards 7.P2 and 7.P3:
+            "CANCELLED — 7.P1 dry-run returned CLOSE (pct_above_1pp = XX.X% < 50% threshold).
+             Historical OddsAPI resolution is insufficient for line movement features."
+          - Remove 7.P3 from Card 7.M's blocker list in project_context.md.
+          - Mark Card 7.P1 as COMPLETE and Cards 7.P2/7.P3 as CANCELLED.
+
+        In both cases, mark Card 7.P1 COMPLETE with the current date.
+
+      dependsOn:
+        - execute-dry-run
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            ctx = pathlib.Path('project_context.md').read_text()
+            # Card 7.P1 must be marked complete or contain a result annotation
+            assert 'COMPLETE' in ctx or 'P1 dry-run result' in ctx, \
+                'project_context.md not updated with 7.P1 result'
+            report = pathlib.Path('betting_ml/evaluation/oddsapi_historical_dry_run.md').read_text()
+            rec = 'PROCEED' if 'PROCEED' in report else 'CLOSE'
+            if rec == 'CLOSE':
+                assert 'CANCELLED' in ctx, \
+                    'Recommendation is CLOSE but 7.P2/7.P3 not marked CANCELLED in project_context.md'
+            print(f'project_context.md updated correctly for recommendation: {rec}')
+            EOF

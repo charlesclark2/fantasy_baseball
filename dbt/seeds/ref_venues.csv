@@ -1,0 +1,35 @@
+venue_id,venue_name,roof_type,park_facing_degrees
+1,Angel Stadium,open,355
+2,Oriole Park at Camden Yards,open,355
+3,Fenway Park,open,60
+4,Rate Field,open,5
+5,Progressive Field,open,355
+7,Kauffman Stadium,open,340
+10,Oakland Coliseum,open,5
+12,Tropicana Field,fixed,
+14,Rogers Centre,convertible,225
+15,Chase Field,convertible,315
+17,Wrigley Field,open,90
+19,Coors Field,open,335
+22,UNIQLO Field at Dodger Stadium,open,25
+31,PNC Park,open,5
+32,American Family Field,convertible,75
+680,T-Mobile Park,convertible,350
+2392,Daikin Park,convertible,300
+2394,Comerica Park,open,335
+2395,Oracle Park,open,5
+2529,Sutter Health Park,open,355
+2602,Great American Ball Park,open,25
+2680,Petco Park,open,340
+2681,Citizens Bank Park,open,350
+2889,Busch Stadium,open,340
+3289,Citi Field,open,350
+3309,Nationals Park,open,5
+3312,Target Field,open,10
+3313,Yankee Stadium,open,30
+4169,loanDepot park,convertible,355
+4705,Truist Park,open,350
+5150,Gocheok Sky Dome,fixed,
+5325,Globe Life Field,convertible,15
+5381,London Stadium,open,350
+2397,Tokyo Dome,fixed,

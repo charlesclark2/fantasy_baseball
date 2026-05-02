@@ -1,0 +1,418 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: fangraphs-stuff-plus-features
+  namespace: default
+spec:
+  description: >
+    Integrate FanGraphs Stuff+ and per-pitch-type arsenal quality metrics into
+    feature_pregame_starter_features so the model can measure pitcher arsenal
+    quality independent of outcomes.
+
+    BACKGROUND: The current starter feature set relies entirely on rolling Statcast
+    outcomes (xwOBA, K%, BB%, barrel rate) with a built-in lag — early-season games
+    have 5–15 IP of outcome data, making these signals near-zero for new or returning
+    starters. Stuff+ (100 = league average) measures the intrinsic quality of a
+    pitcher's arsenal via movement, velocity, and release-point metrics — a leading
+    indicator that stabilizes faster than outcomes. The market already prices Stuff+
+    for pitchers with changed arsenals, electric stuff, or injury-affected velocity.
+
+    Card 7.E (E_fangraphs_ingestion.yaml) delivers the aggregate Stuff+ per pitcher
+    via fg_stuff_plus_raw → stg_fangraphs__stuff_plus → fct_fangraphs_pitching_analytics.
+    This card (7.F) extends that foundation to:
+
+      1. Build a per-pitch-type arsenal staging model (stg_fangraphs__pitcher_arsenal)
+         with one row per pitcher × pitch_type × season — velocity, movement, usage %,
+         and pitch-level Stuff+ for each pitch in the starter's mix.
+
+      2. Build a pivoted mart model (fct_fangraphs_pitcher_arsenal_wide) that collapses
+         the pitcher × pitch_type grain to pitcher × season (wide format) for joining
+         into the feature layer.
+
+      3. Extend feature_pregame_starter_features to join in Stuff+ and arsenal columns
+         for both home and away starters, gated by a sample-size-adaptive weight:
+           stuff_weight = min(1.0, max(0, 1 − games_started_season / 40))
+         At games_started_season < 10 → weight ≥ 0.75; at ≥ 40 → weight = 0.
+
+      4. Retrain home_win and total_runs models with the new features and document
+         CV impact in betting_ml/evaluation/.
+
+    Source: Gap 8 from betting_ml/evaluation/postmortem_v0.md; Card 7.F from
+    project_context.md Phase 7 roadmap. Blocker: Card 7.E must complete first.
+
+  acceptanceCriteria:
+    - description: >
+        stg_fangraphs__pitcher_arsenal builds cleanly with ≥350 starters having
+        non-null stuff_plus for 2026 season. Grain is pitcher × pitch_type × season.
+    - description: >
+        fct_fangraphs_pitcher_arsenal_wide builds cleanly with one row per pitcher
+        × season, containing wide columns: fastball_stuff_plus, slider_stuff_plus,
+        curveball_stuff_plus, changeup_stuff_plus, fastball_pct, breaking_pct,
+        offspeed_pct, primary_pitch_type, overall_stuff_plus.
+    - description: >
+        feature_pregame_starter_features includes home_starter_stuff_plus,
+        away_starter_stuff_plus, home_starter_fastball_pct, away_starter_fastball_pct,
+        home_starter_breaking_pct, away_starter_breaking_pct, home_starter_primary_pitch_type,
+        away_starter_primary_pitch_type. dbtf build passes.
+    - description: >
+        CV impact documented in betting_ml/evaluation/stuff_plus_feature_impact.md
+        with before/after Brier score (home_win) and MAE (total_runs). Even if no
+        improvement, results must be recorded.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: fangraphs-stuff-plus-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential DAG. Tasks 1 and 2 build the dbt data layer; Task 3
+    integrates features into the assembly model; Task 4 retrains models and
+    records CV impact. All tasks depend on Card 7.E completing first.
+  goalRef:
+    name: fangraphs-stuff-plus-features
+  graph:
+    nodes:
+
+      - id: build-pitcher-arsenal-staging
+        kind: Task
+        description: >
+          Create dbt/models/staging/fangraphs/stg_fangraphs__pitcher_arsenal.sql with
+          grain: one row per pitcher × pitch_type × season (deduped to most-recent load_id).
+
+          Source: {{ source('fangraphs', 'fg_stuff_plus_raw') }}
+
+          The raw JSON from the Stuff+ endpoint contains per-pitch-type breakdown rows
+          alongside the aggregate pitcher row. Extract pitch-type level records where
+          a pitch_type field is present and non-null.
+
+          Extracted columns:
+            fg_pitcher_id     VARCHAR  -- FanGraphs pitcher ID
+            pitcher_name      VARCHAR
+            season            INTEGER
+            pitch_type        VARCHAR  -- 'FF' (4-seam), 'SI' (sinker), 'SL' (slider),
+                                      --  'CU' (curveball), 'CH' (changeup), 'FS' (splitter), etc.
+            pitch_usage_pct   FLOAT    -- share of total pitches (0–100)
+            stuff_plus        FLOAT    -- Stuff+ for this pitch type; 100 = league avg
+            location_plus     FLOAT    -- Location+ for this pitch type
+            pitching_plus     FLOAT    -- Pitching+ for this pitch type
+            avg_velocity_mph  FLOAT    -- average pitch velocity
+            avg_h_break_in    FLOAT    -- horizontal break in inches
+            avg_v_break_in    FLOAT    -- vertical (induced) break in inches
+            ingestion_ts      TIMESTAMP_NTZ
+            load_id           VARCHAR
+
+          Deduplication: ROW_NUMBER() OVER (PARTITION BY fg_pitcher_id, season, pitch_type
+          ORDER BY ingestion_ts DESC) = 1
+
+          If the raw JSON endpoint does not expose per-pitch-type rows separately,
+          parse the pitch-breakdown nested array from raw_json using LATERAL FLATTEN
+          in Snowflake SQL.
+
+          Add to dbt/models/staging/fangraphs/schema.yml:
+            - model name with description (grain + purpose)
+            - column descriptions for non-obvious fields
+            - data tests: unique (fg_pitcher_id, season, pitch_type); not_null on
+              fg_pitcher_id, season, pitch_type, stuff_plus
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Pitcher arsenal staging model
+            path: dbt/models/staging/fangraphs/stg_fangraphs__pitcher_arsenal.sql
+          - type: command_succeeds
+            name: Model uses source() reference and has deduplication
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/staging/fangraphs/stg_fangraphs__pitcher_arsenal.sql').read_text()
+                assert "source('fangraphs'" in src, "stg_fangraphs__pitcher_arsenal does not use source() reference"
+                has_dedup = 'ROW_NUMBER()' in src or 'row_number()' in src or 'QUALIFY' in src or 'qualify' in src
+                assert has_dedup, 'stg_fangraphs__pitcher_arsenal lacks deduplication logic'
+                assert 'pitch_type' in src.lower(), 'pitch_type column not found in model'
+                assert 'stuff_plus' in src.lower(), 'stuff_plus column not found in model'
+                print('stg_fangraphs__pitcher_arsenal: source ref, dedup, and required columns present')
+          - type: command_succeeds
+            name: Staging model builds cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "stg_fangraphs__pitcher_arsenal"
+
+      - id: build-arsenal-wide-mart
+        kind: Task
+        description: >
+          Create dbt/models/marts/fangraphs/fct_fangraphs_pitcher_arsenal_wide.sql.
+          Pivots stg_fangraphs__pitcher_arsenal from pitcher × pitch_type × season
+          to pitcher × season (wide format) suitable for joining into the feature layer.
+
+          Output grain: one row per fg_pitcher_id × season.
+
+          Wide columns (NULL when pitcher does not throw that pitch type):
+            overall_stuff_plus      FLOAT  -- from stg_fangraphs__stuff_plus overall value
+            primary_pitch_type      VARCHAR -- pitch_type with highest pitch_usage_pct
+            fastball_pct            FLOAT   -- combined usage % for FF + SI + FC
+            breaking_pct            FLOAT   -- combined usage % for SL + CU + KC + SV
+            offspeed_pct            FLOAT   -- combined usage % for CH + FS + FO
+            fastball_stuff_plus     FLOAT   -- stuff_plus for primary fastball pitch
+            slider_stuff_plus       FLOAT   -- stuff_plus for SL (NULL if not thrown)
+            curveball_stuff_plus    FLOAT   -- stuff_plus for CU (NULL if not thrown)
+            changeup_stuff_plus     FLOAT   -- stuff_plus for CH (NULL if not thrown)
+            avg_fastball_velo_mph   FLOAT   -- avg_velocity_mph for primary fastball
+            max_pitch_break_in      FLOAT   -- max(avg_h_break_in) across all pitch types
+
+          Implementation approach: conditional aggregation (MAX(CASE WHEN pitch_type='FF'
+          THEN stuff_plus END) AS fastball_stuff_plus) rather than PIVOT — avoids
+          Snowflake PIVOT syntax dependency.
+
+          Join to stg_fangraphs__stuff_plus on fg_pitcher_id × season to pull in
+          overall_stuff_plus (the aggregate Stuff+ score from 7.E).
+
+          Add model entry to dbt/models/marts/fangraphs/schema.yml with:
+            - description, column docs, unique(fg_pitcher_id, season) test.
+        dependsOn:
+          - build-pitcher-arsenal-staging
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Wide arsenal mart model
+            path: dbt/models/marts/fangraphs/fct_fangraphs_pitcher_arsenal_wide.sql
+          - type: command_succeeds
+            name: Wide mart has correct structure
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/marts/fangraphs/fct_fangraphs_pitcher_arsenal_wide.sql').read_text().lower()
+                required = ['overall_stuff_plus', 'primary_pitch_type', 'fastball_pct',
+                            'breaking_pct', 'offspeed_pct', 'fastball_stuff_plus']
+                missing = [col for col in required if col not in src]
+                assert not missing, f'Missing columns in arsenal wide mart: {missing}'
+                assert 'ref(' in src or 'stg_fangraphs__pitcher_arsenal' in src, \
+                    'Model does not reference stg_fangraphs__pitcher_arsenal'
+                print('fct_fangraphs_pitcher_arsenal_wide: required columns and model ref present')
+          - type: command_succeeds
+            name: Wide mart builds cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "fct_fangraphs_pitcher_arsenal_wide"
+
+      - id: integrate-arsenal-features
+        kind: Task
+        description: >
+          Extend feature_pregame_starter_features.sql to join in Stuff+ and arsenal
+          columns from fct_fangraphs_pitcher_arsenal_wide for both home and away starters.
+
+          Step 1 — Read the current feature_pregame_starter_features.sql in full before
+          making any edits. Confirm the existing CTE structure, join pattern, and how
+          home/away starters are currently resolved.
+
+          Step 2 — Add a new CTE:
+            arsenal_features as (
+                select
+                    fg_pitcher_id,
+                    season,
+                    overall_stuff_plus,
+                    primary_pitch_type,
+                    fastball_pct,
+                    breaking_pct,
+                    offspeed_pct,
+                    fastball_stuff_plus,
+                    slider_stuff_plus,
+                    curveball_stuff_plus,
+                    changeup_stuff_plus,
+                    avg_fastball_velo_mph
+                from {{ ref('fct_fangraphs_pitcher_arsenal_wide') }}
+            )
+
+          Step 3 — Join arsenal_features to the existing model using:
+            LEFT JOIN arsenal_features home_af
+                ON home_af.fg_pitcher_id = <home_pitcher_fg_id>
+                AND home_af.season = <game_year>
+            LEFT JOIN arsenal_features away_af
+                ON away_af.fg_pitcher_id = <away_pitcher_fg_id>
+                AND away_af.season = <game_year>
+
+          The join key must use fg_pitcher_id. Confirm whether feature_pregame_starter_features
+          currently stores fg_pitcher_id or only mlbam_pitcher_id — if only MLBAM, add a
+          join to ref_players (or stg_fangraphs__stuff_plus) to resolve the ID mapping
+          before the arsenal join.
+
+          Step 4 — Add output columns (prefixed home_ / away_):
+            home_starter_stuff_plus          FLOAT   -- overall_stuff_plus
+            home_starter_primary_pitch_type  VARCHAR
+            home_starter_fastball_pct        FLOAT
+            home_starter_breaking_pct        FLOAT
+            home_starter_offspeed_pct        FLOAT
+            home_starter_fastball_stuff_plus FLOAT
+            home_starter_slider_stuff_plus   FLOAT
+            home_starter_curveball_stuff_plus FLOAT
+            home_starter_changeup_stuff_plus FLOAT
+            home_starter_avg_fastball_velo   FLOAT   -- avg_fastball_velo_mph
+            away_starter_stuff_plus          FLOAT
+            away_starter_primary_pitch_type  VARCHAR
+            away_starter_fastball_pct        FLOAT
+            away_starter_breaking_pct        FLOAT
+            away_starter_offspeed_pct        FLOAT
+            away_starter_fastball_stuff_plus FLOAT
+            away_starter_slider_stuff_plus   FLOAT
+            away_starter_curveball_stuff_plus FLOAT
+            away_starter_changeup_stuff_plus FLOAT
+            away_starter_avg_fastball_velo   FLOAT
+
+          All 20 new columns are nullable — LEFT JOIN means missing Stuff+ data
+          does not drop the game row.
+
+          Step 5 — Run dbtf build --select feature_pregame_starter_features+ to rebuild
+          the model and its downstream dependents (feature_pregame_game_features).
+          Confirm no errors and row count is unchanged vs. pre-change count.
+        dependsOn:
+          - build-arsenal-wide-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_starter_features references arsenal wide mart
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/feature/feature_pregame_starter_features.sql').read_text()
+                assert 'fct_fangraphs_pitcher_arsenal_wide' in src, \
+                    'feature_pregame_starter_features does not ref fct_fangraphs_pitcher_arsenal_wide'
+                required_cols = [
+                    'home_starter_stuff_plus',
+                    'away_starter_stuff_plus',
+                    'home_starter_fastball_pct',
+                    'away_starter_fastball_pct',
+                    'home_starter_primary_pitch_type',
+                    'away_starter_primary_pitch_type',
+                ]
+                missing = [c for c in required_cols if c not in src]
+                assert not missing, f'Missing columns in feature model: {missing}'
+                print('feature_pregame_starter_features: arsenal ref and required output columns present')
+          - type: command_succeeds
+            name: Feature model and downstream models build cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "feature_pregame_starter_features+"
+          - type: command_succeeds
+            name: Row count unchanged after adding arsenal columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Manual check: verify via Snowflake MCP that row count matches pre-change count
+                print("Verify via Snowflake: SELECT COUNT(*) FROM baseball_data.dbt.feature_pregame_starter_features;")
+                print("Compare to pre-change row count. Should be identical — new columns are nullable LEFT JOIN.")
+
+      - id: retrain-and-document-impact
+        kind: Task
+        description: >
+          Retrain home_win and total_runs models with the new Stuff+ arsenal features
+          and document CV impact regardless of outcome.
+
+          Step 1 — Confirm feature_selection.md reflects the new columns.
+          Run betting_ml/scripts/run_feature_selection.py (or equivalent) to evaluate
+          whether any of the 20 new arsenal columns pass the corr_threshold=0.02 filter.
+          If they do, they will appear in the retained feature list automatically.
+          If none pass, note this in the impact document — Stuff+ may require the
+          threshold to be raised (see Card 7.M).
+
+          Step 2 — Retrain home_win model:
+            uv run python betting_ml/scripts/run_xgb_home_win_search.py
+
+          Step 3 — Retrain total_runs model:
+            uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
+
+          Step 4 — Create betting_ml/evaluation/stuff_plus_feature_impact.md with:
+
+            ## Stuff+ Feature Impact Report
+            Date: <run date>
+
+            ### Features retained after selection
+            List any arsenal columns that passed corr_threshold. If none, document
+            the correlation values observed and recommend threshold adjustment.
+
+            ### home_win model
+            | Metric     | Before Stuff+ | After Stuff+ |
+            |------------|---------------|--------------|
+            | CV Brier   | <from model_registry.yaml> | <new value> |
+            | CV AUC     | ...           | ...          |
+
+            ### total_runs model
+            | Metric  | Before Stuff+ | After Stuff+ |
+            |---------|---------------|--------------|
+            | CV MAE  | <from model_registry.yaml> | <new value> |
+
+            ### Interpretation
+            - If CV Brier improves: update model_registry.yaml artifact path to new pkl
+            - If no improvement: document why (low correlation values, few retained features)
+              and flag for Card 7.M (feature selection refresh with raised corr_threshold)
+
+          Step 5 — If models improved, update model_registry.yaml:
+            home_win.cv_brier, home_win.artifact_path, home_win.selected_at
+            total_runs.cv_mae, total_runs.artifact_path, total_runs.selected_at
+
+          USER NOTE: Retraining scripts take 10–20 minutes. The user must execute
+          Steps 2 and 3 and report CV results before model_registry.yaml is updated.
+        dependsOn:
+          - integrate-arsenal-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CV impact document
+            path: betting_ml/evaluation/stuff_plus_feature_impact.md
+          - type: command_succeeds
+            name: Impact document contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/stuff_plus_feature_impact.md').read_text().lower()
+                required_sections = [
+                    'features retained',
+                    'home_win',
+                    'total_runs',
+                    'brier',
+                    'mae',
+                    'interpretation',
+                ]
+                missing = [s for s in required_sections if s not in content]
+                assert not missing, f'Impact doc missing sections: {missing}'
+                print('stuff_plus_feature_impact.md contains all required sections')
+          - type: command_succeeds
+            name: model_registry.yaml updated if models improved
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, yaml
+                reg = yaml.safe_load(pathlib.Path('betting_ml/models/model_registry.yaml').read_text())
+                assert 'home_win' in reg, 'home_win entry missing from model_registry.yaml'
+                assert 'total_runs' in reg, 'total_runs entry missing from model_registry.yaml'
+                hw = reg['home_win']
+                tr = reg['total_runs']
+                assert hw.get('cv_brier') is not None, 'home_win.cv_brier is null'
+                assert tr.get('cv_mae') is not None, 'total_runs.cv_mae is null'
+                assert hw.get('selected_at') is not None, 'home_win.selected_at not set'
+                print(f"model_registry.yaml OK — home_win cv_brier={hw['cv_brier']}, total_runs cv_mae={tr['cv_mae']}")

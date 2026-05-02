@@ -91,3 +91,48 @@ seeds:
           a historical name or location.
         tests:
           - not_null
+
+  # ============================================================================
+  # ref_venues
+  # ============================================================================
+  - name: ref_venues
+    description: >
+      Static reference table for MLB venues. Provides two columns not available
+      in stg_statsapi_venues that are required for weather feature computation:
+      roof_type (normalized to open/convertible/fixed) and park_facing_degrees
+      (compass bearing from home plate to center field, used to decompose wind
+      speed into a headwind/tailwind component). One row per venue_id.
+      NOTE: park_facing_degrees values should be verified against satellite
+      imagery (Google Maps overhead view) before use in production.
+
+    columns:
+
+      - name: venue_id
+        description: MLB Stats API venue ID. Join key to stg_statsapi_venues.
+        tests:
+          - not_null
+          - unique
+
+      - name: venue_name
+        description: Human-readable venue name (for QA and debugging).
+        tests:
+          - not_null
+
+      - name: roof_type
+        description: >
+          Normalized roof classification. open = permanently open sky;
+          convertible = retractable roof that may or may not be open on any
+          given day; fixed = permanently enclosed dome. Weather is fetched for
+          open and convertible parks only.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['open', 'convertible', 'fixed']
+
+      - name: park_facing_degrees
+        description: >
+          Compass bearing (degrees) from home plate to center field.
+          0 = due North, 90 = due East, 180 = due South, 270 = due West.
+          Used to compute wind_component_mph = wind_speed × cos(wind_dir − park_facing).
+          NULL for fixed-roof (dome) parks where wind is not a factor.

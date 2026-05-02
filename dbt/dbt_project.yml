@@ -36,6 +36,10 @@ seeds:
         team_id:          integer
         is_legacy_abbrev: boolean
         is_active:        boolean
+    ref_venues:
+      +column_types:
+        venue_id:             integer
+        park_facing_degrees:  integer
 
 models:
   baseball_betting_and_fantasy:

@@ -1,0 +1,323 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pythagorean-win-expectation-features
+  phase: "7"
+  card: "7.R"
+  priority: P2
+  blocker: none (unblocked)
+spec:
+  description: |
+    Add season-to-date Pythagorean win expectation (RS^1.83 / (RS^1.83 + RA^1.83))
+    as a team quality signal by extending mart_team_season_record — without creating
+    a new model or introducing data leakage.
+
+    Why Pythagorean rather than win_pct (already in the feature store):
+      Win-loss record carries variance from close-game outcomes and bullpen luck.
+      Pythagorean expectation regresses to true team quality faster because it is
+      based on run differential, which has lower variance than binary W/L outcomes.
+      The market uses Pythagorean as a sanity check on team strength independent
+      of record; it is especially informative early in the season when win totals
+      are small.
+
+    Why extend mart_team_season_record (not a new model):
+      - mart_team_season_record already sources from mart_game_results, which has
+        home_final_score / away_final_score.
+      - Its SCD2 grain (team × calendar date, filled forward through non-game days)
+        is already joined in feature_pregame_team_features at record_date = game_date - 1,
+        giving leakage-free pre-game values automatically.
+      - mart_team_rolling_offense / mart_team_rolling_pitching use
+        `rows between unbounded preceding and current row` (includes current game)
+        and must NOT be the source for Pythagorean.
+
+    Net-new columns added to the feature store (3 columns in feature_pregame_game_features):
+      home_pythagorean_win_exp     — home team Pythagorean win expectation pre-game
+      away_pythagorean_win_exp     — away team Pythagorean win expectation pre-game
+      pythagorean_win_exp_diff     — home minus away (signed; positive favors home)
+
+    Formula: pow(RS_ytd, 1.83) / (pow(RS_ytd, 1.83) + pow(RA_ytd, 1.83))
+    Exponent: 1.83 (empirically validated for MLB; do not use 2.0)
+    Guard: NULL when games_played < 10; imputed to 0.5 in ML preprocessing.
+    Expected value range: [0.25, 0.75] for ≥95% of regular-season rows.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pythagorean-win-expectation-features-plan
+  phase: "7"
+  card: "7.R"
+spec:
+  goal:
+    name: pythagorean-win-expectation-features
+
+  tasks:
+
+    - id: extend-mart-team-season-record
+      name: Add runs_scored_ytd, runs_allowed_ytd, and pythagorean_win_exp to mart_team_season_record
+      description: |
+        File: dbt/models/mart/mart_team_season_record.sql
+
+        The model already has a `team_games` CTE that unions home and away
+        perspectives from mart_game_results (aliased as game_results). mart_game_results
+        exposes home_final_score and away_final_score.
+
+        CHANGE 1 — Add run columns to the `team_games` CTE.
+        In the home team branch, add:
+            gr.home_final_score  as runs_scored,
+            gr.away_final_score  as runs_allowed
+        In the away team branch, add:
+            gr.away_final_score  as runs_scored,
+            gr.home_final_score  as runs_allowed
+
+        CHANGE 2 — Thread through `running_totals` CTE.
+        Add two window expressions after the existing wins/losses accumulators:
+
+            sum(runs_scored) over (
+                partition by team_id, game_year
+                order by game_date, game_pk
+                rows between unbounded preceding and current row
+            )  as runs_scored_ytd,
+
+            sum(runs_allowed) over (
+                partition by team_id, game_year
+                order by game_date, game_pk
+                rows between unbounded preceding and current row
+            )  as runs_allowed_ytd
+
+        CHANGE 3 — Carry through `daily_ranked`, `game_day_records`,
+        `game_day_with_expiry`, and `expanded` CTEs.
+        At each CTE, add runs_scored_ytd and runs_allowed_ytd to the SELECT list.
+        In `daily_ranked`, these must use the same doubleheader-dedup logic as
+        wins/losses (keep the last game of the day, rn = 1 ordered by game_pk desc).
+
+        CHANGE 4 — Add pythagorean_win_exp to the `final` CTE SELECT:
+
+            case
+                when gde.games_played >= 10
+                then round(
+                    pow(gde.runs_scored_ytd::float, 1.83)
+                    / nullif(
+                        pow(gde.runs_scored_ytd::float, 1.83)
+                      + pow(gde.runs_allowed_ytd::float, 1.83),
+                        0
+                    ),
+                    4
+                )
+                else null
+            end  as pythagorean_win_exp
+
+        Note: cast to float before pow() to avoid integer overflow on Snowflake.
+        Note: existing columns (wins, losses, win_pct, streak, etc.) must not change.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_team_season_record.sql').read_text()
+            for col in ['runs_scored_ytd', 'runs_allowed_ytd', 'pythagorean_win_exp']:
+                assert col in src, f"'{col}' not found in mart_team_season_record.sql"
+            assert '1.83' in src, "Exponent 1.83 not found — do not use 2.0"
+            assert 'runs_scored' in src and 'runs_allowed' in src, \
+                "run columns not added to team_games CTE"
+            print('mart_team_season_record.sql: Pythagorean columns present with correct exponent')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_team_season_record.sql').read_text()
+            # Confirm existing columns not removed
+            for col in ['wins', 'losses', 'games_played', 'win_pct', 'streak_direction',
+                        'streak_length', 'games_back', 'is_division_leader']:
+                assert col in src, f"Existing column '{col}' removed — regression"
+            print('mart_team_season_record.sql: all existing columns preserved')
+            EOF
+
+    - id: expose-in-team-features
+      name: Expose pythagorean_win_exp through feature_pregame_team_features
+      description: |
+        File: dbt/models/feature/feature_pregame_team_features.sql
+
+        The `season_record` CTE joins mart_team_season_record at:
+            tsr.record_date = dateadd('day', -1, g.game_date::date)
+
+        This join already provides leakage-free pre-game values, including the
+        new pythagorean_win_exp. No JOIN change is needed.
+
+        CHANGE 1 — In the `season_record` CTE SELECT, add:
+            tsr.pythagorean_win_exp
+
+        CHANGE 2 — In the `final` CTE SELECT, add to the season record block:
+            sr.pythagorean_win_exp
+
+        Keep it adjacent to sr.win_pct for readability.
+
+      dependsOn:
+        - extend-mart-team-season-record
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_team_features.sql').read_text()
+            assert 'pythagorean_win_exp' in src, \
+                "'pythagorean_win_exp' not found in feature_pregame_team_features.sql"
+            assert 'tsr.pythagorean_win_exp' in src or 'sr.pythagorean_win_exp' in src, \
+                "pythagorean_win_exp not sourced from season_record CTE"
+            print('feature_pregame_team_features.sql: pythagorean_win_exp exposed')
+            EOF
+
+    - id: expose-in-game-features
+      name: Expose home/away Pythagorean columns in feature_pregame_game_features
+      description: |
+        File: dbt/models/feature/feature_pregame_game_features.sql
+
+        The model joins feature_pregame_team_features twice — once as h_tm (home)
+        and once as a_tm (away). Add the three new columns to the final SELECT,
+        adjacent to the existing h_tm.win_pct / a_tm.win_pct references:
+
+            h_tm.pythagorean_win_exp         as home_pythagorean_win_exp,
+            a_tm.pythagorean_win_exp         as away_pythagorean_win_exp,
+            round(
+                h_tm.pythagorean_win_exp - a_tm.pythagorean_win_exp,
+                4
+            )                                as pythagorean_win_exp_diff,
+
+        Note: pythagorean_win_exp_diff will be NULL if either team's Pythagorean
+        is NULL (games_played < 10 at season start). This is acceptable — the ML
+        preprocessing pipeline imputes both to 0.5, yielding diff = 0.0.
+
+      dependsOn:
+        - expose-in-team-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            for col in ['home_pythagorean_win_exp', 'away_pythagorean_win_exp',
+                        'pythagorean_win_exp_diff']:
+                assert col in src, f"'{col}' not found in feature_pregame_game_features.sql"
+            print('feature_pregame_game_features.sql: all 3 Pythagorean columns present')
+            EOF
+
+    - id: build-and-validate
+      name: Run dbtf build and validate Pythagorean values in Snowflake
+      description: |
+        From the dbt/ directory:
+
+          dbtf build --select +mart_team_season_record+
+
+        This rebuilds mart_team_season_record, feature_pregame_team_features,
+        and feature_pregame_game_features downstream.
+
+        Spot-check query 1 — value range and null rate:
+          SELECT
+              COUNT(*)                                              as total_rows,
+              SUM(CASE WHEN home_pythagorean_win_exp IS NULL THEN 1 ELSE 0 END)
+                                                                   as null_home,
+              SUM(CASE WHEN home_pythagorean_win_exp < 0.2
+                            OR home_pythagorean_win_exp > 0.8
+                       THEN 1 ELSE 0 END)                         as out_of_range,
+              MIN(home_pythagorean_win_exp)                        as min_val,
+              MAX(home_pythagorean_win_exp)                        as max_val,
+              AVG(home_pythagorean_win_exp)                        as avg_val
+          FROM baseball_data.betting.feature_pregame_game_features
+          WHERE game_year IN (2024, 2025, 2026)
+            AND game_type = 'R';
+
+        Expected: avg_val ≈ 0.50 (symmetric), out_of_range < 5% of total_rows.
+
+        Spot-check query 2 — 2024 Dodgers should show high Pythagorean by June:
+          SELECT
+              record_date,
+              games_played,
+              runs_scored_ytd,
+              runs_allowed_ytd,
+              pythagorean_win_exp
+          FROM baseball_data.betting.mart_team_season_record
+          WHERE team_abbrev = 'LAD'
+            AND game_year = 2024
+            AND record_date BETWEEN '2024-06-01' AND '2024-06-30'
+          ORDER BY record_date
+          LIMIT 10;
+
+        Expected: pythagorean_win_exp ≥ 0.60 for the 2024 Dodgers by June.
+
+        Spot-check query 3 — early-season NULL guard:
+          SELECT
+              record_date,
+              games_played,
+              pythagorean_win_exp
+          FROM baseball_data.betting.mart_team_season_record
+          WHERE team_abbrev = 'LAD'
+            AND game_year = 2024
+            AND record_date BETWEEN '2024-03-20' AND '2024-04-10'
+          ORDER BY record_date;
+
+        Expected: pythagorean_win_exp IS NULL for rows where games_played < 10.
+
+      dependsOn:
+        - expose-in-game-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            print('MANUAL CHECK: dbtf build --select +mart_team_season_record+ must complete without errors')
+            print('MANUAL CHECK: run Snowflake spot-check queries described in task description')
+            print('MANUAL CHECK: verify 2024 LAD pythagorean_win_exp >= 0.60 by June 2024')
+            print('MANUAL CHECK: verify NULL for games_played < 10 at season start')
+            EOF
+
+    - id: add-imputation-and-document
+      name: Add 0.5 imputation to ML preprocessing and document CV impact
+      description: |
+        The ML preprocessing pipeline (betting_ml/utils/preprocessing.py) must
+        impute pythagorean_win_exp and pythagorean_win_exp_diff when NULL
+        (early-season games where games_played < 10 for either team).
+
+        Imputation rule:
+          - pythagorean_win_exp: NULL → 0.5 (no information; coin flip)
+          - pythagorean_win_exp_diff: NULL → 0.0 (no edge either direction)
+
+        Add these to the appropriate imputation group in preprocessing.py. Check
+        existing imputation groups to determine which group fits (likely the
+        "win rate / record" or "miscellaneous numeric" group).
+
+        After imputation is added, retrain the model and document in
+        betting_ml/evaluation/feature_notes.md:
+          - Max |r| for each Pythagorean column vs. the three targets (total_runs,
+            run_differential, home_win)
+          - Whether columns survive the r ≥ 0.02 correlation filter
+          - CV impact: Brier score and mean h2h edge before and after
+          - Whether pythagorean_win_exp adds incremental signal over home_win_pct
+            (expect correlation ~0.7–0.85 between them; retain if multicollinearity
+            check passes, i.e., |r(pyth, win_pct)| < 0.85)
+
+      dependsOn:
+        - build-and-validate
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib, ast
+            src = pathlib.Path('betting_ml/utils/preprocessing.py').read_text()
+            assert 'pythagorean' in src, \
+                "'pythagorean' imputation not found in preprocessing.py"
+            print('preprocessing.py: Pythagorean imputation present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            notes = pathlib.Path('betting_ml/evaluation/feature_notes.md')
+            assert notes.exists(), 'betting_ml/evaluation/feature_notes.md not found'
+            text = notes.read_text()
+            for kw in ['pythagorean_win_exp', 'win_pct', 'multicollinear']:
+                assert kw.lower() in text.lower(), \
+                    f"'{kw}' not documented in feature_notes.md"
+            print('feature_notes.md: Pythagorean correlation and multicollinearity results documented')
+            EOF

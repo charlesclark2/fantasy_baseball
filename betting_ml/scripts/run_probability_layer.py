@@ -13,6 +13,7 @@ Run from project root:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -470,6 +471,19 @@ def main() -> None:
         n_games_2026_with_odds=n_games_2026_with_odds,
         n_output_rows=n_output_rows,
     )
+
+    valid_log_losses = [r["log_loss"] for r in alpha_scores if r["log_loss"] == r["log_loss"]]
+    if valid_log_losses:
+        best_log_loss = min(valid_log_losses)
+        best_alpha_path = PROJECT_ROOT / "betting_ml" / "models" / "best_alpha.json"
+        best_alpha_path.parent.mkdir(parents=True, exist_ok=True)
+        best_alpha_path.write_text(json.dumps({
+            "best_alpha": float(best_alpha),
+            "log_loss": float(best_log_loss),
+            "run_ts": datetime.datetime.utcnow().isoformat() + "Z",
+            "source": "run_probability_layer.py",
+        }, indent=2))
+        print(f"Wrote best_alpha.json: alpha={best_alpha}, log_loss={best_log_loss:.6f}")
 
     print("\nDone.")
 

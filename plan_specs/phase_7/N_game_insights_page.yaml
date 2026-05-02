@@ -1,0 +1,411 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: game-insights-page
+  phase: "7"
+  card: "7.N"
+  priority: P1
+  blocker: |
+    No Phase 7A blockers — requires only feature_pregame_game_features and
+    daily_model_predictions, which Phase 6 already delivers.
+    Runtime dependencies:
+      - feature_pregame_game_features populated for selected date (lineup confirmed + dbtf build run)
+      - daily_model_predictions has a row for selected game_pk (predict_today.py run)
+      - shap package added to app dependencies
+      - feature_columns.json persisted by training pipeline (betting_ml/pipeline/train.py)
+spec:
+  description: |
+    Add a Game Insights page to the Streamlit app (app/pages/5_Game_Insights.py) that
+    surfaces the key model features and team performance metrics driving each prediction.
+
+    Why Phase 7A: Unblocked by any other Phase 7A card. The SHAP waterfall section is
+    actively useful *during* Phase 7A feature development — as new features (weather,
+    FanGraphs, archetype, cluster) are added, the waterfall immediately shows whether
+    they are driving predictions in an intuitive direction, helping diagnose feature
+    quality before committing to a retrain cycle.
+
+    Four sections per game:
+      1. Prediction Summary — one-row header bar with model outputs from daily_model_predictions
+      2. Team Performance Comparison — side-by-side metric panels from feature_pregame_game_features
+      3. SHAP Feature Importance — waterfall charts for total_runs and home_win models
+      4. Recent Team Form — last 10 games per team from stg_statsapi_games
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: game-insights-page-plan
+  phase: "7"
+  card: "7.N"
+spec:
+  goal:
+    name: game-insights-page
+
+  tasks:
+
+    - id: add-shap-dependency
+      name: Add shap to app dependencies and persist feature_columns.json
+      description: |
+        Two prerequisites before the page can load:
+
+        1. Add shap to dependencies:
+             In pyproject.toml, add 'shap' to the relevant dependency group
+             (either [project.dependencies] or [project.optional-dependencies] app group).
+             Verify with: uv run python -c "import shap; print(shap.__version__)"
+
+        2. Persist feature_columns.json from training pipeline:
+             In betting_ml/pipeline/train.py, after fitting the model and before saving
+             the model artifact, write the ordered feature column list:
+               import json, pathlib
+               pathlib.Path('model_artifacts/feature_columns.json').write_text(
+                   json.dumps(feature_columns)
+               )
+             where feature_columns is the list of column names passed to model.fit().
+             This file is required at inference time to reconstruct the feature vector
+             in the same order as training.
+
+             If the model has already been trained and feature_columns.json does not
+             exist, re-run training or extract the column list from the saved model
+             object (XGBoost stores feature names in model.get_booster().feature_names).
+
+        The file path used at runtime: model_artifacts/feature_columns.json
+        (relative to repo root, same directory as the saved .json model artifacts).
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['uv', 'run', 'python', '-c', 'import shap; print(shap.__version__)'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"shap import failed:\n{result.stderr}"
+            print(f'shap installed: {result.stdout.strip()}')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib, json
+            p = pathlib.Path('model_artifacts/feature_columns.json')
+            assert p.exists(), "model_artifacts/feature_columns.json does not exist"
+            cols = json.loads(p.read_text())
+            assert isinstance(cols, list) and len(cols) > 0, \
+                "feature_columns.json is empty or not a list"
+            print(f'feature_columns.json: {len(cols)} columns present')
+            EOF
+
+    - id: build-page-scaffold
+      name: Create app/pages/5_Game_Insights.py with date selector and game picker
+      description: |
+        Create app/pages/5_Game_Insights.py. The file name prefix "5_" places it fifth
+        in the Streamlit sidebar after the existing pages (1_Today's_Picks, 2_Market_
+        Comparison, 3_EV_Kelly, 4_Model_Performance).
+
+        Page structure:
+
+        1. Imports and page config:
+             st.set_page_config(page_title="Game Insights", layout="wide")
+             st.title("Game Insights")
+
+        2. Date selector (defaults to today):
+             import datetime
+             date = st.date_input("Select date", value=datetime.date.today())
+
+        3. Game picker dropdown:
+             Query daily_model_predictions for the selected date to get available games.
+             Join to stg_statsapi_games for home_team_name, away_team_name, game_time_et.
+             Format label: "Away @ Home (HH:MM ET)"
+             If no games found for date: st.info("No predictions found for this date.")
+             and st.stop().
+
+             Use mcp__snowflake__run_snowflake_query (at runtime via the Snowflake connector
+             already configured in the app's utils/snowflake.py or equivalent). All queries
+             must be wrapped in @st.cache_data(ttl=300).
+
+        4. game_pk from the selected dropdown entry drives all four sections below.
+
+        5. Graceful degradation: if feature_pregame_game_features has no row for the
+           selected game_pk, display st.warning(...) for the affected sections rather
+           than raising an exception. Page must not crash on missing data.
+
+      dependsOn:
+        - add-shap-dependency
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            tree = ast.parse(src)
+            # Verify required top-level structure
+            for required in ['date_input', 'selectbox', 'cache_data', 'stop']:
+                assert required in src, f"Missing required element: '{required}'"
+            print('5_Game_Insights.py: scaffold structure present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['uv', 'run', 'python', '-c', 'import app.pages; print("import ok")'],
+                capture_output=True, text=True, cwd='.'
+            )
+            # Accept either success or module-not-found (page files aren't a package)
+            # What matters is no SyntaxError in 5_Game_Insights.py
+            result2 = subprocess.run(
+                ['python3', '-m', 'py_compile', 'app/pages/5_Game_Insights.py'],
+                capture_output=True, text=True
+            )
+            assert result2.returncode == 0, \
+                f"5_Game_Insights.py syntax error:\n{result2.stderr}"
+            print('5_Game_Insights.py: syntax check passed')
+            EOF
+
+    - id: build-prediction-summary-and-team-comparison
+      name: Implement Prediction Summary and Team Performance Comparison sections
+      description: |
+        Section 1 — Prediction Summary:
+          Single-row header bar. Pull from daily_model_predictions for the selected game_pk.
+          Display as st.columns(5) with one metric per column:
+            - Predicted Total Runs (predicted_total_runs)
+            - Home Win Probability (home_win_prob, formatted as %)
+            - Market Win Probability (consensus_win_prob, formatted as %)
+            - Edge (home_win_prob - consensus_win_prob, shown with sign and color)
+            - Kelly Fraction (kelly_fraction, formatted as %)
+          Use st.metric() for each. Edge delta: green if positive, red if negative.
+
+        Section 2 — Team Performance Comparison:
+          Pull from feature_pregame_game_features for the selected game_pk.
+          Display six metric groups as a two-column layout (home | away) using st.columns(2).
+          One st.metric() per row within each column, with delta = home_value - away_value
+          (or away_value - home_value depending on which direction favors the home team).
+
+          Metric groups and their source columns:
+
+          Offense (rolling 30d):
+            home_rolling_ops_30d / away_rolling_ops_30d
+            home_rolling_runs_per_game_30d / away_rolling_runs_per_game_30d
+
+          Starting Pitcher:
+            home_starter_era / away_starter_era
+            home_starter_whip / away_starter_whip
+            home_starter_handedness / away_starter_handedness
+
+          Lineup vs. Starter Handedness:
+            home_platoon_advantage_score / away_platoon_advantage_score
+
+          Bullpen (rolling 7d):
+            home_bullpen_era_7d / away_bullpen_era_7d
+            home_bullpen_ip_7d / away_bullpen_ip_7d
+
+          Schedule Context:
+            home_days_rest / away_days_rest
+            home_games_last_7d / away_games_last_7d
+
+          Park & Context (single value — no home/away split):
+            park_run_factor
+            is_dome
+
+          Display nulls gracefully: if a column is null, show "N/A" rather than crashing.
+          All queries wrapped in @st.cache_data(ttl=300).
+
+      dependsOn:
+        - build-page-scaffold
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            for col in [
+                'home_win_prob', 'consensus_win_prob', 'kelly_fraction',
+                'home_rolling_ops_30d', 'home_starter_era',
+                'home_platoon_advantage_score', 'home_bullpen_era_7d',
+                'home_days_rest', 'park_run_factor'
+            ]:
+                assert col in src, f"Expected column reference missing: '{col}'"
+            print('Prediction Summary + Team Comparison: all required column references present')
+            EOF
+
+    - id: build-shap-waterfall
+      name: Implement SHAP waterfall charts for total_runs and home_win models
+      description: |
+        Section 3 — SHAP Feature Importance:
+
+        Model loading:
+          Load saved XGBoost models from model_registry.yaml via utils/model_io.py
+          (or equivalent path used elsewhere in the app). Load both the total_runs model
+          and the home_win model.
+
+          Use @st.cache_resource to cache each shap.TreeExplainer (one per model, not
+          per game). The explainer is expensive to construct and stable across games.
+
+        Feature vector reconstruction:
+          Load feature_columns.json to get the ordered column list.
+          Query feature_pregame_game_features for the selected game_pk, select only the
+          columns in feature_columns (in order). Any missing columns → fill with 0.0.
+          Wrap the query in @st.cache_data(ttl=300).
+
+        SHAP computation and display:
+          For each model (total_runs, home_win):
+            shap_values = explainer(feature_vector_df)
+            Select the top 10 features by absolute SHAP value.
+            Render with shap.waterfall_plot(shap_values[0], max_display=10).
+            Capture the matplotlib figure and pass to st.pyplot(fig).
+
+          Display both charts side by side using st.columns(2).
+          Label each chart clearly: "Total Runs Model" and "Home Win Model".
+
+          If model file not found or feature vector has no rows: display st.warning()
+          and skip the waterfall section rather than crashing.
+
+        Note on shap.waterfall_plot vs plots.waterfall:
+          Use shap.plots.waterfall(shap_values[0]) if using shap >= 0.40 (Explanation
+          object API). Use shap.waterfall_plot(explainer.expected_value, shap_values[0],
+          feature_vector) for older API. Check shap.__version__ at import time and
+          branch accordingly.
+
+      dependsOn:
+        - build-prediction-summary-and-team-comparison
+        - add-shap-dependency
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            for symbol in ['TreeExplainer', 'cache_resource', 'waterfall', 'st.pyplot']:
+                assert symbol in src, f"SHAP section missing expected symbol: '{symbol}'"
+            print('SHAP waterfall section: all required symbols present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            # Verify both cache decorators are used
+            assert 'cache_resource' in src, "Missing @st.cache_resource for explainer"
+            assert 'cache_data' in src, "Missing @st.cache_data for feature vector query"
+            print('SHAP caching: both @st.cache_resource and @st.cache_data present')
+            EOF
+
+    - id: build-recent-form-table
+      name: Implement Recent Team Form section
+      description: |
+        Section 4 — Recent Team Form:
+
+        For both home and away teams, query stg_statsapi_games for the last 10 completed
+        games (game_type = 'R', status = 'Final') before the selected game's game_date,
+        ordered by game_date DESC, LIMIT 10.
+
+        For each team, determine whether they were the home or away team in each game
+        and compute runs scored / runs allowed accordingly.
+
+        Display as a compact st.dataframe (not st.table) with columns:
+          Date       — game_date
+          Opponent   — opposing team abbreviation
+          H/A        — "H" or "A" indicating whether our team was home or away
+          RS         — runs scored by our team
+          RA         — runs allowed by our team
+          W/L        — "W" if RS > RA, "L" if RS < RA, "T" otherwise
+
+        Show home team form and away team form in st.columns(2) with headers
+        "Home: {home_team_name} — Last 10" and "Away: {away_team_name} — Last 10".
+
+        Wrap the query in @st.cache_data(ttl=300).
+        If fewer than 10 prior games exist (early season), show however many are available.
+        If 0 prior games: st.info("No prior games found for this team.")
+
+      dependsOn:
+        - build-page-scaffold
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            for term in ['stg_statsapi_games', 'W/L', 'Last 10', 'st.dataframe']:
+                assert term in src, f"Recent Form section missing: '{term}'"
+            print('Recent Form section: all required elements present')
+            EOF
+
+    - id: integration-and-graceful-degradation
+      name: Verify end-to-end page render and graceful degradation paths
+      description: |
+        Integration verification:
+
+        1. Run Streamlit syntax/import check:
+             uv run python -m py_compile app/pages/5_Game_Insights.py
+             uv run streamlit run app/Home.py --server.headless true &
+             sleep 5 && curl -sf http://localhost:8501 > /dev/null
+             # Page must serve without error
+
+        2. Graceful degradation paths — verify the page handles each case without
+           raising an unhandled exception:
+             a. No predictions for selected date — st.info() + st.stop()
+             b. No feature_pregame_game_features row for selected game_pk — st.warning()
+                for Section 2 and Section 3, page continues to render Section 4
+             c. feature_columns.json missing — st.warning() for Section 3 only
+             d. Model artifact not found — st.warning() for Section 3 only
+
+           Each graceful path should be implemented as a guard clause (check → warn →
+           skip section) rather than a try/except that swallows all errors.
+
+        3. Confirm all six metric groups appear in the Team Comparison section:
+             Offense, Starting Pitcher, Lineup vs. Handedness, Bullpen,
+             Schedule Context, Park & Context
+
+        4. Confirm sidebar label:
+             st.set_page_config must not override the sidebar label — Streamlit derives
+             the sidebar name from the filename ("5 Game Insights"). Verify the file is
+             named exactly app/pages/5_Game_Insights.py.
+
+      dependsOn:
+        - build-prediction-summary-and-team-comparison
+        - build-shap-waterfall
+        - build-recent-form-table
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', '-m', 'py_compile', 'app/pages/5_Game_Insights.py'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, \
+                f"5_Game_Insights.py failed syntax check:\n{result.stderr}"
+            print('5_Game_Insights.py: syntax check clean')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('app/pages/5_Game_Insights.py').read_text()
+            # Verify graceful degradation guards are present
+            for guard in ['st.info', 'st.warning', 'st.stop']:
+                assert guard in src, f"Missing graceful degradation call: '{guard}'"
+            print('Graceful degradation: st.info, st.warning, st.stop all present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            p = pathlib.Path('app/pages/5_Game_Insights.py')
+            assert p.exists(), "app/pages/5_Game_Insights.py does not exist"
+            src = p.read_text()
+            # Verify all six metric group column references are present
+            groups = {
+                'Offense': 'home_rolling_ops_30d',
+                'Starting Pitcher': 'home_starter_era',
+                'Lineup vs. Handedness': 'home_platoon_advantage_score',
+                'Bullpen': 'home_bullpen_era_7d',
+                'Schedule Context': 'home_days_rest',
+                'Park & Context': 'park_run_factor',
+            }
+            for group, col in groups.items():
+                assert col in src, f"Metric group '{group}' missing column ref: '{col}'"
+            print('All six Team Comparison metric groups: column references present')
+            EOF

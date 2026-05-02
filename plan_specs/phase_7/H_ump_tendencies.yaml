@@ -1,0 +1,600 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: umpire-tendency-features
+  namespace: default
+spec:
+  description: >
+    Ingest historical and daily umpire game assignments, compute per-umpire
+    tendency z-scores, and add them to feature_pregame_game_features so the
+    model can adjust for HP umpire zone tendencies before each game.
+
+    BACKGROUND: HP umpire zone tendency shifts total runs (tight zone → fewer
+    runs, wide zone → more runs) and K/BB rates. The market prices HP umpire
+    effects, particularly for total run lines. Expected totals MAE improvement
+    ~0.1 runs. Gap 7 from betting_ml/evaluation/postmortem_v0.md; originally
+    Card 4.B2 (BACKLOG).
+
+    DATA ARCHITECTURE — two sources, one table:
+
+      Source A — UmpScorecards historical bulk export (2015–present):
+        https://umpscorecards.com/data/games
+        Returns a JSON/CSV array of game-level records: game date, game_pk,
+        HP umpire name, per-game K%, BB%, runs scored, called strikes above
+        average (CSAA), and favor metrics. This is the authoritative source
+        for historical umpire tendency data.
+        Limitation: not suitable for daily automation — bulk export only.
+        Use for: one-time backfill (2015–2025) and annual refresh.
+
+      Source B — MLB Stats API schedule with hydrate=officials (daily going forward):
+        Endpoint: https://statsapi.mlb.com/api/v1/schedule
+          ?sportId=1&date=YYYY-MM-DD&hydrate=officials
+        The officials array in each game object contains name and officialType.
+        Filter for officialType = "Home Plate" to get the HP umpire for that game.
+        This is the automated daily source. HP umpire assignments are announced
+        morning of the game — run after 08:00 ET before predict_today.py.
+        Limitation: no per-game tendency metrics (only name + assignment).
+        Use for: daily forward path to stamp umpire_name on today's games.
+
+    Both sources write to a single Snowflake table: baseball_data.statsapi.umpire_game_log
+    (one row per game_pk; UmpScorecards rows include tendency metrics; daily
+    Stats API rows carry only umpire_name and assignment metadata until
+    post-game UmpScorecards data becomes available).
+
+    Tendency features (trailing 3-year z-scores relative to league average) are
+    computed in the dbt feature model and joined to feature_pregame_game_features.
+
+    Source: Gap 7 from postmortem, Card 7.H. Expected effort: ~1 day.
+
+  acceptanceCriteria:
+    - description: >
+        umpire_game_log table exists in baseball_data.statsapi. Historical rows
+        cover 2015–2025 from UmpScorecards (≥20,000 rows). DDL saved to
+        scripts/ddl/umpire_game_log.sql.
+    - description: >
+        scripts/ingest_umpires.py --date YYYY-MM-DD correctly extracts the HP
+        umpire from the MLB Stats API schedule response and upserts to
+        umpire_game_log. Dry-run mode prints umpire names without writing.
+    - description: >
+        feature_pregame_umpire_features builds cleanly with one row per game_pk.
+        ump_k_pct_zscore, ump_bb_pct_zscore, and ump_runs_per_game_zscore are
+        non-null for ≥90% of 2026 regular season games.
+    - description: >
+        feature_pregame_game_features includes ump_k_pct_zscore,
+        ump_bb_pct_zscore, ump_runs_per_game_zscore via LEFT JOIN. dbtf build passes.
+    - description: >
+        CV impact documented in betting_ml/evaluation/umpire_feature_impact.md
+        with before/after totals MAE and home_win Brier. Result recorded even
+        if no improvement.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: umpire-tendency-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG. Tasks 1 and 2 are independent and can run in parallel —
+    DDL setup and the historical backfill script. Task 3 (daily ingestion script)
+    depends on Task 1 (table must exist). Task 4 (dbt feature model) depends on
+    Tasks 2 and 3 (table must be populated). Task 5 (feature integration + retrain)
+    depends on Task 4.
+  goalRef:
+    name: umpire-tendency-features
+  graph:
+    nodes:
+
+      - id: create-umpire-ddl
+        kind: Task
+        description: >
+          Write DDL and create the umpire_game_log table in Snowflake.
+
+          File: scripts/ddl/umpire_game_log.sql
+
+          DDL:
+            CREATE TABLE IF NOT EXISTS baseball_data.statsapi.umpire_game_log (
+                -- Game identifiers
+                game_pk             INTEGER       NOT NULL,
+                game_date           DATE          NOT NULL,
+                season              INTEGER       NOT NULL,
+
+                -- Umpire assignment
+                umpire_name         VARCHAR(100)  NOT NULL,
+                umpire_id           VARCHAR(50),  -- statsapi umpire ID when available
+
+                -- Per-game tendency metrics (from UmpScorecards; NULL for daily-only rows)
+                k_pct               FLOAT,        -- K% for that game
+                bb_pct              FLOAT,        -- BB% for that game
+                total_runs          INTEGER,       -- total runs scored
+                called_strikes_above_avg FLOAT,   -- CSAA from UmpScorecards
+                run_expectancy_delta FLOAT,        -- favor impact on run expectancy
+
+                -- Source metadata
+                data_source         VARCHAR(50)   NOT NULL, -- 'umpscorecards' or 'statsapi'
+                loaded_at           TIMESTAMP_NTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- Unique constraint: one HP umpire per game
+            ALTER TABLE baseball_data.statsapi.umpire_game_log
+            ADD CONSTRAINT uq_umpire_game_log_game_pk UNIQUE (game_pk);
+
+          Apply DDL via mcp__snowflake__run_snowflake_query.
+          Confirm table exists with:
+            SELECT COUNT(*) FROM baseball_data.statsapi.umpire_game_log;
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Umpire game log DDL
+            path: scripts/ddl/umpire_game_log.sql
+          - type: command_succeeds
+            name: DDL file contains required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/umpire_game_log.sql').read_text().lower()
+                required = ['game_pk', 'game_date', 'umpire_name', 'k_pct', 'bb_pct',
+                            'total_runs', 'data_source', 'loaded_at']
+                missing = [c for c in required if c not in sql]
+                assert not missing, f'Missing columns in DDL: {missing}'
+                assert 'umpire_game_log' in sql, 'Table name not found in DDL'
+                print('umpire_game_log DDL contains all required columns')
+
+      - id: build-umpscorecards-backfill
+        kind: Task
+        description: >
+          Create scripts/ingest_umpires_historical.py to bulk-load the UmpScorecards
+          game export (2015–2025) into umpire_game_log.
+
+          Data source: https://umpscorecards.com/data/games
+          This endpoint returns a JSON array of game objects. Each object includes
+          at minimum: date, game_pk (or equivalent MLB game ID), umpire name,
+          k_pct, bb_pct, total_runs, csaa (called strikes above average), and
+          run expectancy delta fields.
+
+          IMPORTANT — inspect the actual JSON structure before writing field mappings.
+          The field names in the UmpScorecards response may differ from the column
+          names in umpire_game_log. Print a sample record during development and map
+          explicitly. Do not assume field names without verifying.
+
+          Script CLI interface:
+            python scripts/ingest_umpires_historical.py [--dry-run] [--season YYYY]
+
+          Behavior:
+            - Fetches the full game export from https://umpscorecards.com/data/games
+              (or filters by season if --season is passed and the API supports it)
+            - Maps response fields to umpire_game_log columns; sets data_source='umpscorecards'
+            - Dry-run: prints record count and one sample row; no Snowflake write
+            - Live: MERGE INTO umpire_game_log ON game_pk to upsert (idempotent re-runs)
+            - Logs: "Loaded N UmpScorecards rows (YYYY–YYYY)"
+            - On HTTP error: non-zero exit; full traceback logged
+
+          Expected row count after backfill: ≥20,000 rows (roughly 2,430 games/season × 10
+          seasons, minus rainouts and non-HP records).
+
+          NOTE ON AUTOMATION: UmpScorecards does not provide a daily-push mechanism.
+          This script is intended for:
+            1. One-time backfill (2015–2025)
+            2. Annual refresh at the start of each off-season
+          Daily going-forward data comes from the MLB Stats API (Task 3).
+          Document this limitation at the top of the script in a comment block.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: UmpScorecards historical backfill script
+            path: scripts/ingest_umpires_historical.py
+          - type: command_succeeds
+            name: Script syntax valid and references umpscorecards URL
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_umpires_historical.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                found_url = False
+                found_merge = False
+                found_dry_run = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'umpscorecards.com' in node.value:
+                            found_url = True
+                        if 'MERGE' in node.value or 'merge' in node.value:
+                            found_merge = True
+                        if 'dry' in node.value.lower() or 'dry_run' in node.value.lower():
+                            found_dry_run = True
+                assert found_url, 'UmpScorecards URL not found in script'
+                assert found_merge, 'MERGE INTO not found in script (required for idempotent upsert)'
+                assert found_dry_run, '--dry-run flag not found in script'
+                print('ingest_umpires_historical.py: URL, MERGE, and dry-run all present')
+          - type: command_succeeds
+            name: Dry-run executes without error
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_umpires_historical.py
+              - "--dry-run"
+
+      - id: build-daily-umpire-ingestion
+        kind: Task
+        description: >
+          Create scripts/ingest_umpires.py to fetch today's HP umpire assignment
+          from the MLB Stats API and upsert to umpire_game_log.
+
+          Endpoint: https://statsapi.mlb.com/api/v1/schedule
+          Required parameters:
+            sportId=1
+            date=YYYY-MM-DD
+            hydrate=officials
+
+          The response structure for each game in dates[].games[]:
+            officials: [
+              { official: { id: int, fullName: str }, officialType: "Home Plate" },
+              { official: { id: int, fullName: str }, officialType: "First Base" },
+              ...
+            ]
+
+          Filter officials where officialType == "Home Plate" to extract the HP umpire.
+          If the officials array is empty or missing (game not yet staffed), skip the
+          game and log: "[WARN] No HP umpire listed for game_pk=X on DATE — skipping."
+
+          Script CLI interface:
+            python scripts/ingest_umpires.py --date YYYY-MM-DD [--dry-run]
+
+          Behavior:
+            - Fetches schedule for --date with hydrate=officials
+            - Extracts game_pk, game_date, season (from date year), umpire_name,
+              umpire_id for each game where officialType == "Home Plate"
+            - Sets data_source='statsapi'; tendency columns (k_pct, bb_pct, etc.) = NULL
+            - Dry-run: prints extracted assignments; no Snowflake write
+            - Live: MERGE INTO umpire_game_log ON game_pk (upserts; safe to re-run)
+            - Logs: "Loaded HP umpire for N of M games on DATE"
+            - Exit non-zero on HTTP error or Snowflake failure
+
+          Integration with daily_ingestion.yml:
+            Add as a daily step that runs after odds ingestion and before dbt build.
+            This ensures the HP umpire is present in umpire_game_log before
+            feature_pregame_umpire_features materializes.
+
+          NOTE: This script deliberately writes NULL for tendency metrics because
+          per-game outcome data (k_pct, bb_pct, total_runs) is only available
+          post-game from UmpScorecards. The dbt feature model computes trailing
+          z-scores from historical rows — the daily assignment row is only needed
+          so the current game_pk can join to the feature model via umpire_name.
+        dependsOn:
+          - create-umpire-ddl
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Daily umpire ingestion script
+            path: scripts/ingest_umpires.py
+          - type: command_succeeds
+            name: Script syntax valid; references statsapi officials endpoint
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/ingest_umpires.py').read_text()
+                ast.parse(src)
+                tree = ast.parse(src)
+                found_hydrate = False
+                found_home_plate = False
+                found_merge = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                        if 'officials' in node.value.lower():
+                            found_hydrate = True
+                        if 'Home Plate' in node.value or 'home plate' in node.value.lower():
+                            found_home_plate = True
+                        if 'MERGE' in node.value or 'merge' in node.value:
+                            found_merge = True
+                assert found_hydrate, 'officials hydrate param not found in ingest_umpires.py'
+                assert found_home_plate, '"Home Plate" officialType filter not found'
+                assert found_merge, 'MERGE INTO not found (required for idempotent upsert)'
+                print('ingest_umpires.py: officials endpoint, Home Plate filter, and MERGE all present')
+          - type: command_succeeds
+            name: Dry-run executes without error
+            command: uv
+            args:
+              - run
+              - python
+              - scripts/ingest_umpires.py
+              - "--date"
+              - "2026-05-01"
+              - "--dry-run"
+
+      - id: build-umpire-feature-model
+        kind: Task
+        description: >
+          Create the dbt staging model and feature model for umpire tendencies.
+
+          FILE 1 — dbt/models/staging/statsapi/stg_statsapi_umpire_game_log.sql
+          Grain: one row per game_pk. Deduplicates to most-recent loaded_at.
+          Extracts: game_pk, game_date, season, umpire_name, umpire_id,
+            k_pct, bb_pct, total_runs, called_strikes_above_avg,
+            run_expectancy_delta, data_source.
+          Source: {{ source('statsapi', 'umpire_game_log') }}
+          Add to dbt/models/staging/statsapi/schema.yml (or create if absent):
+            unique test on game_pk, not_null on umpire_name and game_date.
+
+          FILE 2 — dbt/models/feature/feature_pregame_umpire_features.sql
+          Grain: one row per game_pk (for games with a known HP umpire).
+          Purpose: compute trailing 3-year z-scores for this umpire relative to
+            the league average for that season range.
+
+          Implementation pattern:
+            with
+            -- All historical games with tendency data (UmpScorecards rows only)
+            ump_history as (
+                select
+                    game_pk,
+                    game_date,
+                    season,
+                    umpire_name,
+                    k_pct,
+                    bb_pct,
+                    total_runs
+                from {{ ref('stg_statsapi_umpire_game_log') }}
+                where k_pct is not null  -- exclude daily-only assignment rows
+            ),
+
+            -- League average and stddev per season (for z-score normalization)
+            league_avg as (
+                select
+                    season,
+                    avg(k_pct)      as lg_k_pct_avg,
+                    stddev(k_pct)   as lg_k_pct_std,
+                    avg(bb_pct)     as lg_bb_pct_avg,
+                    stddev(bb_pct)  as lg_bb_pct_std,
+                    avg(total_runs) as lg_runs_avg,
+                    stddev(total_runs) as lg_runs_std
+                from ump_history
+                group by season
+            ),
+
+            -- Per-umpire trailing 3-year averages (use LEAKAGE GUARD: only games
+            -- strictly before the current game's date)
+            ump_trailing as (
+                select
+                    a.game_pk                             as target_game_pk,
+                    a.game_date                           as target_game_date,
+                    a.umpire_name,
+                    avg(b.k_pct)                          as ump_k_pct_trailing,
+                    avg(b.bb_pct)                         as ump_bb_pct_trailing,
+                    avg(b.total_runs)                     as ump_runs_trailing,
+                    count(*)                              as ump_games_sample
+                from {{ ref('stg_statsapi_umpire_game_log') }} a
+                join ump_history b
+                    on  b.umpire_name = a.umpire_name
+                    and b.game_date  >= dateadd('year', -3, a.game_date)
+                    and b.game_date   < a.game_date   -- LEAKAGE GUARD
+                group by a.game_pk, a.game_date, a.umpire_name
+            ),
+
+            -- Z-scores relative to the season's league average
+            -- Use the season of the trailing window midpoint for normalization
+            final as (
+                select
+                    t.target_game_pk                     as game_pk,
+                    t.umpire_name,
+                    t.ump_games_sample,
+                    -- Raw trailing averages
+                    t.ump_k_pct_trailing,
+                    t.ump_bb_pct_trailing,
+                    t.ump_runs_trailing,
+                    -- Z-scores (null-safe: use 0.0 if stddev is 0 or null)
+                    case when coalesce(l.lg_k_pct_std, 0) = 0 then 0.0
+                         else (t.ump_k_pct_trailing  - l.lg_k_pct_avg)  / l.lg_k_pct_std
+                    end                                  as ump_k_pct_zscore,
+                    case when coalesce(l.lg_bb_pct_std, 0) = 0 then 0.0
+                         else (t.ump_bb_pct_trailing - l.lg_bb_pct_avg) / l.lg_bb_pct_std
+                    end                                  as ump_bb_pct_zscore,
+                    case when coalesce(l.lg_runs_std, 0) = 0 then 0.0
+                         else (t.ump_runs_trailing   - l.lg_runs_avg)   / l.lg_runs_std
+                    end                                  as ump_runs_per_game_zscore
+                from ump_trailing t
+                left join league_avg l
+                    on l.season = year(t.target_game_date)
+            )
+
+            select * from final
+
+          Add feature_pregame_umpire_features to dbt/models/feature/schema.yml:
+            - description, unique(game_pk) test, not_null on umpire_name.
+
+          Minimum sample gate: if ump_games_sample < 10, set all z-scores to 0.0
+          (not enough history to trust the trailing average). Add this CASE logic
+          inside the final CTE before the z-score formulas.
+        dependsOn:
+          - build-umpscorecards-backfill
+          - build-daily-umpire-ingestion
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Umpire staging model
+            path: dbt/models/staging/statsapi/stg_statsapi_umpire_game_log.sql
+          - type: artifact_exists
+            name: Umpire feature model
+            path: dbt/models/feature/feature_pregame_umpire_features.sql
+          - type: command_succeeds
+            name: Staging model uses source ref and has deduplication
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/staging/statsapi/stg_statsapi_umpire_game_log.sql').read_text()
+                assert "source('statsapi'" in src, 'Staging model does not use source() reference'
+                has_dedup = any(x in src for x in ['ROW_NUMBER()', 'row_number()', 'QUALIFY', 'qualify'])
+                assert has_dedup, 'Staging model lacks deduplication logic'
+                print('stg_statsapi_umpire_game_log: source ref and dedup present')
+          - type: command_succeeds
+            name: Feature model contains required z-score columns and leakage guard
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/feature/feature_pregame_umpire_features.sql').read_text()
+                required = ['ump_k_pct_zscore', 'ump_bb_pct_zscore', 'ump_runs_per_game_zscore',
+                            'ump_games_sample']
+                missing = [c for c in required if c not in src]
+                assert not missing, f'Missing columns in umpire feature model: {missing}'
+                assert '< a.game_date' in src or "< target_game_date" in src or "b.game_date" in src, \
+                    'LEAKAGE GUARD (strictly less-than date join) not found in umpire feature model'
+                assert 'ump_games_sample' in src and ('< 10' in src or '10' in src), \
+                    'Minimum sample gate (ump_games_sample < 10) not found'
+                print('feature_pregame_umpire_features: z-score columns, leakage guard, and sample gate present')
+          - type: command_succeeds
+            name: Umpire dbt models build cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "stg_statsapi_umpire_game_log feature_pregame_umpire_features"
+
+      - id: integrate-and-retrain
+        kind: Task
+        description: >
+          Add umpire features to feature_pregame_game_features, retrain models,
+          and document CV impact.
+
+          STEP 1 — Add umpire join to feature_pregame_game_features.sql.
+          Read the full file before editing to confirm the existing LEFT JOIN pattern
+          and CTE structure. Add:
+
+            In the CTE block:
+              umpire_feats as (
+                  select * from {{ ref('feature_pregame_umpire_features') }}
+              )
+
+            In the final SELECT (after existing park features join):
+              left join umpire_feats uf on uf.game_pk = g.game_pk
+
+            Output columns (add to the SELECT list):
+              uf.ump_k_pct_zscore,
+              uf.ump_bb_pct_zscore,
+              uf.ump_runs_per_game_zscore,
+              uf.ump_games_sample,
+              uf.umpire_name
+
+          All five columns are nullable — games with no HP umpire listed produce NULLs
+          that downstream models handle gracefully.
+
+          Run: dbtf build --select feature_pregame_game_features+
+          Confirm row count is unchanged (LEFT JOIN; no rows dropped).
+
+          STEP 2 — Feature selection check.
+          Run betting_ml/scripts/run_feature_selection.py (or equivalent) to see if
+          ump_k_pct_zscore, ump_bb_pct_zscore, ump_runs_per_game_zscore pass
+          corr_threshold=0.02. If none pass, note this in the impact document.
+
+          STEP 3 — Retrain both models (USER executes these):
+            uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
+            uv run python betting_ml/scripts/run_xgb_home_win_search.py
+
+          STEP 4 — Document in betting_ml/evaluation/umpire_feature_impact.md:
+
+            ## Umpire Feature Impact Report
+            Date: <run date>
+            Historical rows loaded: <N from umpire_game_log>
+            Coverage: <% of 2026 games with non-null ump_k_pct_zscore>
+
+            ### Features retained after selection
+            List umpire columns that passed corr_threshold. If none passed,
+            record the observed correlations and note that corr_threshold may
+            need raising (see Card 7.M).
+
+            ### total_runs model
+            | Metric  | Before umpire features | After |
+            |---------|------------------------|-------|
+            | CV MAE  | <from model_registry>  | ...   |
+
+            ### home_win model
+            | Metric   | Before | After |
+            |----------|--------|-------|
+            | CV Brier | ...    | ...   |
+
+            ### Coverage analysis
+            Report % of 2026 game-date rows where umpire_name is non-null.
+            If < 90%, document which games are missing and whether the gap is
+            in the historical backfill or the daily ingestion step.
+
+          STEP 5 — Update model_registry.yaml if CV metrics improved.
+
+          STEP 6 — Add ingest_umpires.py --date {date} to daily_ingestion.yml as
+          a step after odds ingestion and before the dbt build. This ensures the
+          HP umpire assignment is present before feature_pregame_umpire_features
+          materializes.
+        dependsOn:
+          - build-umpire-feature-model
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_game_features references umpire feature model
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+                assert 'feature_pregame_umpire_features' in src, \
+                    'feature_pregame_game_features does not ref feature_pregame_umpire_features'
+                required = ['ump_k_pct_zscore', 'ump_bb_pct_zscore', 'ump_runs_per_game_zscore']
+                missing = [c for c in required if c not in src]
+                assert not missing, f'Missing umpire columns in game features assembly: {missing}'
+                print('feature_pregame_game_features: umpire ref and z-score columns present')
+          - type: command_succeeds
+            name: Feature assembly and downstream models build cleanly
+            command: dbtf
+            args:
+              - build
+              - "--select"
+              - "feature_pregame_game_features+"
+          - type: artifact_exists
+            name: CV impact document
+            path: betting_ml/evaluation/umpire_feature_impact.md
+          - type: command_succeeds
+            name: Impact document contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/umpire_feature_impact.md').read_text().lower()
+                required = ['total_runs', 'home_win', 'mae', 'brier', 'coverage', 'features retained']
+                missing = [s for s in required if s not in content]
+                assert not missing, f'Impact doc missing sections: {missing}'
+                print('umpire_feature_impact.md contains all required sections')
+          - type: command_succeeds
+            name: daily_ingestion.yml includes umpire ingestion step
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                candidates = list(pathlib.Path('.').rglob('daily_ingestion.yml'))
+                assert candidates, 'daily_ingestion.yml not found'
+                content = candidates[0].read_text()
+                assert 'ingest_umpires' in content, \
+                    'ingest_umpires step not found in daily_ingestion.yml'
+                print(f'daily_ingestion.yml includes umpire ingestion step')

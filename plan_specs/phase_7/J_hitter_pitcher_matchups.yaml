@@ -1,0 +1,674 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: hitter-pitcher-matchup-features
+  namespace: default
+spec:
+  description: >
+    Compute per-lineup aggregated batter performance splits vs. the scheduled
+    starter's pitch-mix archetype and add them to feature_pregame_lineup_features
+    so the model captures the style-of-matchup signal the market already prices.
+
+    BACKGROUND: Current lineup features aggregate batter rolling stats (wOBA, K%,
+    etc.) without regard for the type of pitcher they are facing. A power-contact
+    lineup facing an elite slider-heavy starter performs differently than the same
+    lineup facing a fastball-dominant power pitcher. Phase 4 Notebook 07 showed
+    that simple handedness matchup adjustment (Card 4.2) added only ΔR²=0.001–0.002
+    beyond base features — insufficient on its own. The hypothesis for 7.J is that
+    pitch-archetype matchup (fastball vs. breaking-ball vs. mixed) captures a
+    deeper style signal not already in starter ERA/K%/xwOBA. Gap 8 from
+    betting_ml/evaluation/postmortem_v0.md.
+
+    APPROACH — two new mart tables, then feature layer extension:
+
+      Mart 1 — mart_pitcher_pitch_archetype
+        Grain: pitcher_id × game_year
+        Source: aggregate stg_batter_pitches.pitch_type at pitcher level.
+        Classify each pitcher × season into one of three archetypes:
+          fastball_dominant  — (FF + SI + FT + FC) share > 60%
+          breaking_dominant  — (SL + CU + KC + SV + CS) share > 50%
+          mixed              — everything else
+        The 7.E dependency is soft for v1: archetype classification from
+        Statcast pitch_type is sufficient; Card 7.F's Stuff+ data can refine
+        the classification boundaries in a future pass without re-engineering
+        the feature model.
+
+      Mart 2 — mart_batter_vs_pitch_archetype
+        Grain: batter_id × pitch_archetype × game_year
+        Source: join stg_batter_pitches to mart_pitcher_pitch_archetype to tag
+        each plate appearance with the opposing pitcher's archetype (for that
+        season), then aggregate batter outcomes.
+        Minimum PA gate: 50 PA per cell.
+        Shrinkage: when pa_count < 50, blend toward league-average using
+        weight = pa_count / (pa_count + 50) so sparse cells don't dominate.
+
+    LEAKAGE GUARD: all feature joins use prior season (game_year - 1) for both
+    the pitcher's archetype and the batter's performance vs. that archetype.
+    Early-season (April/May) will correctly use prior-season archetype; this
+    is an accepted limitation of annual-snapshot classification.
+
+    FEATURE COLUMNS ADDED (per game_pk × side):
+      lineup_woba_vs_starter_archetype    — avg wOBA across 9 slots vs. archetype
+      lineup_xwoba_vs_starter_archetype   — avg xwOBA across 9 slots vs. archetype
+      lineup_k_pct_vs_starter_archetype   — avg K% across 9 slots vs. archetype
+      lineup_iso_vs_starter_archetype     — avg ISO across 9 slots vs. archetype
+      lineup_archetype_pa_coverage        — avg PA count per slot (reliability signal)
+      starter_pitch_archetype             — archetype string for the scheduled starter
+
+    feature_pregame_game_features receives home_/away_ prefixed versions
+    of all six columns.
+
+    Source: Gap 8 from postmortem, Card 7.J. Expected effort: ~1.5 days.
+
+  acceptanceCriteria:
+    - description: >
+        mart_pitcher_pitch_archetype.sql builds; grain is pitcher_id × game_year;
+        every row has pitch_archetype IN ('fastball_dominant', 'breaking_dominant', 'mixed').
+    - description: >
+        mart_batter_vs_pitch_archetype.sql builds; grain is batter_id × pitch_archetype
+        × game_year; shrinkage toward league average applied for pa_count < 50.
+    - description: >
+        feature_pregame_lineup_features.sql adds all six new columns per game_pk × side
+        using prior-season archetype lookup. Row count is unchanged.
+    - description: >
+        feature_pregame_game_features.sql exposes home_ and away_ prefixed versions
+        of all six columns. dbtf parse succeeds.
+    - description: >
+        Both training scripts retrained. betting_ml/evaluation/matchup_split_feature_impact.md
+        documents archetype coverage rate, null rate, and cross-validation ΔR² vs. baseline.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: hitter-pitcher-matchup-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential DAG. Task 1 classifies each pitcher × season by pitch-mix
+    archetype. Task 2 aggregates batter performance vs. each archetype. Task 3 wires
+    the archetype matchup into feature_pregame_lineup_features and feature_pregame_game_features.
+    Task 4 retrains and produces an impact report.
+  goalRef:
+    name: hitter-pitcher-matchup-features
+  graph:
+    nodes:
+
+      - id: build-pitcher-pitch-archetype-mart
+        kind: Task
+        description: >
+          Create dbt/models/mart/mart_pitcher_pitch_archetype.sql.
+          Grain: pitcher_id × game_year.
+          Source: stg_batter_pitches (pitch_type, pitcher_id, game_year, game_type = 'R').
+
+          Read stg_batter_pitches.sql lines 100-115 before starting to confirm
+          pitch_type column name and the full set of pitch-type abbreviations
+          present in the data.
+
+          PITCH FAMILY GROUPINGS (Statcast abbreviations):
+            Fastball family : FF (4-seam), SI (sinker), FT (2-seam), FC (cutter)
+            Breaking family : SL (slider), CU (curveball), KC (knuckle curve),
+                              SV (sweeper), CS (slow curve)
+            Offspeed family : CH (changeup), FS (split-finger), SC (screwball)
+            Other/unknown   : KN (knuckleball), FA, EP, PO, UN, null — excluded
+                              from the denominator so they do not dilute family pcts
+
+          ARCHETYPE CLASSIFICATION (apply in order; first match wins):
+            'fastball_dominant'  if fastball_pct  > 0.60
+            'breaking_dominant'  if breaking_pct  > 0.50
+            'mixed'              otherwise
+          where fastball_pct  = fastball_pitches  / classified_pitches
+                breaking_pct  = breaking_pitches  / classified_pitches
+                classified_pitches = fastball_pitches + breaking_pitches + offspeed_pitches
+          (denominator excludes unknowns to avoid diluting real pitch families)
+
+          Minimum sample gate: exclude pitcher × season rows with
+          classified_pitches < 100 (less than ~3 starts worth of data).
+
+          Full SQL structure:
+
+            {{ config(materialized='table') }}
+
+            with pitch_source as (
+                select
+                    pitcher_id,
+                    game_year,
+                    pitch_type
+                from {{ ref('stg_batter_pitches') }}
+                where game_type = 'R'
+                  and pitch_type is not null
+                  and pitcher_id is not null
+            ),
+
+            pitch_counts as (
+                select
+                    pitcher_id,
+                    game_year,
+                    count(*)                                        as total_pitches,
+                    sum(case when pitch_type in
+                        ('FF','SI','FT','FC')    then 1 else 0 end) as fastball_pitches,
+                    sum(case when pitch_type in
+                        ('SL','CU','KC','SV','CS') then 1 else 0 end) as breaking_pitches,
+                    sum(case when pitch_type in
+                        ('CH','FS','SC')         then 1 else 0 end) as offspeed_pitches
+                from pitch_source
+                group by pitcher_id, game_year
+            ),
+
+            with_pcts as (
+                select
+                    pitcher_id,
+                    game_year,
+                    total_pitches,
+                    fastball_pitches,
+                    breaking_pitches,
+                    offspeed_pitches,
+                    fastball_pitches + breaking_pitches + offspeed_pitches
+                                                        as classified_pitches,
+                    round(fastball_pitches::float /
+                          nullif(fastball_pitches + breaking_pitches + offspeed_pitches, 0), 3)
+                                                        as fastball_pct,
+                    round(breaking_pitches::float /
+                          nullif(fastball_pitches + breaking_pitches + offspeed_pitches, 0), 3)
+                                                        as breaking_pct,
+                    round(offspeed_pitches::float /
+                          nullif(fastball_pitches + breaking_pitches + offspeed_pitches, 0), 3)
+                                                        as offspeed_pct
+                from pitch_counts
+                where fastball_pitches + breaking_pitches + offspeed_pitches >= 100
+            )
+
+            select
+                pitcher_id,
+                game_year,
+                total_pitches,
+                classified_pitches,
+                fastball_pct,
+                breaking_pct,
+                offspeed_pct,
+                case
+                    when fastball_pct > 0.60  then 'fastball_dominant'
+                    when breaking_pct > 0.50  then 'breaking_dominant'
+                    else                           'mixed'
+                end                                     as pitch_archetype
+            from with_pcts
+
+          After building, run a sanity check via Snowflake MCP:
+            SELECT pitch_archetype, COUNT(*) as n,
+                   ROUND(AVG(fastball_pct), 3) as avg_fb_pct,
+                   ROUND(AVG(breaking_pct), 3) as avg_brk_pct
+            FROM baseball_data.betting_ml.mart_pitcher_pitch_archetype
+            GROUP BY pitch_archetype
+            ORDER BY n DESC;
+          Expected: 'mixed' should be the plurality archetype; fastball_dominant
+          and breaking_dominant should each have meaningful counts (not near-zero).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: mart_pitcher_pitch_archetype model
+            path: dbt/models/mart/mart_pitcher_pitch_archetype.sql
+          - type: command_succeeds
+            name: mart_pitcher_pitch_archetype.sql uses correct pitch family groupings
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/mart/mart_pitcher_pitch_archetype.sql').read_text()
+                assert "'FF'" in sql or '"FF"' in sql, 'FF (4-seam) not in fastball family'
+                assert "'SL'" in sql or '"SL"' in sql, 'SL (slider) not in breaking family'
+                assert "'CH'" in sql or '"CH"' in sql, 'CH (changeup) not in offspeed family'
+                assert 'fastball_dominant' in sql, 'fastball_dominant archetype label not found'
+                assert 'breaking_dominant' in sql, 'breaking_dominant archetype label not found'
+                assert 'mixed' in sql, 'mixed archetype label not found'
+                assert 'pitch_archetype' in sql, 'pitch_archetype output column not found'
+                print('mart_pitcher_pitch_archetype.sql pitch family groupings OK')
+          - type: command_succeeds
+            name: mart_pitcher_pitch_archetype.sql syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/mart/mart_pitcher_pitch_archetype.sql').read_text()
+                assert '{{ ref(' in sql or "{{ ref('" in sql or '{{ref(' in sql, \
+                    'No ref() call found — model must source from stg_batter_pitches'
+                assert 'stg_batter_pitches' in sql, 'stg_batter_pitches not referenced'
+                print('mart_pitcher_pitch_archetype.sql structure OK')
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args:
+              - parse
+              - --project-dir
+              - dbt
+
+      - id: build-batter-vs-archetype-mart
+        kind: Task
+        description: >
+          Create dbt/models/mart/mart_batter_vs_pitch_archetype.sql.
+          Grain: batter_id × pitch_archetype × game_year.
+          Source: join stg_batter_pitches to mart_pitcher_pitch_archetype to tag
+          each pitch with the opposing pitcher's archetype for that season, then
+          aggregate batter outcomes at the batter × archetype × season level.
+
+          IMPORTANT — PA vs. pitch granularity:
+          stg_batter_pitches has one row per pitch, not one row per PA. Use
+          plate_appearance_event IS NOT NULL to isolate terminal (last) pitches
+          for PA-level statistics (K%, BB%, wOBA, ISO). Pitch-level stats
+          (whiff rate) can use all rows. Match the same pattern used in
+          mart_batter_vs_handedness_splits.sql.
+
+          SHRINKAGE toward league average for small samples:
+            shrink_weight   = pa_count / (pa_count + 50.0)
+            adj_woba        = shrink_weight * raw_woba   + (1 - shrink_weight) * league_avg_woba
+            adj_xwoba       = shrink_weight * raw_xwoba  + (1 - shrink_weight) * league_avg_xwoba
+            adj_k_pct       = shrink_weight * raw_k_pct  + (1 - shrink_weight) * league_avg_k_pct
+            adj_iso         = shrink_weight * raw_iso     + (1 - shrink_weight) * league_avg_iso
+          Use these approximate league averages as constants (review against
+          stg_batter_pitches aggregate before finalizing):
+            league_avg_woba  = 0.320
+            league_avg_xwoba = 0.315
+            league_avg_k_pct = 0.225
+            league_avg_iso   = 0.165
+
+          Full SQL structure:
+
+            {{ config(materialized='table') }}
+
+            with pitches as (
+                select
+                    bp.batter_id,
+                    bp.pitcher_id,
+                    bp.game_year,
+                    bp.plate_appearance_event,
+                    bp.woba_value,
+                    bp.woba_denom,
+                    bp.xwoba,
+                    bp.is_strikeout,
+                    bp.is_walk,
+                    bp.is_at_bat,
+                    bp.total_bases,
+                    bp.is_hit,
+                    pa.pitch_archetype
+                from {{ ref('stg_batter_pitches') }} bp
+                inner join {{ ref('mart_pitcher_pitch_archetype') }} pa
+                    on  pa.pitcher_id = bp.pitcher_id
+                    and pa.game_year  = bp.game_year
+                where bp.game_type = 'R'
+            ),
+
+            pa_terminal as (
+                select * from pitches
+                where plate_appearance_event is not null
+            ),
+
+            batter_archetype_agg as (
+                select
+                    batter_id,
+                    pitch_archetype,
+                    game_year,
+                    count(*)                            as pa_count,
+                    round(sum(woba_value)
+                          / nullif(sum(woba_denom), 0), 3)       as raw_woba,
+                    round(avg(xwoba),                  3)         as raw_xwoba,
+                    round(sum(is_strikeout)
+                          / nullif(count(*), 0)::float, 3)        as raw_k_pct,
+                    round((sum(total_bases)
+                            - sum(is_hit))
+                          / nullif(sum(is_at_bat), 0)::float, 3) as raw_iso
+                from pa_terminal
+                group by batter_id, pitch_archetype, game_year
+            ),
+
+            with_shrinkage as (
+                select
+                    batter_id,
+                    pitch_archetype,
+                    game_year,
+                    pa_count,
+                    raw_woba,
+                    raw_xwoba,
+                    raw_k_pct,
+                    raw_iso,
+                    pa_count / (pa_count + 50.0)        as shrink_weight,
+                    round(
+                        (pa_count / (pa_count + 50.0)) * coalesce(raw_woba,  0.320)
+                        + (1 - pa_count / (pa_count + 50.0)) * 0.320, 3
+                    )                                   as adj_woba,
+                    round(
+                        (pa_count / (pa_count + 50.0)) * coalesce(raw_xwoba, 0.315)
+                        + (1 - pa_count / (pa_count + 50.0)) * 0.315, 3
+                    )                                   as adj_xwoba,
+                    round(
+                        (pa_count / (pa_count + 50.0)) * coalesce(raw_k_pct, 0.225)
+                        + (1 - pa_count / (pa_count + 50.0)) * 0.225, 3
+                    )                                   as adj_k_pct,
+                    round(
+                        (pa_count / (pa_count + 50.0)) * coalesce(raw_iso,   0.165)
+                        + (1 - pa_count / (pa_count + 50.0)) * 0.165, 3
+                    )                                   as adj_iso
+                from batter_archetype_agg
+            )
+
+            select * from with_shrinkage
+
+          After building, verify distribution via Snowflake MCP:
+            SELECT pitch_archetype,
+                   COUNT(DISTINCT batter_id) as batters,
+                   ROUND(AVG(pa_count), 0) as avg_pa,
+                   ROUND(AVG(adj_woba), 3) as avg_woba
+            FROM baseball_data.betting_ml.mart_batter_vs_pitch_archetype
+            GROUP BY pitch_archetype
+            ORDER BY pitch_archetype;
+          Expected: all three archetypes populated; avg_woba should be 0.300–0.340 range.
+        dependsOn:
+          - build-pitcher-pitch-archetype-mart
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: mart_batter_vs_pitch_archetype model
+            path: dbt/models/mart/mart_batter_vs_pitch_archetype.sql
+          - type: command_succeeds
+            name: mart_batter_vs_pitch_archetype.sql references both source marts and applies shrinkage
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/mart/mart_batter_vs_pitch_archetype.sql').read_text()
+                assert 'stg_batter_pitches' in sql, 'stg_batter_pitches not referenced'
+                assert 'mart_pitcher_pitch_archetype' in sql, \
+                    'mart_pitcher_pitch_archetype not referenced'
+                assert 'adj_woba' in sql, 'adj_woba (shrinkage-adjusted) column not found'
+                assert 'adj_k_pct' in sql, 'adj_k_pct (shrinkage-adjusted) column not found'
+                assert 'shrink_weight' in sql or '50.0' in sql, \
+                    'shrinkage formula (pa / (pa + 50)) not found'
+                assert 'pa_count' in sql, 'pa_count column not found'
+                print('mart_batter_vs_pitch_archetype.sql structure and shrinkage OK')
+          - type: command_succeeds
+            name: mart_batter_vs_pitch_archetype.sql uses PA terminal filter
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/mart/mart_batter_vs_pitch_archetype.sql').read_text().lower()
+                assert 'plate_appearance_event is not null' in sql or \
+                       'plate_appearance_event is not null' in sql.replace(' ', ''), \
+                    'PA terminal filter (plate_appearance_event IS NOT NULL) not found'
+                print('mart_batter_vs_pitch_archetype.sql PA terminal filter present')
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args:
+              - parse
+              - --project-dir
+              - dbt
+
+      - id: integrate-archetype-lineup-features
+        kind: Task
+        description: >
+          Extend feature_pregame_lineup_features.sql with archetype-vs-starter matchup
+          features, then propagate them to feature_pregame_game_features.sql.
+
+          Read feature_pregame_lineup_features.sql lines 64–206 in full before editing
+          to confirm the current CTE chain and all existing LEFT JOIN patterns.
+
+          Current CTE chain:
+            lineups → lineup_slots → slot_stats_ranked → slot_pre_game →
+            lineup_agg → slot_platoon → [injury_agg if 7.I is done] → final
+
+          PART A — feature_pregame_lineup_features.sql
+
+          Step 1 — Add a new CTE that looks up the scheduled starter's pitch archetype
+          for the current game × side combination. The scheduled starter is already
+          available from {{ ref('stg_statsapi_probable_pitchers') }} (or whichever
+          CTE currently provides starter_id; read the model to confirm the source).
+
+          If feature_pregame_lineup_features does not directly reference a starter
+          source, add a starter CTE that pulls from
+          {{ ref('feature_pregame_starter_features') }} at the game_pk × home_away level
+          using the existing grain (one row per game_pk × pitcher_id × home_away). Use
+          the pitcher_id from that model to join to mart_pitcher_pitch_archetype.
+
+            starter_archetype as (
+                select
+                    sf.game_pk,
+                    sf.home_away,
+                    sf.pitcher_id,
+                    pa.pitch_archetype,
+                    pa.game_year    as archetype_season
+                from {{ ref('feature_pregame_starter_features') }} sf
+                left join {{ ref('mart_pitcher_pitch_archetype') }} pa
+                    on  pa.pitcher_id = sf.pitcher_id
+                    and pa.game_year  = year(sf.game_date) - 1  -- LEAKAGE GUARD: prior season
+            ),
+
+          Step 2 — Add a new CTE that computes per-slot batter performance vs. the
+          opposing starter's archetype. NOTE: "opposing" means the starter on the
+          other side — home lineup faces away starter, away lineup faces home starter.
+
+            slot_archetype_stats as (
+                select
+                    ls.game_pk,
+                    ls.home_away,
+                    ls.slot,
+                    ls.batter_id,
+                    bva.adj_woba    as batter_woba_vs_archetype,
+                    bva.adj_xwoba   as batter_xwoba_vs_archetype,
+                    bva.adj_k_pct   as batter_k_pct_vs_archetype,
+                    bva.adj_iso     as batter_iso_vs_archetype,
+                    coalesce(bva.pa_count, 0) as batter_archetype_pa
+                from lineup_slots ls
+                -- Get the opposing starter's archetype (opposite home_away side)
+                left join starter_archetype sa
+                    on  sa.game_pk   = ls.game_pk
+                    and sa.home_away = case
+                                          when ls.home_away = 'home' then 'away'
+                                          else 'home'
+                                      end
+                left join {{ ref('mart_batter_vs_pitch_archetype') }} bva
+                    on  bva.batter_id      = ls.batter_id
+                    and bva.pitch_archetype = sa.pitch_archetype
+                    and bva.game_year       = year(ls.official_date) - 1  -- LEAKAGE GUARD
+                where ls.batter_id is not null
+            ),
+
+          Step 3 — Add a new CTE that aggregates slot_archetype_stats to lineup level:
+
+            archetype_agg as (
+                select
+                    game_pk,
+                    home_away,
+                    round(avg(batter_woba_vs_archetype),  3) as lineup_woba_vs_starter_archetype,
+                    round(avg(batter_xwoba_vs_archetype), 3) as lineup_xwoba_vs_starter_archetype,
+                    round(avg(batter_k_pct_vs_archetype), 3) as lineup_k_pct_vs_starter_archetype,
+                    round(avg(batter_iso_vs_archetype),   3) as lineup_iso_vs_starter_archetype,
+                    round(avg(batter_archetype_pa),       0) as lineup_archetype_pa_coverage
+                from slot_archetype_stats
+                group by game_pk, home_away
+            ),
+
+          Step 4 — Add a CTE that surfaces the starter_pitch_archetype string for
+          the current side (used for display and downstream analysis):
+            This is already in starter_archetype; expose sa.pitch_archetype in the
+            final SELECT as starter_pitch_archetype.
+
+          Step 5 — LEFT JOIN archetype_agg and starter_archetype into the final CTE.
+          Add six new output columns:
+            aa.lineup_woba_vs_starter_archetype,
+            aa.lineup_xwoba_vs_starter_archetype,
+            aa.lineup_k_pct_vs_starter_archetype,
+            aa.lineup_iso_vs_starter_archetype,
+            aa.lineup_archetype_pa_coverage,
+            sa.pitch_archetype                      as starter_pitch_archetype
+
+          Verify row count is unchanged after the edit.
+
+          PART B — feature_pregame_game_features.sql
+
+          Read the home/away pivot pattern for feature_pregame_lineup_features
+          in feature_pregame_game_features.sql before editing. Add the six new
+          columns to the home and away SELECT lists:
+            home side: home_lineup_woba_vs_starter_archetype,
+                       home_lineup_xwoba_vs_starter_archetype,
+                       home_lineup_k_pct_vs_starter_archetype,
+                       home_lineup_iso_vs_starter_archetype,
+                       home_lineup_archetype_pa_coverage,
+                       home_starter_pitch_archetype
+            away side: away_lineup_woba_vs_starter_archetype,
+                       away_lineup_xwoba_vs_starter_archetype,
+                       away_lineup_k_pct_vs_starter_archetype,
+                       away_lineup_iso_vs_starter_archetype,
+                       away_lineup_archetype_pa_coverage,
+                       away_starter_pitch_archetype
+
+          Run dbtf parse to confirm both models compile before proceeding to Task 4.
+
+          NULL RATE EXPECTATION: Early-season (April/May) will have moderate null
+          rates for lineup_archetype_pa_coverage because rookies or call-ups may not
+          have prior-season archetype splits. The adj_* columns from shrinkage ensure
+          they fall back to league average rather than NULL — so
+          lineup_woba_vs_starter_archetype should have null rate < 5% for any game
+          with a confirmed lineup from 2017 onward.
+        dependsOn:
+          - build-batter-vs-archetype-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_lineup_features.sql references mart_batter_vs_pitch_archetype
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_lineup_features.sql').read_text()
+                assert 'mart_batter_vs_pitch_archetype' in sql, \
+                    'mart_batter_vs_pitch_archetype not referenced in feature_pregame_lineup_features'
+                assert 'lineup_woba_vs_starter_archetype' in sql, \
+                    'lineup_woba_vs_starter_archetype column not found'
+                assert 'lineup_k_pct_vs_starter_archetype' in sql, \
+                    'lineup_k_pct_vs_starter_archetype column not found'
+                assert 'starter_pitch_archetype' in sql, \
+                    'starter_pitch_archetype column not found'
+                print('feature_pregame_lineup_features.sql archetype columns OK')
+          - type: command_succeeds
+            name: feature_pregame_lineup_features.sql LEAKAGE GUARD on archetype join
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_lineup_features.sql').read_text().lower()
+                assert '- 1' in sql or '-1' in sql, \
+                    'Prior-season offset (year - 1) not found in archetype join LEAKAGE GUARD'
+                print('LEAKAGE GUARD prior-season offset present in archetype feature join')
+          - type: command_succeeds
+            name: feature_pregame_game_features.sql exposes home/away archetype columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+                assert 'home_lineup_woba_vs_starter_archetype' in sql, \
+                    'home_lineup_woba_vs_starter_archetype not found in feature_pregame_game_features'
+                assert 'away_lineup_woba_vs_starter_archetype' in sql, \
+                    'away_lineup_woba_vs_starter_archetype not found in feature_pregame_game_features'
+                assert 'home_starter_pitch_archetype' in sql, \
+                    'home_starter_pitch_archetype not found in feature_pregame_game_features'
+                print('feature_pregame_game_features.sql home/away archetype columns OK')
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args:
+              - parse
+              - --project-dir
+              - dbt
+
+      - id: retrain-and-document-impact
+        kind: Task
+        description: >
+          Retrain both models with the new archetype matchup features and document
+          the impact.
+
+          Step 1 — Confirm dbtf build succeeds for the two affected feature models:
+            dbtf build --select feature_pregame_lineup_features feature_pregame_game_features
+          (uses the dbtf alias, not dbt).
+
+          Step 2 — Run both training scripts (check betting_ml/ for canonical paths;
+          typically betting_ml/scripts/train_totals_model.py and
+          betting_ml/scripts/train_moneyline_model.py or similar).
+
+          Step 3 — Create betting_ml/evaluation/matchup_split_feature_impact.md with
+          the following sections:
+
+            ## Archetype Coverage
+            - Count of pitcher × season rows per archetype
+              (fastball_dominant / breaking_dominant / mixed)
+            - % of 2016-2025 game starters with a prior-season archetype available
+            - Null rate for lineup_woba_vs_starter_archetype in feature_pregame_game_features
+              for 2022-2025 regular season games
+
+            ## Feature Importance
+            - Permutation importance or SHAP value for lineup_woba_vs_starter_archetype,
+              lineup_k_pct_vs_starter_archetype in both models
+            - Compare vs. avg_woba_30d importance rank (does archetype matchup add
+              incremental signal beyond raw lineup quality?)
+
+            ## Cross-Validation ΔR² (or equivalent)
+            - OLS or XGBoost CV score baseline (without archetype features) vs.
+              with archetype features, for both total_runs and home_win targets
+            - ΔR² threshold for including in primary feature set: > 0.002
+              (consistent with Phase 4 notebook methodology)
+
+            ## Row Count Verification
+            - feature_pregame_lineup_features: row count before and after (must match)
+            - feature_pregame_game_features: row count before and after (must match)
+
+            ## Known Limitations
+            - Annual archetype snapshot: a pitcher who dramatically changed their
+              pitch mix mid-season (e.g., injury, mechanical adjustment) is not
+              captured until the next season's classification
+            - Card 7.F (Stuff+) can refine archetype thresholds and add arsenal
+              quality dimension (not just mix proportion); documented as a future
+              enhancement path
+            - Rookies and debut-season starters have no prior-season archetype;
+              treated as 'mixed' archetype in the feature model (null → fallback)
+        dependsOn:
+          - integrate-archetype-lineup-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: matchup split feature impact report
+            path: betting_ml/evaluation/matchup_split_feature_impact.md
+          - type: command_succeeds
+            name: matchup_split_feature_impact.md contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/matchup_split_feature_impact.md').read_text().lower()
+                assert 'archetype coverage' in text or 'coverage' in text, \
+                    'Coverage section not found in impact report'
+                assert 'feature importance' in text or 'importance' in text, \
+                    'Feature importance section not found in impact report'
+                assert 'row count' in text, \
+                    'Row count verification section not found in impact report'
+                print('matchup_split_feature_impact.md contains required sections')

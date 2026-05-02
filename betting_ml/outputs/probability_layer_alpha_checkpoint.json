@@ -3,9 +3,49 @@
   "alpha_scores": [
     {
       "alpha": 0.0,
-      "log_loss": NaN
+      "log_loss": 0.6832632713006547
+    },
+    {
+      "alpha": 0.1,
+      "log_loss": 0.6837438483850647
+    },
+    {
+      "alpha": 0.2,
+      "log_loss": 0.6854359183534344
+    },
+    {
+      "alpha": 0.3,
+      "log_loss": 0.6882565573445102
+    },
+    {
+      "alpha": 0.4,
+      "log_loss": 0.6921274179697354
+    },
+    {
+      "alpha": 0.5,
+      "log_loss": 0.6969767009401512
+    },
+    {
+      "alpha": 0.6,
+      "log_loss": 0.7027389243908144
+    },
+    {
+      "alpha": 0.7,
+      "log_loss": 0.7093539470041614
+    },
+    {
+      "alpha": 0.8,
+      "log_loss": 0.7167662402463829
+    },
+    {
+      "alpha": 0.9,
+      "log_loss": 0.7248761085253946
+    },
+    {
+      "alpha": 1.0,
+      "log_loss": 0.7336067839941405
     }
   ],
-  "n_tuning_games": 0,
-  "small_sample_warning": true
+  "n_tuning_games": 14126,
+  "small_sample_warning": false
 }
