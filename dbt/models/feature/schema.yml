@@ -982,3 +982,33 @@ models:
         description: True for fixed-roof dome parks; False for open/convertible.
         tests:
           - not_null
+
+  - name: feature_pregame_umpire_features
+    description: >
+      One row per game_pk with a known HP umpire. Trailing 3-year z-scores
+      for HP umpire tendency relative to league average. Leakage guard:
+      only games strictly before the target game date are used.
+      k_pct/bb_pct z-scores default to 0.0 (not in UmpScorecards by-game export).
+      Minimum sample gate: ump_games_sample < 10 sets all z-scores to 0.0.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+    columns:
+      - name: game_pk
+        tests: [not_null, unique]
+      - name: umpire_name
+        tests: [not_null]
+      - name: ump_games_sample
+        description: Number of trailing 3-year games used to compute the umpire averages.
+        tests: [not_null]
+      - name: ump_k_pct_zscore
+        description: K% z-score vs league average (0.0 until k_pct data is populated).
+      - name: ump_bb_pct_zscore
+        description: BB% z-score vs league average (0.0 until bb_pct data is populated).
+      - name: ump_runs_per_game_zscore
+        description: Total runs per game z-score vs league average.
+      - name: ump_run_impact_zscore
+        description: Total Run Impact z-score — direct measure of umpire zone effect on run expectancy.
+      - name: ump_accuracy_zscore
+        description: Accuracy Above Expected z-score — how accurately this umpire calls the zone.

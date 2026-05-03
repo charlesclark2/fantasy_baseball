@@ -1,22 +1,37 @@
 total_runs:
   model_name: ngboost_tuned
   eval_year: 2026
-  cv_mae: 3.5718
+  cv_mae: 3.4856
+  dist: LogNormal
+  n_estimators: 500
+  training_cutoff: "2021+"
   artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
-  selected_at: "2026-04-25T00:00:00Z"
+  selected_at: "2026-05-03T00:00:00Z"
+  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with Stuff+ arsenal features (Card 7.F). CV MAE 3.4856 vs prior 3.5232 (−0.038). Scores not directly comparable — different dataset cutoff. Prior model included weather features; Stuff+ features added in this run."
 
 run_differential:
   model_name: ngboost_tuned
   eval_year: 2026
-  cv_mae: 3.4195
+  cv_mae: 3.4586
+  dist: Normal
+  n_estimators: 500
+  training_cutoff: "2021+"
   artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
-  selected_at: "2026-04-25T00:00:00Z"
+  selected_at: "2026-05-03T00:00:00Z"
+  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with 267 features including Stuff+ and umpire features (Cards 7.F, 7.H). CV MAE 3.4586 vs prior 3.4195 — scores not directly comparable (different feature set and dataset cutoff). LogNormal excluded: run_diff can be negative, causing log(Y) divide-by-zero. Normal distribution only going forward."
 
 home_win:
   model_name: xgboost_sigmoid
   eval_year: 2026
   cv_brier: 0.2443
+  training_cutoff: "2021+"
   calibration_method: sigmoid
   calibration_split: 2025
-  artifact_path: betting_ml/models/home_win/xgboost_sigmoid_prod_calibrated.pkl
-  selected_at: "2026-04-25T00:00:00Z"
+  artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+  selected_at: "2026-05-03T00:00:00Z"
+  calibrator_path: betting_ml/models/home_win/calibrator.joblib
+  calibrator_method: platt
+  calibrator_fitted_at: "2026-05-02T20:36:19.682028+00:00"
+  calibrator_ece_before: 0.061385
+  calibrator_ece_after: 0.037009
+  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with Stuff+ arsenal features (Card 7.F). CV Brier 0.2443 vs pre-Stuff+ baseline 0.2443 — flat. Prior 2015+ retrain scored 0.2428 but CV scores are not comparable across dataset cutoff change. Calibrator fitted on prior model — refit recommended."

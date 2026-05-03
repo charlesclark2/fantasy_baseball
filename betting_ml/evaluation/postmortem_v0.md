@@ -95,12 +95,12 @@ edge residuals once ≥100 game results are available.
 
 ### Gap 3 — Total runs MAE barely improves over the naive baseline
 
-**What:** The v0 totals model achieves CV MAE = 3.5718 (NGBoost Normal,
+**What:** The v0 totals model achieved CV MAE = 3.5718 (NGBoost Normal,
 n_estimators=200), a ~0.7% improvement over the naive global mean baseline
-(approximately 3.59 runs). The tuned XGBoost achieves 3.5655 but is inviable
+(approximately 3.59 runs). The tuned XGBoost achieved 3.5655 but is inviable
 for production (no pred_dist).
 
-**Evidence:** From `model_registry.yaml`: `total_runs` cv_mae = 3.5718. The
+**Evidence:** From `model_registry.yaml`: `total_runs` cv_mae = 3.5718 (v0). The
 naive NB01 baseline is approximately 3.5–3.6 runs (global mean). The strongest
 individual feature correlations are park_run_factor (r = 0.122) and elevation
 (r = 0.111); no feature exceeds r = 0.13. Away pitching asymmetry: Card 3.9
@@ -120,10 +120,24 @@ absent.
 
 **Phase 7 priority:** P1 (weather features), P2 (umpires, away pitching investigation)
 
-**Recommended action:** Implement weather features first (temperature, wind
-speed/direction relative to park orientation, humidity for outdoor parks) — GPS
-coordinates already available in `stg_statsapi_venues`. Expected lift: 0.2–0.3
-runs MAE.
+**Resolution (Card 7.B — 2026-05-02):** Weather features implemented and backfilled
+for 2022–2026 seasons via Open-Meteo API (no key required). New features added to
+`feature_pregame_game_features`: `temp_f`, `wind_speed_mph`, `wind_direction_deg`,
+`wind_component_mph` (wind × cos(wind_dir − park_facing_degrees)), `humidity_pct`,
+`is_dome`. NGBoost grid search (4 configs: 2 n_estimators × 2 distributions) with
+all weather features included:
+
+| n_estimators | dist | CV MAE |
+|---|---|---|
+| 200 | Normal | 3.5282 |
+| 200 | LogNormal | 3.5389 |
+| 500 | Normal | 3.5271 |
+| 500 | LogNormal | **3.5232** |
+
+**Best config:** n_estimators=500, LogNormal, CV MAE = **3.5232** (improved from
+3.5718; −0.049, −1.4%). All four configs beat the 3.55 target. Model promoted to
+prod (`ngboost_tuned_prod.pkl`). Remaining gap vs. naive baseline is small;
+umpire and away-pitching features are the next expected sources of lift.
 
 ---
 
@@ -312,22 +326,14 @@ betting_ml/scripts/run_probability_layer.py`), under 15 minutes.
 
 ---
 
-### P1 — Weather features for outdoor parks (Card 4.B1)
+### ~~P1 — Weather features for outdoor parks (Card 7.B)~~ ✓ COMPLETE
 
-**Why P1:** Weather is the highest-signal missing feature for the totals model
-by a wide margin. Wind at outdoor parks (Wrigley Field, Fenway, Coors) produces
-documented ~2-run swings. Park factor (r=0.122) and elevation (r=0.111) are the
-strongest features in the current set — weather variables sit in the same signal
-range and are not correlated with anything already in the model. GPS coordinates
-are already available in `stg_statsapi_venues`. Expected MAE improvement: 0.2–0.3
-runs, which would close roughly half the gap to the naive baseline. Implementation
-is medium-high effort (weather API integration + dbt feature table) but the
-highest expected-lift single investment in Phase 7.
-
-- Add temperature, wind speed/direction (relative to park orientation), humidity
-  to the feature set for outdoor parks
-- Source from a weather API using GPS coordinates from `stg_statsapi_venues`
-- Add as features to `feature_pregame_game_features` via new dbt model
+**Completed 2026-05-02.** CV MAE improved from 3.5718 → 3.5232 (−0.049, −1.4%).
+Best config: NGBoost LogNormal, n_estimators=500. All 4 grid configs beat the
+3.55 target. Features added: `temp_f`, `wind_speed_mph`, `wind_direction_deg`,
+`wind_component_mph`, `humidity_pct`, `is_dome`. Data sourced from Open-Meteo
+(no API key); backfilled 2022–2026 via archive endpoint. See Gap 3 resolution
+above for full grid results.
 
 ---
 
@@ -481,6 +487,104 @@ directly into the existing feature assembly path as additional columns on
 - Retraining the current architecture on more data without fixing the
   feature/calibration gaps is not expected to produce market-beating predictions;
   this is explicitly a P3 item, not P1
+
+---
+
+---
+
+## Card 7.C Calibration Diagnostic
+
+**Data:** 1,053 completed 2026 games (2026-03-27 → 2026-05-01) with `has_odds = TRUE`,
+non-null `consensus_win_prob`, and non-null `home_team_won` from `mart_game_results`.
+The full dataset has 0 null `consensus_win_prob` values.
+
+### Reliability Diagram — consensus_win_prob (10 bins)
+
+| Bin | Bin Range | Count | Mean Predicted | Fraction Home Wins | Bias |
+|-----|-----------|-------|---------------|--------------------|------|
+| 1 | 0.3–0.4 | 47 | 0.3831 | 0.4255 | +0.0424 |
+| 2 | 0.4–0.5 | 381 | 0.4640 | 0.5354 | +0.0714 |
+| 3 | 0.5–0.6 | 496 | 0.5417 | 0.5343 | −0.0074 |
+| 4 | 0.6–0.7 | 129 | 0.6307 | 0.5426 | −0.0881 |
+
+Bins 0.0–0.3 and 0.7–1.0 contain 0 games — the model's output range in 2026 is 0.3–0.7.
+
+**Interpretation:** The model underpredicts in the below-50% range (actual home win rate
+is systematically *higher* than predicted when the model is skeptical of the home team)
+and overpredicts in the above-60% range (model is overconfident on strong home favorites).
+The bias shifts sign near 50%, but the magnitudes are highly non-linear: +0.07 at the
+0.4–0.5 bin, near-zero at 0.5–0.6, and −0.09 at 0.6–0.7.
+
+**ECE baseline (full 2026 dataset, 1,053 games):** 0.0420
+
+### Context Breakdown
+
+| Segment | N | Mean Predicted | Frac Home Wins | Bias | Mean H2H Edge |
+|---------|---|---------------|----------------|------|---------------|
+| All games | 1,053 | 0.5174 | 0.5309 | +0.0134 | −0.0158 |
+| Road fav conflict¹ | 47 | 0.5252 | 0.2979 | −0.2273 | high positive |
+| Non-road-fav | 1,006 | 0.5171 | 0.5400 | +0.0229 | — |
+| High-run parks² | 169 | 0.5149 | 0.5917 | +0.0768 | — |
+| Non-high-run | 884 | 0.5181 | 0.5215 | +0.0034 | — |
+| Afternoon games³ | 93 | 0.5177 | 0.2903 | −0.2274 | — |
+| Evening games | 960 | 0.5174 | 0.5552 | +0.0378 | — |
+
+¹ Road favorite conflict: market favors away (h2h_market_implied_prob < 0.50) but
+model favors home (consensus_win_prob > 0.50).
+² High-run parks: venue_id IN (19 Coors, 2602 Great American, 4705, 680, 2392).
+³ Afternoon games: game_datetime UTC hour < 20 (~4pm ET cutoff).
+
+**Bias nature:** The bias is **context-concentrated**, not uniform. Road-favorite conflicts
+and afternoon games show a severe −22% negative bias, meaning the model drastically
+over-estimates home win probability in these specific conditions. High-run parks
+show a moderate positive bias (+0.08). The overall mean bias (+0.013) masks these
+extremes. Evening/non-conflict games are approximately well-calibrated after accounting
+for the systematic 2026 distribution shift.
+
+### Calibration Method Recommendation
+
+**Recommendation: Platt scaling (logistic regression).** Although the reliability
+diagram's per-bin bias sizes are non-linear, empirical testing (see Card 7.C training
+results below) confirms Platt scaling achieves lower ECE than isotonic regression on
+the held-out 20% eval set. The primary miscalibration driver is a monotone systematic
+shift (the model outputs are compressed into 0.3–0.7 while the actual home win rate
+is roughly uniform at 0.53 across the full range), which a logistic-regression
+transformation handles efficiently. Isotonic regression is preferred for non-monotone
+curves, but the 2026 data does not exhibit that pattern at the volume available.
+
+### Calibrator Training Results
+
+**Train/eval split:** 80/20 chronological (no random shuffling).
+- Train: 842 rows, 2026-03-27 → 2026-04-28
+- Eval: 211 rows, 2026-04-28 → 2026-05-01
+
+| Method | ECE (eval set) |
+|--------|---------------|
+| consensus_win_prob (uncalibrated) | 0.0614 |
+| Platt scaling | **0.0370** |
+| Isotonic regression | 0.0416 |
+
+Selected: **Platt scaling** (lower ECE on held-out eval set).
+Artifact: `betting_ml/models/home_win/calibrator.joblib`
+Metadata: `betting_ml/models/home_win/calibrator_meta.json`
+
+ECE improvement: **0.0614 → 0.0370** (39.7% reduction on held-out eval set).
+
+### Mean H2H Edge — Calibrated vs. Baseline
+
+Evaluated on 986 has_odds 2026 rows with non-null `consensus_win_prob` and
+`h2h_market_implied_prob`:
+
+| Metric | NGBoost alone (v0) | consensus_win_prob (v0) | calibrated_win_prob (7.C) |
+|--------|-------------------|------------------------|--------------------------|
+| Mean h2h edge | −0.0361 | −0.0155 | **+0.0040** |
+| % positive edge | 22.95% | 36.1% | **49.6%** |
+
+The calibrator shifts mean edge from −0.0155 to +0.0040 and positive-edge rate from
+36.1% to 49.6% — nearly at market parity. The mean calibrated win probability is 0.5385
+vs. a mean market probability of 0.5345. This does not guarantee profitability but
+eliminates the systematic downward bias that was generating negative edge on the
+majority of predictions.
 
 ---
 

@@ -47,6 +47,8 @@ models:
       +materialized: table
     mart:
       +materialized: view
+    marts:
+      +materialized: view
     feature:
       +materialized: table
       +schema: betting_features

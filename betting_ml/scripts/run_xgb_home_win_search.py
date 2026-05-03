@@ -1,4 +1,4 @@
-"""Card 4.12c — Optuna TPE hyperparameter search for XGBoost (Platt) on home_win.
+"""XGBoost home_win — Optuna TPE hyperparameter search (Platt calibration).
 
 Runs 50 Optuna trials with the TPE sampler, persists the best Platt-calibrated
 XGBoost classifier, and writes:
@@ -248,7 +248,7 @@ def run_search() -> None:
         sys.exit(1)
 
     print(
-        "\nCard 4.12c search complete. "
+        "\nXGBoost home_win search complete. "
         "Run with --report-only to generate the markdown report."
     )
 
@@ -281,7 +281,7 @@ def _build_report(results: dict) -> str:
     improved_marker = " ✓" if results["improved"] else " ✗"
 
     lines = [
-        "# XGBoost home_win Hyperparameter Tuning (Card 4.12c)",
+        "# XGBoost home_win Hyperparameter Tuning (Optuna TPE)",
         "",
         "Optuna TPE sampler (seed=42), direction=minimize, n_trials=50.",
         "Platt calibration (sigmoid) applied within each CV fold via LogisticRegression.",
@@ -378,7 +378,7 @@ def _update_project_context(results: dict) -> None:
     improved_str = "improved ✓" if improved else "did not improve ✗"
 
     section = f"""
-#### Card 4.12c Results — XGBoost home_win Hyperparameter Tuning (Optuna TPE)
+#### XGBoost home_win — Hyperparameter Tuning Results (Optuna TPE)
 
 - **xgb_win_outcome_improved:** {improved} — XGBoost home_win Brier {improved_str} (tuned={tuned:.4f} vs baseline={baseline:.4f})
 - **Baseline Brier:** {baseline:.4f} | **Tuned Brier:** {tuned:.4f} | **Change:** {improvement_pct:+.2f}%
@@ -390,38 +390,20 @@ def _update_project_context(results: dict) -> None:
     with open(_CONTEXT_PATH) as f:
         content = f.read()
 
-    if "card 4.12c" in content.lower():
-        import re
+    import re
+    if re.search(r"#### XGBoost home_win — Hyperparameter Tuning Results", content):
         content = re.sub(
-            r"#### Card 4\.12c Results.*?(?=\n####|\Z)",
+            r"#### XGBoost home_win — Hyperparameter Tuning Results.*?(?=\n####|\Z)",
             section.lstrip("\n"),
             content,
             flags=re.DOTALL,
-        )
-    elif "#### Card 4.12b Results" in content:
-        content = content.replace(
-            "#### Card 4.12b Results",
-            section.lstrip("\n") + "\n#### Card 4.12b Results",
-            1,
-        )
-    elif "#### Card 4.12a Results" in content:
-        content = content.replace(
-            "#### Card 4.12a Results",
-            section.lstrip("\n") + "\n#### Card 4.12a Results",
-            1,
-        )
-    elif "#### Card 4.1 —" in content:
-        content = content.replace(
-            "#### Card 4.1 —",
-            section.lstrip("\n") + "\n#### Card 4.1 —",
-            1,
         )
     else:
         content += section
 
     with open(_CONTEXT_PATH, "w") as f:
         f.write(content)
-    print(f"Updated {_CONTEXT_PATH} with Card 4.12c results.")
+    print(f"Updated {_CONTEXT_PATH} with XGBoost home_win tuning results.")
 
 
 if __name__ == "__main__":

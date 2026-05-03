@@ -1,0 +1,340 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: full-model-retraining-post-feature-expansion
+  namespace: default
+spec:
+  description: >
+    Retrain all three production models (home_win XGBoost, total_runs NGBoost,
+    run_differential NGBoost) jointly on the complete Phase 7 feature set once
+    all Phase 7 feature expansion cards are complete, and refit the Platt
+    calibrator on the new home_win model weights.
+
+    BACKGROUND: Each Phase 7 feature card (7.B, 7.F, 7.G, 7.H, 7.I, 7.J, 7.K)
+    adds columns to feature_pregame_game_features and reruns feature_selection.py.
+    Running a full retrain after every card is wasteful (~1 hour per NGBoost run,
+    growing as features are added) and produces non-comparable CV scores across
+    runs (different feature sets, different null structures per run). The interim
+    retrains done in Card 7.F (Stuff+ features) established the 2021+ training
+    cutoff baseline; this card is the definitive joint retrain on the full
+    combined feature matrix.
+
+    This card is the prerequisite for Card 7.MB (model architecture evaluation)
+    because 7.MB uses the production-retrained models as the XGBoost/NGBoost
+    baseline. Comparing challenger architectures against interim per-feature-card
+    retrains would understate the baseline's true performance on the full feature
+    set.
+
+    CALIBRATOR NOTE: The Platt calibrator (calibrator.joblib) fitted in Card 7.C
+    and noted as stale after Card 7.F must be refit here on the new home_win model
+    weights before any production deployment of the v1 model.
+
+  acceptanceCriteria:
+    - description: >
+        validate_feature_selection.py completes on the full 2021+ dataset with
+        all Phase 7 features populated; feature_selection.md updated with final
+        retained feature count and list. Null-rate summary logged per feature
+        group (Stuff+, weather, umpires, injury, matchup, cluster).
+    - description: >
+        All three production model artifacts updated: betting_ml/models/home_win/,
+        betting_ml/models/total_runs/, betting_ml/models/run_differential/.
+        Artifact filenames follow existing naming convention (_tuned_2026.pkl or
+        _tuned_prod.pkl).
+    - description: >
+        Platt calibrator refit on new home_win model weights. calibrator.joblib
+        updated; model_registry.yaml calibrator_fitted_at timestamp updated.
+        ECE before/after recorded.
+    - description: >
+        model_registry.yaml updated for all three models with: new cv metrics,
+        artifact paths, selected_at = retrain date, training_cutoff = "2021+",
+        and notes summarizing feature counts and delta vs. Card 7.F baseline.
+    - description: >
+        betting_ml/evaluation/v1_retrain_impact.md created. Required sections:
+        feature set summary (retained count, new features vs. 7.F baseline),
+        before/after CV table for all three models, calibrator ECE before/after,
+        interpretation noting which feature groups contributed lift, and
+        recommendation for Card 7.MB.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: full-model-retraining-plan
+  namespace: default
+spec:
+  description: >
+    Five-task sequential DAG. Task 1 confirms feature coverage. Task 2 runs
+    feature selection on the full combined matrix. Tasks 3–5 retrain each model
+    and refit the calibrator. Task 6 documents results and updates the registry.
+  goalRef:
+    name: full-model-retraining-post-feature-expansion
+  graph:
+    nodes:
+
+      - id: verify-feature-coverage
+        kind: Task
+        description: >
+          Before retraining, verify that all Phase 7 feature columns are
+          populated at acceptable rates in feature_pregame_game_features for
+          the 2021+ training window.
+
+          Run via Snowflake MCP:
+            SELECT
+                game_year,
+                COUNT(*) as rows,
+                COUNT(home_weather_temp_f) as has_weather,
+                COUNT(home_starter_stuff_plus) as has_stuff_plus,
+                COUNT(home_umpire_k_rate) as has_umpire,
+                COUNT(home_starter_injury_flag) as has_injury,
+                COUNT(home_lineup_woba_vs_archetype) as has_archetype,
+                COUNT(home_lineup_wrc_vs_cluster) as has_cluster
+            FROM baseball_data.betting_features.feature_pregame_game_features
+            WHERE game_year >= 2021
+            GROUP BY game_year
+            ORDER BY game_year;
+
+          Flag any feature group with null rate > 25% for any season — do NOT
+          block the retrain for high null rates, but document them in
+          v1_retrain_impact.md so they inform interpretation of CV results.
+
+          If any Phase 7 feature column is entirely absent (schema gap), open a
+          blocking issue in the plan before proceeding to Task 2.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Feature coverage check runs without error
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print("Run feature coverage query via Snowflake MCP before proceeding.")
+                print("Verify: home_weather_temp_f, home_starter_stuff_plus,")
+                print("        home_umpire_k_rate, home_starter_injury_flag,")
+                print("        home_lineup_woba_vs_archetype, home_lineup_wrc_vs_cluster")
+                print("are all present as columns in feature_pregame_game_features.")
+
+      - id: run-feature-selection
+        kind: Task
+        description: >
+          Run validate_feature_selection.py on the full 2021+ dataset with all
+          Phase 7 features populated. This produces the definitive feature list
+          for the v1 models.
+
+          Command:
+            uv run python betting_ml/scripts/validate_feature_selection.py
+
+          Expected output: updated betting_ml/evaluation/feature_selection.md
+          with retained feature count, near-zero dropped list, and multicollinear
+          dropped list.
+
+          Compare retained count vs. Card 7.F baseline (267 retained). Document
+          the delta and which feature groups contributed new retained features.
+        dependsOn:
+          - verify-feature-coverage
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Feature selection output
+            path: betting_ml/evaluation/feature_selection.md
+          - type: command_succeeds
+            name: feature_selection.md has been updated after Card 7.F
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/feature_selection.md').read_text()
+                assert 'retained' in content.lower(), 'feature_selection.md does not document retained features'
+                print('feature_selection.md exists and contains retention results')
+
+      - id: retrain-home-win
+        kind: Task
+        description: >
+          Retrain the home_win XGBoost model on the full 2021+ feature set.
+
+          Command:
+            uv run python betting_ml/scripts/run_xgb_home_win_search.py
+
+          Record CV Brier score. Compare to Card 7.F baseline (0.2443).
+          CV scores are directly comparable this time — same dataset, different
+          feature set. A lower Brier indicates net lift from Phase 7 features
+          added after 7.F.
+        dependsOn:
+          - run-feature-selection
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Home win model artifact
+            path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+          - type: command_succeeds
+            name: home_win model artifact is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, pathlib
+                model = joblib.load('betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl')
+                print(f'home_win model loaded: {type(model).__name__}')
+
+      - id: retrain-total-runs
+        kind: Task
+        description: >
+          Retrain the total_runs NGBoost model on the full 2021+ feature set.
+
+          Command:
+            uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
+
+          Record CV MAE. Compare to Card 7.F baseline (3.4856).
+        dependsOn:
+          - run-feature-selection
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Total runs model artifact
+            path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+          - type: command_succeeds
+            name: total_runs model artifact is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, pathlib
+                model = joblib.load('betting_ml/models/total_runs/ngboost_tuned_prod.pkl')
+                print(f'total_runs model loaded: {type(model).__name__}')
+
+      - id: retrain-run-differential
+        kind: Task
+        description: >
+          Retrain the run_differential NGBoost model on the full 2021+ feature
+          set. LogNormal distribution must remain excluded (run_diff can be
+          negative; log(Y) divide-by-zero confirmed in Card 7.F).
+
+          Command:
+            uv run python betting_ml/scripts/run_ngboost_run_diff_search.py
+
+          Record CV MAE. Compare to Card 7.F baseline (3.4586).
+        dependsOn:
+          - run-feature-selection
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Run differential model artifact
+            path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
+          - type: command_succeeds
+            name: run_differential model artifact is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib, pathlib
+                model = joblib.load('betting_ml/models/run_differential/ngboost_tuned_prod.pkl')
+                print(f'run_differential model loaded: {type(model).__name__}')
+
+      - id: refit-calibrator-and-document
+        kind: Task
+        description: >
+          Refit the Platt calibrator on the new home_win model weights, update
+          model_registry.yaml for all three models, and produce v1_retrain_impact.md.
+
+          Step 1 — Refit calibrator:
+            uv run python betting_ml/scripts/train_calibrator.py
+          Record ECE before and after. Update calibrator_fitted_at in
+          model_registry.yaml.
+
+          Step 2 — Update model_registry.yaml for all three models:
+            - cv metrics (cv_brier / cv_mae) from this retrain
+            - artifact_path (confirm correct path for each model)
+            - selected_at = today's date in ISO 8601
+            - training_cutoff = "2021+"
+            - notes summarizing feature count, delta vs. Card 7.F baseline,
+              and any notable feature group contributions
+
+          Step 3 — Create betting_ml/evaluation/v1_retrain_impact.md:
+
+            ## v1 Model Retraining Impact Report
+            Date: <run date>
+            Card: 7.MA — Full Model Retraining After Feature Expansion
+
+            ### Feature Set Summary
+            | Feature group | Card | Retained features |
+            |---|---|---|
+            | Statcast rolling (baseline) | Phase 2/4 | <n> |
+            | Weather | 7.B | <n> |
+            | Stuff+ arsenal | 7.F | 13 |
+            | Umpire tendencies | 7.H | <n> |
+            | Injury / lineup status | 7.I | <n> |
+            | Pitch archetype matchup | 7.J | <n> |
+            | Pitcher clusters | 7.K | <n> |
+            | **Total retained** | — | **<n>** |
+
+            ### CV Results vs. Card 7.F Baseline (2021+ data, same training cutoff)
+            | Model | 7.F CV | 7.MA CV | Delta | Note |
+            |---|---|---|---|---|
+            | home_win (Brier) | 0.2443 | <new> | <delta> | Directly comparable |
+            | total_runs (MAE) | 3.4856 | <new> | <delta> | Directly comparable |
+            | run_differential (MAE) | 3.4586 | <new> | <delta> | Normal dist only |
+
+            ### Calibrator
+            | Metric | Before refit | After refit |
+            |---|---|---|
+            | ECE | <before> | <after> |
+
+            ### Interpretation
+            <narrative: which feature groups contributed lift, any surprises>
+
+            ### Recommendation for Card 7.MB
+            <whether to proceed with architecture evaluation, and which baseline
+            Brier score Card 7.MB should use>
+        dependsOn:
+          - retrain-home-win
+          - retrain-total-runs
+          - retrain-run-differential
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: v1 retrain impact document
+            path: betting_ml/evaluation/v1_retrain_impact.md
+          - type: command_succeeds
+            name: v1_retrain_impact.md contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/v1_retrain_impact.md').read_text().lower()
+                required = ['feature set', 'home_win', 'total_runs', 'run_differential',
+                            'calibrat', '7.f', 'interpretation']
+                missing = [s for s in required if s not in content]
+                assert not missing, f'v1_retrain_impact.md missing sections: {missing}'
+                print('v1_retrain_impact.md contains all required sections')
+          - type: command_succeeds
+            name: model_registry.yaml updated for all three models with selected_at
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, yaml
+                reg = yaml.safe_load(pathlib.Path('betting_ml/models/model_registry.yaml').read_text())
+                for key in ('home_win', 'total_runs', 'run_differential'):
+                    assert key in reg, f'{key} missing from model_registry.yaml'
+                    assert reg[key].get('selected_at'), f'{key}.selected_at not set'
+                    assert reg[key].get('training_cutoff') == '2021+', \
+                        f'{key}.training_cutoff must be "2021+"'
+                hw = reg['home_win']
+                assert hw.get('calibrator_fitted_at'), 'home_win.calibrator_fitted_at not updated'
+                print(
+                    f"model_registry.yaml OK — "
+                    f"home_win cv_brier={hw.get('cv_brier')}, "
+                    f"total_runs cv_mae={reg['total_runs'].get('cv_mae')}, "
+                    f"run_differential cv_mae={reg['run_differential'].get('cv_mae')}"
+                )

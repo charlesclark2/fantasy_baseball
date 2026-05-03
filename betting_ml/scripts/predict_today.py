@@ -17,6 +17,7 @@ import warnings
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -40,6 +41,30 @@ from betting_ml.models.total_runs_trainer import p_over_line
 # ---------------------------------------------------------------------------
 
 MODEL_VERSION = "v0"
+
+_CALIBRATOR_PATH = Path('betting_ml/models/home_win/calibrator.joblib')
+
+
+def _load_calibrator():
+    if _CALIBRATOR_PATH.exists():
+        return joblib.load(_CALIBRATOR_PATH)
+    print('[WARN] calibrator.joblib not found — using consensus_win_prob uncalibrated')
+    return None
+
+
+_calibrator = _load_calibrator()
+
+
+def _apply_calibrator(consensus_win_prob: float) -> float:
+    """Return calibrated win probability; falls back to consensus if no calibrator."""
+    if _calibrator is not None:
+        raw = np.array([consensus_win_prob])
+        try:
+            return float(_calibrator.predict_proba(raw.reshape(-1, 1))[0, 1])
+        except AttributeError:
+            return float(_calibrator.predict(raw)[0])
+    return consensus_win_prob
+
 
 _CREATE_PREDICTIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
@@ -65,7 +90,8 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     -- Core model outputs (populated for every game)
     p_home_win_ngboost      FLOAT,   -- NGBoost run-diff: P(home run diff > 0)
     p_home_win_classifier   FLOAT,   -- XGBoost + Platt calibration: P(home wins)
-    consensus_win_prob      FLOAT,   -- 0.5 * ngboost + 0.5 * classifier
+    consensus_win_prob      FLOAT,   -- 0.5 * ngboost + 0.5 * classifier (audit column)
+    calibrated_win_prob     FLOAT,   -- consensus_win_prob after in-season Platt recalibration
     pick                    VARCHAR(60),
     pred_total_runs         FLOAT,   -- NGBoost total-runs point estimate (loc)
     pred_total_runs_scale   FLOAT,   -- NGBoost total-runs uncertainty (scale / std dev)
@@ -98,7 +124,7 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
     has_odds,
-    p_home_win_ngboost, p_home_win_classifier, consensus_win_prob, pick,
+    p_home_win_ngboost, p_home_win_classifier, consensus_win_prob, calibrated_win_prob, pick,
     pred_total_runs, pred_total_runs_scale,
     pred_run_diff_loc, pred_run_diff_scale,
     p_over_ngboost,
@@ -111,7 +137,7 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
     %(home_team)s, %(away_team)s, %(home_team_abbrev)s, %(away_team_abbrev)s,
     %(has_odds)s,
-    %(p_home_win_ngboost)s, %(p_home_win_classifier)s, %(consensus_win_prob)s, %(pick)s,
+    %(p_home_win_ngboost)s, %(p_home_win_classifier)s, %(consensus_win_prob)s, %(calibrated_win_prob)s, %(pick)s,
     %(pred_total_runs)s, %(pred_total_runs_scale)s,
     %(pred_run_diff_loc)s, %(pred_run_diff_scale)s,
     %(p_over_ngboost)s,
@@ -171,12 +197,13 @@ def _write_predictions_to_snowflake(
         ngb_win  = float(p_home_win_ngb[i])
         clf_win  = float(p_home_win_clf[i])
         cons_win = ngb_win * 0.5 + clf_win * 0.5
+        cal_win  = _apply_calibrator(cons_win)
 
-        # H2H market values
+        # H2H market values — use calibrated_win_prob as the live edge input
         h2h_mkt_v  = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
-            h2h_edge  = compute_edge(cons_win, h2h_mkt_v)
-            h2h_post  = compute_posterior(cons_win, h2h_mkt_v, best_alpha)
+            h2h_edge  = compute_edge(cal_win, h2h_mkt_v)
+            h2h_post  = compute_posterior(cal_win, h2h_mkt_v, best_alpha)
             h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
         else:
             h2h_edge = h2h_post = h2h_kelly = None
@@ -216,6 +243,7 @@ def _write_predictions_to_snowflake(
             "p_home_win_ngboost":     ngb_win,
             "p_home_win_classifier":  clf_win,
             "consensus_win_prob":     cons_win,
+            "calibrated_win_prob":    cal_win,
             "pick":                   picks[i],
             "pred_total_runs":        float(loc_tot[i]),
             "pred_total_runs_scale":  float(scale_tot[i]),
@@ -651,7 +679,21 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    p_home_win_clf = clf_hw.predict_proba(X_vals)[:, 1]
+    # XGBoost requires an exact feature-count match. The weather features were added
+    # to feature_selection.md after the current prod model was trained; exclude them
+    # here until the model is retrained to include them.
+    _FEATURES_ADDED_AFTER_LAST_RETRAIN = frozenset({
+        'humidity_pct', 'temp_f', 'wind_component_mph', 'wind_direction_deg',
+    })
+    clf_cols = [c for c in X_today_imp.columns if c not in _FEATURES_ADDED_AFTER_LAST_RETRAIN]
+    _expected_n = clf_hw.base_clf.n_features_in_
+    if len(clf_cols) != _expected_n:
+        warnings.warn(
+            f"clf_hw expects {_expected_n} features but got {len(clf_cols)} after excluding "
+            f"known post-retrain features. Retraining needed."
+        )
+    X_clf = X_today_imp[clf_cols].values
+    p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
 
     # ------------------------------------------------------------------
     # Build output rows (has_odds=True games only, Card 4.13 schema)
@@ -678,16 +720,17 @@ def main() -> None:
             continue
 
         if pd.notna(h2h_mkt[i]):
-            mp  = float(p_home_win_ngb[i])
+            cons_prob = float(p_home_win_ngb[i]) * 0.5 + float(p_home_win_clf[i]) * 0.5
+            calibrated_win_prob = _apply_calibrator(cons_prob)
             mkt = float(h2h_mkt[i])
-            edge = compute_edge(mp, mkt)
+            edge = compute_edge(calibrated_win_prob, mkt)
             output_rows.append({
                 "game_key":             game_key,
                 "market":               "h2h",
-                "model_prob":           mp,
+                "model_prob":           calibrated_win_prob,
                 "market_implied_prob":  mkt,
                 "alpha":                best_alpha,
-                "posterior_prob":       compute_posterior(mp, mkt, best_alpha),
+                "posterior_prob":       compute_posterior(calibrated_win_prob, mkt, best_alpha),
                 "edge":                 edge,
                 "implied_kelly_fraction": compute_kelly(edge, mkt),
             })
@@ -746,23 +789,24 @@ def main() -> None:
         ngb_win = float(p_home_win_ngb[i])
         clf_win = float(p_home_win_clf[i])
         consensus_win = ngb_win * 0.5 + clf_win * 0.5
+        calibrated_win = _apply_calibrator(consensus_win)
 
-        if consensus_win >= 0.55:
-            pick = f"HOME ({consensus_win*100:.0f}%)"
-        elif consensus_win <= 0.45:
-            pick = f"AWAY ({(1-consensus_win)*100:.0f}%)"
-        elif consensus_win > 0.50:
-            pick = f"TOSS-UP (lean HOME {consensus_win*100:.0f}%)"
-        elif consensus_win < 0.50:
-            pick = f"TOSS-UP (lean AWAY {(1-consensus_win)*100:.0f}%)"
+        if calibrated_win >= 0.55:
+            pick = f"HOME ({calibrated_win*100:.0f}%)"
+        elif calibrated_win <= 0.45:
+            pick = f"AWAY ({(1-calibrated_win)*100:.0f}%)"
+        elif calibrated_win > 0.50:
+            pick = f"TOSS-UP (lean HOME {calibrated_win*100:.0f}%)"
+        elif calibrated_win < 0.50:
+            pick = f"TOSS-UP (lean AWAY {(1-calibrated_win)*100:.0f}%)"
         else:
             pick = "EVEN"
 
         picks_list.append(pick)
 
         _h2h_v = float(h2h_mkt[i]) if pd.notna(h2h_mkt[i]) else None
-        _edge_v = compute_edge(float(p_home_win_ngb[i]), _h2h_v) if (has_odds and _h2h_v is not None) else None
-        _post_v = compute_posterior(float(p_home_win_ngb[i]), _h2h_v, best_alpha) if (has_odds and _h2h_v is not None) else None
+        _edge_v = compute_edge(calibrated_win, _h2h_v) if (has_odds and _h2h_v is not None) else None
+        _post_v = compute_posterior(calibrated_win, _h2h_v, best_alpha) if (has_odds and _h2h_v is not None) else None
         _kelly_v = compute_kelly(_edge_v, _h2h_v) if (_edge_v is not None and _h2h_v is not None) else None
 
         rows_table.append({
@@ -772,6 +816,7 @@ def main() -> None:
             "Pred Total":         f"{pred_total[i]:.1f}",
             "Model Win% (NGBoost)": _pct(p_home_win_ngb[i]),
             "Classifier Win%":    _pct(p_home_win_clf[i]),
+            "Calibrated Win%":    _pct(calibrated_win),
             "Market Win%":        _pct(_h2h_v) if has_odds else "—",
             "Posterior%":         _pct(_post_v),
             "Edge":               f"{_edge_v*100:.1f}%" if _edge_v is not None else "—",

@@ -1,0 +1,227 @@
+version: 2
+
+models:
+
+  - name: fct_fangraphs_pitcher_arsenal_wide
+    description: >
+      Wide-format pitcher arsenal mart. Grain: one row per fg_pitcher_id × season.
+      Pivots stg_fangraphs__pitcher_arsenal from pitcher × pitch_type × season to
+      pitcher × season using conditional aggregation. Joins stg_fangraphs__stuff_plus
+      for overall_stuff_plus and mlbam_pitcher_id. Intended as the join target for
+      feature_pregame_starter_features to add arsenal quality signals to the ML feature layer.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_pitcher_id, season]
+    columns:
+      - name: fg_pitcher_id
+        description: FanGraphs pitcher ID. Primary grain key.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: overall_stuff_plus
+        description: >
+          Overall Stuff+ score from stg_fangraphs__stuff_plus. 100 = league average.
+          Leading indicator of arsenal quality that stabilizes faster than ERA/xwOBA.
+      - name: mlbam_pitcher_id
+        description: >
+          MLB Advanced Media (Statcast) player ID cast to INTEGER. Joins to
+          stg_statsapi_probable_pitchers.probable_pitcher_id and savant.ref_players.mlb_bam_id.
+      - name: primary_pitch_type
+        description: >
+          Pitch type with the highest usage percentage for this pitcher in this season
+          (from stg_fangraphs__pitcher_arsenal). E.g. 'FF', 'SL', 'CU'.
+      - name: fastball_pct
+        description: Combined usage fraction for fastball types (FF + SI + FC).
+      - name: breaking_pct
+        description: Combined usage fraction for breaking balls (SL + CU + KC + ST).
+      - name: offspeed_pct
+        description: Combined usage fraction for offspeed pitches (CH + FS).
+      - name: fastball_stuff_plus
+        description: >
+          Stuff+ for the primary fastball type (whichever of FF, SI, FC has the
+          highest usage). Null when pitcher throws no fastball-family pitch.
+      - name: slider_stuff_plus
+        description: Stuff+ for slider (SL). Null if pitcher does not throw a slider.
+      - name: curveball_stuff_plus
+        description: >
+          Stuff+ for curveball (CU). Null if pitcher does not throw a CU — note KC
+          (knuckle-curve) is tracked separately and does not populate this column.
+      - name: changeup_stuff_plus
+        description: Stuff+ for changeup (CH). Null if pitcher does not throw a changeup.
+      - name: avg_fastball_velo_mph
+        description: Average velocity (mph) of the primary fastball pitch type.
+      - name: max_pitch_break_in
+        description: Maximum absolute horizontal break (inches) across all pitch types thrown.
+
+  - name: fct_fangraphs_pitching_analytics
+    description: >
+      Analytics-ready pitching view joining Stuff+ leaderboard data with ZiPS
+      pre-season projections. Grain: one row per pitcher per season. Stuff+ is
+      the base; ZiPS enriches with projection metrics via LEFT JOIN (not all
+      pitchers will have ZiPS projections). Use proj_* columns as early-season
+      priors before Statcast rolling stats stabilize (~first 4-6 weeks).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_pitcher_id, season]
+    columns:
+      - name: fg_pitcher_id
+        description: FanGraphs pitcher ID. Primary grain key.
+        tests: [not_null]
+      - name: pitcher_name
+        description: Pitcher's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: stuff_plus
+        description: >
+          Overall Stuff+ score for the most recent ingested snapshot. Measures raw
+          pitch quality vs. league average (100). Leading indicator before ERA stabilizes.
+      - name: location_plus
+        description: Location+ score measuring command quality vs. league average (100).
+      - name: pitching_plus
+        description: Pitching+ score — composite of Stuff+ and Location+.
+      - name: primary_pitch_type
+        description: Dominant pitch category by usage — 'fastball', 'breaking', or 'offspeed'.
+      - name: fastball_pct
+        description: Fraction of pitches that are fastball-type (4-seam + sinker + cutter).
+      - name: breaking_pct
+        description: Fraction of pitches that are breaking balls (slider + curveball).
+      - name: offspeed_pct
+        description: Fraction of pitches that are offspeed (changeup + splitter).
+      - name: stuff_ip
+        description: Innings pitched in the Stuff+ snapshot window.
+      - name: proj_era
+        description: ZiPS projected ERA. Null if no ZiPS projection exists for this pitcher/season.
+      - name: proj_fip
+        description: ZiPS projected FIP. Preferred over proj_era as an expected-performance metric.
+      - name: proj_xfip
+        description: ZiPS projected xFIP. Null for most ZiPS CSV sources.
+      - name: proj_k_pct
+        description: ZiPS projected K%. Null for CSV-sourced ZiPS — use proj_k_per_9 instead.
+      - name: proj_bb_pct
+        description: ZiPS projected BB%. Null for CSV-sourced ZiPS — use proj_bb_per_9 instead.
+      - name: proj_k_per_9
+        description: ZiPS projected strikeouts per 9 innings.
+      - name: proj_bb_per_9
+        description: ZiPS projected walks per 9 innings.
+      - name: proj_ip
+        description: ZiPS projected innings pitched for the season.
+      - name: proj_war
+        description: ZiPS projected WAR.
+      - name: proj_whip
+        description: ZiPS projected WHIP.
+      - name: mlbam_pitcher_id
+        description: >
+          MLB Advanced Media (Statcast) player ID from ZiPS MLBAMID field.
+          Joins to savant.ref_players.mlb_bam_id. Null when pitcher is not in ZiPS.
+
+  - name: fct_fangraphs_hitting_analytics
+    description: >
+      Analytics-ready hitting view joining ZiPS pre-season projections with
+      in-season FanGraphs leaderboard rolling window snapshots. Grain: one row
+      per batter per season. ZiPS is the base; leaderboard enriches with rolling
+      in-season actuals via LEFT JOIN. Use proj_* columns as early-season priors
+      and rolling_wrc_plus_* columns to track in-season form.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_batter_id, season]
+    columns:
+      - name: fg_batter_id
+        description: FanGraphs batter ID. Primary grain key.
+        tests: [not_null]
+      - name: batter_name
+        description: Batter's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: proj_wrc_plus
+        description: ZiPS projected wRC+. League average is 100.
+      - name: proj_obp
+        description: ZiPS projected on-base percentage.
+      - name: proj_slg
+        description: ZiPS projected slugging percentage.
+      - name: proj_k_pct
+        description: ZiPS projected strikeout rate.
+      - name: proj_bb_pct
+        description: ZiPS projected walk rate.
+      - name: proj_pa
+        description: ZiPS projected plate appearances.
+      - name: proj_hr
+        description: ZiPS projected home runs.
+      - name: proj_war
+        description: ZiPS projected WAR.
+      - name: mlbam_batter_id
+        description: >
+          MLB Advanced Media (Statcast) player ID from ZiPS MLBAMID field.
+          Joins to savant.ref_players.mlb_bam_id.
+      - name: rolling_wrc_plus_7d
+        description: Most recently completed 7-day rolling window wRC+. High variance — use cautiously.
+      - name: rolling_wrc_plus_14d
+        description: Most recently completed 14-day rolling window wRC+.
+      - name: rolling_wrc_plus_30d
+        description: Most recently completed 30-day rolling window wRC+. Preferred early-season signal.
+      - name: season_wrc_plus
+        description: Season-to-date wRC+ from the full-season leaderboard window.
+      - name: rolling_obp_7d
+        description: 7-day rolling OBP from the most recently completed window.
+      - name: rolling_obp_14d
+        description: 14-day rolling OBP from the most recently completed window.
+      - name: rolling_obp_30d
+        description: 30-day rolling OBP from the most recently completed window.
+      - name: season_obp
+        description: Season-to-date OBP.
+      - name: rolling_pa_7d
+        description: Plate appearances in the most recent 7-day window.
+      - name: rolling_pa_14d
+        description: Plate appearances in the most recent 14-day window.
+      - name: rolling_pa_30d
+        description: Plate appearances in the most recent 30-day window.
+      - name: season_pa
+        description: Season-to-date plate appearances.
+
+  - name: dim_fangraphs_player_xref
+    description: >
+      Cross-reference table mapping FanGraphs player IDs to MLBAM (Statcast) IDs.
+      Grain: one row per unique FanGraphs player ID. Unions all four FanGraphs
+      sources (ZiPS pitching, ZiPS hitting, Stuff+, hitting leaderboard) to
+      capture every player FanGraphs tracks, including minor leaguers and prospects.
+      Minor league players use 'sa'-prefixed IDs (fg_milb_id); MLB players use
+      numeric IDs (fg_mlb_id). Use this table to join FanGraphs data to Statcast
+      data via mlbam_id → savant.ref_players.mlb_bam_id.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_player_id]
+    columns:
+      - name: fg_player_id
+        description: >
+          FanGraphs player ID as-is. Numeric for MLB players; 'sa'-prefixed for
+          minor league / prospect players (e.g., 'sa3014916'). Primary key.
+        tests: [not_null, unique]
+      - name: player_name
+        description: Player's full name. Sourced from any available FanGraphs feed.
+      - name: mlbam_id
+        description: >
+          MLB Advanced Media (Statcast) player ID. Joins to savant.ref_players.mlb_bam_id.
+          Present for players with any MLB appearance; may be null for deep prospects
+          not yet in the Statcast system.
+      - name: fg_mlb_id
+        description: >
+          FanGraphs MLB player ID (numeric only). Populated when the player has an
+          MLB FanGraphs profile. Null for minor league players.
+      - name: fg_milb_id
+        description: >
+          FanGraphs minor league player ID ('sa'-prefixed). Populated when the player
+          is tracked only in FanGraphs' minor league system. Null for MLB players.
+      - name: is_milb_player
+        description: True when fg_player_id is 'sa'-prefixed (minor league / prospect player).
+      - name: is_pitcher
+        description: True when the player appears in any FanGraphs pitching source (ZiPS pitching or Stuff+).
+      - name: is_batter
+        description: True when the player appears in any FanGraphs hitting source (ZiPS hitting or hitting leaderboard).

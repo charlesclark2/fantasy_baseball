@@ -22,7 +22,7 @@ FROM baseball_data.betting_features.feature_pregame_game_features f
 JOIN baseball_data.betting.mart_game_results r USING (game_pk)
 WHERE f.has_full_data = TRUE
   AND LEAST(f.home_games_played, f.away_games_played) >= {min_games_played}
-  AND f.game_year != 2020
+  AND f.game_year >= 2021
 """
 
 _TODAY_QUERY = """
@@ -37,7 +37,7 @@ WITH ranked AS (
          ROW_NUMBER() OVER (PARTITION BY home_team ORDER BY game_date DESC, game_pk DESC) AS rn
   FROM baseball_data.betting_features.feature_pregame_game_features
   WHERE home_team IN ({team_list})
-    AND game_year != 2020
+    AND game_year >= 2021
 )
 SELECT * FROM ranked WHERE rn = 1
 """
@@ -48,7 +48,7 @@ WITH ranked AS (
          ROW_NUMBER() OVER (PARTITION BY away_team ORDER BY game_date DESC, game_pk DESC) AS rn
   FROM baseball_data.betting_features.feature_pregame_game_features
   WHERE away_team IN ({team_list})
-    AND game_year != 2020
+    AND game_year >= 2021
 )
 SELECT * FROM ranked WHERE rn = 1
 """

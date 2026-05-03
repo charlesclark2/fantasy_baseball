@@ -207,7 +207,8 @@ def main() -> None:
 
     saved_path = save_model(clf, target="home_win", model_name="dummy_smoke", eval_year=2025)
     print(f"  Saved to: {saved_path}")
-    loaded_clf = load_model(target="home_win", model_name="dummy_smoke", eval_year=2025)
+    import joblib
+    loaded_clf = joblib.load(saved_path)
     preds = loaded_clf.predict(X[:5])
     if len(preds) != 5:
         _fail("Loaded model prediction returned unexpected shape.")

@@ -38,17 +38,12 @@ _REPORT_PATH = PROJECT_ROOT / "betting_ml" / "evaluation" / "hyperparameter_tuni
 _CONTEXT_PATH = PROJECT_ROOT / "project_context.md"
 
 _N_ESTIMATORS_GRID = [200, 500, 1000]
-_DIST_GRID = ["Normal", "LogNormal"]
-
-_LOGNORMAL_NOTE = (
-    "LogNormal distribution requires strictly positive targets; "
-    "run_differential contains negative values (home team can lose by any margin)."
-)
+_DIST_GRID = ["Normal"]  # LogNormal excluded: run_diff can be negative, log(Y) blows up
 
 
 def _get_dist_class(dist_name: str):
-    from ngboost.distns import Normal, LogNormal
-    return {"Normal": Normal, "LogNormal": LogNormal}[dist_name]
+    from ngboost.distns import Normal
+    return {"Normal": Normal}[dist_name]
 
 
 def _prepare_folds(df, feature_cols: list[str]) -> list[dict]:
@@ -104,53 +99,41 @@ def run_search() -> None:
     grid_results = []
     best_viable = None
 
-    print("\nRunning NGBoost grid search — run_differential (6 combinations)...")
-    print(f"{'n_estimators':>12}  {'dist':>10}  {'CV MAE':>10}  {'viable':>6}")
-    print("-" * 48)
+    print("\nRunning NGBoost grid search — run_differential (3 combinations)...")
+    print(f"{'n_estimators':>12}  {'dist':>10}  {'CV MAE':>10}")
+    print("-" * 38)
 
     for n_est in _N_ESTIMATORS_GRID:
         for dist_name in _DIST_GRID:
             dist_cls = _get_dist_class(dist_name)
             fold_maes = []
-            viable = True
-            lognormal_note = None
 
-            try:
-                for fold in folds:
-                    y_train = df.loc[fold["train_idx"], "run_differential"].values
-                    y_eval = df.loc[fold["eval_idx"], "run_differential"].values
+            for fold in folds:
+                y_train = df.loc[fold["train_idx"], "run_differential"].values
+                y_eval = df.loc[fold["eval_idx"], "run_differential"].values
 
-                    ngb = NGBRegressor(n_estimators=n_est, Dist=dist_cls, verbose=False)
-                    ngb.fit(fold["X_train"].values, y_train)
-                    y_pred = ngb.predict(fold["X_eval"].values)
+                ngb = NGBRegressor(n_estimators=n_est, Dist=dist_cls, verbose=False)
+                ngb.fit(fold["X_train"].values, y_train)
+                y_pred = ngb.predict(fold["X_eval"].values)
 
-                    if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
-                        raise ValueError(f"NaN/Inf predictions from {dist_name} dist")
+                if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
+                    raise ValueError(f"NaN/Inf predictions from {dist_name} dist")
 
-                    fold_maes.append(float(np.mean(np.abs(y_eval - y_pred))))
+                fold_maes.append(float(np.mean(np.abs(y_eval - y_pred))))
 
-                cv_mae = float(np.mean(fold_maes))
-
-            except Exception as exc:
-                viable = False
-                cv_mae = None
-                lognormal_note = _LOGNORMAL_NOTE if dist_name == "LogNormal" else str(exc)
-                fold_maes = []
+            cv_mae = float(np.mean(fold_maes))
 
             result = {
                 "n_estimators": n_est,
                 "dist": dist_name,
                 "cv_mae": cv_mae,
-                "viable": viable,
-                "lognormal_note": lognormal_note,
             }
             grid_results.append(result)
 
             mae_str = f"{cv_mae:.4f}" if cv_mae is not None else "null"
-            viable_str = "true" if viable else "false"
-            print(f"{n_est:>12}  {dist_name:>10}  {mae_str:>10}  {viable_str:>6}")
+            print(f"{n_est:>12}  {dist_name:>10}  {mae_str:>10}")
 
-            if viable and (best_viable is None or cv_mae < best_viable["cv_mae"]):
+            if best_viable is None or cv_mae < best_viable["cv_mae"]:
                 best_viable = result
 
     if best_viable is None:
@@ -163,10 +146,6 @@ def run_search() -> None:
     best_dist_cls = _get_dist_class(best_dist_name)
 
     print(f"\nBest config: n_estimators={best_n_est}, dist={best_dist_name}, CV MAE={best_cv_mae:.4f}")
-
-    lognormal_entries = [r for r in grid_results if r["dist"] == "LogNormal"]
-    lognormal_viable = any(r["viable"] for r in lognormal_entries)
-    lognormal_note_final = _LOGNORMAL_NOTE
 
     print("\nPersisting best model (retrain on last-fold training split)...")
     ngb_best = NGBRegressor(n_estimators=best_n_est, Dist=best_dist_cls, verbose=False)
@@ -189,8 +168,6 @@ def run_search() -> None:
         "best_n_estimators": best_n_est,
         "best_dist": best_dist_name,
         "best_cv_mae": best_cv_mae,
-        "lognormal_viable": lognormal_viable,
-        "lognormal_note": lognormal_note_final,
         "persisted_models": [
             {
                 "target": "run_differential",
@@ -221,30 +198,21 @@ def _build_report(results: dict) -> str:
         "",
         "## NGBoost run_differential Grid Search Results",
         "",
-        "Grid search over n_estimators ∈ {200, 500, 1000} and dist ∈ {Normal, LogNormal}.",
+        "Grid search over n_estimators ∈ {200, 500, 1000}, dist = Normal only.",
+        "LogNormal excluded: run_differential can be negative, causing log(Y) divide-by-zero.",
         "Evaluation metric: mean absolute error (MAE) across temporal CV splits (min_train_seasons=3).",
         "",
-        "| n_estimators | Dist | CV MAE | Viable |",
-        "|-------------|------|--------|--------|",
+        "| n_estimators | Dist | CV MAE |",
+        "|-------------|------|--------|",
     ]
 
     for r in grid:
         mae_str = f"{r['cv_mae']:.4f}" if r["cv_mae"] is not None else "N/A"
-        viable_str = "Yes" if r["viable"] else "No"
-        lines.append(f"| {r['n_estimators']} | {r['dist']} | {mae_str} | {viable_str} |")
+        lines.append(f"| {r['n_estimators']} | {r['dist']} | {mae_str} |")
 
     lines += [
         "",
-        f"**Best viable configuration:** n_estimators={best_n_est}, dist={best_dist}, CV MAE={best_cv_mae:.4f}",
-        "",
-        "## LogNormal Distribution Note",
-        "",
-        "LogNormal is **not viable** for run_differential. The LogNormal distribution requires "
-        "strictly positive support (values > 0), but run_differential contains negative values — "
-        "the home team can lose by any margin, so the target ranges from large negative numbers "
-        "to large positive numbers. Attempting to fit NGBoost with LogNormal on negative targets "
-        "causes numerical failures or NaN predictions. All three LogNormal grid entries are "
-        "recorded as `viable=false` with the note: _\"" + _LOGNORMAL_NOTE + "\"_",
+        f"**Best configuration:** n_estimators={best_n_est}, dist={best_dist}, CV MAE={best_cv_mae:.4f}",
         "",
         "## Best NGBoost Configuration",
         "",

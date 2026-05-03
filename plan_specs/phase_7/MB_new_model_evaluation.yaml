@@ -22,10 +22,12 @@ spec:
     categoricals (pitch_archetype, cluster_id) where LightGBM and CatBoost have
     structural advantages over XGBoost.
 
-    TRIGGER: Run this evaluation after all Phase 7 P2 feature cards (7.A–7.K)
-    are merged into the feature store — or at end of the 2026 regular season
-    (whichever comes first). The time-based fallback prevents indefinite deferral
-    if any P2 card stalls.
+    TRIGGER: Run this evaluation after Card 7.MA (full model retraining on the
+    complete Phase 7 feature set) is complete — or at end of the 2026 regular
+    season (whichever comes first). Card 7.MA must precede this card so that
+    the architecture comparison uses the production-ready retrained models as the
+    baseline, not the interim per-feature-card retrains. The time-based fallback
+    prevents indefinite deferral if any P2 card stalls.
 
     CANDIDATE MODELS:
       1. XGBoost + NGBoost (current — the baseline to beat)

@@ -80,6 +80,10 @@ weather as (
     select * from {{ ref('feature_pregame_weather_features') }}
 ),
 
+umpire_feats as (
+    select * from {{ ref('feature_pregame_umpire_features') }}
+),
+
 game_context as (
     select
         game_pk,
@@ -250,6 +254,18 @@ final as (
         h_st.avg_ip_season                      as home_starter_avg_ip_season,
         h_st.has_ip_history                     as home_starter_has_ip_history,
 
+        -- ── Home starter: FanGraphs Stuff+ arsenal features (Card 7.F) ────────
+        h_st.starter_stuff_plus                 as home_starter_stuff_plus,
+        h_st.starter_primary_pitch_type         as home_starter_primary_pitch_type,
+        h_st.starter_fastball_pct               as home_starter_fastball_pct,
+        h_st.starter_breaking_pct               as home_starter_breaking_pct,
+        h_st.starter_offspeed_pct               as home_starter_offspeed_pct,
+        h_st.starter_fastball_stuff_plus        as home_starter_fastball_stuff_plus,
+        h_st.starter_slider_stuff_plus          as home_starter_slider_stuff_plus,
+        h_st.starter_curveball_stuff_plus       as home_starter_curveball_stuff_plus,
+        h_st.starter_changeup_stuff_plus        as home_starter_changeup_stuff_plus,
+        h_st.starter_avg_fastball_velo          as home_starter_avg_fastball_velo,
+
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
         a_st.pitcher_name                       as away_starter_pitcher_name,
@@ -304,6 +320,18 @@ final as (
         a_st.avg_ip_last_3                      as away_starter_avg_ip_last_3,
         a_st.avg_ip_season                      as away_starter_avg_ip_season,
         a_st.has_ip_history                     as away_starter_has_ip_history,
+
+        -- ── Away starter: FanGraphs Stuff+ arsenal features (Card 7.F) ────────
+        a_st.starter_stuff_plus                 as away_starter_stuff_plus,
+        a_st.starter_primary_pitch_type         as away_starter_primary_pitch_type,
+        a_st.starter_fastball_pct               as away_starter_fastball_pct,
+        a_st.starter_breaking_pct               as away_starter_breaking_pct,
+        a_st.starter_offspeed_pct               as away_starter_offspeed_pct,
+        a_st.starter_fastball_stuff_plus        as away_starter_fastball_stuff_plus,
+        a_st.starter_slider_stuff_plus          as away_starter_slider_stuff_plus,
+        a_st.starter_curveball_stuff_plus       as away_starter_curveball_stuff_plus,
+        a_st.starter_changeup_stuff_plus        as away_starter_changeup_stuff_plus,
+        a_st.starter_avg_fastball_velo          as away_starter_avg_fastball_velo,
 
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
@@ -612,7 +640,18 @@ final as (
         wpf.wind_direction_deg,
         wpf.wind_component_mph,
         wpf.humidity_pct,
-        wpf.is_dome
+        wpf.is_dome,
+
+        -- ── HP umpire tendency features (Card 7.H) ────────────────────────────
+        -- Trailing 3-year z-scores relative to league average.
+        -- NULL when no HP umpire is listed for the game.
+        uf.umpire_name,
+        uf.ump_games_sample,
+        uf.ump_k_pct_zscore,
+        uf.ump_bb_pct_zscore,
+        uf.ump_runs_per_game_zscore,
+        uf.ump_run_impact_zscore,
+        uf.ump_accuracy_zscore
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -631,6 +670,8 @@ final as (
         on  hwr.game_pk = g.game_pk
     left join weather wpf
         on  wpf.game_pk = g.game_pk
+    left join umpire_feats uf
+        on  uf.game_pk = g.game_pk
 )
 
 select * from final

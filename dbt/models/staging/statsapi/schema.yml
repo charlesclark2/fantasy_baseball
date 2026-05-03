@@ -1,0 +1,44 @@
+version: 2
+
+models:
+
+  - name: stg_statsapi_umpire_game_log
+    description: >
+      One row per game_pk. HP umpire assignment and per-game tendency metrics
+      from UmpScorecards (historical) and MLB Stats API (daily assignment).
+      Deduplicates to the most authoritative row: UmpScorecards rows (with
+      tendency metrics) are preferred over Stats API rows (assignment only).
+    columns:
+      - name: game_pk
+        description: MLB game identifier. Primary key.
+        tests:
+          - unique
+          - not_null
+      - name: game_date
+        description: Date the game was played.
+        tests: [not_null]
+      - name: season
+        description: Season year.
+        tests: [not_null]
+      - name: umpire_name
+        description: HP umpire full name.
+        tests: [not_null]
+      - name: umpire_id
+        description: MLB Stats API umpire ID. Null for rows sourced from UmpScorecards only.
+      - name: k_pct
+        description: Game-level K% (not available in by-game UmpScorecards export; NULL).
+      - name: bb_pct
+        description: Game-level BB% (not available in by-game UmpScorecards export; NULL).
+      - name: total_runs
+        description: Total runs scored (home + away). Null for Stats API-only rows.
+      - name: called_strikes_above_avg
+        description: Correct Calls Above Expected from UmpScorecards.
+      - name: run_expectancy_delta
+        description: Favor (Home) run expectancy impact from UmpScorecards.
+      - name: total_run_impact
+        description: Total Run Impact from UmpScorecards.
+      - name: accuracy_above_expected
+        description: Accuracy Above Expected from UmpScorecards.
+      - name: data_source
+        description: "'umpscorecards' or 'statsapi'."
+        tests: [not_null]

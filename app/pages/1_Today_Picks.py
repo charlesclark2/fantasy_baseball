@@ -326,7 +326,8 @@ with col_r1:
             else:
                 st.success("Predictions refreshed.")
         else:
-            st.error(f"predict_today.py failed (exit {result.returncode}):\n{result.stderr[:500]}")
+            st.error(f"predict_today.py failed (exit {result.returncode})")
+            st.code(result.stderr, language="text")
 with col_r2:
     if st.button("Refresh Lineups & Odds Only"):
         _scripts_dir = str(_PROJECT_ROOT / "scripts")
@@ -365,7 +366,8 @@ with col_r2:
             with st.spinner(f"{_label}…"):
                 _r = subprocess.run(_cmd, capture_output=True, text=True, cwd=_cwd)
             if _r.returncode != 0:
-                st.error(f"{_label} failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+                st.error(f"{_label} failed (exit {_r.returncode})")
+                st.code(_r.stderr, language="text")
                 _failed = True
                 break
             if _is_historical and "lines" in _label:
@@ -400,7 +402,8 @@ with col_r2:
                         capture_output=True, text=True,
                     )
                 if _r.returncode != 0:
-                    st.error(f"dbt build failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+                    st.error(f"dbt build failed (exit {_r.returncode})")
+                    st.code(_r.stderr, language="text")
                 else:
                     with st.spinner("Refreshing predictions with confirmed lineup data…"):
                         _r = subprocess.run(
@@ -410,7 +413,8 @@ with col_r2:
                             cwd=str(_PROJECT_ROOT),
                         )
                     if _r.returncode != 0:
-                        st.error(f"predict_today.py failed (exit {_r.returncode}):\n{_r.stderr[:500]}")
+                        st.error(f"predict_today.py failed (exit {_r.returncode})")
+                        st.code(_r.stderr, language="text")
                     else:
                         _no_games = (
                             "No games found" in _r.stdout

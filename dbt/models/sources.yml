@@ -113,6 +113,14 @@ sources:
             description: Calendar date on which this venue record was last ingested.
             tests: [not_null]
 
+      - name: umpire_game_log
+        description: >
+          One row per game_pk. HP umpire assignment and per-game tendency
+          metrics. Loaded by two scripts: ingest_umpires_historical.py
+          (UmpScorecards bulk export, annual refresh) and ingest_umpires.py
+          (MLB Stats API daily assignment, morning of game). UmpScorecards rows
+          carry tendency metrics; Stats API rows carry only umpire_name/id.
+
       - name: weather_raw
         description: >
           One row per game_pk × venue_id. Stores weather conditions at or near
@@ -452,3 +460,41 @@ sources:
             description: >
               Season year of the player's most recent MLB appearance. Stored as
               float in source; cast to integer in staging.
+
+  - name: fangraphs
+    database: baseball_data
+    schema: fangraphs
+    description: >
+      Raw FanGraphs data ingested via scripts/ingest_fangraphs_*.py.
+      All tables are append-only; full API/CSV response payloads are stored
+      in raw_json VARIANT. Ingest scripts use curl_cffi to bypass Cloudflare
+      TLS fingerprinting.
+
+    tables:
+      - name: fg_stuff_plus_raw
+        description: >
+          Raw append-only table for FanGraphs Stuff+ pitching leaderboard (type=36).
+          Grain: one row per ingestion run × pitcher × rolling window. Full API
+          response stored in raw_json VARIANT. Stuff+ available from 2020 onward.
+          Rolling windows: 14d, 30d, and full season.
+
+      - name: fg_zips_pitching_raw
+        description: >
+          Raw append-only table for FanGraphs ZiPS pitching projections.
+          Grain: one row per ingestion run × pitcher × projection_type.
+          Pre-season full projection data loaded from manually-downloaded CSVs
+          (source_endpoint = 'csv_manual_download'); in-season rolling ZiPS
+          loaded via API.
+
+      - name: fg_zips_hitting_raw
+        description: >
+          Raw append-only table for FanGraphs ZiPS hitting projections.
+          Grain: one row per ingestion run × batter × projection_type.
+          Pre-season full projection data loaded from manually-downloaded CSVs;
+          in-season rolling ZiPS loaded via API.
+
+      - name: fg_hitting_leaderboard_raw
+        description: >
+          Raw append-only table for FanGraphs hitting leaderboard snapshots
+          (Dashboard type=8). Grain: one row per ingestion run × batter ×
+          window_type × window date range. Window types: 7d, 14d, 30d, season.

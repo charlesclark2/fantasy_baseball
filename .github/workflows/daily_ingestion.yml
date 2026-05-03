@@ -77,6 +77,42 @@ jobs:
           OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
         run: uv run ingest_weather.py --date $(date +%Y-%m-%d)
 
+      - name: Ingest HP umpire assignments for today
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run ingest_umpires.py --date $(date +%Y-%m-%d)
+
+      # FanGraphs: Stuff+ runs weekly (Sundays) — rolling 14d/30d/season windows
+      - name: Ingest FanGraphs Stuff+ (weekly, Sundays only)
+        if: ${{ github.event_name == 'workflow_dispatch' || format('{0}', github.event.schedule) == '0 12 * * 0' || startsWith(github.event.schedule, '0 12 * * 0') }}
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run ingest_fangraphs_stuff_plus.py --season $(date +%Y) --window-types 14d,30d,season
+
+      # FanGraphs: Hitting leaderboard runs daily during the season
+      - name: Ingest FanGraphs hitting leaderboard (daily)
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run ingest_fangraphs_hitting_leaderboard.py --season $(date +%Y) --window-types season
+
+      # FanGraphs ZiPS: runs Feb 1 and Jul 1 — controlled by manual dispatch or cron schedule
+      # To load: uv run python scripts/ingest_fangraphs_zips_csv.py --season YYYY
+
   dbt-build:
     needs: ingest
     uses: ./.github/workflows/dbt_daily_build.yml

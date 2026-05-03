@@ -56,9 +56,20 @@ spec:
         home_starter_breaking_pct, away_starter_breaking_pct, home_starter_primary_pitch_type,
         away_starter_primary_pitch_type. dbtf build passes.
     - description: >
+        betting_ml/utils/data_loader.py training query filters to game_year >= 2021
+        (not game_year != 2020). Pre-2020 rows are excluded because Stuff+, weather,
+        and other post-2020 features are systematically NULL for that era, creating a
+        distribution shift between training and production. This applies to _QUERY,
+        _LATEST_HOME_QUERY, and _LATEST_AWAY_QUERY.
+    - description: >
+        All three production models (home_win XGBoost, total_runs NGBoost,
+        run_differential NGBoost) are retrained on the 2021+ dataset and
+        model_registry.yaml is updated with new cv metrics, artifact paths, and
+        selected_at timestamps for all three.
+    - description: >
         CV impact documented in betting_ml/evaluation/stuff_plus_feature_impact.md
-        with before/after Brier score (home_win) and MAE (total_runs). Even if no
-        improvement, results must be recorded.
+        with before/after Brier score (home_win) and MAE (total_runs and
+        run_differential). Even if no improvement, results must be recorded.
 
 ---
 apiVersion: planspec.io/v1alpha1
@@ -324,11 +335,21 @@ spec:
       - id: retrain-and-document-impact
         kind: Task
         description: >
-          Retrain home_win and total_runs models with the new Stuff+ arsenal features
-          and document CV impact regardless of outcome.
+          Retrain all three production models (home_win, total_runs, run_differential)
+          on the cleaned 2021+ dataset with the new Stuff+ arsenal features, and
+          document CV impact regardless of outcome.
+
+          Step 0 — Update training data cutoff in data_loader.py.
+          Change the WHERE clause in _QUERY, _LATEST_HOME_QUERY, and _LATEST_AWAY_QUERY
+          from `game_year != 2020` to `game_year >= 2021`. Rationale: 2015–2019 rows
+          have 0% Stuff+ population (and partial weather/FanGraphs coverage), creating
+          a distribution shift between training (NULL = feature didn't exist) and
+          production (NULL = rare edge case). Filtering to 2021+ drops ~11,700 rows
+          (from ~24,000 to ~12,600) but ensures every training row has the same feature
+          coverage as production.
 
           Step 1 — Confirm feature_selection.md reflects the new columns.
-          Run betting_ml/scripts/run_feature_selection.py (or equivalent) to evaluate
+          Run betting_ml/scripts/validate_feature_selection.py to evaluate
           whether any of the 20 new arsenal columns pass the corr_threshold=0.02 filter.
           If they do, they will appear in the retained feature list automatically.
           If none pass, note this in the impact document — Stuff+ may require the
@@ -340,45 +361,75 @@ spec:
           Step 3 — Retrain total_runs model:
             uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
 
-          Step 4 — Create betting_ml/evaluation/stuff_plus_feature_impact.md with:
+          Step 4 — Retrain run_differential model:
+            uv run python betting_ml/scripts/run_ngboost_run_diff_search.py
+
+          Step 5 — Update betting_ml/evaluation/stuff_plus_feature_impact.md with
+          results for all three models:
 
             ## Stuff+ Feature Impact Report
             Date: <run date>
+
+            ### Training data cutoff change
+            Changed from game_year != 2020 to game_year >= 2021.
+            Pre-2020 rows dropped: ~11,700 (0% Stuff+ population).
+            Post-2021 rows retained: ~12,600 (~99.8% Stuff+ population).
 
             ### Features retained after selection
             List any arsenal columns that passed corr_threshold. If none, document
             the correlation values observed and recommend threshold adjustment.
 
             ### home_win model
-            | Metric     | Before Stuff+ | After Stuff+ |
-            |------------|---------------|--------------|
-            | CV Brier   | <from model_registry.yaml> | <new value> |
-            | CV AUC     | ...           | ...          |
+            | Metric   | Before (2015+) | After (2021+) |
+            |----------|----------------|---------------|
+            | CV Brier | <prior>        | <new value>   |
 
             ### total_runs model
-            | Metric  | Before Stuff+ | After Stuff+ |
-            |---------|---------------|--------------|
-            | CV MAE  | <from model_registry.yaml> | <new value> |
+            | Metric | Before (2015+) | After (2021+) |
+            |--------|----------------|---------------|
+            | CV MAE | <prior>        | <new value>   |
+
+            ### run_differential model
+            | Metric | Before (2015+) | After (2021+) |
+            |--------|----------------|---------------|
+            | CV MAE | <prior>        | <new value>   |
 
             ### Interpretation
-            - If CV Brier improves: update model_registry.yaml artifact path to new pkl
-            - If no improvement: document why (low correlation values, few retained features)
-              and flag for Card 7.M (feature selection refresh with raised corr_threshold)
+            - If CV metrics improve: update model_registry.yaml for all three models.
+            - If no improvement: document why and flag for Card 7.M.
 
-          Step 5 — If models improved, update model_registry.yaml:
+          Step 6 — Update model_registry.yaml for all three models if metrics improved:
             home_win.cv_brier, home_win.artifact_path, home_win.selected_at
             total_runs.cv_mae, total_runs.artifact_path, total_runs.selected_at
+            run_differential.cv_mae, run_differential.artifact_path, run_differential.selected_at
 
-          USER NOTE: Retraining scripts take 10–20 minutes. The user must execute
-          Steps 2 and 3 and report CV results before model_registry.yaml is updated.
+          USER NOTE: Retraining scripts take 10–20 minutes each. The user must execute
+          Steps 2–4 and report CV results before model_registry.yaml is updated.
         dependsOn:
           - integrate-arsenal-features
         acceptanceCriteria:
+          - type: command_succeeds
+            name: data_loader.py uses game_year >= 2021 in all training queries
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/utils/data_loader.py').read_text()
+                assert 'game_year >= 2021' in src, (
+                    'data_loader.py still uses game_year != 2020 — must be >= 2021'
+                )
+                assert 'game_year != 2020' not in src, (
+                    'Old game_year != 2020 filter still present in data_loader.py'
+                )
+                print('data_loader.py: game_year >= 2021 filter confirmed in all queries')
           - type: artifact_exists
             name: CV impact document
             path: betting_ml/evaluation/stuff_plus_feature_impact.md
           - type: command_succeeds
-            name: Impact document contains required sections
+            name: Impact document contains required sections for all three models
             command: uv
             args:
               - run
@@ -391,15 +442,17 @@ spec:
                     'features retained',
                     'home_win',
                     'total_runs',
+                    'run_differential',
                     'brier',
                     'mae',
                     'interpretation',
+                    '2021',
                 ]
                 missing = [s for s in required_sections if s not in content]
                 assert not missing, f'Impact doc missing sections: {missing}'
                 print('stuff_plus_feature_impact.md contains all required sections')
           - type: command_succeeds
-            name: model_registry.yaml updated if models improved
+            name: model_registry.yaml updated for all three models
             command: uv
             args:
               - run
@@ -408,11 +461,18 @@ spec:
               - |-
                 import pathlib, yaml
                 reg = yaml.safe_load(pathlib.Path('betting_ml/models/model_registry.yaml').read_text())
-                assert 'home_win' in reg, 'home_win entry missing from model_registry.yaml'
-                assert 'total_runs' in reg, 'total_runs entry missing from model_registry.yaml'
+                for key in ('home_win', 'total_runs', 'run_differential'):
+                    assert key in reg, f'{key} entry missing from model_registry.yaml'
+                    assert reg[key].get('selected_at') is not None, f'{key}.selected_at not set'
                 hw = reg['home_win']
                 tr = reg['total_runs']
+                rd = reg['run_differential']
                 assert hw.get('cv_brier') is not None, 'home_win.cv_brier is null'
                 assert tr.get('cv_mae') is not None, 'total_runs.cv_mae is null'
-                assert hw.get('selected_at') is not None, 'home_win.selected_at not set'
-                print(f"model_registry.yaml OK — home_win cv_brier={hw['cv_brier']}, total_runs cv_mae={tr['cv_mae']}")
+                assert rd.get('cv_mae') is not None, 'run_differential.cv_mae is null'
+                print(
+                    f"model_registry.yaml OK — "
+                    f"home_win cv_brier={hw['cv_brier']}, "
+                    f"total_runs cv_mae={tr['cv_mae']}, "
+                    f"run_differential cv_mae={rd['cv_mae']}"
+                )

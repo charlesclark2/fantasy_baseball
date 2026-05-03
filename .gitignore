@@ -27,3 +27,6 @@ betting_ml/outputs/probability_outputs*.parquet
 
 # Snowflake DDL provisioned copy (contains real secret values — never commit)
 scripts/ddl/snowflake_task_dag_provisioned.sql
+
+# Raw data files (large binaries, Excel exports — not tracked in git)
+scripts/raw_files/

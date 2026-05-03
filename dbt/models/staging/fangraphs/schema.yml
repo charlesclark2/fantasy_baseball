@@ -1,0 +1,281 @@
+version: 2
+
+models:
+
+  - name: stg_fangraphs__pitcher_arsenal
+    description: >
+      Per-pitch-type arsenal staging model. Grain: one row per pitcher × pitch_type
+      × season, deduplicated to the most recently ingested load. Unpivots the wide
+      FanGraphs Stuff+ raw payload into one row per pitch type so pitch-level quality
+      metrics can be joined and aggregated independently. Note: FanGraphs uses 'FA'
+      for 4-seam usage tracking (pfx system) but 'FF' for 4-seam Stuff+ scoring
+      (sp system); this model normalises both to pitch_type = 'FF'.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_pitcher_id, season, pitch_type]
+    columns:
+      - name: fg_pitcher_id
+        description: FanGraphs pitcher ID.
+        tests: [not_null]
+      - name: pitcher_name
+        description: Pitcher's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: pitch_type
+        description: >
+          FanGraphs pitch type code: FF (4-seam fastball), SI (sinker), FC (cutter),
+          SL (slider), CU (curveball), KC (knuckle-curve), CH (changeup), FS (splitter),
+          ST (sweeper). One row per pitch type actually thrown by this pitcher.
+        tests: [not_null]
+      - name: pitch_usage_pct
+        description: >
+          Fraction of total pitches thrown that are this pitch type (0–1 scale),
+          from pfx tracking system. Null rows are excluded at staging time.
+        tests: [not_null]
+      - name: stuff_plus
+        description: >
+          Stuff+ score for this specific pitch type. 100 = league average; 110 means
+          this individual pitch is 10% better than average on raw stuff. May be null
+          for pitch types where FanGraphs lacks sufficient data.
+      - name: location_plus
+        description: Location+ for this pitch type. Measures command quality relative to 100.
+      - name: pitching_plus
+        description: Pitching+ composite for this pitch type (Stuff+ × Location+).
+      - name: avg_velocity_mph
+        description: Average pitch velocity (mph) for this pitch type from pfx tracking.
+      - name: avg_h_break_in
+        description: >
+          Average horizontal movement in inches (pfx system, catcher's perspective).
+          Positive = arm-side, negative = glove-side for a right-handed pitcher.
+      - name: avg_v_break_in
+        description: >
+          Average vertical (induced) break in inches (pfx system). Positive = rising
+          relative to gravity. Fastballs typically 8–12 in; curveballs typically negative.
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run that produced this row.
+        tests: [not_null]
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+  - name: stg_fangraphs__stuff_plus
+    description: >
+      Staged FanGraphs Stuff+ pitching leaderboard. Grain: one row per pitcher
+      per season, deduplicated to the most recently ingested load. Stuff+ grades
+      each pitcher's raw arsenal quality independent of outcomes; scores above 100
+      are above-average. Available from 2020 onward.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_pitcher_id, season]
+    columns:
+      - name: fg_pitcher_id
+        description: FanGraphs pitcher ID. Joins to fg_zips_pitching_raw.fg_pitcher_id.
+        tests: [not_null]
+      - name: pitcher_name
+        description: Pitcher's full name as returned by the FanGraphs API.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: ip
+        description: Innings pitched in the window that produced this Stuff+ snapshot.
+      - name: stuff_plus
+        description: >
+          Overall Stuff+ score. Measures raw pitch quality relative to league average
+          (100). A score of 110 means the pitcher's arsenal is 10% better than average
+          on pure stuff, regardless of outcomes. Stabilizes after ~3 outings.
+      - name: location_plus
+        description: Location+ score. Measures command/control quality relative to 100.
+      - name: pitching_plus
+        description: >
+          Pitching+ score. Composite of Stuff+ and Location+. Best single-number
+          summary of raw pitching ability in this window.
+      - name: fastball_pct
+        description: >
+          Fraction of pitches thrown that are fastball-type (4-seam + sinker + cutter).
+          Derived by summing pfxFA%, pfxSI%, and pfxFC% from the Stuff+ payload.
+      - name: breaking_pct
+        description: >
+          Fraction of pitches thrown that are breaking balls (slider + curveball).
+          Derived by summing pfxSL% and pfxCU%.
+      - name: offspeed_pct
+        description: >
+          Fraction of pitches thrown that are offspeed (changeup + splitter).
+          Derived by summing pfxCH% and pfxFS%.
+      - name: primary_pitch_type
+        description: >
+          Dominant pitch category: 'fastball', 'breaking', or 'offspeed'. Determined
+          by whichever of fastball_pct, breaking_pct, offspeed_pct is largest.
+      - name: mlbam_pitcher_id
+        description: MLB Advanced Media (Statcast) player ID from xMLBAMID field. Joins to savant.ref_players.mlb_bam_id.
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run that produced this row.
+        tests: [not_null]
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+  - name: stg_fangraphs__zips_pitching
+    description: >
+      Staged FanGraphs ZiPS pitching projections. Grain: one row per pitcher per
+      season per projection_type, deduplicated to the most recently ingested load.
+      Pre-season ZiPS CSVs provide full pitcher projections (~400+ pitchers per
+      season). Used as the primary early-season ERA/FIP baseline before rolling
+      Statcast stats stabilize.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_pitcher_id, season, projection_type]
+    columns:
+      - name: fg_pitcher_id
+        description: FanGraphs pitcher ID.
+        tests: [not_null]
+      - name: pitcher_name
+        description: Pitcher's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year this projection targets.
+        tests: [not_null]
+      - name: projection_type
+        description: Projection system identifier (e.g., 'zips', 'rzips', 'steamer').
+        tests: [not_null]
+      - name: proj_era
+        description: Projected ERA for the season.
+      - name: proj_fip
+        description: Projected FIP (Fielding Independent Pitching) for the season.
+      - name: proj_xfip
+        description: Projected xFIP. Null for some projection types that do not publish xFIP.
+      - name: proj_k_pct
+        description: Projected strikeout rate (K%). Null for ZiPS CSV — use proj_k_per_9 instead.
+      - name: proj_bb_pct
+        description: Projected walk rate (BB%). Null for ZiPS CSV — use proj_bb_per_9 instead.
+      - name: proj_k_per_9
+        description: Projected strikeouts per 9 innings. Always populated for ZiPS.
+      - name: proj_bb_per_9
+        description: Projected walks per 9 innings. Always populated for ZiPS.
+      - name: proj_ip
+        description: Projected innings pitched.
+      - name: proj_war
+        description: Projected WAR.
+      - name: proj_whip
+        description: Projected WHIP.
+      - name: mlbam_pitcher_id
+        description: MLB Advanced Media (Statcast) player ID. Joins to savant.ref_players.mlb_bam_id.
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run.
+        tests: [not_null]
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+  - name: stg_fangraphs__zips_hitting
+    description: >
+      Staged FanGraphs ZiPS hitting projections. Grain: one row per batter per
+      season per projection_type, deduplicated to the most recently ingested load.
+      Pre-season ZiPS CSVs provide full batter projections (~700+ per season). Used
+      as early-season wRC+/OBP baseline before rolling Statcast stats stabilize.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_batter_id, season, projection_type]
+    columns:
+      - name: fg_batter_id
+        description: FanGraphs batter ID.
+        tests: [not_null]
+      - name: batter_name
+        description: Batter's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year this projection targets.
+        tests: [not_null]
+      - name: projection_type
+        description: Projection system identifier (e.g., 'zips', 'rzips', 'steamer').
+        tests: [not_null]
+      - name: proj_wrc_plus
+        description: Projected wRC+. League average is 100; higher is better for hitters.
+      - name: proj_obp
+        description: Projected on-base percentage.
+      - name: proj_slg
+        description: Projected slugging percentage.
+      - name: proj_avg
+        description: Projected batting average.
+      - name: proj_k_pct
+        description: Projected strikeout rate.
+      - name: proj_bb_pct
+        description: Projected walk rate.
+      - name: proj_pa
+        description: Projected plate appearances.
+      - name: proj_hr
+        description: Projected home runs.
+      - name: proj_war
+        description: Projected WAR.
+      - name: proj_iso
+        description: Projected isolated power (SLG - AVG).
+      - name: mlbam_batter_id
+        description: MLB Advanced Media (Statcast) player ID. Joins to savant.ref_players.mlb_bam_id.
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run.
+        tests: [not_null]
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+  - name: stg_fangraphs__hitting_leaderboard
+    description: >
+      Staged FanGraphs hitting leaderboard snapshots (Dashboard type=8). Grain:
+      one row per batter per season per window_type per window_start date. All
+      rolling windows are preserved to enable trend analysis. Window types: 7d,
+      14d, 30d, and full season.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fg_batter_id, season, window_type, window_start]
+    columns:
+      - name: fg_batter_id
+        description: FanGraphs batter ID. Extracted from raw_json:playerid.
+        tests: [not_null]
+      - name: batter_name
+        description: Batter's full name.
+        tests: [not_null]
+      - name: season
+        description: MLB season year.
+        tests: [not_null]
+      - name: window_type
+        description: Rolling window size — '7d', '14d', '30d', or 'season'.
+        tests: [not_null]
+      - name: window_start
+        description: First date of the rolling window (inclusive).
+        tests: [not_null]
+      - name: window_end
+        description: Last date of the rolling window (inclusive).
+        tests: [not_null]
+      - name: wrc_plus
+        description: wRC+ in this window. League average is 100; higher is better.
+      - name: obp
+        description: On-base percentage in this window.
+      - name: slg
+        description: Slugging percentage in this window.
+      - name: avg
+        description: Batting average in this window.
+      - name: k_pct
+        description: Strikeout rate in this window.
+      - name: bb_pct
+        description: Walk rate in this window.
+      - name: pa
+        description: Plate appearances in this window.
+      - name: hr
+        description: Home runs in this window.
+      - name: war
+        description: WAR in this window.
+      - name: mlbam_batter_id
+        description: MLB Advanced Media player ID from xMLBAMID field.
+      - name: ingestion_ts
+        description: Timestamp of the ingestion run.
+        tests: [not_null]
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]

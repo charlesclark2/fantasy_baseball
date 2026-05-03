@@ -263,6 +263,9 @@ spec:
 
           5. Run predict_today.py for today and confirm rows logged to Snowflake:
                uv run python betting_ml/scripts/predict_today.py --date $(date +%Y-%m-%d)
+             Confirm no "Feature shape mismatch" error and no
+             "_FEATURES_ADDED_AFTER_LAST_RETRAIN" warning in output — the retrain
+             should have produced a model that accepts all retained features.
 
           6. Check Streamlit app Today's Picks page — confirm picks load and
              Model Win% values are plausible (not all 0.5, not null).
@@ -422,6 +425,16 @@ spec:
                    eval_year: <--eval-year argument>
                    cv_mae_baseline: <new CV MAE if NGBoost was re-searched>
                    ece_baseline: <new ECE if calibration was re-run>
+              4. If home_win was retrained and the retrain included weather features
+                 (humidity_pct, temp_f, wind_component_mph, wind_direction_deg):
+                 Clear the _FEATURES_ADDED_AFTER_LAST_RETRAIN exclusion set in both
+                 betting_ml/scripts/predict_today.py and scripts/predict_today.py.
+                 The set was added as a temporary workaround (2026-05-02) when weather
+                 features were added to feature_selection.md before the model was
+                 retrained. Once the model includes those features natively, the
+                 exclusion must be removed so weather signals reach the classifier.
+                 Replace the block with just:
+                   X_clf = X_vals
             If --dry-run: print planned renames and registry updates; write nothing.
 
           STEP 5 — Update selection log:

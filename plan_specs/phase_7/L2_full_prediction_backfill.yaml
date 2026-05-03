@@ -44,7 +44,7 @@ spec:
     - id: extend-predict-script
       name: Add batch flags and versioning columns to predict_today.py
       description: |
-        Modify betting_ml/predict_today.py (or its entrypoint) to support batch
+        Modify betting_ml/scripts/predict_today.py (or its entrypoint) to support batch
         re-scoring over a historical date range.
 
         Changes required:
@@ -87,13 +87,22 @@ spec:
            imputation (median fill or model-native null handling) and does not
            error on sparse rows.
 
+           WEATHER FEATURE NOTE (as of 2026-05-02): predict_today.py contains a
+           _FEATURES_ADDED_AFTER_LAST_RETRAIN exclusion set that drops weather columns
+           (humidity_pct, temp_f, wind_component_mph, wind_direction_deg) before
+           calling the home_win classifier. This is a temporary workaround until
+           Card 7.D retrains the model with those features. For historical game dates
+           before weather data was ingested, those columns will be NaN-filled anyway
+           (acceptable). Once Card 7.D retraining is complete, the exclusion set
+           will be cleared and full 246-feature scoring will apply to all dates.
+
       dependsOn: []
       acceptanceCriteria:
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
             import ast, pathlib
-            src = pathlib.Path('betting_ml/predict_today.py').read_text()
+            src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
             tree = ast.parse(src)
             # Check for required CLI flags
             for flag in ['start_date', 'end_date', 'model_version', 'feature_version', 'dry_run']:
@@ -105,7 +114,7 @@ spec:
             python3 - <<'EOF'
             import subprocess
             result = subprocess.run(
-                ['python3', 'betting_ml/predict_today.py',
+                ['python3', 'betting_ml/scripts/predict_today.py',
                  '--start-date', '2024-04-01', '--end-date', '2024-04-02',
                  '--model-version', 'v1', '--dry-run'],
                 capture_output=True, text=True
@@ -133,24 +142,24 @@ spec:
 
         Recommended execution order (each is idempotent):
           # Seasons where Phase 7 features are confirmed partial (per 7.L1 audit)
-          python3 betting_ml/predict_today.py \
+          python3 betting_ml/scripts/predict_today.py \
               --start-date 2021-04-01 --end-date 2022-10-31 \
               --model-version v1 --feature-version v1_partial
 
-          python3 betting_ml/predict_today.py \
+          python3 betting_ml/scripts/predict_today.py \
               --start-date 2023-04-01 --end-date 2023-10-31 \
               --model-version v1 --feature-version v1_partial
 
           # Seasons where full Phase 7 feature coverage is confirmed
-          python3 betting_ml/predict_today.py \
+          python3 betting_ml/scripts/predict_today.py \
               --start-date 2024-04-01 --end-date 2024-10-31 \
               --model-version v1 --feature-version v1_full
 
-          python3 betting_ml/predict_today.py \
+          python3 betting_ml/scripts/predict_today.py \
               --start-date 2025-04-01 --end-date 2025-10-31 \
               --model-version v1 --feature-version v1_full
 
-          python3 betting_ml/predict_today.py \
+          python3 betting_ml/scripts/predict_today.py \
               --start-date 2026-04-01 --end-date <today> \
               --model-version v1 --feature-version v1_full
 

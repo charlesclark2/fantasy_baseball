@@ -143,6 +143,38 @@ ip_stats as (
     group by game_pk, pitcher_id
 ),
 
+-- FanGraphs Stuff+ arsenal features (Card 7.F)
+-- Joined on mlbam_pitcher_id (integer) × season from fct_fangraphs_pitcher_arsenal_wide.
+-- All columns are nullable — missing Stuff+ data does not drop the game row.
+-- Exposed in feature_pregame_game_features as:
+--   home_starter_stuff_plus, away_starter_stuff_plus,
+--   home_starter_primary_pitch_type, away_starter_primary_pitch_type,
+--   home_starter_fastball_pct, away_starter_fastball_pct,
+--   home_starter_breaking_pct, away_starter_breaking_pct,
+--   home_starter_offspeed_pct, away_starter_offspeed_pct,
+--   home_starter_fastball_stuff_plus, away_starter_fastball_stuff_plus,
+--   home_starter_slider_stuff_plus, away_starter_slider_stuff_plus,
+--   home_starter_curveball_stuff_plus, away_starter_curveball_stuff_plus,
+--   home_starter_changeup_stuff_plus, away_starter_changeup_stuff_plus,
+--   home_starter_avg_fastball_velo, away_starter_avg_fastball_velo
+arsenal_features as (
+    select
+        mlbam_pitcher_id,
+        season,
+        overall_stuff_plus,
+        primary_pitch_type,
+        fastball_pct,
+        breaking_pct,
+        offspeed_pct,
+        fastball_stuff_plus,
+        slider_stuff_plus,
+        curveball_stuff_plus,
+        changeup_stuff_plus,
+        avg_fastball_velo_mph
+    from {{ ref('fct_fangraphs_pitcher_arsenal_wide') }}
+    where mlbam_pitcher_id is not null
+),
+
 -- Prior-season platoon splits vs LHB (game_year - 1 to prevent in-season leakage)
 platoon_lhb as (
     select
@@ -260,7 +292,19 @@ final as (
         -- has_ip_history: false for debut starters with no prior starts in the dataset
         ips.avg_ip_last_3,
         ips.avg_ip_season,
-        (ips.game_pk is not null)::boolean       as has_ip_history
+        (ips.game_pk is not null)::boolean       as has_ip_history,
+
+        -- ── FanGraphs Stuff+ arsenal features (Card 7.F) ─────────────────────
+        af.overall_stuff_plus                    as starter_stuff_plus,
+        af.primary_pitch_type                    as starter_primary_pitch_type,
+        af.fastball_pct                          as starter_fastball_pct,
+        af.breaking_pct                          as starter_breaking_pct,
+        af.offspeed_pct                          as starter_offspeed_pct,
+        af.fastball_stuff_plus                   as starter_fastball_stuff_plus,
+        af.slider_stuff_plus                     as starter_slider_stuff_plus,
+        af.curveball_stuff_plus                  as starter_curveball_stuff_plus,
+        af.changeup_stuff_plus                   as starter_changeup_stuff_plus,
+        af.avg_fastball_velo_mph                 as starter_avg_fastball_velo
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -278,6 +322,9 @@ final as (
     left join ip_stats ips
         on  ips.game_pk     = pp.game_pk
         and ips.pitcher_id  = pp.pitcher_id
+    left join arsenal_features af
+        on  af.mlbam_pitcher_id = pp.pitcher_id
+        and af.season           = year(pp.game_date)
 )
 
 select * from final

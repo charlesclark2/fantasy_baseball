@@ -233,8 +233,18 @@ spec:
           Update betting_ml/scripts/predict_today.py to pass data_source through to
           the Snowflake INSERT so every prediction row is tagged.
 
-          Step 1 — Read _INSERT_PREDICTION (lines ~95–123) and _write_predictions_to_snowflake
-          (lines ~126–243) before making any edits.
+          NOTE: As of 2026-05-02, predict_today.py was modified for Card 7.C
+          (calibrator integration) and a feature-exclusion workaround. The file now
+          contains a _CALIBRATOR_PATH / _load_calibrator / _apply_calibrator block
+          after the MODEL_VERSION constant (~lines 45–66), which shifts all subsequent
+          line numbers. It also contains a _FEATURES_ADDED_AFTER_LAST_RETRAIN block
+          in the scoring section (just before p_home_win_clf = clf_hw.predict_proba(...))
+          that excludes weather features until the model is retrained. Do not remove
+          or alter that block — it is load-bearing until Card 7.D retraining runs.
+          Read the file first to locate the actual current line numbers.
+
+          Step 1 — Read _INSERT_PREDICTION and _write_predictions_to_snowflake
+          before making any edits (use Read tool; do not rely on line number hints).
 
           Step 2 — Add data_source to _INSERT_PREDICTION:
             In the column list: add data_source after model_version
