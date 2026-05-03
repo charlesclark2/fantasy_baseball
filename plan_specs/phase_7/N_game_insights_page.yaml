@@ -409,3 +409,43 @@ spec:
                 assert col in src, f"Metric group '{group}' missing column ref: '{col}'"
             print('All six Team Comparison metric groups: column references present')
             EOF
+
+    - id: fix-market-movement-pre-game-filter
+      name: Filter Market Movement table to pre-game snapshots only
+      description: |
+        Problem: The Market Movement expander on Today's Picks (app/pages/1_Today_Picks.py)
+        was showing line movement across ALL captured snapshots for the day, including
+        in-game and post-game odds. Live in-game lines can reach extreme values (e.g.,
+        -1858) once a game is effectively decided, producing nonsensical "movement" like
+        -70 → -1858 (-1788) that misleads pre-game betting decisions.
+
+        Root cause: _MOVEMENT_SQL used `WHERE o.commence_date = '{date}'` with no
+        upper-bound on ingestion_ts. The final pre-game snapshot vs. the last in-game
+        snapshot were both eligible for rn_last = 1.
+
+        Fix applied (2026-05-03):
+          Add `AND o.ingestion_ts < o.commence_time` to the snap_consensus CTE WHERE
+          clause in _MOVEMENT_SQL. This restricts both the "open" and "close" snapshots
+          to captures that occurred before the game started.
+
+          Column help text updated: "open → close (Δ pts). Pre-game snapshots only."
+          Captures column updated: "Number of pre-game odds snapshots collected."
+
+        File changed: app/pages/1_Today_Picks.py (_MOVEMENT_SQL, _MV_COL_HELP)
+
+        No dbt model changes required — mart_odds_outcomes already stores
+        commence_time per row, and the filter is applied at query time.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('app/pages/1_Today_Picks.py').read_text()
+            assert 'ingestion_ts < o.commence_time' in src, \
+                "Pre-game filter missing from _MOVEMENT_SQL"
+            assert 'Pre-game snapshots only' in src, \
+                "Column help text not updated to reflect pre-game-only filter"
+            print('Market movement pre-game filter: both guards present')
+            EOF

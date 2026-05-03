@@ -236,3 +236,68 @@ uv run odds_api_ingestion.py odds
 cd ../dbt
 dbtf build
 ```
+
+---
+
+## Credit Budget — OddsAPI Historical Backfill (Card 7.P2)
+
+**Documented 2026-05-03.**
+
+The OddsAPI historical endpoint charges 1 credit per request. Both `h2h` and
+`totals` markets are combined in a single call per timestamp (`markets=h2h,totals`).
+
+| Season | Game dates | Timestamps | API calls |
+|--------|-----------|------------|-----------|
+| 2021   | 182       | 3          | 546       |
+| 2022   | 179       | 3          | 537       |
+| 2023   | 182       | 3          | 546       |
+| 2024   | 185       | 3          | 555       |
+| 2025   | 184       | 3          | 552       |
+| **Total** | **912** | **3**   | **2,736** |
+
+Credits remaining after 7.P1 dry-run: **19,305**
+Estimated cost of full backfill: **2,736** credits
+Credits remaining after full backfill (estimated): **~16,569**
+
+Script: `scripts/backfill_historical_odds_snapshots.py`
+Target table: `baseball_data.oddsapi.odds_snapshots_historical`
+
+Run in season batches (newest first) from the `scripts/` directory:
+
+```bash
+# 2025 season (~552 API calls)
+uv run backfill_historical_odds_snapshots.py \
+    --start-date 2025-03-01 --end-date 2025-10-31 \
+    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+
+# 2024 season (~555 API calls)
+uv run backfill_historical_odds_snapshots.py \
+    --start-date 2024-03-01 --end-date 2024-10-31 \
+    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+
+# 2021–2023 seasons (~1,629 API calls)
+uv run backfill_historical_odds_snapshots.py \
+    --start-date 2021-04-01 --end-date 2023-10-31 \
+    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+```
+
+The script is idempotent — already-loaded `(game_date, snapshot_ts, bookmaker)` triples are skipped.
+
+Post-backfill coverage check:
+```sql
+SELECT
+    YEAR(game_date) AS season,
+    COUNT(DISTINCT game_pk) AS n_games,
+    COUNT(DISTINCT CASE WHEN snap_count >= 2 THEN game_pk END) AS n_games_2plus,
+    ROUND(100.0 * COUNT(DISTINCT CASE WHEN snap_count >= 2 THEN game_pk END)
+          / NULLIF(COUNT(DISTINCT game_pk), 0), 1) AS pct_2plus
+FROM (
+    SELECT game_pk, game_date, COUNT(*) AS snap_count
+    FROM baseball_data.oddsapi.odds_snapshots_historical
+    WHERE bookmaker = 'draftkings'
+    GROUP BY game_pk, game_date
+) t
+GROUP BY season ORDER BY season;
+```
+
+Gate: **≥80% of 2024–2025 game_pks must have ≥2 snapshots** before proceeding to Card 7.P3.

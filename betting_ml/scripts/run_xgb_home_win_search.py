@@ -29,6 +29,7 @@ from xgboost import XGBClassifier
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import get_snowflake_connection, load_features
 from betting_ml.utils.feature_selection import load_retained_features
@@ -42,22 +43,6 @@ N_TRIALS = 50
 _RESULTS_PATH = PROJECT_ROOT / "betting_ml" / "evaluation" / "tuning_results_xgb_home_win.json"
 _REPORT_PATH = PROJECT_ROOT / "betting_ml" / "evaluation" / "hyperparameter_tuning_xgb_home_win.md"
 _CONTEXT_PATH = PROJECT_ROOT / "project_context.md"
-
-
-class PlattCalibratedXGBClassifier:
-    """XGBClassifier with a fitted Platt (sigmoid) calibrator.
-
-    Wraps the base classifier and calibrator so downstream code can call
-    predict_proba() to obtain calibrated win probabilities.
-    """
-
-    def __init__(self, xgb_classifier: XGBClassifier, calibrator: LogisticRegression) -> None:
-        self.xgb_classifier = xgb_classifier
-        self.calibrator = calibrator
-
-    def predict_proba(self, X) -> np.ndarray:
-        raw = self.xgb_classifier.predict_proba(X)[:, 1]
-        return self.calibrator.predict_proba(raw.reshape(-1, 1))
 
 
 def _load_baseline_brier() -> float:

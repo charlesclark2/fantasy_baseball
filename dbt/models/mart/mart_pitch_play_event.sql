@@ -143,6 +143,11 @@ final as (
         end                                                     as error_position,
             -- Which defensive position committed the error
 
+        -- ── wOBA components (from Statcast) ──────────────────────────────────────
+        woba_value,
+        woba_denom,
+        xwoba,
+
         -- ── Run / win expectancy impact ───────────────────────────────────────────
         delta_run_exp,
         delta_pitcher_run_exp,

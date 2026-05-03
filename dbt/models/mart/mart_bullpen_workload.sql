@@ -32,6 +32,7 @@ with pitches as (
         inning,
         home_team,
         away_team,
+        plate_appearance_event,
         case when inning_half = 'Top' then home_team else away_team end as pitching_team
     from {{ ref('stg_batter_pitches') }}
     where game_type = 'R'
@@ -53,7 +54,18 @@ bullpen_pitcher_game as (
         p.home_team,
         p.away_team,
         max(p.inning)   as max_inning_pitched,
-        count(*)        as pitches_thrown
+        count(*)        as pitches_thrown,
+        sum(case when p.plate_appearance_event in (
+            'strikeout', 'strikeout_double_play',
+            'field_out', 'force_out',
+            'grounded_into_double_play', 'double_play', 'triple_play',
+            'sac_fly', 'sac_fly_double_play',
+            'sac_bunt', 'sac_bunt_double_play',
+            'fielders_choice_out',
+            'caught_stealing_2b', 'caught_stealing_3b', 'caught_stealing_home',
+            'pickoff_1b', 'pickoff_2b', 'pickoff_3b',
+            'other_out'
+        ) then 1 else 0 end)  as outs_recorded
     from pitches p
     left join starters s
         on  p.game_pk       = s.game_pk
@@ -77,6 +89,7 @@ game_bullpen as (
         sum(pitches_thrown)                                         as bullpen_pitches,
         count(distinct pitcher_id)                                  as pitchers_used,
         count(*)                                                    as reliever_appearances,
+        sum(outs_recorded)                                          as outs_recorded,
         max(case when max_inning_pitched >= 7 then 1 else 0 end)   as had_high_leverage_appearance,
         max(case when max_inning_pitched >= 9 then 1 else 0 end)   as had_closer_appearance
     from bullpen_pitcher_game
@@ -92,6 +105,7 @@ date_bullpen as (
         sum(bullpen_pitches)                                        as bullpen_pitches,
         sum(pitchers_used)                                          as pitchers_used,
         sum(reliever_appearances)                                   as reliever_appearances,
+        sum(outs_recorded)                                          as outs_recorded,
         max(had_high_leverage_appearance)                           as had_high_leverage_appearance,
         max(had_closer_appearance)                                  as had_closer_appearance
     from game_bullpen
@@ -168,7 +182,35 @@ rolling as (
             partition by pitching_team
             order by game_date
             range between interval '2 days' preceding and interval '1 day' preceding
-        )                                                           as closer_used_prev_2d
+        )                                                           as closer_used_prev_2d,
+
+        -- Innings pitched (outs / 3): prior 1 day
+        round(
+            coalesce(sum(outs_recorded) over (
+                partition by pitching_team
+                order by game_date
+                range between interval '1 day' preceding
+                          and interval '1 day' preceding
+            ), 0) / 3.0, 1
+        )                                                           as bullpen_ip_prev_1d,
+
+        -- Innings pitched (outs / 3): prior 2 days
+        round(
+            coalesce(sum(outs_recorded) over (
+                partition by pitching_team
+                order by game_date
+                range between interval '2 days' preceding
+                          and interval '1 day' preceding
+            ), 0) / 3.0, 1
+        )                                                           as bullpen_ip_prev_2d,
+
+        -- Pitchers used: prior 2 days (2d window complement to existing 3d/7d)
+        sum(pitchers_used) over (
+            partition by pitching_team
+            order by game_date
+            range between interval '2 days' preceding
+                      and interval '1 day' preceding
+        )                                                           as pitchers_used_prev_2d
 
     from date_bullpen
 )
@@ -199,7 +241,10 @@ select
     r.reliever_appearances_prev_7d,
     r.high_leverage_used_prev_2d,
     r.closer_used_prev_1d,
-    r.closer_used_prev_2d
+    r.closer_used_prev_2d,
+    r.bullpen_ip_prev_1d,
+    r.bullpen_ip_prev_2d,
+    r.pitchers_used_prev_2d
 
 from game_bullpen gb
 left join rolling r

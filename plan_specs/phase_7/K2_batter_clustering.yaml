@@ -1,0 +1,483 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: batter-archetype-clustering
+  phase: "7"
+  card: "7.K2"
+  priority: P2
+  blocker: |
+    Card 7.K (pitcher clustering) must be complete so pitcher_clusters assignments exist.
+    Soft gate: proceed only if Card 7.K cluster features rank in the top 100 of full
+    XGBoost feature importance (from Card 7.MA retraining). If pitcher cluster features
+    show near-zero importance, this card should be re-scoped before implementation.
+spec:
+  description: |
+    Cluster all MLB batters into hitting-profile archetypes using a plate-discipline and
+    batted-ball vector built from Statcast and FanGraphs hitting data. Persist batter
+    cluster assignments to Snowflake, then compute each lineup's predicted performance
+    against the scheduled starter's pitcher cluster (from 7.K) using a batter-archetype ×
+    pitcher-archetype matchup mart. Add those signals to feature_pregame_game_features.
+
+    Motivation: Card 7.K captures the supply side (pitcher arsenal style). This card captures
+    the demand side — which batter archetypes are vulnerable to or excel against each
+    pitcher archetype. The combination creates a true two-sided matchup feature that is more
+    stable and interpretable than raw rolling wOBA vs. cluster because it generalizes across
+    batters who have insufficient PA history vs. a specific cluster.
+
+    Why K2 and not a new letter: this card is the structural complement to 7.K.
+    Both cards together form the pitcher-archetype × batter-archetype interaction system.
+
+    Architecture:
+      Step 1 — Build mart_batter_profile_summary: per-batter-season hitting profile
+               aggregating Statcast plate events (GB%, FB%, Pull%, Oppo%, barrel%,
+               avg exit velocity) and FanGraphs hitting analytics (K%, BB%, ISO,
+               sprint speed, xwOBA). Minimum 100 PA.
+      Step 2 — Run k-means clustering (k=4..8 evaluated, final k by silhouette) in Python.
+               Persist batter cluster assignments to baseball_data.statsapi.batter_clusters.
+      Step 3 — Build mart_batter_archetype_vs_pitcher_cluster: rolling wOBA per
+               (batter_cluster_id, pitcher_cluster_id) pair — how does each batter
+               archetype historically perform against each pitcher archetype?
+               This is a population-level summary (not per-batter), making it robust
+               even for batters or matchups with thin individual history.
+      Step 4 — Build feature_batter_archetype_matchups: for each game × side, look up
+               the opposing starter's pitcher cluster (from 7.K), identify which batter
+               archetypes are present in the lineup, and compute a weighted average
+               expected wOBA based on the batter-archetype × pitcher-archetype mart.
+               Integrate into feature_pregame_game_features.
+
+    Leakage guard: all batter cluster assignments use game_year - 1 (prior-season) to
+    prevent label leakage into in-season predictions.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: batter-archetype-clustering-plan
+  phase: "7"
+  card: "7.K2"
+spec:
+  goal:
+    name: batter-archetype-clustering
+
+  tasks:
+
+    - id: build-batter-profile-mart
+      name: Build batter hitting profile summary mart
+      description: |
+        Create dbt/models/mart/mart_batter_profile_summary.sql.
+        Grain: batter_id × game_year.
+        Purpose: one-row-per-batter-season hitting vector for k-means clustering.
+
+        Sources:
+          1. mart_pitch_play_event (Statcast PA-level events):
+             - Batted ball direction and type (GB%, FB%, LD%, Pull%, Oppo%)
+             - Barrel rate (barrel_rate)
+             - Average exit velocity (avg_exit_velocity)
+             - Contact rate (1 - K%) derived from Statcast pitch outcomes
+             - Hard hit rate (exit_velocity >= 95 mph)
+          2. fct_fangraphs_hitting_analytics (FanGraphs season-level aggregates):
+             - k_pct, bb_pct — plate discipline
+             - iso — isolated power
+             - sprint_speed — baserunning / athleticism
+          3. mart_batter_vs_pitch_archetype (Card 7.J):
+             - adj_woba, adj_xwoba — overall offensive production, blended across archetypes
+
+        SQL outline:
+
+          with statcast_pa as (
+              -- Grain: batter_id x game_year
+              -- Aggregate plate appearance terminal events from mart_pitch_play_event
+              select
+                  batter_id,
+                  game_year,
+                  count(*)                                       as pa_count,
+                  avg(launch_speed_mph)                          as avg_exit_velocity,
+                  sum(case when bb_type = 'ground_ball' then 1 else 0 end)::float
+                      / nullif(count(case when bb_type is not null then 1 end), 0)
+                                                                 as gb_pct,
+                  sum(case when bb_type = 'fly_ball' then 1 else 0 end)::float
+                      / nullif(count(case when bb_type is not null then 1 end), 0)
+                                                                 as fb_pct,
+                  sum(case when bb_type = 'line_drive' then 1 else 0 end)::float
+                      / nullif(count(case when bb_type is not null then 1 end), 0)
+                                                                 as ld_pct,
+                  -- Pull% derived from hit_location zones (1-3 = pull for RHH; 7-9 for LHH)
+                  sum(case when is_pull_side then 1 else 0 end)::float
+                      / nullif(count(case when bb_type is not null then 1 end), 0)
+                                                                 as pull_pct,
+                  sum(case when launch_speed_mph >= 95 then 1 else 0 end)::float
+                      / nullif(count(*), 0)                      as hard_hit_pct,
+                  -- Barrel: launch_speed >= 98 mph and optimal launch angle band
+                  sum(case
+                      when launch_speed_mph >= 98
+                       and launch_angle_degrees between 26 and 30 then 1
+                       else 0
+                  end)::float / nullif(count(*), 0)              as barrel_pct,
+                  avg(estimated_woba_using_speedangle)            as avg_xwoba
+              from {{ ref('mart_pitch_play_event') }}
+              where plate_appearance_event is not null
+                and game_year >= 2020
+              group by 1, 2
+          ),
+
+          fg_hitting as (
+              select
+                  mlbam_batter_id as batter_id,
+                  season          as game_year,
+                  k_pct,
+                  bb_pct,
+                  iso,
+                  sprint_speed
+              from {{ ref('fct_fangraphs_hitting_analytics') }}
+              where season >= 2020
+          )
+
+          select
+              s.batter_id,
+              s.game_year,
+              s.pa_count,
+              s.avg_exit_velocity,
+              s.gb_pct,
+              s.fb_pct,
+              s.ld_pct,
+              s.pull_pct,
+              s.hard_hit_pct,
+              s.barrel_pct,
+              s.avg_xwoba,
+              f.k_pct,
+              f.bb_pct,
+              f.iso,
+              f.sprint_speed
+          from statcast_pa s
+          left join fg_hitting f
+              on  f.batter_id  = s.batter_id
+              and f.game_year  = s.game_year
+          where s.pa_count >= 100  -- minimum threshold: ~25 games of regular ABs
+
+        Materialization: table (rebuilt seasonally, small grain).
+        Path: dbt/models/mart/mart_batter_profile_summary.sql
+
+        Note: is_pull_side and bb_type must be confirmed as available columns in
+        mart_pitch_play_event. If pull_pct derivation is not feasible from available
+        columns, omit and document the gap — the remaining features are sufficient
+        for meaningful clustering.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_batter_profile_summary.sql').read_text()
+            assert 'mart_pitch_play_event' in src, "mart_pitch_play_event ref missing"
+            assert 'fct_fangraphs_hitting_analytics' in src, "fct_fangraphs_hitting_analytics ref missing"
+            assert 'pa_count' in src, "pa_count column missing"
+            assert '>= 100' in src.replace(' ', ''), "minimum PA threshold (100) not found"
+            for col in ['gb_pct', 'fb_pct', 'k_pct', 'bb_pct', 'iso', 'avg_exit_velocity']:
+                assert col in src, f"Feature column '{col}' missing"
+            print('mart_batter_profile_summary: refs, PA threshold, and required columns present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess, sys
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'mart_batter_profile_summary', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('mart_batter_profile_summary: dbtf build succeeded')
+            EOF
+
+    - id: build-batter-clustering-script
+      name: Cluster batters by hitting profile and persist assignments
+      description: |
+        Create betting_ml/scripts/batter_clustering/cluster_batters.py.
+
+        Follows the same structure as cluster_pitchers.py (Card 7.K):
+          1. Load mart_batter_profile_summary from Snowflake for target season.
+          2. Derive composite features before scaling (see below).
+          3. Drop rows with >30% null across clustering features.
+          4. Impute remaining nulls with column median.
+          5. Standardize with sklearn.preprocessing.StandardScaler.
+          6. Fit k-means for k in range(4, 8), select best k by silhouette score.
+          7. Assign human-readable cluster labels from centroid feature inspection
+             (same centroid-driven approach as cluster_pitchers.py).
+          8. Persist to baseball_data.statsapi.batter_clusters via DELETE + INSERT upsert.
+          9. Save model artifacts (kmeans_{season}.pkl, scaler_{season}.pkl) to
+             betting_ml/models/batter_clustering/.
+
+        Clustering feature columns (BATTER_FEATURE_COLS):
+          k_pct           -- strikeout rate (plate discipline, penalty)
+          bb_pct          -- walk rate (plate discipline, reward)
+          iso             -- isolated power
+          gb_pct          -- ground ball rate
+          fb_pct          -- fly ball rate
+          pull_pct        -- pull tendency
+          hard_hit_pct    -- hard contact rate (exit velo >= 95 mph)
+          barrel_pct      -- barrel rate
+          avg_exit_velocity
+          sprint_speed    -- if available from FanGraphs; NULL-imputed to median
+          avg_xwoba       -- overall offensive output; imputed to 0.315 if null
+
+        Derived features computed before scaling (analogous to spin_diff in K):
+          bb_k_ratio       = bb_pct / (k_pct + 0.001)  -- walk-to-strikeout ratio
+          contact_power    = (1 - k_pct) * iso          -- contact × power composite
+
+        Cluster label assignment — centroid-driven priority order:
+          1. power_pull:    highest (iso + barrel_pct + pull_pct)
+          2. patient_obp:   highest (bb_pct + bb_k_ratio)
+          3. groundball_speed: highest (gb_pct) AND lowest (fb_pct)
+          4. high_whiff:    highest k_pct (with above-average iso)
+          5. contact_spray: lowest k_pct + lowest pull_pct (finesse contact hitter)
+          Remaining → balanced
+
+        DDL for baseball_data.statsapi.batter_clusters:
+          CREATE TABLE IF NOT EXISTS baseball_data.statsapi.batter_clusters (
+              batter_id        INTEGER      NOT NULL,
+              season           INTEGER      NOT NULL,
+              cluster_id       INTEGER      NOT NULL,
+              cluster_label    VARCHAR(50)  NOT NULL,
+              silhouette_score FLOAT,
+              run_timestamp    TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+              PRIMARY KEY (batter_id, season)
+          );
+
+        Upsert: DELETE existing rows for season, then INSERT (matches pattern in cluster_pitchers.py;
+        no MERGE — project standard per MEMORY.md).
+
+        Silhouette threshold: warn if < 0.10 (same calibration as pitcher clustering).
+        Batter archetypes will have a lower silhouette ceiling than pitchers because
+        offensive profiles are more continuous — a threshold of 0.10 is realistic.
+
+        CLI usage:
+          uv run python betting_ml/scripts/batter_clustering/cluster_batters.py --season 2025
+          uv run python betting_ml/scripts/batter_clustering/cluster_batters.py --season 2025 --dry-run
+          uv run python betting_ml/scripts/batter_clustering/cluster_batters.py --season 2025 --min-k 4 --max-k 8
+
+        Spot-check names (well-known hitters with expected archetypes):
+          Aaron Judge    → power_pull
+          Luis Arraez    → contact_spray
+          Juan Soto      → patient_obp
+          Yordan Alvarez → power_pull
+          Steven Kwan    → contact_spray
+          Freddie Freeman→ balanced or patient_obp
+          Pete Alonso    → power_pull
+          Jose Abreu     → groundball_speed or balanced
+          Bo Bichette    → high_whiff or balanced
+          Jose Ramirez   → patient_obp or balanced
+
+        Path: betting_ml/scripts/batter_clustering/cluster_batters.py
+
+      dependsOn:
+        - build-batter-profile-mart
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('betting_ml/scripts/batter_clustering/cluster_batters.py').read_text()
+            tree = ast.parse(src)
+            imports = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names: imports.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    imports.add(node.module or '')
+            assert any('sklearn' in i for i in imports), "sklearn not imported"
+            assert 'silhouette_score' in src, "silhouette_score not used"
+            assert 'KMeans' in src, "KMeans not used"
+            assert 'StandardScaler' in src, "StandardScaler not used"
+            assert 'batter_clusters' in src, "batter_clusters table reference missing"
+            assert '--dry-run' in src, "dry-run flag missing"
+            assert 'bb_k_ratio' in src, "bb_k_ratio derived feature missing"
+            print('cluster_batters.py: required imports, constants, derived features present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'betting_ml/scripts/batter_clustering/cluster_batters.py',
+                 '--season', '2024', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"Dry-run failed:\n{result.stderr}"
+            assert 'silhouette' in result.stdout.lower(), "silhouette score not reported in dry-run"
+            print('cluster_batters.py --dry-run: completed successfully')
+            EOF
+
+    - id: build-archetype-matchup-mart
+      name: Build batter-archetype × pitcher-archetype rolling matchup mart
+      description: |
+        Create two dbt models:
+
+        Model 1 — dbt/models/mart/mart_batter_archetype_vs_pitcher_cluster.sql
+          Grain: batter_cluster_id × pitcher_cluster_id × game_date (anchor).
+          Purpose: population-level rolling wOBA for each batter-archetype vs.
+          pitcher-archetype pairing. Because this is a population summary (all batters
+          of archetype X vs. all pitchers of cluster Y), it is stable even for rare
+          matchups and provides a strong prior for lineups with thin individual PA history.
+
+          Logic:
+            1. Join mart_pitch_play_event to baseball_data.statsapi.batter_clusters
+               (batter_id + game_year - 1 = season, leakage guard).
+            2. Join mart_pitch_play_event to baseball_data.statsapi.pitcher_clusters
+               (pitcher_id + game_year - 1 = season, leakage guard).
+            3. For each (batter_cluster_id, pitcher_cluster_id, anchor_date):
+                 - Aggregate all PA events in [anchor - 180d, anchor - 1d]
+                 - Compute population wOBA and xwOBA
+                 - Apply shrinkage toward league average (weight = pa_count / (pa_count + 100))
+            4. Emit rows only where pa_count >= 50 (population min PA for the pairing).
+
+          Use a 180-day rolling window (vs. 30d in mart_batter_woba_vs_cluster) because
+          this is a population stat; a wider window improves stability without introducing
+          meaningful time drift.
+
+          Output columns:
+            batter_cluster_id, pitcher_cluster_id, game_date (anchor),
+            pa_count, adj_woba, adj_xwoba
+
+          Materialization: incremental (unique_key: batter_cluster_id + pitcher_cluster_id + game_date).
+          Path: dbt/models/mart/mart_batter_archetype_vs_pitcher_cluster.sql
+
+        Model 2 — dbt/models/feature/feature_batter_archetype_matchups.sql
+          Grain: game_pk × side.
+          Purpose: for each game × side, compute the expected wOBA advantage based on
+          the lineup's batter archetype composition facing the opposing starter's pitcher cluster.
+
+          CTE chain:
+            games → mart_game_results (regular season, game_year, game_date)
+            starter_cluster → baseball_data.statsapi.pitcher_clusters joined via
+                              stg_statsapi_probable_pitchers, using game_year - 1
+            lineup_slots → unpivot stg_statsapi_lineups_wide to batter_id per slot
+            batter_cluster → join baseball_data.statsapi.batter_clusters on
+                              batter_id + game_year - 1
+            slot_matchup → join mart_batter_archetype_vs_pitcher_cluster on
+                            (batter_cluster_id, opp_pitcher_cluster_id, game_date - 1)
+            agg → AVG(adj_woba), AVG(adj_xwoba), COUNT(adj_woba) per game × side
+
+          Output columns (added to feature_pregame_game_features):
+            home_lineup_archetype_avg_woba        -- avg expected wOBA from cluster-cluster matchups
+            home_lineup_archetype_avg_xwoba
+            home_lineup_archetype_slot_coverage   -- how many of 9 lineup slots had matchup data
+            away_lineup_archetype_avg_woba
+            away_lineup_archetype_avg_xwoba
+            away_lineup_archetype_slot_coverage
+            home_batter_cluster_mode              -- most common batter archetype in home lineup
+            away_batter_cluster_mode
+
+          Materialization: table (rebuilt daily, game-level grain).
+          Path: dbt/models/feature/feature_batter_archetype_matchups.sql
+
+      dependsOn:
+        - build-batter-clustering-script
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/mart/mart_batter_archetype_vs_pitcher_cluster.sql').read_text()
+            assert 'batter_clusters' in src, "batter_clusters source missing"
+            assert 'pitcher_clusters' in src, "pitcher_clusters source missing"
+            assert 'game_year - 1' in src.replace(' ', ''), "game_year-1 leakage guard missing"
+            assert 'adj_woba' in src, "adj_woba shrinkage column missing"
+            assert 'pa_count' in src, "pa_count column missing"
+            print('mart_batter_archetype_vs_pitcher_cluster: required refs and leakage guard present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_batter_archetype_matchups.sql').read_text()
+            for col in ['archetype_avg_woba', 'archetype_avg_xwoba', 'archetype_slot_coverage',
+                        'batter_cluster_mode']:
+                assert col in src, f"Output column '{col}' missing"
+            assert 'game_year - 1' in src.replace(' ', ''), "game_year-1 leakage guard missing"
+            print('feature_batter_archetype_matchups: output columns and leakage guard present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select',
+                 'mart_batter_archetype_vs_pitcher_cluster feature_batter_archetype_matchups',
+                 '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('mart_batter_archetype_vs_pitcher_cluster + feature_batter_archetype_matchups: build succeeded')
+            EOF
+
+    - id: integrate-and-document
+      name: Integrate batter archetype matchup features and document CV impact
+      description: |
+        1. Extend feature_pregame_game_features.sql to include batter archetype matchup columns.
+           Add a CTE `batter_archetype_matchups` that LEFT JOINs feature_batter_archetype_matchups
+           on game_pk, then propagate the 8 new columns to the final SELECT.
+
+        2. Rebuild feature_pregame_game_features:
+             dbtf build --select feature_pregame_game_features --target dev
+
+        3. Retrain models using the standard training script with the updated feature set.
+           Compare Brier score / MAE against the Card 7.K baseline (not the pre-K baseline,
+           since K2 is evaluated incrementally on top of K's contribution).
+           Threshold: ΔBrier < −0.001 to declare K2 a positive contribution.
+
+        4. Spot-check batter archetype interpretability for 10 well-known hitters (see
+           cluster_batters.py spot-check list). Verify sensible assignments — e.g., Aaron
+           Judge should land in power_pull, Luis Arraez in contact_spray.
+
+        5. Create betting_ml/evaluation/batter_cluster_feature_impact.md with:
+           - Silhouette score and chosen k for each season clustered
+           - Cluster centroid summary table (cluster_label, n_batters, key centroid values)
+           - Spot-check table: 10 well-known hitters with assigned label and expected label
+           - Null rate for archetype matchup columns (target < 15%; April will be higher)
+           - Feature importance ranks for the 8 new columns (from XGBoost feature_importances_)
+           - ΔBrier vs. Card 7.K baseline
+           - Known limitations (April null rate, platoon/part-time batter coverage,
+             batter cluster drift across multi-season samples)
+
+        6. If incremental Brier improvement is < 0.001 (negligible), document as such and
+           note that the features are retained for potential ensemble or interaction effects
+           in Card 7.MB. Do not remove features based solely on marginal aggregate impact —
+           they may carry signal in specific lineup configurations.
+
+      dependsOn:
+        - build-archetype-matchup-mart
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            assert 'feature_batter_archetype_matchups' in src, \
+                "feature_pregame_game_features does not reference feature_batter_archetype_matchups"
+            for col in ['home_lineup_archetype_avg_woba', 'away_lineup_archetype_avg_woba',
+                        'home_batter_cluster_mode', 'away_batter_cluster_mode']:
+                assert col in src, f"Column '{col}' missing from feature_pregame_game_features"
+            print('feature_pregame_game_features: batter archetype columns integrated')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['dbtf', 'build', '--select', 'feature_pregame_game_features', '--target', 'dev'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"dbtf build failed:\n{result.stderr}"
+            print('feature_pregame_game_features: dbtf build succeeded with batter archetype columns')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/batter_cluster_feature_impact.md').read_text()
+            for section in ['silhouette', 'null rate', 'feature importance', 'cluster_label',
+                            'delta', 'spot-check']:
+                assert section.lower() in report.lower(), \
+                    f"Impact report missing section: '{section}'"
+            print('batter_cluster_feature_impact.md: all required sections present')
+            EOF

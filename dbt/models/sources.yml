@@ -195,6 +195,57 @@ sources:
           - name: loaded_at
             description: UTC timestamp when the row was last written to Snowflake.
 
+      - name: pitcher_clusters
+        description: >
+          One row per pitcher_id × season. Pitcher k-means cluster assignments
+          produced by betting_ml/scripts/pitcher_clustering/cluster_pitchers.py
+          (Card 7.K). Populated via DELETE + INSERT for the target season.
+          Cluster IDs are per-season and not stable across runs; use cluster_label
+          for human-readable interpretation.
+        columns:
+          - name: pitcher_id
+            description: MLBAM pitcher ID. Joins to mart_pitch_characteristics.pitcher_id.
+            tests: [not_null]
+          - name: season
+            description: Season year the clustering was run for.
+            tests: [not_null]
+          - name: cluster_id
+            description: 0-indexed k-means cluster assignment for this pitcher-season.
+            tests: [not_null]
+          - name: cluster_label
+            description: Human-readable cluster archetype label from CLUSTER_LABELS constant.
+            tests: [not_null]
+          - name: silhouette_score
+            description: Silhouette score for the best-k solution used in this run.
+          - name: run_timestamp
+            description: Wall-clock timestamp when the row was written.
+
+      - name: batter_clusters
+        description: >
+          One row per batter_id × season. Batter k-means cluster assignments
+          produced by betting_ml/scripts/batter_clustering/cluster_batters.py
+          (Card 7.K2). Populated via DELETE + INSERT for the target season.
+          Cluster IDs are per-season and not stable across runs; use cluster_label
+          for human-readable interpretation. Cluster labels: power_pull,
+          patient_obp, groundball_speed, high_whiff, contact_spray, balanced.
+        columns:
+          - name: batter_id
+            description: MLBAM batter ID. Joins to mart_pitch_play_event.batter_id.
+            tests: [not_null]
+          - name: season
+            description: Season year the clustering was run for.
+            tests: [not_null]
+          - name: cluster_id
+            description: 0-indexed k-means cluster assignment for this batter-season.
+            tests: [not_null]
+          - name: cluster_label
+            description: Human-readable batter archetype label (power_pull, patient_obp, etc.).
+            tests: [not_null]
+          - name: silhouette_score
+            description: Silhouette score for the best-k solution used in this run.
+          - name: run_timestamp
+            description: Wall-clock timestamp when the row was written.
+
   - name: savant
     database: baseball_data
     schema: savant

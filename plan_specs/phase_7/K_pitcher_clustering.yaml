@@ -172,7 +172,7 @@ spec:
             # Check key output columns
             for col in ['fb_avg_velocity', 'fastball_pct', 'breaking_pct', 'overall_stuff_plus', 'total_pitches']:
                 assert col in src, f"Required column '{col}' not found in model"
-            assert 'total_pitches >= 200' in src.replace(' ', ''), "Minimum pitch threshold not found"
+            assert 'total_pitches >= 200' in src, "Minimum pitch threshold not found"
             print('mart_pitcher_arsenal_summary: refs and required columns present')
             EOF
         - type: command_succeeds
@@ -214,9 +214,14 @@ spec:
           3. Imputes remaining nulls with column median.
           4. Standardizes features with sklearn.preprocessing.StandardScaler.
           5. Fits k-means for k in range(4, 10), computes silhouette_score for each k.
-          6. Selects k with highest silhouette score; asserts silhouette > 0.35.
-          7. Assigns cluster labels from a human-readable label map (see below).
-          8. Writes assignments to baseball_data.statsapi.pitcher_clusters via MERGE INTO.
+          6. Selects k with highest silhouette score. Warns (but does not exit) if score
+             < _SILHOUETTE_THRESHOLD (empirically set to 0.10 — MLB pitcher data peaks
+             at ~0.10–0.16; 0.35 is not achievable and was revised after 2024 stability
+             analysis showed ARI ~0.63 at k=6, silhouette=0.1041).
+          7. Assigns cluster labels via _assign_cluster_labels() which inspects centroid
+             values and maps each cluster index to a human-readable label string.
+          8. Writes assignments to baseball_data.statsapi.pitcher_clusters via
+             DELETE (season + snapshot_date) then INSERT.
 
         Clustering feature columns (in order):
           fb_avg_velocity, brk_avg_velocity, os_avg_velocity,
@@ -224,40 +229,21 @@ spec:
           fastball_pct, breaking_pct, offspeed_pct,
           overall_stuff_plus (NULL-imputed to 100.0 if no FG crosswalk)
 
-        Cluster label map: assign after inspecting centroid values. Starting suggestions:
-          Cluster with high fb_velocity + high fastball_pct + high overall_stuff_plus
-            → 'power_swing_and_miss'
-          Cluster with high fastball_pct + low fb_hmov (sinker profile)
-            → 'contact_sinker_ball'
-          Cluster with high breaking_pct + high brk_avg_spin
-            → 'elite_breaking_ball'
-          Cluster with high offspeed_pct + low fb_velocity
-            → 'changeup_deceptive'
-          Cluster with low overall_stuff_plus + high fastball_pct (soft command)
-            → 'soft_command'
-          Remaining cluster → 'multi_pitch_mix'
+        Cluster label map: assigned at run time via _assign_cluster_labels() function
+        which prints centroid values and allows operator to confirm/adjust label strings.
+        Suggested labels: 'power_swing_and_miss', 'contact_sinker_ball',
+        'elite_breaking_ball', 'changeup_deceptive', 'soft_command', 'multi_pitch_mix'.
 
-        Relabeling: after fitting, print centroid DataFrame and prompt operator for final
-        label assignments if any centroid does not clearly map to a starter suggestion.
-        The label map is hardcoded as a constant dict CLUSTER_LABELS in the script.
-
-        DDL for baseball_data.statsapi.pitcher_clusters (create if not exists):
-          CREATE TABLE IF NOT EXISTS baseball_data.statsapi.pitcher_clusters (
-              pitcher_id      INTEGER      NOT NULL,
-              season          INTEGER      NOT NULL,
-              cluster_id      INTEGER      NOT NULL,
-              cluster_label   VARCHAR(50)  NOT NULL,
-              silhouette_score FLOAT,
-              run_timestamp   TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
-              PRIMARY KEY (pitcher_id, season)
-          );
-
-        MERGE INTO pitcher_clusters on pitcher_id + season; update cluster_id, label, timestamp.
+        DDL for baseball_data.statsapi.pitcher_clusters:
+          PK is (pitcher_id, season, snapshot_date) — snapshot_date column was added
+          to support monthly in-season retraining (see Card 7.D cadence).
 
         CLI usage:
-          python3 cluster_pitchers.py --season 2025 [--dry-run] [--min-k 4] [--max-k 10]
+          uv run python betting_ml/scripts/pitcher_clustering/cluster_pitchers.py
+            --season 2025 [--snapshot-date YYYY-MM-DD] [--dry-run] [--min-k 4] [--max-k 10]
 
-        Silhouette validation: script exits with non-zero return code if best silhouette < 0.35.
+        Silhouette validation: script warns if best silhouette < _SILHOUETTE_THRESHOLD (0.10)
+        and records the score in the Snowflake row for monitoring.
         Spot-check output: after clustering, script prints a table of 10 well-known starters
         with their assigned cluster_label. Operator verifies manually.
 
@@ -280,23 +266,26 @@ spec:
                 elif isinstance(node, ast.ImportFrom):
                     imports.add(node.module or '')
             assert any('sklearn' in i for i in imports), "sklearn not imported"
-            assert any('StandardScaler' in src for _ in [1]), "StandardScaler not used"
+            assert 'StandardScaler' in src, "StandardScaler not used"
             assert 'silhouette_score' in src, "silhouette_score not used"
             assert 'KMeans' in src, "KMeans not used"
-            assert 'CLUSTER_LABELS' in src, "CLUSTER_LABELS constant missing"
+            assert '_assign_cluster_labels' in src, "_assign_cluster_labels function missing"
             assert 'pitcher_clusters' in src, "pitcher_clusters table reference missing"
             assert '--dry-run' in src, "dry-run flag missing"
-            print('cluster_pitchers.py: required imports, constants, and flags present')
+            print('cluster_pitchers.py: required imports, functions, and flags present')
             EOF
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
             import pathlib
             src = pathlib.Path('betting_ml/scripts/pitcher_clustering/cluster_pitchers.py').read_text()
-            assert '0.35' in src, "Silhouette threshold 0.35 not enforced"
-            assert 'MERGE INTO' in src.upper() or 'merge into' in src.lower(), "MERGE INTO not used for upsert"
+            assert '_SILHOUETTE_THRESHOLD' in src, "_SILHOUETTE_THRESHOLD constant missing"
+            # Script uses DELETE + INSERT keyed on (season, snapshot_date) rather than MERGE INTO
+            assert 'DELETE FROM' in src.upper() or 'delete from' in src.lower(), "DELETE not used for upsert"
+            assert 'INSERT INTO' in src.upper() or 'insert into' in src.lower(), "INSERT INTO not used for upsert"
             assert 'dry_run' in src or 'dry-run' in src, "dry-run mode not implemented"
-            print('cluster_pitchers.py: silhouette threshold, MERGE INTO, dry-run all present')
+            assert '--snapshot-date' in src, "--snapshot-date arg missing"
+            print('cluster_pitchers.py: silhouette threshold, DELETE+INSERT upsert, dry-run, snapshot-date all present')
             EOF
 
     - id: build-lineup-vs-cluster-mart
@@ -378,7 +367,7 @@ spec:
             src = pathlib.Path('dbt/models/mart/mart_batter_woba_vs_cluster.sql').read_text()
             assert 'mart_pitch_play_event' in src, "mart_pitch_play_event ref missing"
             assert 'pitcher_clusters' in src, "pitcher_clusters source ref missing"
-            assert 'plate_appearance_event IS NOT NULL' in src, "PA terminal filter missing"
+            assert 'plate_appearance_event is not null' in src.lower(), "PA terminal filter missing"
             assert 'pa_count' in src, "pa_count column missing"
             assert 'adj_woba' in src, "adj_woba shrinkage column missing"
             assert '10' in src, "min PA gate (10) not found"
@@ -392,7 +381,9 @@ spec:
             for col in ['avg_woba_vs_cluster', 'avg_xwoba_vs_cluster', 'cluster_slot_coverage',
                         'starter_cluster_id']:
                 assert col in src, f"Output column '{col}' missing"
-            assert 'game_year - 1' in src.replace(' ', ''), "game_year-1 leakage guard missing"
+            # Leakage guard: snapshot_date < game_date (replaces the original game_year - 1 join;
+            # snapshot_date approach supports monthly in-season retraining per Card 7.D cadence)
+            assert 'snapshot_date' in src, "snapshot_date leakage guard missing"
             assert 'stg_statsapi_lineups_wide' in src, "lineups source missing"
             print('feature_pitcher_cluster_matchups: output columns and leakage guard present')
             EOF

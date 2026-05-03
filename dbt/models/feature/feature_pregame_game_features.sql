@@ -84,6 +84,14 @@ umpire_feats as (
     select * from {{ ref('feature_pregame_umpire_features') }}
 ),
 
+cluster_matchups as (
+    select * from {{ ref('feature_pitcher_cluster_matchups') }}
+),
+
+batter_archetype_matchups as (
+    select * from {{ ref('feature_batter_archetype_matchups') }}
+),
+
 game_context as (
     select
         game_pk,
@@ -438,6 +446,9 @@ final as (
         h_tm.high_leverage_used_prev_2d         as home_high_leverage_used_prev_2d,
         h_tm.closer_used_prev_1d                as home_closer_used_prev_1d,
         h_tm.closer_used_prev_2d                as home_closer_used_prev_2d,
+        h_tm.bullpen_ip_prev_1d                 as home_bullpen_ip_prev_1d,
+        h_tm.bullpen_ip_prev_2d                 as home_bullpen_ip_prev_2d,
+        h_tm.pitchers_used_prev_2d              as home_pitchers_used_prev_2d,
         h_tm.bp_k_pct_14d                       as home_bp_k_pct_14d,
         h_tm.bp_bb_pct_14d                      as home_bp_bb_pct_14d,
         h_tm.bp_xwoba_against_14d               as home_bp_xwoba_against_14d,
@@ -542,6 +553,9 @@ final as (
         a_tm.high_leverage_used_prev_2d         as away_high_leverage_used_prev_2d,
         a_tm.closer_used_prev_1d                as away_closer_used_prev_1d,
         a_tm.closer_used_prev_2d                as away_closer_used_prev_2d,
+        a_tm.bullpen_ip_prev_1d                 as away_bullpen_ip_prev_1d,
+        a_tm.bullpen_ip_prev_2d                 as away_bullpen_ip_prev_2d,
+        a_tm.pitchers_used_prev_2d              as away_pitchers_used_prev_2d,
         a_tm.bp_k_pct_14d                       as away_bp_k_pct_14d,
         a_tm.bp_bb_pct_14d                      as away_bp_bb_pct_14d,
         a_tm.bp_xwoba_against_14d               as away_bp_xwoba_against_14d,
@@ -677,7 +691,31 @@ final as (
         uf.ump_bb_pct_zscore,
         uf.ump_runs_per_game_zscore,
         uf.ump_run_impact_zscore,
-        uf.ump_accuracy_zscore
+        uf.ump_accuracy_zscore,
+
+        -- ── Pitcher cluster matchup features (Card 7.K) ───────────────────────
+        -- Rolling wOBA each lineup scored vs. pitchers in the opposing starter's
+        -- cluster. Null before 2021 (cluster data begins 2020, prior-season lag).
+        cm.home_lineup_avg_woba_vs_cluster,
+        cm.home_lineup_avg_xwoba_vs_cluster,
+        cm.home_lineup_cluster_slot_coverage,
+        cm.away_lineup_avg_woba_vs_cluster,
+        cm.away_lineup_avg_xwoba_vs_cluster,
+        cm.away_lineup_cluster_slot_coverage,
+        cm.home_starter_cluster_id,
+        cm.away_starter_cluster_id,
+
+        -- ── Batter archetype × pitcher archetype matchup features (Card 7.K2) ──
+        -- Population-level expected wOBA based on lineup batter archetypes vs.
+        -- opposing starter's pitcher cluster. Null before 2021 (prior-season lag).
+        bam.home_lineup_archetype_avg_woba,
+        bam.home_lineup_archetype_avg_xwoba,
+        bam.home_lineup_archetype_slot_coverage,
+        bam.away_lineup_archetype_avg_woba,
+        bam.away_lineup_archetype_avg_xwoba,
+        bam.away_lineup_archetype_slot_coverage,
+        bam.home_batter_cluster_mode,
+        bam.away_batter_cluster_mode
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -698,6 +736,10 @@ final as (
         on  wpf.game_pk = g.game_pk
     left join umpire_feats uf
         on  uf.game_pk = g.game_pk
+    left join cluster_matchups cm
+        on  cm.game_pk = g.game_pk
+    left join batter_archetype_matchups bam
+        on  bam.game_pk = g.game_pk
 )
 
 select * from final

@@ -72,6 +72,7 @@ WITH snap_consensus AS (
         AVG(CASE WHEN o.market_key = 'totals' AND o.outcome_name = 'Over' THEN o.outcome_point END) AS total_line_avg
     FROM baseball_data.betting.mart_odds_outcomes o
     WHERE o.commence_date = '{date}'
+      AND o.ingestion_ts < o.commence_time
     GROUP BY o.event_id, o.home_team, o.away_team, o.ingestion_ts
 ),
 ranked AS (
@@ -678,11 +679,11 @@ with st.expander("📈 Market Movement", expanded=False):
         _MV_VISIBLE = ["Matchup", "Home ML", "Away ML", "Total Line", "Captures", "Time Window"]
         _MV_COL_HELP = {
             "Matchup": "Away @ Home",
-            "Home ML": "Consensus home-team moneyline: open → current (Δ pts).  Blue = significant move (≥15 pts).",
-            "Away ML": "Consensus away-team moneyline: open → current (Δ pts)",
-            "Total Line": "Consensus over/under line: open → current",
-            "Captures": "Number of odds snapshots collected for this date",
-            "Time Window": "Time range of first and last capture (UTC)",
+            "Home ML": "Consensus home-team moneyline: open → close (Δ pts). Pre-game snapshots only.  Blue = significant move (≥15 pts).",
+            "Away ML": "Consensus away-team moneyline: open → close (Δ pts). Pre-game snapshots only.",
+            "Total Line": "Consensus over/under line: open → close. Pre-game snapshots only.",
+            "Captures": "Number of pre-game odds snapshots collected for this date",
+            "Time Window": "Time range of first and last pre-game capture (UTC)",
         }
         _MV_SIG_THRESHOLD = 15
 

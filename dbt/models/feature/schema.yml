@@ -1012,3 +1012,119 @@ models:
         description: Total Run Impact z-score — direct measure of umpire zone effect on run expectancy.
       - name: ump_accuracy_zscore
         description: Accuracy Above Expected z-score — how accurately this umpire calls the zone.
+
+  # ============================================================================
+  # feature_pitcher_cluster_matchups
+  # ============================================================================
+  - name: feature_pitcher_cluster_matchups
+    description: >
+      Pre-game pitcher cluster matchup features for ML. One row per game_pk
+      (regular season only, grain matches mart_game_results game_type = 'R').
+
+      Aggregates mart_batter_woba_vs_cluster across all 9 lineup slots, keyed
+      on the opposing starter's pitcher cluster ID. Each lineup batter's
+      30-day shrinkage-adjusted wOBA and xwOBA vs. that cluster are averaged
+      to produce a single game-level matchup score per side.
+
+      Leakage guards:
+        - Cluster assignments use the most recent snapshot_date strictly before
+          game_date (snapshot_ranked CTE with rn = 1).
+        - Batter wOBA stats are joined on game_date = game_date - 1 (strictly
+          prior day), inheriting mart_batter_woba_vs_cluster's own leakage guard.
+
+      Availability: effective coverage begins 2021 (clusters require at least
+      one snapshot from the prior 2020 post-season run; 2020 games have no
+      prior snapshot and will produce nulls). April/early-May games fall back
+      to the prior-season end-of-year snapshot automatically.
+
+      Null pattern: avg_woba/xwoba_vs_cluster are null when (a) no snapshot
+      exists before the game (2020 games), (b) the starter has no cluster
+      assignment, or (c) no lineup batter has ≥ 10 PA vs. that cluster in the
+      rolling window. slot_coverage tracks how many of 9 lineup slots had a
+      non-null adj_woba match.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: home_lineup_avg_woba_vs_cluster
+        description: >
+          Average shrinkage-adjusted wOBA of the home lineup batters vs. the
+          away starter's pitcher cluster. Null when no cluster assignment or
+          batter coverage exists.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "home_lineup_avg_woba_vs_cluster is not null"
+
+      - name: home_lineup_avg_xwoba_vs_cluster
+        description: >
+          Average shrinkage-adjusted xwOBA of the home lineup batters vs. the
+          away starter's pitcher cluster. Null under same conditions as
+          home_lineup_avg_woba_vs_cluster.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "home_lineup_avg_xwoba_vs_cluster is not null"
+
+      - name: home_lineup_cluster_slot_coverage
+        description: >
+          Number of the 9 home lineup slots with a non-null adj_woba match
+          vs. the away starter's cluster. 0 when no batter had coverage.
+          Null when no home lineup was found.
+
+      - name: away_lineup_avg_woba_vs_cluster
+        description: >
+          Average shrinkage-adjusted wOBA of the away lineup batters vs. the
+          home starter's pitcher cluster. Null when no cluster or batter coverage.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "away_lineup_avg_woba_vs_cluster is not null"
+
+      - name: away_lineup_avg_xwoba_vs_cluster
+        description: >
+          Average shrinkage-adjusted xwOBA of the away lineup batters vs. the
+          home starter's pitcher cluster. Null under same conditions.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "away_lineup_avg_xwoba_vs_cluster is not null"
+
+      - name: away_lineup_cluster_slot_coverage
+        description: >
+          Number of the 9 away lineup slots with a non-null adj_woba match
+          vs. the home starter's cluster. 0 when no batter had coverage.
+          Null when no away lineup was found.
+
+      - name: home_starter_cluster_id
+        description: >
+          Cluster ID of the home starter from the most recent pitcher_clusters
+          snapshot strictly before game_date. Null for 2020 games (no prior
+          snapshot) and for games without a confirmed probable home pitcher.
+
+      - name: away_starter_cluster_id
+        description: >
+          Cluster ID of the away starter from the most recent pitcher_clusters
+          snapshot strictly before game_date. Null for same reasons as
+          home_starter_cluster_id.

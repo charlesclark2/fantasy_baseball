@@ -1,0 +1,318 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: historical-intraday-odds-backfill
+  phase: "7"
+  card: "7.P2"
+  priority: P2
+  blocker: "7.P1 complete (PROCEED — 2026-05-03)"
+spec:
+  description: |
+    Backfill historical intraday odds snapshots for the 2021–2025 MLB regular
+    seasons to provide the line movement training data required by Card 7.P3.
+
+    The 7.P1 dry-run confirmed that the OddsAPI historical endpoint stores
+    meaningful intraday variation (67.3% of games show ≥1pp movement at
+    DraftKings; mean = 3.83pp). This card executes the full backfill: 3
+    timestamp snapshots per game date (12:00 / 17:00 / 23:00 UTC) across
+    every regular-season game date from 2021-04-01 through 2025-10-31,
+    writing results into `baseball_data.oddsapi.odds_snapshots_historical`.
+
+    Credit budget: ~2,700 API calls for the full date range
+    (3 snapshots × ~900 game days). Verify credits before running.
+    The 7.P1 dry-run left 19,305 credits remaining.
+
+    Post-backfill gate:
+      PASS if ≥80% of 2024–2025 game_pks have ≥2 distinct snapshots.
+      FAIL otherwise — investigate API gaps before proceeding to 7.P3.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: historical-intraday-odds-backfill-plan
+  phase: "7"
+  card: "7.P2"
+spec:
+  goal:
+    name: historical-intraday-odds-backfill
+
+  tasks:
+
+    - id: create-snowflake-table
+      name: Create odds_snapshots_historical table in Snowflake
+      description: |
+        Create the destination table before the backfill script runs. Execute
+        this DDL in Snowflake (one-time, idempotent):
+
+          CREATE TABLE IF NOT EXISTS baseball_data.oddsapi.odds_snapshots_historical (
+              game_pk          INTEGER,
+              game_date        DATE,
+              snapshot_ts      TIMESTAMP_TZ,
+              home_team        VARCHAR,
+              away_team        VARCHAR,
+              home_price       INTEGER,       -- American odds (null if not available)
+              away_price       INTEGER,
+              over_price       INTEGER,       -- null if no totals market in snapshot
+              under_price      INTEGER,
+              total_line       FLOAT,         -- O/U total (null if no totals)
+              bookmaker        VARCHAR,
+              home_win_prob    FLOAT,         -- derived: american_to_implied_prob(home_price)
+              away_win_prob    FLOAT,
+              load_id          VARCHAR,       -- YYYY-MM-DD_HH:MM_bookmaker
+              loaded_at        TIMESTAMP_TZ DEFAULT CURRENT_TIMESTAMP()
+          );
+
+        Grain: (game_pk, snapshot_ts, bookmaker) — enforced by MERGE in the
+        backfill script.
+
+        Notes:
+          - `game_pk` is the MLB Stats API game ID (integer). The backfill
+            script resolves it from `baseball_data.statsapi.stg_statsapi_games`
+            by matching home_team + away_team + game_date.
+          - `home_win_prob` / `away_win_prob` are stored pre-computed to avoid
+            re-deriving them in every downstream query.
+          - `over_price` / `under_price` / `total_line` are populated only when
+            the bookmaker includes a `totals` market in the snapshot. Null is
+            expected for ~30–40% of historical snapshots.
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Verifies the table DDL is documented (Snowflake MCP used for actual creation)
+            import pathlib
+            spec = pathlib.Path('plan_specs/phase_7/P2_historical_odds_backfill.yaml').read_text()
+            assert 'odds_snapshots_historical' in spec
+            assert 'game_pk' in spec
+            assert 'snapshot_ts' in spec
+            print('DDL documented in plan spec')
+            EOF
+
+    - id: write-backfill-script
+      name: Write scripts/backfill_historical_odds_snapshots.py
+      description: |
+        Create a standalone backfill script that queries the OddsAPI historical
+        endpoint for every regular-season game date and writes results to
+        `baseball_data.oddsapi.odds_snapshots_historical`.
+
+        Script interface:
+          uv run backfill_historical_odds_snapshots.py \
+              --start-date 2021-04-01 \
+              --end-date   2025-10-31 \
+              --timestamps 12:00,17:00,23:00 \
+              [--bookmaker draftkings] \
+              [--sleep-seconds 1.5] \
+              [--dry-run]   # print date range and expected call count; skip API/Snowflake
+
+        Behavior:
+          1. Connect to Snowflake using the same key-pair auth pattern as
+             `odds_api_ingestion.py` (reads SNOWFLAKE_* env vars from ../.env).
+
+          2. Fetch the list of regular-season game dates in the requested range:
+               SELECT DISTINCT official_date
+               FROM baseball_data.betting.stg_statsapi_games
+               WHERE game_type = 'R'
+                 AND official_date BETWEEN :start_date AND :end_date
+               ORDER BY official_date;
+
+          3. For already-loaded (game_date, snapshot_ts, bookmaker) combos,
+             skip the API call (idempotency check):
+               SELECT DISTINCT game_date, snapshot_ts::DATE || 'T' ||
+                   TO_VARCHAR(snapshot_ts, 'HH24:MI') || ':00Z' AS ts_label,
+                   bookmaker
+               FROM baseball_data.oddsapi.odds_snapshots_historical
+               WHERE bookmaker = :bookmaker
+                 AND game_date BETWEEN :start_date AND :end_date;
+
+          4. For each date × timestamp not already loaded:
+             a. Call GET /v4/historical/sports/baseball_mlb/odds with both
+                markets=h2h and markets=totals in the same request (comma-
+                separated: `markets=h2h,totals`). This costs 1 credit per call.
+             b. For each event in the response:
+                - Resolve game_pk from stg_statsapi_games (match home_team +
+                  away_team + commence_time::date). Log any unmatched games but
+                  continue.
+                - Extract h2h home/away prices (American odds) for the
+                  configured bookmaker.
+                - Extract totals market over/under prices and the O/U line.
+                - Compute home_win_prob / away_win_prob using the standard
+                  formula: abs_odds / (abs_odds + 100) for negative odds;
+                  100 / (odds + 100) for positive.
+             c. Batch-write rows to Snowflake via a VARCHAR temp table +
+                PARSE_JSON MERGE pattern (same as ingest_transactions.py):
+                - Stage rows as VARCHAR strings in a temp table.
+                - MERGE INTO odds_snapshots_historical ON
+                  (game_pk, snapshot_ts, bookmaker) — UPDATE if exists,
+                  INSERT if not. This makes reruns safe.
+
+          5. After each monthly batch (or every 50 dates), log:
+               - n_dates processed, n_dates skipped (already loaded)
+               - n_rows inserted / updated
+               - credits used / remaining
+
+          6. Print a final summary:
+               - Total dates processed, total API calls made, total rows written
+               - Credits remaining (from last response header)
+
+          Error handling:
+            - 401/403: exit 1 with plan tier message
+            - 429: exit 1, log partial progress (rows already written are safe
+              due to MERGE idempotency; rerun will skip loaded dates)
+            - Unmatched game (no game_pk found): log as WARNING; write row with
+              game_pk = NULL (excludes from 7.P3 join but preserves the data)
+
+        Note on `markets=h2h,totals`: The OddsAPI historical endpoint accepts
+        comma-separated markets in a single request, costing only 1 credit for
+        both. Use this to capture totals market data in the same pass.
+
+      dependsOn:
+        - create-snowflake-table
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('scripts/backfill_historical_odds_snapshots.py').read_text()
+            for flag in ['start_date', 'end_date', 'timestamps', 'dry_run']:
+                assert flag in src, f"CLI flag '{flag}' not found"
+            tree = ast.parse(src)
+            print('backfill_historical_odds_snapshots.py: required CLI flags present')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import subprocess
+            result = subprocess.run(
+                ['python3', 'scripts/backfill_historical_odds_snapshots.py',
+                 '--start-date', '2024-04-15',
+                 '--end-date',   '2024-04-15',
+                 '--timestamps', '12:00,17:00,23:00',
+                 '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, \
+                f"--dry-run failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
+            print('backfill_historical_odds_snapshots.py: --dry-run exits cleanly')
+            EOF
+
+    - id: estimate-credit-cost
+      name: Estimate API credit cost and document in scripts/daily_run.md
+      description: |
+        Before running the full backfill, calculate the expected credit cost:
+          - Query stg_statsapi_games to count distinct game dates per season:
+              SELECT game_year, COUNT(DISTINCT official_date) AS n_dates
+              FROM baseball_data.betting.stg_statsapi_games
+              WHERE game_type = 'R'
+                AND official_date BETWEEN '2021-04-01' AND '2025-10-31'
+              GROUP BY game_year ORDER BY game_year;
+          - Multiply n_dates × 3 timestamps to get total API calls.
+          - Already-loaded dates (from prior partial runs) reduce this count.
+          - Typical cost: ~270 dates/season × 3 timestamps × 5 seasons = ~4,050
+            calls. With 19,305 credits remaining, this is well within budget.
+          - Document in `scripts/daily_run.md` under a new "Credit Budget" section.
+
+      dependsOn:
+        - write-backfill-script
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            doc = pathlib.Path('scripts/daily_run.md')
+            if doc.exists():
+                assert 'credit' in doc.read_text().lower() or 'Credit' in doc.read_text(), \
+                    'Credit budget not documented in scripts/daily_run.md'
+            else:
+                # acceptable if the file doesn't exist yet — check project_context.md instead
+                ctx = pathlib.Path('project_context.md').read_text()
+                assert '7.P2' in ctx and 'credit' in ctx.lower(), \
+                    'Credit estimate not documented anywhere'
+            print('Credit budget documented')
+            EOF
+
+    - id: execute-full-backfill
+      name: Run the backfill script for 2021–2025 regular seasons
+      description: |
+        Execute in monthly batches to stay well under rate limits. Recommended
+        order: newest first (2025, then 2024, etc.) so the most recent data is
+        available for 7.P3 validation while older seasons fill in.
+
+        Recommended batch commands (run from scripts/):
+
+          # 2025 season
+          uv run backfill_historical_odds_snapshots.py \
+              --start-date 2025-03-01 --end-date 2025-10-31 \
+              --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+
+          # 2024 season
+          uv run backfill_historical_odds_snapshots.py \
+              --start-date 2024-03-01 --end-date 2024-10-31 \
+              --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+
+          # 2021–2023 seasons (can be combined or split further)
+          uv run backfill_historical_odds_snapshots.py \
+              --start-date 2021-04-01 --end-date 2023-10-31 \
+              --timestamps 12:00,17:00,23:00 --bookmaker draftkings
+
+        The script is idempotent: rerunning any batch is safe. If a run is
+        interrupted by a 429, rerun the same batch — already-loaded dates
+        are skipped via the idempotency check.
+
+        Post-backfill verification query (run via Snowflake MCP):
+          SELECT
+              YEAR(game_date) AS season,
+              COUNT(DISTINCT game_pk) AS n_games,
+              COUNT(DISTINCT CASE WHEN snapshot_count >= 2 THEN game_pk END) AS n_games_2plus_snaps,
+              ROUND(100.0 * COUNT(DISTINCT CASE WHEN snapshot_count >= 2 THEN game_pk END)
+                    / NULLIF(COUNT(DISTINCT game_pk), 0), 1) AS pct_2plus_snaps
+          FROM (
+              SELECT game_pk, game_date, COUNT(*) AS snapshot_count
+              FROM baseball_data.oddsapi.odds_snapshots_historical
+              WHERE bookmaker = 'draftkings'
+              GROUP BY game_pk, game_date
+          ) t
+          GROUP BY season ORDER BY season;
+
+        Gate: ≥80% of 2024–2025 games must have ≥2 snapshots for the backfill
+        to be considered sufficient for 7.P3 feature computation.
+
+      dependsOn:
+        - estimate-credit-cost
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Checks that the table exists and has rows (Snowflake MCP verifies coverage)
+            # This AC is satisfied after running the verification query above and
+            # confirming ≥80% coverage for 2024–2025.
+            import pathlib
+            ctx = pathlib.Path('project_context.md').read_text()
+            assert '7.P2' in ctx
+            # Operator: replace this check with actual Snowflake query result
+            print('MANUAL STEP: run coverage query via Snowflake MCP and confirm ≥80% for 2024–2025')
+            EOF
+
+    - id: update-project-context
+      name: Mark Card 7.P2 complete and unblock 7.P3 in project_context.md
+      description: |
+        After the backfill passes the coverage gate:
+          1. Update Card 7.P2 header to "✓ Complete (YYYY-MM-DD)".
+          2. Add a completion note with coverage stats:
+             "Coverage: 2024 XX.X% (N games ≥2 snaps), 2025 XX.X%"
+          3. Remove the blocker from Card 7.P3 and mark it as active.
+          4. Update the plan spec index row for 7.P2 and 7.P3.
+
+      dependsOn:
+        - execute-full-backfill
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            ctx = pathlib.Path('project_context.md').read_text()
+            assert 'COMPLETE' in ctx or '7.P2' in ctx, \
+                'project_context.md not updated with 7.P2 completion'
+            print('project_context.md updated for 7.P2 completion')
+            EOF

@@ -55,6 +55,19 @@ spec:
         before/after CV table for all three models, calibrator ECE before/after,
         interpretation noting which feature groups contributed lift, and
         recommendation for Card 7.MB.
+    - description: >
+        predict_today.py runs end-to-end from the Streamlit app ("Refresh
+        Predictions" button) without error after all model artifacts and the
+        calibrator are updated. Specifically: (1) PlattCalibratedXGBClassifier
+        unpickles correctly (class must be importable at load time via
+        betting_ml/utils/calibrated_classifier.py); (2) NGBoost LogNormal
+        total_runs model params are extracted using the scipy lognorm convention
+        (s/scale keys, not loc/scale); (3) feature count matches
+        xgb_classifier.n_features_in_ (267 retained + 2 pipeline-generated
+        indicators = 269 expected). Smoke-test by triggering "Refresh
+        Predictions" in the app immediately after completing Task
+        refit-calibrator-and-document and confirming no traceback in the
+        terminal.
 
 ---
 apiVersion: planspec.io/v1alpha1
@@ -72,6 +85,50 @@ spec:
   graph:
     nodes:
 
+      - id: refresh-pitcher-clusters
+        kind: Task
+        description: >
+          Re-run pitcher k-means clustering for the prior season before retraining
+          so that feature_pitcher_cluster_matchups reflects current arsenal profiles.
+          Clustering is a prerequisite for feature coverage because the
+          pitcher_clusters table drives home/away_starter_cluster_id columns.
+
+          Command:
+            uv run python betting_ml/scripts/pitcher_clustering/cluster_pitchers.py
+              --season {prior_season}
+
+          Where {prior_season} = current training year - 1 (e.g., 2024 when
+          retraining on 2021–2025 data). The prior-season lag is intentional:
+          feature_pitcher_cluster_matchups uses game_year - 1 clusters to prevent
+          label leakage.
+
+          After clustering:
+            dbtf build --select mart_batter_woba_vs_cluster
+                              feature_pitcher_cluster_matchups
+                              feature_pregame_game_features
+                --target dev
+
+          Silhouette assertion: script exits non-zero if silhouette < 0.35.
+          If silhouette cannot reach threshold, reduce --max-k to 6 and re-run.
+
+          Model artifacts saved to betting_ml/models/pitcher_clustering/:
+            kmeans_{season}.pkl, scaler_{season}.pkl
+
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Clustering script exits cleanly
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                assert pathlib.Path('betting_ml/models/pitcher_clustering').exists(), \
+                    "pitcher_clustering model artifacts directory missing — was cluster_pitchers.py run?"
+                print("pitcher_clustering artifacts directory exists")
+
       - id: verify-feature-coverage
         kind: Task
         description: >
@@ -88,7 +145,7 @@ spec:
                 COUNT(home_umpire_k_rate) as has_umpire,
                 COUNT(home_starter_injury_flag) as has_injury,
                 COUNT(home_lineup_woba_vs_archetype) as has_archetype,
-                COUNT(home_lineup_wrc_vs_cluster) as has_cluster
+                COUNT(home_lineup_avg_woba_vs_cluster) as has_cluster
             FROM baseball_data.betting_features.feature_pregame_game_features
             WHERE game_year >= 2021
             GROUP BY game_year
@@ -100,7 +157,8 @@ spec:
 
           If any Phase 7 feature column is entirely absent (schema gap), open a
           blocking issue in the plan before proceeding to Task 2.
-        dependsOn: []
+        dependsOn:
+          - refresh-pitcher-clusters
         acceptanceCriteria:
           - type: command_succeeds
             name: Feature coverage check runs without error
@@ -338,3 +396,25 @@ spec:
                     f"total_runs cv_mae={reg['total_runs'].get('cv_mae')}, "
                     f"run_differential cv_mae={reg['run_differential'].get('cv_mae')}"
                 )
+          - type: command_succeeds
+            name: predict_today.py model-loading smoke test (no Snowflake required)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys, pathlib
+                sys.path.insert(0, str(pathlib.Path('.').resolve()))
+                from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa
+                from betting_ml.utils.model_io import load_model
+                clf_hw = load_model('home_win', 'prod')
+                assert hasattr(clf_hw, 'xgb_classifier'), \
+                    f"home_win model missing .xgb_classifier — got type {type(clf_hw)}"
+                n = clf_hw.xgb_classifier.n_features_in_
+                assert n > 0, f"n_features_in_ is {n}"
+                ngb_tot = load_model('total_runs', 'prod')
+                ngb_diff = load_model('run_differential', 'prod')
+                print(f"All models load OK. home_win expects {n} features.")
+                print(f"total_runs dist: {type(ngb_tot.Dist).__name__}")
+                print(f"run_differential dist: {type(ngb_diff.Dist).__name__}")

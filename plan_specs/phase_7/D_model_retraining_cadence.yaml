@@ -62,6 +62,18 @@ spec:
         model_registry.yaml contains old artifact paths renamed with a date suffix
         (e.g. xgb_isotonic_home_win_2026-07-15.pkl) after a retrain run, confirming
         the rollback mechanism works
+    - description: >
+        Pitcher cluster monthly retraining cadence is implemented and documented:
+        cluster_pitchers.py accepts --snapshot-date (default today); pitcher_clusters
+        table PK is (pitcher_id, season, snapshot_date); feature_pitcher_cluster_matchups
+        joins on MAX(snapshot_date) < game_date.  Retraining schedule:
+        April–early May use prior-season end-of-year snapshot (no in-season run needed);
+        first in-season snapshot run on or around June 1 once starters accumulate
+        ~750 pitches (stability analysis ARI ~0.63, 2024 season); monthly snapshots
+        on or around the 1st of July, August, and September; post-World-Series run
+        produces the off-season baseline for the following year.
+        Command: uv run python betting_ml/scripts/pitcher_clustering/cluster_pitchers.py
+        --season <year> --snapshot-date <YYYY-MM-DD>
 
 ---
 apiVersion: planspec.io/v1alpha1

@@ -1,0 +1,18 @@
+# OddsAPI Historical Dry-Run — Sample Dates
+# Verified against stg_statsapi_games (game_type = 'R') via Snowflake query 2026-05-03.
+# All dates have ≥8 regular-season games. Dates with 10+ games preferred.
+#
+# 2024 season (6 dates — early, mid, late spread)
+2024-04-15
+2024-05-10
+2024-06-20
+2024-07-25
+2024-08-30
+2024-09-20
+# 2025 season (6 dates — early, mid, late spread)
+2025-04-12
+2025-05-06
+2025-06-25
+2025-07-20
+2025-08-28
+2025-09-15

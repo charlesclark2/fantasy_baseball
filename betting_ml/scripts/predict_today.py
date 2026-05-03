@@ -28,6 +28,7 @@ from betting_ml.utils.data_loader import load_features, load_todays_features, ge
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
+from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — required for joblib unpickling
 from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
@@ -657,11 +658,14 @@ def main() -> None:
     # ------------------------------------------------------------------
     X_vals = X_today_imp.values
 
-    # NGBoost .dist() returns the predictive distribution (scipy-compatible, .params + .cdf()).
-    # In ngboost >=0.3 the method is named pred_dist(); the plan spec refers to this as .dist().
     pred_dist_tot = ngb_total.pred_dist(X_vals)
-    loc_tot   = pred_dist_tot.params["loc"]
-    scale_tot = pred_dist_tot.params["scale"]
+    # LogNormal uses scipy lognorm convention: s=sigma (log-std), scale=exp(mu)
+    if "s" in pred_dist_tot.params:
+        scale_tot = pred_dist_tot.params["s"]
+        loc_tot   = np.log(pred_dist_tot.params["scale"])
+    else:
+        loc_tot   = pred_dist_tot.params["loc"]
+        scale_tot = pred_dist_tot.params["scale"]
 
     total_line_vals = (
         df_today["total_line_consensus"].values
@@ -679,20 +683,13 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    # XGBoost requires an exact feature-count match. The weather features were added
-    # to feature_selection.md after the current prod model was trained; exclude them
-    # here until the model is retrained to include them.
-    _FEATURES_ADDED_AFTER_LAST_RETRAIN = frozenset({
-        'humidity_pct', 'temp_f', 'wind_component_mph', 'wind_direction_deg',
-    })
-    clf_cols = [c for c in X_today_imp.columns if c not in _FEATURES_ADDED_AFTER_LAST_RETRAIN]
-    _expected_n = clf_hw.base_clf.n_features_in_
-    if len(clf_cols) != _expected_n:
+    _expected_n = clf_hw.xgb_classifier.n_features_in_
+    if X_today_imp.shape[1] != _expected_n:
         warnings.warn(
-            f"clf_hw expects {_expected_n} features but got {len(clf_cols)} after excluding "
-            f"known post-retrain features. Retraining needed."
+            f"clf_hw expects {_expected_n} features but got {X_today_imp.shape[1]}. "
+            f"Model retraining may be needed."
         )
-    X_clf = X_today_imp[clf_cols].values
+    X_clf = X_today_imp.values
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
 
     # ------------------------------------------------------------------

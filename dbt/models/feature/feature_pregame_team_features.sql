@@ -303,6 +303,9 @@ final as (
         bw.high_leverage_used_prev_2d,
         bw.closer_used_prev_1d,
         bw.closer_used_prev_2d,
+        bw.bullpen_ip_prev_1d,
+        bw.bullpen_ip_prev_2d,
+        bw.pitchers_used_prev_2d,
 
         -- ── Schedule context ──────────────────────────────────────────────────
         sc.days_rest,

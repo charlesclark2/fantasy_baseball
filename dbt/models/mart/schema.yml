@@ -1431,6 +1431,46 @@ models:
                            'right_field', 'unknown']
                   # null is valid when error_on_play is false
 
+      - name: woba_value
+        description: >
+          Statcast wOBA numerator value for this plate appearance outcome.
+          Non-null only on terminal pitches for wOBA-eligible events (hits, walks,
+          HBP, outs). Null on non-terminal pitches and for events not included
+          in wOBA (stolen bases, pickoffs, etc.).
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 5
+              config:
+                where: "woba_value is not null"
+
+      - name: woba_denom
+        description: >
+          Statcast wOBA denominator. 1 for all wOBA-eligible plate appearances
+          (at-bats, walks, HBP, sacrifice flies). 0 for non-PA events (sacrifice
+          bunts, interference). Null on non-terminal pitches.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "woba_denom is not null"
+
+      - name: xwoba
+        description: >
+          Statcast expected wOBA based on exit velocity and launch angle.
+          Non-null only for balls put in play. Null for strikeouts, walks,
+          HBP, and all non-terminal pitches.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 5
+              config:
+                where: "xwoba is not null"
+
       - name: delta_run_exp
         description: Change in run expectancy before and after the pitch.
 
@@ -6316,3 +6356,117 @@ models:
           Opening Day (no prior game in season) and when venue data is missing.
         tests:
           - not_null
+
+  # ============================================================================
+  # mart_batter_woba_vs_cluster
+  # ============================================================================
+  - name: mart_batter_woba_vs_cluster
+    description: >
+      Rolling 30-day batter wOBA performance vs. each pitcher cluster.
+      Grain: batter_id × cluster_id × game_date (one row per batter per cluster
+      per calendar day they appear in the data). The game_date here is the
+      anchor date — rolling stats cover game_date in [anchor_date - 30 days,
+      anchor_date - 1 day] (strictly prior, no leakage).
+
+      Availability: cluster data begins 2020; all rows have game_year >= 2020.
+      Minimum sample gate: only rows with pa_count >= 10 are emitted.
+
+      Shrinkage: both wOBA and xwOBA are shrunk toward league average
+      (0.320 and 0.315 respectively) using a prior of 30 PA. adj_woba and
+      adj_xwoba are the primary features for downstream use.
+
+      Joined by feature_pitcher_cluster_matchups using game_date = game_date - 1
+      (i.e., the day-before row) to align with pre-game leakage constraints.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [batter_id, cluster_id, game_date]
+
+    columns:
+      - name: batter_id
+        description: MLB Player ID for the batter.
+        tests:
+          - not_null
+
+      - name: cluster_id
+        description: Pitcher cluster ID the batter faced (from pitcher_clusters).
+        tests:
+          - not_null
+
+      - name: game_date
+        description: >
+          Anchor date for the rolling window. Rows cover pitches from
+          [game_date - 30 days, game_date - 1 day] strictly.
+        tests:
+          - not_null
+
+      - name: pa_count
+        description: >
+          Plate appearances by this batter vs. this cluster in the rolling 30-day
+          window ending the day before game_date. Always >= 10 (model gate).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 10"
+
+      - name: raw_woba
+        description: >
+          Raw wOBA = woba_sum / woba_denom_sum over the rolling window.
+          Null when woba_denom_sum = 0 (no wOBA-eligible PA).
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+              config:
+                where: "raw_woba is not null"
+
+      - name: raw_xwoba
+        description: >
+          Average xwOBA over the rolling window. Null when no balls in play
+          contribute xwOBA within the window.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+              config:
+                where: "raw_xwoba is not null"
+
+      - name: shrink_weight
+        description: >
+          Bayesian shrinkage weight: pa_count / (pa_count + 30). Range [0, 1).
+          Higher values indicate the raw estimate is trusted more; at the gate
+          minimum of 10 PA this equals ~0.25.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+      - name: adj_woba
+        description: >
+          Shrinkage-adjusted wOBA toward league average (0.320).
+          adj_woba = shrink_weight × raw_woba + (1 − shrink_weight) × 0.320.
+          Primary feature for downstream ML use.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+
+      - name: adj_xwoba
+        description: >
+          Shrinkage-adjusted xwOBA toward league average (0.315).
+          adj_xwoba = shrink_weight × raw_xwoba + (1 − shrink_weight) × 0.315.
+          Primary feature for downstream ML use.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2

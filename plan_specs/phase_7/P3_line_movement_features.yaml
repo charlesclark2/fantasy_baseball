@@ -1,0 +1,330 @@
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: line-movement-feature-engineering
+  phase: "7"
+  card: "7.P3"
+  priority: P2
+  blocker: "7.P2 complete (odds_snapshots_historical populated with ≥80% coverage)"
+spec:
+  description: |
+    Compute opening-to-pre-game line movement as model features for both the
+    h2h (home win probability) and totals (over/under) models.
+
+    Intraday line movement is one of the few signals that encodes information
+    from sharp bettors — information not available in any observable feature.
+    When the implied home-win probability shifts materially from market open
+    to T-1h, it almost always reflects informed money rather than public
+    sentiment. The 7.P1 dry-run confirmed that DraftKings historical data
+    shows real intraday variation (mean 3.83pp across 2024–2025 samples).
+
+    Deliverables:
+      1. New dbt model: `mart_odds_line_movement` — one row per game_pk,
+         combining historical snapshots (7.P2) and live 2026 data.
+      2. Four new feature columns added to `feature_pregame_game_features`:
+         `h2h_line_movement`, `total_line_movement`, `open_home_win_prob`,
+         `open_total_line`.
+      3. CV impact documented: Brier score and mean h2h edge before and after;
+         feature importance from SHAP confirms non-zero contribution.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: line-movement-feature-engineering-plan
+  phase: "7"
+  card: "7.P3"
+spec:
+  goal:
+    name: line-movement-feature-engineering
+
+  tasks:
+
+    - id: build-mart-odds-line-movement
+      name: Create dbt model mart_odds_line_movement
+      description: |
+        Build `dbt/models/mart/mart_odds_line_movement.sql` with grain:
+        one row per game_pk (one row per game, not per snapshot).
+
+        Columns:
+          game_pk              INTEGER     -- MLB Stats API game ID
+          game_date            DATE
+          home_team            VARCHAR
+          away_team            VARCHAR
+          open_home_win_prob   FLOAT       -- implied prob from earliest h2h snapshot
+          pregame_home_win_prob FLOAT      -- implied prob from last snapshot before game
+          h2h_line_movement    FLOAT       -- pregame_home_win_prob - open_home_win_prob
+                                           --   positive = line moved toward home team
+          open_total_line      FLOAT       -- opening O/U total (null if no totals data)
+          pregame_total_line   FLOAT       -- O/U total from last snapshot before game
+          total_line_movement  FLOAT       -- pregame_total_line - open_total_line
+                                           --   positive = total moved up
+          snapshot_count       INTEGER     -- distinct snapshots available (data quality flag)
+          data_source          VARCHAR     -- 'historical' (7.P2) or 'live' (mart_odds_outcomes)
+          bookmaker            VARCHAR     -- which bookmaker used (default: draftkings)
+
+        Data sources by era:
+          - 2021–2025: `baseball_data.oddsapi.odds_snapshots_historical` (Card 7.P2)
+          - 2026+:     `baseball_data.betting.mart_odds_outcomes` filtered to
+                       `ingestion_ts < commence_time` (live snapshots)
+
+        Use a UNION ALL + ROW_NUMBER pattern to identify earliest and latest
+        snapshot per game_pk across both sources. The "last snapshot before
+        game" is the row with the maximum snapshot_ts that is still
+        < commence_time (leakage guard — same pattern as feature_pregame_odds_features).
+
+        Null handling:
+          - When only one snapshot exists: h2h_line_movement and
+            total_line_movement are NULL (not 0 — do NOT impute here; imputation
+            happens in feature_pregame_game_features).
+          - When totals data is absent from all snapshots for a game:
+            open_total_line, pregame_total_line, total_line_movement are NULL.
+
+        dbt tests to add in mart_odds_line_movement.yml:
+          - not_null: game_pk
+          - not_null: game_date
+          - relationships: game_pk to mart_game_results.game_pk
+          - accepted_values: data_source in ['historical', 'live']
+          - dbt_utils.recency: game_date is within 7 days of current date
+            (verifies live data is flowing)
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            model = pathlib.Path('dbt/models/mart/mart_odds_line_movement.sql')
+            assert model.exists(), 'mart_odds_line_movement.sql not found'
+            src = model.read_text()
+            for col in ['h2h_line_movement', 'total_line_movement',
+                        'open_home_win_prob', 'open_total_line', 'snapshot_count']:
+                assert col in src, f"Column '{col}' not found in mart model"
+            print('mart_odds_line_movement.sql: all required columns present')
+            EOF
+        - type: command_succeeds
+          command: |
+            bash -c "cd $(git rev-parse --show-toplevel)/dbt && dbtf build --select mart_odds_line_movement 2>&1 | tail -5"
+
+    - id: add-sources-yml-entry
+      name: Register odds_snapshots_historical in dbt sources.yml
+      description: |
+        Add the new raw table as a dbt source so `mart_odds_line_movement` can
+        reference it via `{{ source('oddsapi', 'odds_snapshots_historical') }}`.
+
+        In `dbt/models/sources.yml`, under the existing `oddsapi` source block,
+        add:
+          - name: odds_snapshots_historical
+            description: >
+              Historical intraday odds snapshots for 2021–2025 MLB regular
+              seasons. Three snapshots per game date at 12:00, 17:00, and
+              23:00 UTC. Grain: (game_pk, snapshot_ts, bookmaker). Written
+              by scripts/backfill_historical_odds_snapshots.py (Card 7.P2).
+            columns:
+              - name: game_pk
+                description: MLB Stats API game ID. May be null for unmatched events.
+              - name: snapshot_ts
+                description: UTC timestamp of the OddsAPI historical query.
+              - name: bookmaker
+                description: OddsAPI bookmaker key (e.g., 'draftkings').
+              - name: home_win_prob
+                description: Implied home win probability derived from American odds.
+              - name: h2h_line_movement
+                description: Derived column in mart_odds_line_movement, not stored here.
+
+      dependsOn:
+        - build-mart-odds-line-movement
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            yml = pathlib.Path('dbt/models/sources.yml').read_text()
+            assert 'odds_snapshots_historical' in yml, \
+                'odds_snapshots_historical not found in sources.yml'
+            print('sources.yml: odds_snapshots_historical registered')
+            EOF
+
+    - id: extend-feature-pregame-game-features
+      name: Add 4 line movement columns to feature_pregame_game_features
+      description: |
+        Extend `dbt/models/feature/feature_pregame_game_features.sql` to
+        LEFT JOIN `mart_odds_line_movement` and expose four new columns:
+
+          home_h2h_line_movement   FLOAT   -- h2h_line_movement (signed, home perspective)
+          home_open_win_prob       FLOAT   -- open_home_win_prob
+          total_line_movement      FLOAT   -- total_line_movement (positive = total moved up)
+          open_total_line          FLOAT   -- opening O/U line
+
+        Null imputation (apply in this model, not in mart_odds_line_movement):
+          - COALESCE(lm.h2h_line_movement, 0.0) AS home_h2h_line_movement
+          - COALESCE(lm.total_line_movement, 0.0) AS total_line_movement
+          - open_home_win_prob and open_total_line: leave NULL (imputing 0.0
+            for a probability doesn't make sense semantically; models will
+            handle nulls or they will be excluded by the correlation filter).
+
+        JOIN condition (leakage guard):
+          LEFT JOIN mart_odds_line_movement lm
+              ON lm.game_pk = g.game_pk
+              AND lm.bookmaker = 'draftkings'
+
+        The bookmaker is hardcoded to 'draftkings' in this first version.
+        Add a comment noting that a configurable bookmaker parameter is
+        a future enhancement.
+
+        No changes to the grain (still one row per game_pk). Row count after
+        the join should be identical to the existing count (LEFT JOIN).
+
+      dependsOn:
+        - add-sources-yml-entry
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            feat = pathlib.Path('dbt/models/feature/feature_pregame_game_features.sql').read_text()
+            for col in ['h2h_line_movement', 'total_line_movement',
+                        'open_home_win_prob', 'open_total_line']:
+                assert col in feat, f"Column '{col}' not found in feature_pregame_game_features"
+            assert 'mart_odds_line_movement' in feat, \
+                'mart_odds_line_movement join not found in feature_pregame_game_features'
+            print('feature_pregame_game_features: all 4 line movement columns present')
+            EOF
+        - type: command_succeeds
+          command: |
+            bash -c "cd $(git rev-parse --show-toplevel)/dbt && dbtf build --select feature_pregame_game_features 2>&1 | tail -5"
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            # Row count must not change from LEFT JOIN
+            # Operator: run this query via Snowflake MCP to verify
+            print('MANUAL STEP: verify row count unchanged in feature_pregame_game_features after join')
+            print('SELECT COUNT(*) FROM baseball_data.betting.feature_pregame_game_features;')
+            print('Expected: same count as before this change (51,382 as of Card 7.J).')
+            EOF
+
+    - id: update-feature-notes
+      name: Document null rate and imputation in betting_ml/evaluation/feature_notes.md
+      description: |
+        Create or update `betting_ml/evaluation/feature_notes.md` with a section
+        for the line movement features:
+
+        ## Line Movement Features (Card 7.P3)
+
+        **Source:** `mart_odds_line_movement` via `feature_pregame_game_features`
+        **Bookmaker:** DraftKings (hardcoded; future enhancement to make configurable)
+
+        ### Columns
+        | Column | Description | Null handling |
+        |--------|-------------|---------------|
+        | `home_h2h_line_movement` | pregame_home_win_prob − open_home_win_prob | Imputed 0.0 (no movement = no info) |
+        | `home_open_win_prob` | Implied home win prob at market open | NULL left as-is (imputing 0.0 for a prob is meaningless) |
+        | `total_line_movement` | pregame_total − open_total O/U | Imputed 0.0 |
+        | `open_total_line` | Opening O/U total | NULL left as-is |
+
+        ### Expected null rates (post 7.P2 backfill)
+        - 2024–2025: ~20% null for line movement (games with only 1 snapshot);
+          ~35–40% null for totals columns (bookmakers often omit totals from
+          historical snapshots).
+        - 2021–2023: null rate may be higher — API data retention is shallower
+          for older seasons. Accept up to 50% null for pre-2022 data.
+        - 2026+: null rate ~0% for h2h movement (live intraday snapshots);
+          ~10–15% for totals (some games have no totals market).
+
+        ### Assumption: imputing 0.0 for no movement
+        When only one snapshot is available (market open = market close), we
+        impute movement = 0.0 rather than NULL. The rationale: zero movement
+        conveys "no detectable sharp action" — a meaningful signal. Imputing
+        the mean or median would introduce leakage from other games in the
+        training set. This assumption is documented here and should be revisited
+        if the feature contributes negatively to model performance.
+
+      dependsOn:
+        - extend-feature-pregame-game-features
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            notes = pathlib.Path('betting_ml/evaluation/feature_notes.md')
+            assert notes.exists(), 'feature_notes.md not found'
+            text = notes.read_text()
+            assert 'line movement' in text.lower() or 'h2h_line_movement' in text, \
+                'Line movement section not found in feature_notes.md'
+            assert 'imput' in text.lower(), 'Imputation strategy not documented'
+            print('feature_notes.md: line movement documentation present')
+            EOF
+
+    - id: cv-impact-evaluation
+      name: Evaluate CV impact and document feature importance
+      description: |
+        After building the feature store with line movement columns:
+
+        1. Run feature selection to check which columns survive the r ≥ 0.02
+           correlation threshold with home_win (h2h model) and total_runs
+           (totals model):
+             - Expected to survive: `home_h2h_line_movement` (sharp money signal)
+             - Less certain: `open_home_win_prob`, `total_line_movement`,
+               `open_total_line`
+
+        2. Retrain the XGBoost home_win model with the new features included.
+           Compare Brier scores and mean h2h edge:
+             - Baseline: current model (Card 7.MA or most recent retrain)
+             - v1 + line movement: model with line movement features added
+
+        3. Compute SHAP values for the retrained model. Confirm that
+           `home_h2h_line_movement` has non-zero mean |SHAP| value in the
+           feature importance plot.
+
+        4. Write results to `betting_ml/evaluation/line_movement_feature_impact.md`:
+             - Feature selection results (survived / dropped)
+             - CV Brier score: before and after
+             - Mean h2h edge: before and after (on has_odds rows)
+             - SHAP top-20 feature importance table
+             - Recommendation: include / exclude from production model
+
+        Note: Full model retrain is deferred to Card 7.MA. This task runs a
+        quick CV evaluation using the existing train/test split in
+        `run_xgb_home_win_search.py` or an equivalent lightweight script.
+        Do NOT replace the production model until Card 7.MA runs the full
+        grid search with all Phase 7 features.
+
+      dependsOn:
+        - update-feature-notes
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/line_movement_feature_impact.md')
+            assert report.exists(), 'line_movement_feature_impact.md not found'
+            text = report.read_text()
+            for kw in ['brier', 'h2h_line_movement', 'shap', 'mean']:
+                assert kw.lower() in text.lower(), f"'{kw}' not found in impact report"
+            print('line_movement_feature_impact.md: required sections present')
+            EOF
+
+    - id: update-project-context
+      name: Mark Card 7.P3 complete and update project_context.md
+      description: |
+        After CV evaluation is documented:
+          1. Update Card 7.P3 header to "✓ Complete (YYYY-MM-DD)".
+          2. Add a note with CV impact: Brier before/after, mean edge before/after,
+             whether `home_h2h_line_movement` survived feature selection.
+          3. Update the plan spec index row for 7.P3.
+          4. If the feature did NOT survive the correlation filter or SHAP shows
+             near-zero contribution, note this explicitly and mark the feature
+             as excluded pending Card 7.MA full retrain.
+
+      dependsOn:
+        - cv-impact-evaluation
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            ctx = pathlib.Path('project_context.md').read_text()
+            assert 'COMPLETE' in ctx or '7.P3' in ctx, \
+                'project_context.md not updated with 7.P3 completion'
+            print('project_context.md updated for 7.P3 completion')
+            EOF
