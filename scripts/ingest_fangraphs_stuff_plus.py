@@ -47,7 +47,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
-import statsapi
+import requests
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
@@ -81,7 +81,13 @@ def _season_dates(season: int) -> tuple[date, date]:
         return _season_dates_cache[season]
 
     try:
-        data = statsapi.get("seasons", {"sportId": 1, "season": season})
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/seasons",
+            params={"sportId": 1, "season": season},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
         info = data["seasons"][0]
         start = date.fromisoformat(info["regularSeasonStartDate"])
         end = date.fromisoformat(info["regularSeasonEndDate"])
