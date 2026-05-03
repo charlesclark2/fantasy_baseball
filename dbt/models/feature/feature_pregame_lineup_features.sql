@@ -102,6 +102,52 @@ slot_pre_game as (
     select * from slot_stats_ranked where rn = 1
 ),
 
+-- Point-in-time IL status per lineup slot as of official_date
+-- LEAKAGE GUARD: status_start_date <= official_date ensures only pre-game transactions used
+slot_injury as (
+    select
+        sp.game_pk,
+        sp.official_date,
+        sp.home_away,
+        sp.slot,
+        sp.batter_id,
+        coalesce(inj.is_injured, false)  as is_injured
+    from slot_pre_game sp
+    left join {{ ref('stg_statsapi_player_injury_status') }} inj
+        on  inj.player_id         = sp.batter_id
+        and inj.status_start_date <= sp.official_date   -- LEAKAGE GUARD
+        and (
+                inj.status_end_date  > sp.official_date
+                or inj.status_end_date is null
+            )
+),
+
+-- Injury-adjusted lineup quality aggregates
+-- Divides by 9 (not active count) so IL slots impose a penalty on the aggregate
+injury_agg as (
+    select
+        si.game_pk,
+        si.official_date,
+        si.home_away,
+        count(case when si.is_injured then 1 end)       as injured_player_count,
+        round(
+            sum(case when not si.is_injured
+                     then coalesce(sp.woba_30d,  0) else 0 end
+            ) / 9.0, 3
+        )                                               as injury_adj_avg_woba_30d,
+        round(
+            sum(case when not si.is_injured
+                     then coalesce(sp.xwoba_30d, 0) else 0 end
+            ) / 9.0, 3
+        )                                               as injury_adj_avg_xwoba_30d
+    from slot_injury si
+    left join slot_pre_game sp
+        on  sp.game_pk    = si.game_pk
+        and sp.home_away  = si.home_away
+        and sp.slot       = si.slot
+    group by si.game_pk, si.official_date, si.home_away
+),
+
 -- Aggregate slot-level stats to game × side level
 lineup_agg as (
     select
@@ -151,6 +197,60 @@ slot_platoon as (
     group by ls.game_pk, ls.home_away
 ),
 
+-- Starter pitch archetype for each game × side (prior-season LEAKAGE GUARD)
+starter_archetype as (
+    select
+        sf.game_pk,
+        sf.side                                     as home_away,
+        sf.pitcher_id,
+        pa.pitch_archetype
+    from {{ ref('feature_pregame_starter_features') }} sf
+    left join {{ ref('mart_pitcher_pitch_archetype') }} pa
+        on  pa.pitcher_id = sf.pitcher_id
+        and pa.game_year  = year(sf.game_date) - 1   -- LEAKAGE GUARD: prior season
+),
+
+-- Per-slot batter performance vs. the opposing starter's pitch archetype
+slot_archetype_stats as (
+    select
+        ls.game_pk,
+        ls.home_away,
+        ls.slot,
+        ls.batter_id,
+        bva.adj_woba    as batter_woba_vs_archetype,
+        bva.adj_xwoba   as batter_xwoba_vs_archetype,
+        bva.adj_k_pct   as batter_k_pct_vs_archetype,
+        bva.adj_iso     as batter_iso_vs_archetype,
+        coalesce(bva.pa_count, 0) as batter_archetype_pa
+    from lineup_slots ls
+    -- opposing starter: home lineup faces away starter, away lineup faces home starter
+    left join starter_archetype sa
+        on  sa.game_pk   = ls.game_pk
+        and sa.home_away = case
+                              when ls.home_away = 'home' then 'away'
+                              else 'home'
+                          end
+    left join {{ ref('mart_batter_vs_pitch_archetype') }} bva
+        on  bva.batter_id      = ls.batter_id
+        and bva.pitch_archetype = sa.pitch_archetype
+        and bva.game_year       = year(ls.official_date) - 1   -- LEAKAGE GUARD
+    where ls.batter_id is not null
+),
+
+-- Lineup-level aggregation of archetype matchup stats
+archetype_agg as (
+    select
+        game_pk,
+        home_away,
+        round(avg(batter_woba_vs_archetype),  3) as lineup_woba_vs_starter_archetype,
+        round(avg(batter_xwoba_vs_archetype), 3) as lineup_xwoba_vs_starter_archetype,
+        round(avg(batter_k_pct_vs_archetype), 3) as lineup_k_pct_vs_starter_archetype,
+        round(avg(batter_iso_vs_archetype),   3) as lineup_iso_vs_starter_archetype,
+        round(avg(batter_archetype_pa),       0) as lineup_archetype_pa_coverage
+    from slot_archetype_stats
+    group by game_pk, home_away
+),
+
 final as (
     select
         l.game_pk,
@@ -191,7 +291,22 @@ final as (
         sp.avg_xwoba_vs_rhp,
         sp.avg_k_pct_vs_rhp,
         sp.avg_bb_pct_vs_rhp,
-        sp.avg_hard_hit_pct_vs_rhp
+        sp.avg_hard_hit_pct_vs_rhp,
+
+        -- Injury-adjusted lineup quality (Card 7.I)
+        -- injury_adj columns divide by 9 so IL absences reduce the aggregate
+        coalesce(ia.injured_player_count, 0)    as injured_player_count,
+        ia.injury_adj_avg_woba_30d,
+        ia.injury_adj_avg_xwoba_30d,
+
+        -- Hitter vs. starter pitch-archetype matchup features (Card 7.J)
+        -- Prior-season archetype lookup; shrinkage-adjusted for small samples
+        aa.lineup_woba_vs_starter_archetype,
+        aa.lineup_xwoba_vs_starter_archetype,
+        aa.lineup_k_pct_vs_starter_archetype,
+        aa.lineup_iso_vs_starter_archetype,
+        aa.lineup_archetype_pa_coverage,
+        opp_sa.pitch_archetype                  as starter_pitch_archetype
 
     from lineups l
     left join lineup_agg la
@@ -200,6 +315,19 @@ final as (
     left join slot_platoon sp
         on  sp.game_pk   = l.game_pk
         and sp.home_away = l.home_away
+    left join injury_agg ia
+        on  ia.game_pk   = l.game_pk
+        and ia.home_away = l.home_away
+    left join archetype_agg aa
+        on  aa.game_pk   = l.game_pk
+        and aa.home_away = l.home_away
+    -- opposing starter archetype: home lineup faces away starter
+    left join starter_archetype opp_sa
+        on  opp_sa.game_pk   = l.game_pk
+        and opp_sa.home_away = case
+                                   when l.home_away = 'home' then 'away'
+                                   else 'home'
+                               end
 )
 
 select * from final

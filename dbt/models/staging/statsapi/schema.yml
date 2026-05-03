@@ -2,6 +2,53 @@ version: 2
 
 models:
 
+  - name: stg_statsapi_transactions
+    description: >
+      One row per transaction_id. Deduplicated from player_transactions using
+      ROW_NUMBER() ordered by ingestion_ts DESC. Exposes all transaction fields
+      with cleaned types. Feeds stg_statsapi_player_injury_status.
+    columns:
+      - name: transaction_id
+        description: Stats API transaction identifier. Primary key.
+        tests:
+          - unique
+          - not_null
+      - name: player_id
+        description: MLBAM player ID.
+        tests: [not_null]
+      - name: transaction_date
+        description: Date the transaction was recorded.
+        tests: [not_null]
+      - name: type_code
+        description: Transaction type code (e.g. '10-Day IL', 'Activated').
+        tests: [not_null]
+
+  - name: stg_statsapi_player_injury_status
+    description: >
+      One row per player_id × status interval. Derived from stg_statsapi_transactions
+      using LEAD() to bound each status period. Supports point-in-time IL status joins
+      for injury-adjusted lineup quality features (Card 7.I).
+      Join pattern:
+        ON inj.player_id = batter_id
+        AND inj.status_start_date <= official_date
+        AND (inj.status_end_date > official_date OR inj.status_end_date IS NULL)
+    columns:
+      - name: player_id
+        description: MLBAM player ID.
+        tests: [not_null]
+      - name: status_start_date
+        description: Date the status interval begins (= event_date of the transaction).
+        tests: [not_null]
+      - name: status_end_date
+        description: >
+          Date the status interval ends (= event_date of the next transaction for this player).
+          NULL means the status is still current.
+      - name: is_injured
+        description: >
+          true = IL placement (player unavailable). false = activation/reinstatement.
+          type_code values are provisional; confirm against live API output.
+        tests: [not_null]
+
   - name: stg_statsapi_umpire_game_log
     description: >
       One row per game_pk. HP umpire assignment and per-game tendency metrics

@@ -113,6 +113,38 @@ sources:
             description: Calendar date on which this venue record was last ingested.
             tests: [not_null]
 
+      - name: player_transactions
+        description: >
+          One row per roster transaction event per player. Fetched from the
+          Stats API /v1/transactions endpoint via scripts/ingest_transactions.py
+          with a 7-day lookback. Captures IL placements (10-Day IL, 60-Day IL,
+          7-Day IL), activations, reinstatements, and other roster moves.
+          The Stats API may return the same transaction_id across overlapping
+          date range queries; deduplication happens in stg_statsapi_transactions.
+          Ingested daily via daily_ingestion.yml.
+          Feeds stg_statsapi_player_injury_status for injury-adjusted lineup
+          quality features (Card 7.I).
+        columns:
+          - name: transaction_id
+            description: Stats API transaction identifier. Primary key.
+            tests:
+              - not_null
+              - unique:
+                  config:
+                    severity: warn
+          - name: player_id
+            description: MLBAM player ID (person.id from the API).
+            tests: [not_null]
+          - name: transaction_date
+            description: Date the transaction was recorded.
+            tests: [not_null]
+          - name: type_code
+            description: >
+              Transaction type code from the Stats API (e.g. '10-Day IL',
+              'Activated', 'Reinstated'). Provisional — confirm values
+              against live API output from first ingestion run.
+            tests: [not_null]
+
       - name: umpire_game_log
         description: >
           One row per game_pk. HP umpire assignment and per-game tendency

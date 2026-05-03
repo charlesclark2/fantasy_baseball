@@ -530,6 +530,27 @@ st.dataframe(
 )
 
 # ---------------------------------------------------------------------------
+# IL injury warnings
+# ---------------------------------------------------------------------------
+
+if "home_injured_player_count" in df.columns or "away_injured_player_count" in df.columns:
+    il_warnings = []
+    for _, r in df.iterrows():
+        home_il = int(r.get("home_injured_player_count") or 0)
+        away_il = int(r.get("away_injured_player_count") or 0)
+        if home_il > 0 or away_il > 0:
+            parts = []
+            if home_il > 0:
+                parts.append(f"{r['home_team']}: {home_il} IL player(s)")
+            if away_il > 0:
+                parts.append(f"{r['away_team']}: {away_il} IL player(s)")
+            il_warnings.append(f"{r['away_team']} @ {r['home_team']} — " + ", ".join(parts))
+    if il_warnings:
+        with st.expander("⚠ IL Players in Projected Lineups", expanded=True):
+            for msg in il_warnings:
+                st.warning(msg)
+
+# ---------------------------------------------------------------------------
 # Recommended Bets
 # ---------------------------------------------------------------------------
 

@@ -170,6 +170,19 @@ final as (
         h_ln.avg_bb_pct_vs_rhp                  as home_avg_bb_pct_vs_rhp,
         h_ln.avg_hard_hit_pct_vs_rhp            as home_avg_hard_hit_pct_vs_rhp,
 
+        -- ── Home injury-adjusted lineup quality (Card 7.I) ────────────────────
+        h_ln.injured_player_count               as home_injured_player_count,
+        h_ln.injury_adj_avg_woba_30d            as home_injury_adj_avg_woba_30d,
+        h_ln.injury_adj_avg_xwoba_30d           as home_injury_adj_avg_xwoba_30d,
+
+        -- ── Home lineup vs. starter pitch-archetype matchup (Card 7.J) ────────
+        h_ln.lineup_woba_vs_starter_archetype   as home_lineup_woba_vs_starter_archetype,
+        h_ln.lineup_xwoba_vs_starter_archetype  as home_lineup_xwoba_vs_starter_archetype,
+        h_ln.lineup_k_pct_vs_starter_archetype  as home_lineup_k_pct_vs_starter_archetype,
+        h_ln.lineup_iso_vs_starter_archetype    as home_lineup_iso_vs_starter_archetype,
+        h_ln.lineup_archetype_pa_coverage       as home_lineup_archetype_pa_coverage,
+        h_ln.starter_pitch_archetype            as home_starter_pitch_archetype,
+
         -- ── Away lineup ───────────────────────────────────────────────────────
         a_ln.has_full_lineup                    as away_has_full_lineup,
         a_ln.lhb_count                          as away_lhb_count,
@@ -198,6 +211,19 @@ final as (
         a_ln.avg_k_pct_vs_rhp                   as away_avg_k_pct_vs_rhp,
         a_ln.avg_bb_pct_vs_rhp                  as away_avg_bb_pct_vs_rhp,
         a_ln.avg_hard_hit_pct_vs_rhp            as away_avg_hard_hit_pct_vs_rhp,
+
+        -- ── Away injury-adjusted lineup quality (Card 7.I) ────────────────────
+        a_ln.injured_player_count               as away_injured_player_count,
+        a_ln.injury_adj_avg_woba_30d            as away_injury_adj_avg_woba_30d,
+        a_ln.injury_adj_avg_xwoba_30d           as away_injury_adj_avg_xwoba_30d,
+
+        -- ── Away lineup vs. starter pitch-archetype matchup (Card 7.J) ────────
+        a_ln.lineup_woba_vs_starter_archetype   as away_lineup_woba_vs_starter_archetype,
+        a_ln.lineup_xwoba_vs_starter_archetype  as away_lineup_xwoba_vs_starter_archetype,
+        a_ln.lineup_k_pct_vs_starter_archetype  as away_lineup_k_pct_vs_starter_archetype,
+        a_ln.lineup_iso_vs_starter_archetype    as away_lineup_iso_vs_starter_archetype,
+        a_ln.lineup_archetype_pa_coverage       as away_lineup_archetype_pa_coverage,
+        a_ln.starter_pitch_archetype            as away_starter_pitch_archetype,
 
         -- ── Home starting pitcher ─────────────────────────────────────────────
         h_st.pitcher_id                         as home_starter_pitcher_id,

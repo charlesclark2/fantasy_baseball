@@ -113,6 +113,19 @@ jobs:
       # FanGraphs ZiPS: runs Feb 1 and Jul 1 — controlled by manual dispatch or cron schedule
       # To load: uv run python scripts/ingest_fangraphs_zips_csv.py --season YYYY
 
+      - name: Ingest player transactions (7-day lookback for retroactive IL placements)
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          uv run ingest_transactions.py \
+            --start-date $(date -d '7 days ago' +%Y-%m-%d 2>/dev/null || date -v-7d +%Y-%m-%d) \
+            --end-date $(date +%Y-%m-%d)
+
   dbt-build:
     needs: ingest
     uses: ./.github/workflows/dbt_daily_build.yml
