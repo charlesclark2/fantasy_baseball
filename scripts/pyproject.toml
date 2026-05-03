@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=46.0.7",
+    "curl-cffi>=0.7",
     "pandas>=2.0",
     "python-dotenv>=1.2.2",
     "requests>=2.33.1",
