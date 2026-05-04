@@ -32,3 +32,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["betting_ml"]
+
+[tool.pytest.ini_options]
+testpaths = ["betting_ml/tests", "scripts/tests"]
+pythonpath = [".", "scripts"]
