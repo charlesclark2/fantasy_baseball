@@ -100,6 +100,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
             )
 
             total_line = _safe_float(r.get("total_line_consensus")) if "over" in market_name or "under" in market_name else None
+            inserted_at = r.get("inserted_at")
 
             rows.append({
                 "game_pk": game_pk,
@@ -116,6 +117,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
                 "both_confirmed": both_confirmed,
                 "actionable": actionable,
                 "total_line": total_line,
+                "inserted_at": inserted_at,
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
@@ -244,6 +246,11 @@ _ALL_MARKETS_HELP = {
     "Model Prob": "Model-estimated probability for this side (blended NGBoost + XGBoost for h2h; NGBoost for totals)",
     "Mkt Impl Prob": "Probability implied by the consensus market odds (1 / decimal odds)",
     "Decimal Odds": "Decimal format odds: payout per $1 wagered including stake (e.g. 2.000 = even money)",
+    "Odds At (UTC)": (
+        "Time (UTC) when the model scored this game and locked in the market odds. "
+        "Odds may have moved since — verify current lines before placing a bet. "
+        "A large discrepancy vs. current market often signals a late lineup change."
+    ),
     "EV": "Expected value per $1 wagered. Formula: (model_prob × (decimal_odds − 1)) − (1 − model_prob). Positive = favorable long-run return.",
     "Raw Kelly%": (
         "Full Kelly criterion fraction before capping: EV / (decimal_odds − 1). "
@@ -264,12 +271,25 @@ _ALL_MARKETS_HELP = {
     ),
 }
 
+
+def _fmt_odds_at(val) -> str:
+    if val is None:
+        return "—"
+    try:
+        import pandas as pd
+        ts = pd.Timestamp(val)
+        return ts.strftime("%H:%M")
+    except Exception:
+        return "—"
+
+
 df_display = pd.DataFrame({
     "Matchup": df_ev["matchup_label"],
     "Market": df_ev["market"],
     "Model Prob": df_ev["model_prob"].map(lambda v: f"{v:.1%}" if v is not None else "—"),
     "Mkt Impl Prob": df_ev["market_prob"].map(lambda v: f"{v:.1%}" if v is not None else "—"),
     "Decimal Odds": df_ev["decimal_odds"].map(lambda v: f"{v:.3f}" if v is not None else "—"),
+    "Odds At (UTC)": df_ev["inserted_at"].map(_fmt_odds_at),
     "EV": df_ev["ev"].map(lambda v: f"{v:+.4f}" if v is not None else "—"),
     "Raw Kelly%": df_ev["kelly_raw"].map(lambda v: f"{v:.2%}" if v is not None else "—"),
     "Capped Kelly%": df_ev["kelly_capped"].map(lambda v: f"{v:.2%}" if v is not None else "—"),

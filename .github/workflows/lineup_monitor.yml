@@ -42,7 +42,7 @@ jobs:
           ")
           uv run ingest_statsapi.py schedule --start-date "$PRIOR_MONTH"
 
-      - name: Rebuild staging lineup models
+      - name: Rebuild staging lineup and probable pitcher models
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -50,7 +50,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select stg_statsapi_lineups stg_statsapi_lineups_wide --project-dir dbt --profiles-dir dbt
+        run: dbtf build --select stg_statsapi_lineups stg_statsapi_lineups_wide stg_statsapi_probable_pitchers --project-dir dbt --profiles-dir dbt
 
       - name: Check for newly confirmed lineups
         id: lineup_check

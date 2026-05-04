@@ -99,35 +99,54 @@ def handler(session):
     try:
         today = date.today().isoformat()
 
-        # Step A — Lineup detection: query stg_statsapi_lineups_wide for today.
-        # A lineup is confirmed when both home_lineup_slot_1 and away_lineup_slot_1
-        # are populated. This view reflects the most recent dbtf build output.
-        # stg_statsapi_lineups_wide has one row per (game_pk, home_away) and
-        # already excludes rows where slot_1_player_id is null (i.e. no lineup yet).
-        # Both lineups are confirmed when both 'home' and 'away' rows exist for a game.
+        # Step A — Confirmed games (both batting lineups posted) with current probable pitchers.
+        # Pitchers don't appear in batting lineups (universal DH), so we join
+        # stg_statsapi_probable_pitchers to detect starter changes.
         confirmed_rows = session.sql(f"""
-            SELECT game_pk
-            FROM baseball_data.betting.stg_statsapi_lineups_wide
-            WHERE official_date = '{today}'::date
-            GROUP BY game_pk
-            HAVING COUNT(DISTINCT home_away) = 2
+            SELECT
+                l.game_pk,
+                p_home.probable_pitcher_id AS home_starter_id,
+                p_away.probable_pitcher_id AS away_starter_id
+            FROM (
+                SELECT game_pk
+                FROM baseball_data.betting.stg_statsapi_lineups_wide
+                WHERE official_date = '{today}'::date
+                GROUP BY game_pk
+                HAVING COUNT(DISTINCT home_away) = 2
+            ) l
+            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_home
+                ON l.game_pk = p_home.game_pk AND p_home.side = 'home'
+            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_away
+                ON l.game_pk = p_away.game_pk AND p_away.side = 'away'
         """).collect()
 
-        confirmed_game_pks = [row[0] for row in confirmed_rows]
+        confirmed = {row[0]: (row[1], row[2]) for row in confirmed_rows}
 
-        # Step B — Deduplication and dispatch.
-        # Only process games not already in lineup_monitor_state for today.
+        # Step B — Already-triggered games with stored starter IDs.
         already_triggered_rows = session.sql(f"""
-            SELECT game_pk
+            SELECT game_pk, home_starter_id, away_starter_id
             FROM baseball_data.config.lineup_monitor_state
             WHERE run_date = '{today}'::date
         """).collect()
-        already_triggered = {row[0] for row in already_triggered_rows}
+        already_triggered = {row[0]: (row[1], row[2]) for row in already_triggered_rows}
 
-        new_game_pks = [pk for pk in confirmed_game_pks if pk not in already_triggered]
+        new_game_pks = []
+        pitcher_change_pks = []
+        for pk, (home_starter, away_starter) in confirmed.items():
+            if pk not in already_triggered:
+                new_game_pks.append(pk)
+            else:
+                stored_home, stored_away = already_triggered[pk]
+                # NULL stored starters = pre-migration row; skip on first run.
+                if stored_home is None or stored_away is None:
+                    continue
+                if stored_home != home_starter or stored_away != away_starter:
+                    pitcher_change_pks.append(pk)
+
+        all_trigger_pks = new_game_pks + pitcher_change_pks
         dispatched = 0
 
-        if new_game_pks:
+        if all_trigger_pks:
             pat = _snowflake.get_generic_secret_string('github_pat')
             url = (
                 f'https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}'
@@ -135,15 +154,16 @@ def handler(session):
             )
 
             for game_pk in new_game_pks:
-                # Insert with NOT EXISTS guard to prevent duplicate inserts on
-                # concurrent executions (belt-and-suspenders alongside the UNIQUE constraint).
+                home_starter, away_starter = confirmed[game_pk]
                 session.sql(f"""
                     INSERT INTO baseball_data.config.lineup_monitor_state
-                        (run_date, game_pk, triggered_at)
+                        (run_date, game_pk, triggered_at, home_starter_id, away_starter_id)
                     SELECT
                         '{today}'::date,
                         {game_pk}::int,
-                        CURRENT_TIMESTAMP()
+                        CURRENT_TIMESTAMP(),
+                        {home_starter}::int,
+                        {away_starter}::int
                     WHERE NOT EXISTS (
                         SELECT 1
                         FROM baseball_data.config.lineup_monitor_state
@@ -152,7 +172,18 @@ def handler(session):
                     )
                 """).collect()
 
-                # Dispatch dbt_staging_build.yml for this game_pk.
+            for game_pk in pitcher_change_pks:
+                home_starter, away_starter = confirmed[game_pk]
+                session.sql(f"""
+                    UPDATE baseball_data.config.lineup_monitor_state
+                    SET home_starter_id = {home_starter}::int,
+                        away_starter_id = {away_starter}::int,
+                        triggered_at    = CURRENT_TIMESTAMP()
+                    WHERE run_date = '{today}'::date
+                      AND game_pk  = {game_pk}::int
+                """).collect()
+
+            for game_pk in all_trigger_pks:
                 resp = requests.post(
                     url,
                     headers={
@@ -169,8 +200,6 @@ def handler(session):
                     timeout=30,
                 )
 
-                # On success (HTTP 204), update gh_workflow_run_id placeholder.
-                # The actual run ID is populated by the workflow callback on completion.
                 if resp.status_code == 204:
                     session.sql(f"""
                         UPDATE baseball_data.config.lineup_monitor_state
