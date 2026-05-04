@@ -30,7 +30,8 @@ jobs:
 
       - name: Install dbt-fusion
         run: |
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Write Snowflake private key
