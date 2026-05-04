@@ -185,5 +185,7 @@ The old artifact is always preserved on disk and in git — rollback does not re
 
 | Tag | Target | Model | Deployed | CV metric |
 |---|---|---|---|---|
+| `model/total_runs/v1` | `total_runs` | ngboost_tuned (LogNormal, 500 est) | 2026-05-04 | MAE 3.5190 |
+| `model/run_differential/v1` | `run_differential` | ngboost_tuned (Normal, 200 est) | 2026-05-04 | MAE 3.4724 |
 | `model/home_win/v2` | `home_win` | elasticnet (Pipeline) | 2026-05-04 | Brier 0.2425, ECE 0.0202 |
 | `model/home_win/v1` | `home_win` | xgb_classifier_tuned + Platt | pre-7.MB | Brier 0.2439 |
