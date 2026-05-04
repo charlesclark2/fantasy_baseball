@@ -1,6 +1,6 @@
 total_runs:
   model_name: ngboost_tuned
-  model_version: v0
+  model_version: v1
   eval_year: 2026
   cv_mae: 3.5190
   dist: LogNormal
@@ -9,13 +9,14 @@ total_runs:
   training_cutoff: "2021+"
   features: 292
   artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
-  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+  deployed_date: "2026-05-04"
   selected_at: "2026-05-04T00:00:00Z"
-  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.5190 vs 7.F baseline 3.4856 (+0.96% regression — within CV noise, below 1% revert threshold). New features include umpire, injury, pitch archetype, cluster matchup, bullpen IP, pythagorean. LogNormal dist retained."
+  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.5190 vs 7.F baseline 3.4856 (+0.96% regression — within CV noise, below 1% revert threshold). New features include umpire, injury, pitch archetype, cluster matchup, bullpen IP, pythagorean. LogNormal dist retained. Rollback: ngboost_tuned_prod.pkl (pre-7.MA, 267 features — rolling back also requires reverting feature_columns.json)."
 
 run_differential:
   model_name: ngboost_tuned
-  model_version: v0
+  model_version: v1
   eval_year: 2026
   cv_mae: 3.4724
   dist: Normal
@@ -24,9 +25,10 @@ run_differential:
   training_cutoff: "2021+"
   features: 292
   artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
-  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
+  deployed_date: "2026-05-04"
   selected_at: "2026-05-04T00:00:00Z"
-  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression — within CV noise). Normal distribution only; LogNormal excluded because run_diff can be negative."
+  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression — within CV noise). Normal distribution only; LogNormal excluded because run_diff can be negative. Rollback: ngboost_tuned_prod.pkl (pre-7.MA, 267 features — rolling back also requires reverting feature_columns.json)."
 
 home_win:
   model_name: elasticnet
