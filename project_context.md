@@ -3656,6 +3656,29 @@ Deferred. Streamlit app is development-only throughout Phase 8. Production deplo
 
 ---
 
+### Phase 8 — dbt Quality Gates (Card 8.I)
+
+**Status:** Not started (2026-05-04). Full spec in `plan_specs/phase_8/I_dbt_quality_gates.yaml`.
+
+Two CI/CD gates that must pass before any PR can merge into main. Currently CI validates Python and model artifacts but has no dbt coverage — a broken ref() or a logic regression in a feature model can merge silently and corrupt the prediction feature matrix.
+
+| Card | Title | Effort | Status |
+|---|---|---|---|
+| 8.I1 | dbt Compilation Check | Low (~0.5d) | [ ] Not started |
+| 8.I2 | dbt Data Diff Check | Medium (~1.5d) | [ ] Deferred — requires 8.H4 (Snowflake dev schema) |
+
+#### 8.I1 — dbt Compilation Check
+
+Add a `dbt-compile` job to `ci.yml` that runs `dbtf compile --project-dir dbt --profiles-dir dbt` on every PR targeting main. No Snowflake credentials required — compile is static analysis only. Catches broken `ref()` calls, `source()` mismatches, Jinja syntax errors, and circular DAG dependencies. Must be a required status check on main branch protection.
+
+**Deliverable:** New `dbt-compile` job in `.github/workflows/ci.yml` using the same dbt-fusion cache install pattern as `dbt_staging_build.yml`.
+
+#### 8.I2 — dbt Data Diff Check (Deferred)
+
+Deferred pending 8.H4 (Snowflake Environment Isolation). Once a dev schema exists, this card adds a `dbt-data-diff` job that builds modified models in the CI schema (`state:modified+`), then runs `scripts/dbt_data_diff.py` to compare row counts and NULL rates against prod. Fails on: row count delta >1%, NULL rate delta >2pp, or any column added/removed. Requires prod `manifest.json` stored as a GitHub Actions artifact from `dbt_daily_build.yml` for `state:modified` to resolve.
+
+---
+
 ### Phase 9 — Advanced Model Architecture (Deferred)
 
 Two modeling approaches identified during Phase 8 retrains for evaluation in Phase 9:

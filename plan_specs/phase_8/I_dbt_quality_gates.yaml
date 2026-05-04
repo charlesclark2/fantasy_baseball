@@ -1,0 +1,175 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: dbt-quality-gates
+  namespace: default
+spec:
+  description: >
+    Add two CI/CD quality gates that must pass before any PR can merge into main:
+    a dbt compilation check (no Snowflake connection required) and a data diff check
+    (requires a dev Snowflake schema). Together these ensure that dbt model changes
+    are syntactically valid and do not silently alter downstream feature data before
+    reaching production.
+
+    MOTIVATION:
+      The current CI pipeline validates Python code (pytest, py_compile) and model
+      artifacts (smoke test) but has no dbt coverage. A broken ref(), a renamed
+      column, or a logic change in a feature model can pass CI and merge cleanly,
+      then silently corrupt the feature matrix used by predict_today.py. Both gates
+      together close this gap.
+
+    CARDS:
+      8.I1 — dbt Compilation Check (Low, ~0.5d): static analysis only, no Snowflake
+      8.I2 — dbt Data Diff Check (Medium, ~1.5d): requires Snowflake dev schema;
+              depends on 8.H4 (Snowflake Environment Isolation)
+
+  cards:
+
+    - id: "8.I1"
+      title: "dbt Compilation Check"
+      effort: Low (~0.5d)
+      status: Not started
+
+      description: >
+        Add a dbt-compile CI job to ci.yml that runs dbtf compile on every PR
+        targeting main. The compile step resolves all ref() and source() calls,
+        renders Jinja macros, and validates schema.yml against the project graph —
+        without executing any SQL or connecting to Snowflake. It catches the most
+        common classes of dbt breakage before they reach the data warehouse.
+
+        What dbtf compile catches:
+          - ref() pointing to a non-existent model or renamed model
+          - source() referencing a table not declared in sources.yml
+          - Jinja syntax errors (undefined variables, malformed macros)
+          - schema.yml column references that don't match the model's SELECT list
+          - Circular dependencies in the model DAG
+
+        What it does NOT catch:
+          - Runtime SQL errors (wrong column types, missing data)
+          - Logic regressions (correct SQL, wrong output values)
+          - Schema drift in upstream Snowflake sources
+
+      deliverables:
+        - path: .github/workflows/ci.yml
+          change: >
+            Add a new job `dbt-compile` (runs-on: ubuntu-latest) with the following steps:
+              1. actions/checkout@v4
+              2. Cache dbt-fusion binary (same actions/cache pattern as dbt_staging_build.yml,
+                 keyed on DBT_FUSION_VERSION env var)
+              3. Install dbt-fusion if cache miss (same curl install as dbt_staging_build.yml)
+              4. Add ~/.local/bin to PATH
+              5. Run: dbtf compile --project-dir dbt --profiles-dir dbt
+            Job must be listed under `needs` for any merge-gating step. No Snowflake
+            secrets are required — dbtf compile is a static analysis pass.
+
+      acceptance_criteria:
+        - ci.yml has a `dbt-compile` job that triggers on pull_request to main
+        - Job installs dbt-fusion via the same cached install pattern used in dbt_staging_build.yml
+        - Job runs `dbtf compile --project-dir dbt --profiles-dir dbt` and exits non-zero on any error
+        - A PR that introduces a broken ref() (e.g., ref('nonexistent_model')) fails the job
+        - A PR with valid dbt passes the job without requiring any Snowflake credentials
+        - Branch protection rule on main includes `dbt-compile` as a required status check
+
+      notes: >
+        The dbt profiles.yml already exists at dbt/profiles.yml with a Snowflake target,
+        but dbtf compile does not execute queries so the profile credentials are never
+        invoked. The compile step should work in a GitHub Actions runner with no secrets
+        configured. If dbtf compile raises connection errors due to profile loading,
+        add --target=dev with a dummy profile that sets type: snowflake but skips
+        connection validation, or check dbt-fusion docs for a --no-connect flag.
+
+    - id: "8.I2"
+      title: "dbt Data Diff Check"
+      effort: Medium (~1.5d)
+      status: Deferred — requires 8.H4 (Snowflake Environment Isolation)
+
+      description: >
+        After each PR's dbt changes are compiled (8.I1), run the modified models in a
+        CI dev schema within Snowflake and compare their output statistics against the
+        corresponding production schema tables. Alert if any model's row count changes
+        by more than the defined threshold or if NULL rates on key feature columns shift
+        materially. This catches logic regressions — valid SQL that produces wrong values
+        — which compilation alone cannot detect.
+
+        APPROACH:
+          1. Identify modified dbt models: `dbtf ls --select state:modified --project-dir dbt`
+             using the production manifest.json as the state artifact.
+          2. Build modified models + their downstream dependents in a CI schema:
+             `dbtf build --select state:modified+ --target ci_dev --project-dir dbt`
+             where `ci_dev` target writes to BASEBALL_DEV.<schema> (8.H4 provides this).
+          3. For each modified model, run a Snowflake comparison query:
+             - Row count: |count(ci_dev) - count(prod)| / count(prod) > threshold → FAIL
+             - NULL rate per column: |null_rate(ci_dev) - null_rate(prod)| > threshold → FAIL
+             - Value range (numeric columns): min/max outside prod range → WARN
+          4. Output a markdown diff summary as a GitHub Actions step summary.
+             Fail the job on any FAIL-level finding; surface WARNs as annotations only.
+
+        THRESHOLDS (configurable in scripts/dbt_data_diff.py):
+          - Row count delta: > 1% → FAIL
+          - NULL rate delta: > 2pp (percentage points) → FAIL
+          - Column added or removed: always FAIL (schema change must be explicit)
+          - Value range breach: WARN only (new extremes may be valid new data)
+
+        SCOPE — models to diff:
+          Only models in dbt/models/feature/ and dbt/models/mart/ are diffed.
+          Staging models (dbt/models/staging/) are excluded — they are thin wrappers
+          over raw sources and their row counts naturally differ between CI and prod
+          depending on the CI run date.
+
+      dependencies:
+        - "8.H4 — Snowflake Environment Isolation: requires a BASEBALL_DEV database
+           with the same role/warehouse as prod, and a ci_dev dbt target in profiles.yml"
+        - "8.I1 — Compilation Check: data diff only runs if compilation passes"
+        - "Production manifest.json artifact: ci.yml must store the manifest.json from
+           the most recent prod dbt build (via dbt_daily_build.yml) as a GitHub Actions
+           artifact or in a known Snowflake stage, so state:modified can resolve it"
+
+      deliverables:
+        - path: scripts/dbt_data_diff.py
+          description: >
+            Python script that accepts --models (list of model names to diff),
+            --ci-schema (dev schema name), --prod-schema (prod schema name),
+            --thresholds (optional JSON override). Connects to Snowflake using
+            environment variables (same pattern as other scripts). Outputs a markdown
+            table of pass/fail/warn per model and exits non-zero on any FAIL.
+
+        - path: .github/workflows/ci.yml
+          change: >
+            Add a new job `dbt-data-diff` that:
+              1. Runs only when dbt/models/** files are changed (paths filter)
+              2. Depends on `dbt-compile` job passing
+              3. Installs dbt-fusion and Python (uv)
+              4. Downloads the prod manifest.json artifact from the last dbt_daily_build.yml run
+              5. Runs `dbtf build --select state:modified+ --target ci_dev`
+              6. Runs `uv run python scripts/dbt_data_diff.py --models <modified_list>`
+              7. Uploads the diff summary as a GitHub Actions step summary
+
+        - path: dbt/profiles.yml
+          change: >
+            Add a ci_dev target that points to BASEBALL_DEV database (provisioned by 8.H4).
+            Credentials sourced from the same GitHub Actions secrets as prod, with a
+            different database and schema (BASEBALL_DEV.CI_<run_id>).
+
+      acceptance_criteria:
+        - A PR that changes a feature model SQL runs dbt-data-diff automatically
+        - A PR that deletes a column from a feature model fails the diff job
+        - A PR with a logic change that shifts a column NULL rate by >2pp fails the diff job
+        - A PR with no dbt/models/** changes skips the dbt-data-diff job entirely
+        - The diff summary is visible as a GitHub Actions step summary on every triggered run
+        - A PR with dbt changes that match prod statistics within thresholds passes the job
+        - Job is listed as a required status check on main branch protection
+
+      notes: >
+        The state:modified selector requires a reference manifest.json from the last
+        production build. The simplest storage option is to have dbt_daily_build.yml
+        upload manifest.json as a GitHub Actions artifact (actions/upload-artifact) after
+        each successful build, and have the CI data diff job download it
+        (actions/download-artifact). An alternative is to store it in a Snowflake internal
+        stage (e.g., @BASEBALL.PUBLIC.dbt_state/manifest.json) and download it with a
+        snowsql GET command — this avoids GitHub artifact retention limits (90 days default)
+        but adds a Snowflake dependency to the artifact retrieval step.
+
+        dbt-audit-helper is an alternative to a custom comparison script: it generates
+        SQL that compares two relations column-by-column. Evaluate at 8.I2 implementation
+        time whether dbt-fusion's package compatibility supports audit-helper macros.
