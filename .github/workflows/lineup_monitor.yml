@@ -15,7 +15,9 @@ jobs:
       - uses: astral-sh/setup-uv@v5
 
       - name: Install dbt-fusion
-        run: curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sudo sh -s -- --to /usr/local/bin
+        run: |
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sudo sh -s -- --to /usr/local/bin
+          sudo ln -sf /usr/local/bin/dbt /usr/local/bin/dbtf
 
       - name: Write Snowflake private key
         run: |
