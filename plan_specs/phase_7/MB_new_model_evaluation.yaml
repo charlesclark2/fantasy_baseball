@@ -22,12 +22,37 @@ spec:
     categoricals (pitch_archetype, cluster_id) where LightGBM and CatBoost have
     structural advantages over XGBoost.
 
+    CALIBRATOR FLAG FROM 7.MA (2026-05-04): The Card 7.MA retrain produced a
+    raw XGBoost model with ECE 0.0247 — already better calibrated than the
+    previous Platt-scaled model (ECE 0.0370). Applying Platt scaling degraded
+    ECE to 0.0420 on the 2026 eval window (217 rows). The calibration task in
+    this card MUST evaluate whether the Platt calibrator in the inference path
+    should be removed or replaced. The baseline for calibration comparison is
+    the raw 7.MA model ECE of 0.0247, not the prior calibrated ECE of 0.0370.
+    See betting_ml/evaluation/v1_retrain_impact.md § Calibrator ECE for details.
+
     TRIGGER: Run this evaluation after Card 7.MA (full model retraining on the
     complete Phase 7 feature set) is complete — or at end of the 2026 regular
     season (whichever comes first). Card 7.MA must precede this card so that
     the architecture comparison uses the production-ready retrained models as the
     baseline, not the interim per-feature-card retrains. The time-based fallback
     prevents indefinite deferral if any P2 card stalls.
+
+    DATA COMPLETENESS PREREQUISITE — 2021 WEATHER BACKFILL (added 2026-05-04):
+    The Card 7.MA retrain was run before Card 7.L1 (2021 weather backfill)
+    completed. As a result, the production 7.MA models were trained with 0%
+    coverage for 2021 weather features (~2,429 rows mean-imputed). The CV harness
+    in this card trains ALL candidate models (including the XGBoost baseline) from
+    scratch on the fold data — so if the harness runs after the 2021 weather
+    backfill is applied and propagated via `dbtf build`, all architectures compete
+    on the same richer dataset and the comparison is fair. Running the harness
+    BEFORE the 2021 weather backfill is complete would give challengers and the
+    baseline equal access to imputed data, but would waste an opportunity to
+    evaluate on complete data.
+    GATE: The build-cv-harness task checks 2021 weather coverage. If coverage
+    is below 80% for game_year = 2021, the script halts with an error message
+    directing the user to complete the 2021 weather backfill (Card 7.L1) and
+    re-run `dbtf build` before proceeding.
 
     CANDIDATE MODELS:
       1. XGBoost + NGBoost (current — the baseline to beat)
@@ -40,6 +65,15 @@ spec:
       5. Isotonic recalibration layer (applied on top of the best base model;
          re-maps raw probability outputs to better-calibrated probabilities
          using sklearn CalibratedClassifierCV with method='isotonic')
+      6. ElasticNet Logistic Regression (linear baseline for win probability;
+         Ridge regression for runs targets). Literature review (Cui 2020,
+         Wharton/Penn thesis) found ElasticNet logistic regression achieves
+         61.77% accuracy / AUC 0.67 on this exact problem class and outperforms
+         XGBoost at typical baseball sample sizes (~10K rows). Fast to train,
+         interpretable, and low operational overhead. If ElasticNet matches
+         gradient boosting on Brier score, prefer ElasticNet for simplicity.
+         Evaluation script: eval_elasticnet.py. Solver: lbfgs, max_iter=1000,
+         l1_ratio=0.5, C tuned via 5-fold inner CV (C ∈ [0.001, 0.01, 0.1, 1.0]).
 
     EVALUATION PROTOCOL:
       Walk-forward cross-validation with four folds (time-series aware;
@@ -57,6 +91,13 @@ spec:
       3. % positive-edge games — target: improve from 35.39%
       4. Log-loss — consistent with alpha-tuning methodology (Card 7.A)
       5. Totals MAE — for the runs total target
+      6. Run-line P&L (simulated) — arXiv:2511.02815 validated this as a better
+         proxy for betting model quality than accuracy alone. Simulate flat-stake
+         bets on the run line (−1.5 / +1.5) using each model's predicted win
+         probability and run differential; record ROI per fold. A model whose
+         win probabilities correlate with run-line edge generates positive
+         simulated ROI. This maps directly to real betting value and is a
+         stronger business metric than h2h moneyline edge alone.
 
     SELECTION DECISION RULE:
       A challenger model beats the baseline if it achieves lower mean Brier score
@@ -112,17 +153,34 @@ spec:
           walk-forward fold generator and metric evaluator shared across all
           candidate models.
 
-          PREREQUISITES: confirm the full Phase 7 feature set is available in
-          feature_pregame_game_features by running via Snowflake MCP:
-            SELECT COUNT(*) as rows,
+          PREREQUISITES: confirm data completeness before building folds.
+
+          Step 1 — Check 2021 weather backfill gate (BLOCKING).
+          Run via Snowflake MCP:
+            SELECT game_year,
+                   COUNT(*) as rows,
                    COUNT(home_weather_temp_f) as has_weather,
+                   ROUND(COUNT(home_weather_temp_f) / COUNT(*), 3) as weather_coverage
+            FROM baseball_data.betting_ml.feature_pregame_game_features
+            WHERE game_year IN (2021, 2022, 2023, 2024, 2025)
+            GROUP BY game_year
+            ORDER BY game_year;
+          IF weather_coverage for game_year = 2021 is below 0.80:
+            HALT with error: "2021 weather backfill incomplete (coverage = X%).
+            Complete Card 7.L1 and run `dbtf build` before running this harness.
+            All CV folds include 2021 training data; imputed weather in 2021
+            would give all models equal-but-diminished signal, wasting the backfill."
+
+          Step 2 — Check Phase 7 feature presence (non-blocking, log only).
+          Run via Snowflake MCP:
+            SELECT COUNT(*) as rows,
                    COUNT(home_lineup_woba_vs_starter_archetype) as has_archetype,
                    COUNT(home_lineup_wrc_vs_cluster) as has_cluster
             FROM baseball_data.betting_ml.feature_pregame_game_features
             WHERE game_year >= 2022;
-          If any of the three Phase 7 feature columns are NULL-dominant (< 10%
-          coverage), note the gap in the report but proceed — the harness should
-          be built on whatever feature set is available at run time.
+          If any column is NULL-dominant (< 10% coverage), note the gap in the
+          fold preparation log but proceed — the harness should be built on
+          whatever feature set is available at run time.
 
           FOLD DEFINITIONS (hardcode; these must never change between runs):
             FOLDS = [
@@ -140,7 +198,8 @@ spec:
                   dates, team names, model_version, any _flag columns)
               y_win  — home_win (binary classification target)
               y_runs — total_runs (regression target)
-            Write X, y_win, y_runs as parquet to
+              y_diff — run_differential (regression target; also used for run_line_roi)
+            Write X, y_win, y_runs, y_diff as parquet to
               betting_ml/evaluation/model_evaluation/features_{fold_name}.parquet
               betting_ml/evaluation/model_evaluation/targets_{fold_name}.parquet
             so that all candidate model scripts read identical data (no re-fetching).
@@ -153,6 +212,15 @@ spec:
                                   threshold=0.0) -> float
             def log_loss_score(y_true, y_prob) -> float
             def totals_mae(y_true, y_pred) -> float
+            def run_line_roi(y_win, y_run_diff_pred, run_line=-1.5,
+                             flat_stake=1.0) -> float
+              -- simulates flat-stake run-line bets using predicted run differential
+              -- a bet is placed on the home team −1.5 when predicted run diff > 1.5,
+                 on the away team +1.5 when predicted run diff < −1.5
+              -- ROI = (total_profit - total_staked) / total_staked
+              -- requires run_diff (actual) and run_diff_pred (predicted) in targets
+              -- arXiv:2511.02815 validated run-line P&L as a better proxy for
+                 betting model quality than accuracy or Brier alone
 
           CLI:
             python betting_ml/scripts/model_evaluation/cv_harness.py --prepare-folds
@@ -191,7 +259,7 @@ spec:
                 tree = ast.parse(src)
                 fn_names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
                 required = {'brier_score', 'mean_h2h_edge', 'pct_positive_edge',
-                            'log_loss_score', 'totals_mae'}
+                            'log_loss_score', 'totals_mae', 'run_line_roi'}
                 missing = required - fn_names
                 assert not missing, f'Missing metric functions: {missing}'
                 print(f'cv_harness.py defines all required metric functions: {required}')
@@ -224,17 +292,19 @@ spec:
               eval_lightgbm.py
               eval_catboost.py
               eval_ensemble_stacked.py
+              eval_elasticnet.py         -- linear baseline (literature-validated)
 
           SCRIPT CONTRACT (each evaluation script must follow this pattern):
             1. Load fold parquet files from betting_ml/evaluation/model_evaluation/
             2. For each fold: fit on train split, predict on test split
-            3. Compute all five metrics (brier_score, mean_h2h_edge, pct_positive_edge,
-               log_loss_score, totals_mae) using functions imported from cv_harness
+            3. Compute all six metrics (brier_score, mean_h2h_edge, pct_positive_edge,
+               log_loss_score, totals_mae, run_line_roi) using functions imported
+               from cv_harness
             4. Write results to:
                  betting_ml/evaluation/model_evaluation/results_{model_name}.parquet
                Schema: fold_name, model_name, brier_score, log_loss, mean_h2h_edge,
-                       pct_positive_edge, totals_mae, train_rows, test_rows,
-                       fit_time_seconds
+                       pct_positive_edge, totals_mae, run_line_roi, train_rows,
+                       test_rows, fit_time_seconds
             5. Print a per-fold summary table to stdout
 
           MODEL CONFIGURATIONS:
@@ -271,6 +341,20 @@ spec:
               training. Ensure inner folds respect temporal ordering (use time-based
               split within the outer training window, not random k-fold).
 
+            eval_elasticnet.py:
+              LogisticRegression for win probability (penalty='elasticnet', solver='saga',
+              l1_ratio=0.5, max_iter=1000). Tune C via 5-fold inner time-series CV
+              over [0.001, 0.01, 0.1, 1.0] — select best C per fold outer training
+              window. StandardScaler applied before fitting (required for ElasticNet).
+              Ridge regression (alpha tuned over [0.1, 1.0, 10.0, 100.0]) for total
+              runs. No categorical encoding needed — one-hot encode any object/category
+              columns using pd.get_dummies before scaling.
+              RATIONALE: Cui (2020) Wharton thesis found ElasticNet logistic regression
+              outperforms XGBoost at ~10K sample sizes for MLB win prediction, achieving
+              61.77% accuracy / AUC 0.67. This candidate validates whether a fast linear
+              model matches boosting quality on our feature set, and if so, warrants
+              replacing XGBoost for the win probability target.
+
           HYPERPARAMETER NOTE: Do NOT tune hyperparameters per fold. Use the
           fixed configurations above. The goal is architecture comparison, not
           hyperparameter sensitivity. A single hyperparameter tuning pass on the
@@ -292,6 +376,7 @@ spec:
                     'betting_ml/scripts/model_evaluation/eval_lightgbm.py',
                     'betting_ml/scripts/model_evaluation/eval_catboost.py',
                     'betting_ml/scripts/model_evaluation/eval_ensemble_stacked.py',
+                    'betting_ml/scripts/model_evaluation/eval_elasticnet.py',
                 ]
                 for path in scripts:
                     src = pathlib.Path(path).read_text()
@@ -312,6 +397,7 @@ spec:
                     'betting_ml/scripts/model_evaluation/eval_lightgbm.py',
                     'betting_ml/scripts/model_evaluation/eval_catboost.py',
                     'betting_ml/scripts/model_evaluation/eval_ensemble_stacked.py',
+                    'betting_ml/scripts/model_evaluation/eval_elasticnet.py',
                 ]
                 for path in scripts:
                     src = pathlib.Path(path).read_text()
@@ -327,7 +413,7 @@ spec:
                     assert imports, f'{path}: does not import from cv_harness'
                 print('All evaluation scripts import from cv_harness')
           - type: command_succeeds
-            name: result parquet files exist for all four models
+            name: result parquet files exist for all five models
             command: uv
             args:
               - run
@@ -341,16 +427,129 @@ spec:
                     'results_lightgbm.parquet',
                     'results_catboost.parquet',
                     'results_ensemble_stacked.parquet',
+                    'results_elasticnet.parquet',
                 ]
                 for f in expected:
                     assert (results_dir / f).exists(), f'Missing results file: {f}'
                 print('All model result parquet files exist')
+
+      - id: analyze-feature-importance
+        kind: Task
+        description: >
+          Run SHAP-based feature importance analysis on the XGBoost baseline model
+          to identify low-signal and potentially noisy features across the 292-feature
+          set. The 7.MA retrain showed total_runs and run_differential regressed
+          slightly after adding 25 new features — this task determines whether any
+          of those features (or existing ones) are adding noise rather than signal.
+
+          CONTEXT: The 7.MA retrain (2026-05-04) recommended this analysis in
+          v1_retrain_impact.md § Recommendation for 7.MB. Features to scrutinize
+          include the Phase 7 additions (umpire tendencies, pythagorean win exp,
+          bullpen fatigue IP, injury counts, pitch archetype matchup, cluster matchup)
+          which were flagged as potentially adding context without offsetting signal
+          for total_runs and run_differential.
+
+          IMPLEMENTATION — write betting_ml/scripts/model_evaluation/analyze_feature_importance.py:
+
+            1. Load the fold_2025 training parquet (largest training window, produced
+               by cv_harness.py) for both X and y_win targets.
+            2. Fit an XGBoostClassifier using the baseline hyperparameters from
+               eval_xgboost_ngboost.py on the full fold_2025 training split.
+            3. Compute SHAP values using shap.TreeExplainer. Use shap.summary_plot
+               to produce a bar plot saved to:
+                 betting_ml/evaluation/model_evaluation/shap_importance_fold2025.png
+            4. Also compute XGBoost native feature importance (gain-based) as a
+               cross-check.
+            5. Build a DataFrame with columns:
+                 feature, mean_abs_shap, xgb_gain_importance, feature_group
+               where feature_group is inferred from column name prefix
+               (e.g. "ump_" → umpire, "pythagorean" → pythagorean, etc.).
+            6. Sort by mean_abs_shap ascending (lowest signal first).
+            7. Flag features as PRUNE_CANDIDATE if:
+                 mean_abs_shap < 0.001 AND xgb_gain_importance < 0.0005
+               Flag features as NOISE_RISK if they belong to Phase 7 feature groups
+               (7.H, 7.I, 7.J, 7.K, 7.K2, 7.Q, 7.R) AND mean_abs_shap is below
+               the median SHAP value for ALL features.
+            8. Write results to:
+                 betting_ml/evaluation/model_evaluation/feature_importance_v1.parquet
+               Schema: feature, mean_abs_shap, xgb_gain_importance, feature_group,
+                       phase7_addition (bool), prune_candidate (bool), noise_risk (bool)
+            9. Print a summary: total features, prune candidate count, noise risk count,
+               and the top-10 and bottom-10 features by mean_abs_shap.
+
+          REPORT — append a § Feature Importance Analysis section to
+          betting_ml/evaluation/model_selection_v1.md (written in Task 4) containing:
+            - Count of prune candidates and noise risk features
+            - Table of bottom-20 features by SHAP (with flags)
+            - Table of Phase 7 additions ranked by SHAP (to evaluate 7.MA additions)
+            - Recommendation: list features to remove in the next retrain if
+              prune_candidate = True; list features to monitor if noise_risk = True
+
+          NOTE: This analysis does NOT modify any model or feature set — it is
+          diagnostic only. Feature removal is deferred to the next scheduled retrain
+          (All-Star break or later). The output informs the select-and-document task.
+
+        dependsOn:
+          - evaluate-candidate-models
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: feature importance analysis script
+            path: betting_ml/scripts/model_evaluation/analyze_feature_importance.py
+          - type: command_succeeds
+            name: analyze_feature_importance.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/analyze_feature_importance.py').read_text()
+                ast.parse(src)
+                print('analyze_feature_importance.py syntax OK')
+          - type: command_succeeds
+            name: analyze_feature_importance.py uses SHAP and defines prune/noise flags
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/model_evaluation/analyze_feature_importance.py').read_text()
+                tree = ast.parse(src)
+                found_shap = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            if 'shap' in alias.name.lower():
+                                found_shap = True
+                    if isinstance(node, ast.ImportFrom) and node.module and 'shap' in node.module.lower():
+                        found_shap = True
+                assert found_shap, 'shap not imported in analyze_feature_importance.py'
+                assert 'prune_candidate' in src, 'prune_candidate flag not defined'
+                assert 'noise_risk' in src, 'noise_risk flag not defined'
+                print('analyze_feature_importance.py uses SHAP and defines required flags')
+          - type: artifact_exists
+            name: feature importance results parquet
+            path: betting_ml/evaluation/model_evaluation/feature_importance_v1.parquet
 
       - id: evaluate-isotonic-calibration
         kind: Task
         description: >
           Apply isotonic recalibration on top of each base model's win probability
           predictions and measure Brier score improvement.
+
+          PREREQUISITE — CHECK EXISTING CALIBRATOR FIRST:
+          The 7.MA retrain (2026-05-04) found that the raw XGBoost model has
+          ECE 0.0247, which is better than both: (a) the previous Platt-calibrated
+          model (ECE 0.0370) and (b) the new Platt-calibrated model (ECE 0.0420).
+          Before evaluating isotonic calibration, explicitly test whether the
+          current production inference path (with Platt calibrator) produces
+          better or worse ECE than the raw model on the 7.MB eval window.
+          If raw > calibrated (raw ECE lower), recommend removing the calibrator.
+          Document this comparison in results_calibration.parquet and in the
+          § Calibration Analysis section of model_selection_v1.md.
 
           Isotonic recalibration post-processes raw model probability outputs to
           improve calibration (reliability) without changing the ranking of
@@ -393,6 +592,7 @@ spec:
             for this dataset; document as a confirmed negative finding.
         dependsOn:
           - evaluate-candidate-models
+          - analyze-feature-importance
         acceptanceCriteria:
           - type: artifact_exists
             name: calibration evaluation script
@@ -488,6 +688,13 @@ spec:
             ## Calibration Analysis
             Summary of isotonic recalibration results per model.
             Whether calibration is applied to the selected model.
+            REQUIRED: explicitly state whether the Platt calibrator in the
+            current predict_today.py inference path should be kept, removed,
+            or replaced. Reference the 7.MA baseline (raw ECE 0.0247) as the
+            threshold — any calibration method must beat this to justify its
+            inclusion. If no calibration method beats the raw model, the
+            recommended action is to remove PlattCalibratedXGBClassifier from
+            the inference path and serve raw XGBoost probabilities directly.
 
             ## Hyperparameter Tuning (optional)
             If time permits: run Optuna or RandomizedSearchCV on the selected model
@@ -510,6 +717,7 @@ spec:
               or update the selection.
         dependsOn:
           - evaluate-isotonic-calibration
+          - analyze-feature-importance
         acceptanceCriteria:
           - type: artifact_exists
             name: model selection report

@@ -1,0 +1,154 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: elo-team-strength-rating
+  namespace: default
+spec:
+  description: >
+    Add a dynamic Elo-based team strength rating as a pre-game feature. Elo ratings
+    update after every game result and encode strength of schedule — a team that wins
+    against strong opponents gains more Elo than one that beats weak opponents. This
+    is meaningfully different from win rate, pythagorean win expectation, or rolling
+    offense/pitching metrics.
+
+    RESEARCH BASIS:
+      Cui (2020): used an Elo momentum tracker as a covariate in the best-performing
+      ElasticNet model. The Elo tracker was the feature that captured team-level
+      trajectory beyond simple win rate. FiveThirtyEight's MLB Elo model (which
+      the thesis references) uses K=4 per game, home field advantage = 24 Elo points,
+      and season-start regression to the mean (each team's Elo regresses 1/3 of the
+      way back to 1500 at the start of a new season).
+
+    CURRENT STATE:
+      - home_win_rate_trailing_3yr: captures historical win percentage but treats
+        all wins equally (no strength of schedule).
+      - pythagorean_win_exp: captures run efficiency within the current season but
+        has no opponent quality component.
+      - streak features: direction signal only, no magnitude.
+      Elo adds the opponent quality dimension that none of these capture.
+
+    IMPLEMENTATION:
+      Build betting_ml/scripts/compute_elo.py that:
+        1. Reads mart_game_results from Snowflake ordered by game_date ASC.
+        2. Initializes each team at Elo = 1500 at the start of the dataset (2015).
+        3. After each game, updates both teams' Elo using the standard formula:
+             expected_home = 1 / (1 + 10^((away_elo - home_elo - HOME_ADV) / 400))
+             k = 4  (standard MLB K-factor)
+             home_elo_new = home_elo + k * (home_win - expected_home)
+             away_elo_new = away_elo + k * (away_win - expected_home)
+           where HOME_ADV = 24 Elo points (FiveThirtyEight MLB standard).
+        4. At the start of each new season, apply mean regression:
+             team_elo = 0.667 * team_elo + 0.333 * 1500
+           (1/3 regression to the mean — FiveThirtyEight's approach).
+        5. Write the pre-game Elo snapshot (before the game is played) to
+           Snowflake table baseball_data.betting.team_elo_history:
+             game_pk, team_abbrev, elo_before_game, elo_after_game, game_date
+
+      LEAKAGE: Only elo_before_game is used as a feature — it reflects the team's
+      Elo before the game's outcome is known. The elo_after_game update is applied
+      to the internal state but never exposed to the model as a pre-game feature.
+
+      FEATURE COLUMNS to add to feature_pregame_team_features:
+        home_elo, away_elo, elo_diff (home_elo - away_elo)
+      These surface in feature_pregame_game_features with the same names.
+
+    BACKFILL: Run compute_elo.py on all historical games (2015–present) to populate
+    team_elo_history. Then add it to daily_ingestion.yml to update after each game day.
+
+    EFFORT: Medium (~1 day). Self-contained computation from existing mart_game_results;
+    no new external data source required.
+
+    Source: Cui (2020) — Elo momentum tracker as a strength-of-schedule-aware covariate.
+
+  acceptanceCriteria:
+    - description: >
+        betting_ml/scripts/compute_elo.py exists and produces team_elo_history in
+        Snowflake. Spot-check: top 5 teams by Elo at end of 2024 season should
+        include teams with the best records; bottom 5 should include teams with the
+        worst records.
+    - description: >
+        feature_pregame_game_features includes home_elo, away_elo, elo_diff columns.
+        Null rate = 0 for all games from 2015 onward. dbtf build and tests pass.
+    - description: >
+        validate_feature_selection.py output shows elo_diff correlation with all
+        three targets.
+    - description: >
+        betting_ml/evaluation/elo_feature_impact.md documents: correlation vs. targets,
+        cross-correlation with home_win_rate_trailing_3yr and pythagorean_win_exp
+        (tests whether Elo adds independent signal), and retrain recommendation.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: elo-team-strength-rating-plan
+  namespace: default
+spec:
+  description: >
+    Three-task plan: build the Elo computation script and run the historical
+    backfill, join Elo into the feature layer, validate and report.
+  goalRef:
+    name: elo-team-strength-rating
+  graph:
+    nodes:
+
+      - id: build-elo-compute-script
+        kind: Task
+        description: >
+          Write betting_ml/scripts/compute_elo.py.
+          Parameters: --start-year (default 2015), --end-year (default current year).
+          Reads mart_game_results via Snowflake connector; writes to team_elo_history.
+          Include --dry-run flag that prints the last 20 Elo updates without writing
+          to Snowflake (for validation). Include a --check flag that prints the
+          top 5 and bottom 5 teams by Elo at the end of the most recent season.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Elo compute script
+            path: betting_ml/scripts/compute_elo.py
+          - type: command_succeeds
+            name: compute_elo.py syntax is valid
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/compute_elo.py').read_text()
+                ast.parse(src)
+                assert 'HOME_ADV' in src or 'home_adv' in src.lower(), \
+                    'HOME_ADV constant not defined'
+                assert '1500' in src, 'Initial Elo 1500 not referenced'
+                print('compute_elo.py syntax OK and contains required constants')
+
+      - id: add-elo-to-features
+        kind: Task
+        description: >
+          After running the historical backfill (user runs compute_elo.py --start-year 2015),
+          join team_elo_history into feature_pregame_team_features and surface
+          home_elo, away_elo, elo_diff in feature_pregame_game_features.
+          Use existing game_pk + team_abbrev join pattern.
+          Add to daily_ingestion.yml: run compute_elo.py after each game day to
+          update Elo scores.
+        dependsOn:
+          - build-elo-compute-script
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build feature models with Elo columns
+            command: dbtf
+            args: [build, --select, +feature_pregame_game_features]
+
+      - id: validate-and-report
+        kind: Task
+        description: >
+          Run validate_feature_selection.py. Write
+          betting_ml/evaluation/elo_feature_impact.md. Include correlation table,
+          cross-correlation with existing team-strength proxies, and recommendation.
+        dependsOn:
+          - add-elo-to-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Elo feature impact report
+            path: betting_ml/evaluation/elo_feature_impact.md

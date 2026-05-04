@@ -5,35 +5,35 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.4910111197637677,
+      "cv_mae": 3.5211573235017006,
       "viable": true,
       "lognormal_note": null
     },
     {
       "n_estimators": 200,
       "dist": "LogNormal",
-      "cv_mae": 3.486545009302654,
+      "cv_mae": 3.522356465089739,
       "viable": true,
       "lognormal_note": null
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.498723658609149,
+      "cv_mae": 3.531570655582149,
       "viable": true,
       "lognormal_note": null
     },
     {
       "n_estimators": 500,
       "dist": "LogNormal",
-      "cv_mae": 3.485565657383501,
+      "cv_mae": 3.519025415513605,
       "viable": true,
       "lognormal_note": null
     }
   ],
   "best_n_estimators": 500,
   "best_dist": "LogNormal",
-  "best_cv_mae": 3.485565657383501,
+  "best_cv_mae": 3.519025415513605,
   "persisted_models": [
     {
       "target": "total_runs",

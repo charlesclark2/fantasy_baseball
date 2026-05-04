@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Run unit tests
+        run: uv run pytest -v --tb=short
+
+      - name: predict_today.py syntax check
+        run: uv run python -m py_compile scripts/predict_today.py
+
+  model-smoke-test:
+    name: Model Artifact Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --no-dev-packages || uv sync
+
+      - name: Smoke test home_win model
+        run: |
+          uv run python -c "
+          import numpy as np
+          from betting_ml.utils.model_io import load_model
+          m = load_model('home_win')
+          p = m.predict_proba(np.zeros((1, m.n_features_in_)))[0, 1]
+          assert 0.0 < p < 1.0, f'Bad probability: {p}'
+          print(f'OK — p={p:.4f}, n_features={m.n_features_in_}')
+          "

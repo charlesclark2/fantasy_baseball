@@ -143,6 +143,37 @@ ip_stats as (
     group by game_pk, pitcher_id
 ),
 
+-- Start-count fastball velocity: last ≤3 prior starts with valid velo data.
+-- Mirrors the ip_starts / ip_stats pattern. LEAKAGE GUARD identical: strictly < pp.game_date.
+-- avg_fastball_velo from mart_starting_pitcher_game_log is the per-start mean across FF/SI/FC,
+-- so a single outlier pitch or mislabeled pitch type cannot skew the result.
+velo_starts as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        gl.avg_fastball_velo,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by gl.game_date::date desc
+        )  as recency_rank
+    from probable_pitchers pp
+    inner join {{ ref('mart_starting_pitcher_game_log') }} gl
+        on  gl.pitcher_id       = pp.pitcher_id
+        and gl.game_date::date  < pp.game_date   -- LEAKAGE GUARD
+        and gl.avg_fastball_velo is not null
+),
+
+velo_stats as (
+    select
+        game_pk,
+        pitcher_id,
+        round(
+            avg(case when recency_rank <= 3 then avg_fastball_velo end),
+        1)  as avg_fastball_velo_3start
+    from velo_starts
+    group by game_pk, pitcher_id
+),
+
 -- FanGraphs Stuff+ arsenal features (Card 7.F)
 -- Joined on mlbam_pitcher_id (integer) × season from fct_fangraphs_pitcher_arsenal_wide.
 -- All columns are nullable — missing Stuff+ data does not drop the game row.
@@ -173,6 +204,71 @@ arsenal_features as (
         avg_fastball_velo_mph
     from {{ ref('fct_fangraphs_pitcher_arsenal_wide') }}
     where mlbam_pitcher_id is not null
+),
+
+-- ZiPS pre-season FIP projections (Card 8.B)
+-- proj_xfip is NULL in current ingestion (FanGraphs ZiPS export does not include xFIP).
+-- fip_era_gap omitted: earned runs are not available in the pipeline.
+zips_fip as (
+    select
+        mlbam_pitcher_id::integer   as pitcher_id,
+        season,
+        proj_fip,
+        proj_xfip
+    from {{ ref('fct_fangraphs_pitching_analytics') }}
+    where mlbam_pitcher_id is not null
+),
+
+-- Trailing FIP over last 30 starts (Card 8.B)
+-- FIP = (13×HR + 3×(BB+HBP) - 2×K) / IP + 3.10
+-- NULL when IP sum < 10 (debut or very short career).
+fip_starts as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        gl.home_runs_allowed,
+        gl.walks,
+        gl.hit_by_pitch,
+        gl.strikeouts,
+        gl.innings_pitched,
+        gl.runs_allowed,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by gl.game_date::date desc
+        ) as recency_rank
+    from probable_pitchers pp
+    inner join {{ ref('mart_starting_pitcher_game_log') }} gl
+        on  gl.pitcher_id      = pp.pitcher_id
+        and gl.game_date::date < pp.game_date   -- LEAKAGE GUARD
+),
+
+fip_stats as (
+    select
+        game_pk,
+        pitcher_id,
+        case
+            when sum(case when recency_rank <= 30 then innings_pitched end) >= 10
+            then round(
+                (  13.0 * sum(case when recency_rank <= 30 then home_runs_allowed end)
+                 + 3.0  * (  sum(case when recency_rank <= 30 then walks end)
+                           + sum(case when recency_rank <= 30 then hit_by_pitch end))
+                 - 2.0  * sum(case when recency_rank <= 30 then strikeouts end))
+                / nullif(sum(case when recency_rank <= 30 then innings_pitched end), 0)
+                + 3.10,
+                2)
+            else null
+        end as trailing_fip_30g,
+        -- RA/9: runs allowed per 9 innings (proxy for ERA; no earned/unearned distinction)
+        case
+            when sum(case when recency_rank <= 30 then innings_pitched end) >= 10
+            then round(
+                sum(case when recency_rank <= 30 then runs_allowed end) * 9.0
+                / nullif(sum(case when recency_rank <= 30 then innings_pitched end), 0),
+                2)
+            else null
+        end as trailing_ra9_30g
+    from fip_starts
+    group by game_pk, pitcher_id
 ),
 
 -- Prior-season platoon splits vs LHB (game_year - 1 to prevent in-season leakage)
@@ -266,6 +362,15 @@ final as (
         -- ── Fastball velocity trend (positive = velocity trending up) ────────
         round(pgr.avg_fastball_velo_7d - pgr.avg_fastball_velo_30d, 1) as fastball_velo_trend,
 
+        -- ── Start-count velocity delta (Card 7.S): last 3 starts avg minus season avg ──
+        -- Independent of calendar gaps; captures IL returns, skipped starts, 6-man rotations.
+        -- NULL when pitcher has no prior starts with valid fastball velo data.
+        vs.avg_fastball_velo_3start,
+        round(
+            vs.avg_fastball_velo_3start - pgr.avg_fastball_velo_std,
+            1
+        )  as velo_delta_3start,
+
         -- ── Momentum deltas: 7-day minus season-to-date (positive = trending up)
         pgr.k_pct_7d - pgr.k_pct_std                as k_pct_7d_minus_std,
         pgr.xwoba_against_7d - pgr.xwoba_against_std as xwoba_7d_minus_std,
@@ -304,7 +409,17 @@ final as (
         af.slider_stuff_plus                     as starter_slider_stuff_plus,
         af.curveball_stuff_plus                  as starter_curveball_stuff_plus,
         af.changeup_stuff_plus                   as starter_changeup_stuff_plus,
-        af.avg_fastball_velo_mph                 as starter_avg_fastball_velo
+        af.avg_fastball_velo_mph                 as starter_avg_fastball_velo,
+
+        -- ── ZiPS projected FIP and trailing FIP/RA9 (Card 8.B) ───────────────
+        -- proj_xfip is NULL in current ingestion (FanGraphs ZiPS export omits xFIP).
+        -- trailing_fip_30g / trailing_ra9_30g: last 30 starts. NULL if IP < 10.
+        zf.proj_fip                              as starter_proj_fip,
+        zf.proj_xfip                             as starter_proj_xfip,
+        fs.trailing_fip_30g                      as starter_trailing_fip_30g,
+        fs.trailing_ra9_30g                      as starter_trailing_ra9_30g,
+        round(fs.trailing_fip_30g - fs.trailing_ra9_30g, 2)
+                                                 as starter_fip_ra9_gap
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -322,9 +437,18 @@ final as (
     left join ip_stats ips
         on  ips.game_pk     = pp.game_pk
         and ips.pitcher_id  = pp.pitcher_id
+    left join velo_stats vs
+        on  vs.game_pk      = pp.game_pk
+        and vs.pitcher_id   = pp.pitcher_id
     left join arsenal_features af
         on  af.mlbam_pitcher_id = pp.pitcher_id
         and af.season           = year(pp.game_date)
+    left join zips_fip zf
+        on  zf.pitcher_id   = pp.pitcher_id
+        and zf.season       = year(pp.game_date)
+    left join fip_stats fs
+        on  fs.game_pk      = pp.game_pk
+        and fs.pitcher_id   = pp.pitcher_id
 )
 
 select * from final

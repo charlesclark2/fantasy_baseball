@@ -25,6 +25,23 @@ def get_snowflake_session():
     return conn
 
 
+def run_execute(sql: str, params: tuple | list | None = None, conn=None) -> None:
+    """Execute a DML statement (INSERT/UPDATE/DELETE) with optional bind parameters."""
+    if conn is None:
+        conn = get_snowflake_session()
+    try:
+        cur = conn.cursor()
+        if params is not None:
+            cur.execute(sql, params)
+        else:
+            cur.execute(sql)
+    except Exception as exc:
+        preview = sql[:200].replace("\n", " ")
+        raise RuntimeError(
+            f"Snowflake execute failed: {exc}\nSQL preview: {preview}"
+        ) from exc
+
+
 def run_query(sql: str, conn=None) -> pd.DataFrame:
     """Execute SQL and return a pandas DataFrame.
 

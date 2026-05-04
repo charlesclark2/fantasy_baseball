@@ -25,14 +25,25 @@ jobs:
       SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
       SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+      DBT_FUSION_VERSION: "2026-05"  # bump to force cache invalidation and pull latest
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache dbt-fusion
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbtf
+          key: dbtf-${{ env.DBT_FUSION_VERSION }}-${{ runner.os }}
+
       - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Add dbt-fusion to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Write Snowflake private key
         run: |
@@ -54,12 +65,12 @@ jobs:
 
       - name: dbt build (odd day)
         if: steps.mode.outputs.mode == 'build' || github.event_name == 'workflow_dispatch'
-        run: dbt build --project-dir dbt --profiles-dir dbt
+        run: dbtf build --project-dir dbt --profiles-dir dbt
 
       - name: dbt run (even day)
         if: steps.mode.outputs.mode == 'run'
-        run: dbt run --project-dir dbt --profiles-dir dbt
+        run: dbtf run --project-dir dbt --profiles-dir dbt
 
       - name: dbt build --full-refresh (Sunday)
         if: steps.mode.outputs.mode == 'full_refresh'
-        run: dbt build --full-refresh --project-dir dbt --profiles-dir dbt
+        run: dbtf build --full-refresh --project-dir dbt --profiles-dir dbt

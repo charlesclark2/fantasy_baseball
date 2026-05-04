@@ -8,6 +8,7 @@ produces betting_ml/evaluation/run_differential_results.md.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -202,7 +203,7 @@ def run_cv(df: pd.DataFrame, feature_cols: list[str]) -> tuple[list[dict], list[
     return fold_results, ablation_results, final_fold_models
 
 
-def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], summary_row: dict) -> None:
+def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], summary_row: dict, retrain_version: str) -> None:
     print("\nWriting results to Snowflake...")
     conn = get_snowflake_connection()
     try:
@@ -219,16 +220,17 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                 mae FLOAT,
                 rmse FLOAT,
                 win_prob_brier FLOAT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_results_run_diff")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_results_run_diff ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for row in fold_results:
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_results_run_diff
-                    (fold, model, n_eval, mae, rmse, win_prob_brier)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (fold, model, n_eval, mae, rmse, win_prob_brier, retrain_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     row["fold"],
@@ -237,6 +239,7 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                     row["mae"],
                     row["rmse"],
                     row["win_prob_brier"],
+                    retrain_version,
                 ),
             )
         print(f"  Inserted {len(fold_results)} rows into cv_results_run_diff")
@@ -250,17 +253,18 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                 era_delta_mae FLOAT,
                 mae_without_hwrt FLOAT,
                 home_win_rate_delta_mae FLOAT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_era_ablation_run_diff")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_era_ablation_run_diff ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for row in ablation_results:
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_era_ablation_run_diff
                     (fold, mae_with_era, mae_without_era, era_delta_mae,
-                     mae_without_hwrt, home_win_rate_delta_mae)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                     mae_without_hwrt, home_win_rate_delta_mae, retrain_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     row["fold"],
@@ -269,6 +273,7 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                     row["era_delta_mae"],
                     row["mae_without_hwrt"],
                     row["home_win_rate_delta_mae"],
+                    retrain_version,
                 ),
             )
         print(f"  Inserted {len(ablation_results)} rows into cv_era_ablation_run_diff")
@@ -281,16 +286,17 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                 era_features_help BOOLEAN,
                 home_win_rate_trailing_helps BOOLEAN,
                 lognormal_viable BOOLEAN,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_summary_run_diff")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_summary_run_diff ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         cur.execute(
             """
             INSERT INTO baseball_data.betting_ml.cv_summary_run_diff
                 (best_mae_model, best_win_prob_brier_model, era_features_help,
-                 home_win_rate_trailing_helps, lognormal_viable)
-            VALUES (%s, %s, %s, %s, %s)
+                 home_win_rate_trailing_helps, lognormal_viable, retrain_version)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (
                 summary_row["best_mae_model"],
@@ -298,6 +304,7 @@ def _write_snowflake(fold_results: list[dict], ablation_results: list[dict], sum
                 summary_row["era_features_help"],
                 summary_row["home_win_rate_trailing_helps"],
                 summary_row["lognormal_viable"],
+                retrain_version,
             ),
         )
         print("  Inserted 1 row into cv_summary_run_diff")
@@ -690,6 +697,10 @@ def update_project_context(
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", default=datetime.date.today().isoformat(), help="Retrain version tag written to Snowflake (default: today's date)")
+    args = parser.parse_args()
+
     print("Card 4.10 — Run Differential Regression Baselines")
     print("=" * 60)
 
@@ -729,7 +740,7 @@ def main() -> None:
         save_model(final_fold_models["ngboost_lognormal"], target="run_differential", model_name="ngboost_lognormal", eval_year=eval_year)
     print("Models saved.")
 
-    _write_snowflake(fold_results, ablation_results, summary)
+    _write_snowflake(fold_results, ablation_results, summary, retrain_version=args.version)
 
     _verify_beats_baseline(fold_results, lognormal_viable)
 

@@ -45,7 +45,9 @@ team_games as (
         gr.game_pk,
         gr.game_date,
         gr.game_year,
-        gr.home_team_won           as is_win
+        gr.home_team_won           as is_win,
+        gr.home_final_score        as runs_scored,
+        gr.away_final_score        as runs_allowed
     from game_results gr
     inner join ref_teams ht on gr.home_team = ht.team_abbrev
 
@@ -57,7 +59,9 @@ team_games as (
         gr.game_pk,
         gr.game_date,
         gr.game_year,
-        (not gr.home_team_won)     as is_win
+        (not gr.home_team_won)     as is_win,
+        gr.away_final_score        as runs_scored,
+        gr.home_final_score        as runs_allowed
     from game_results gr
     inner join ref_teams at on gr.away_team = at.team_abbrev
 
@@ -87,6 +91,18 @@ running_totals as (
             order by game_date, game_pk
             rows between unbounded preceding and current row
         )                          as losses,
+
+        sum(runs_scored) over (
+            partition by team_id, game_year
+            order by game_date, game_pk
+            rows between unbounded preceding and current row
+        )                          as runs_scored_ytd,
+
+        sum(runs_allowed) over (
+            partition by team_id, game_year
+            order by game_date, game_pk
+            rows between unbounded preceding and current row
+        )                          as runs_allowed_ytd,
 
         -- Streak isolation: the group increments every time is_win flips,
         -- allowing COUNT to give the current consecutive-game streak length.
@@ -134,6 +150,8 @@ daily_ranked as (
         wins + losses              as games_played,
         streak_direction,
         streak_length,
+        runs_scored_ytd,
+        runs_allowed_ytd,
         row_number() over (
             partition by team_id, game_date, game_year
             order by game_pk desc
@@ -154,7 +172,9 @@ game_day_records as (
         losses,
         games_played,
         streak_direction,
-        streak_length
+        streak_length,
+        runs_scored_ytd,
+        runs_allowed_ytd
     from daily_ranked
     where rn = 1
 
@@ -221,6 +241,8 @@ expanded as (
         )                          as win_pct,
         gde.streak_direction,
         gde.streak_length,
+        gde.runs_scored_ytd,
+        gde.runs_allowed_ytd,
         gde.record_effective_date,
         case
             when gde.next_game_date is null then null
@@ -274,6 +296,21 @@ final as (
         losses,
         games_played,
         win_pct,
+        runs_scored_ytd,
+        runs_allowed_ytd,
+        case
+            when games_played >= 10
+            then round(
+                pow(runs_scored_ytd::float, 1.83)
+                / nullif(
+                    pow(runs_scored_ytd::float, 1.83)
+                  + pow(runs_allowed_ytd::float, 1.83),
+                    0
+                ),
+                4
+            )
+            else null
+        end                        as pythagorean_win_exp,
 
         -- ── Division standing ────────────────────────────────────────────────────
         (

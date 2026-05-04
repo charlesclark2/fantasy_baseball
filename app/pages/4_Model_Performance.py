@@ -12,11 +12,32 @@ import streamlit as st
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+import datetime
+
 from app.utils.db import get_snowflake_session, run_query
 
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
+
+_PLACED_BETS_SQL = """
+SELECT
+    b.score_date,
+    b.matchup,
+    b.market,
+    b.american_odds,
+    b.stake,
+    b.total_line,
+    b.outcome,
+    g.home_score,
+    g.away_score,
+    g.status_code
+FROM baseball_data.betting_ml.placed_bets b
+LEFT JOIN baseball_data.betting.stg_statsapi_games g
+    ON b.game_pk = g.game_pk
+    AND g.status_code = 'F'
+ORDER BY b.score_date ASC, b.placed_at ASC
+"""
 
 _PREDICTION_LOG_SQL = """
 SELECT
@@ -51,6 +72,56 @@ FROM baseball_data.config.prediction_log
 
 def _table_missing(exc: Exception) -> bool:
     return "002003" in str(exc) or "does not exist" in str(exc).lower()
+
+
+@st.cache_data(ttl=300)
+def load_placed_bets() -> pd.DataFrame:
+    try:
+        df = run_query(_PLACED_BETS_SQL)
+    except Exception:
+        return pd.DataFrame()
+    if df.empty:
+        return pd.DataFrame()
+    df.columns = [c.lower() for c in df.columns]
+    df["score_date"] = pd.to_datetime(df["score_date"]).dt.date
+    for col in ("american_odds", "home_score", "away_score"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    for col in ("stake", "total_line"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
+
+
+def _settle_outcome(row: pd.Series) -> str | None:
+    if pd.isna(row.get("status_code")) or row.get("status_code") != "F":
+        return None
+    hs, as_ = row.get("home_score"), row.get("away_score")
+    if pd.isna(hs) or pd.isna(as_):
+        return None
+    total = hs + as_
+    market = str(row.get("market", ""))
+    tl = row.get("total_line")
+    if market == "h2h home":
+        return "win" if hs > as_ else "loss"
+    if market == "h2h away":
+        return "win" if as_ > hs else "loss"
+    if market in ("over", "under") and not pd.isna(tl):
+        if total > tl:
+            return "win" if market == "over" else "loss"
+        if total < tl:
+            return "win" if market == "under" else "loss"
+        return "push"
+    return None
+
+
+def _pl_from_outcome(stake: float, american_odds: int, outcome: str | None) -> float | None:
+    if outcome is None:
+        return None
+    if outcome == "push":
+        return 0.0
+    dec = (american_odds / 100 + 1) if american_odds > 0 else (100 / abs(american_odds) + 1)
+    return stake * (dec - 1) if outcome == "win" else -stake
 
 
 @st.cache_data(ttl=3600)
@@ -541,3 +612,93 @@ else:
             st.altair_chart(chart, use_container_width=True)
         else:
             st.info("No actionable totals predictions in this date range.")
+
+# ---------------------------------------------------------------------------
+# Actual Bet Performance
+# ---------------------------------------------------------------------------
+
+st.header("Actual Bet Performance")
+st.caption(
+    "Real dollars wagered via the Bet Tracker, settled against actual game scores. "
+    "Only bets that have been logged and whose games have a final score are included "
+    "in the chart and metrics. Pending bets are excluded from the cumulative line."
+)
+
+df_bets = load_placed_bets()
+
+if df_bets.empty:
+    st.info("No bets logged yet. Use 'Log a Bet' on the EV Tracker page to start tracking.")
+else:
+    df_bets["_outcome"] = df_bets.apply(_settle_outcome, axis=1)
+    df_bets["_pl"] = df_bets.apply(
+        lambda r: _pl_from_outcome(
+            float(r["stake"]) if not pd.isna(r["stake"]) else 0.0,
+            int(r["american_odds"]) if not pd.isna(r["american_odds"]) else 0,
+            r["_outcome"],
+        ),
+        axis=1,
+    )
+
+    settled_bets = df_bets[df_bets["_outcome"].notna()].copy()
+    wins_b = (settled_bets["_outcome"] == "win").sum()
+    losses_b = (settled_bets["_outcome"] == "loss").sum()
+    pushes_b = (settled_bets["_outcome"] == "push").sum()
+    total_wagered_b = float(settled_bets["stake"].sum()) if not settled_bets.empty else 0.0
+    total_pl_b = float(settled_bets["_pl"].sum()) if not settled_bets.empty else 0.0
+    roi_b = total_pl_b / total_wagered_b if total_wagered_b > 0 else 0.0
+    total_bets = len(df_bets)
+    pending_count = int(df_bets["_outcome"].isna().sum())
+
+    bm1, bm2, bm3, bm4, bm5 = st.columns(5)
+    bm1.metric("Total Bets", total_bets, help=f"{pending_count} pending settlement.")
+    bm2.metric("Total Wagered ($)", f"{total_wagered_b:.2f}", help="Sum of stakes for settled bets.")
+    bm3.metric(
+        "Total P&L ($)",
+        f"{total_pl_b:+.2f}",
+        delta=f"{total_pl_b:+.2f}",
+        help="Actual realized profit/loss across all settled bets.",
+    )
+    bm4.metric("ROI%", f"{roi_b:+.1%}", help="Total P&L ÷ Total Wagered (settled bets).")
+    bm5.metric("Record (W-L-P)", f"{wins_b}-{losses_b}-{pushes_b}")
+
+    if not settled_bets.empty:
+        settled_bets = settled_bets.sort_values("score_date").copy()
+        settled_bets["cumulative_pl"] = settled_bets["_pl"].cumsum()
+
+        # Collapse to one point per date (last cumulative value of that day)
+        daily_pl = (
+            settled_bets.groupby("score_date")
+            .agg(cumulative_pl=("cumulative_pl", "last"), daily_pl=("_pl", "sum"))
+            .reset_index()
+        )
+        daily_pl["date"] = pd.to_datetime(daily_pl["score_date"])
+
+        # Add a zero-origin row so the chart starts at 0
+        origin = pd.DataFrame([{
+            "date": daily_pl["date"].min() - pd.Timedelta(days=1),
+            "cumulative_pl": 0.0,
+            "daily_pl": 0.0,
+        }])
+        daily_pl = pd.concat([origin, daily_pl], ignore_index=True).sort_values("date")
+
+        line = (
+            alt.Chart(daily_pl)
+            .mark_line(point=True, color="#2196F3")
+            .encode(
+                x=alt.X("date:T", title="Date",
+                        axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
+                y=alt.Y("cumulative_pl:Q", title="Cumulative P&L ($)"),
+                tooltip=[
+                    alt.Tooltip("date:T", title="Date", format="%b %d"),
+                    alt.Tooltip("cumulative_pl:Q", title="Cumulative P&L ($)", format="+.2f"),
+                    alt.Tooltip("daily_pl:Q", title="Day P&L ($)", format="+.2f"),
+                ],
+            )
+        )
+        zero_rule = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
+            color="grey", strokeDash=[4, 4]
+        ).encode(y="y:Q")
+
+        st.altair_chart((line + zero_rule).properties(height=300), use_container_width=True)
+    else:
+        st.info("No bets have settled yet — check back after today's games are final.")

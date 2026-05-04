@@ -26,7 +26,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import load_features, load_todays_features, get_snowflake_connection
 from betting_ml.utils.preprocessing import build_imputation_pipeline
-from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — required for joblib unpickling
 from betting_ml.utils.probability_layer import (
@@ -41,29 +40,11 @@ from betting_ml.models.total_runs_trainer import p_over_line
 # Constants
 # ---------------------------------------------------------------------------
 
-MODEL_VERSION = "v0"
+MODEL_VERSION = "v1"
 
-_CALIBRATOR_PATH = Path('betting_ml/models/home_win/calibrator.joblib')
-
-
-def _load_calibrator():
-    if _CALIBRATOR_PATH.exists():
-        return joblib.load(_CALIBRATOR_PATH)
-    print('[WARN] calibrator.joblib not found — using consensus_win_prob uncalibrated')
-    return None
-
-
-_calibrator = _load_calibrator()
-
-
+# v1 (elasticnet) is naturally calibrated — no post-hoc calibration layer.
+# calibrator.joblib was fit on XGBoost raw scores and must not be applied here.
 def _apply_calibrator(consensus_win_prob: float) -> float:
-    """Return calibrated win probability; falls back to consensus if no calibrator."""
-    if _calibrator is not None:
-        raw = np.array([consensus_win_prob])
-        try:
-            return float(_calibrator.predict_proba(raw.reshape(-1, 1))[0, 1])
-        except AttributeError:
-            return float(_calibrator.predict(raw)[0])
     return consensus_win_prob
 
 
@@ -605,19 +586,19 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Feature matrix preparation
     # ------------------------------------------------------------------
-    feature_cols = load_retained_features()
-    feature_cols_hist = [c for c in feature_cols if c in df_hist.columns]
-    feature_cols_today = [c for c in feature_cols if c in df_today.columns]
-    missing = set(feature_cols) - set(feature_cols_today)
+    # Load the canonical feature list saved at model training time so the
+    # column count and order exactly match what the production models expect.
+    _feature_cols_path = PROJECT_ROOT / "model_artifacts" / "feature_columns.json"
+    feature_cols = json.loads(_feature_cols_path.read_text())
+    missing = set(feature_cols) - set(df_today.columns)
     if missing:
         warnings.warn(
-            f"{len(missing)} retained features missing from today's data (will fill NaN): "
+            f"{len(missing)} model features missing from today's data (will fill NaN): "
             f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
         )
 
-    X_hist = df_hist[[c for c in feature_cols_hist if c in df_hist.columns]]
-    X_today_raw = df_today[[c for c in feature_cols_today if c in df_today.columns]]
-    X_today_raw = X_today_raw.reindex(columns=X_hist.columns, fill_value=np.nan)
+    X_hist = df_hist.reindex(columns=feature_cols, fill_value=np.nan)
+    X_today_raw = df_today.reindex(columns=feature_cols, fill_value=np.nan)
 
     pipeline = build_imputation_pipeline()
     X_hist_imp = pipeline.fit_transform(X_hist)
@@ -683,8 +664,13 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    _expected_n = clf_hw.xgb_classifier.n_features_in_
-    if X_today_imp.shape[1] != _expected_n:
+    if hasattr(clf_hw, "n_features_in_"):
+        _expected_n = clf_hw.n_features_in_
+    elif hasattr(clf_hw, "xgb_classifier"):
+        _expected_n = clf_hw.xgb_classifier.n_features_in_
+    else:
+        _expected_n = None
+    if _expected_n is not None and X_today_imp.shape[1] != _expected_n:
         warnings.warn(
             f"clf_hw expects {_expected_n} features but got {X_today_imp.shape[1]}. "
             f"Model retraining may be needed."

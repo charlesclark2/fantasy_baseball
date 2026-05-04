@@ -22,6 +22,8 @@ dependencies = [
     "python-dotenv>=1.0",
     "plotly>=6.7.0",
     "curl-cffi>=0.7",
+    "lightgbm>=4.6.0",
+    "catboost>=1.2.10",
 ]
 
 [build-system]
@@ -30,3 +32,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["betting_ml"]
+
+[tool.pytest.ini_options]
+testpaths = ["betting_ml/tests", "scripts/tests"]
+pythonpath = [".", "scripts"]

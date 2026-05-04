@@ -2,29 +2,23 @@
 
 ## NGBoost run_differential Grid Search Results
 
-Grid search over n_estimators ∈ {200, 500, 1000} and dist ∈ {Normal, LogNormal}.
+Grid search over n_estimators ∈ {200, 500, 1000}, dist = Normal only.
+LogNormal excluded: run_differential can be negative, causing log(Y) divide-by-zero.
 Evaluation metric: mean absolute error (MAE) across temporal CV splits (min_train_seasons=3).
 
-| n_estimators | Dist | CV MAE | Viable |
-|-------------|------|--------|--------|
-| 200 | Normal | 3.4649 | Yes |
-| 200 | LogNormal | N/A | No |
-| 500 | Normal | 3.4586 | Yes |
-| 500 | LogNormal | N/A | No |
-| 1000 | Normal | 3.4760 | Yes |
-| 1000 | LogNormal | N/A | No |
+| n_estimators | Dist | CV MAE |
+|-------------|------|--------|
+| 200 | Normal | 3.4724 |
+| 500 | Normal | 3.4788 |
+| 1000 | Normal | 3.4993 |
 
-**Best viable configuration:** n_estimators=500, dist=Normal, CV MAE=3.4586
-
-## LogNormal Distribution Note
-
-LogNormal is **not viable** for run_differential. The LogNormal distribution requires strictly positive support (values > 0), but run_differential contains negative values — the home team can lose by any margin, so the target ranges from large negative numbers to large positive numbers. Attempting to fit NGBoost with LogNormal on negative targets causes numerical failures or NaN predictions. All three LogNormal grid entries are recorded as `viable=false` with the note: _"LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."_
+**Best configuration:** n_estimators=200, dist=Normal, CV MAE=3.4724
 
 ## Best NGBoost Configuration
 
-- **best_n_estimators:** 500
+- **best_n_estimators:** 200
 - **best_dist:** Normal
-- **CV MAE:** 3.4586
+- **CV MAE:** 3.4724
 
 The Normal distribution is the only viable choice for run_differential, as it supports the full real line and can model both positive (home win) and negative (away win) margins.
 

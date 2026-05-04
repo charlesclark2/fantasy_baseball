@@ -13,7 +13,7 @@ import streamlit as st
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.utils.db import run_query
+from app.utils.db import run_execute, run_query
 
 # ---------------------------------------------------------------------------
 # Queries
@@ -99,6 +99,8 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
                 and model_prob is not None
             )
 
+            total_line = _safe_float(r.get("total_line_consensus")) if "over" in market_name or "under" in market_name else None
+
             rows.append({
                 "game_pk": game_pk,
                 "matchup": matchup,
@@ -113,6 +115,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
                 "kelly_exceeded_cap": kelly_exceeded_cap,
                 "both_confirmed": both_confirmed,
                 "actionable": actionable,
+                "total_line": total_line,
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
@@ -385,6 +388,286 @@ else:
         help="Expected profit as a percentage of total money staked across checked bets. For every $1 bet, you expect to gain/lose this fraction.",
     )
     m4.metric("Bets Selected", str(n_bets), help="Number of checked bets contributing to the metrics.")
+
+# ---------------------------------------------------------------------------
+# Log a Bet
+# ---------------------------------------------------------------------------
+
+_BET_HISTORY_SQL = """
+SELECT
+    b.bet_id,
+    b.placed_at,
+    b.score_date,
+    b.game_pk,
+    b.matchup,
+    b.market,
+    b.bookmaker,
+    b.american_odds,
+    b.stake,
+    b.total_line,
+    b.model_prob,
+    b.market_prob,
+    b.ev,
+    b.kelly_capped,
+    b.outcome,
+    b.profit_loss,
+    b.notes,
+    g.home_score,
+    g.away_score,
+    g.status_code
+FROM baseball_data.betting_ml.placed_bets b
+LEFT JOIN baseball_data.betting.stg_statsapi_games g
+    ON b.game_pk = g.game_pk
+    AND g.status_code = 'F'
+ORDER BY b.placed_at DESC
+"""
+
+_INSERT_BET_SQL = """
+INSERT INTO baseball_data.betting_ml.placed_bets
+    (score_date, game_pk, matchup, market, bookmaker, american_odds, stake,
+     total_line, model_prob, market_prob, ev, kelly_capped, notes)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+
+
+def _derive_outcome(row: pd.Series) -> str | None:
+    """Return 'win', 'loss', 'push', or None (pending) for a placed_bets row."""
+    if pd.isna(row.get("status_code")) or row.get("status_code") != "F":
+        return None
+    home_score = row.get("home_score")
+    away_score = row.get("away_score")
+    if pd.isna(home_score) or pd.isna(away_score):
+        return None
+    total_actual = home_score + away_score
+    market = str(row.get("market", ""))
+    total_line = row.get("total_line")
+
+    if market == "h2h home":
+        return "win" if home_score > away_score else "loss"
+    if market == "h2h away":
+        return "win" if away_score > home_score else "loss"
+    if market in ("over", "under") and not pd.isna(total_line):
+        if total_actual > total_line:
+            return "win" if market == "over" else "loss"
+        if total_actual < total_line:
+            return "win" if market == "under" else "loss"
+        return "push"
+    return None
+
+
+def _compute_pl(stake: float, american_odds: int, outcome: str | None) -> float | None:
+    if outcome is None:
+        return None
+    if outcome == "push":
+        return 0.0
+    if american_odds > 0:
+        decimal_odds = american_odds / 100 + 1
+    else:
+        decimal_odds = 100 / abs(american_odds) + 1
+    if outcome == "win":
+        return stake * (decimal_odds - 1)
+    return -stake  # loss
+
+
+def _american_from_decimal(dec: float) -> int:
+    if dec >= 2.0:
+        return round((dec - 1) * 100)
+    else:
+        return round(-100 / (dec - 1))
+
+
+@st.cache_data(ttl=300, show_spinner="Loading bet history...")
+def load_bet_history() -> pd.DataFrame:
+    return run_query(_BET_HISTORY_SQL)
+
+
+st.divider()
+with st.expander("📝 Log a Bet", expanded=False):
+    _bet_logged_msg = st.session_state.pop("_bet_success", None)
+    if _bet_logged_msg:
+        st.success(f"Bet logged: {_bet_logged_msg}")
+
+    # Version counters: incrementing a counter changes widget keys, forcing
+    # Streamlit to create fresh widgets with their value= defaults on the next render.
+    _sel_v = st.session_state.get("_bet_sel_version", 0)
+    _form_v = st.session_state.get("_bet_form_version", 0)
+
+    # ---- game + market selectors (outside form so auto-populate reacts) ----
+    if df_ev.empty:
+        st.info("No EV data for this date. Select a date with games to log a bet.")
+    else:
+        matchup_options = ["— select —"] + sorted(df_ev["matchup_label"].unique().tolist())
+        sel_game = st.selectbox(
+            "Game",
+            matchup_options,
+            key=f"bet_log_game_{_sel_v}",
+        )
+
+        df_game_rows = df_ev[df_ev["matchup_label"] == sel_game] if sel_game != "— select —" else pd.DataFrame()
+
+        market_options = df_game_rows["market"].tolist() if not df_game_rows.empty else []
+        sel_market = st.selectbox(
+            "Market",
+            ["— select —"] + market_options,
+            key=f"bet_log_market_{_sel_v}",
+        )
+
+        ev_row: pd.Series | None = None
+        if sel_game != "— select —" and sel_market != "— select —" and not df_game_rows.empty:
+            mask = df_game_rows["market"] == sel_market
+            if mask.any():
+                ev_row = df_game_rows[mask].iloc[0]
+
+        if ev_row is not None:
+            c1, c2, c3, c4, c5 = st.columns(5)
+            c1.metric("Model Prob", f"{ev_row['model_prob']:.1%}")
+            c2.metric("Mkt Impl Prob", f"{ev_row['market_prob']:.1%}")
+            c3.metric("Consensus Odds", f"{_american_from_decimal(ev_row['decimal_odds']):+d}")
+            c4.metric("EV", f"{ev_row['ev']:+.4f}")
+            c5.metric("Capped Kelly%", f"{ev_row['kelly_capped']:.2%}")
+
+        with st.form(f"log_bet_form_{_form_v}"):
+            col_a, col_b, col_c = st.columns(3)
+            bookmaker = col_a.text_input("Bookmaker", value="bovada", key=f"bet_form_bookmaker_{_form_v}")
+            default_odds = (
+                _american_from_decimal(ev_row["decimal_odds"]) if ev_row is not None else -110
+            )
+            actual_odds = col_b.number_input(
+                "Actual Odds (American)",
+                min_value=-10000,
+                max_value=10000,
+                value=int(default_odds),
+                step=1,
+                key=f"bet_form_odds_{_form_v}",
+            )
+            stake_input = col_c.number_input(
+                "Stake ($)", min_value=0.01, value=10.0, step=1.0, key=f"bet_form_stake_{_form_v}"
+            )
+
+            show_total_line = ev_row is not None and sel_market in ("over", "under")
+            default_total = float(ev_row["total_line"]) if (show_total_line and ev_row["total_line"] is not None) else 0.0
+            total_line_input = None
+            if show_total_line:
+                total_line_input = st.number_input(
+                    "Total Line (O/U)", value=default_total, step=0.5, key=f"bet_form_total_line_{_form_v}"
+                )
+
+            notes_input = st.text_area("Notes (optional)", max_chars=500, key=f"bet_form_notes_{_form_v}")
+
+            submitted = st.form_submit_button("Log Bet")
+            if submitted:
+                if sel_game == "— select —" or sel_market == "— select —":
+                    st.error("Select a game and market before logging.")
+                elif stake_input <= 0:
+                    st.error("Stake must be greater than 0.")
+                elif actual_odds == 0:
+                    st.error("American odds cannot be 0.")
+                else:
+                    try:
+                        game_pk_val = int(df_game_rows.iloc[0]["game_pk"]) if not df_game_rows.empty else None
+                        run_execute(
+                            _INSERT_BET_SQL,
+                            params=(
+                                date_str,
+                                game_pk_val,
+                                sel_game,
+                                sel_market,
+                                bookmaker or None,
+                                int(actual_odds),
+                                float(stake_input),
+                                float(total_line_input) if total_line_input is not None else None,
+                                float(ev_row["model_prob"]) if ev_row is not None else None,
+                                float(ev_row["market_prob"]) if ev_row is not None else None,
+                                float(ev_row["ev"]) if ev_row is not None else None,
+                                float(ev_row["kelly_capped"]) if ev_row is not None else None,
+                                notes_input or None,
+                            ),
+                        )
+                        st.session_state["_bet_success"] = f"{sel_game} — {sel_market} @ {int(actual_odds):+d} (${float(stake_input):.2f})"
+                        st.session_state["_bet_sel_version"] = _sel_v + 1
+                        st.session_state["_bet_form_version"] = _form_v + 1
+                        load_bet_history.clear()
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to log bet: {exc}")
+
+# ---------------------------------------------------------------------------
+# Bet History
+# ---------------------------------------------------------------------------
+
+st.subheader(f"Bet History — {selected_date.strftime('%b %-d, %Y')}")
+
+df_hist_raw = load_bet_history()
+
+if df_hist_raw.empty:
+    st.info("No bets logged yet. Use 'Log a Bet' above to record your first bet.")
+else:
+    _df_all = df_hist_raw.copy()
+    _df_all.columns = [c.lower() for c in _df_all.columns]
+    if "score_date" in _df_all.columns:
+        _df_all["score_date"] = pd.to_datetime(_df_all["score_date"]).dt.date
+    df_hist = _df_all[_df_all["score_date"] == selected_date].copy() if "score_date" in _df_all.columns else _df_all.copy()
+
+    if df_hist.empty:
+        st.info(f"No bets logged for {selected_date}. Use 'Log a Bet' above to record a bet for this date.")
+    else:
+        # Auto-settle: derive outcome and P&L in Python (display-only, no DB writes)
+        df_hist["_derived_outcome"] = df_hist.apply(_derive_outcome, axis=1)
+        df_hist["_display_outcome"] = df_hist["_derived_outcome"].where(
+            df_hist["outcome"].isna(), df_hist["outcome"]
+        )
+        df_hist["_pl"] = df_hist.apply(
+            lambda r: _compute_pl(
+                float(r["stake"]) if not pd.isna(r["stake"]) else 0.0,
+                int(r["american_odds"]) if not pd.isna(r["american_odds"]) else 0,
+                r["_display_outcome"],
+            ),
+            axis=1,
+        )
+
+        # Summary metrics (settled only)
+        settled = df_hist[df_hist["_display_outcome"].notna()]
+        wins = (settled["_display_outcome"] == "win").sum()
+        losses = (settled["_display_outcome"] == "loss").sum()
+        pushes = (settled["_display_outcome"] == "push").sum()
+        total_wagered = float(settled["stake"].sum()) if not settled.empty else 0.0
+        total_pl = float(settled["_pl"].sum()) if not settled.empty else 0.0
+        roi = total_pl / total_wagered if total_wagered > 0 else 0.0
+
+        sm1, sm2, sm3, sm4 = st.columns(4)
+        sm1.metric("Total Wagered ($)", f"{total_wagered:.2f}", help="Sum of stakes for settled bets only.")
+        sm2.metric(
+            "Total P&L ($)",
+            f"{total_pl:+.2f}",
+            delta=f"{total_pl:+.2f}",
+            help="Realized profit/loss across all settled bets.",
+        )
+        sm3.metric("ROI%", f"{roi:+.1%}", help="Total P&L ÷ Total Wagered (settled bets).")
+        sm4.metric("Record (W-L-P)", f"{wins}-{losses}-{pushes}", help="Wins, losses, and pushes among settled bets.")
+
+        def _fmt_outcome(o):
+            if o is None or (isinstance(o, float) and pd.isna(o)):
+                return "pending"
+            return str(o)
+
+        df_table = pd.DataFrame({
+            "Matchup": df_hist["matchup"],
+            "Market": df_hist["market"],
+            "Bookmaker": df_hist["bookmaker"].fillna("—"),
+            "Odds": df_hist["american_odds"].map(lambda v: f"{int(v):+d}" if not pd.isna(v) else "—"),
+            "Stake ($)": df_hist["stake"].map(lambda v: f"{float(v):.2f}" if not pd.isna(v) else "—"),
+            "Model Prob": df_hist["model_prob"].map(lambda v: f"{float(v):.1%}" if not pd.isna(v) else "—"),
+            "EV": df_hist["ev"].map(lambda v: f"{float(v):+.4f}" if not pd.isna(v) else "—"),
+            "Outcome": df_hist["_display_outcome"].map(_fmt_outcome),
+            "P&L ($)": df_hist["_pl"].map(lambda v: f"{float(v):+.2f}" if v is not None and not pd.isna(v) else "—"),
+        })
+
+        def _outcome_color(val: str):
+            colors = {"win": "color: green", "loss": "color: red", "push": "color: grey", "pending": "font-style: italic; color: grey"}
+            return colors.get(val, "")
+
+        styled = df_table.style.map(_outcome_color, subset=["Outcome"])
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------------------------
 # Sidebar context

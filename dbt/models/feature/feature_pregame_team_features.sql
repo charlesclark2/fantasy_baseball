@@ -197,6 +197,7 @@ season_record as (
         tsr.losses,
         tsr.games_played,
         tsr.win_pct,
+        tsr.pythagorean_win_exp,
         tsr.games_back,
         tsr.streak_direction,
         tsr.streak_length
@@ -204,6 +205,15 @@ season_record as (
     left join {{ ref('mart_team_season_record') }} tsr
         on  tsr.team_abbrev = g.team_abbrev
         and tsr.record_date = dateadd('day', -1, g.game_date::date)
+),
+
+-- ── Elo rating as of before this game (Card 8.D) ─────────────────────────────
+elo_ratings as (
+    select
+        game_pk,
+        team_abbrev,
+        elo_before_game
+    from {{ source('betting', 'team_elo_history') }}
 ),
 
 final as (
@@ -219,6 +229,7 @@ final as (
         sr.losses,
         sr.games_played,
         sr.win_pct,
+        sr.pythagorean_win_exp,
         sr.games_back,
         sr.streak_direction,
         sr.streak_length,
@@ -337,7 +348,18 @@ final as (
         off.games_7d                                 as off_games_played_7d,
         off.games_14d                                as off_games_played_14d,
         off.games_30d                                as off_games_played_30d,
-        off.games_std                                as off_games_played_std
+        off.games_std                                as off_games_played_std,
+
+        -- ── Elo team strength rating (Card 8.D) ──────────────────────────────
+        -- Pre-game snapshot; NULL until compute_elo.py backfill is run.
+        er.elo_before_game                           as elo_rating,
+
+        -- ── Defensive fielding quality (Card 8.C) ────────────────────────────
+        -- Prior-season OAA from FanGraphs (season-level; leakage-free).
+        -- NULL for games before 2017 (first year 2016 OAA is available as prior).
+        -- Coalesced to 0 (league average) in team_oaa_blended.
+        fo.team_oaa_prior_season,
+        fo.team_oaa_blended
 
     from games g
     left join offense_pre_game off
@@ -364,6 +386,12 @@ final as (
     left join {{ ref('mart_team_schedule_context') }} sc
         on  sc.team_abbrev   = g.team_abbrev
         and sc.game_pk       = g.game_pk
+    left join elo_ratings er
+        on  er.team_abbrev   = g.team_abbrev
+        and er.game_pk       = g.game_pk
+    left join {{ ref('mart_team_fielding_oaa') }} fo
+        on  fo.team_abbrev   = g.team_abbrev
+        and fo.game_pk       = g.game_pk
 )
 
 select * from final

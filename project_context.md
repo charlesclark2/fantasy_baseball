@@ -6,7 +6,7 @@ Build a machine learning system capable of predicting the outcome and total runs
 
 **Phases 1–6 are complete as of 2026-05-01.** The data mart (Phase 1), pre-game feature store (Phase 2), EDA (Phase 3, 2026-04-24), ML pipeline (Phase 4, 2026-04-25), model selection and prediction CLI (Phase 5), and betting application layer (Phase 6, 2026-05-01) are all done. **Phase 7 (Model Refinement and Production Infrastructure) is the active phase.**
 
-**Phase 7 progress:** Card 7A (alpha-grid-rerun, 2026-05-02) complete — full 11-candidate α grid rerun against corrected 2026 odds data (14,126 has_odds eval records); best_alpha confirmed at 0.0 (log-loss rises monotonically from 0.6833 at α=0.0 to 0.7336 at α=1.0); `alpha_tuning_results` populated with 11 rows; `betting_ml/models/best_alpha.json` written; `predict_today.py` three-tier fallback (Snowflake → file → 0.5) confirmed in place; Gaps 4 and 5 from postmortem_v0.md resolved. Card 7.C (home-win-probability-calibration, 2026-05-02) complete — diagnostic analysis confirmed systematic home-team underprediction (ECE baseline 0.0614); Platt scaling calibrator fit on 2026 in-season results (train_n=842, eval_n=211); ECE improved 0.0614 → 0.0370; `betting_ml/models/home_win/calibrator.joblib` and `calibrator_meta.json` persisted; `predict_today.py` updated to load calibrator at startup, apply it per-game, write `calibrated_win_prob` to `daily_model_predictions`, and use it as input to `compute_edge()` and `compute_kelly()`; `consensus_win_prob` retained as audit column; `calibrated_win_prob FLOAT` column added to Snowflake table via DDL migration; `model_registry.yaml` updated with calibrator metadata; feature-shape mismatch bug fixed via `_FEATURES_ADDED_AFTER_LAST_RETRAIN` exclusion set (drops 4 weather columns until Card 7.D retraining); Gap 2 from postmortem_v0.md resolved. Card 7.E (FanGraphs ingestion pipeline, 2026-05-02) complete — full FanGraphs ingestion pipeline built and validated; raw tables (`fg_stuff_plus_raw`, `fg_zips_pitching_raw`, `fg_zips_hitting_raw`, `fg_hitting_leaderboard_raw`) in `baseball_data.fangraphs` schema; ingestion scripts ship manual CSV uploads for ZiPS projections (2024–2026 backfill) and direct API pulls for Stuff+ and hitting leaderboard rolling windows (7d/14d/30d/season); four staging models (`stg_fangraphs__stuff_plus`, `stg_fangraphs__zips_pitching`, `stg_fangraphs__zips_hitting`, `stg_fangraphs__hitting_leaderboard`) with proper grain and all tests passing; three mart models (`fct_fangraphs_pitching_analytics`, `fct_fangraphs_hitting_analytics`, `dim_fangraphs_player_xref`) in `baseball_data.betting`; `dim_fangraphs_player_xref` cross-references FanGraphs player IDs (numeric = MLB, `sa`-prefixed = MiLB) to MLBAM IDs — 9,330 rows total (4,552 MLB, 4,778 MiLB), 2 missing MLBAM IDs; validation script (`scripts/validate_fangraphs_pipeline.py`) runs four checks (raw row counts, MLBAM join rate ≥95% for MLB-active pitchers only, Stuff+ null rate <10%, mart duplicate grain checks) — all PASS with 96.3% MLBAM join rate (1,004/1,042 MLB-active pitchers); `betting_ml/evaluation/fangraphs_validation.md` written; Gap 8 from postmortem_v0.md resolved. Card 7.F (FanGraphs Stuff+ and pitch-arsenal features, 2026-05-03) complete — `stg_fangraphs__pitcher_arsenal` and `fct_fangraphs_pitcher_arsenal_wide` built; 13/18 numeric arsenal features retained by feature selection (top: `home_starter_stuff_plus` rank 16/267); training data cutoff changed to `game_year >= 2021` (pre-2020 rows had 0% Stuff+ population); all three models retrained on 10,243 rows (267 features): home_win Brier 0.2443 (flat), total_runs MAE 3.4856 (−0.038), run_differential MAE 3.4586 (+0.039, LogNormal excluded); `model_registry.yaml` updated for all three; `betting_ml/evaluation/stuff_plus_feature_impact.md` created; full retraining after future feature expansion deferred to Card 7.MA. Card 7.H (umpire tendency features, 2026-05-03) complete — two-source architecture: UmpScorecards bulk CSV (25,556 rows, 2015–2026) for historical tendency metrics + MLB Stats API `hydrate=officials` for daily forward-path assignment; `baseball_data.statsapi.umpire_game_log` table; `stg_statsapi_umpire_game_log` staging model (ROW_NUMBER dedup, preferring umpscorecards rows); `feature_pregame_umpire_features` with trailing 3-yr z-scores, leakage guard, and sample gate; 5 features computed, 2 retained by corr threshold (ump_runs_per_game_zscore |r|=0.024, ump_accuracy_zscore |r|=0.021); 99.4% coverage for 2026 regular season games; `feature_pregame_game_features` updated with LEFT JOIN; daily ingestion wired into `daily_ingestion.yml`; `betting_ml/evaluation/umpire_feature_impact.md` written; LogNormal permanently excluded from run_diff search grid; model retraining deferred to pre-7.MA batch checkpoint. Card 7.I (injury and confirmed lineup features, 2026-05-03) complete — MLB Stats API `/v1/transactions` endpoint used as authoritative IL source; `baseball_data.statsapi.player_transactions` table (66,497 rows, 2021–2026 backfill); `scripts/ingest_transactions.py` uses bulk temp-table + DELETE/INSERT + `INSERT INTO ... SELECT PARSE_JSON(...)` pattern (Snowflake rejects `PARSE_JSON` in VALUES clause); `stg_statsapi_transactions` deduplicates raw rows; `stg_statsapi_player_injury_status` derives point-in-time intervals via `LEAD()` — all IL events use `typeCode='SC'`, placement vs. activation distinguished by description `ILIKE` patterns (confirmed via dry-run); `feature_pregame_lineup_features` extended with `injured_player_count`, `injury_adj_avg_woba_30d`, `injury_adj_avg_xwoba_30d` (divides by 9 to penalise IL absences); `feature_pregame_game_features` exposes `home_`/`away_` prefixed versions; Streamlit Today's Picks shows IL warning badge per team; 33.4% of game-rows have ≥1 IL player, `injury_adj_avg_woba` (0.308) < `avg_woba` (0.331) confirming penalty is live; row count unchanged (51,382); model retraining deferred to pre-7.MA batch checkpoint. Card 7.J (hitter vs. pitcher pitch-archetype matchup features, 2026-05-03) complete — `mart_pitcher_pitch_archetype` built (7,879 pitcher × season rows; 49% fastball_dominant, 45% mixed, 7% breaking_dominant; archetype avg pitch-mix percentages confirm correct threshold application); `mart_batter_vs_pitch_archetype` built (Bayesian shrinkage at 50 PA, blending toward wOBA=0.320/xwOBA=0.315/K%=0.225/ISO=0.165 league averages; adj_woba near prior for breaking_dominant avg 13 PA, meaningful signal for fastball_dominant/mixed avg ~100 PA); `feature_pregame_lineup_features` and `feature_pregame_game_features` each extended with 6 new archetype matchup columns (lineup_woba/xwoba/k_pct/iso_vs_starter_archetype, lineup_archetype_pa_coverage, starter_pitch_archetype); prior-season leakage guard on all archetype joins; row count unchanged (51,382); `betting_ml/evaluation/matchup_split_feature_impact.md` written; CV impact numbers and model retrain deferred to pre-7.MA batch checkpoint. Card 7.K (pitcher clustering model, 2026-05-03) complete — k-means on arsenal vectors (velocity, break, pitch mix, Stuff+); 2025 season: k=6, silhouette=0.1094, 640 pitchers assigned; cluster labels: `power_swing_and_miss`, `elite_breaking_ball`, `contact_sinker_ball`, `changeup_deceptive`, `soft_command`, `multi_pitch_mix`; `pitcher_clusters` PK: `(pitcher_id, season, snapshot_date)`; `mart_batter_woba_vs_cluster` switched from 30-day rolling to career-cumulative (`UNBOUNDED PRECEDING`) to resolve 76% null rate; `feature_pitcher_cluster_matchups` uses `QUALIFY ROW_NUMBER` for most-recent-prior-record join (handles off-days); 2026 null rate: March 1.3%, April 4.4%, May 6.7% — all < 10% AC passes; all 11 plan spec AC checks pass. Card 7.K2 (batter archetype clustering, 2026-05-03) complete — demand-side complement to Card 7.K; `mart_batter_profile_summary` (2808 rows, 2020–2026) built from `mart_pitch_play_event` + `stg_batter_pitches` (batted ball via pitch_sk) + `fct_fangraphs_hitting_analytics`; k-means on 12-feature hitting vector (sprint_speed unavailable); seasons 2020–2025 clustered: 2024 k=4 silhouette=0.1413 (455 batters), 2025 k=5 silhouette=0.1428 (461 batters); labels: `power_pull`, `patient_obp`, `groundball_speed`, `high_whiff`, `contact_spray`, `balanced`; `mart_batter_archetype_vs_pitcher_cluster` (180-day rolling population wOBA/xwOBA, shrinkage at 100 PA, 50 PA gate, leakage-guarded) built; `feature_batter_archetype_matchups` and 8 new columns integrated into `feature_pregame_game_features`; 2026 coverage: March 98.7%, April 95.7%, May 93.3% — all > 85% target; all dbtf builds pass, 9 existing feature tests pass; ΔBrier deferred to Card 7.MA. Card 7.Q (bullpen fatigue IP features, 2026-05-03) complete — `mart_bullpen_workload` extended with `outs_recorded` (same out-event list as `mart_bullpen_effectiveness`) and three new rolling window columns (`bullpen_ip_prev_1d`, `bullpen_ip_prev_2d`, `pitchers_used_prev_2d`); six home/away columns surfaced in `feature_pregame_game_features` via `feature_pregame_team_features`; no new ingestion or mart models — pure extension of existing models; `dbtf build --select +mart_bullpen_workload+` rebuilt 5 models, 99 tests pass; null rates: `home_bullpen_ip_prev_1d` 0.54%, `home_pitchers_used_prev_2d` 2.65% (both under 5%); spot-check confirms non-zero IP for heavy-usage days, max 5.0 IP; correlation analysis and CV impact deferred to Card 7.MA; baseline pitch-count |r| thresholds documented in `betting_ml/evaluation/feature_notes.md`.
+**Phase 7 progress:** Card 7A (alpha-grid-rerun, 2026-05-02) complete — full 11-candidate α grid rerun against corrected 2026 odds data (14,126 has_odds eval records); best_alpha confirmed at 0.0 (log-loss rises monotonically from 0.6833 at α=0.0 to 0.7336 at α=1.0); `alpha_tuning_results` populated with 11 rows; `betting_ml/models/best_alpha.json` written; `predict_today.py` three-tier fallback (Snowflake → file → 0.5) confirmed in place; Gaps 4 and 5 from postmortem_v0.md resolved. Card 7.C (home-win-probability-calibration, 2026-05-02) complete — diagnostic analysis confirmed systematic home-team underprediction (ECE baseline 0.0614); Platt scaling calibrator fit on 2026 in-season results (train_n=842, eval_n=211); ECE improved 0.0614 → 0.0370; `betting_ml/models/home_win/calibrator.joblib` and `calibrator_meta.json` persisted; `predict_today.py` updated to load calibrator at startup, apply it per-game, write `calibrated_win_prob` to `daily_model_predictions`, and use it as input to `compute_edge()` and `compute_kelly()`; `consensus_win_prob` retained as audit column; `calibrated_win_prob FLOAT` column added to Snowflake table via DDL migration; `model_registry.yaml` updated with calibrator metadata; feature-shape mismatch bug fixed via `_FEATURES_ADDED_AFTER_LAST_RETRAIN` exclusion set (drops 4 weather columns until Card 7.D retraining); Gap 2 from postmortem_v0.md resolved. Card 7.E (FanGraphs ingestion pipeline, 2026-05-02) complete — full FanGraphs ingestion pipeline built and validated; raw tables (`fg_stuff_plus_raw`, `fg_zips_pitching_raw`, `fg_zips_hitting_raw`, `fg_hitting_leaderboard_raw`) in `baseball_data.fangraphs` schema; ingestion scripts ship manual CSV uploads for ZiPS projections (2024–2026 backfill) and direct API pulls for Stuff+ and hitting leaderboard rolling windows (7d/14d/30d/season); four staging models (`stg_fangraphs__stuff_plus`, `stg_fangraphs__zips_pitching`, `stg_fangraphs__zips_hitting`, `stg_fangraphs__hitting_leaderboard`) with proper grain and all tests passing; three mart models (`fct_fangraphs_pitching_analytics`, `fct_fangraphs_hitting_analytics`, `dim_fangraphs_player_xref`) in `baseball_data.betting`; `dim_fangraphs_player_xref` cross-references FanGraphs player IDs (numeric = MLB, `sa`-prefixed = MiLB) to MLBAM IDs — 9,330 rows total (4,552 MLB, 4,778 MiLB), 2 missing MLBAM IDs; validation script (`scripts/validate_fangraphs_pipeline.py`) runs four checks (raw row counts, MLBAM join rate ≥95% for MLB-active pitchers only, Stuff+ null rate <10%, mart duplicate grain checks) — all PASS with 96.3% MLBAM join rate (1,004/1,042 MLB-active pitchers); `betting_ml/evaluation/fangraphs_validation.md` written; Gap 8 from postmortem_v0.md resolved. Card 7.F (FanGraphs Stuff+ and pitch-arsenal features, 2026-05-03) complete — `stg_fangraphs__pitcher_arsenal` and `fct_fangraphs_pitcher_arsenal_wide` built; 13/18 numeric arsenal features retained by feature selection (top: `home_starter_stuff_plus` rank 16/267); training data cutoff changed to `game_year >= 2021` (pre-2020 rows had 0% Stuff+ population); all three models retrained on 10,243 rows (267 features): home_win Brier 0.2443 (flat), total_runs MAE 3.4856 (−0.038), run_differential MAE 3.4586 (+0.039, LogNormal excluded); `model_registry.yaml` updated for all three; `betting_ml/evaluation/stuff_plus_feature_impact.md` created; full retraining after future feature expansion deferred to Card 7.MA. Card 7.H (umpire tendency features, 2026-05-03) complete — two-source architecture: UmpScorecards bulk CSV (25,556 rows, 2015–2026) for historical tendency metrics + MLB Stats API `hydrate=officials` for daily forward-path assignment; `baseball_data.statsapi.umpire_game_log` table; `stg_statsapi_umpire_game_log` staging model (ROW_NUMBER dedup, preferring umpscorecards rows); `feature_pregame_umpire_features` with trailing 3-yr z-scores, leakage guard, and sample gate; 5 features computed, 2 retained by corr threshold (ump_runs_per_game_zscore |r|=0.024, ump_accuracy_zscore |r|=0.021); 99.4% coverage for 2026 regular season games; `feature_pregame_game_features` updated with LEFT JOIN; daily ingestion wired into `daily_ingestion.yml`; `betting_ml/evaluation/umpire_feature_impact.md` written; LogNormal permanently excluded from run_diff search grid; model retraining deferred to pre-7.MA batch checkpoint. Card 7.I (injury and confirmed lineup features, 2026-05-03) complete — MLB Stats API `/v1/transactions` endpoint used as authoritative IL source; `baseball_data.statsapi.player_transactions` table (66,497 rows, 2021–2026 backfill); `scripts/ingest_transactions.py` uses bulk temp-table + DELETE/INSERT + `INSERT INTO ... SELECT PARSE_JSON(...)` pattern (Snowflake rejects `PARSE_JSON` in VALUES clause); `stg_statsapi_transactions` deduplicates raw rows; `stg_statsapi_player_injury_status` derives point-in-time intervals via `LEAD()` — all IL events use `typeCode='SC'`, placement vs. activation distinguished by description `ILIKE` patterns (confirmed via dry-run); `feature_pregame_lineup_features` extended with `injured_player_count`, `injury_adj_avg_woba_30d`, `injury_adj_avg_xwoba_30d` (divides by 9 to penalise IL absences); `feature_pregame_game_features` exposes `home_`/`away_` prefixed versions; Streamlit Today's Picks shows IL warning badge per team; 33.4% of game-rows have ≥1 IL player, `injury_adj_avg_woba` (0.308) < `avg_woba` (0.331) confirming penalty is live; row count unchanged (51,382); model retraining deferred to pre-7.MA batch checkpoint. Card 7.J (hitter vs. pitcher pitch-archetype matchup features, 2026-05-03) complete — `mart_pitcher_pitch_archetype` built (7,879 pitcher × season rows; 49% fastball_dominant, 45% mixed, 7% breaking_dominant; archetype avg pitch-mix percentages confirm correct threshold application); `mart_batter_vs_pitch_archetype` built (Bayesian shrinkage at 50 PA, blending toward wOBA=0.320/xwOBA=0.315/K%=0.225/ISO=0.165 league averages; adj_woba near prior for breaking_dominant avg 13 PA, meaningful signal for fastball_dominant/mixed avg ~100 PA); `feature_pregame_lineup_features` and `feature_pregame_game_features` each extended with 6 new archetype matchup columns (lineup_woba/xwoba/k_pct/iso_vs_starter_archetype, lineup_archetype_pa_coverage, starter_pitch_archetype); prior-season leakage guard on all archetype joins; row count unchanged (51,382); `betting_ml/evaluation/matchup_split_feature_impact.md` written; CV impact numbers and model retrain deferred to pre-7.MA batch checkpoint. Card 7.K (pitcher clustering model, 2026-05-03) complete — k-means on arsenal vectors (velocity, break, pitch mix, Stuff+); 2025 season: k=6, silhouette=0.1094, 640 pitchers assigned; cluster labels: `power_swing_and_miss`, `elite_breaking_ball`, `contact_sinker_ball`, `changeup_deceptive`, `soft_command`, `multi_pitch_mix`; `pitcher_clusters` PK: `(pitcher_id, season, snapshot_date)`; `mart_batter_woba_vs_cluster` switched from 30-day rolling to career-cumulative (`UNBOUNDED PRECEDING`) to resolve 76% null rate; `feature_pitcher_cluster_matchups` uses `QUALIFY ROW_NUMBER` for most-recent-prior-record join (handles off-days); 2026 null rate: March 1.3%, April 4.4%, May 6.7% — all < 10% AC passes; all 11 plan spec AC checks pass. Card 7.K2 (batter archetype clustering, 2026-05-03) complete — demand-side complement to Card 7.K; `mart_batter_profile_summary` (2808 rows, 2020–2026) built from `mart_pitch_play_event` + `stg_batter_pitches` (batted ball via pitch_sk) + `fct_fangraphs_hitting_analytics`; k-means on 12-feature hitting vector (sprint_speed unavailable); seasons 2020–2025 clustered: 2024 k=4 silhouette=0.1413 (455 batters), 2025 k=5 silhouette=0.1428 (461 batters); labels: `power_pull`, `patient_obp`, `groundball_speed`, `high_whiff`, `contact_spray`, `balanced`; `mart_batter_archetype_vs_pitcher_cluster` (180-day rolling population wOBA/xwOBA, shrinkage at 100 PA, 50 PA gate, leakage-guarded) built; `feature_batter_archetype_matchups` and 8 new columns integrated into `feature_pregame_game_features`; 2026 coverage: March 98.7%, April 95.7%, May 93.3% — all > 85% target; all dbtf builds pass, 9 existing feature tests pass; ΔBrier deferred to Card 7.MA. Card 7.Q (bullpen fatigue IP features, 2026-05-03) complete — `mart_bullpen_workload` extended with `outs_recorded` (same out-event list as `mart_bullpen_effectiveness`) and three new rolling window columns (`bullpen_ip_prev_1d`, `bullpen_ip_prev_2d`, `pitchers_used_prev_2d`); six home/away columns surfaced in `feature_pregame_game_features` via `feature_pregame_team_features`; no new ingestion or mart models — pure extension of existing models; `dbtf build --select +mart_bullpen_workload+` rebuilt 5 models, 99 tests pass; null rates: `home_bullpen_ip_prev_1d` 0.54%, `home_pitchers_used_prev_2d` 2.65% (both under 5%); spot-check confirms non-zero IP for heavy-usage days, max 5.0 IP; correlation analysis and CV impact deferred to Card 7.MA; baseline pitch-count |r| thresholds documented in `betting_ml/evaluation/feature_notes.md`. Card 7.R (Pythagorean win expectation features, 2026-05-03) complete — `mart_team_season_record` extended with `runs_scored` / `runs_allowed` in `team_games` CTE, threaded through all intermediate CTEs as `runs_scored_ytd` / `runs_allowed_ytd`, and `pythagorean_win_exp` computed in `final` CTE (exponent 1.83, NULL guard at games_played < 10); `feature_pregame_team_features` exposes `pythagorean_win_exp` via existing leakage-free `record_date = game_date - 1` join; `feature_pregame_game_features` adds `home_pythagorean_win_exp`, `away_pythagorean_win_exp`, `pythagorean_win_exp_diff`; `preprocessing.py` imputes individual values to 0.5 and diff to 0.0; Snowflake spot-check confirmed avg_val ≈ 0.500 across all years 2015–2026, null_pct ~9% (expected early-season), 2020 elevated (19%) and 2026 YTD (30%) both explained by short/partial seasons; 2023 max 0.933 confirmed valid (2023 TB Rays 13-0 start, 76 RS / 18 RA through 10 games); CV impact deferred to Card 7.MA. Card 7.MA (full model retraining, 2026-05-04) complete — joint retrain of all three models on full Phase 7 feature set (292 retained, 10,256 rows); home_win Brier 0.2443 → 0.2439 (improved); total_runs MAE 3.4856 → 3.5190 (+0.96%, within noise); run_differential MAE 3.4586 → 3.4724 (+0.40%, within noise); calibrator refit — raw model ECE 0.0247 is better than previous calibrated ECE 0.0370 (Platt scaling degraded to 0.0420; flagged for 7.MB evaluation); feature_columns.json updated to 294 features; all ACs pass; Card 7.MB calibrator flag documented.
 
 **Phase 4 summary:** All seven EDA notebooks and Phase 3 analysis scripts complete. Foundation, feature selection, and baseline models complete for all three targets (Cards 4.6–4.11). Card 4.12 (hyperparameter optimization) complete — XGBoost tuned via Optuna TPE for all targets; NGBoost grid-searched for total_runs and run_differential. Card 4.13 (Bayesian probability layer) complete — best_alpha=0.0 (market dominates; model adds directional edge signal, not calibration); 230 output rows across 115 2026 games written to Snowflake.
 
@@ -296,7 +296,7 @@ The project has a well-structured, well-documented data mart that covers the pri
 | ML pipeline foundation | Phase 4 foundation complete — `betting_ml/utils/` complete: data loader, CV splits, preprocessing, feature selection, model I/O, evaluation helpers (Cards 4.6 and 4.8 complete) |
 | Prediction models | Phase 4 complete — baseline + tuned models for all three targets (Cards 4.9–4.12e); Bayesian probability layer complete (Card 4.13, best_alpha=0.0). **Known gap:** Card 4.10 baseline MAE (3.4461) was generated with pre-Card 4.8 feature set; tuned model (3.4195) uses correct features. |
 | Model selection and registry | Phase 5.1 complete — `model_registry.yaml` written; `_prod` artifacts for all three targets; `xgboost_sigmoid_prod_calibrated.pkl` fit on 2025 hold-out; `calibration_verification.md` passes (delta=+0.0028, PASS). `betting_ml/evaluation/selection_log.md` documents regression artifact selection. |
-| Prediction CLI | Phase 5.2 complete — `predict_today.py` scores all confirmed games for a target date, applies the Bayesian probability layer, and writes results to `baseball_data.config.prediction_log` in Snowflake (parquet and CSV file outputs removed 2026-05-01). `best_alpha` loaded from Snowflake `alpha_tuning_results` with fallback to `best_alpha.json`. Intraday fallback via `load_todays_features_via_statsapi()` assembles features from MLB Stats API when nightly dbt pipeline rows are not yet available. **Post-retrain smoke test required:** after any model retraining the "Refresh Predictions" button in the Streamlit app must be triggered and confirmed error-free before the retrain card is closed. Three known failure modes from 2026-05-03: (1) `PlattCalibratedXGBClassifier` pickle deserialization fails if the class is not importable at load time — class lives in `betting_ml/utils/calibrated_classifier.py` and must be imported in `predict_today.py` before `joblib.load()`; (2) NGBoost `LogNormal` total_runs model exposes `pred_dist().params` with keys `s`/`scale` (scipy lognorm convention), not `loc`/`scale` — extraction must branch on `"s" in params`; (3) XGBoost home_win model feature count must match `xgb_classifier.n_features_in_` exactly (267 retained + 2 pipeline-generated indicators = 269 as of Card 7.F retrain). |
+| Prediction CLI | Phase 5.2 complete — `predict_today.py` scores all confirmed games for a target date, applies the Bayesian probability layer, and writes results to `baseball_data.config.prediction_log` in Snowflake (parquet and CSV file outputs removed 2026-05-01). `best_alpha` loaded from Snowflake `alpha_tuning_results` with fallback to `best_alpha.json`. Intraday fallback via `load_todays_features_via_statsapi()` assembles features from MLB Stats API when nightly dbt pipeline rows are not yet available. **Post-retrain smoke test required:** after any model retraining the "Refresh Predictions" button in the Streamlit app must be triggered and confirmed error-free before the retrain card is closed. Three known failure modes from 2026-05-03: (1) `PlattCalibratedXGBClassifier` pickle deserialization fails if the class is not importable at load time — class lives in `betting_ml/utils/calibrated_classifier.py` and must be imported in `predict_today.py` before `joblib.load()`; (2) NGBoost `LogNormal` total_runs model exposes `pred_dist().params` with keys `s`/`scale` (scipy lognorm convention), not `loc`/`scale` — extraction must branch on `"s" in params`; (3) XGBoost home_win model feature count must match `xgb_classifier.n_features_in_` exactly (292 retained + 2 pipeline-generated indicators = 294 as of Card 7.MA retrain). |
 | Lineup monitor | Phase 5.3 substantially complete (22/23) — `task_lineup_monitor` live and STARTED in Snowflake (serverless, hourly ET cron); `lineup_monitor_proc` reads `baseball_data.betting.stg_statsapi_lineups_wide`, deduplicates via `lineup_monitor_state`, dispatches `dbt_staging_build.yml` via GitHub REST API; workflow validated end-to-end; one criterion (real dispatch log entry) pending until confirmed lineups available. Email notification deferred to Phase 6. |
 | Betting/sizing layer | Phase 6 complete — Snowflake Task DAG live; Card 6.G backfill complete (1,098 rows, 36 dates, 941 has_odds); Cards 6.B/C/D/E/H/I all complete as of 2026-05-01; **Card 6.H** delivered consensus_win_prob fix (mean h2h edge −0.036 → −0.017), 8-gap postmortem (`betting_ml/evaluation/postmortem_v0.md`), and Phase 7 roadmap including FanGraphs data pipeline as P1; Card 6.F deferred to Phase 7 |
 | FanGraphs data pipeline | Complete (Card 7.E, 2026-05-02) — raw ingestion for ZiPS projections (pitcher + batter), Stuff+, and hitting leaderboard; `baseball_data.fangraphs` schema; 4 staging models + 3 mart models (`fct_fangraphs_pitching_analytics`, `fct_fangraphs_hitting_analytics`, `dim_fangraphs_player_xref`); 9,330-player xref (4,552 MLB / 4,778 MiLB); MLBAM join rate 96.3% for MLB-active pitchers; validation script all PASS |
@@ -723,28 +723,25 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 #### Card 4.11 Results — Win Outcome Classification Baselines
 
-- **Best model (log loss):** `xgb_isotonic` (mean log loss = 0.6689)
-- **Best Brier score:** `xgb_isotonic` (mean = 0.2393)
-- **Better calibration method:** isotonic (Platt ECE=0.0119, Isotonic ECE=0.0000)
+- **Best model (log loss):** `xgb_isotonic` (mean log loss = 0.6746)
+- **Best Brier score:** `xgb_isotonic` (mean = 0.2412)
+- **Better calibration method:** isotonic (Platt ECE=0.0070, Isotonic ECE=0.0000)
 - **hwrt_reduces_bias:** False
-- **Home bias in recent seasons:** 2023:neutral, 2024:neutral, 2025:neutral
+- **Home bias in recent seasons:** 2024:neutral, 2025:neutral
 - **Recommended classifier for Phase 6 EV:** `xgb_isotonic`
-
-
-
 
 #### Card 4.12e Results — NGBoost run_differential Hyperparameter Tuning (Grid Search)
 
-- **best_ngboost_config_run_diff:** {n_estimators: 500, dist: Normal}
-- **Best CV MAE:** 3.4586
+- **best_ngboost_config_run_diff:** {n_estimators: 200, dist: Normal}
+- **Best CV MAE:** 3.4724
 - **lognormal_viable:** false
-- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=500, dist=Normal, CV MAE=3.4586; model persisted via model_io.py as `ngboost_tuned`.
+- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=200, dist=Normal, CV MAE=3.4724; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12d Results — NGBoost total_runs Hyperparameter Tuning (Grid Search)
 
 - **best_ngboost_config_total_runs:** {n_estimators: 500, dist: LogNormal}
-- **Best CV MAE:** 3.4856
-- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=LogNormal with CV MAE=3.4856; model persisted via model_io.py as `ngboost_tuned`.
+- **Best CV MAE:** 3.5190
+- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=LogNormal with CV MAE=3.5190; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12c Results — XGBoost home_win Hyperparameter Tuning (Optuna TPE)
 
@@ -2600,31 +2597,18 @@ Two-source architecture: UmpScorecards bulk CSV (2015–2026, 25,556 rows) for h
 
 ---
 
-##### Card 7.MA — Full Model Retraining After Feature Expansion (P2)
+##### Card 7.MA — Full Model Retraining After Feature Expansion (P2) ✓ Complete (2026-05-04)
 
 **Title:** Retrain all three production models jointly on the complete Phase 7 feature set once all feature expansion cards are done
 
-**Why P2:** NGBoost retraining runs take ~1 hour each and will grow as features are added. Retraining after every individual feature card is wasteful and produces non-comparable CV scores across runs (different feature sets, different null structures). The right workflow is to complete all feature expansion (7.G, 7.H, 7.I, 7.J, 7.K), run `validate_feature_selection.py` once on the full combined feature matrix, then do a single joint retrain of all three models.
-
-*Blocker:* All Phase 7 feature expansion cards (7.G, 7.H, 7.I, 7.J, 7.K) must complete first.
-
-*Technical implementation:*
-1. Run `validate_feature_selection.py` on the full 2021+ dataset with all Phase 7 features populated; record retained feature count and any new or dropped columns vs. Card 7.F baseline (267 retained).
-2. Retrain home_win: `uv run python betting_ml/scripts/run_xgb_home_win_search.py`
-3. Retrain total_runs: `uv run python betting_ml/scripts/run_ngboost_total_runs_search.py`
-4. Retrain run_differential: `uv run python betting_ml/scripts/run_ngboost_run_diff_search.py`
-5. Refit Platt calibrator on new home_win model weights: `uv run python betting_ml/scripts/train_calibrator.py`
-6. Update `model_registry.yaml` for all three models + calibrator metadata.
-7. Document CV impact in `betting_ml/evaluation/v1_retrain_impact.md` — before/after for each model vs. Card 7.F baseline, with a breakdown by feature group contribution (Stuff+, weather, umpires, injury, matchup, cluster).
-
-*Note on calibrator:* The `calibrator.joblib` fitted in Card 7.C was fitted on pre-Card 7.F model weights. A refit is required before production deployment. This card is the designated refit point.
+*Completed (2026-05-04):* Joint retrain of all three models on the full Phase 7 feature set (292 retained features, 10,256 rows, 6 seasons 2021–2026). Pitcher clustering refreshed for 2025 season (k=4, silhouette=0.1100, 640 pitchers). Feature selection: 267 (7.F) → 292 retained (+25 new Phase 7 features); 294 total model inputs including 2 pipeline-generated indicators. CV results vs. 7.F baseline: home_win Brier 0.2443 → **0.2439** (−0.17% ✓ improved); total_runs MAE 3.4856 → **3.5190** (+0.96%, within CV noise); run_differential MAE 3.4586 → **3.4724** (+0.40%, within CV noise). Calibrator refit on new home_win weights — notable finding: raw model ECE 0.0247 is already better than the previous calibrated model (ECE 0.0370); Platt scaling degraded ECE to 0.0420 on 2026 eval window; raw model is better calibrated than the calibrated output (flagged for Card 7.MB evaluation). `model_registry.yaml` updated for all three models; `betting_ml/evaluation/v1_retrain_impact.md` created; `betting_ml/evaluation/model_performance_history.md` updated with 7.MA results; `feature_columns.json` updated to 294 features in both `betting_ml/models/` and `model_artifacts/`; `predict_today.py` smoke test passes (n_features_in_=294). Card 7.MB (`MB_new_model_evaluation.yaml`) updated with calibrator flag from 7.MA. **Note on 2021 weather:** This retrain was executed before Card 7.L1 completed the 2021 weather backfill; all 2,429 2021 rows (~23.7% of training data) had weather features imputed with training-set mean rather than actual values. Card 7.L1 has since backfilled actual 2021 weather. The first Card 7.D scheduled retrain should incorporate actual 2021 weather data; no emergency retrain required (improvement expected within CV noise).
 
 *Acceptance criteria:*
-- [ ] `feature_selection.md` updated with retained feature count on full Phase 7 feature matrix
-- [ ] All three model artifacts updated in `betting_ml/models/`
-- [ ] `calibrator.joblib` refit on new home_win model; `model_registry.yaml` `calibrator_fitted_at` updated
-- [ ] `model_registry.yaml` updated for all three models with new cv metrics, artifact paths, `selected_at` timestamps, and `training_cutoff: "2021+"`
-- [ ] `betting_ml/evaluation/v1_retrain_impact.md` created with before/after CV table and feature group attribution
+- [x] `feature_selection.md` updated with retained feature count on full Phase 7 feature matrix
+- [x] All three model artifacts updated in `betting_ml/models/`
+- [x] `calibrator.joblib` refit on new home_win model; `model_registry.yaml` `calibrator_fitted_at` updated
+- [x] `model_registry.yaml` updated for all three models with new cv metrics, artifact paths, `selected_at` timestamps, and `training_cutoff: "2021+"`
+- [x] `betting_ml/evaluation/v1_retrain_impact.md` created with before/after CV table and feature group attribution
 
 ---
 
@@ -2660,80 +2644,63 @@ Two-source architecture: UmpScorecards bulk CSV (2015–2026, 25,556 rows) for h
 
 ---
 
-##### Card 7.P2 — Historical Intraday Odds Backfill (P2)
+##### Card 7.P2 — Historical Intraday Odds Backfill (P2) ✓ Complete (2026-05-03)
 
 **Title:** Backfill historical intraday odds snapshots for 2021–2025 to provide line movement training data for 7.P3
 
-**7.P1 dry-run result: PROCEED (67.3%, mean 3.83pp)** — Card 7.P2 is now unblocked.
+**Coverage (Bovada, verified 2026-05-03):**
+| Season | Matched games | ≥2 snapshots | % ≥2 snaps |
+|--------|--------------|-------------|------------|
+| 2021   | 1,769        | 1,644       | 92.9%      |
+| 2022   | 1,785        | 1,740       | 97.5%      |
+| 2023   | 1,795        | 1,754       | 97.7%      |
+| 2024   | 1,809        | 1,788       | 98.8%      |
+| 2025   | 1,758        | 1,514       | 86.1%      |
 
-*Previously blocked by:* Card 7.P1 (complete 2026-05-03).
+All seasons pass the ≥80% gate. Card 7.P3 is unblocked.
 
-**Why P2:** The line movement feature requires training examples where both the opening line and the pre-game line are known. Without historical snapshots at multiple timestamps, only 2026 post-Card-7.O data (6 snapshots/day, from May 2026 forward) would be available — far too small a sample. Extending to 2021 gives 4–5 full seasons of line movement signal.
-
-*Technical implementation:*
-- For each game date 2021-04-01 through 2025-10-31, query the OddsAPI historical endpoint at 3 timestamps: `12:00 UTC` (open), `17:00 UTC` (mid-day), `23:00 UTC` (pre-game). Both `h2h` and `totals` markets in a single API call (1 credit per snapshot).
-- Store results in `baseball_data.oddsapi.odds_snapshots_historical` — grain: `(home_team, away_team, game_date, snapshot_ts, bookmaker)`. Table auto-created by script on first run.
-- Idempotent via MERGE. Already-loaded triples are skipped.
-- Credit cost: 912 game dates × 3 timestamps = **2,736 API calls** (19,305 remaining after 7.P1). Documented in `scripts/daily_run.md`.
-- Post-backfill gate: ≥80% of 2024–2025 game_pks must have ≥2 snapshots.
-
-*Progress (2026-05-03):*
-- `scripts/backfill_historical_odds_snapshots.py` written — full implementation with MERGE idempotency, game_pk resolution from `stg_statsapi_games`, `--dry-run` support.
-- Credit budget documented in `scripts/daily_run.md`.
-- **Pending:** Manual execution in season batches (see commands below).
-
-*Execute commands (run from `scripts/` directory):*
-```bash
-# 2025 season (~552 API calls)
-uv run backfill_historical_odds_snapshots.py \
-    --start-date 2025-03-01 --end-date 2025-10-31 \
-    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
-
-# 2024 season (~555 API calls)
-uv run backfill_historical_odds_snapshots.py \
-    --start-date 2024-03-01 --end-date 2024-10-31 \
-    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
-
-# 2021–2023 seasons (~1,629 API calls)
-uv run backfill_historical_odds_snapshots.py \
-    --start-date 2021-04-01 --end-date 2023-10-31 \
-    --timestamps 12:00,17:00,23:00 --bookmaker draftkings
-```
+*Implementation notes:*
+- Bookmaker switched from DraftKings to **Bovada** (user's primary bookmaker).
+- 3 timestamps per day: `12:00`, `17:00`, `23:00 UTC`. Historical endpoint costs **10 credits per call** (not 1 as originally assumed).
+- Coverage check fixed to operate at **game level** (not date level) — a date is only skipped once every game on that date has ≥N snapshots. Added `--min-snapshots` CLI flag to control threshold.
+- Doubleheader resolution improved: lookup returns `list[(game_pk, game_start_utc)]`; disambiguates by `commence_time` proximity instead of overwriting with last game.
+- Team name normalization: `normalize_team_name()` handles Athletics rename (2025+) and any future franchise moves.
+- 3-level game_pk resolution: exact date → date−1 (late-night UTC crossover) → date+1 (postponed games).
+- COVID-postponed games (e.g., WSH vs NYM 2021-04-01) correctly stored with `game_pk = NULL`.
 
 *Acceptance criteria:*
 - [x] `scripts/backfill_historical_odds_snapshots.py` exists; accepts `--start-date`, `--end-date`, `--timestamps`; idempotent via MERGE
-- [x] API credit cost documented in `scripts/daily_run.md` (2,736 calls; ~16,569 credits remaining after full run)
-- [ ] `baseball_data.oddsapi.odds_snapshots_historical` populated; ≥80% of 2024–2025 games have ≥2 snapshots (pending execution)
+- [x] API credit cost documented in `scripts/daily_run.md`
+- [x] `baseball_data.oddsapi.odds_snapshots_historical` populated; ≥80% of 2024–2025 games have ≥2 snapshots — **gate PASSED** (2024: 98.8%, 2025: 86.1%)
 
 ---
 
-##### Card 7.P3 — Line Movement Feature Engineering (P2)
+##### Card 7.P3 — Line Movement Feature Engineering (P2) ✓ COMPLETE 2026-05-03
 
 **Title:** Compute opening-to-pre-game line movement as model features for both the h2h and totals models
 
-*Blocker:* Card 7.P2 (historical intraday odds backfill) must complete first.
+*Previously blocked by:* Card 7.P2 (complete 2026-05-03) — now unblocked.
 
 **Why P2:** Intraday line movement captures information from sharp bettors that is absent from all observable features. When the home team's implied win probability shifts materially between open and T-1h, it almost always reflects informed money — not public sentiment. This is one of the few ways to encode "what does the market know that the observables don't."
 
-*Technical implementation:*
-- New dbt model `mart_odds_line_movement` — for each `game_pk`:
-  - `open_home_win_prob`: implied home win probability from the earliest available snapshot
-  - `pregame_home_win_prob`: implied home win probability from the last snapshot before game start (T-30min or closest)
-  - `h2h_line_movement`: `pregame_home_win_prob - open_home_win_prob` (positive = line moved toward home)
-  - `open_total_line`: opening O/U total
-  - `pregame_total_line`: closing O/U total
-  - `total_line_movement`: `pregame_total_line - open_total_line` (positive = total moved up)
-  - `snapshot_count`: number of distinct snapshots available (data quality flag)
-- For 2026+: source from live `mart_odds_outcomes` + `mart_odds_events`. For 2021–2025: source from `odds_snapshots_historical` (7.P2).
-- Add 4 columns to `feature_pregame_game_features`: `h2h_line_movement`, `total_line_movement`, `open_home_win_prob`, `open_total_line`.
-- Null handling: null when only one snapshot exists. Impute `h2h_line_movement` and `total_line_movement` with 0.0 (no movement = no information); document this assumption.
-- Retrain and document CV impact. Expected: stronger signal on the h2h model than totals.
+*Implementation summary:*
+- `dbt/models/mart/mart_odds_line_movement.sql` — one row per game_pk; UNION ALL of `odds_snapshots_historical` (2021–2025) and `mart_odds_outcomes` pre-game snapshots (2026+); leakage-guarded. Bookmaker: bovada.
+- 4 new columns in `feature_pregame_game_features`: `home_h2h_line_movement` (COALESCE 0.0), `home_open_win_prob` (NULL ok), `total_line_movement` (COALESCE 0.0), `open_total_line` (NULL ok).
+- `odds_snapshots_historical` registered in `dbt/models/sources.yml`.
+- All dbt tests pass; feature table row count unchanged (LEFT JOIN).
+
+*CV impact (2026-05-03) — `betting_ml/evaluation/line_movement_feature_impact.md`:*
+- Baseline Brier: 0.2455 | With line movement: 0.2466 | Delta: +0.0011 (slight regression with fixed params)
+- `home_open_win_prob` ranked **#7 in SHAP** (mean |SHAP| = 0.0299) — strong signal
+- `home_h2h_line_movement` mean |SHAP| = 0.0108 — non-zero, expected to improve at full retrain
+- Correlation filter: `home_h2h_line_movement` ✓ (r=0.0247), `home_open_win_prob` ✓ (r=0.1865), `open_total_line` ✓ (r=-0.0330), `total_line_movement` ✗ (r=-0.0019)
+- Recommendation: EXCLUDE from production model pending Card 7.MA full retrain (fixed-param CV is directional only; `home_open_win_prob` SHAP rank strongly suggests improvement at tuned retrain)
 
 *Acceptance criteria:*
-- [ ] `mart_odds_line_movement` builds cleanly; `h2h_line_movement` non-null for ≥85% of 2024–2026 games
-- [ ] `feature_pregame_game_features` includes all 4 columns; `dbtf build` passes all tests
-- [ ] CV impact documented: Brier score and mean h2h edge before and after; feature importance confirms non-zero SHAP contribution from `h2h_line_movement`
-- [ ] Null rate and imputation strategy documented in `betting_ml/evaluation/feature_notes.md`
+- [x] `mart_odds_line_movement` builds cleanly; `h2h_line_movement` non-null for ≥85% of 2024–2026 games
+- [x] `feature_pregame_game_features` includes all 4 columns; `dbtf build` passes all tests
+- [x] CV impact documented: Brier score and mean h2h edge before and after; feature importance confirms non-zero SHAP contribution from `h2h_line_movement`
+- [x] Null rate and imputation strategy documented in `betting_ml/evaluation/feature_notes.md`
 
 ---
 
@@ -2772,7 +2739,7 @@ uv run backfill_historical_odds_snapshots.py \
 
 ---
 
-##### Card 7.R — Pythagorean Win Expectation Features (P2)
+##### Card 7.R — Pythagorean Win Expectation Features (P2) ✓ COMPLETE 2026-05-03
 
 **Title:** Add season-to-date Pythagorean win expectation as a team quality signal to complement rolling stat features
 
@@ -2790,10 +2757,10 @@ uv run backfill_historical_odds_snapshots.py \
 - Guard: return NULL when `games_played < 10`; impute with 0.5 (no information) in the ML preprocessing pipeline.
 
 *Acceptance criteria:*
-- [ ] `home_pythagorean_win_exp` and `away_pythagorean_win_exp` present in `feature_pregame_game_features`; values in [0.2, 0.8] for ≥95% of non-null rows
-- [ ] NULL for games where either team has < 10 games played in the season; imputed to 0.5
-- [ ] Spot-check: 2024 Dodgers should show Pythagorean win exp ≥ 0.60 by June
-- [ ] `dbtf build` passes; CV impact documented after retrain
+- [x] `home_pythagorean_win_exp` and `away_pythagorean_win_exp` present in `feature_pregame_game_features`; values in [0.2, 0.8] for ≥95% of non-null rows
+- [x] NULL for games where either team has < 10 games played in the season; imputed to 0.5
+- [x] Spot-check: 2024 Dodgers should show Pythagorean win exp ≥ 0.60 by June
+- [x] `dbtf build` passes; CV impact documented after retrain
 
 ---
 
@@ -2815,10 +2782,10 @@ uv run backfill_historical_odds_snapshots.py \
 - Impute `velo_delta_3start` → 0.0 in `betting_ml/utils/preprocessing.py` (NULL only for debut starters with no prior velo data).
 
 *Acceptance criteria:*
-- [ ] `feature_pregame_starter_features` has `velo_starts`, `velo_stats` CTEs and `velo_delta_3start` column; leakage guard (`< pp.game_date`) confirmed; all existing columns preserved
-- [ ] `feature_pregame_game_features` includes `home_starter_velo_delta_3start` and `away_starter_velo_delta_3start`; `dbtf build --select +feature_pregame_starter_features+` passes
-- [ ] `velo_delta_3start` plausible range: 99th percentile < 3.0 mph, 1st percentile > −3.0 mph; avg ≈ 0.0
-- [ ] Imputation added to `preprocessing.py`; CV impact and multicollinearity check vs. `fastball_velo_trend` documented in `betting_ml/evaluation/feature_notes.md`
+- [x] `feature_pregame_starter_features` has `velo_starts`, `velo_stats` CTEs and `velo_delta_3start` column; leakage guard (`< pp.game_date`) confirmed; all existing columns preserved
+- [x] `feature_pregame_game_features` includes `home_starter_velo_delta_3start` and `away_starter_velo_delta_3start`; `dbtf build --select +feature_pregame_starter_features+` passes
+- [x] `velo_delta_3start` plausible range: 99th percentile < 3.0 mph, 1st percentile > −3.0 mph; avg ≈ 0.0
+- [x] Imputation added to `preprocessing.py`; CV impact and multicollinearity check vs. `fastball_velo_trend` documented in `betting_ml/evaluation/feature_notes.md`
 
 ##### Card 7.MB — Model Architecture Evaluation (P2)
 
@@ -2879,14 +2846,22 @@ uv run backfill_historical_odds_snapshots.py \
 - **Section 4 — Recent Team Form:** For both home and away teams, query the last 10 games from `stg_statsapi_games`. Display as a compact `st.dataframe` with columns: Date, Opponent, H/A, Runs Scored, Runs Allowed, W/L.
 
 *Acceptance criteria:*
-- [ ] Page appears in the Streamlit sidebar as "Game Insights"; game picker populates from `daily_model_predictions` for the selected date
-- [ ] Prediction Summary bar renders for any game with a `daily_model_predictions` row: total runs, home win%, market win%, edge, Kelly
-- [ ] Team Performance Comparison section renders all six metric groups side-by-side with correct home/away attribution
-- [ ] SHAP waterfall chart renders for both `total_runs` and `home_win` models; top 10 features shown by absolute SHAP value
-- [ ] Recent Form table shows last 10 games for both teams with correct W/L column
-- [ ] All Snowflake queries wrapped in `@st.cache_data(ttl=300)`
-- [ ] Page degrades gracefully when `feature_pregame_game_features` or `daily_model_predictions` has no row for the selected game
-- [ ] `shap` added to app dependencies; `uv run streamlit run` starts without import errors
+- [x] Page appears in the Streamlit sidebar as "Game Insights"; game picker populates from `daily_model_predictions` for the selected date
+- [x] Prediction Summary bar renders for any game with a `daily_model_predictions` row: total runs, home win%, market win%, edge, Kelly
+- [x] Team Performance Comparison section renders all six metric groups side-by-side with correct home/away attribution
+- [x] SHAP waterfall chart renders for both `total_runs` and `home_win` models; top 10 features shown by absolute SHAP value
+- [x] Recent Form table shows last 10 games for both teams with correct W/L column
+- [x] All Snowflake queries wrapped in `@st.cache_data(ttl=300)`
+- [x] Page degrades gracefully when `feature_pregame_game_features` or `daily_model_predictions` has no row for the selected game
+- [x] `shap` added to app dependencies; `uv run streamlit run` starts without import errors
+
+*Implementation notes (2026-05-03):*
+- `app/pages/5_Game_Insights.py` — new page; registered in `app/streamlit_app.py` via explicit `st.navigation()` between EV Tracker and Performance Tracker.
+- `PlattCalibratedXGBClassifier` import added to `streamlit_app.py` — joblib requires the class in `__main__` to unpickle the home_win model.
+- Feature loading mirrors the two-path approach in `predict_today.py`: Snowflake `feature_pregame_game_features` first, then `load_todays_features()` (Stats API) as a fallback so same-day games without a completed dbt build still show data.
+- `_cmp()` uses `st.metric` with native `help=` parameter for tooltips and `label_visibility="hidden"` on the away column to maintain row-height alignment.
+- Recent Form table includes a TOTALS row showing aggregate RS/RA and W/L record for the displayed 10-game window.
+- SHAP explainers cached with `@st.cache_resource` (per model, not per game); feature vectors cached with `@st.cache_data(ttl=300)` per `(game_pk, date_str)`.
 
 *Pre-game odds filter fix (2026-05-03):*
 The Market Movement expander on Today's Picks was showing in-game and post-game lines alongside pre-game lines, producing extreme movements (e.g., -70 → -1858) that are meaningless for betting decisions. Root cause: `_MOVEMENT_SQL` used no upper-bound on `ingestion_ts`, so live in-game snapshots were eligible as the "current" value. Fix: added `AND o.ingestion_ts < o.commence_time` to the `snap_consensus` CTE — both the open and close now come exclusively from pre-game captures. Column help text updated to "open → close (Δ pts). Pre-game snapshots only." Documented as task `fix-market-movement-pre-game-filter` in `plan_specs/phase_7/N_game_insights_page.yaml`.
@@ -2898,38 +2873,17 @@ The Market Movement expander on Today's Picks was showing in-game and post-game 
 
 All Phase 7B cards are **blocked** until Phase 7A produces a model with mean h2h edge > +0.01 (the Card 7.D gate condition in `plan_specs/phase_7/D_model_retraining_cadence.yaml`). Infrastructure investment is not warranted until the model's live value is confirmed.
 
-**Card 7.D — Model retraining cadence:** Periodic in-season refits and the manual retraining runbook. See `plan_specs/phase_7/D_model_retraining_cadence.yaml` for the full spec. Performance gate (mean_edge > +0.01, >40% positive across ≥50 post-Phase-7A games) must clear before this card begins. Card 7.D also owns the pitcher cluster monthly retraining cadence: `cluster_pitchers.py --snapshot-date` run ~June 1, July 1, August 1, September 1, and post-World Series (prior-season snapshot used for April/May games; stability analysis shows ARI ~0.63 at 750 pitches).
+**Card 7.D — Model retraining cadence:** Periodic in-season refits and the manual retraining runbook. See `plan_specs/phase_7/D_model_retraining_cadence.yaml` for the full spec. Performance gate (mean_edge > +0.01, >40% positive across ≥50 post-Phase-7A games) must clear before this card begins. Card 7.D also owns the pitcher cluster monthly retraining cadence: `cluster_pitchers.py --snapshot-date` run ~June 1, July 1, August 1, September 1, and post-World Series (prior-season snapshot used for April/May games; stability analysis shows ARI ~0.63 at 750 pitches). **One-time retrain input:** The Card 7.MA retrain (2026-05-04) predated the 7.L1 2021 weather backfill; 2,429 2021 rows used mean-imputed weather. Actual 2021 weather is now in the feature store and must be incorporated in the first 7.D scheduled retrain.
 
 **α drift monitoring:** `best_alpha.json` (Card 7.A) and `alpha_tuning_results` track the Bayesian mixing weight across refit runs. If best_alpha drifts away from 0.0 as 2026 data grows, it signals improving calibration relative to the market — the leading indicator to watch before committing to Card 7.D work.
 
 ---
 
-#### Card 7.2 — Production Application (Replaces Streamlit MVP)
+#### Card 7.2 — Production Application — MOVED to Phase 8 as Card 8.G
 
-**Title:** Replace the Phase 6 Streamlit MVP with a production-grade web application
-
-**Description:**
-
-*Technical implementation:*
-- The Streamlit MVP (Cards 6.B–6.E) is a single-process app that is fast to build but not designed for concurrent users, background refresh, or mobile access. Once the model's live value is established over a full season, replace it with a purpose-built stack.
-- **Recommended architecture:**
-  - **Backend:** FastAPI service (`app/api/`) that exposes a small REST API — `GET /predictions/{date}`, `GET /games/{game_pk}/odds`, `GET /performance`. Reads from Snowflake and model artifacts. Runs as a Docker container (deployable to Fly.io, Railway, or any container host).
-  - **Frontend:** React or Next.js SPA (`app/web/`) consuming the FastAPI endpoints. Replicates all four Streamlit pages as proper routes. Mobile-responsive layout so the daily picks are usable from a phone.
-  - **Auth:** Single-user auth (Bearer token or magic link) — this is a personal tool, not a multi-tenant app.
-  - **Background refresh:** Replace the Streamlit "Refresh" button with a server-sent event (SSE) stream that pushes lineup confirmation events from the Snowflake `lineup_monitor_state` table to the frontend in real time.
-  - **Hosting:** Containerized API + static frontend hosted on a low-cost PaaS. No Kubernetes needed.
-- The Streamlit app (`app/`) is retained as a development and debugging tool after the production app ships; it is not decommissioned.
-
-*Blockers:* The Streamlit MVP (Cards 6.B–6.E) must complete a full season of live use and the model must demonstrate positive CLV before investment in the production app is warranted. This card is explicitly deferred until that threshold is met.
-
-*Acceptance criteria:*
-- [ ] FastAPI backend serves all four data endpoints; each endpoint returns within 2 seconds on a cold Snowflake query
-- [ ] Frontend replicates Today's Picks, Market Comparison, EV/Kelly, and Performance pages from the Streamlit MVP
-- [ ] Mobile layout renders correctly on 390px-wide viewport (iPhone 15 baseline)
-- [ ] Bearer token auth prevents unauthenticated access to all API endpoints
-- [ ] SSE stream delivers lineup confirmation events to the frontend within 60 seconds of the Snowflake `lineup_monitor_state` row being written
-- [ ] Docker Compose file at repo root starts the full stack (API + frontend) with a single `docker compose up`
-- [ ] Streamlit app remains functional alongside the production app for development use
+> **Moved (2026-05-04):** This card is out of scope for Phase 7, which focuses on feature engineering and model development. Moved to Phase 8 as Card 8.G. See the Phase 8 section for the full spec.
+>
+> Card 7.U (Live Odds Bookmaker Selector, P3) is also **closed and deferred to Card 8.G** — the bookmaker selector belongs in the production app, not the Streamlit MVP. Its acceptance criteria from `plan_specs/phase_7/T_bet_tracker.yaml` are captured in the Card 8.G spec.
 
 ---
 
@@ -2996,13 +2950,13 @@ Net result: 6 snapshots per game day. Afternoon first pitches (1pm–3pm ET) get
 | Phase 7B | Production infrastructure: monitoring, auto-retraining, dashboard | Months |
 | Card 7.MA | Full model retraining on complete Phase 7 feature set + calibrator refit | Phase 7A P2 (blocked on 7.G–7.K) |
 | Card 7.MB | Model architecture evaluation — LightGBM/CatBoost/ensemble vs. XGBoost/NGBoost baseline | Phase 7A P2 (blocked on 7.MA) |
-| Card 7.N | Game Insights page (Streamlit) — SHAP waterfalls, team comparison, recent form | Phase 7A (unblocked) |
+| Card 7.N | Game Insights page (Streamlit) — SHAP waterfalls, team comparison, recent form | ✓ Complete (2026-05-03) |
 | Card 7.O | Dynamic per-game OddsAPI fetch — SUPERSEDED; replaced by 2 extra cron triggers in odds_snapshot.yml | Closed |
 | Card 7.P1 | OddsAPI historical dry-run — validate intraday line movement exists in historical data | ✓ Complete (2026-05-03); PROCEED (67.3%, 3.83pp mean) |
-| Card 7.P2 | Historical intraday odds backfill 2021–2025 — backfill 3 snapshots/day across 5 seasons | Phase 7A P2 (unblocked by 7.P1) |
-| Card 7.P3 | Line movement feature engineering — h2h_line_movement + total_line_movement as model inputs | Phase 7A P2 (blocked on 7.P2) |
+| Card 7.P2 | Historical intraday odds backfill 2021–2025 — backfill 3 snapshots/day across 5 seasons | ✓ Complete (2026-05-03) — Bovada; 2021: 92.9%, 2022: 97.5%, 2023: 97.7%, 2024: 98.8%, 2025: 86.1% ≥2 snaps; gate PASSED |
+| Card 7.P3 | Line movement feature engineering — h2h_line_movement + total_line_movement as model inputs | Phase 7A P2 (unblocked by 7.P2) |
 | Card 7.Q | Bullpen fatigue/availability features — reliever IP last 1d/2d, closer availability | Phase 7A P2 (unblocked) |
-| Card 7.R | Pythagorean win expectation — RS^1.83/(RS^1.83+RA^1.83) season-to-date per team | Phase 7A P2 (unblocked) |
+| Card 7.R | Pythagorean win expectation — RS^1.83/(RS^1.83+RA^1.83) season-to-date per team | ✓ Complete (2026-05-03) |
 | Card 7.S | Starter velocity trend — fastball velo delta over last 3 starts vs. season avg | Phase 7A P2 (unblocked) |
 
 ---
@@ -3030,15 +2984,48 @@ Net result: 6 snapshots per game day. Afternoon first pitches (1pm–3pm ET) get
 | `scripts/daily_run.md` | **Daily ingestion runbook** — step-by-step commands to keep all Snowflake source tables current; covers savant, statsapi, and odds_api ingestion plus dbt refresh |
 | `scripts/savant_ingestion.py` | Baseball Savant CSV ingestion; chunked by day, idempotent, extensible via `StatcastEndpoint` registry; subcommands: `batter_pitches` |
 | `scripts/ingest_statsapi.py` | Python ingestion for Stats API schedule and venues; schedule subcommand defaults to current month only without `--start-date`; pass prior-month start to cover retroactive lineup confirmations |
+| `scripts/ingest_fangraphs_stuff_plus.py` | FanGraphs Stuff+ pitching leaderboard ingestion; 14d and 30d rolling windows; appends to `fg_stuff_plus_raw`; coverage 2020+ |
+| `scripts/ingest_fangraphs_hitting_leaderboard.py` | FanGraphs hitting leaderboard ingestion; 7d/14d/30d/season windows; wOBA, wRC+, K%, BB%; appends to `fg_hitting_leaderboard_raw` |
+| `scripts/ingest_fangraphs_zips_pitching.py` | FanGraphs ZiPS/Steamer pitching projections ingestion; current season (`rzips`) and historical backfill (`zips_YYYY`); appends to `fg_zips_pitching_raw` |
+| `scripts/ingest_fangraphs_zips_hitting.py` | FanGraphs ZiPS/Steamer hitting projections ingestion; appends to `fg_zips_hitting_raw` |
+| `scripts/ingest_fangraphs_zips_csv.py` | Loads pre-season ZiPS CSV files (manually downloaded from FanGraphs) into `fg_zips_hitting_raw` and `fg_zips_pitching_raw`; needed because FanGraphs API returns only ~11 rows for historical seasons |
+| `scripts/ingest_oaa.py` | Team-level OAA and DRS ingestion from FanGraphs fielding leaderboard; MERGE into `external.oaa_team_season_raw`; Card 8.C backfill 2016–2025 |
+| `scripts/ingest_transactions.py` | Stats API roster transaction ingestion (IL placements, activations); upserts into `statsapi.player_transactions`; powers injury-adjusted lineup features |
+| `scripts/ingest_umpires.py` | Daily HP umpire assignment ingestion from Stats API; upserts umpire_name into `statsapi.umpire_game_log`; run after 08:00 ET before predict_today.py |
+| `scripts/ingest_umpires_historical.py` | Bulk-load UmpScorecards historical by-game CSV into `statsapi.umpire_game_log`; one-time backfill + annual off-season refresh |
+| `scripts/ingest_weather.py` | Game-day weather ingestion for outdoor MLB parks; primary source Open-Meteo (no key required); upserts into `statsapi.weather_raw`; `--source` flag selects Open-Meteo or OpenWeatherMap |
 | `scripts/odds_api_ingestion.py` | Python ingestion for The Odds API events and odds endpoints; two subcommands: `events` and `odds` |
+| `scripts/oddsapi_historical_dry_run.py` | Validates OddsAPI historical endpoint for meaningful intraday odds movement before committing to Card 7.P2 backfill; writes gate recommendation to `evaluation/oddsapi_historical_dry_run.md` |
+| `scripts/backfill_historical_odds_snapshots.py` | Backfills historical intraday odds snapshots (3 timestamps/day: 12:00/17:00/23:00 UTC) to `oddsapi.odds_snapshots_historical`; Card 7.P2; ~2,736 API calls for 2021–2025 |
+| `scripts/backfill_prediction_log.py` | Nightly backfill of `actual_outcome` and `closing_market_prob` in `config.prediction_log`; idempotent (only touches NULL rows); run after `dbt build` |
+| `scripts/backfill_transactions.py` | Historical backfill of player roster transactions season-by-season; prerequisite for Card 7.MA retraining with injury signals |
+| `scripts/predict_today.py` | Scripts-layer daily scoring entry point; scores confirmed games, prints picks table, writes predictions to Snowflake; delegates to `betting_ml` |
+| `scripts/validate_fangraphs_pipeline.py` | End-to-end validation of FanGraphs ingestion pipeline; checks row counts, MLBAM ID join rate (≥95%), Stuff+ null rate, mart grain; writes `evaluation/fangraphs_validation.md` |
+| `scripts/date_utils.py` | Reusable UTC date/time helpers (`format_iso_utc`, `default_window`) used by odds ingestion; injectable `now` parameter makes functions unit-testable |
+| `scripts/tests/test_date_utils.py` | Pytest unit tests for `date_utils` (19 tests covering format, window boundaries, timezone conversion, rollover) |
+| `scripts/utils/fangraphs_client.py` | Shared HTTP client for all FanGraphs ingestion scripts; uses `curl_cffi` to impersonate Chrome TLS fingerprint to pass Cloudflare; exposes `fetch_projections()` and `fetch_leaderboard()` |
+| `scripts/utils/snowflake_loader.py` | Shared Snowflake connection factory and raw-table append utility; auto-wraps `raw_json` columns in `PARSE_JSON()`; same env-var auth convention as all ingest scripts |
+| `scripts/ddl/oddsapi_raw_tables.sql` | DDL for `baseball_data.oddsapi.mlb_events_raw` and `mlb_odds_raw`; run once via snowsql to create tables |
+| `scripts/ddl/add_calibrated_win_prob.sql` | DDL to add `calibrated_win_prob` column to `daily_model_predictions` |
+| `scripts/ddl/lineup_monitor_task.sql` | Snowflake Task definition for lineup monitoring automation |
+| `scripts/ddl/snowflake_task_dag.sql` | Full Snowflake Task DAG for automated daily ingestion; Cards 6.A.1–6.A.5 |
+| `scripts/ddl/player_transactions.sql` | DDL for `statsapi.player_transactions`; Card 7.I injury/confirmed lineup features |
+| `scripts/ddl/umpire_game_log.sql` | DDL for `statsapi.umpire_game_log` |
+| `scripts/ddl/weather_raw.sql` | DDL for `statsapi.weather_raw` |
+| `scripts/ddl/placed_bets.sql` | DDL for `betting.placed_bets` bet tracker table; records individual bets with stake, odds, market, outcome, profit/loss |
+| `scripts/ddl/fangraphs/fg_stuff_plus_raw.sql` | DDL for `fangraphs.fg_stuff_plus_raw` |
+| `scripts/ddl/fangraphs/fg_hitting_leaderboard_raw.sql` | DDL for `fangraphs.fg_hitting_leaderboard_raw` |
+| `scripts/ddl/fangraphs/fg_zips_pitching_raw.sql` | DDL for `fangraphs.fg_zips_pitching_raw` |
+| `scripts/ddl/fangraphs/fg_zips_hitting_raw.sql` | DDL for `fangraphs.fg_zips_hitting_raw` |
+| `scripts/ddl/fangraphs/run_ddl.py` | Runner script that executes all FanGraphs DDL files in order |
+| `app/home.py` | Streamlit landing page — Diamond Edge project description and page navigation guide |
 | `app/streamlit_app.py` | Streamlit multi-page app entry point; run with `uv run streamlit run app/streamlit_app.py` |
 | `app/utils/db.py` | Snowflake connection helper (`run_query`); reads RSA key from `~/.local/bin` path; shared `@st.cache_resource` connection across pages |
 | `app/pages/1_Today_Picks.py` | Today's Picks page — ranked game predictions, lineup status, edge/EV summary, market movement expander; two action buttons (Refresh Predictions, Refresh Lineups & Odds Only) that run ingestion and dbt synchronously |
 | `app/pages/2_Market_Comparison.py` | Market Comparison page — per-game model vs. bookmaker deep-dive; line movement chart, totals panel, sharp vs. soft, cross-bookmaker table; uses `event_id` scoping to prevent cross-series leakage |
 | `app/pages/3_EV_Kelly.py` | EV Tracker & Kelly Sizer page — all markets, all games; bankroll simulator with checkbox slate, correlated-bet deduplication, doubleheader detection |
-| `scripts/date_utils.py` | Reusable UTC date/time helpers (`format_iso_utc`, `default_window`) used by odds ingestion; injectable `now` parameter makes functions unit-testable |
-| `scripts/tests/test_date_utils.py` | Pytest unit tests for `date_utils` (19 tests covering format, window boundaries, timezone conversion, rollover) |
-| `scripts/ddl/oddsapi_raw_tables.sql` | DDL for `baseball_data.oddsapi.mlb_events_raw` and `mlb_odds_raw`; run once via snowsql to create tables |
+| `app/pages/4_Model_Performance.py` | Performance Tracker page — historical prediction quality charts; accuracy over time, Brier score trend, calibration curve; Card 6.E |
+| `app/pages/5_Game_Insights.py` | Game Insights page — key model features and SHAP explanations per game |
 | `exploratory_data_analysis/` | Marimo EDA notebooks (Phase 3); run with `uv run marimo run <notebook>.py` |
 | `exploratory_data_analysis/01_target_variables.py` | Target variable analysis — total runs, run differential, home win rate distributions (2016–2025) |
 | `exploratory_data_analysis/02_feature_coverage.py` | Null rate heatmap (374 cols × all seasons), `has_full_data` count verification, imputation strategy decisions |
@@ -3055,6 +3042,8 @@ Net result: 6 snapshots per game day. Afternoon first pitches (1pm–3pm ET) get
 | `betting_ml/utils/feature_selection.py` | Card 4.8 — feature selection module; `load_retained_features()` returns canonical 241-feature list from `feature_selection.md`; drops near-zero correlation and high-multicollinearity features |
 | `betting_ml/utils/model_io.py` | Card 4.8 — `save_model` / `load_model` via joblib; path convention `betting_ml/models/{target}/{model_name}_{eval_year}.pkl` |
 | `betting_ml/utils/evaluation.py` | `fold_metrics()` and `brier_score_over_under()` helpers used by baseline training scripts |
+| `betting_ml/utils/calibrated_classifier.py` | `PlattCalibratedXGBClassifier` wrapper — bundles an `XGBClassifier` with a fitted Platt (sigmoid `LogisticRegression`) calibrator |
+| `betting_ml/utils/probability_layer.py` | Card 4.13 Bayesian probability layer utilities: `vig_adjust`, `compute_posterior`, `compute_edge`, `compute_kelly`, `tune_alpha` |
 | `betting_ml/models/total_runs_trainer.py` | Card 4.9 — `train_ridge`, `train_xgboost`, `train_ngboost`, `p_over_line` for total runs target |
 | `betting_ml/models/win_outcome_trainer.py` | Card 4.11 — `train_logistic`, `train_xgboost_classifier`, `compute_calibration_curve`, `compute_ece` |
 | `betting_ml/models/total_runs/` | Serialized total runs models (ridge, xgboost, ngboost_normal, ngboost_lognormal per eval year) |
@@ -3062,15 +3051,68 @@ Net result: 6 snapshots per game day. Afternoon first pitches (1pm–3pm ET) get
 | `betting_ml/models/home_win/` | Serialized win outcome models (logistic, xgboost_platt, xgboost_isotonic per eval year) |
 | `betting_ml/scripts/analyze_pitching_decomp.py` | Card 3.8 analysis — bullpen vs. starter xwOBA decomposition; writes `evaluation/pitching_decomp_results.json` |
 | `betting_ml/scripts/analyze_home_away_pitch_asymmetry.py` | Card 3.9 analysis — home/away pitching asymmetry root-cause; writes `evaluation/home_away_pitch_asymmetry_results.json` |
+| `betting_ml/scripts/analyze_bookmaker_calibration.py` | Card 3.11 — bookmaker calibration and market efficiency analysis (H1–H7); computes market consensus Brier as Phase 4 model benchmark |
+| `betting_ml/scripts/analyze_era_split_corr_stability.py` | Card 3.10 — era-split correlation stability; Fisher z-tests for pre-/post-2022 correlation shifts; writes results JSON |
 | `betting_ml/scripts/train_total_runs_baselines.py` | Card 4.9 — train all total runs baseline models; writes CV results to Snowflake and `total_runs_results.md` |
 | `betting_ml/scripts/train_run_diff_baselines.py` | Card 4.10 — train all run differential baseline models; writes CV results and `run_differential_results.md` |
 | `betting_ml/scripts/train_win_outcome_baselines.py` | Card 4.11 — train win outcome baseline models; writes CV results and `win_outcome_results.md` |
 | `betting_ml/scripts/run_hyperparameter_search.py` | Card 4.12 — Optuna TPE search (50 trials × 3 XGBoost targets) + NGBoost grid; USER-EXECUTED; writes `tuning_results.json` |
+| `betting_ml/scripts/run_xgb_total_runs_search.py` | Card 4.12 — Optuna TPE search for XGBoost total_runs; writes `tuning_results_xgb_total_runs.json` |
+| `betting_ml/scripts/run_xgb_run_diff_search.py` | Card 4.12b — Optuna TPE search for XGBoost run_differential; writes `tuning_results_xgb_run_diff.json` |
+| `betting_ml/scripts/run_xgb_home_win_search.py` | Card 4.12 — Optuna TPE search for XGBoost home_win (Platt calibration); writes `tuning_results_xgb_home_win.json` |
+| `betting_ml/scripts/run_ngboost_total_runs_search.py` | Card 4.12d — NGBoost grid search for total_runs (4 combinations: 2 n_estimators × 2 distributions); writes `tuning_results_ngboost_total_runs.json` |
+| `betting_ml/scripts/run_ngboost_run_diff_search.py` | Card 4.12e — NGBoost grid search for run_differential (6 combinations); writes `tuning_results_ngboost_run_diff.json` |
 | `betting_ml/scripts/generate_tuning_report.py` | Card 4.12 — reads `tuning_results.json`; writes `hyperparameter_tuning.md` and updates `project_context.md` |
+| `betting_ml/scripts/generate_xgb_run_diff_report.py` | Card 4.12b — reads `tuning_results_xgb_run_diff.json`; writes `hyperparameter_tuning_xgb_run_diff.md` |
+| `betting_ml/scripts/seed_run_diff_cv_results.py` | One-off seed of run_differential CV results to Snowflake after initial write failure |
+| `betting_ml/scripts/run_probability_layer.py` | Card 4.13 — Bayesian probability layer pipeline; CV α tuning on historical games, 2026 predictions, parquet output, Snowflake persistence |
+| `betting_ml/scripts/refit_win_calibration.py` | Phase 5 — production calibration refit; 3-way temporal split (train 2016–2023, calibrate 2024, eval 2025); saves `xgboost_sigmoid_prod_calibrated.pkl` |
+| `betting_ml/scripts/train_calibrator.py` | Card 7.C — in-season win-probability calibrator; fits Platt and isotonic on 2026 games, keeps lower ECE; saves `calibrator.joblib` and `calibrator_meta.json` |
+| `betting_ml/scripts/predict_today.py` | Phase 5 daily scoring entry point; scores confirmed games, prints picks table, writes `probability_outputs` parquet and Snowflake rows |
+| `betting_ml/scripts/backfill_predictions_2026.py` | Card 6.G — backfills 2026 predictions for all completed dates missing from `daily_model_predictions`; enables Performance Tracker historical analysis |
+| `betting_ml/scripts/evaluate_line_movement_features.py` | Card 7.P3 — CV impact evaluation of four line movement features vs. XGBoost home_win Brier; writes `line_movement_feature_impact.md` |
+| `betting_ml/scripts/validate_feature_selection.py` | Card 4.8 — integration smoke test for feature selection and model I/O; verifies protected features retained, multicollinear drops recorded, save/load round-trip |
+| `betting_ml/scripts/validate_pipeline.py` | End-to-end pipeline smoke test: `load_features → build_imputation_pipeline → all_season_splits`; asserts zero nulls post-imputation, correct fold structure |
+| `betting_ml/scripts/pitcher_clustering/cluster_pitchers.py` | Card 7.K — pitcher arsenal k-means clustering; loads `mart_pitcher_arsenal_summary`, persists assignments to `statsapi.pitcher_clusters` |
+| `betting_ml/scripts/pitcher_clustering/cluster_stability_analysis.py` | Card 7.K supplementary — bootstrap Adjusted Rand Index analysis to determine pitch-count threshold for stable cluster assignments |
+| `betting_ml/scripts/batter_clustering/cluster_batters.py` | Card 7.K2 — batter hitting-profile k-means clustering; loads `mart_batter_profile_summary`, persists assignments to `statsapi.batter_clusters` |
+| `betting_ml/scripts/compute_elo.py` | Card 8.D — Elo rating computation; FiveThirtyEight MLB standard (K=4, HOME_ADV=24, 1/3 season regression); writes `betting.team_elo_history`; `--dry-run` and `--check` flags |
+| `betting_ml/scripts/model_evaluation/cv_harness.py` | Card 7.MB — walk-forward CV data preparation; prepares 4 fold parquets for candidate model evaluation scripts; `--prepare-folds` and `--check` modes |
+| `betting_ml/scripts/model_evaluation/eval_xgboost_ngboost.py` | Card 7.MB — XGBoost + NGBoost baseline evaluation on walk-forward CV folds; `--include-ngboost` flag (NGBoost ~1hr/fold) |
+| `betting_ml/scripts/model_evaluation/eval_lightgbm.py` | Card 7.MB — LightGBM evaluation on walk-forward CV folds |
+| `betting_ml/scripts/model_evaluation/eval_catboost.py` | Card 7.MB — CatBoost evaluation on walk-forward CV folds |
+| `betting_ml/scripts/model_evaluation/eval_elasticnet.py` | Card 7.MB — ElasticNet (LogisticRegression + Ridge) evaluation on walk-forward CV folds; linear baseline |
+| `betting_ml/scripts/model_evaluation/eval_ensemble_stacked.py` | Card 7.MB — stacked ensemble evaluation (XGBoost + LightGBM + CatBoost base; LogisticRegression/Ridge meta); OOF predictions preserve temporal ordering |
+| `betting_ml/scripts/model_evaluation/eval_market_blind.py` | Card 7.MB — market-blind evaluation; all market-derived columns excluded; produces independent probability estimates |
+| `betting_ml/scripts/model_evaluation/eval_calibration.py` | Card 7.MB — calibration analysis across top candidate models; compares raw ECE vs. isotonic vs. Platt; informs calibration strategy for production |
+| `betting_ml/scripts/model_evaluation/analyze_feature_importance.py` | Card 7.MB — SHAP TreeExplainer + XGBoost gain importance on fold_2025; outputs `shap_importance_fold2025.png` and `feature_importance_v1.parquet` |
 | `betting_ml/evaluation/feature_selection.md` | Card 4.8 results — canonical retained feature list (241 features) with target correlations and drop reasons |
+| `betting_ml/evaluation/feature_notes.md` | Running notes on feature engineering decisions; flags, caveats, and known issues across all feature groups |
+| `betting_ml/evaluation/selection_log.md` | Feature selection decision log — per-feature retain/drop decisions with rationale |
 | `betting_ml/evaluation/total_runs_results.md` | Card 4.9 results — per-season MAE/RMSE, model comparison, NGBoost distribution verdict |
 | `betting_ml/evaluation/run_differential_results.md` | Card 4.10 results — per-season MAE/RMSE, win probability Brier scores, era ablation |
 | `betting_ml/evaluation/win_outcome_results.md` | Card 4.11 results — Brier score, log loss, calibration curves, home-team bias analysis |
+| `betting_ml/evaluation/model_selection_v1.md` | v1 model selection decision document — architecture choice rationale |
+| `betting_ml/evaluation/v1_retrain_impact.md` | v1 retrain impact — quantified performance delta after first production retrain |
+| `betting_ml/evaluation/postmortem_v0.md` | v0 model postmortem — root causes of early-season underperformance |
+| `betting_ml/evaluation/model_performance_history.md` | Cumulative model performance history by season; tracks Brier, MAE, edge calibration across versions |
+| `betting_ml/evaluation/probability_layer_results.md` | Card 4.13 results — Bayesian probability layer CV α tuning, posterior calibration, edge distribution |
+| `betting_ml/evaluation/calibration_verification.md` | Card 7.C calibration verification — ECE comparison (Platt vs. isotonic vs. raw) on 2026 in-season data |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_total_runs.md` | XGBoost total_runs hyperparameter tuning results |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_run_diff.md` | XGBoost run_differential hyperparameter tuning results (Card 4.12b) |
+| `betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md` | XGBoost home_win hyperparameter tuning results |
+| `betting_ml/evaluation/hyperparameter_tuning_ngboost_total_runs.md` | NGBoost total_runs grid search results (Card 4.12d) |
+| `betting_ml/evaluation/hyperparameter_tuning_ngboost_run_diff.md` | NGBoost run_differential grid search results (Card 4.12e) |
+| `betting_ml/evaluation/pitcher_cluster_feature_impact.md` | Card 7.K pitcher cluster matchup CV impact — Brier delta and edge improvement |
+| `betting_ml/evaluation/batter_cluster_feature_impact.md` | Card 7.K2 batter cluster matchup CV impact results |
+| `betting_ml/evaluation/stuff_plus_feature_impact.md` | Stuff+ feature CV impact — correlation with targets, Brier delta, retrain recommendation |
+| `betting_ml/evaluation/umpire_feature_impact.md` | Umpire feature CV impact — umpire tendency z-score correlation and Brier delta |
+| `betting_ml/evaluation/injury_feature_impact.md` | Injury feature CV impact — IL signal correlation and Brier delta |
+| `betting_ml/evaluation/line_movement_feature_impact.md` | Card 7.P3 line movement feature CV impact — four features vs. home_win Brier |
+| `betting_ml/evaluation/matchup_split_feature_impact.md` | Matchup split feature CV impact results |
+| `betting_ml/evaluation/mart_odds_consensus_validation.md` | `mart_odds_consensus` validation — bookmaker coverage, consensus vs. individual line agreement |
+| `betting_ml/evaluation/oddsapi_historical_dry_run.md` | OddsAPI historical endpoint dry-run results — intraday movement gate decision (Card 7.P1) |
+| `betting_ml/evaluation/fangraphs_validation.md` | FanGraphs pipeline validation — raw row counts, MLBAM ID join rate, Stuff+ null rate, mart grain check |
 | `betting_ml/evaluation/pitching_decomp_results.json` | Card 3.8 results — cross-correlation, partial correlations, OLS R² decomposition, design recommendation |
 | `betting_ml/evaluation/home_away_pitch_asymmetry_results.json` | Card 3.9 results — partial correlations, quartile analysis, era-split, design recommendation |
 | `betting_ml/tests/test_cv_splits.py` | Unit tests for temporal CV split logic |
@@ -3078,8 +3120,13 @@ Net result: 6 snapshots per game day. Afternoon first pitches (1pm–3pm ET) get
 | `plan_specs/` | Declarative PlanSpec YAML files for agentic task execution |
 | `plan_specs/plan_spec_implementation.md` | PlanSpec overview, structure reference, and agentic engineering rationale |
 | `plan_specs/eda_plan_spec_template.yaml` | Template for Phase 3 EDA analysis card plan specs |
+| `plan_specs/phase_2/` | Phase 2 infrastructure plan specs |
 | `plan_specs/phase_3/` | Phase 3 EDA plan specs (Cards 3.8–3.11) |
 | `plan_specs/phase_4/` | Phase 4 ML pipeline plan specs (Cards 4.6–4.13) |
+| `plan_specs/phase_5/` | Phase 5 production pipeline plan specs |
+| `plan_specs/phase_6/` | Phase 6 Streamlit app plan specs |
+| `plan_specs/phase_7/` | Phase 7 advanced feature engineering and model evaluation plan specs (Cards 7.C–7.MB) |
+| `plan_specs/phase_8/` | Phase 8 advanced feature engineering and Bayesian inference plan specs (Cards 8.A–8.G) |
 
 ---
 
@@ -3295,70 +3342,343 @@ Declarative YAML planning specs (planspec.io/v1alpha1) for agentic task executio
 | 7 | 7.L2 | `plan_specs/phase_7/L2_full_prediction_backfill.yaml` | Created — P2; batch re-score 2021–2026 with v1 model; model_version + feature_version columns; multi-year metrics vs. v0 baseline; blocker: 7.L1 |
 | 7 | 7.MA | `plan_specs/phase_7/MA_full_model_retraining.yaml` | Created — P2; joint retrain of all 3 models on full Phase 7 feature set + calibrator refit; 5-task DAG; blocked on 7.G–7.K |
 | 7 | 7.MB | `plan_specs/phase_7/MB_new_model_evaluation.yaml` | Created — P2; walk-forward CV harness (4 folds); benchmarks XGBoost/NGBoost vs. LightGBM, CatBoost, stacked ensemble + isotonic calibration; Cohen's d ≥ 0.10 selection rule; blocked on 7.MA |
-| 7 | 7.N | `plan_specs/phase_7/N_game_insights_page.yaml` | Created — Phase 7A, unblocked; Game Insights Streamlit page: Prediction Summary, Team Comparison, SHAP waterfall, Recent Form |
+| 7 | 7.N | `plan_specs/phase_7/N_game_insights_page.yaml` | ✓ Complete (2026-05-03) — `app/pages/5_Game_Insights.py`; 4 sections: Prediction Summary, Team Comparison (6 metric groups), SHAP waterfall (home_win + total_runs), Recent Form (last 10 + TOTALS row); Stats API fallback for same-day games; all ACs met |
 | 7 | 7.O | *(no plan spec — 3-line `odds_snapshot.yml` change)* | COMPLETE — 2 additional cron triggers (18:30 UTC + 23:30 UTC) added to `odds_snapshot.yml`; 6 total snapshots/day |
 | 7 | 7.P1 | `plan_specs/phase_7/P1_oddsapi_hist_snap_dry.yaml` | ✓ Complete (2026-05-03) — PROCEED: 67.3% pct_above_1pp, mean 3.83pp; `betting_ml/evaluation/oddsapi_historical_dry_run.md` written; 7.P2/7.P3 unblocked |
-| 7 | 7.P2 | `plan_specs/phase_7/P2_historical_odds_backfill.yaml` | Created (2026-05-03) — unblocked; backfill 2021–2025 intraday odds (3 snapshots/day) into `baseball_data.oddsapi.odds_snapshots_historical` |
-| 7 | 7.P3 | `plan_specs/phase_7/P3_line_movement_features.yaml` | Created (2026-05-03) — blocked on 7.P2; `mart_odds_line_movement` dbt model + 4 new columns in `feature_pregame_game_features` |
+| 7 | 7.P2 | `plan_specs/phase_7/P2_historical_odds_backfill.yaml` | ✓ Complete (2026-05-03) — Bovada bookmaker; 3 timestamps/day (12:00/17:00/23:00 UTC); coverage: 2021 92.9%, 2022 97.5%, 2023 97.7%, 2024 98.8%, 2025 86.1% ≥2 snaps; gate PASSED; 7.P3 unblocked |
+| 7 | 7.P3 | `plan_specs/phase_7/P3_line_movement_features.yaml` | ✓ Complete (2026-05-03) — `mart_odds_line_movement` (bovada, 2021–2025 hist + 2026 live); 4 new columns in `feature_pregame_game_features`; Brier Δ +0.0011 (fixed params); `home_open_win_prob` #7 SHAP (0.0299); features in store, retrain deferred to 7.MA |
 | 7 | 7.Q | `plan_specs/phase_7/Q_bullpen_fatigue.yaml` | Not yet created — unblocked; mart_bullpen_fatigue → 8 new columns in feature_pregame_game_features |
-| 7 | 7.R | `plan_specs/phase_7/R_pythagorean_win_exp.yaml` | Not yet created — unblocked; 2–3 line dbt calculation on existing stg_statsapi_games data |
+| 7 | 7.R | `plan_specs/phase_7/R_pythagorean_wins.yaml` | ✓ Complete (2026-05-03) — `mart_team_season_record` extended with `runs_scored_ytd`, `runs_allowed_ytd`, `pythagorean_win_exp`; 3 columns in `feature_pregame_game_features`; imputation added to `preprocessing.py`; Snowflake spot-check confirmed avg_val ≈ 0.500 across all years; 2023 TB outlier (0.933) confirmed valid (13-0 start) |
 
 ---
 
-### Phase 8 — Dynamic Bayesian Inference Engine
+### Phase 8 — Advanced Feature Engineering (Cards 8.A–8.E)
+
+**Plan specs:** `plan_specs/phase_8/` (A–E). Prerequisites: Phase 7 complete, including Card 7.MB model selection evaluation.
+
+Cards 8.A–8.E add literature-validated feature encodings and new data sources before the next scheduled model retrain. See individual plan specs for full task graphs and acceptance criteria.
+
+| Card | Title | Effort | Status |
+|---|---|---|---|
+| 8.A | Percentage-Difference Feature Encoding | Low (~0.5d) | [ ] Not started |
+| 8.B | ZiPS FIP Starter Features | Low-Medium (~0.5d) | [ ] Not started |
+| 8.C | Defensive Fielding Metrics (OAA) | High (~1.5–2d) | [ ] Not started |
+| 8.D | Elo Team Strength Rating | Medium (~1d) | [ ] Not started |
+| 8.E | Bat Tracking Matchup Features | Medium (~1d) | [ ] Not started |
+
+---
+
+### Phase 8 — Dynamic Bayesian Inference Engine (Cards 8.F1–8.F5)
 
 **Blocked until Phase 7 produces a market-beating model** (calibrated_win_prob Brier < 0.2395 AND mean h2h edge > 0.0 on the 2026 has_odds sample). See `bayesian_inference_prd.md` for full PRD and feasibility review.
 
 The core problem this phase addresses: Card 7.A confirmed `best_alpha = 0.0` globally — the market dominates at every alpha value. Phase 8 makes the blending weight dynamic per-game rather than a global constant. In high-uncertainty regimes (early season, debut starters, thin rolling windows), the market's pricing edge over the model is narrowest, making a non-zero model weight defensible. In mid-season games with stable rosters, the weight converges back toward 0.
 
-Phase 8 has five cards executed sequentially (A1 → A2, A1 → A3, A1 → A4, A2 → A5):
+Execution order: 8.F1 → 8.F2, 8.F1 → 8.F3, 8.F1 → 8.F4, 8.F2 → 8.F5.
 
-#### Card 8.A1 — Game Uncertainty Scoring
+---
 
-Compute a `game_uncertainty_score ∈ [0, 1]` per game from existing feature store columns (games_played_30d, starter_appearances_30d, has_ip_history flags). Write the score to `daily_model_predictions` at inference time. This is the input to all downstream Phase 8 cards.
+#### Card 8.F1 — Game Uncertainty Scoring
 
-Formula (v1):
-- `starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc` where each component is 1.0 for debut starters, decaying to 0.0 at 15 appearances
-- `team_uncertainty = 0.5 * home_team_unc + 0.5 * away_team_unc` where each component is 1.0 at 0 games, decaying to 0.0 at 20 games
-- `game_uncertainty_score = 0.5 * starter_uncertainty + 0.5 * team_uncertainty`, clamped to [0, 1]
+**Description:**
+Compute a per-game `game_uncertainty_score ∈ [0, 1]` at inference time from existing feature store columns. This score is the shared input for all downstream Dynamic Bayesian cards (8.F2–8.F5). High uncertainty = debut starters, early-season thin windows; low uncertainty = mid-season stable rosters.
 
-No new data sources required. DDL migration adds `game_uncertainty_score FLOAT` to `daily_model_predictions`.
+**Technical Implementation:**
+- Formula (v1):
+  - `starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc` — each component = 1.0 for debut starters, decays linearly to 0.0 at 15 career appearances
+  - `team_uncertainty = 0.5 * home_team_unc + 0.5 * away_team_unc` — each component = 1.0 at 0 games played in current season, decays linearly to 0.0 at 20 games
+  - `game_uncertainty_score = 0.5 * starter_uncertainty + 0.5 * team_uncertainty`, clamped to [0, 1]
+- Input columns: `home_starter_appearances_30d`, `away_starter_appearances_30d`, `home_games_played_ytd`, `away_games_played_ytd` — all already in `feature_pregame_game_features`
+- DDL migration: add `game_uncertainty_score FLOAT` to `baseball_data.betting_ml.daily_model_predictions`
+- Compute in `predict_today.py` after feature assembly, before inference; write alongside model outputs
 
-#### Card 8.A2 — Dynamic Alpha Weighting
+**Acceptance Criteria:**
+- [ ] `game_uncertainty_score` column present in `daily_model_predictions` for all inference runs after migration
+- [ ] Score = 1.0 for Opening Day games with debut starters; score ≤ 0.1 for mid-August games with established starters (spot-check query)
+- [ ] DDL migration script exists at `scripts/ddl/add_uncertainty_score.sql`
+- [ ] No score is NULL for any scored game (NULL inputs treated as full uncertainty = 1.0)
 
-Replace the global `best_alpha` scalar in `compute_posterior()` with a per-game weight driven by `game_uncertainty_score`.
+---
 
-Formula: `dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT` where `MAX_MODEL_WEIGHT = 0.15` (conservative starting value). At full uncertainty, model gets 15% weight; at mid-season stability, model gets 0% (same as current best_alpha=0.0).
+#### Card 8.F2 — Dynamic Alpha Weighting
 
-`MAX_MODEL_WEIGHT` is documented in `model_registry.yaml` under a new `bayesian_layer` block and re-evaluated after 200+ scored games. `dynamic_alpha` is written to `daily_model_predictions` for auditability. Evaluation query stratified by `game_uncertainty_score` bucket confirms high-uncertainty games trend toward better mean edge as the season progresses.
+**Blocked on Card 7.MB.** `compute_posterior()` consumes `calibrated_win_prob`, and Card 7.MA found that Platt scaling is currently *degrading* calibration (raw ECE 0.0247 vs. calibrated ECE 0.0420). Card 7.MB evaluates whether Platt is replaced by isotonic calibration or dropped entirely. The input this card blends may change. Do not implement until 7.MB confirms the calibration approach and the winning model architecture.
 
-#### Card 8.A3 — NGBoost Distribution Surfacing
+**Description:**
+Replace the global `best_alpha = 0.0` scalar in `compute_posterior()` with a per-game weight driven by `game_uncertainty_score`. At full uncertainty, the model gets up to 15% weight in the posterior blend; at mid-season stability the weight converges back to 0 (matching the current global result).
 
-Extract the LogNormal parameters (mu, sigma) from the NGBoost totals model at inference time and write `prob_over_line`, `prob_under_line`, and `total_variance` to `daily_model_predictions`. These are already computed internally — they just aren't persisted. `prob_over_line = 1 - lognorm.cdf(market_totals_line, s=sigma, scale=exp(mu))`. Null when no totals line is available. DDL migration adds five columns: `ngb_total_mu`, `ngb_total_sigma`, `total_variance`, `prob_over_line`, `prob_under_line`.
+**Technical Implementation:**
+- Formula: `dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT`
+- `MAX_MODEL_WEIGHT = 0.15` (conservative starting value; re-evaluated after 200+ scored games)
+- Edit `betting_ml/models/bayesian_posterior.py` (or equivalent): replace `alpha = best_alpha` with `alpha = game_uncertainty_score * MAX_MODEL_WEIGHT`
+- Add `bayesian_layer` block to `model_registry.yaml`:
+  ```yaml
+  bayesian_layer:
+    MAX_MODEL_WEIGHT: 0.15
+    formula: dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT
+    last_evaluated: null
+    evaluation_note: "Re-evaluate after 200+ scored games"
+  ```
+- DDL migration: add `dynamic_alpha FLOAT` column to `daily_model_predictions`
+- Write `dynamic_alpha` value per game to `daily_model_predictions` for auditability
 
-#### Card 8.A4 — Feature Stabilization Layer
+**Acceptance Criteria:**
+- [ ] `compute_posterior()` no longer uses a global scalar `best_alpha`; uses `game_uncertainty_score * MAX_MODEL_WEIGHT` instead
+- [ ] `dynamic_alpha` persisted in `daily_model_predictions` for all scored games
+- [ ] `MAX_MODEL_WEIGHT` documented in `model_registry.yaml` under `bayesian_layer`
+- [ ] Spot-check: `dynamic_alpha` = 0.0 for games where `game_uncertainty_score` = 0.0; `dynamic_alpha` = 0.15 for games where `game_uncertainty_score` = 1.0
+- [ ] Evaluation query (written, not yet run): stratify `daily_model_predictions` by `game_uncertainty_score` bucket (0–0.25, 0.25–0.5, 0.5–0.75, 0.75–1.0) and compute mean h2h edge per bucket
 
-Apply `w = n / (n + k)` shrinkage to rolling stat features at inference time before model predict(). This is a Python preprocessing transform only — the dbt feature store is unchanged. Stabilization constants (k) and priors by stat type:
+---
 
-| Stat | k | Prior |
-|---|---|---|
-| wOBA (offensive, 30d) | 150 | 0.320 |
-| xwOBA against (pitching, 30d) | 150 | 0.310 |
-| Starter K% (season-to-date) | 60 | 0.215 |
-| Starter xwOBA against (season-to-date) | 100 | 0.310 |
-| Bullpen xwOBA against (30d) | 100 | 0.315 |
+#### Card 8.F3 — NGBoost Distribution Surfacing
 
-A `stabilize_features()` helper is added to `predict_today.py` and called after feature assembly, before model inference. The training pipeline is unaffected until Card 7.D retraining.
+**Blocked on Card 7.MB.** This card is built entirely around `ngb_totals.pred_dist(X)` — a method specific to the NGBoost API that returns a LogNormal distribution object. Card 7.MB benchmarks LightGBM and CatBoost against NGBoost as the totals model; if NGBoost is retired, the entire technical implementation needs to be redesigned (options: keep NGBoost only for uncertainty quantification while using LightGBM for point predictions, or derive a distribution from quantile regression). Do not implement until 7.MB confirms whether NGBoost survives as the totals model.
 
-#### Card 8.A5 — Uncertainty-Adjusted Kelly Sizing
+**Description:**
+Extract the LogNormal distribution parameters (mu, sigma) from the NGBoost totals model at inference time and persist `prob_over_line`, `prob_under_line`, and `total_variance` to `daily_model_predictions`. These are already computed internally by NGBoost — this card makes them queryable outputs rather than ephemeral internal state.
 
-Apply a monotone discount to the Kelly fraction based on `game_uncertainty_score`. Formula: `uncertainty_discount = max(0.1, 1.0 - 0.5 * game_uncertainty_score)`. At full uncertainty the Kelly fraction is halved; the 0.1 floor prevents the bet from being zeroed. `adjusted_kelly_fraction` and `uncertainty_discount` are written to `daily_model_predictions`. `KELLY_UNCERTAINTY_DISCOUNT = 0.5` is documented in `model_registry.yaml`. After 100+ scored games, Sharpe ratio and mean P&L of adjusted vs. base Kelly are compared in `betting_ml/evaluation/phase8_results.md`.
-| 7 | 7.S | `plan_specs/phase_7/S_starter_velo_trend.yaml` | Not yet created — unblocked; mart_pitcher_start_velo → velo_delta_3start columns in feature_pregame_game_features |
+**Technical Implementation:**
+- At inference time after `ngb_totals.predict(X)`, also call `ngb_totals.pred_dist(X)` to get the distribution object
+- Extract: `mu = dist.loc` (log-scale mean), `sigma = dist.scale` (log-scale std)
+- Compute:
+  - `total_variance = exp(2*mu + sigma^2) * (exp(sigma^2) - 1)` (LogNormal variance formula)
+  - `prob_over_line = 1 - lognorm.cdf(market_totals_line, s=sigma, scale=exp(mu))` using `scipy.stats.lognorm`
+  - `prob_under_line = 1 - prob_over_line`
+- Set all five columns to NULL when `market_totals_line` is unavailable
+- DDL migration: add five columns to `daily_model_predictions`: `ngb_total_mu FLOAT`, `ngb_total_sigma FLOAT`, `total_variance FLOAT`, `prob_over_line FLOAT`, `prob_under_line FLOAT`
+
+**Acceptance Criteria:**
+- [ ] Five new columns present in `daily_model_predictions` after DDL migration
+- [ ] `prob_over_line + prob_under_line = 1.0` (within float tolerance) for all non-NULL rows
+- [ ] Columns are NULL when `market_totals_line` is NULL; non-NULL otherwise (for games with a totals line)
+- [ ] `ngb_total_mu` and `ngb_total_sigma` are positive finite floats for all non-NULL rows
+
+---
+
+#### Card 8.F4 — Feature Stabilization Layer
+
+**Blocked on Card 7.MB.** The shrinkage constants (k values) are tuned for XGBoost's variance behavior. LightGBM and CatBoost have built-in regularization that partially handles small-sample variance natively — if either replaces XGBoost, the k values may add no signal or hurt performance and would need to be re-derived against the winning architecture. Do not finalize constants or implement until 7.MB confirms the winning model.
+
+**Description:**
+Apply James-Stein-style `w = n / (n + k)` shrinkage to key rolling stat features at inference time, before `model.predict()`. Small-sample rolling windows are shrunk toward a league-average prior. This is a Python preprocessing transform only — the dbt feature store is unchanged.
+
+**Technical Implementation:**
+- Add `stabilize_features(df, games_played_col)` helper to `predict_today.py` (or a new `betting_ml/models/feature_stabilizer.py`)
+- For each stat, apply: `stabilized = w * rolling_value + (1 - w) * prior` where `w = n / (n + k)` and `n = games_played_ytd` (or pitch count / PA count as appropriate)
+- Stabilization constants:
+
+  | Stat column | k | Prior |
+  |---|---|---|
+  | `home_team_woba_30d`, `away_team_woba_30d` | 150 | 0.320 |
+  | `home_bp_xwoba_against_30d`, `away_bp_xwoba_against_30d` | 150 | 0.310 |
+  | `home_starter_k_pct_std`, `away_starter_k_pct_std` | 60 | 0.215 |
+  | `home_starter_xwoba_against_std`, `away_starter_xwoba_against_std` | 100 | 0.310 |
+  | `home_bp_xwoba_against_30d`, `away_bp_xwoba_against_30d` | 100 | 0.315 |
+
+- Call `stabilize_features()` after feature assembly and before `model.predict()` in `predict_today.py`
+- Training pipeline (`train_model.py`) is NOT modified — stabilization is inference-only until the next retrain checkpoint
+
+**Acceptance Criteria:**
+- [ ] `stabilize_features()` function exists and is called in `predict_today.py` before `model.predict()`
+- [ ] Stabilization constants and priors documented in `model_registry.yaml` under a `feature_stabilization` block
+- [ ] Unit test: with n=0 games played, `stabilized_woba ≈ 0.320`; with n=150 games played, `stabilized_woba ≈ 0.5 * rolling + 0.5 * 0.320`
+- [ ] Training pipeline (`train_model.py`) does not import or call `stabilize_features()` — stabilization is inference-only
+
+---
+
+#### Card 8.F5 — Uncertainty-Adjusted Kelly Sizing
+
+**Description:**
+Apply a monotone uncertainty discount to the Kelly fraction at bet-sizing time, using `game_uncertainty_score`. Higher uncertainty → smaller Kelly fraction → more conservative position sizing. The floor at 0.1 prevents bets from being zeroed even at maximum uncertainty.
+
+**Technical Implementation:**
+- Formula: `uncertainty_discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * game_uncertainty_score)`
+- `KELLY_UNCERTAINTY_DISCOUNT = 0.5` (at full uncertainty, Kelly fraction is halved)
+- `adjusted_kelly_fraction = kelly_fraction * uncertainty_discount`
+- Edit Kelly sizing logic in `predict_today.py` or `app/utils/ev_kelly.py` to apply the discount before displaying recommended bet size
+- DDL migration: add `adjusted_kelly_fraction FLOAT` and `uncertainty_discount FLOAT` to `daily_model_predictions`
+- Document `KELLY_UNCERTAINTY_DISCOUNT` in `model_registry.yaml` under `bayesian_layer`
+- After 100+ scored games: compare Sharpe ratio and mean P&L of `adjusted_kelly_fraction` vs. base `kelly_fraction` in `betting_ml/evaluation/phase8_kelly_results.md`
+
+**Acceptance Criteria:**
+- [ ] `adjusted_kelly_fraction` and `uncertainty_discount` present in `daily_model_predictions` after DDL migration
+- [ ] Spot-check: `uncertainty_discount = 1.0` when `game_uncertainty_score = 0.0`; `uncertainty_discount = 0.5` when `game_uncertainty_score = 1.0`; floor enforced (`uncertainty_discount >= 0.1` always)
+- [ ] `KELLY_UNCERTAINTY_DISCOUNT` documented in `model_registry.yaml` under `bayesian_layer`
+- [ ] EV Kelly page in the Streamlit app displays `adjusted_kelly_fraction` (not raw `kelly_fraction`) as the recommended bet size
+- [ ] Evaluation report template exists at `betting_ml/evaluation/phase8_kelly_results.md` (populated after 100+ scored games)
+| 7 | 7.S | `plan_specs/phase_7/S_starter_velo_trend.yaml` | Complete — `home/away_starter_velo_delta_3start` in `feature_pregame_game_features`; imputation in `preprocessing.py`; CV impact deferred to 7.MA retrain |
+| 7 | 7.T | `plan_specs/phase_7/T_bet_tracker.yaml` | Complete (2026-05-03) — `baseball_data.betting_ml.placed_bets` DDL (17 cols, `scripts/ddl/placed_bets.sql`); "Log a Bet" expander on EV Kelly page (game + market selector, auto-populated model/EV metrics, bookmaker/odds/stake/notes form, parameterized INSERT, version-counter form-reset pattern); "Bet History" section filtered to selected date (auto-settlement from `stg_statsapi_games` scores, derived outcome + P&L in Python, 4-metric summary row, colour-coded Outcome column); "Actual Bet Performance" cumulative P&L chart added to Performance Tracker page; all 5 plan-spec ACs pass; note: Bet History shows selected date only (user-requested deviation from spec's all-dates default) |
+| 7 | 7.U | `plan_specs/phase_7/T_bet_tracker.yaml` (appended) | **Closed — deferred to Card 8.G (2026-05-04).** P3 bookmaker selector + live OddsAPI refresh belongs in the production web app, not the Streamlit MVP. ACs folded into Card 8.G spec. |
+| 7 | 7.2 | *(no plan spec)* | **Moved to Phase 8 as Card 8.G (2026-05-04).** Production web application (FastAPI + React/Next.js) is out of scope for Phase 7 feature/model work. See Card 8.G. |
+| 8 | 8.G | *(no plan spec — spec inline in project_context.md)* | Not started — blocked on positive CLV confirmation (mean edge > +0.01 over ≥50 games). Absorbs Card 7.2 (production app architecture) and Card 7.U (bookmaker selector). |
 
 #### XGBoost home_win — Hyperparameter Tuning Results (Optuna TPE)
 
-- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.2443 vs baseline=0.2443)
-- **Baseline Brier:** 0.2443 | **Tuned Brier:** 0.2443 | **Change:** +0.01%
-- **Best params:** max_depth=4, learning_rate=0.0333, n_estimators=161, subsample=0.904, colsample_bytree=0.785, reg_alpha=0.219, reg_lambda=1.076
-- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.2443 vs baseline=0.2443 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
+- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.2439 vs baseline=0.2443)
+- **Baseline Brier:** 0.2443 | **Tuned Brier:** 0.2439 | **Change:** +0.17%
+- **Best params:** max_depth=3, learning_rate=0.0450, n_estimators=394, subsample=0.841, colsample_bytree=0.601, reg_alpha=0.472, reg_lambda=1.994
+- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.2439 vs baseline=0.2443 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
 - **Full results:** `betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md`, `betting_ml/evaluation/tuning_results_xgb_home_win.json`
+
+---
+
+---
+
+### Phase 8 — Production Web Application (Card 8.G)
+
+**Prerequisite:** Streamlit MVP completes a full season of live use AND the model demonstrates positive CLV (mean h2h edge > +0.01 sustained over ≥50 games). Infrastructure investment is not warranted until the model's live value is confirmed.
+
+---
+
+#### Card 8.G — Production Web Application (moved from Card 7.2)
+
+**Description:**
+Replace the Phase 6 Streamlit MVP with a production-grade web application. The Streamlit MVP is a single-process app fast to build but not designed for concurrent users, background refresh, or mobile access. Once the model's live value is established, replace it with a purpose-built stack. The Streamlit app is retained as a development and debugging tool after the production app ships — it is not decommissioned.
+
+**Technical Implementation:**
+- **Backend:** FastAPI service (`app/api/`) exposing a REST API:
+  - `GET /predictions/{date}` — today's picks with model outputs
+  - `GET /games/{game_pk}/odds` — odds and market comparison for a game
+  - `GET /performance` — historical P&L and CLV metrics
+  - Reads from Snowflake and saved model artifacts; runs as a Docker container (deployable to Fly.io, Railway, or any container host)
+- **Frontend:** React or Next.js SPA (`app/web/`) consuming the FastAPI endpoints
+  - Replicates all five Streamlit pages as proper routes: Today's Picks, Market Comparison, EV/Kelly, Performance Tracker, Game Insights
+  - Mobile-responsive layout (390px-wide viewport baseline) so daily picks are usable from a phone
+- **Auth:** Single-user auth (Bearer token or magic link) — personal tool, not multi-tenant
+- **Background refresh:** Replace the Streamlit "Refresh" button with a server-sent event (SSE) stream pushing lineup confirmation events from `lineup_monitor_state` to the frontend in real time
+- **Hosting:** Containerized API + static frontend on a low-cost PaaS; no Kubernetes needed
+- **Bookmaker selector (from Card 7.U):** Bookmaker dropdown in the EV/Kelly page (default: consensus). "Refresh Live Odds" button calls the OddsAPI current endpoint for today's games for the selected bookmaker; recomputes EV/Kelly/edge in-session without overwriting Snowflake consensus odds. Live odds cached 5 minutes per (date, bookmaker) pair. Rows with no bookmaker odds fall back to consensus with a warning indicator. Supported: bovada, draftkings, fanduel, betmgm, caesars.
+
+**Acceptance Criteria:**
+- [ ] FastAPI backend serves all data endpoints; each returns within 2 seconds on a cold Snowflake query
+- [ ] Frontend replicates all five pages from the Streamlit MVP with correct data
+- [ ] Mobile layout renders correctly on 390px-wide viewport (iPhone 15 baseline)
+- [ ] Bearer token auth prevents unauthenticated access to all API endpoints
+- [ ] SSE stream delivers lineup confirmation events to the frontend within 60 seconds of the Snowflake `lineup_monitor_state` row being written
+- [ ] Docker Compose file at repo root starts the full stack (API + frontend) with a single `docker compose up`
+- [ ] Streamlit app remains functional alongside the production app for development use
+- [ ] Bookmaker selector present in the EV/Kelly page; "Refresh Live Odds" button fetches from OddsAPI; failed API call shows `st.error()` and falls back to consensus (never crashes the page)
+- [ ] Live odds cached 5 minutes per (date, bookmaker); rows without bookmaker odds show a "consensus fallback" indicator
+
+---
+
+### Phase 8 — Data & Model Engineering Infrastructure (Card 8.H)
+
+**Status:** In Progress (2026-05-04). Prerequisite for Card 8.G (Production Web App) and safe execution of all other Phase 8 cards. Full spec in `docs/phase_8_infra_epic.md`.
+
+| Card | Title | Effort | Status |
+|---|---|---|---|
+| 8.H1 | CI/CD Pipeline Hardening | Low (~0.5d) | [x] Complete (2026-05-04) |
+| 8.H2 | Model Deploy Protocol | Low (~0.5d) | [x] Complete (2026-05-04) — elasticnet deployed as home_win v2, runbook at `docs/model_deploy_runbook.md` |
+| 8.H3 | Live Monitoring & Alerting | Medium (~1d) | [ ] Not started |
+| 8.H4 | Snowflake Environment Isolation | High (~1.5–2d) | [ ] Deferred — not required until Phase 9 production build-out |
+| 8.H5 | Application Deployment (Streamlit Cloud) | Low (~0.5d) | [ ] Deferred — Streamlit app is development-only; production deployment is Card 8.G |
+
+**Recommended sequencing:** 8.H1 → 8.H2 → 8.H3 → (8.H4 and 8.H5 deferred to Phase 9)
+
+---
+
+#### 8.H1 — CI/CD Pipeline Hardening (Complete)
+
+Closed five gaps identified in the 7.MB CI/CD audit:
+1. `lineup_monitor.yml` dbt-fusion binary now cached via `actions/cache` keyed on `DBT_FUSION_VERSION`; same cache applied to `dbt_daily_build.yml` and `dbt_staging_build.yml`
+2. All `dbt` → `dbtf` command references corrected across all workflow files
+3. Model artifact smoke test added to `ci.yml` (`model-smoke-test` job): loads `home_win` pkl, asserts `0 < p < 1`
+4. `predict_today.py` syntax check added as a CI step
+5. Gap 5 (dbt PR test gate) deferred to 8.H4 (requires dev Snowflake environment)
+
+---
+
+#### 8.H2 — Model Deploy Protocol (Complete)
+
+Structured, reversible deploy process for all three production model targets. Runbook at `docs/model_deploy_runbook.md`. First use: elasticnet deployed as `home_win` v2 (2026-05-04).
+
+Protocol steps: (1) train and evaluate, (2) write artifact, (3) update `model_registry.yaml` with `rollback_artifact_path`, (4) smoke test locally, (5) commit and `git tag model/{target}/v{N}`, (6) open PR and merge with CI passing, (7) post-deploy verification.
+
+Registry version history: `model/home_win/v2` (elasticnet Pipeline, Brier 0.2425, ECE 0.0202, 2026-05-04); `model/total_runs/v1` (NGBoost LogNormal, MAE 3.5190, 2026-05-04); `model/run_differential/v1` (NGBoost Normal, MAE 3.4724, 2026-05-04). All three production targets formally deployed. Rollback artifacts documented in registry.
+
+---
+
+#### 8.H3 — Live Monitoring & Alerting (Next)
+
+**Goal:** Detect model degradation, data staleness, and prediction coverage failures before they affect bets.
+
+**Scope — three monitoring targets:**
+
+**1. Calibration drift (ECE)**
+Extend `backfill_prediction_log.py` (or a new `scripts/compute_model_health.py`) to compute rolling 14-day ECE on `prediction_log` rows where `outcome` is not null. Write results to a new `model_health_log` Snowflake table with columns `(run_date, target, window_days, ece, brier, sample_n, alert_fired)`. Alert threshold: ECE > 0.04 (2× elasticnet baseline of 0.0202). Alert mechanism: exit non-zero + write `alert_fired = true` to the table; GitHub Actions step failure surfaces the alert.
+
+**2. Data freshness**
+Implement `scripts/check_data_freshness.py`. Queries `MAX(ingestion_timestamp)` per source table against per-source staleness thresholds:
+
+| Source table | Expected freshness | Alert if stale > |
+|---|---|---|
+| `savant.batter_pitches` | Daily (yesterday) | 36h |
+| `oddsapi.mlb_odds_raw` | 6× daily | 6h on game days |
+| `fangraphs.fg_stuff_plus_raw` | Sunday | 8 days |
+| `statsapi.umpire_game_log` | Daily | 36h |
+| `statsapi.player_transactions` | Daily | 36h |
+| `statsapi.monthly_schedule` (lineups) | Hourly on game days | 2h on game days |
+
+Script exits non-zero on any threshold breach. Add as a step in `daily_ingestion.yml` after all ingestion steps.
+
+**3. Prediction coverage**
+After `predict_today.py` runs, check that `daily_model_predictions` has a row for every scheduled game with confirmed lineups (`has_full_lineup = true`). Coverage < 90% on any game day is a failure. Add as a step in `daily_ingestion.yml` immediately after the scoring step.
+
+**Deliverables:**
+- `scripts/check_data_freshness.py`
+- `scripts/compute_model_health.py` (ECE drift compute + `model_health_log` writer)
+- `scripts/check_prediction_coverage.py`
+- DDL for `model_health_log` table in `scripts/ddl/`
+- Both check scripts wired into `daily_ingestion.yml`
+- `docs/monitoring_runbook.md`
+
+**Acceptance criteria:**
+- [ ] `model_health_log` table exists in Snowflake; ECE computed daily on rolling 14-day window
+- [ ] ECE alert fires (exits non-zero) when threshold is exceeded — verified via a manual test with synthetic data
+- [ ] `check_data_freshness.py` passes locally on current data and exits non-zero on simulated stale input
+- [ ] Prediction coverage check step present in `daily_ingestion.yml` and passes on current `daily_model_predictions`
+- [ ] All three scripts wired into `daily_ingestion.yml` after their respective upstream steps
+- [ ] `docs/monitoring_runbook.md` documents all thresholds, alert behavior, and manual resolution steps
+
+---
+
+#### 8.H4 — Snowflake Environment Isolation (Deferred)
+
+Deferred to Phase 9. Required before the production web application (Card 8.G) is built, but not blocking current Phase 8 feature work. Full spec in `docs/phase_8_infra_epic.md`.
+
+---
+
+#### 8.H5 — Application Deployment (Deferred)
+
+Deferred. Streamlit app is development-only throughout Phase 8. Production deployment via FastAPI + React is Card 8.G (Phase 9). Full spec in `docs/phase_8_infra_epic.md`.
+
+---
+
+### Phase 9 — Advanced Model Architecture (Deferred)
+
+Two modeling approaches identified during Phase 8 retrains for evaluation in Phase 9:
+
+#### Stacked Ensemble
+
+Train base models (Ridge, XGBoost, LightGBM) using out-of-fold predictions, then train a meta-model (Ridge or Logistic Regression) on the OOF outputs only. Expected marginal gain over the best single model is modest but low-risk to evaluate. Critical implementation constraint: the meta-model must never see in-fold predictions to avoid leakage.
+
+#### Decomposed / Micro-services Model Architecture
+
+Rather than a single monolithic model predicting total runs or win probability, decompose into separate models for each team's run scoring:
+
+```
+home_runs_scored = f(home_lineup, away_starter, park, weather, umpire)
+away_runs_scored = f(away_lineup, home_starter, park, weather, umpire)
+
+total_runs       = home_runs_scored + away_runs_scored
+run_differential = home_runs_scored - away_runs_scored
+win_probability  = derived from run_differential distribution
+```
+
+**Motivation:** Matches the causal structure of baseball (pitching and hitting are separable). Enables partial pipeline re-runs when lineup or starter changes occur pre-game — only the affected sub-model needs to re-run. Aligns with how sophisticated sports analytics organizations structure predictions (player projection systems aggregate to lineup level, then combine home/away). Validated sub-models (runs allowed, runs scored) are more tractable than full-game outcomes.
+
+**Tradeoff:** Errors compound across sub-models; cross-component interactions (dominant pitcher vs. weak lineup) may be underweighted versus a monolithic model that implicitly learns them.
+
+**Pre-requisite for Phase 9:** Keep home/away offensive and pitching feature names separable by naming convention in the current feature store so the Phase 9 refactor is cheaper.

@@ -9,23 +9,23 @@ Note that scores are Brier scores (lower is better).
 
 | Metric | Baseline CV Score | Tuned CV Score | Improvement (%) | Trials |
 |--------|-------------------|----------------|-----------------|--------|
-| Brier Score | 0.2443 | 0.2443 | +0.01% ✓ | 50 |
+| Brier Score | 0.2443 | 0.2439 | +0.17% ✓ | 50 |
 
 Baseline sourced from Snowflake table `baseball_data.betting_ml.cv_results_win_outcome` (model='xgb_platt').
 
 **Best hyperparameter values:**
 
-- `max_depth`: 4
-- `learning_rate`: 0.033342
-- `n_estimators`: 161
-- `subsample`: 0.9044
-- `colsample_bytree`: 0.7850
-- `reg_alpha`: 0.2189
-- `reg_lambda`: 1.0764
+- `max_depth`: 3
+- `learning_rate`: 0.044990
+- `n_estimators`: 394
+- `subsample`: 0.8410
+- `colsample_bytree`: 0.6007
+- `reg_alpha`: 0.4724
+- `reg_lambda`: 1.9940
 
 ## Optuna Trial Convergence
 
-The best Brier score of 0.2443 was first achieved at trial number 17 (out of 50 total trials).
+The best Brier score of 0.2439 was first achieved at trial number 46 (out of 50 total trials).
 
 Convergence required extended search beyond the first 10 trials, indicating a more complex hyperparameter landscape for this target.
 
@@ -33,13 +33,13 @@ Convergence required extended search beyond the first 10 trials, indicating a mo
 
 ```python
 best_params = {
-    "max_depth": 4,
-    "learning_rate": 0.033342,
-    "n_estimators": 161,
-    "subsample": 0.9044,
-    "colsample_bytree": 0.7850,
-    "reg_alpha": 0.2189,
-    "reg_lambda": 1.0764,
+    "max_depth": 3,
+    "learning_rate": 0.044990,
+    "n_estimators": 394,
+    "subsample": 0.8410,
+    "colsample_bytree": 0.6007,
+    "reg_alpha": 0.4724,
+    "reg_lambda": 1.9940,
 }
 ```
 

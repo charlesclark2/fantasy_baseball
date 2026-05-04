@@ -34,6 +34,12 @@ class _NumericNormalizer(BaseEstimator, TransformerMixin):
 # Column patterns for null group identification
 _PLATOON_SUFFIXES = ("_vs_lhb", "_vs_rhb", "_vs_lhp", "_vs_rhp", "_adj")
 _WIN_PCT_COLS = ["home_win_pct", "away_win_pct"]
+_PYTHAGOREAN_COLS = ["home_pythagorean_win_exp", "away_pythagorean_win_exp"]
+_PYTHAGOREAN_DIFF_COLS = ["pythagorean_win_exp_diff"]
+_VELO_DELTA_COLS = [
+    "home_starter_velo_delta_3start",
+    "away_starter_velo_delta_3start",
+]
 _DAYS_REST_COLS = [
     "home_days_rest",
     "away_days_rest",
@@ -150,7 +156,8 @@ class _ParkRunFactorImputer(BaseEstimator, TransformerMixin):
 
 
 class _ConstantImputer(BaseEstimator, TransformerMixin):
-    """Groups 3 & 4: Fill team win% with 0.500, days_rest with 4."""
+    """Groups 3, 4 & 5: Fill team win% with 0.500, days_rest with 4,
+    Pythagorean win expectation with 0.5, and Pythagorean diff with 0.0."""
 
     def fit(self, X: pd.DataFrame, y=None):
         self.is_fitted_ = True
@@ -164,6 +171,15 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
         for col in _DAYS_REST_COLS:
             if col in X.columns:
                 X[col] = X[col].fillna(4)
+        for col in _PYTHAGOREAN_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.500)
+        for col in _PYTHAGOREAN_DIFF_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        for col in _VELO_DELTA_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
         return X
 
 
@@ -278,7 +294,7 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
       indicators       — add has_starter_platoon_data and is_new_venue columns
       platoon          — Group 1: starter platoon splits → column mean
       park             — Group 2: park run factor cascade → league avg → 1.000
-      constants        — Groups 3 & 4: win% → 0.500; days_rest → 4
+      constants        — Groups 3 & 4: win% → 0.500; days_rest → 4; pythagorean → 0.5 / 0.0
       bullpen_xwoba    — Group 5: bullpen xwOBA → training-set mean
       bayesian         — Group 6: rolling stats → Bayesian shrinkage
       fallback         — catch-all mean/mode fill for any remaining nulls

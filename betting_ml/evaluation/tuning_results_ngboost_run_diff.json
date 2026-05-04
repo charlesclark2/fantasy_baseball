@@ -5,51 +5,22 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.4648688259694063,
-      "viable": true,
-      "lognormal_note": null
-    },
-    {
-      "n_estimators": 200,
-      "dist": "LogNormal",
-      "cv_mae": null,
-      "viable": false,
-      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+      "cv_mae": 3.472398397626046
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.458554259484016,
-      "viable": true,
-      "lognormal_note": null
-    },
-    {
-      "n_estimators": 500,
-      "dist": "LogNormal",
-      "cv_mae": null,
-      "viable": false,
-      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+      "cv_mae": 3.478764079827689
     },
     {
       "n_estimators": 1000,
       "dist": "Normal",
-      "cv_mae": 3.4760191847891355,
-      "viable": true,
-      "lognormal_note": null
-    },
-    {
-      "n_estimators": 1000,
-      "dist": "LogNormal",
-      "cv_mae": null,
-      "viable": false,
-      "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin)."
+      "cv_mae": 3.4992867484137107
     }
   ],
-  "best_n_estimators": 500,
+  "best_n_estimators": 200,
   "best_dist": "Normal",
-  "best_cv_mae": 3.458554259484016,
-  "lognormal_viable": false,
-  "lognormal_note": "LogNormal distribution requires strictly positive targets; run_differential contains negative values (home team can lose by any margin).",
+  "best_cv_mae": 3.472398397626046,
   "persisted_models": [
     {
       "target": "run_differential",
