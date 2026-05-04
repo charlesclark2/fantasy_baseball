@@ -30,9 +30,11 @@ jobs:
           key: dbtf-${{ env.DBT_FUSION_VERSION }}-${{ runner.os }}
 
       - name: Install dbt-fusion
-        if: steps.cache-dbtf.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          mkdir -p ~/.local/bin
+          if [ ! -f ~/.local/bin/dbtf ]; then
+            curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+          fi
 
       - name: Add dbt-fusion to PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
