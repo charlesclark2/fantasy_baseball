@@ -6,6 +6,15 @@ a picks table to stdout, and write the canonical probability_outputs parquet.
 Run from project root:
     uv run python betting_ml/scripts/predict_today.py
     uv run python betting_ml/scripts/predict_today.py --date 2025-04-15
+
+Champion/challenger backfill mode:
+    uv run python betting_ml/scripts/predict_today.py \\
+        --start-date 2021-04-01 --end-date 2025-10-01 \\
+        --model-tag v0 --feature-version v0 --dry-run
+
+    uv run python betting_ml/scripts/predict_today.py \\
+        --start-date 2021-04-01 --end-date 2026-05-04 \\
+        --model-tag v1 --feature-version v1
 """
 
 from __future__ import annotations
@@ -14,12 +23,13 @@ import argparse
 import json
 import sys
 import warnings
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -27,7 +37,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.utils.data_loader import load_features, load_todays_features, get_snowflake_connection
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.model_io import load_model
-from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — required for joblib unpickling
+from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401
 from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
@@ -35,74 +45,184 @@ from betting_ml.utils.probability_layer import (
 )
 from betting_ml.models.total_runs_trainer import p_over_line
 
+_REGISTRY_PATH = PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
+
 
 # ---------------------------------------------------------------------------
-# Constants
+# Registry helpers
 # ---------------------------------------------------------------------------
 
-MODEL_VERSION = "v1"
+def _load_registry() -> dict:
+    with open(_REGISTRY_PATH) as f:
+        return yaml.safe_load(f) or {}
 
-# v1 (elasticnet) is naturally calibrated — no post-hoc calibration layer.
-# calibrator.joblib was fit on XGBoost raw scores and must not be applied here.
+
+def _registry_artifact_path(entry: dict, model_tag: str) -> str:
+    if model_tag == "v0":
+        return entry.get("rollback_artifact_path") or entry["artifact_path"]
+    return entry["artifact_path"]
+
+
+def _registry_feature_columns_path(entry: dict, model_tag: str) -> Path | None:
+    """Return the feature columns JSON path for the requested model tag.
+
+    Returns None if the registry entry has no feature_columns_path (legacy entries).
+    """
+    if model_tag == "v0":
+        key = "rollback_feature_columns_path"
+    else:
+        key = "feature_columns_path"
+    path_str = entry.get(key)
+    if not path_str:
+        return None
+    p = Path(path_str)
+    return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def _load_model_for_tag(target: str, model_tag: str) -> object:
+    registry = _load_registry()
+    entry = registry[target]
+    artifact_path = _registry_artifact_path(entry, model_tag)
+    p = Path(artifact_path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+    if not p.exists():
+        raise FileNotFoundError(f"Artifact not found: {p}")
+    return joblib.load(p)
+
+
+def _model_version_label(model_tag: str) -> str:
+    """Convert a model tag (v0/v1) to the model_version string inserted into Snowflake."""
+    return model_tag
+
+
+# ---------------------------------------------------------------------------
+# Feature matrix builder — registry-aware
+# ---------------------------------------------------------------------------
+
+def _build_feature_matrix(
+    df_raw: pd.DataFrame,
+    df_hist: pd.DataFrame,
+    target: str,
+    model_tag: str,
+    model_obj: object,
+) -> np.ndarray:
+    """Return the imputed feature matrix X for df_raw.
+
+    Dispatches on target + model metadata to select the correct feature columns.
+    For NGBoost models: uses the feature_columns.json from the registry.
+    For elasticnet home_win: uses elasticnet_feature_columns.json.
+    For rollback XGBoost home_win: uses feature_columns.json (294 features).
+    In all cases, validates the output column count against model.n_features_in_ (if set).
+    """
+    registry = _load_registry()
+    entry = registry[target]
+    feat_path = _registry_feature_columns_path(entry, model_tag)
+
+    if feat_path is not None and feat_path.exists():
+        feature_cols = json.loads(feat_path.read_text())
+        missing = set(feature_cols) - set(df_raw.columns)
+        if missing:
+            warnings.warn(
+                f"[{target}/{model_tag}] {len(missing)} model features missing from data "
+                f"(will fill NaN): {sorted(missing)[:3]}{'...' if len(missing) > 3 else ''}"
+            )
+        X_hist_raw = df_hist.reindex(columns=feature_cols, fill_value=np.nan)
+        X_today_raw = df_raw.reindex(columns=feature_cols, fill_value=np.nan)
+
+        if target in ("total_runs", "run_differential"):
+            # NGBoost uses the imputation pipeline which adds indicator columns
+            pipeline = build_imputation_pipeline()
+            X_hist_imp = pipeline.fit_transform(X_hist_raw)
+            X_hist_imp = X_hist_imp.select_dtypes(include=[np.number])
+            X_today_imp = pipeline.transform(X_today_raw)
+            X_today_imp = X_today_imp.reindex(columns=X_hist_imp.columns, fill_value=0.0)
+        else:
+            # Elasticnet and XGBoost: no build_imputation_pipeline (they handle imputation internally)
+            X_today_imp = X_today_raw
+    else:
+        # Legacy fallback: no feature columns path configured
+        warnings.warn(
+            f"[{target}/{model_tag}] No feature_columns_path in registry; "
+            f"falling back to all numeric columns"
+        )
+        from betting_ml.scripts.model_evaluation.cv_harness import _NON_FEATURE_COLS
+        _NON_FEAT = _NON_FEATURE_COLS | {"split"}
+        numeric_cols = df_raw.select_dtypes(include=[np.number]).columns.tolist()
+        feature_cols = [c for c in numeric_cols if c not in _NON_FEAT]
+        X_today_imp = df_raw.reindex(columns=feature_cols, fill_value=np.nan)
+
+    # Validate feature count against model expectation (if model stores it)
+    expected_n = getattr(model_obj, "n_features_in_", None)
+    if expected_n is None and hasattr(model_obj, "xgb_classifier"):
+        expected_n = getattr(model_obj.xgb_classifier, "n_features_in_", None)
+    if expected_n is not None and X_today_imp.shape[1] != expected_n:
+        raise ValueError(
+            f"[{target}/{model_tag}] Feature count mismatch: model expects {expected_n} "
+            f"but got {X_today_imp.shape[1]}. Retrain the model or fix feature_columns_path."
+        )
+
+    return X_today_imp.values if isinstance(X_today_imp, pd.DataFrame) else X_today_imp
+
+
+# ---------------------------------------------------------------------------
+# Calibrator (home_win v1 elasticnet is natively calibrated)
+# ---------------------------------------------------------------------------
+
 def _apply_calibrator(consensus_win_prob: float) -> float:
     return consensus_win_prob
 
 
+# ---------------------------------------------------------------------------
+# Snowflake DDL + DML
+# ---------------------------------------------------------------------------
+
 _CREATE_PREDICTIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
-    -- Run metadata
     model_version           VARCHAR(20)    NOT NULL,
+    feature_version         VARCHAR(30),
     inserted_at             TIMESTAMP_NTZ  NOT NULL,
     score_date              DATE           NOT NULL,
-
-    -- Game identifiers
     game_pk                 INTEGER,
     game_date               DATE,
     game_datetime           TIMESTAMP_NTZ,
-
-    -- Matchup
     home_team               VARCHAR(100),
     away_team               VARCHAR(100),
     home_team_abbrev        VARCHAR(10),
     away_team_abbrev        VARCHAR(10),
-
-    -- Whether bookmaker odds were available for this game
     has_odds                BOOLEAN,
-
-    -- Core model outputs (populated for every game)
-    p_home_win_ngboost      FLOAT,   -- NGBoost run-diff: P(home run diff > 0)
-    p_home_win_classifier   FLOAT,   -- XGBoost + Platt calibration: P(home wins)
-    consensus_win_prob      FLOAT,   -- 0.5 * ngboost + 0.5 * classifier (audit column)
-    calibrated_win_prob     FLOAT,   -- consensus_win_prob after in-season Platt recalibration
+    p_home_win_ngboost      FLOAT,
+    p_home_win_classifier   FLOAT,
+    consensus_win_prob      FLOAT,
+    calibrated_win_prob     FLOAT,
     pick                    VARCHAR(60),
-    pred_total_runs         FLOAT,   -- NGBoost total-runs point estimate (loc)
-    pred_total_runs_scale   FLOAT,   -- NGBoost total-runs uncertainty (scale / std dev)
-    pred_run_diff_loc       FLOAT,   -- NGBoost run-diff point estimate (loc)
-    pred_run_diff_scale     FLOAT,   -- NGBoost run-diff uncertainty (scale / std dev)
-    p_over_ngboost          FLOAT,   -- NGBoost P(total runs > total_line_consensus)
-
-    -- Probability layer (alpha tuned on historical data)
+    pred_total_runs         FLOAT,
+    pred_total_runs_scale   FLOAT,
+    pred_run_diff_loc       FLOAT,
+    pred_run_diff_scale     FLOAT,
+    p_over_ngboost          FLOAT,
     alpha                   FLOAT,
-
-    -- H2H (moneyline) market — NULL when has_odds = FALSE
-    h2h_market_implied_prob FLOAT,   -- consensus vig-adjusted P(home wins)
-    h2h_posterior_prob      FLOAT,   -- Bayesian blend of model and market
-    h2h_edge                FLOAT,   -- consensus_win_prob - h2h_market_implied_prob
-    h2h_kelly_fraction      FLOAT,   -- full Kelly fraction (positive = bet home)
-
-    -- Totals market — NULL when has_odds = FALSE
-    total_line_consensus    FLOAT,   -- consensus over/under line
-    over_prob_consensus     FLOAT,   -- consensus vig-adjusted P(over)
-    totals_model_prob       FLOAT,   -- NGBoost P(total > total_line_consensus)
+    h2h_market_implied_prob FLOAT,
+    h2h_posterior_prob      FLOAT,
+    h2h_edge                FLOAT,
+    h2h_kelly_fraction      FLOAT,
+    total_line_consensus    FLOAT,
+    over_prob_consensus     FLOAT,
+    totals_model_prob       FLOAT,
     totals_posterior_prob   FLOAT,
     totals_edge             FLOAT,
     totals_kelly_fraction   FLOAT
 )
 """
 
+_CHECK_DUPLICATE = """
+SELECT COUNT(*) FROM baseball_data.betting_ml.daily_model_predictions
+WHERE game_pk = %(game_pk)s AND model_version = %(model_version)s
+"""
+
 _INSERT_PREDICTION = """
 INSERT INTO baseball_data.betting_ml.daily_model_predictions (
-    model_version, inserted_at, score_date,
+    model_version, feature_version, inserted_at, score_date,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
     has_odds,
@@ -115,7 +235,7 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
 ) VALUES (
-    %(model_version)s, %(inserted_at)s, %(score_date)s,
+    %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
     %(home_team)s, %(away_team)s, %(home_team_abbrev)s, %(away_team_abbrev)s,
     %(has_odds)s,
@@ -148,6 +268,9 @@ def _write_predictions_to_snowflake(
     has_odds_col: pd.Series,
     best_alpha: float,
     picks: list[str],
+    model_version: str,
+    feature_version: str,
+    dry_run: bool = False,
 ) -> None:
     def _f(arr, i) -> float | None:
         v = arr[i]
@@ -159,13 +282,9 @@ def _write_predictions_to_snowflake(
         v = df.iloc[i][col]
         if pd.isna(v):
             return None
-        # Snowflake connector doesn't handle numpy scalars in %(name)s params;
-        # .item() converts np.int64 / np.float64 / etc. to native Python types.
         return v.item() if hasattr(v, "item") else v
 
     def _sanitize(row: dict) -> dict:
-        # Snowflake connector serializes Python float('nan') as the SQL literal NAN,
-        # which Snowflake rejects. Convert any remaining NaN floats to None.
         return {
             k: (None if isinstance(v, float) and v != v else v)
             for k, v in row.items()
@@ -181,8 +300,7 @@ def _write_predictions_to_snowflake(
         cons_win = ngb_win * 0.5 + clf_win * 0.5
         cal_win  = _apply_calibrator(cons_win)
 
-        # H2H market values — use calibrated_win_prob as the live edge input
-        h2h_mkt_v  = _f(h2h_mkt, i)
+        h2h_mkt_v = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
             h2h_edge  = compute_edge(cal_win, h2h_mkt_v)
             h2h_post  = compute_posterior(cal_win, h2h_mkt_v, best_alpha)
@@ -190,10 +308,9 @@ def _write_predictions_to_snowflake(
         else:
             h2h_edge = h2h_post = h2h_kelly = None
 
-        # Totals market values
-        over_mkt_v    = _f(over_mkt, i)
-        total_line_v  = _f(total_line_vals, i)
-        p_over_v      = float(p_over_total[i])
+        over_mkt_v   = _f(over_mkt, i)
+        total_line_v = _f(total_line_vals, i)
+        p_over_v     = float(p_over_total[i])
         if has_odds and over_mkt_v is not None:
             tot_edge  = compute_edge(p_over_v, over_mkt_v)
             tot_post  = compute_posterior(p_over_v, over_mkt_v, best_alpha)
@@ -201,7 +318,6 @@ def _write_predictions_to_snowflake(
         else:
             tot_edge = tot_post = tot_kelly = None
 
-        # Parse game_datetime from df_today if present
         raw_dt = _s(df_today, "game_datetime", i)
         game_dt: datetime | None = None
         if raw_dt is not None:
@@ -210,11 +326,14 @@ def _write_predictions_to_snowflake(
             except Exception:
                 pass
 
+        game_pk_val = _s(df_today, "game_pk", i)
+
         rows.append(_sanitize({
-            "model_version":          MODEL_VERSION,
+            "model_version":          model_version,
+            "feature_version":        feature_version,
             "inserted_at":            inserted_at,
             "score_date":             score_date,
-            "game_pk":                _s(df_today, "game_pk", i),
+            "game_pk":                game_pk_val,
             "game_date":              score_date,
             "game_datetime":          game_dt,
             "home_team":              _s(df_today, "home_name", i) or _s(df_today, "home_team", i),
@@ -245,27 +364,43 @@ def _write_predictions_to_snowflake(
             "totals_kelly_fraction":  tot_kelly,
         }))
 
+    if dry_run:
+        print(f"\n[dry-run] Would insert {len(rows)} row(s) for {target_date} "
+              f"(model_version={model_version}, feature_version={feature_version})")
+        return
+
     try:
         conn = get_snowflake_connection()
         try:
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
-            cur.executemany(_INSERT_PREDICTION, rows)
+
+            inserted = 0
+            skipped = 0
+            for row in rows:
+                # Idempotent guard: skip if (game_pk, model_version) already exists
+                if row.get("game_pk") is not None:
+                    cur.execute(_CHECK_DUPLICATE, {"game_pk": row["game_pk"], "model_version": row["model_version"]})
+                    if cur.fetchone()[0] > 0:
+                        skipped += 1
+                        continue
+                cur.execute(_INSERT_PREDICTION, row)
+                inserted += 1
+
             conn.commit()
-            print(f"\nWrote {len(rows)} prediction row(s) to "
+            print(f"\nWrote {inserted} prediction row(s) to "
                   f"baseball_data.betting_ml.daily_model_predictions "
-                  f"(model_version={MODEL_VERSION}, inserted_at={inserted_at.isoformat()})")
+                  f"(model_version={model_version}, feature_version={feature_version}, "
+                  f"skipped_duplicates={skipped}, date={target_date})")
         finally:
             conn.close()
     except Exception as exc:
-        print(f"\nWarning: Could not write predictions to Snowflake ({exc}). "
-              "Parquet output is still valid.")
+        print(f"\nWarning: Could not write predictions to Snowflake ({exc}).")
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 
 def _load_ngb_cfg(path: str, target_label: str) -> tuple[int, str]:
     p = Path(path)
@@ -283,7 +418,6 @@ def _load_ngb_cfg(path: str, target_label: str) -> tuple[int, str]:
 
 
 def _load_best_alpha() -> float:
-    # Primary source: alpha_tuning_results (Card 4.13 output)
     try:
         conn = get_snowflake_connection()
         try:
@@ -301,7 +435,6 @@ def _load_best_alpha() -> float:
     except Exception as exc:
         print(f"Warning: Could not load alpha from Snowflake ({exc}); trying local cache")
 
-    # Fallback: best_alpha.json written by Card 4.13
     cache_path = PROJECT_ROOT / "betting_ml" / "models" / "best_alpha.json"
     if cache_path.exists():
         with open(cache_path) as f:
@@ -339,7 +472,7 @@ INSERT INTO baseball_data.config.prediction_log (
 """
 
 
-def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None:
+def _write_prediction_log(output_rows: list[dict], prediction_date: str, dry_run: bool = False) -> None:
     rows = []
     pred_date = date.fromisoformat(prediction_date)
     for r in output_rows:
@@ -367,6 +500,11 @@ def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None
             "ev":                        ev,
             "kelly_fraction":            r.get("implied_kelly_fraction"),
         })
+
+    if dry_run:
+        print(f"[dry-run] Would write {len(rows)} rows to prediction_log for {prediction_date}")
+        return
+
     conn = get_snowflake_connection()
     try:
         cur = conn.cursor()
@@ -494,12 +632,6 @@ WHERE pl.game_pk = c.game_pk
 
 
 def _backfill_outcomes() -> None:
-    """Backfill actual_outcome and closing_market_prob for settled games.
-
-    Idempotent — only touches rows where the target column IS NULL.
-    For retroactive --date runs the outcomes are already in mart tables
-    so they populate immediately. For today's games, 0 rows are updated.
-    """
     steps = [
         ("actual_outcome h2h",              _BACKFILL_OUTCOME_H2H_SQL),
         ("actual_outcome totals",           _BACKFILL_OUTCOME_TOTALS_SQL),
@@ -518,129 +650,129 @@ def _backfill_outcomes() -> None:
         conn.close()
 
 
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Score today's MLB games using the Phase 5 production models."
+        description="Score MLB games using production models. Supports single-date and backfill modes."
     )
     parser.add_argument(
         "--date",
         metavar="YYYY-MM-DD",
-        default=date.today().isoformat(),
-        help="Target game date (default: today)",
+        default=None,
+        help="Target game date (default: today). Mutually exclusive with --start-date/--end-date.",
+    )
+    parser.add_argument(
+        "--start-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="Start date for backfill range (inclusive). Requires --end-date.",
+    )
+    parser.add_argument(
+        "--end-date",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="End date for backfill range (inclusive). Requires --start-date.",
+    )
+    parser.add_argument(
+        "--model-tag",
+        choices=["v0", "v1"],
+        default="v1",
+        help="Which model version to score with: v1=current champion, v0=rollback/challenger. "
+             "Default: v1",
+    )
+    parser.add_argument(
+        "--feature-version",
+        default=None,
+        help="Label stored in feature_version column (default: same as --model-tag).",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Score and print output but do not write to Snowflake.",
     )
     parser.add_argument(
         "--no-log-snowflake",
         action="store_true",
         default=False,
-        help="Skip writing to prediction_log (dry-run mode)",
+        help="Skip writing to prediction_log.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.date and (args.start_date or args.end_date):
+        parser.error("--date is mutually exclusive with --start-date/--end-date")
+    if bool(args.start_date) != bool(args.end_date):
+        parser.error("--start-date and --end-date must be used together")
+    if args.feature_version is None:
+        args.feature_version = args.model_tag
+
+    return args
+
+
+def _date_range(start: str, end: str) -> list[str]:
+    d = date.fromisoformat(start)
+    stop = date.fromisoformat(end)
+    result = []
+    while d <= stop:
+        result.append(d.isoformat())
+        d += timedelta(days=1)
+    return result
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Single-date scoring core
 # ---------------------------------------------------------------------------
 
-
-def main() -> None:
-    args = _parse_args()
-    target_date = args.date
-    print(f"Scoring games for {target_date}")
-
-    # ------------------------------------------------------------------
-    # Data loading
-    # ------------------------------------------------------------------
+def _score_date(
+    target_date: str,
+    df_hist: pd.DataFrame,
+    ngb_total: object,
+    ngb_diff: object,
+    clf_hw: object,
+    ngb_tot_dist: str,
+    ngb_diff_dist: str,
+    best_alpha: float,
+    model_tag: str,
+    model_version: str,
+    feature_version: str,
+    dry_run: bool,
+    log_snowflake: bool,
+) -> None:
+    print(f"\n--- Scoring {target_date} (model_tag={model_tag}) ---")
     df_today = load_todays_features(target_date)
 
     if df_today.empty:
-        print(f"No games found for {target_date}.")
-        sys.exit(0)
+        print(f"  No games found for {target_date}.")
+        return
 
-    print(f"  Found {len(df_today)} game(s) for {target_date}")
+    print(f"  Found {len(df_today)} game(s)")
 
-    # Filter to confirmed lineups when lineup data is available (home_lineup_slot_1 /
-    # away_lineup_slot_1 are populated by the nightly dbt pipeline; the statsapi
-    # fallback path does not have them, so the filter is skipped gracefully).
     lineup_cols = ("home_lineup_slot_1", "away_lineup_slot_1")
     if all(c in df_today.columns for c in lineup_cols):
         before = len(df_today)
         df_today = df_today[
             df_today["home_lineup_slot_1"].notna() & df_today["away_lineup_slot_1"].notna()
         ]
-        print(f"  Lineup filter: {before} → {len(df_today)} game(s) with confirmed lineups")
+        if len(df_today) < before:
+            print(f"  Lineup filter: {before} → {len(df_today)} game(s)")
         if df_today.empty:
-            print("No games with confirmed lineups found.")
-            sys.exit(0)
+            print("  No games with confirmed lineups.")
+            return
 
     for col in ("has_odds", "home_win_prob_consensus"):
         if col not in df_today.columns:
-            raise ValueError(
-                f"Required column '{col}' not found in today's feature data. "
-                f"Available columns: {sorted(df_today.columns.tolist())}"
-            )
+            raise ValueError(f"Required column '{col}' missing from today's features.")
 
-    print("Loading historical features for imputation pipeline fitting...")
-    df_hist = load_features(min_games_played=15)
-    print(f"  Loaded {len(df_hist):,} historical rows")
+    # ------ NGBoost feature matrices ------
+    X_ngb = _build_feature_matrix(df_today, df_hist, "total_runs", model_tag, ngb_total)
+    X_diff = _build_feature_matrix(df_today, df_hist, "run_differential", model_tag, ngb_diff)
+    X_clf  = _build_feature_matrix(df_today, df_hist, "home_win", model_tag, clf_hw)
 
-    # ------------------------------------------------------------------
-    # Feature matrix preparation
-    # ------------------------------------------------------------------
-    # Load the canonical feature list saved at model training time so the
-    # column count and order exactly match what the production models expect.
-    _feature_cols_path = PROJECT_ROOT / "model_artifacts" / "feature_columns.json"
-    feature_cols = json.loads(_feature_cols_path.read_text())
-    missing = set(feature_cols) - set(df_today.columns)
-    if missing:
-        warnings.warn(
-            f"{len(missing)} model features missing from today's data (will fill NaN): "
-            f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
-        )
-
-    X_hist = df_hist.reindex(columns=feature_cols, fill_value=np.nan)
-    X_today_raw = df_today.reindex(columns=feature_cols, fill_value=np.nan)
-
-    pipeline = build_imputation_pipeline()
-    X_hist_imp = pipeline.fit_transform(X_hist)
-    X_hist_imp = X_hist_imp.select_dtypes(include=[np.number])
-
-    X_today_imp = pipeline.transform(X_today_raw)
-    X_today_imp = X_today_imp.reindex(columns=X_hist_imp.columns, fill_value=0.0)
-
-    # ------------------------------------------------------------------
-    # Load production models
-    # ------------------------------------------------------------------
-    print("Loading production models from registry...")
-    ngb_total = load_model("total_runs", "prod")
-    ngb_diff  = load_model("run_differential", "prod")
-    clf_hw    = load_model("home_win", "prod")
-    print(f"  total_runs: {type(ngb_total).__name__}")
-    print(f"  run_differential: {type(ngb_diff).__name__}")
-    print(f"  home_win: {type(clf_hw).__name__}")
-
-    # ------------------------------------------------------------------
-    # Load NGBoost distribution config
-    # ------------------------------------------------------------------
-    _, ngb_tot_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_total_runs.json", "total_runs"
-    )
-    _, ngb_diff_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_run_diff.json", "run_differential"
-    )
-
-    # ------------------------------------------------------------------
-    # Load best_alpha from Snowflake
-    # ------------------------------------------------------------------
-    best_alpha = _load_best_alpha()
-    print(f"  best_alpha={best_alpha}")
-
-    # ------------------------------------------------------------------
-    # Score today's games
-    # ------------------------------------------------------------------
-    X_vals = X_today_imp.values
-
-    pred_dist_tot = ngb_total.pred_dist(X_vals)
-    # LogNormal uses scipy lognorm convention: s=sigma (log-std), scale=exp(mu)
+    # ------ Score NGBoost total runs ------
+    pred_dist_tot = ngb_total.pred_dist(X_ngb)
     if "s" in pred_dist_tot.params:
         scale_tot = pred_dist_tot.params["s"]
         loc_tot   = np.log(pred_dist_tot.params["scale"])
@@ -657,32 +789,20 @@ def main() -> None:
         ngb_tot_dist, {"loc": loc_tot, "scale": scale_tot}, total_line=total_line_vals
     )
 
-    pred_dist_diff = ngb_diff.pred_dist(X_vals)
+    # ------ Score NGBoost run diff ------
+    pred_dist_diff = ngb_diff.pred_dist(X_diff)
     loc_diff   = pred_dist_diff.params["loc"]
     scale_diff = pred_dist_diff.params["scale"]
     p_home_win_ngb = p_over_line(
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    if hasattr(clf_hw, "n_features_in_"):
-        _expected_n = clf_hw.n_features_in_
-    elif hasattr(clf_hw, "xgb_classifier"):
-        _expected_n = clf_hw.xgb_classifier.n_features_in_
-    else:
-        _expected_n = None
-    if _expected_n is not None and X_today_imp.shape[1] != _expected_n:
-        warnings.warn(
-            f"clf_hw expects {_expected_n} features but got {X_today_imp.shape[1]}. "
-            f"Model retraining may be needed."
-        )
-    X_clf = X_today_imp.values
+    # ------ Score classifier ------
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
 
-    # ------------------------------------------------------------------
-    # Build output rows (has_odds=True games only, Card 4.13 schema)
-    # ------------------------------------------------------------------
+    # ------ Market data ------
     has_odds_col = df_today["has_odds"].fillna(False).astype(bool)
-    h2h_mkt  = (
+    h2h_mkt = (
         df_today["home_win_prob_consensus"].values
         if "home_win_prob_consensus" in df_today.columns
         else np.full(len(df_today), np.nan)
@@ -693,6 +813,24 @@ def main() -> None:
         else np.full(len(df_today), np.nan)
     )
 
+    # ------ Build picks ------
+    picks_list: list[str] = []
+    for i in range(len(df_today)):
+        ngb_win = float(p_home_win_ngb[i])
+        clf_win = float(p_home_win_clf[i])
+        cal_win = _apply_calibrator(ngb_win * 0.5 + clf_win * 0.5)
+        if cal_win >= 0.55:
+            picks_list.append(f"HOME ({cal_win*100:.0f}%)")
+        elif cal_win <= 0.45:
+            picks_list.append(f"AWAY ({(1-cal_win)*100:.0f}%)")
+        elif cal_win > 0.50:
+            picks_list.append(f"TOSS-UP (lean HOME {cal_win*100:.0f}%)")
+        elif cal_win < 0.50:
+            picks_list.append(f"TOSS-UP (lean AWAY {(1-cal_win)*100:.0f}%)")
+        else:
+            picks_list.append("EVEN")
+
+    # ------ Build output rows for prediction_log ------
     output_rows: list[dict] = []
     for i, row_idx in enumerate(df_today.index):
         game_key = str(row_idx)
@@ -704,16 +842,16 @@ def main() -> None:
 
         if pd.notna(h2h_mkt[i]):
             cons_prob = float(p_home_win_ngb[i]) * 0.5 + float(p_home_win_clf[i]) * 0.5
-            calibrated_win_prob = _apply_calibrator(cons_prob)
+            cal = _apply_calibrator(cons_prob)
             mkt = float(h2h_mkt[i])
-            edge = compute_edge(calibrated_win_prob, mkt)
+            edge = compute_edge(cal, mkt)
             output_rows.append({
                 "game_key":             game_key,
                 "market":               "h2h",
-                "model_prob":           calibrated_win_prob,
+                "model_prob":           cal,
                 "market_implied_prob":  mkt,
                 "alpha":                best_alpha,
-                "posterior_prob":       compute_posterior(calibrated_win_prob, mkt, best_alpha),
+                "posterior_prob":       compute_posterior(cal, mkt, best_alpha),
                 "edge":                 edge,
                 "implied_kelly_fraction": compute_kelly(edge, mkt),
             })
@@ -733,147 +871,12 @@ def main() -> None:
                 "implied_kelly_fraction": compute_kelly(edge, mkt),
             })
 
-    # Rank has_odds games by abs(edge) descending (highest-conviction bets first).
     output_rows.sort(key=lambda r: abs(r.get("edge") or 0.0), reverse=True)
 
-
-    # ------------------------------------------------------------------
-    # Print picks table (all games, not just has_odds)
-    # ------------------------------------------------------------------
-    def _matchup(idx: int) -> str:
-        row = df_today.iloc[idx]
-        for home_col, away_col in [
-            ("home_team_abbrev", "away_team_abbrev"),
-            ("home_team", "away_team"),
-        ]:
-            if home_col in df_today.columns and away_col in df_today.columns:
-                return f"{row[away_col]} @ {row[home_col]}"
-        return str(df_today.index[idx])
-
-    def _game_time(idx: int) -> str:
-        row = df_today.iloc[idx]
-        if "game_datetime" in df_today.columns and pd.notna(row.get("game_datetime")):
-            return str(row["game_datetime"])
-        if "game_date" in df_today.columns:
-            return str(row["game_date"])
-        return "—"
-
-    def _pct(val) -> str:
-        if pd.isna(val):
-            return "—"
-        return f"{float(val)*100:.1f}%"
-
-    pred_total = loc_tot
-    picks_list: list[str] = []
-
-    rows_table = []
-    for i in range(len(df_today)):
-        has_odds = has_odds_col.iloc[i]
-        ngb_win = float(p_home_win_ngb[i])
-        clf_win = float(p_home_win_clf[i])
-        consensus_win = ngb_win * 0.5 + clf_win * 0.5
-        calibrated_win = _apply_calibrator(consensus_win)
-
-        if calibrated_win >= 0.55:
-            pick = f"HOME ({calibrated_win*100:.0f}%)"
-        elif calibrated_win <= 0.45:
-            pick = f"AWAY ({(1-calibrated_win)*100:.0f}%)"
-        elif calibrated_win > 0.50:
-            pick = f"TOSS-UP (lean HOME {calibrated_win*100:.0f}%)"
-        elif calibrated_win < 0.50:
-            pick = f"TOSS-UP (lean AWAY {(1-calibrated_win)*100:.0f}%)"
-        else:
-            pick = "EVEN"
-
-        picks_list.append(pick)
-
-        _h2h_v = float(h2h_mkt[i]) if pd.notna(h2h_mkt[i]) else None
-        _edge_v = compute_edge(calibrated_win, _h2h_v) if (has_odds and _h2h_v is not None) else None
-        _post_v = compute_posterior(calibrated_win, _h2h_v, best_alpha) if (has_odds and _h2h_v is not None) else None
-        _kelly_v = compute_kelly(_edge_v, _h2h_v) if (_edge_v is not None and _h2h_v is not None) else None
-
-        rows_table.append({
-            "Matchup":            _matchup(i),
-            "Pick":               pick,
-            "Game Time":          _game_time(i),
-            "Pred Total":         f"{pred_total[i]:.1f}",
-            "Model Win% (NGBoost)": _pct(p_home_win_ngb[i]),
-            "Classifier Win%":    _pct(p_home_win_clf[i]),
-            "Calibrated Win%":    _pct(calibrated_win),
-            "Market Win%":        _pct(_h2h_v) if has_odds else "—",
-            "Posterior%":         _pct(_post_v),
-            "Edge":               f"{_edge_v*100:.1f}%" if _edge_v is not None else "—",
-            "Kelly%":             f"{_kelly_v*100:.2f}%" if _kelly_v is not None else "—",
-        })
-
-
-    df_table = pd.DataFrame(rows_table)
-    print("\n" + df_table.to_string(index=False))
-
-    print("""
-Column Definitions
-------------------
-  Matchup              Away team @ Home team. All win probabilities below are for the HOME team.
-
-  Pick                 Model recommendation based on the consensus of Model Win% (NGBoost) and
-                       Classifier Win%.
-                         HOME (X%)  — model strongly favors home (consensus >55%); X% = home win prob.
-                         AWAY (X%)  — model strongly favors away (consensus <45%); X% = away win prob.
-                         TOSS-UP (lean HOME/AWAY X%) — consensus in 45–55% range; lean direction shown.
-                         EVEN — consensus is exactly 50/50.
-
-  Game Time            Scheduled start time (UTC).
-
-  Pred Total           NGBoost point estimate for the total combined runs scored in the game.
-
-  Model Win% (NGBoost) Probability the HOME team wins, from the NGBoost distributional model trained
-                       on run differential. NGBoost outputs a full probability distribution over
-                       outcomes, and this is the probability that home run differential > 0.
-
-  Classifier Win%      Probability the HOME team wins, from a separately trained XGBoost classifier
-                       with Platt (sigmoid) calibration. Uses the same features but is trained
-                       directly on win/loss outcomes rather than run differential.
-
-  Market Win%          Consensus vig-adjusted implied probability the HOME team wins, averaged across
-                       all bookmakers. Vig-adjustment removes the bookmaker's built-in margin so the
-                       home and away probabilities sum to 100%.
-
-  Posterior%           Bayesian blend of Model Win% (NGBoost) and Market Win%, controlled by
-                       best_alpha (tuned on historical data). Values near Market Win% mean the market
-                       is weighted heavily; values near Model Win% mean the model is trusted more.
-                       This is the final probability used for Kelly sizing.
-
-  Edge                 Model Win% (NGBoost) minus Market Win% — how much the model disagrees with
-                       the market, expressed in percentage points.
-                         Positive (+) = model thinks the home team is more likely to win than the
-                           market implies → potential value on a HOME bet.
-                         Negative (−) = model thinks the home team is less likely to win than the
-                           market implies → potential value on an AWAY bet.
-
-  Kelly%               Implied Kelly criterion bet size as a fraction of bankroll, derived from
-                       Edge and Market Win%.
-                         Positive (+) = Kelly recommends betting on the HOME team.
-                         Negative (−) = Kelly recommends betting on the AWAY team.
-                       These are full-Kelly values — in practice apply a fractional multiplier
-                       (e.g. 0.25×) to reduce variance before sizing real bets.""")
-
-    n_h2h = sum(1 for r in output_rows if r["market"] == "h2h")
-    n_tot = sum(1 for r in output_rows if r["market"] == "totals")
-    if output_rows:
-        print(f"\n{len(output_rows)} output rows ({n_h2h} h2h, {n_tot} totals) ready for Snowflake logging.")
-    else:
-        print("\n0 output rows (no odds available — picks table above uses model probabilities only).")
-
-    # ------------------------------------------------------------------
-    # Write prediction_log to Snowflake
-    # ------------------------------------------------------------------
-    if not args.no_log_snowflake:
-        _write_prediction_log(output_rows, target_date)
+    if log_snowflake and not dry_run:
+        _write_prediction_log(output_rows, target_date, dry_run=False)
         _backfill_outcomes()
 
-    # ------------------------------------------------------------------
-    # Write predictions to Snowflake
-    # ------------------------------------------------------------------
     run_ts = datetime.now(timezone.utc).replace(tzinfo=None)
     _write_predictions_to_snowflake(
         df_today=df_today,
@@ -892,7 +895,81 @@ Column Definitions
         has_odds_col=has_odds_col,
         best_alpha=best_alpha,
         picks=picks_list,
+        model_version=model_version,
+        feature_version=feature_version,
+        dry_run=dry_run,
     )
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    args = _parse_args()
+    model_tag     = args.model_tag
+    feature_version = args.feature_version
+    model_version = _model_version_label(model_tag)
+    dry_run       = args.dry_run
+    log_snowflake = not args.no_log_snowflake
+
+    # Determine date range
+    if args.start_date:
+        dates = _date_range(args.start_date, args.end_date)
+        print(f"Backfill mode: {len(dates)} dates from {args.start_date} to {args.end_date} "
+              f"(model_tag={model_tag}, feature_version={feature_version})")
+    else:
+        target = args.date or date.today().isoformat()
+        dates = [target]
+        print(f"Scoring {target} (model_tag={model_tag})")
+
+    # ------ Load historical data for imputation ------
+    print("Loading historical features for imputation pipeline fitting...")
+    df_hist = load_features(min_games_played=15)
+    print(f"  Loaded {len(df_hist):,} historical rows")
+
+    # ------ Load models ------
+    print(f"Loading models (tag={model_tag})...")
+    ngb_total = _load_model_for_tag("total_runs", model_tag)
+    ngb_diff  = _load_model_for_tag("run_differential", model_tag)
+    clf_hw    = _load_model_for_tag("home_win", model_tag)
+    print(f"  total_runs: {type(ngb_total).__name__}")
+    print(f"  run_differential: {type(ngb_diff).__name__}")
+    print(f"  home_win: {type(clf_hw).__name__}")
+
+    # ------ Load NGBoost distribution config ------
+    _, ngb_tot_dist = _load_ngb_cfg(
+        "betting_ml/evaluation/tuning_results_ngboost_total_runs.json", "total_runs"
+    )
+    _, ngb_diff_dist = _load_ngb_cfg(
+        "betting_ml/evaluation/tuning_results_ngboost_run_diff.json", "run_differential"
+    )
+
+    best_alpha = _load_best_alpha()
+    print(f"  best_alpha={best_alpha}")
+
+    # ------ Score each date ------
+    for target_date in dates:
+        try:
+            _score_date(
+                target_date=target_date,
+                df_hist=df_hist,
+                ngb_total=ngb_total,
+                ngb_diff=ngb_diff,
+                clf_hw=clf_hw,
+                ngb_tot_dist=ngb_tot_dist,
+                ngb_diff_dist=ngb_diff_dist,
+                best_alpha=best_alpha,
+                model_tag=model_tag,
+                model_version=model_version,
+                feature_version=feature_version,
+                dry_run=dry_run,
+                log_snowflake=log_snowflake,
+            )
+        except Exception as exc:
+            print(f"  Error scoring {target_date}: {exc}")
+            if len(dates) == 1:
+                raise
 
 
 if __name__ == "__main__":

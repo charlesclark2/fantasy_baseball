@@ -9,8 +9,11 @@ Logic:
   1. Query stg_statsapi_lineups_wide for today's games where both home and
      away lineups are confirmed (slot_1_player_id populated for both sides).
   2. Compare against lineup_monitor_state to find games not yet triggered.
-  3. Insert new entries into lineup_monitor_state (idempotent with NOT EXISTS).
-  4. Write has_new_games (true/false) and new_game_pks (comma-separated) to
+  3. For already-triggered games, check if the starting pitcher changed —
+     if so, re-trigger so updated features and predictions are produced.
+  4. Insert new entries into lineup_monitor_state (idempotent with NOT EXISTS).
+     Update existing entries when a pitcher change is detected.
+  5. Write has_new_games (true/false) and new_game_pks (comma-separated) to
      $GITHUB_OUTPUT. If not running in GHA, prints to stdout instead.
 
 Snowflake authentication — private key (preferred) or password fallback:
@@ -104,42 +107,86 @@ def main() -> None:
     cur = conn.cursor()
 
     try:
-        # Step 1 — find games where both home and away lineups are confirmed
+        # Step 1 — confirmed games (both batting lineups posted) with current probable pitchers.
+        # In the universal DH era pitchers don't appear in batting lineups, so we join
+        # stg_statsapi_probable_pitchers to track starter changes separately.
         cur.execute(
             """
-            SELECT game_pk
-            FROM baseball_data.betting.stg_statsapi_lineups_wide
-            WHERE official_date = %s::date
-            GROUP BY game_pk
-            HAVING COUNT(DISTINCT home_away) = 2
+            SELECT
+                l.game_pk,
+                p_home.probable_pitcher_id AS home_starter_id,
+                p_away.probable_pitcher_id AS away_starter_id
+            FROM (
+                SELECT game_pk
+                FROM baseball_data.betting.stg_statsapi_lineups_wide
+                WHERE official_date = %s::date
+                GROUP BY game_pk
+                HAVING COUNT(DISTINCT home_away) = 2
+            ) l
+            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_home
+                ON l.game_pk = p_home.game_pk AND p_home.side = 'home'
+            LEFT JOIN baseball_data.betting.stg_statsapi_probable_pitchers p_away
+                ON l.game_pk = p_away.game_pk AND p_away.side = 'away'
             """,
             [today],
         )
-        confirmed = {row[0] for row in cur.fetchall()}
+        confirmed: dict[int, tuple[int | None, int | None]] = {
+            row[0]: (row[1], row[2]) for row in cur.fetchall()
+        }
         log.info("Confirmed games today: %d", len(confirmed))
 
-        # Step 2 — find which games have already been triggered today
+        # Step 2 — games already triggered today, with stored starter IDs
         cur.execute(
             """
-            SELECT game_pk
+            SELECT game_pk, home_starter_id, away_starter_id
             FROM baseball_data.config.lineup_monitor_state
             WHERE run_date = %s::date
             """,
             [today],
         )
-        already_triggered = {row[0] for row in cur.fetchall()}
+        already_triggered: dict[int, tuple[int | None, int | None]] = {
+            row[0]: (row[1], row[2]) for row in cur.fetchall()
+        }
         log.info("Already triggered today: %d", len(already_triggered))
 
-        new_game_pks = sorted(confirmed - already_triggered)
-        log.info("New game_pks to trigger: %s", new_game_pks)
+        new_game_pks: list[int] = []
+        pitcher_change_pks: list[int] = []
 
-        # Step 3 — record new entries in the state table
+        for pk, (home_starter, away_starter) in confirmed.items():
+            if pk not in already_triggered:
+                new_game_pks.append(pk)
+            else:
+                stored_home, stored_away = already_triggered[pk]
+                # If stored starters are NULL (pre-migration rows), skip — treat as unknown.
+                # On the next run the starters will be populated and changes can be detected.
+                if stored_home is None or stored_away is None:
+                    continue
+                if stored_home != home_starter or stored_away != away_starter:
+                    log.info(
+                        "Pitcher change detected for game_pk=%d: "
+                        "home %s→%s, away %s→%s",
+                        pk, stored_home, home_starter, stored_away, away_starter,
+                    )
+                    pitcher_change_pks.append(pk)
+
+        all_trigger_pks = sorted(new_game_pks + pitcher_change_pks)
+        log.info(
+            "New game_pks: %s | Pitcher change pks: %s",
+            new_game_pks,
+            pitcher_change_pks,
+        )
+
+        # Step 3 — record new entries; update starter IDs for pitcher changes
         for pk in new_game_pks:
+            home_starter, away_starter = confirmed[pk]
+            # Probable pitcher may be NULL if not yet announced — store NULL rather than cast error
+            home_cast = f"{home_starter}::int" if home_starter is not None else "NULL::int"
+            away_cast = f"{away_starter}::int" if away_starter is not None else "NULL::int"
             cur.execute(
-                """
+                f"""
                 INSERT INTO baseball_data.config.lineup_monitor_state
-                    (run_date, game_pk, triggered_at)
-                SELECT %s::date, %s::int, CURRENT_TIMESTAMP()
+                    (run_date, game_pk, triggered_at, home_starter_id, away_starter_id)
+                SELECT %s::date, %s::int, CURRENT_TIMESTAMP(), {home_cast}, {away_cast}
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM baseball_data.config.lineup_monitor_state
@@ -149,6 +196,21 @@ def main() -> None:
                 [today, pk, today, pk],
             )
 
+        for pk in pitcher_change_pks:
+            home_starter, away_starter = confirmed[pk]
+            home_cast = f"{home_starter}::int" if home_starter is not None else "NULL::int"
+            away_cast = f"{away_starter}::int" if away_starter is not None else "NULL::int"
+            cur.execute(
+                f"""
+                UPDATE baseball_data.config.lineup_monitor_state
+                SET home_starter_id = {home_cast},
+                    away_starter_id = {away_cast},
+                    triggered_at    = CURRENT_TIMESTAMP()
+                WHERE run_date = %s::date AND game_pk = %s::int
+                """,
+                [today, pk],
+            )
+
         # Audit log
         cur.execute(
             """
@@ -156,14 +218,14 @@ def main() -> None:
                 (task_name, run_ts, status, rows_affected)
             VALUES (%s, CURRENT_TIMESTAMP(), 'SUCCESS', %s)
             """,
-            [TASK, len(new_game_pks)],
+            [TASK, len(all_trigger_pks)],
         )
         conn.commit()
 
         # Step 4 — write GHA outputs
-        write_github_output("has_new_games", "true" if new_game_pks else "false")
-        write_github_output("new_game_pks", ",".join(str(pk) for pk in new_game_pks))
-        log.info("Done. has_new_games=%s", bool(new_game_pks))
+        write_github_output("has_new_games", "true" if all_trigger_pks else "false")
+        write_github_output("new_game_pks", ",".join(str(pk) for pk in all_trigger_pks))
+        log.info("Done. has_new_games=%s", bool(all_trigger_pks))
 
     except Exception as e:
         log.error("lineup_monitor failed: %s", e)
