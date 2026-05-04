@@ -1,179 +1,332 @@
+---
 apiVersion: planspec.io/v1alpha1
 kind: Goal
 metadata:
-  name: full-prediction-backfill
+  name: champion-challenger-model-versioning
   phase: "7"
   card: "7.L2"
   priority: P2
   blocker: "Card 7.L1 (historical feature backfill) must complete first"
 spec:
   description: |
-    Batch re-score all game dates from 2021-04-01 through the current date using
-    the v1 model and the full Phase 7 feature set. Store results alongside existing
-    v0 predictions (never overwrite). Compile multi-year performance metrics by
-    season and compare to v0 baseline.
+    Build a champion/challenger model versioning framework that enables any two
+    deployed model versions to be compared head-to-head on the same historical
+    date range before a new version is promoted to production.
 
-    Why the full historical range matters: the 2026-only backfill (36 game dates)
-    is too small to reliably measure mean h2h edge or % positive edge — a few bad
-    weeks can swamp the signal. Scoring 2021–2026 gives 4–5 full seasons and
-    hundreds of games per evaluation period, making metric comparisons statistically
-    meaningful. The Model Performance page (6.E) also becomes far more useful with
-    a multi-year trend.
+    MOTIVATION:
+      Before this card, there is no systematic way to validate that a retrained
+      model actually performs better than its predecessor. The current deploy
+      process (8.H2) sets an acceptance bar on CV metrics but not on live-game
+      prediction quality. This card closes that gap: re-scoring a historical
+      window with both the champion (current deployed model) and the challenger
+      (newly retrained model) produces a direct metric comparison on real games,
+      making the promotion decision evidence-based rather than CV-only.
 
-    Two new columns on daily_model_predictions:
-      model_version   — identifies the model weights used (e.g., 'v0', 'v1')
-      feature_version — identifies feature completeness ('v1_full' for seasons
-                        where all Phase 7 features are populated, 'v1_partial'
-                        for seasons with higher null rates per 7.L1 audit)
+    WHAT CHANGES:
+      1. model_registry.yaml gains feature_columns_path and
+         rollback_feature_columns_path so each model version knows exactly
+         which feature set it was trained on. This is required because v0 uses
+         267 features and v1 uses 292 — passing the wrong feature set to the
+         wrong artifact produces silently wrong predictions.
 
-    Existing v0 rows must never be modified. All backfill writes are INSERT only.
+      2. predict_today.py gains --start-date, --end-date, --model-tag, and
+         --feature-version flags. --model-tag ('v0' or 'v1') controls which
+         artifacts and feature column list are loaded from the registry;
+         --feature-version is a metadata string written to the DB row.
+
+      3. daily_model_predictions gains a feature_version column. Existing v0
+         rows are backfilled with feature_version = 'v0'.
+
+      4. scripts/compare_model_versions.py computes side-by-side metrics for
+         any two model_version tags over a shared date range and outputs a
+         markdown report.
+
+      5. The 8.H2 deploy runbook is updated to require a comparison run as
+         Step 1 before any model is promoted. The comparison is the primary
+         gate; CV metrics are a secondary signal.
+
+    ONGOING USE:
+      Every future retrain follows this protocol:
+        1. Train challenger; save artifact; update registry rollback fields.
+        2. Re-score the last two full seasons with --model-tag=<challenger_tag>.
+        3. Run compare_model_versions.py for challenger vs. champion.
+        4. If challenger wins on the primary metric (mean_h2h_edge, 2024+
+           window), promote. If not, revert or investigate.
+
+    CURRENT STATE (as of 2026-05-04):
+      - daily_model_predictions has 1,215 v0 rows (2026-03-27 through 2026-05-04).
+        feature_version column does not yet exist.
+      - v0 artifacts: ngboost_tuned_prod.pkl (total_runs, run_diff; 267 features)
+        and xgb_classifier_tuned_2026.pkl (home_win; 267 features).
+      - v1 artifacts: currently deployed (292 features; all three targets).
+      - feature_columns_v0.json does not exist as a named file. It must be
+        extracted from git history before the v0 backfill can run.
+      - v0 baseline metrics: mean_h2h_edge = −0.017, pct_positive = 35.39%
+        (2026 dates only — statistically weak; goal of this card is to establish
+        a multi-season baseline).
 
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
 metadata:
-  name: full-prediction-backfill-plan
+  name: champion-challenger-model-versioning-plan
   phase: "7"
   card: "7.L2"
 spec:
   goal:
-    name: full-prediction-backfill
+    name: champion-challenger-model-versioning
 
   tasks:
 
-    - id: extend-predict-script
-      name: Add batch flags and versioning columns to predict_today.py
+    - id: save-v0-feature-columns
+      name: Extract and save v0 feature column list from git history
       description: |
-        Modify betting_ml/scripts/predict_today.py (or its entrypoint) to support batch
-        re-scoring over a historical date range.
+        The v0 models (ngboost_tuned_prod.pkl, xgb_classifier_tuned_2026.pkl) were
+        trained on 267 features. The current feature_columns.json has 292 features.
+        Passing the wrong feature set to the wrong artifact produces silently wrong
+        predictions. Before any v0 backfill can run, the v0 feature column list must
+        be saved as a named, versioned file.
 
-        Changes required:
+        STEPS:
+          1. Find the commit immediately before the 7.MA retrain (tag: model/total_runs/v1
+             was created at commit 7c2aaf0 on 2026-05-04). The commit just prior is the
+             last state where feature_columns.json had 267 features.
 
-        1. CLI flags:
-             --start-date   YYYY-MM-DD   First game date to score (inclusive)
-             --end-date     YYYY-MM-DD   Last game date to score (inclusive)
-             --model-version            String tag written to model_version column
-                                          (default: 'v1')
-             --feature-version          String tag written to feature_version column
-                                          (default: 'v1_full'); operator overrides
-                                          to 'v1_partial' for seasons flagged in 7.L1
-                                          coverage audit
-             --dry-run                  Print date range and game count; skip writes
+             git log --oneline | grep -A1 "7c2aaf0"
+             git show <prior-commit>:betting_ml/models/feature_columns.json \
+                 > betting_ml/models/feature_columns_v0.json
 
-           When --start-date and --end-date are provided, iterate over each unique
-           game_date in that range that has games in the schedule (skip off-days).
-           Process dates sequentially; print progress: "Scoring YYYY-MM-DD (N games)".
+          2. Verify the file has ~267 feature entries:
+             python3 -c "import json; cols = json.load(open('betting_ml/models/feature_columns_v0.json')); print(len(cols))"
+             Expected: 267 (±2 for pipeline-generated indicators).
 
-        2. Schema changes — add columns to daily_model_predictions if they do not
-           exist:
-             ALTER TABLE baseball_data.statsapi.daily_model_predictions
-                 ADD COLUMN IF NOT EXISTS model_version   VARCHAR(20);
-             ALTER TABLE baseball_data.statsapi.daily_model_predictions
-                 ADD COLUMN IF NOT EXISTS feature_version VARCHAR(20);
+          3. Commit the file:
+             git add betting_ml/models/feature_columns_v0.json
+             git commit -m "Save v0 feature column list for champion/challenger backfill"
 
-           Backfill existing v0 rows:
-             UPDATE baseball_data.statsapi.daily_model_predictions
-             SET model_version = 'v0', feature_version = 'v0'
-             WHERE model_version IS NULL;
-
-        3. Write path: use INSERT INTO (not MERGE) to avoid touching existing rows.
-           Deduplicate guard: before inserting for a game_pk, check whether a row
-           with the same game_pk AND model_version already exists. If so, skip
-           (idempotent re-run safety).
-
-        4. Null feature handling: if Phase 7 feature columns are null for a game,
-           the model must still produce a prediction using only the available features.
-           Confirm that the trained model's feature pipeline handles nulls via
-           imputation (median fill or model-native null handling) and does not
-           error on sparse rows.
-
-           WEATHER FEATURE NOTE (as of 2026-05-02): predict_today.py contains a
-           _FEATURES_ADDED_AFTER_LAST_RETRAIN exclusion set that drops weather columns
-           (humidity_pct, temp_f, wind_component_mph, wind_direction_deg) before
-           calling the home_win classifier. This is a temporary workaround until
-           Card 7.D retrains the model with those features. For historical game dates
-           before weather data was ingested, those columns will be NaN-filled anyway
-           (acceptable). Once Card 7.D retraining is complete, the exclusion set
-           will be cleared and full 246-feature scoring will apply to all dates.
+        NOTE: feature_columns_v0.json must be added to .gitignore exceptions so it is
+        tracked (same pattern as elasticnet_2026.pkl exception in 8.H2).
 
       dependsOn: []
       acceptanceCriteria:
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
+            import json, pathlib
+            cols = json.loads(pathlib.Path('betting_ml/models/feature_columns_v0.json').read_text())
+            assert 260 <= len(cols) <= 275, f"Expected ~267 v0 features, got {len(cols)}"
+            print(f'feature_columns_v0.json: {len(cols)} features — OK')
+            EOF
+
+    - id: registry-feature-columns
+      name: Add feature_columns_path fields to model_registry.yaml
+      description: |
+        Each entry in model_registry.yaml should declare which feature column file
+        maps to the artifact_path and to the rollback_artifact_path. This makes the
+        mapping explicit and machine-readable so predict_today.py can look up the
+        right feature set by model tag without hard-coding paths.
+
+        Add two fields to each target in model_registry.yaml:
+
+          feature_columns_path: betting_ml/models/feature_columns.json
+          rollback_feature_columns_path: betting_ml/models/feature_columns_v0.json
+
+        These fields apply to all three targets (total_runs, run_differential,
+        home_win) because all three models were retrained together at 7.MA and
+        all three rollback artifacts use the 267-feature set.
+
+      dependsOn:
+        - save-v0-feature-columns
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import yaml, pathlib
+            reg = yaml.safe_load(pathlib.Path('betting_ml/models/model_registry.yaml').read_text())
+            for target in ['total_runs', 'run_differential', 'home_win']:
+                assert 'feature_columns_path' in reg[target], \
+                    f"{target} missing feature_columns_path"
+                assert 'rollback_feature_columns_path' in reg[target], \
+                    f"{target} missing rollback_feature_columns_path"
+            print('model_registry.yaml: feature_columns_path fields present for all targets — OK')
+            EOF
+
+    - id: schema-migration
+      name: Add feature_version column and backfill existing rows
+      description: |
+        Add feature_version VARCHAR(30) to daily_model_predictions and backfill
+        all existing rows. This is a one-time DDL + DML pair, safe to run
+        idempotently (IF NOT EXISTS / WHERE model_version IS NULL).
+
+        SQL to execute via mcp__snowflake__run_snowflake_query:
+
+          ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+              ADD COLUMN IF NOT EXISTS feature_version VARCHAR(30);
+
+          UPDATE baseball_data.betting_ml.daily_model_predictions
+          SET feature_version = 'v0'
+          WHERE feature_version IS NULL;
+
+        After migration, verify:
+          SELECT feature_version, COUNT(*) FROM daily_model_predictions
+          GROUP BY feature_version;
+          -- Expected: all rows show feature_version = 'v0'
+
+      dependsOn: []
+      acceptanceCriteria:
+        - type: manual
+          description: |
+            Run via mcp__snowflake__run_snowflake_query:
+              SELECT COUNT(*) FROM baseball_data.betting_ml.daily_model_predictions
+              WHERE feature_version IS NULL;
+            Expected: 0 rows with NULL feature_version.
+
+    - id: extend-predict-script
+      name: Add batch flags and model-tag loading to predict_today.py
+      description: |
+        Extend predict_today.py to support batch re-scoring over a date range
+        with any registered model version.
+
+        NEW CLI FLAGS:
+          --start-date   YYYY-MM-DD   First game date to score (inclusive).
+                                       When present, --date is ignored.
+          --end-date     YYYY-MM-DD   Last game date to score (inclusive).
+                                       Required when --start-date is provided.
+          --model-tag    STRING       Which model version to load from the registry.
+                                       'v1' (default) → artifact_path +
+                                                         feature_columns_path.
+                                       'v0' → rollback_artifact_path +
+                                               rollback_feature_columns_path.
+          --feature-version STRING    Tag written to the feature_version column.
+                                       Default: 'v1_full'. Set to 'v1_partial'
+                                       for seasons with known feature gaps per
+                                       7.L1 coverage audit.
+          --dry-run                   Print date range and game count; skip writes.
+
+        MODEL LOADING CHANGES:
+          The existing MODEL_VERSION constant and load_model() calls must be
+          replaced with a registry-aware loader:
+            1. Read model_registry.yaml.
+            2. Based on --model-tag, select artifact_path vs rollback_artifact_path
+               for each target, and the corresponding feature_columns_path.
+            3. Load the feature column list from that path (replaces the static
+               feature_columns.json import).
+            4. Write --model-tag value (e.g., 'v0', 'v1') as model_version to DB.
+               Write --feature-version value as feature_version to DB.
+
+        BATCH LOOP:
+          When --start-date and --end-date are provided:
+            1. Query distinct game_dates in that range from
+               baseball_data.statsapi.schedule (or equivalent source table).
+            2. For each date, call the existing single-date scoring logic.
+            3. Skip dates where a row with the same game_pk AND model_version
+               already exists (idempotent guard — INSERT only, never MERGE).
+            4. Print progress: "Scoring YYYY-MM-DD (N games) [model_tag=X]".
+
+        FEATURE SET MISMATCH GUARD:
+          After loading the feature column list, assert that the number of features
+          matches the model's expected input width. For sklearn Pipeline (home_win),
+          use m.n_features_in_. For NGBoost (total_runs, run_diff), use m.n_features.
+          Raise a clear error if they do not match — do not silently score.
+
+      dependsOn:
+        - registry-feature-columns
+        - schema-migration
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
             import ast, pathlib
             src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
-            tree = ast.parse(src)
-            # Check for required CLI flags
-            for flag in ['start_date', 'end_date', 'model_version', 'feature_version', 'dry_run']:
+            for flag in ['start_date', 'end_date', 'model_tag', 'feature_version', 'dry_run']:
                 assert flag in src, f"CLI flag '{flag}' not found in predict_today.py"
-            print('predict_today.py: all required CLI flags present')
+            print('predict_today.py: all required CLI flags present — OK')
             EOF
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
             import subprocess
             result = subprocess.run(
-                ['python3', 'betting_ml/scripts/predict_today.py',
-                 '--start-date', '2024-04-01', '--end-date', '2024-04-02',
-                 '--model-version', 'v1', '--dry-run'],
+                ['uv', 'run', 'python', 'betting_ml/scripts/predict_today.py',
+                 '--start-date', '2025-04-01', '--end-date', '2025-04-02',
+                 '--model-tag', 'v1', '--dry-run'],
                 capture_output=True, text=True
             )
             assert result.returncode == 0, f"predict_today.py dry-run failed:\n{result.stderr}"
-            print('predict_today.py: historical date range dry-run succeeded')
+            assert 'dry' in result.stdout.lower() or '2025-04' in result.stdout, \
+                "Expected dry-run output not found"
+            print('predict_today.py: batch dry-run v1 succeeded — OK')
             EOF
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
             import subprocess
-            # Confirm v0 rows were backfilled with model_version = 'v0'
-            # Actual verification via mcp__snowflake__run_snowflake_query:
-            # SELECT COUNT(*) FROM daily_model_predictions
-            # WHERE model_version IS NULL
-            # Expected: 0 rows with NULL model_version after backfill
-            print('MANUAL CHECK: verify no NULL model_version rows remain after v0 backfill UPDATE')
+            result = subprocess.run(
+                ['uv', 'run', 'python', 'betting_ml/scripts/predict_today.py',
+                 '--start-date', '2025-04-01', '--end-date', '2025-04-02',
+                 '--model-tag', 'v0', '--dry-run'],
+                capture_output=True, text=True
+            )
+            assert result.returncode == 0, f"predict_today.py v0 dry-run failed:\n{result.stderr}"
+            print('predict_today.py: batch dry-run v0 succeeded — OK')
             EOF
 
-    - id: run-full-backfill
-      name: Execute batch re-score for 2021–2026
+    - id: add-compare-script
+      name: Build compare_model_versions.py
       description: |
-        Run the full historical prediction backfill in seasonal batches to manage
-        runtime and allow partial restarts if a batch fails.
+        Create scripts/compare_model_versions.py. This script queries
+        daily_model_predictions for two model_version tags over a shared date
+        range and outputs a side-by-side metrics report as both a markdown table
+        (printed to stdout) and optionally written to betting_ml/evaluation/.
 
-        Recommended execution order (each is idempotent):
-          # Seasons where Phase 7 features are confirmed partial (per 7.L1 audit)
-          python3 betting_ml/scripts/predict_today.py \
-              --start-date 2021-04-01 --end-date 2022-10-31 \
-              --model-version v1 --feature-version v1_partial
+        USAGE:
+          uv run python scripts/compare_model_versions.py \
+              --champion v0 \
+              --challenger v1 \
+              --start-date 2024-04-01 \
+              --end-date 2026-05-04 \
+              --output-md betting_ml/evaluation/model_comparison_v0_v1.md
 
-          python3 betting_ml/scripts/predict_today.py \
-              --start-date 2023-04-01 --end-date 2023-10-31 \
-              --model-version v1 --feature-version v1_partial
+        METRICS COMPUTED (for each model_version × season × aggregate):
+          mean_h2h_edge   — mean(h2h_edge) where has_odds = TRUE
+          pct_positive    — % rows where h2h_edge > 0 (has_odds = TRUE)
+          brier_score     — mean((calibrated_win_prob - home_win_actual)^2)
+                            requires joining to game outcomes; skip if outcomes
+                            not yet resolved (game_date > today - 1)
+          totals_mae      — mean(|pred_total_runs - actual_total_runs|)
+                            requires joining to game outcomes
+          run_diff_mae    — mean(|pred_run_diff_loc - actual_run_diff|)
+          n_games         — total games scored
+          n_odds_games    — games where has_odds = TRUE
 
-          # Seasons where full Phase 7 feature coverage is confirmed
-          python3 betting_ml/scripts/predict_today.py \
-              --start-date 2024-04-01 --end-date 2024-10-31 \
-              --model-version v1 --feature-version v1_full
+        OUTPUT FORMAT — markdown table, one row per season per model_version,
+        plus an aggregate row for 2024+ (primary evaluation window):
 
-          python3 betting_ml/scripts/predict_today.py \
-              --start-date 2025-04-01 --end-date 2025-10-31 \
-              --model-version v1 --feature-version v1_full
+          | Season | Model | N | N_Odds | Mean_H2H_Edge | Pct_Pos | Brier | Tot_MAE |
+          |--------|-------|---|--------|---------------|---------|-------|---------|
+          | 2024   | v0    | … | …      | …             | …       | …     | …       |
+          | 2024   | v1    | … | …      | …             | …       | …     | …       |
+          ...
+          | 2024+  | v0    | … | …      | ...           | …       | …     | …       |
+          | 2024+  | v1    | … | …      | …             | …       | …     | …       |
 
-          python3 betting_ml/scripts/predict_today.py \
-              --start-date 2026-04-01 --end-date <today> \
-              --model-version v1 --feature-version v1_full
+        PROMOTION VERDICT:
+          Print a clear PROMOTE / DO NOT PROMOTE / INCONCLUSIVE verdict based on:
+            PROMOTE if:
+              challenger mean_h2h_edge (2024+) > champion mean_h2h_edge (2024+)
+              AND challenger brier_score (2024+) ≤ champion brier_score + 0.002
+            DO NOT PROMOTE if:
+              challenger mean_h2h_edge (2024+) ≤ champion mean_h2h_edge
+              AND no other metric shows meaningful improvement
+            INCONCLUSIVE if:
+              h2h_edge improves but brier_score regresses beyond +0.002, or
+              n_odds_games < 100 (insufficient sample for reliable comparison)
 
-        Note: adjust feature_version tags based on the recommendations in
-        betting_ml/evaluation/historical_feature_coverage.md (7.L1 output).
-
-        Post-run verification:
-          SELECT model_version, feature_version, MIN(game_date), MAX(game_date), COUNT(*)
-          FROM baseball_data.statsapi.daily_model_predictions
-          GROUP BY model_version, feature_version
-          ORDER BY model_version, feature_version
-
-        Expected: v0 rows present for 2026 dates; v1 rows present for 2021–2026.
-        No game_pk should have two v1 rows (deduplicate guard from Task 1).
+        OUTCOME DATA DEPENDENCY:
+          Brier and MAE metrics require game outcomes. Query from:
+            baseball_data.statsapi.schedule (home_score, away_score, status)
+          Rows where status != 'Final' are excluded from outcome-dependent metrics.
+          h2h_edge and pct_positive do not require outcomes and are always computed.
 
       dependsOn:
         - extend-predict-script
@@ -181,89 +334,119 @@ spec:
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
-            # Verify no duplicate v1 rows per game_pk
-            # Actual check via mcp__snowflake__run_snowflake_query:
-            # SELECT game_pk, COUNT(*) as n
-            # FROM daily_model_predictions
-            # WHERE model_version = 'v1'
-            # GROUP BY game_pk HAVING n > 1
-            # Expected: 0 rows
-            print('MANUAL CHECK: verify no duplicate v1 rows per game_pk in daily_model_predictions')
+            import ast, pathlib
+            src = pathlib.Path('scripts/compare_model_versions.py').read_text()
+            for symbol in ['champion', 'challenger', 'start_date', 'end_date',
+                           'mean_h2h_edge', 'brier', 'PROMOTE']:
+                assert symbol.lower() in src.lower(), \
+                    f"Expected symbol '{symbol}' not found in compare_model_versions.py"
+            print('compare_model_versions.py: required symbols present — OK')
             EOF
+
+    - id: run-initial-comparison
+      name: Run v0 and v1 backfills and produce initial comparison report
+      description: |
+        Execute the initial champion/challenger comparison that motivated this card.
+        Run in the following order — each command is idempotent and can be safely
+        re-run if interrupted.
+
+        STEP 1 — Backfill v0 for 2021–2025 (use rollback artifacts, 267 features):
+          Per 7.L1 coverage audit, 2021–2023 have known feature gaps. Use
+          feature-version tags accordingly:
+
+          uv run python betting_ml/scripts/predict_today.py \
+              --start-date 2021-04-01 --end-date 2023-10-31 \
+              --model-tag v0 --feature-version v0_partial
+
+          uv run python betting_ml/scripts/predict_today.py \
+              --start-date 2024-04-01 --end-date 2025-10-31 \
+              --model-tag v0 --feature-version v0_full
+
+        STEP 2 — Backfill v1 for 2021–2026 (use current artifacts, 292 features):
+
+          uv run python betting_ml/scripts/predict_today.py \
+              --start-date 2021-04-01 --end-date 2023-10-31 \
+              --model-tag v1 --feature-version v1_partial
+
+          uv run python betting_ml/scripts/predict_today.py \
+              --start-date 2024-04-01 --end-date 2026-05-04 \
+              --model-tag v1 --feature-version v1_full
+
+        STEP 3 — Run comparison:
+
+          uv run python scripts/compare_model_versions.py \
+              --champion v0 \
+              --challenger v1 \
+              --start-date 2024-04-01 \
+              --end-date 2026-05-04 \
+              --output-md betting_ml/evaluation/model_comparison_v0_v1.md
+
+        POST-RUN VERIFICATION:
+          SELECT model_version, feature_version, MIN(game_date), MAX(game_date), COUNT(*)
+          FROM baseball_data.betting_ml.daily_model_predictions
+          GROUP BY model_version, feature_version
+          ORDER BY model_version, feature_version;
+
+          Expected groups: v0/v0_partial, v0/v0_full, v1/v0 (existing 2026 rows
+          backfilled), v1/v1_partial, v1/v1_full.
+
+          No game_pk should have two rows with the same model_version (idempotent guard).
+
+      dependsOn:
+        - extend-predict-script
+        - add-compare-script
+      acceptanceCriteria:
+        - type: manual
+          description: |
+            Verify via Snowflake:
+              SELECT model_version, feature_version, MIN(game_date), MAX(game_date), COUNT(*)
+              FROM baseball_data.betting_ml.daily_model_predictions
+              GROUP BY model_version, feature_version ORDER BY 1, 2;
+            Expected: v0 rows span 2021–2026; v1 rows span 2021–2026.
+            No NULL feature_version values.
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
-            # Verify v0 rows untouched
-            # SELECT COUNT(*) FROM daily_model_predictions WHERE model_version = 'v0'
-            # Compare to pre-backfill count; should be unchanged
-            print('MANUAL CHECK: verify v0 row count unchanged after backfill run')
+            import pathlib
+            report = pathlib.Path('betting_ml/evaluation/model_comparison_v0_v1.md').read_text()
+            for required in ['mean_h2h_edge', 'brier', 'PROMOTE', '2024', 'v0', 'v1']:
+                assert required.lower() in report.lower(), \
+                    f"Required content '{required}' missing from comparison report"
+            print('model_comparison_v0_v1.md: all required sections present — OK')
             EOF
 
-    - id: document-multi-year-metrics
-      name: Compile multi-year performance metrics and update postmortem
+    - id: update-deploy-runbook
+      name: Update 8.H2 deploy runbook to require comparison as a pre-promotion gate
       description: |
-        Compute performance metrics for the v1 model by season and compare to v0 baseline.
+        Edit docs/model_deploy_runbook.md to replace the current Step 1
+        (train and evaluate) with a two-part step that makes the champion/challenger
+        comparison a required pre-promotion gate.
 
-        Metric definitions (consistent with existing Model Performance page in 6.E):
-          mean_h2h_edge   — average (model_win_prob - consensus_win_prob) where has_odds = TRUE
-          pct_positive    — % of predictions where model_win_prob > consensus_win_prob
-          brier_score     — mean((model_win_prob - actual_outcome)^2)
-          totals_mae      — mean absolute error on predicted total vs. actual total (where available)
+        CHANGES TO RUNBOOK:
+          Step 1 becomes two sub-steps:
+            1a. Train challenger and record CV metrics (existing).
+            1b. Re-score the last two full seasons with --model-tag=<challenger_tag>
+                and run compare_model_versions.py. The comparison report must show
+                PROMOTE or INCONCLUSIVE before proceeding. A DO NOT PROMOTE verdict
+                requires investigation before continuing.
 
-        Compute for each combination of: season × model_version × feature_version.
+          Add a new entry to the registry version history table after each deploy
+          (already established in 8.H2; no format change needed).
 
-        V0 baseline (from postmortem_v0.md):
-          mean_h2h_edge = −0.017
-          pct_positive  = 35.39%
-          (measured over 2026 game dates only)
-
-        Comparison rule for v1 evaluation:
-          Primary evaluation window: 2024–2026 (seasons with full or near-full
-          feature coverage per 7.L1 audit). Earlier seasons (2021–2023) reported
-          separately as context, not as the primary pass/fail metric.
-
-        Report must include:
-          1. Year-by-year table: season, n_games, mean_h2h_edge, pct_positive,
-             brier_score, totals_mae, feature_version
-          2. Aggregate 2024–2026 summary row vs. v0 baseline
-          3. If v1 aggregate mean_h2h_edge (2024–2026) does not exceed −0.017:
-             required root-cause note covering at least two hypotheses from the
-             postmortem_v0.md 8-gap analysis
-          4. Null-feature impact analysis: compare brier_score for v1_full vs.
-             v1_partial rows to quantify the cost of missing Phase 7 features
-          5. Recommendation: which model_version to use for live scoring going
-             forward (should be v1 if any metric improves; flag if v0 is still
-             preferred on any market)
-
-        Append all of the above as a new section "Phase 7 v1 Model Performance" in
-        betting_ml/evaluation/postmortem_v0.md.
+          Add a note: "The compare_model_versions.py output file must be committed
+          to betting_ml/evaluation/ as part of the deploy commit (Step 5)."
 
       dependsOn:
-        - run-full-backfill
+        - add-compare-script
       acceptanceCriteria:
         - type: command_succeeds
           command: |
             python3 - <<'EOF'
             import pathlib
-            report = pathlib.Path('betting_ml/evaluation/postmortem_v0.md').read_text()
-            assert 'Phase 7 v1 Model Performance' in report, \
-                "New v1 performance section missing from postmortem_v0.md"
-            for section in ['mean_h2h_edge', 'pct_positive', 'brier_score',
-                            'v1_full', 'v1_partial', '2024']:
-                assert section.lower() in report.lower(), \
-                    f"Required content '{section}' missing from postmortem section"
-            print('postmortem_v0.md: Phase 7 v1 performance section present with all required content')
-            EOF
-        - type: command_succeeds
-          command: |
-            python3 - <<'EOF'
-            import pathlib
-            report = pathlib.Path('betting_ml/evaluation/postmortem_v0.md').read_text()
-            # Confirm root-cause note is present when mean edge does not improve
-            # (The note may not be needed if v1 does improve — but section must exist
-            #  either way with a clear pass/fail declaration)
-            assert any(kw in report for kw in ['root-cause', 'root cause', 'hypothesis',
-                                                'recommendation', 'live scoring']), \
-                "Postmortem missing root-cause or recommendation section"
-            print('postmortem_v0.md: root-cause / recommendation content present')
+            runbook = pathlib.Path('docs/model_deploy_runbook.md').read_text()
+            assert 'compare_model_versions' in runbook, \
+                "Runbook missing compare_model_versions.py reference"
+            assert 'PROMOTE' in runbook, \
+                "Runbook missing PROMOTE verdict language"
+            print('model_deploy_runbook.md: comparison gate documented — OK')
             EOF

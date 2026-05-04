@@ -21,6 +21,7 @@ retrain are the planned checkpoints.
 | 8.C | Defensive Fielding Metrics (OAA / UZR) | DBS thesis (2022) | High |
 | 8.D | Elo-Based Team Strength Rating | Cui (2020) | Medium |
 | 8.E | Bat Tracking Per-Batter Matchup Aggregations | Phase 4 EDA deferral | Medium |
+| 8.I | dbt Quality Gates (Compile + Data Diff) | Internal — CI/CD hardening | Low/Medium |
 
 ## Literature references
 

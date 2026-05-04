@@ -2572,28 +2572,47 @@ Two-source architecture: UmpScorecards bulk CSV (2015–2026, 25,556 rows) for h
 
 ---
 
-##### Card 7.L2 — Full Prediction Backfill: Re-score 2021–2026 with v1 Model (P2)
+##### Card 7.L2 — Champion/Challenger Model Versioning Framework (P2)
 
-**Title:** Batch re-score all historical game dates from 2021 through current date with the v1 model and document multi-year performance vs. v0 baseline
+**Title:** Build a versioned prediction framework that enables any two deployed model versions to be compared head-to-head on historical data before a new version is promoted to production
 
-**Why P2:** The 2026-only backfill (36 game dates) is too small a sample to reliably measure mean h2h edge or % positive — a few bad weeks can swamp the signal. Scoring 2021–2026 gives 4–5 full seasons and hundreds of games per evaluation period, making metric comparisons statistically meaningful. The Model Performance page (6.E) also becomes far more useful with a multi-year trend. Gap reference: Phase 7 Roadmap P2 from postmortem.
+**Why P2:** Before this card, the deploy process (8.H2) gates on CV metrics but has no systematic way to validate that a retrained model actually performs better on real games. This card closes that gap: re-scoring a historical window with both the champion (current deployed model) and the challenger (newly retrained model) produces a direct metric comparison on actual outcomes, making every promotion decision evidence-based. The v0 baseline (mean h2h edge −0.017, 35.39% positive) is also measured on only ~36 game dates in 2026 — statistically too weak for reliable conclusions. Extending both model versions across 2021–2026 gives 4–5 full seasons and makes the comparison meaningful.
 
 *Blocker:* Card 7.L1 (historical feature backfill) must complete first so feature inputs are populated for all dates.
 
 *Technical implementation:*
-- Extend `predict_today.py` with `--start-date` / `--end-date` flags for batch re-scoring.
-- Add `model_version` column to `daily_model_predictions` (e.g., `v0`, `v1`); v0 rows must not be overwritten — insert new rows only.
-- Add `feature_version` column to `daily_model_predictions` to tag rows by Phase 7 feature completeness (e.g., `v1_full` vs. `v1_partial` for early seasons with higher null rates).
-- Run batch re-score from 2021-04-01 through current date; skip dates where odds data is absent.
-- Compute metrics by year: mean h2h edge, % positive edge, Brier score, totals MAE. Compare against v0 baseline (−0.017, 35.39% positive).
-- Append multi-year results as a follow-up section in `betting_ml/evaluation/postmortem_v0.md`.
+
+**1. Save v0 feature column list** — extract `feature_columns_v0.json` (~267 features) from git history (pre-7.MA commit) and commit it. Required because v0 and v1 models were trained on different feature sets; passing the wrong set to the wrong artifact produces silently wrong predictions.
+
+**2. Extend `model_registry.yaml`** — add `feature_columns_path` and `rollback_feature_columns_path` to each target entry so predict_today.py can look up the correct feature set by model tag without hard-coding paths.
+
+**3. Extend `predict_today.py`** with:
+- `--start-date` / `--end-date` — batch re-scoring over a date range
+- `--model-tag` (`v0` or `v1`) — loads `rollback_artifact_path` + `rollback_feature_columns_path` for `v0`; `artifact_path` + `feature_columns_path` for `v1`
+- `--feature-version` — metadata string written to DB (e.g., `v1_full`, `v1_partial`, `v0_full`, `v0_partial`)
+- `--dry-run` — print date/game count, skip writes
+- Idempotent INSERT guard: skip any (game_pk, model_version) pair already in the table
+- Feature set mismatch guard: assert model's expected input width matches the loaded feature column count before scoring
+
+**4. Schema migration** — `ALTER TABLE` to add `feature_version VARCHAR(30)` to `daily_model_predictions`; backfill existing 1,215 v0 rows with `feature_version = 'v0'`.
+
+**5. `scripts/compare_model_versions.py`** — takes `--champion`, `--challenger`, `--start-date`, `--end-date`; queries `daily_model_predictions`; outputs a markdown table of metrics side-by-side per season and for the 2024+ aggregate window. Prints a clear PROMOTE / DO NOT PROMOTE / INCONCLUSIVE verdict. Metrics: `mean_h2h_edge`, `pct_positive`, `brier_score`, `totals_mae`, `run_diff_mae`, `n_games`, `n_odds_games`.
+
+**6. Initial comparison run** — backfill v0 for 2021–2025 (rollback artifacts), backfill v1 for 2021–2026 (current artifacts), run comparison, commit report to `betting_ml/evaluation/model_comparison_v0_v1.md`.
+
+**7. Update 8.H2 deploy runbook** — add comparison script as a required pre-promotion gate in Step 1. The comparison output file must be committed as part of every deploy commit going forward.
+
+*Ongoing use:* Every future retrain follows this protocol — score the last two full seasons with the challenger tag, run compare_model_versions.py, promote only if verdict is PROMOTE or INCONCLUSIVE with an investigation note.
 
 *Acceptance criteria:*
-- [ ] `predict_today.py` accepts `--start-date` / `--end-date` flags; batch re-score completes without errors for full 2021–2026 range
-- [ ] `daily_model_predictions` contains `v1` rows for all backfill dates; no `v0` rows overwritten
-- [ ] `feature_version` column populated on all `v1` rows
-- [ ] Post-backfill metrics documented by year (2021–2026) and vs. v0 baseline in `postmortem_v0.md`
-- [ ] If v1 mean edge across 2024–2026 (most recent 2+ seasons with full feature coverage) does not exceed v0 (−0.017), a root-cause note is added to the postmortem — not a blocker, but required documentation
+- [ ] `feature_columns_v0.json` committed to `betting_ml/models/` with ~267 features
+- [ ] `model_registry.yaml` has `feature_columns_path` and `rollback_feature_columns_path` for all three targets
+- [ ] `predict_today.py` accepts `--start-date`, `--end-date`, `--model-tag`, `--feature-version`, `--dry-run`; dry-run passes for both `v0` and `v1` tags
+- [ ] `daily_model_predictions` has `feature_version` column; no NULL values remain
+- [ ] `scripts/compare_model_versions.py` exists and outputs PROMOTE/DO NOT PROMOTE/INCONCLUSIVE verdict
+- [ ] v0 and v1 rows both span 2021–2026 in `daily_model_predictions`; no duplicate (game_pk, model_version) rows
+- [ ] `betting_ml/evaluation/model_comparison_v0_v1.md` committed with season-by-season and 2024+ aggregate metrics
+- [ ] `docs/model_deploy_runbook.md` references `compare_model_versions.py` as a required pre-promotion gate
 
 ---
 
@@ -3339,7 +3358,7 @@ Declarative YAML planning specs (planspec.io/v1alpha1) for agentic task executio
 | 7 | 7.K | `plan_specs/phase_7/K_pitcher_clustering.yaml` | Created — P2; arsenal vector (velocity/break/Stuff+/pitch-mix) → k-means clustering (k=6, silhouette=0.1041, threshold 0.10) → pitcher_clusters table (PK: pitcher_id × season × snapshot_date) → mart_batter_woba_vs_cluster (30d rolling, shrinkage at 30 PA) → feature_pitcher_cluster_matchups (snapshot_date < game_date leakage guard); 4 tasks; dbt tests pass |
 | 7 | 7.K2 | `plan_specs/phase_7/K2_batter_clustering.yaml` | Created — P2; soft-gated on 7.K feature importance; batter profile mart (K%, BB%, ISO, GB%, FB%, Pull%, EV, barrel%) → k-means batter archetypes (k=4–8) → batter_clusters table → mart_batter_archetype_vs_pitcher_cluster (180d population rolling) → feature_batter_archetype_matchups; 4 tasks; blocker: 7.K |
 | 7 | 7.L1 | `plan_specs/phase_7/L1_historical_feature_backfill.yaml` | Created — P2; run historical ETL for all Phase 7 feature pipelines (weather, FanGraphs, umpire, injury, cluster) back to 2021; feature coverage audit; blocker: all Phase 7 feature cards complete |
-| 7 | 7.L2 | `plan_specs/phase_7/L2_full_prediction_backfill.yaml` | Created — P2; batch re-score 2021–2026 with v1 model; model_version + feature_version columns; multi-year metrics vs. v0 baseline; blocker: 7.L1 |
+| 7 | 7.L2 | `plan_specs/phase_7/L2_full_prediction_backfill.yaml` | Created — P2; champion/challenger versioning framework; --model-tag flag, feature_columns_path in registry, compare_model_versions.py, v0+v1 backfill 2021–2026, comparison gates deploy runbook; blocker: 7.L1 |
 | 7 | 7.MA | `plan_specs/phase_7/MA_full_model_retraining.yaml` | Created — P2; joint retrain of all 3 models on full Phase 7 feature set + calibrator refit; 5-task DAG; blocked on 7.G–7.K |
 | 7 | 7.MB | `plan_specs/phase_7/MB_new_model_evaluation.yaml` | Created — P2; walk-forward CV harness (4 folds); benchmarks XGBoost/NGBoost vs. LightGBM, CatBoost, stacked ensemble + isotonic calibration; Cohen's d ≥ 0.10 selection rule; blocked on 7.MA |
 | 7 | 7.N | `plan_specs/phase_7/N_game_insights_page.yaml` | ✓ Complete (2026-05-03) — `app/pages/5_Game_Insights.py`; 4 sections: Prediction Summary, Team Comparison (6 metric groups), SHAP waterfall (home_win + total_runs), Recent Form (last 10 + TOTALS row); Stats API fallback for same-day games; all ACs met |
@@ -3653,6 +3672,29 @@ Deferred to Phase 9. Required before the production web application (Card 8.G) i
 #### 8.H5 — Application Deployment (Deferred)
 
 Deferred. Streamlit app is development-only throughout Phase 8. Production deployment via FastAPI + React is Card 8.G (Phase 9). Full spec in `docs/phase_8_infra_epic.md`.
+
+---
+
+### Phase 8 — dbt Quality Gates (Card 8.I)
+
+**Status:** Not started (2026-05-04). Full spec in `plan_specs/phase_8/I_dbt_quality_gates.yaml`.
+
+Two CI/CD gates that must pass before any PR can merge into main. Currently CI validates Python and model artifacts but has no dbt coverage — a broken ref() or a logic regression in a feature model can merge silently and corrupt the prediction feature matrix.
+
+| Card | Title | Effort | Status |
+|---|---|---|---|
+| 8.I1 | dbt Compilation Check | Low (~0.5d) | [ ] Not started |
+| 8.I2 | dbt Data Diff Check | Medium (~1.5d) | [ ] Deferred — requires 8.H4 (Snowflake dev schema) |
+
+#### 8.I1 — dbt Compilation Check
+
+Add a `dbt-compile` job to `ci.yml` that runs `dbtf compile --project-dir dbt --profiles-dir dbt` on every PR targeting main. No Snowflake credentials required — compile is static analysis only. Catches broken `ref()` calls, `source()` mismatches, Jinja syntax errors, and circular DAG dependencies. Must be a required status check on main branch protection.
+
+**Deliverable:** New `dbt-compile` job in `.github/workflows/ci.yml` using the same dbt-fusion cache install pattern as `dbt_staging_build.yml`.
+
+#### 8.I2 — dbt Data Diff Check (Deferred)
+
+Deferred pending 8.H4 (Snowflake Environment Isolation). Once a dev schema exists, this card adds a `dbt-data-diff` job that builds modified models in the CI schema (`state:modified+`), then runs `scripts/dbt_data_diff.py` to compare row counts and NULL rates against prod. Fails on: row count delta >1%, NULL rate delta >2pp, or any column added/removed. Requires prod `manifest.json` stored as a GitHub Actions artifact from `dbt_daily_build.yml` for `state:modified` to resolve.
 
 ---
 
