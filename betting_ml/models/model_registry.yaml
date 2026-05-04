@@ -1,5 +1,6 @@
 total_runs:
   model_name: ngboost_tuned
+  model_version: v0
   eval_year: 2026
   cv_mae: 3.5190
   dist: LogNormal
@@ -8,11 +9,13 @@ total_runs:
   training_cutoff: "2021+"
   features: 292
   artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
   selected_at: "2026-05-04T00:00:00Z"
   notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.5190 vs 7.F baseline 3.4856 (+0.96% regression — within CV noise, below 1% revert threshold). New features include umpire, injury, pitch archetype, cluster matchup, bullpen IP, pythagorean. LogNormal dist retained."
 
 run_differential:
   model_name: ngboost_tuned
+  model_version: v0
   eval_year: 2026
   cv_mae: 3.4724
   dist: Normal
@@ -21,23 +24,21 @@ run_differential:
   training_cutoff: "2021+"
   features: 292
   artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
   selected_at: "2026-05-04T00:00:00Z"
   notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression — within CV noise). Normal distribution only; LogNormal excluded because run_diff can be negative."
 
 home_win:
-  model_name: xgboost_sigmoid
+  model_name: elasticnet
+  model_version: v1
   eval_year: 2026
-  cv_brier: 0.2439
+  cv_brier: 0.2425
+  ece_raw: 0.0202
   training_rows: 10256
   training_cutoff: "2021+"
-  features: 292
-  calibration_method: sigmoid
-  artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+  features: 453
+  artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  rollback_artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+  deployed_date: "2026-05-04"
   selected_at: "2026-05-04T00:00:00Z"
-  calibrator_path: betting_ml/models/home_win/calibrator.joblib
-  calibrator_method: platt
-  calibrator_fitted_at: "2026-05-04T04:50:11.734761+00:00"
-  calibrator_ece_before: 0.024747
-  calibrator_ece_after: 0.041991
-  calibrator_warning: "Calibration degraded ECE on eval set (0.0247 → 0.0420). Raw model is already well-calibrated — better than previous calibrated model (0.0370). Consider deploying without calibrator or monitoring live calibration."
-  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV Brier 0.2439 vs 7.F baseline 0.2443 (−0.17% improvement). Raw model ECE 0.0247 is the best calibration yet — prior calibrated model was 0.0370."
+  notes: "Card 7.MB deploy. LogisticRegression (elasticnet, l1_ratio=0.5, inner-CV C) wrapped in sklearn Pipeline (imputer→scaler→clf). CV Brier 0.2425 (best of 7 candidates), ECE_raw 0.0202 — no calibration layer (Platt worsens ECE to 0.0238). Rollback: xgb_classifier_tuned_2026.pkl (v0, CV Brier 0.2439)."

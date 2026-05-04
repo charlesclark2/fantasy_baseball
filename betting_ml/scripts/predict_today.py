@@ -40,29 +40,11 @@ from betting_ml.models.total_runs_trainer import p_over_line
 # Constants
 # ---------------------------------------------------------------------------
 
-MODEL_VERSION = "v0"
+MODEL_VERSION = "v1"
 
-_CALIBRATOR_PATH = Path('betting_ml/models/home_win/calibrator.joblib')
-
-
-def _load_calibrator():
-    if _CALIBRATOR_PATH.exists():
-        return joblib.load(_CALIBRATOR_PATH)
-    print('[WARN] calibrator.joblib not found — using consensus_win_prob uncalibrated')
-    return None
-
-
-_calibrator = _load_calibrator()
-
-
+# v1 (elasticnet) is naturally calibrated — no post-hoc calibration layer.
+# calibrator.joblib was fit on XGBoost raw scores and must not be applied here.
 def _apply_calibrator(consensus_win_prob: float) -> float:
-    """Return calibrated win probability; falls back to consensus if no calibrator."""
-    if _calibrator is not None:
-        raw = np.array([consensus_win_prob])
-        try:
-            return float(_calibrator.predict_proba(raw.reshape(-1, 1))[0, 1])
-        except AttributeError:
-            return float(_calibrator.predict(raw)[0])
     return consensus_win_prob
 
 
@@ -682,8 +664,13 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    _expected_n = clf_hw.xgb_classifier.n_features_in_
-    if X_today_imp.shape[1] != _expected_n:
+    if hasattr(clf_hw, "n_features_in_"):
+        _expected_n = clf_hw.n_features_in_
+    elif hasattr(clf_hw, "xgb_classifier"):
+        _expected_n = clf_hw.xgb_classifier.n_features_in_
+    else:
+        _expected_n = None
+    if _expected_n is not None and X_today_imp.shape[1] != _expected_n:
         warnings.warn(
             f"clf_hw expects {_expected_n} features but got {X_today_imp.shape[1]}. "
             f"Model retraining may be needed."

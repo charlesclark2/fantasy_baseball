@@ -17,6 +17,9 @@ exploratory_data_analysis/__marimo__/
 
 # Trained model artifacts (large binaries — store via Git LFS or object storage)
 betting_ml/models/**/*.pkl
+# Production artifacts listed in model_registry.yaml are tracked directly in git.
+# Add an exception here whenever a new production artifact is deployed (8.H2 protocol).
+!betting_ml/models/home_win/elasticnet_2026.pkl
 
 # Daily prediction outputs (written by predict_today.py — tracked in Snowflake, not git)
 betting_ml/outputs/predictions*.csv
