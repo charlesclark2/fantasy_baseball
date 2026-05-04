@@ -7,18 +7,18 @@ Evaluation metric: mean absolute error (MAE) across temporal CV splits (min_trai
 
 | n_estimators | Dist | CV MAE | Viable |
 |-------------|------|--------|--------|
-| 200 | Normal | 3.4910 | Yes |
-| 200 | LogNormal | 3.4865 | Yes |
-| 500 | Normal | 3.4987 | Yes |
-| 500 | LogNormal | 3.4856 | Yes |
+| 200 | Normal | 3.5212 | Yes |
+| 200 | LogNormal | 3.5224 | Yes |
+| 500 | Normal | 3.5316 | Yes |
+| 500 | LogNormal | 3.5190 | Yes |
 
-**Best viable configuration:** n_estimators=500, dist=LogNormal, CV MAE=3.4856
+**Best viable configuration:** n_estimators=500, dist=LogNormal, CV MAE=3.5190
 
 ## Best NGBoost Configuration
 
 - **best_n_estimators:** 500
 - **best_dist:** LogNormal
-- **CV MAE:** 3.4856
+- **CV MAE:** 3.5190
 
 ## Persisted Model
 
@@ -32,4 +32,4 @@ Model saved successfully. ✓ (persisted)
 
 ## Notes on Distribution Choice
 
-LogNormal outperformed Normal (best MAE: 3.4856 vs 3.4910). This is expected since total_runs is a non-negative count — LogNormal's support over (0, ∞) is a natural fit for run totals and avoids predicting negative values.
+LogNormal outperformed Normal (best MAE: 3.5190 vs 3.5212). This is expected since total_runs is a non-negative count — LogNormal's support over (0, ∞) is a natural fit for run totals and avoids predicting negative values.

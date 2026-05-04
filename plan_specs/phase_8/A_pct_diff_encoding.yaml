@@ -1,0 +1,181 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pct-diff-feature-encoding
+  namespace: default
+spec:
+  description: >
+    Add percentage-difference encoding of home/away feature pairs as additional
+    model inputs. Multiple studies (Cui 2020, Singh 2024) found that encoding
+    paired statistics as (home - away) / home × 100 outperforms using raw absolute
+    values, particularly for metrics where the scale varies considerably
+    (e.g., ERA 2.5 vs. 5.0 is a 100% difference, but the raw delta of 2.5 is the
+    same as 4.5 vs. 7.0 which is a 55% difference).
+
+    RESEARCH BASIS:
+      - Cui (2020): percentage-difference encoding of OBP, ISO, WHIP, and rest days
+        was selected as the best representation over raw values and absolute differences
+        after evaluating three encodings on 9,700 held-out games.
+      - Singh (2024): independently confirmed percentage-difference encoding as the
+        best of three tested representations (ratio, difference, percentage-difference)
+        using brute-force feature combination analysis on MLB data.
+
+    CURRENT STATE: All home/away paired features in feature_pregame_game_features are
+    stored as raw absolute values (home_team_woba_30d, away_team_woba_30d). Difference
+    features (e.g., matchup_woba_diff) exist for some pairs but use absolute differences,
+    not percentage-difference encoding. Percentage-difference features would be NEW
+    additional columns, not replacements — the raw values are retained and feature
+    selection determines which encoding survives.
+
+    SCOPE: Apply percentage-difference encoding to the most predictive paired feature
+    groups identified in Phase 3 EDA and Phase 7 SHAP analysis (Card 7.MB):
+      1. Offense: wOBA, xwOBA, K%, BB% (30d and STD windows)
+      2. Pitching: starter xwOBA against, starter K%, starter BB% (STD window)
+      3. Bullpen: bp_xwOBA_against, bp_k_pct (30d window)
+      4. Pythagorean win expectation (already a diff; add pct-diff version)
+      5. Injury-adjusted wOBA (home vs. away)
+
+    IMPLEMENTATION:
+      Add computed columns to feature_pregame_game_features using the formula:
+        pct_diff = CASE
+          WHEN away_val = 0 OR away_val IS NULL THEN NULL
+          ELSE (home_val - away_val) / ABS(away_val) * 100
+        END
+      Column naming convention: home_away_<feature_name>_pct_diff
+      Examples:
+        home_away_woba_30d_pct_diff
+        home_away_starter_xwoba_against_pct_diff
+        home_away_bp_xwoba_against_30d_pct_diff
+        home_away_injury_adj_woba_pct_diff
+        home_away_pythagorean_win_exp_pct_diff
+
+    FEATURE SELECTION: After adding the pct-diff columns, re-run
+    validate_feature_selection.py. The new columns will compete against their raw and
+    absolute-difference counterparts. Only those that pass the |r| > 0.005 threshold
+    and survive multicollinearity checks (|r| < 0.85 with existing features) are
+    retained. No guarantee that pct-diff columns survive — this validates the
+    literature finding on our specific dataset.
+
+    RETRAIN: Deferred to next scheduled retrain checkpoint (All-Star break or end of
+    2026 season). The feature columns can be added to feature_pregame_game_features
+    immediately; the model will pick them up at the next retrain.
+
+    Source: Phase 7.MB literature review. Effort: ~0.5 days.
+
+  acceptanceCriteria:
+    - description: >
+        feature_pregame_game_features includes pct-diff columns for all five feature
+        groups listed in SCOPE. dbtf parse succeeds and all existing tests pass.
+    - description: >
+        validate_feature_selection.py output documents which pct-diff columns were
+        retained vs. dropped, with correlation and multicollinearity reason codes.
+    - description: >
+        betting_ml/evaluation/pct_diff_encoding_impact.md documents: feature group
+        coverage, which pct-diff columns survived selection, and cross-correlation
+        with raw/absolute-diff equivalents. If zero pct-diff features survive
+        selection, document as a confirmed negative finding.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pct-diff-feature-encoding-plan
+  namespace: default
+spec:
+  description: >
+    Two-task sequential plan. Task 1 adds the pct-diff columns to the dbt feature
+    model. Task 2 runs feature selection and writes the impact report.
+  goalRef:
+    name: pct-diff-feature-encoding
+  graph:
+    nodes:
+
+      - id: add-pct-diff-columns
+        kind: Task
+        description: >
+          Edit dbt/models/feature/feature_pregame_game_features.sql to add
+          percentage-difference encoded columns for the five feature groups.
+
+          For each home/away pair (home_val, away_val), add:
+            CASE
+              WHEN away_val = 0 OR away_val IS NULL THEN NULL
+              ELSE ROUND((home_val - away_val) / ABS(away_val) * 100, 4)
+            END AS home_away_<feature>_pct_diff
+
+          Feature pairs to add (derive from existing column names in the SELECT):
+            1. woba_30d (home_team_woba_30d, away_team_woba_30d)
+            2. xwoba_30d (home_team_xwoba_30d, away_team_xwoba_30d)
+            3. k_pct_30d (home_team_k_pct_30d, away_team_k_pct_30d)
+            4. starter_xwoba_against_std
+            5. starter_k_pct_std
+            6. bp_xwoba_against_30d
+            7. injury_adj_avg_woba (if present)
+            8. pythagorean_win_exp
+
+          Run `dbtf build --select feature_pregame_game_features` after changes.
+          Run `dbtf test --select feature_pregame_game_features` to confirm tests pass.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf parse succeeds
+            command: dbtf
+            args: [parse]
+          - type: command_succeeds
+            name: pct-diff columns exist in compiled SQL
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                compiled = glob.glob(
+                    'dbt/target/compiled/**/feature_pregame_game_features.sql',
+                    recursive=True
+                )
+                assert compiled, 'Compiled feature_pregame_game_features.sql not found'
+                src = pathlib.Path(compiled[0]).read_text()
+                assert 'pct_diff' in src, 'No pct_diff columns found in compiled SQL'
+                count = src.count('pct_diff')
+                assert count >= 5, f'Expected >= 5 pct_diff columns, found {count}'
+                print(f'pct_diff columns found: {count}')
+
+      - id: validate-and-report
+        kind: Task
+        description: >
+          Run validate_feature_selection.py (or the equivalent feature selection
+          script) to evaluate which pct-diff columns survive the correlation and
+          multicollinearity thresholds. Write the impact report.
+
+          Run:
+            uv run python betting_ml/scripts/validate_feature_selection.py
+
+          Then write betting_ml/evaluation/pct_diff_encoding_impact.md documenting:
+            - Total pct-diff columns added
+            - Which survived feature selection (|r| > 0.005 with any target,
+              multicollinearity |r| < 0.85 with existing features)
+            - Cross-correlation table: pct-diff column vs. its raw and abs-diff
+              equivalents (does pct-diff carry new information?)
+            - Recommendation: if any pct-diff feature survives and has |r| higher
+              than its raw/abs-diff counterpart, recommend retaining it in the next
+              retrain. Otherwise document as confirmed negative finding.
+        dependsOn:
+          - add-pct-diff-columns
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: pct-diff encoding impact report
+            path: betting_ml/evaluation/pct_diff_encoding_impact.md
+          - type: command_succeeds
+            name: impact report contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/pct_diff_encoding_impact.md').read_text().lower()
+                assert 'survived' in text or 'retained' in text or 'negative finding' in text, \
+                    'Report must state which columns survived or confirm negative finding'
+                print('pct_diff_encoding_impact.md content OK')

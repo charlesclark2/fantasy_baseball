@@ -255,23 +255,36 @@ def fetch_dates_with_sufficient_coverage(
     min_snapshots: int = 2,
 ) -> set[str]:
     """
-    Return set of game_date ISO strings that already have >= min_snapshots distinct
-    snapshot timestamps loaded. Dates in this set are skipped entirely on rerun.
+    Return set of game_date ISO strings where EVERY game on that date already has
+    >= min_snapshots distinct snapshot timestamps loaded.
+
+    A date is only skipped when all its games are fully covered — if even one game
+    has fewer than min_snapshots snapshots the date is re-processed so the missing
+    timestamp can be added for the under-covered game(s).
     """
     sql = f"""
-        SELECT TO_VARCHAR(game_date, 'YYYY-MM-DD') AS gd
-        FROM {TARGET_FQN}
-        WHERE bookmaker = %(bk)s
-          AND game_date >= %(start)s
-          AND game_date <= %(end)s
-        GROUP BY game_date
-        HAVING COUNT(DISTINCT snapshot_ts) >= %(min_snaps)s
+        WITH game_snap_counts AS (
+            SELECT
+                TO_VARCHAR(game_date, 'YYYY-MM-DD')   AS gd,
+                home_team,
+                away_team,
+                COUNT(DISTINCT snapshot_ts)            AS snap_count
+            FROM {TARGET_FQN}
+            WHERE bookmaker = %(bk)s
+              AND game_date >= %(start)s
+              AND game_date <= %(end)s
+            GROUP BY game_date, home_team, away_team
+        )
+        SELECT gd
+        FROM game_snap_counts
+        GROUP BY gd
+        HAVING MIN(snap_count) >= %(min_snaps)s
     """
     with conn.cursor() as cur:
         cur.execute(sql, {
-            "bk":       bookmaker,
-            "start":    start_date.isoformat(),
-            "end":      end_date.isoformat(),
+            "bk":        bookmaker,
+            "start":     start_date.isoformat(),
+            "end":       end_date.isoformat(),
             "min_snaps": min_snapshots,
         })
         return {row[0] for row in cur.fetchall()}
@@ -665,6 +678,7 @@ def run_backfill(
     timestamps: list[str],
     bookmaker: str,
     sleep_seconds: float,
+    min_snapshots: int = 2,
 ) -> None:
     log.info("Connecting to Snowflake ...")
     conn = get_snowflake_connection()
@@ -686,9 +700,12 @@ def run_backfill(
     log.info("  %d game(s) cached across %d matchup-dates (%d doubleheader date(s))",
              n_games, len(pk_lookup), n_dh)
 
-    log.info("Checking coverage of already-loaded snapshots ...")
-    dates_sufficient = fetch_dates_with_sufficient_coverage(conn, start_date, end_date, bookmaker)
-    log.info("  %d date(s) already have ≥2 snapshots — will skip entirely", len(dates_sufficient))
+    log.info("Checking coverage of already-loaded snapshots (min_snapshots=%d) ...", min_snapshots)
+    dates_sufficient = fetch_dates_with_sufficient_coverage(
+        conn, start_date, end_date, bookmaker, min_snapshots=min_snapshots
+    )
+    log.info("  %d date(s) already have ≥%d snapshots — will skip entirely",
+             len(dates_sufficient), min_snapshots)
     already_loaded = fetch_already_loaded(conn, start_date, end_date, bookmaker)
     log.info("  %d (game_date, snapshot_ts) pair(s) already loaded — will skip individual calls", len(already_loaded))
 
@@ -709,7 +726,7 @@ def run_backfill(
         date_str = game_date.isoformat() if isinstance(game_date, date) else str(game_date)
 
         if date_str in dates_sufficient:
-            log.info("  %s — already has ≥2 snapshots, skipping date", date_str)
+            log.info("  %s — already has ≥%d snapshots, skipping date", date_str, min_snapshots)
             calls_skipped += len(timestamps)
             call_num      += len(timestamps)
             continue
@@ -845,6 +862,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Seconds to sleep between API calls (default: {DEFAULT_SLEEP}).",
     )
     parser.add_argument(
+        "--min-snapshots",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Skip a date only when it already has >= N distinct snapshot timestamps loaded "
+            "(default: 2). Use --min-snapshots 3 when adding a third timestamp to dates "
+            "that already have 2."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -893,6 +921,7 @@ def main() -> None:
         timestamps    = timestamps,
         bookmaker     = args.bookmaker,
         sleep_seconds = args.sleep_seconds,
+        min_snapshots = args.min_snapshots,
     )
 
 

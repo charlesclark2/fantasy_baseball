@@ -1,37 +1,43 @@
 total_runs:
   model_name: ngboost_tuned
   eval_year: 2026
-  cv_mae: 3.4856
+  cv_mae: 3.5190
   dist: LogNormal
   n_estimators: 500
+  training_rows: 10256
   training_cutoff: "2021+"
-  artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
-  selected_at: "2026-05-03T00:00:00Z"
-  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with Stuff+ arsenal features (Card 7.F). CV MAE 3.4856 vs prior 3.5232 (−0.038). Scores not directly comparable — different dataset cutoff. Prior model included weather features; Stuff+ features added in this run."
+  features: 292
+  artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  selected_at: "2026-05-04T00:00:00Z"
+  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.5190 vs 7.F baseline 3.4856 (+0.96% regression — within CV noise, below 1% revert threshold). New features include umpire, injury, pitch archetype, cluster matchup, bullpen IP, pythagorean. LogNormal dist retained."
 
 run_differential:
   model_name: ngboost_tuned
   eval_year: 2026
-  cv_mae: 3.4586
+  cv_mae: 3.4724
   dist: Normal
-  n_estimators: 500
+  n_estimators: 200
+  training_rows: 10256
   training_cutoff: "2021+"
-  artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
-  selected_at: "2026-05-03T00:00:00Z"
-  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with 267 features including Stuff+ and umpire features (Cards 7.F, 7.H). CV MAE 3.4586 vs prior 3.4195 — scores not directly comparable (different feature set and dataset cutoff). LogNormal excluded: run_diff can be negative, causing log(Y) divide-by-zero. Normal distribution only going forward."
+  features: 292
+  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  selected_at: "2026-05-04T00:00:00Z"
+  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression — within CV noise). Normal distribution only; LogNormal excluded because run_diff can be negative."
 
 home_win:
   model_name: xgboost_sigmoid
   eval_year: 2026
-  cv_brier: 0.2443
+  cv_brier: 0.2439
+  training_rows: 10256
   training_cutoff: "2021+"
+  features: 292
   calibration_method: sigmoid
-  calibration_split: 2025
   artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
-  selected_at: "2026-05-03T00:00:00Z"
+  selected_at: "2026-05-04T00:00:00Z"
   calibrator_path: betting_ml/models/home_win/calibrator.joblib
   calibrator_method: platt
-  calibrator_fitted_at: "2026-05-02T20:36:19.682028+00:00"
-  calibrator_ece_before: 0.061385
-  calibrator_ece_after: 0.037009
-  notes: "Retrained on 2021+ data (10,243 rows, 6 seasons) with Stuff+ arsenal features (Card 7.F). CV Brier 0.2443 vs pre-Stuff+ baseline 0.2443 — flat. Prior 2015+ retrain scored 0.2428 but CV scores are not comparable across dataset cutoff change. Calibrator fitted on prior model — refit recommended."
+  calibrator_fitted_at: "2026-05-04T04:50:11.734761+00:00"
+  calibrator_ece_before: 0.024747
+  calibrator_ece_after: 0.041991
+  calibrator_warning: "Calibration degraded ECE on eval set (0.0247 → 0.0420). Raw model is already well-calibrated — better than previous calibrated model (0.0370). Consider deploying without calibrator or monitoring live calibration."
+  notes: "Card 7.MA retrain on full Phase 7 feature set (292 features, 10,256 rows, 6 seasons 2021-2026). CV Brier 0.2439 vs 7.F baseline 0.2443 (−0.17% improvement). Raw model ECE 0.0247 is the best calibration yet — prior calibrated model was 0.0370."

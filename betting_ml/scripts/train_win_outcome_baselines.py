@@ -8,6 +8,8 @@ updates project_context.md.
 
 from __future__ import annotations
 
+import argparse
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -339,6 +341,7 @@ def write_to_snowflake(
     calib_df: pd.DataFrame,
     home_bias_results: list[dict],
     summary: dict,
+    retrain_version: str,
 ) -> None:
     print("\nWriting results to Snowflake...")
     conn = get_snowflake_connection()
@@ -357,17 +360,18 @@ def write_to_snowflake(
                 auc_roc FLOAT,
                 ece FLOAT,
                 calibration_curve VARIANT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_results_win_outcome")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_results_win_outcome ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for _, row in results_df.iterrows():
             calib_json = json.dumps(row["calibration_curve"])
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_results_win_outcome
-                    (fold, model, n_eval, log_loss, brier_score, auc_roc, ece, calibration_curve)
-                SELECT %s, %s, %s, %s, %s, %s, %s, PARSE_JSON(%s)
+                    (fold, model, n_eval, log_loss, brier_score, auc_roc, ece, calibration_curve, retrain_version)
+                SELECT %s, %s, %s, %s, %s, %s, %s, PARSE_JSON(%s), %s
                 """,
                 (
                     row["fold"],
@@ -378,6 +382,7 @@ def write_to_snowflake(
                     float(row["auc_roc"]),
                     float(row["ece"]),
                     calib_json,
+                    retrain_version,
                 ),
             )
         print(f"  cv_results_win_outcome: {len(results_df)} rows written")
@@ -389,19 +394,20 @@ def write_to_snowflake(
                 calibration_method VARCHAR,
                 ece FLOAT,
                 ece_uncalibrated FLOAT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_calibration_win_outcome")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_calibration_win_outcome ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for _, row in calib_df.iterrows():
             ece_uncal = None if pd.isna(row["ece_uncalibrated"]) else float(row["ece_uncalibrated"])
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_calibration_win_outcome
-                    (fold, calibration_method, ece, ece_uncalibrated)
-                VALUES (%s, %s, %s, %s)
+                    (fold, calibration_method, ece, ece_uncalibrated, retrain_version)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
-                (row["fold"], row["calibration_method"], float(row["ece"]), ece_uncal),
+                (row["fold"], row["calibration_method"], float(row["ece"]), ece_uncal, retrain_version),
             )
         print(f"  cv_calibration_win_outcome: {len(calib_df)} rows written")
 
@@ -414,17 +420,18 @@ def write_to_snowflake(
                 brier_with_hwrt FLOAT,
                 brier_without_hwrt FLOAT,
                 home_bias_direction VARCHAR,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_home_bias_win_outcome")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_home_bias_win_outcome ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for r in home_bias_results:
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_home_bias_win_outcome
                     (fold, log_loss_with_hwrt, log_loss_without_hwrt,
-                     brier_with_hwrt, brier_without_hwrt, home_bias_direction)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                     brier_with_hwrt, brier_without_hwrt, home_bias_direction, retrain_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     r["fold"],
@@ -433,6 +440,7 @@ def write_to_snowflake(
                     r["brier_with_hwrt"],
                     r["brier_without_hwrt"],
                     r["home_bias_direction"],
+                    retrain_version,
                 ),
             )
         print(f"  cv_home_bias_win_outcome: {len(home_bias_results)} rows written")
@@ -447,17 +455,18 @@ def write_to_snowflake(
                 better_calibration_method VARCHAR,
                 hwrt_reduces_bias BOOLEAN,
                 home_bias_in_recent_seasons VARCHAR,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_summary_win_outcome")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_summary_win_outcome ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         cur.execute(
             """
             INSERT INTO baseball_data.betting_ml.cv_summary_win_outcome
                 (best_log_loss_model, best_brier_model, best_auc_model,
                  best_calibration_model, better_calibration_method,
-                 hwrt_reduces_bias, home_bias_in_recent_seasons)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 hwrt_reduces_bias, home_bias_in_recent_seasons, retrain_version)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 summary["best_log_loss_model"],
@@ -467,6 +476,7 @@ def write_to_snowflake(
                 summary["better_calibration_method"],
                 bool(summary["hwrt_reduces_bias"]),
                 summary["home_bias_in_recent_seasons"],
+                retrain_version,
             ),
         )
         print("  cv_summary_win_outcome: 1 row written")
@@ -726,6 +736,10 @@ def update_project_context(summary: dict) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", default=datetime.date.today().isoformat(), help="Retrain version tag written to Snowflake (default: today's date)")
+    args = parser.parse_args()
+
     results_df, calib_df, home_bias_results, summary = run_cv()
 
     # Verify trained models beat naive baseline on log loss for majority of folds
@@ -750,7 +764,7 @@ def main() -> None:
     else:
         print("\nAll trained models beat naive baseline on log loss on majority of folds. ✓")
 
-    write_to_snowflake(results_df, calib_df, home_bias_results, summary)
+    write_to_snowflake(results_df, calib_df, home_bias_results, summary, retrain_version=args.version)
     write_report(results_df, calib_df, home_bias_results, summary)
     update_project_context(summary)
     print("\nCard 4.11 complete.")

@@ -31,6 +31,26 @@ sources:
           - name: x_requests_remaining
             description: Value of the x-requests-remaining response header. Null if header absent.
 
+      - name: odds_snapshots_historical
+        description: >
+          Historical intraday odds snapshots for 2021–2025 MLB regular seasons.
+          Three snapshots per game date at 12:00, 17:00, and 23:00 UTC. Written
+          by scripts/backfill_historical_odds_snapshots.py (Card 7.P2). Bookmaker:
+          bovada. Grain: (game_pk, snapshot_ts, bookmaker).
+        columns:
+          - name: game_pk
+            description: MLB Stats API game ID. May be null for unmatched events.
+          - name: snapshot_ts
+            description: UTC timestamp of the OddsAPI historical query.
+          - name: bookmaker
+            description: OddsAPI bookmaker key (e.g., 'bovada').
+          - name: home_win_prob
+            description: >
+              Implied home win probability derived from American odds.
+              Formula: abs(odds)/(abs(odds)+100) for negative; 100/(odds+100) for positive.
+          - name: total_line
+            description: Over/Under total line. Null for ~30–40% of historical snapshots.
+
       - name: mlb_odds_raw
         description: >
           One row per event per market/region ingestion call of the
@@ -581,3 +601,36 @@ sources:
           Raw append-only table for FanGraphs hitting leaderboard snapshots
           (Dashboard type=8). Grain: one row per ingestion run × batter ×
           window_type × window date range. Window types: 7d, 14d, 30d, season.
+
+  - name: external
+    database: baseball_data
+    schema: external
+    description: >
+      Derived tables written by ingestion scripts that don't fit the raw source
+      schemas (oddsapi, statsapi, savant, fangraphs). Includes team fielding OAA
+      from FanGraphs and other script-produced seasonal aggregates.
+
+    tables:
+      - name: oaa_team_season_raw
+        description: >
+          Team-level Outs Above Average (OAA) and Defensive Runs Saved (DRS)
+          from the FanGraphs major-league team fielding leaderboard. Written by
+          scripts/ingest_oaa.py. Grain: team_abbrev × game_year. Season-level
+          totals only (not daily rolling). OAA coverage begins 2016 (Statcast era).
+
+  - name: betting
+    database: baseball_data
+    schema: betting
+    description: >
+      Derived baseball_data.betting tables written by Python scripts
+      (not managed by dbt). Includes Elo ratings and other script-produced outputs.
+
+    tables:
+      - name: team_elo_history
+        description: >
+          Pre-game and post-game Elo ratings for every team in every regular-season
+          game from 2015 onward. Written by betting_ml/scripts/compute_elo.py.
+          Parameters: K=4, HOME_ADV=24 Elo points, initial rating=1500,
+          season-start regression = 0.667 * elo + 0.333 * 1500 (FiveThirtyEight MLB).
+          Grain: game_pk × team_abbrev.
+          Only elo_before_game is used as a pre-game feature.

@@ -92,6 +92,12 @@ batter_archetype_matchups as (
     select * from {{ ref('feature_batter_archetype_matchups') }}
 ),
 
+line_movement as (
+    select * from {{ ref('mart_odds_line_movement') }}
+    where bookmaker = 'bovada'
+    -- Future enhancement: make bookmaker configurable via a dbt variable
+),
+
 game_context as (
     select
         game_pk,
@@ -272,6 +278,7 @@ final as (
         h_st.batter_chase_rate_std              as home_starter_batter_chase_rate_std,
         h_st.avg_fastball_velo_std              as home_starter_avg_fastball_velo_std,
         h_st.fastball_velo_trend                as home_starter_fastball_velo_trend,
+        h_st.velo_delta_3start                  as home_starter_velo_delta_3start,
         h_st.k_pct_7d_minus_std                 as home_starter_k_pct_7d_minus_std,
         h_st.xwoba_7d_minus_std                 as home_starter_xwoba_7d_minus_std,
         h_st.appearances_30d                    as home_starter_appearances_30d,
@@ -299,6 +306,13 @@ final as (
         h_st.starter_curveball_stuff_plus       as home_starter_curveball_stuff_plus,
         h_st.starter_changeup_stuff_plus        as home_starter_changeup_stuff_plus,
         h_st.starter_avg_fastball_velo          as home_starter_avg_fastball_velo,
+
+        -- ── Home starter: ZiPS FIP projections and trailing FIP/RA9 (Card 8.B) ─
+        h_st.starter_proj_fip                   as home_starter_proj_fip,
+        h_st.starter_proj_xfip                  as home_starter_proj_xfip,
+        h_st.starter_trailing_fip_30g           as home_starter_trailing_fip_30g,
+        h_st.starter_trailing_ra9_30g           as home_starter_trailing_ra9_30g,
+        h_st.starter_fip_ra9_gap                as home_starter_fip_ra9_gap,
 
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
@@ -339,6 +353,7 @@ final as (
         a_st.batter_chase_rate_std              as away_starter_batter_chase_rate_std,
         a_st.avg_fastball_velo_std              as away_starter_avg_fastball_velo_std,
         a_st.fastball_velo_trend                as away_starter_fastball_velo_trend,
+        a_st.velo_delta_3start                  as away_starter_velo_delta_3start,
         a_st.k_pct_7d_minus_std                 as away_starter_k_pct_7d_minus_std,
         a_st.xwoba_7d_minus_std                 as away_starter_xwoba_7d_minus_std,
         a_st.appearances_30d                    as away_starter_appearances_30d,
@@ -367,11 +382,19 @@ final as (
         a_st.starter_changeup_stuff_plus        as away_starter_changeup_stuff_plus,
         a_st.starter_avg_fastball_velo          as away_starter_avg_fastball_velo,
 
+        -- ── Away starter: ZiPS FIP projections and trailing FIP/RA9 (Card 8.B) ─
+        a_st.starter_proj_fip                   as away_starter_proj_fip,
+        a_st.starter_proj_xfip                  as away_starter_proj_xfip,
+        a_st.starter_trailing_fip_30g           as away_starter_trailing_fip_30g,
+        a_st.starter_trailing_ra9_30g           as away_starter_trailing_ra9_30g,
+        a_st.starter_fip_ra9_gap                as away_starter_fip_ra9_gap,
+
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
         h_tm.losses                             as home_losses,
         h_tm.games_played                       as home_games_played,
         h_tm.win_pct                            as home_win_pct,
+        h_tm.pythagorean_win_exp                as home_pythagorean_win_exp,
         h_tm.games_back                         as home_games_back,
         h_tm.streak_direction                   as home_streak_direction,
         h_tm.streak_length                      as home_streak_length,
@@ -479,6 +502,7 @@ final as (
         a_tm.losses                             as away_losses,
         a_tm.games_played                       as away_games_played,
         a_tm.win_pct                            as away_win_pct,
+        a_tm.pythagorean_win_exp                as away_pythagorean_win_exp,
         a_tm.games_back                         as away_games_back,
         a_tm.streak_direction                   as away_streak_direction,
         a_tm.streak_length                      as away_streak_length,
@@ -580,6 +604,26 @@ final as (
         a_tm.off_games_played_14d               as away_games_played_14d,
         a_tm.off_games_played_30d               as away_games_played_30d,
         a_tm.off_games_played_std               as away_games_played_std,
+
+        -- ── Elo team strength ratings (Card 8.D) ─────────────────────────────
+        -- Pre-game snapshot from compute_elo.py. NULL until backfill is run.
+        h_tm.elo_rating                         as home_elo,
+        a_tm.elo_rating                         as away_elo,
+        h_tm.elo_rating - a_tm.elo_rating       as elo_diff,
+
+        -- ── Team defensive quality: OAA (Card 8.C) ───────────────────────────
+        -- Prior-season OAA from FanGraphs. NULL pre-2017 (no 2016 prior season).
+        -- team_oaa_blended coalesces NULL to 0 (league average).
+        h_tm.team_oaa_prior_season              as home_team_oaa_prior_season,
+        a_tm.team_oaa_prior_season              as away_team_oaa_prior_season,
+        h_tm.team_oaa_blended                   as home_team_oaa_blended,
+        a_tm.team_oaa_blended                   as away_team_oaa_blended,
+
+        -- ── Pythagorean win expectation differential ───────────────────────────
+        round(
+            h_tm.pythagorean_win_exp - a_tm.pythagorean_win_exp,
+            4
+        )                                       as pythagorean_win_exp_diff,
 
         -- ── Lineup-vs-starter handedness matchup adjustments ─────────────────
         -- Weighted average of the opposing starter's platoon splits, weighted by
@@ -715,7 +759,53 @@ final as (
         bam.away_lineup_archetype_avg_xwoba,
         bam.away_lineup_archetype_slot_coverage,
         bam.home_batter_cluster_mode,
-        bam.away_batter_cluster_mode
+        bam.away_batter_cluster_mode,
+
+        -- ── Line movement features (Card 7.P3) ───────────────────────────────────
+        -- Bookmaker: bovada (matches odds_snapshots_historical Card 7.P2 backfill).
+        -- h2h_line_movement / total_line_movement imputed to 0.0 when only 1 snapshot
+        -- exists (no detectable sharp action = meaningful signal, not missing data).
+        -- open_home_win_prob / open_total_line left NULL — imputing 0.0 for a
+        -- probability is semantically meaningless; models handle nulls or exclude.
+        coalesce(lm.h2h_line_movement,  0.0)    as home_h2h_line_movement,
+        lm.open_home_win_prob                   as home_open_win_prob,
+        coalesce(lm.total_line_movement, 0.0)   as total_line_movement,
+        lm.open_total_line,
+
+        -- ── Percentage-difference encoded matchup features (Card 8.A) ─────────────
+        -- (home_val - away_val) / ABS(away_val) * 100; positive = home advantage.
+        -- NULL when away denominator is 0 or NULL.
+        case when a_tm.off_woba_30d = 0 or a_tm.off_woba_30d is null then null
+             else round((h_tm.off_woba_30d - a_tm.off_woba_30d) / abs(a_tm.off_woba_30d) * 100, 4)
+        end                                     as home_away_off_woba_30d_pct_diff,
+
+        case when a_tm.off_xwoba_30d = 0 or a_tm.off_xwoba_30d is null then null
+             else round((h_tm.off_xwoba_30d - a_tm.off_xwoba_30d) / abs(a_tm.off_xwoba_30d) * 100, 4)
+        end                                     as home_away_off_xwoba_30d_pct_diff,
+
+        case when a_tm.off_k_pct_30d = 0 or a_tm.off_k_pct_30d is null then null
+             else round((h_tm.off_k_pct_30d - a_tm.off_k_pct_30d) / abs(a_tm.off_k_pct_30d) * 100, 4)
+        end                                     as home_away_off_k_pct_30d_pct_diff,
+
+        case when a_st.xwoba_against_std = 0 or a_st.xwoba_against_std is null then null
+             else round((h_st.xwoba_against_std - a_st.xwoba_against_std) / abs(a_st.xwoba_against_std) * 100, 4)
+        end                                     as home_away_starter_xwoba_against_std_pct_diff,
+
+        case when a_st.k_pct_std = 0 or a_st.k_pct_std is null then null
+             else round((h_st.k_pct_std - a_st.k_pct_std) / abs(a_st.k_pct_std) * 100, 4)
+        end                                     as home_away_starter_k_pct_std_pct_diff,
+
+        case when a_tm.bp_xwoba_against_30d = 0 or a_tm.bp_xwoba_against_30d is null then null
+             else round((h_tm.bp_xwoba_against_30d - a_tm.bp_xwoba_against_30d) / abs(a_tm.bp_xwoba_against_30d) * 100, 4)
+        end                                     as home_away_bp_xwoba_against_30d_pct_diff,
+
+        case when a_ln.injury_adj_avg_woba_30d = 0 or a_ln.injury_adj_avg_woba_30d is null then null
+             else round((h_ln.injury_adj_avg_woba_30d - a_ln.injury_adj_avg_woba_30d) / abs(a_ln.injury_adj_avg_woba_30d) * 100, 4)
+        end                                     as home_away_injury_adj_avg_woba_30d_pct_diff,
+
+        case when a_tm.pythagorean_win_exp = 0 or a_tm.pythagorean_win_exp is null then null
+             else round((h_tm.pythagorean_win_exp - a_tm.pythagorean_win_exp) / abs(a_tm.pythagorean_win_exp) * 100, 4)
+        end                                     as home_away_pythagorean_win_exp_pct_diff
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -740,6 +830,8 @@ final as (
         on  cm.game_pk = g.game_pk
     left join batter_archetype_matchups bam
         on  bam.game_pk = g.game_pk
+    left join line_movement lm
+        on  lm.game_pk = g.game_pk
 )
 
 select * from final

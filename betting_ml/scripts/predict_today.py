@@ -26,7 +26,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import load_features, load_todays_features, get_snowflake_connection
 from betting_ml.utils.preprocessing import build_imputation_pipeline
-from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — required for joblib unpickling
 from betting_ml.utils.probability_layer import (
@@ -605,19 +604,19 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Feature matrix preparation
     # ------------------------------------------------------------------
-    feature_cols = load_retained_features()
-    feature_cols_hist = [c for c in feature_cols if c in df_hist.columns]
-    feature_cols_today = [c for c in feature_cols if c in df_today.columns]
-    missing = set(feature_cols) - set(feature_cols_today)
+    # Load the canonical feature list saved at model training time so the
+    # column count and order exactly match what the production models expect.
+    _feature_cols_path = PROJECT_ROOT / "model_artifacts" / "feature_columns.json"
+    feature_cols = json.loads(_feature_cols_path.read_text())
+    missing = set(feature_cols) - set(df_today.columns)
     if missing:
         warnings.warn(
-            f"{len(missing)} retained features missing from today's data (will fill NaN): "
+            f"{len(missing)} model features missing from today's data (will fill NaN): "
             f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
         )
 
-    X_hist = df_hist[[c for c in feature_cols_hist if c in df_hist.columns]]
-    X_today_raw = df_today[[c for c in feature_cols_today if c in df_today.columns]]
-    X_today_raw = X_today_raw.reindex(columns=X_hist.columns, fill_value=np.nan)
+    X_hist = df_hist.reindex(columns=feature_cols, fill_value=np.nan)
+    X_today_raw = df_today.reindex(columns=feature_cols, fill_value=np.nan)
 
     pipeline = build_imputation_pipeline()
     X_hist_imp = pipeline.fit_transform(X_hist)

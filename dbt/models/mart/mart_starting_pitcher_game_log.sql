@@ -122,36 +122,55 @@ starters as (
     where
         pg.total_pitches      >= 20
         or pg.distinct_innings_count >= 3
+),
+
+-- Runs allowed per starter per game derived from pitch-level score changes.
+-- Sum of (post_pitch_bat_score - pre_pitch_bat_score) for each pitch thrown by
+-- the pitcher. This is RA (runs allowed), not ERA (no earned/unearned distinction
+-- since error tracking is not available in the pitch feed).
+runs_allowed_agg as (
+    select
+        pgc.game_pk,
+        pgc.pitcher_id,
+        sum(pgc.post_pitch_bat_score - pgc.pre_pitch_bat_score) as runs_allowed
+    from {{ ref('mart_pitch_game_context') }} pgc
+    where pgc.game_type = 'R'
+    group by pgc.game_pk, pgc.pitcher_id
 )
 
 select
-    game_pk,
-    game_date,
-    game_year,
-    pitcher_id,
-    pitching_team,
-    batting_team,
-    home_team,
-    away_team,
-    is_home_team,
+    s.game_pk,
+    s.game_date,
+    s.game_year,
+    s.pitcher_id,
+    s.pitching_team,
+    s.batting_team,
+    s.home_team,
+    s.away_team,
+    s.is_home_team,
 
-    total_pitches,
-    batters_faced,
-    outs_recorded,
+    s.total_pitches,
+    s.batters_faced,
+    s.outs_recorded,
     -- Traditional innings pitched format: 6 outs = 2.0, 7 outs = 2.1, 8 outs = 2.2
-    floor(outs_recorded / 3) + (mod(outs_recorded, 3) * 0.1)       as innings_pitched,
+    floor(s.outs_recorded / 3) + (mod(s.outs_recorded, 3) * 0.1)  as innings_pitched,
 
-    strikeouts,
-    walks,
-    hit_by_pitch,
-    home_runs_allowed,
-    hits_allowed,
+    s.strikeouts,
+    s.walks,
+    s.hit_by_pitch,
+    s.home_runs_allowed,
+    s.hits_allowed,
+
+    coalesce(rag.runs_allowed, 0)                                   as runs_allowed,
 
     round(
-        xwoba_numerator / nullif(xwoba_denom, 0),
+        s.xwoba_numerator / nullif(s.xwoba_denom, 0),
         4
     )                                                               as xwoba_against,
 
-    round(avg_fastball_velo, 1)                                     as avg_fastball_velo
+    round(s.avg_fastball_velo, 1)                                   as avg_fastball_velo
 
-from starters
+from starters s
+left join runs_allowed_agg rag
+    on  rag.game_pk    = s.game_pk
+    and rag.pitcher_id = s.pitcher_id

@@ -8,6 +8,8 @@ and updates project_context.md.
 
 from __future__ import annotations
 
+import argparse
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -582,7 +584,7 @@ def update_project_context(cv_results: dict, results_df: pd.DataFrame) -> None:
     print(f"Updated {context_path} with Card 4.9 results.")
 
 
-def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame) -> None:
+def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame, retrain_version: str) -> None:
     """Write CV results to Snowflake tables in baseball_data.betting_ml schema."""
     print("\nWriting results to Snowflake...")
     conn = get_snowflake_connection()
@@ -599,16 +601,17 @@ def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame) -> None:
                 mae FLOAT,
                 rmse FLOAT,
                 brier_score FLOAT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_results_tot_runs")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_results_tot_runs ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for row in cv_results["fold_results"]:
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_results_tot_runs
-                    (fold, model, n_eval, mae, rmse, brier_score)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (fold, model, n_eval, mae, rmse, brier_score, retrain_version)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     row["fold"],
@@ -617,6 +620,7 @@ def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame) -> None:
                     row["mae"],
                     row["rmse"],
                     row["brier_score"],
+                    retrain_version,
                 ),
             )
         print(f"  cv_results_tot_runs: {len(cv_results['fold_results'])} rows written")
@@ -627,18 +631,19 @@ def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame) -> None:
                 rank INTEGER,
                 feature VARCHAR,
                 mean_abs_shap FLOAT,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_shap_features_tot_runs")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_shap_features_tot_runs ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         for i, feat in enumerate(cv_results["shap_top_features"], start=1):
             cur.execute(
                 """
                 INSERT INTO baseball_data.betting_ml.cv_shap_features_tot_runs
-                    (rank, feature, mean_abs_shap)
-                VALUES (%s, %s, %s)
+                    (rank, feature, mean_abs_shap, retrain_version)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (i, feat["feature"], feat["mean_abs_shap"]),
+                (i, feat["feature"], feat["mean_abs_shap"], retrain_version),
             )
         print(f"  cv_shap_features_tot_runs: {len(cv_results['shap_top_features'])} rows written")
 
@@ -648,21 +653,23 @@ def write_to_snowflake(cv_results: dict, results_df: pd.DataFrame) -> None:
                 best_mae_model VARCHAR,
                 best_brier_model VARCHAR,
                 ngboost_better_dist VARCHAR,
+                retrain_version VARCHAR,
                 loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        cur.execute("TRUNCATE TABLE baseball_data.betting_ml.cv_summary_tot_runs")
+        cur.execute("ALTER TABLE baseball_data.betting_ml.cv_summary_tot_runs ADD COLUMN IF NOT EXISTS retrain_version VARCHAR")
         summary = cv_results["summary"]
         cur.execute(
             """
             INSERT INTO baseball_data.betting_ml.cv_summary_tot_runs
-                (best_mae_model, best_brier_model, ngboost_better_dist)
-            VALUES (%s, %s, %s)
+                (best_mae_model, best_brier_model, ngboost_better_dist, retrain_version)
+            VALUES (%s, %s, %s, %s)
             """,
             (
                 summary["best_mae_model"],
                 summary["best_brier_model"],
                 summary["ngboost_better_dist"],
+                retrain_version,
             ),
         )
         print("  cv_summary_tot_runs: 1 row written")
@@ -699,8 +706,12 @@ def report_from_json() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--version", default=datetime.date.today().isoformat(), help="Retrain version tag written to Snowflake (default: today's date)")
+    args = parser.parse_args()
+
     cv_results, results_df, calib_data, shap_df = run_cv()
-    write_to_snowflake(cv_results, results_df)
+    write_to_snowflake(cv_results, results_df, retrain_version=args.version)
     write_report(cv_results, results_df, calib_data, shap_df)
     update_project_context(cv_results, results_df)
     print("\nCard 4.9 complete.")

@@ -389,11 +389,18 @@ with col_r2:
             else:
                 # Rebuild just the lineup + odds models synchronously so results are
                 # immediately visible — no need to wait for a GHA workflow to finish.
+                # Ordering: mart tables first (schema changes must be materialized before
+                # feature tables that reference them), then feature tables in dependency
+                # order. dbt resolves exact execution order from the DAG.
                 _dbt_select = " ".join([
                     "stg_statsapi_lineups", "stg_statsapi_lineups_wide",
                     "stg_oddsapi_events", "stg_oddsapi_odds",
                     "mart_odds_events", "mart_odds_outcomes",
+                    "mart_team_season_record",
+                    "mart_starting_pitcher_game_log",
                     "feature_pregame_lineup_features", "feature_pregame_odds_features",
+                    "feature_pregame_team_features",
+                    "feature_pregame_starter_features",
                     "feature_pregame_game_features",
                 ])
                 with st.spinner("Rebuilding dbt lineup + odds models…"):

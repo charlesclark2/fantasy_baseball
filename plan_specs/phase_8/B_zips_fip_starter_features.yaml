@@ -1,0 +1,148 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: zips-fip-starter-features
+  namespace: default
+spec:
+  description: >
+    Surface ZiPS projected FIP and xFIP as pre-game starter features, and derive
+    the FIP-ERA gap as a "luck adjustment" signal for each starter.
+
+    RESEARCH BASIS:
+      Cui (2020) used the FIP-ERA gap explicitly as a luck-adjustment feature — a
+      starter with ERA >> FIP has been getting unlucky (expected to improve), while
+      ERA << FIP has been getting lucky (expected to regress). This normalizes
+      the well-known phenomenon that ERA is noisy in short samples while FIP is a
+      better predictor of future performance.
+
+    CURRENT STATE:
+      - fct_fangraphs_pitching_analytics contains proj_fip (ZiPS projected FIP)
+        and proj_xfip (ZiPS projected xFIP) for each pitcher × season.
+      - feature_pregame_starter_features does NOT join to fct_fangraphs_pitching_analytics
+        and does NOT expose any FIP-related columns.
+      - mart_starting_pitcher_game_log contains actual IP, ERA, K, BB per start but
+        does not compute a trailing FIP.
+
+    WORK REQUIRED:
+      1. Compute trailing actual FIP from mart_starting_pitcher_game_log (or extend
+         it): FIP = (13×HR + 3×(BB+HBP) - 2×K) / IP + FIP_constant.
+         FIP constant is roughly 3.10–3.15 (use league average for the season).
+         Compute as a rolling 30-game window (or season-to-date).
+      2. Join ZiPS proj_fip (pre-season projection) to feature_pregame_starter_features
+         via pitcher_id × game_year (season-level, leakage-free).
+      3. Derive FIP-ERA gap: rolling_fip_30g - rolling_era_30g. Positive = getting
+         unlucky (FIP > ERA means good performance not reflected in runs allowed).
+         Negative = getting lucky.
+      4. Add to feature_pregame_starter_features and surface in
+         feature_pregame_game_features as home_starter_fip_era_gap,
+         home_starter_proj_fip (ZiPS), home_starter_proj_xfip (ZiPS), and
+         away equivalents.
+
+    LEAKAGE NOTE: ZiPS projections are pre-season (published February/March). Using
+    game_year join (e.g., 2025 projection for games in 2025 season) is leakage-free
+    as long as the join key is game_year, not game_date. Rolling actual FIP must use
+    < game_date window (same rule as all rolling stats).
+
+    COVERAGE NOTES:
+      - ZiPS coverage: 2024 and 2025 backfill ingested (Card 7.E). 2026 must be
+        ingested fresh before this card can run fully. Pre-2024 seasons will have
+        NULL proj_fip (impute to league-average FIP = 4.00 for imputation).
+      - Trailing actual FIP requires HR, BB, HBP, K, IP data in mart_starting_pitcher_game_log.
+        Verify HBP is available; if not, use (13×HR + 3×BB - 2×K) / IP (standard
+        approximation excluding HBP).
+
+    EFFORT: Low-medium (~0.5 days). Data already ingested; requires one dbt model
+    extension and one new computed column block in feature_pregame_starter_features.
+
+    Source: Cui (2020) Wharton thesis — FIP-ERA gap as luck adjustment signal.
+
+  acceptanceCriteria:
+    - description: >
+        feature_pregame_starter_features includes: home_starter_proj_fip,
+        home_starter_proj_xfip, home_starter_trailing_fip_30g,
+        home_starter_fip_era_gap (and away equivalents). dbtf build and tests pass.
+    - description: >
+        Snowflake spot-check confirms non-null values for ≥ 85% of 2024–2025 game rows
+        for proj_fip and ≥ 80% for trailing_fip (expected nulls in first 5 career starts).
+    - description: >
+        validate_feature_selection.py output documents which FIP columns were retained
+        vs. dropped, with target correlations.
+    - description: >
+        betting_ml/evaluation/fip_starter_feature_impact.md documents: null rates,
+        correlation with targets, comparison to existing xwOBA-against features,
+        and recommendation on whether FIP adds independent signal.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: zips-fip-starter-features-plan
+  namespace: default
+spec:
+  description: >
+    Three-task plan. Task 1 extends mart_starting_pitcher_game_log with trailing FIP.
+    Task 2 joins ZiPS proj_fip and computed trailing FIP into feature_pregame_starter_features.
+    Task 3 validates feature coverage and writes the impact report.
+  goalRef:
+    name: zips-fip-starter-features
+  graph:
+    nodes:
+
+      - id: compute-trailing-fip
+        kind: Task
+        description: >
+          Extend mart_starting_pitcher_game_log (or create mart_starter_fip) to add
+          trailing FIP calculations.
+
+          FIP formula:
+            fip = (13 * hr_allowed + 3 * (bb_allowed + hbp_allowed) - 2 * k) / ip
+                  + fip_constant
+          FIP constant per season: use a CTE that computes league-average FIP
+          constant from all starters in that season (or hardcode 3.10 if not available).
+          If HBP is not in the game log, use: (13 * hr + 3 * bb - 2 * k) / ip + 3.10.
+
+          Add as a rolling 30-game window (SUM over prior 30 starts using game_date < current game_date).
+          Null-guard: NULL if ip_sum < 10 (insufficient sample).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf parse succeeds after mart changes
+            command: dbtf
+            args: [parse]
+
+      - id: add-fip-to-starter-features
+        kind: Task
+        description: >
+          Join trailing FIP and ZiPS proj_fip into feature_pregame_starter_features.
+
+          1. Join mart_starting_pitcher_game_log (with trailing FIP) to the starters
+             CTE on pitcher_id + game_pk, using the existing rolling window join pattern.
+          2. Join fct_fangraphs_pitching_analytics on pitcher_id + game_year for
+             ZiPS proj_fip and proj_xfip (pre-season projection, leakage-free).
+          3. Derive fip_era_gap = trailing_fip_30g - trailing_era_30g.
+             NULL if either component is NULL.
+          4. Surface all four columns (proj_fip, proj_xfip, trailing_fip_30g,
+             fip_era_gap) in feature_pregame_game_features with home/away prefixes.
+        dependsOn:
+          - compute-trailing-fip
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for starter and game features
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_starter_features+
+
+      - id: validate-and-report
+        kind: Task
+        description: >
+          Run validate_feature_selection.py and write the impact report.
+          Write betting_ml/evaluation/fip_starter_feature_impact.md.
+        dependsOn:
+          - add-fip-to-starter-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: FIP starter feature impact report
+            path: betting_ml/evaluation/fip_starter_feature_impact.md

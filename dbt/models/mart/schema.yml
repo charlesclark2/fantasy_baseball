@@ -3,6 +3,53 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_odds_line_movement
+  # ============================================================================
+  - name: mart_odds_line_movement
+    description: >
+      One row per game_pk. Opening and pre-game implied home-win probability and
+      O/U total line, computed from intraday odds snapshots. Exposes h2h and
+      totals line movement as signed deltas (pregame − open). Bookmaker: bovada.
+      Sources: odds_snapshots_historical (2021–2025, Card 7.P2) and
+      mart_odds_outcomes filtered to pre-game ingestions (2026+). Card 7.P3.
+
+    columns:
+
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Calendar date of the game.
+        tests:
+          - not_null
+
+      - name: h2h_line_movement
+        description: >
+          pregame_home_win_prob − open_home_win_prob. Positive = line moved
+          toward home team. NULL when snapshot_count = 1.
+
+      - name: total_line_movement
+        description: >
+          pregame_total_line − open_total_line. Positive = total moved up.
+          NULL when snapshot_count = 1 or no totals data available.
+
+      - name: snapshot_count
+        description: Number of distinct pre-game snapshots available for the game.
+
+      - name: data_source
+        description: "'historical' (Card 7.P2 backfill) or 'live' (2026+ intraday)."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['historical', 'live']
+
+      - name: bookmaker
+        description: OddsAPI bookmaker key used (bovada).
+
+  # ============================================================================
   # mart_game_odds_bridge
   # ============================================================================
   - name: mart_game_odds_bridge

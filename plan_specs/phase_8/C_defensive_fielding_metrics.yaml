@@ -1,0 +1,163 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: defensive-fielding-metrics
+  namespace: default
+spec:
+  description: >
+    Add team-level defensive quality features using Statcast Outs Above Average (OAA)
+    or FanGraphs Ultimate Zone Rating (UZR). The project currently has no fielding
+    quality signal — all run prevention is attributed to pitching (xwOBA against, K%,
+    FIP). Defensive quality is an independent dimension that can affect run prevention
+    independently of pitcher quality.
+
+    RESEARCH BASIS:
+      Hughes / DBS (2022): DRS (Defensive Runs Saved) and wRC+ were identified as the
+      cleanest player-level inputs for run production/prevention models because they
+      directly quantify run value. DRS credits/debits a fielder's contribution to
+      runs saved relative to an average fielder — it is already in the same unit as
+      the target variable (runs). At the team level, DRS sums to a meaningful
+      team-level defensive quality score.
+
+    WHY DEFENSE MATTERS:
+      Pitchers don't allow runs in isolation — their xwOBA against and FIP already
+      account for defense-independent performance, but the actual runs allowed in
+      a game depend on the fielders behind them converting batted balls into outs.
+      A team with elite defense (top 5 in OAA) converts ~15-25 more outs per season
+      than an average team, reducing opposing team scoring by an estimated 0.1–0.15
+      runs per game. This is not currently captured anywhere in the model.
+
+    DATA SOURCE OPTIONS:
+      Option A (preferred) — Baseball Savant OAA (Outs Above Average):
+        URL: https://baseballsavant.mlb.com/leaderboard/outs_above_average
+        Statcast-native; team-level rolling OAA available from 2016+; scrape or
+        use the public CSV download. Grain: team × season (or team × date for
+        rolling). Season-level OAA is appropriate for a pre-game feature.
+
+      Option B — FanGraphs UZR/DRS (via web scrape or manual CSV):
+        DRS from Baseball Reference / FanGraphs; team-level season totals.
+        More historical coverage (back to 2002) but does not integrate as cleanly
+        with the existing FanGraphs ingestion pipeline.
+
+      RECOMMENDATION: Use Option A (Baseball Savant OAA) for consistency with
+      Statcast-native data already in the pipeline.
+
+    FEATURE DESIGN:
+      - team_oaa_ytd: team's cumulative OAA for the current season, updated daily,
+        using game_date - 1 leakage guard.
+      - team_oaa_prior_season: prior season's team OAA (full season, pre-season
+        baseline before YTD accumulates meaningful sample).
+      - team_oaa_blended: weighted blend of ytd (weight = games_played / 162) and
+        prior season (weight = 1 - games_played / 162) — same Bayesian shrinkage
+        pattern as pythagorean win expectation.
+      Surface as home_team_oaa_blended, away_team_oaa_blended in
+      feature_pregame_game_features.
+
+    COVERAGE NOTE: OAA is Statcast-era only (2016+), consistent with our existing
+    training cutoff. Null-impute to 0 (league average) for missing games.
+
+    EFFORT: High (~1.5–2 days). New data source requiring ingestion pipeline, staging
+    model, mart model, and feature join.
+
+    Source: Hughes / DBS (2022) thesis — DRS/OAA as direct run value signal.
+
+  acceptanceCriteria:
+    - description: >
+        Baseball Savant OAA data ingested to Snowflake for 2016–2026 seasons.
+        Raw table in baseball_data.statsapi or baseball_data.external schema.
+        Grain: team × season (minimum); team × date if rolling is available.
+    - description: >
+        mart_team_fielding_oaa built with columns: team_abbrev, game_year,
+        team_oaa_season, team_oaa_prior_season, team_oaa_blended.
+        Null rate < 5% for 2021–2025 seasons.
+    - description: >
+        feature_pregame_game_features includes home_team_oaa_blended and
+        away_team_oaa_blended. dbtf build and tests pass.
+    - description: >
+        validate_feature_selection.py output documents OAA feature correlations
+        with all three targets.
+    - description: >
+        betting_ml/evaluation/fielding_oaa_feature_impact.md documents: null rates,
+        correlation with targets vs. pitching xwOBA (tests whether OAA adds
+        independent signal beyond pitcher quality), and retrain recommendation.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: defensive-fielding-metrics-plan
+  namespace: default
+spec:
+  description: >
+    Four-task plan: ingest OAA data, build staging/mart, add to feature layer,
+    validate and report.
+  goalRef:
+    name: defensive-fielding-metrics
+  graph:
+    nodes:
+
+      - id: ingest-oaa-data
+        kind: Task
+        description: >
+          Write scripts/ingest_oaa.py to download Baseball Savant OAA team-level
+          season totals and load them to Snowflake.
+
+          Baseball Savant OAA CSV endpoint:
+            https://baseballsavant.mlb.com/leaderboard/outs_above_average?type=Fielding_Team&startYear=2016&endYear=<current_year>&split=yes&min=q&pos=all&roles=&viz=hide&csv=true
+
+          Download the CSV, parse team name → team_abbrev mapping (use the existing
+          team_abbrev mapping in the project), and load to:
+            baseball_data.external.oaa_team_season_raw
+          Columns: team_abbrev, game_year, oaa, n_opportunities.
+
+          Backfill: 2016–2025 seasons. Add 2026 to the daily ingestion schedule
+          (or cron monthly during the season) via daily_ingestion.yml.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: OAA ingestion script
+            path: scripts/ingest_oaa.py
+
+      - id: build-mart-oaa
+        kind: Task
+        description: >
+          Build dbt/models/mart/mart_team_fielding_oaa.sql.
+          Compute team_oaa_blended = ytd_oaa × (games_played / 162) +
+          prior_season_oaa × (1 - games_played / 162).
+          Leakage guard: join on game_date - 1 (same as team_schedule_context).
+        dependsOn:
+          - ingest-oaa-data
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build mart_team_fielding_oaa
+            command: dbtf
+            args: [build, --select, mart_team_fielding_oaa]
+
+      - id: add-oaa-to-features
+        kind: Task
+        description: >
+          Join mart_team_fielding_oaa into feature_pregame_team_features and surface
+          home_team_oaa_blended, away_team_oaa_blended in feature_pregame_game_features.
+        dependsOn:
+          - build-mart-oaa
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build feature models
+            command: dbtf
+            args: [build, --select, +feature_pregame_game_features]
+
+      - id: validate-and-report
+        kind: Task
+        description: >
+          Run validate_feature_selection.py. Write
+          betting_ml/evaluation/fielding_oaa_feature_impact.md.
+          Include: null rates by season, Pearson correlation of home/away OAA with
+          each target, partial correlation controlling for home_bp_xwoba_against_30d
+          (tests whether OAA adds signal beyond pitching quality).
+        dependsOn:
+          - add-oaa-to-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: fielding OAA feature impact report
+            path: betting_ml/evaluation/fielding_oaa_feature_impact.md

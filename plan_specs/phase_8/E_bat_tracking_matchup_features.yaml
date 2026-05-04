@@ -1,0 +1,145 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bat-tracking-matchup-features
+  namespace: default
+spec:
+  description: >
+    Add per-batter bat tracking matchup aggregations (bat speed vs. pitch velocity,
+    swing path vs. pitch movement) as pre-game lineup features. This was explicitly
+    deferred from Phase 4 EDA with the note "Re-evaluate with per-batter matchup
+    aggregations in Phase 5+."
+
+    DEFERRAL CONTEXT (Phase 4 EDA, Notebook 06):
+      Phase 4 evaluated bat tracking at the 30-day TEAM AVERAGE level and found
+      max |r| = 0.022 with total runs (vs. 0.088 for park factor). OLS ΔR² < 0.001.
+      The EDA verdict: "bat speed–wOBA correlation is low (|r| = 0.225) — the weak
+      signal is not redundancy but rather that 30-day TEAM AVERAGES lose the
+      individual-level precision bat speed carries. Re-evaluate with per-batter
+      matchup aggregations in Phase 5+."
+      Coverage: bat tracking available 2023-07-14+ (Hawk-Eye bat sensors).
+
+    HYPOTHESIS FOR PHASE 8:
+      Individual batter bat speed vs. the specific starter's fastball velocity is a
+      matchup signal that team averages wash out. A lineup full of high-bat-speed
+      hitters facing a 97+ mph starter is a different prediction scenario than a
+      lineup of contact hitters facing the same starter. The key is the INTERACTION
+      between batter bat speed and pitcher pitch velocity/movement, not the raw
+      team averages.
+
+    FEATURE DESIGN:
+      Aggregate across the 9-batter lineup, weighted by lineup position (batting
+      order 1-3 weighted more heavily — they get more PAs):
+        lineup_bat_speed_vs_starter_velo: avg(batter_bat_speed_30d / starter_fastball_velo)
+          — ratio > 1.0 means batters are "fast enough" to catch up to the fastball
+        lineup_swing_length_std: standard deviation of swing lengths across the lineup
+          — high variance = lineup has both contact and power hitters (less predictable)
+        lineup_attack_angle_vs_starter_gb_pct: avg(batter_attack_angle_30d) relative
+          to starter's groundball % — high attack angle vs. groundball pitcher =
+          favorable matchup for extra-base hits
+
+    COVERAGE CONSTRAINT:
+      Bat tracking is 2023-07-14+ only. This card creates an ERA-SPECIFIC feature
+      block that is only populated for games from 2023 mid-season onward. The training
+      set must handle NULL values for all pre-2023 rows (mean imputation, or a
+      has_bat_tracking flag). Given our 2021+ training cutoff, roughly 50% of training
+      rows will have NULL bat tracking features. This is the same single-model path
+      the Phase 4 EDA validated for team-level bat tracking.
+
+    PREREQUISITE: Phase 7.MB feature importance analysis (Card 7.MB analyze-feature-importance)
+    should complete first to establish which existing features carry redundant signal.
+    If existing Stuff+ and pitch archetype matchup features already capture the
+    velocity/movement interaction, bat tracking matchups may be redundant.
+
+    EFFORT: Medium (~1 day). Data exists in mart_pitch_hit_characteristics;
+    requires a new mart aggregation and feature join.
+
+    Source: Phase 4 EDA Notebook 06 explicit deferral ("re-evaluate with per-batter
+    matchup aggregations in Phase 5+").
+
+  acceptanceCriteria:
+    - description: >
+        mart_batter_bat_tracking_profile built with columns: batter_id, game_date,
+        bat_speed_30d, swing_length_30d, attack_angle_30d. Grain: batter × game_date.
+        Null rate reflects 2023+ coverage only; pre-2023 rows expected 100% null.
+    - description: >
+        feature_pregame_lineup_features extended with lineup-level bat tracking
+        aggregations: lineup_bat_speed_vs_starter_velo, lineup_avg_bat_speed,
+        lineup_avg_attack_angle. Surface in feature_pregame_game_features with
+        home/away prefixes.
+    - description: >
+        validate_feature_selection.py output documents correlations and null rates.
+        If null rate > 50% of training rows, document in report and note that
+        coverage will improve as 2024+ seasons accumulate.
+    - description: >
+        betting_ml/evaluation/bat_tracking_matchup_feature_impact.md documents:
+        null rates by season, correlation with targets, cross-correlation with
+        existing Stuff+ and archetype matchup features (tests for redundancy),
+        and retrain recommendation.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bat-tracking-matchup-features-plan
+  namespace: default
+spec:
+  description: >
+    Three-task plan: build batter bat tracking profile mart, add lineup aggregations
+    to feature layer, validate and report.
+  goalRef:
+    name: bat-tracking-matchup-features
+  graph:
+    nodes:
+
+      - id: build-batter-bat-tracking-mart
+        kind: Task
+        description: >
+          Build dbt/models/mart/mart_batter_bat_tracking_profile.sql.
+          Source: mart_pitch_hit_characteristics, filtered to swing events
+          (event_type IN ('hit_into_play', 'swinging_strike', 'foul', 'foul_tip'))
+          where bat_speed IS NOT NULL (2023-07-14+).
+          Compute 30-day rolling averages: bat_speed_30d, swing_length_30d,
+          attack_angle_30d. Partition by batter_id, rolling window on game_date < current.
+          Grain: batter_id × game_date. NULL for all pre-2023 dates.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build mart_batter_bat_tracking_profile
+            command: dbtf
+            args: [build, --select, mart_batter_bat_tracking_profile]
+
+      - id: add-bat-tracking-to-features
+        kind: Task
+        description: >
+          Extend feature_pregame_lineup_features to aggregate bat tracking across
+          the 9-batter lineup. Join mart_batter_bat_tracking_profile on
+          batter_id + game_date (< game_date leakage guard). Compute:
+            lineup_avg_bat_speed = AVG(bat_speed_30d) across 9 batters
+            lineup_avg_attack_angle = AVG(attack_angle_30d) across 9 batters
+            lineup_bat_speed_vs_starter_velo = AVG(bat_speed_30d) /
+              NULLIF(home_starter_fastball_velo_7d, 0)
+          Surface in feature_pregame_game_features with home/away prefixes.
+        dependsOn:
+          - build-batter-bat-tracking-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build feature models with bat tracking columns
+            command: dbtf
+            args: [build, --select, +feature_pregame_game_features]
+
+      - id: validate-and-report
+        kind: Task
+        description: >
+          Run validate_feature_selection.py. Write
+          betting_ml/evaluation/bat_tracking_matchup_feature_impact.md.
+          Key sections: null rates by season, correlation with targets,
+          cross-correlation with Stuff+ and archetype matchup features,
+          recommendation.
+        dependsOn:
+          - add-bat-tracking-to-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: bat tracking matchup feature impact report
+            path: betting_ml/evaluation/bat_tracking_matchup_feature_impact.md

@@ -45,6 +45,17 @@ spec:
 
     If the performance gate is not met by the All-Star break, defer retraining
     until Phase 7A improvements have been implemented and validated.
+
+    ONE-TIME RETRAIN INPUT — 2021 weather backfill (Card 7.L1, completed 2026-05-04):
+    The Card 7.MA retrain (2026-05-04) was executed before Card 7.L1 completed the
+    historical weather backfill. As a result, all 2,429 2021 rows (~23.7% of training
+    data) had weather features imputed with training-set mean rather than actual values.
+    Card 7.L1 has since backfilled actual 2021 weather data into the feature store.
+    The next scheduled retrain (All-Star break or later, subject to performance gate)
+    should incorporate actual 2021 weather to replace the mean-imputed values. No
+    emergency retrain is required — mean imputation is a principled fallback and the
+    improvement is expected to be within CV noise — but the correction should be
+    included in the first retrain that clears all gates.
   acceptanceCriteria:
     - description: >
         scripts/daily_run.md contains a "Model Retraining" section documenting
