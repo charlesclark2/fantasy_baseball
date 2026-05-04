@@ -9,15 +9,28 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
 
+    env:
+      DBT_FUSION_VERSION: "2026-05"  # bump to force cache invalidation and pull latest
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
 
+      - name: Cache dbt-fusion
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbtf
+          key: dbtf-${{ env.DBT_FUSION_VERSION }}-${{ runner.os }}
+
       - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Add dbt-fusion to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Write Snowflake private key
         run: |
@@ -50,7 +63,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select stg_statsapi_lineups stg_statsapi_lineups_wide --project-dir dbt --profiles-dir dbt
+        run: dbtf build --select stg_statsapi_lineups stg_statsapi_lineups_wide --project-dir dbt --profiles-dir dbt
 
       - name: Check for newly confirmed lineups
         id: lineup_check
@@ -72,4 +85,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
+        run: dbtf build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
