@@ -21,6 +21,9 @@ betting_ml/models/**/*.pkl
 # Add an exception here whenever a new production artifact is deployed (8.H2 protocol).
 !betting_ml/models/home_win/elasticnet_2026.pkl
 
+# Model evaluation artifacts (large binary fold data — regenerated each retrain, not tracked in git)
+betting_ml/evaluation/model_evaluation/*.parquet
+
 # Daily prediction outputs (written by predict_today.py — tracked in Snowflake, not git)
 betting_ml/outputs/predictions*.csv
 betting_ml/outputs/probability_outputs*.parquet
