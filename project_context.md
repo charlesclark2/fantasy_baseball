@@ -3565,17 +3565,94 @@ Replace the Phase 6 Streamlit MVP with a production-grade web application. The S
 
 ### Phase 8 — Data & Model Engineering Infrastructure (Card 8.H)
 
-**Status:** Planning (2026-05-04). Prerequisite for Card 8.G (Production Web App) and safe execution of all other Phase 8 cards. Full spec in `docs/phase_8_infra_epic.md`.
+**Status:** In Progress (2026-05-04). Prerequisite for Card 8.G (Production Web App) and safe execution of all other Phase 8 cards. Full spec in `docs/phase_8_infra_epic.md`.
 
 | Card | Title | Effort | Status |
 |---|---|---|---|
-| 8.H1 | CI/CD Pipeline Hardening | Low (~0.5d) | [ ] Not started |
-| 8.H2 | Model Deploy Protocol | Low (~0.5d) | [ ] Not started — first use is elasticnet deploy from 7.MB |
+| 8.H1 | CI/CD Pipeline Hardening | Low (~0.5d) | [x] Complete (2026-05-04) |
+| 8.H2 | Model Deploy Protocol | Low (~0.5d) | [x] Complete (2026-05-04) — elasticnet deployed as home_win v2, runbook at `docs/model_deploy_runbook.md` |
 | 8.H3 | Live Monitoring & Alerting | Medium (~1d) | [ ] Not started |
-| 8.H4 | Snowflake Environment Isolation | High (~1.5–2d) | [ ] Not started |
-| 8.H5 | Application Deployment (Streamlit Cloud) | Low (~0.5d) | [ ] Not started |
+| 8.H4 | Snowflake Environment Isolation | High (~1.5–2d) | [ ] Deferred — not required until Phase 9 production build-out |
+| 8.H5 | Application Deployment (Streamlit Cloud) | Low (~0.5d) | [ ] Deferred — Streamlit app is development-only; production deployment is Card 8.G |
 
-**Recommended sequencing:** 8.H1 (Gaps 1–3) → 8.H2 → 8.H3 (parallel) → 8.H4 → 8.H1 (Gaps 4–5) → 8.H5
+**Recommended sequencing:** 8.H1 → 8.H2 → 8.H3 → (8.H4 and 8.H5 deferred to Phase 9)
+
+---
+
+#### 8.H1 — CI/CD Pipeline Hardening (Complete)
+
+Closed five gaps identified in the 7.MB CI/CD audit:
+1. `lineup_monitor.yml` dbt-fusion binary now cached via `actions/cache` keyed on `DBT_FUSION_VERSION`; same cache applied to `dbt_daily_build.yml` and `dbt_staging_build.yml`
+2. All `dbt` → `dbtf` command references corrected across all workflow files
+3. Model artifact smoke test added to `ci.yml` (`model-smoke-test` job): loads `home_win` pkl, asserts `0 < p < 1`
+4. `predict_today.py` syntax check added as a CI step
+5. Gap 5 (dbt PR test gate) deferred to 8.H4 (requires dev Snowflake environment)
+
+---
+
+#### 8.H2 — Model Deploy Protocol (Complete)
+
+Structured, reversible deploy process for all three production model targets. Runbook at `docs/model_deploy_runbook.md`. First use: elasticnet deployed as `home_win` v2 (2026-05-04).
+
+Protocol steps: (1) train and evaluate, (2) write artifact, (3) update `model_registry.yaml` with `rollback_artifact_path`, (4) smoke test locally, (5) commit and `git tag model/{target}/v{N}`, (6) open PR and merge with CI passing, (7) post-deploy verification.
+
+Registry version history: `model/home_win/v2` (elasticnet Pipeline, Brier 0.2425, ECE 0.0202, 2026-05-04); `model/total_runs/v1` (NGBoost LogNormal, MAE 3.5190, 2026-05-04); `model/run_differential/v1` (NGBoost Normal, MAE 3.4724, 2026-05-04). All three production targets formally deployed. Rollback artifacts documented in registry.
+
+---
+
+#### 8.H3 — Live Monitoring & Alerting (Next)
+
+**Goal:** Detect model degradation, data staleness, and prediction coverage failures before they affect bets.
+
+**Scope — three monitoring targets:**
+
+**1. Calibration drift (ECE)**
+Extend `backfill_prediction_log.py` (or a new `scripts/compute_model_health.py`) to compute rolling 14-day ECE on `prediction_log` rows where `outcome` is not null. Write results to a new `model_health_log` Snowflake table with columns `(run_date, target, window_days, ece, brier, sample_n, alert_fired)`. Alert threshold: ECE > 0.04 (2× elasticnet baseline of 0.0202). Alert mechanism: exit non-zero + write `alert_fired = true` to the table; GitHub Actions step failure surfaces the alert.
+
+**2. Data freshness**
+Implement `scripts/check_data_freshness.py`. Queries `MAX(ingestion_timestamp)` per source table against per-source staleness thresholds:
+
+| Source table | Expected freshness | Alert if stale > |
+|---|---|---|
+| `savant.batter_pitches` | Daily (yesterday) | 36h |
+| `oddsapi.mlb_odds_raw` | 6× daily | 6h on game days |
+| `fangraphs.fg_stuff_plus_raw` | Sunday | 8 days |
+| `statsapi.umpire_game_log` | Daily | 36h |
+| `statsapi.player_transactions` | Daily | 36h |
+| `statsapi.monthly_schedule` (lineups) | Hourly on game days | 2h on game days |
+
+Script exits non-zero on any threshold breach. Add as a step in `daily_ingestion.yml` after all ingestion steps.
+
+**3. Prediction coverage**
+After `predict_today.py` runs, check that `daily_model_predictions` has a row for every scheduled game with confirmed lineups (`has_full_lineup = true`). Coverage < 90% on any game day is a failure. Add as a step in `daily_ingestion.yml` immediately after the scoring step.
+
+**Deliverables:**
+- `scripts/check_data_freshness.py`
+- `scripts/compute_model_health.py` (ECE drift compute + `model_health_log` writer)
+- `scripts/check_prediction_coverage.py`
+- DDL for `model_health_log` table in `scripts/ddl/`
+- Both check scripts wired into `daily_ingestion.yml`
+- `docs/monitoring_runbook.md`
+
+**Acceptance criteria:**
+- [ ] `model_health_log` table exists in Snowflake; ECE computed daily on rolling 14-day window
+- [ ] ECE alert fires (exits non-zero) when threshold is exceeded — verified via a manual test with synthetic data
+- [ ] `check_data_freshness.py` passes locally on current data and exits non-zero on simulated stale input
+- [ ] Prediction coverage check step present in `daily_ingestion.yml` and passes on current `daily_model_predictions`
+- [ ] All three scripts wired into `daily_ingestion.yml` after their respective upstream steps
+- [ ] `docs/monitoring_runbook.md` documents all thresholds, alert behavior, and manual resolution steps
+
+---
+
+#### 8.H4 — Snowflake Environment Isolation (Deferred)
+
+Deferred to Phase 9. Required before the production web application (Card 8.G) is built, but not blocking current Phase 8 feature work. Full spec in `docs/phase_8_infra_epic.md`.
+
+---
+
+#### 8.H5 — Application Deployment (Deferred)
+
+Deferred. Streamlit app is development-only throughout Phase 8. Production deployment via FastAPI + React is Card 8.G (Phase 9). Full spec in `docs/phase_8_infra_epic.md`.
 
 ---
 
