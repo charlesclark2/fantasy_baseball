@@ -450,3 +450,150 @@ spec:
                 "Runbook missing PROMOTE verdict language"
             print('model_deploy_runbook.md: comparison gate documented — OK')
             EOF
+
+    - id: review-totals-directional-bias
+      name: Investigate total_runs directional bias shift in v1
+      description: |
+        The v1 total_runs NGBoost model appears to have flipped its systematic
+        directional bias relative to v0: v0 consistently predicted over, v1
+        consistently predicts under. MAE alone will not catch this — a model
+        that always predicts 7.5 runs can post a fine MAE but be useless for
+        over/under betting.
+
+        DURING THE COMPARISON REVIEW, run the following query in addition to
+        the standard compare_model_versions.py output:
+
+          SELECT
+              model_version,
+              AVG(pred_total_runs)                                        AS mean_pred,
+              AVG(actual_total_runs)                                      AS mean_actual,
+              AVG(totals_edge)                                            AS mean_totals_edge,
+              SUM(CASE WHEN totals_edge > 0 THEN 1 ELSE 0 END)::FLOAT
+                  / NULLIF(COUNT(*), 0)                                  AS pct_over_edge
+          FROM baseball_data.betting_ml.daily_model_predictions p
+          LEFT JOIN baseball_data.betting.mart_game_results g USING (game_pk)
+          WHERE model_version IN ('v0', 'v1')
+            AND game_date >= '2024-04-01'
+          GROUP BY model_version;
+
+        RED FLAGS:
+          - pct_over_edge near 0% or 100% for v1 → systematic directional bias
+          - mean_pred substantially below mean_actual for v1 → model undershoots runs
+          - Large gap between mean_pred(v0) and mean_pred(v1) on the same games
+
+        IF BIAS IS CONFIRMED:
+          Likely causes to investigate:
+            1. New features (bullpen IP, Stuff+, Pythagorean, pitch archetype) may
+               all correlate with low run environments in the training data, over-
+               weighting the under direction.
+            2. Imputed zeros from the expanded feature set may systematically bias
+               predictions downward.
+            3. 2021+ training cutoff skews toward pitching-dominated seasons.
+          Resolution: do NOT promote the v1 total_runs model. Keep v0 NGBoost for
+          totals until a corrected v2 is trained. This is the primary motivation for
+          the per-target model version support task below.
+
+      dependsOn:
+        - run-initial-comparison
+      acceptanceCriteria:
+        - type: manual
+          description: |
+            Run the directional bias query above in Snowflake. Document findings
+            in the comparison report (betting_ml/evaluation/model_comparison_v0_v1.md)
+            under a "Totals Directional Bias Check" section. If bias is confirmed,
+            note that v1 total_runs is excluded from promotion consideration.
+
+    - id: per-target-model-version-support
+      name: Add per-target model version flags to predict_today.py and compare_model_versions.py
+      description: |
+        The three model types (home_win ElasticNet, total_runs NGBoost, run_diff
+        NGBoost) are trained separately and may be promoted independently. The
+        current single --model-tag flag applies one version to all three targets
+        simultaneously, which prevents partial promotions (e.g. promote home_win
+        v1 but keep total_runs at v0).
+
+        This task must be completed before the automated scoring step is wired
+        into dbt_staging_build.yml.
+
+        CHANGES TO predict_today.py:
+          Replace --model-tag with three optional per-target flags:
+            --home-win-tag      STRING   Default: read model_version from registry
+            --total-runs-tag    STRING   Default: read model_version from registry
+            --run-diff-tag      STRING   Default: read model_version from registry
+
+          When a flag is not provided, fall back to the model_version field in
+          model_registry.yaml for that target. This makes the registry the source
+          of truth by default and allows selective overrides for backfills.
+
+          The model_version written to DB per prediction row should reflect the
+          per-target tag used (not a single composite tag), OR use a composite
+          label like 'hw:v1/tr:v0/rd:v0' — decision to be made during
+          implementation based on how compare_model_versions.py needs to query it.
+
+        CHANGES TO compare_model_versions.py:
+          Add per-target metric sections to the report:
+            - home_win: mean_h2h_edge, pct_positive, brier — with per-target PROMOTE verdict
+            - total_runs: totals_MAE, mean_pred vs mean_actual, pct_over_edge — with verdict
+            - run_diff: run_diff_MAE — with verdict
+          Overall verdict becomes a summary of three per-target verdicts.
+
+        CHANGES TO dbt_staging_build.yml (AC gate):
+          Only add the predict_today.py step to the workflow AFTER this task is
+          complete and the comparison report from run-initial-comparison confirms
+          which per-target version to use. Do not wire up automated scoring with
+          the blunt --model-tag flag.
+
+      dependsOn:
+        - review-totals-directional-bias
+        - update-deploy-runbook
+      acceptanceCriteria:
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import ast, pathlib
+            src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+            for flag in ['home_win_tag', 'total_runs_tag', 'run_diff_tag']:
+                assert flag in src, f"Per-target flag '{flag}' not found in predict_today.py"
+            print('predict_today.py: per-target model version flags present — OK')
+            EOF
+        - type: command_succeeds
+          command: |
+            python3 - <<'EOF'
+            import pathlib
+            src = pathlib.Path('scripts/compare_model_versions.py').read_text()
+            for section in ['home_win', 'total_runs', 'run_diff', 'pct_over_edge']:
+                assert section.lower() in src.lower(), \
+                    f"Per-target section '{section}' missing from compare_model_versions.py"
+            print('compare_model_versions.py: per-target sections present — OK')
+            EOF
+        - type: manual
+          description: |
+            dbt_staging_build.yml must contain a step that calls predict_today.py
+            with per-target version flags (or registry-default fallback). The step
+            must only be merged after the comparison report from run-initial-comparison
+            is committed and the target-level promotion decisions are documented.
+
+    - id: wire-automated-scoring
+      name: Wire predict_today.py into dbt_staging_build.yml
+      description: |
+        After per-target version support is in place and the initial comparison
+        confirms which versions to use per target, add a scoring step to
+        dbt_staging_build.yml so predictions are written to Snowflake automatically
+        whenever a lineup is confirmed.
+
+        The step runs after the dbtf feature build and calls:
+          uv run python betting_ml/scripts/predict_today.py
+
+        With no explicit version flags, the script falls back to model_registry.yaml
+        per-target model_version fields — which should reflect the promoted versions
+        after the comparison decision is made.
+
+      dependsOn:
+        - per-target-model-version-support
+      acceptanceCriteria:
+        - type: manual
+          description: |
+            dbt_staging_build.yml contains a step after the dbtf build that runs
+            predict_today.py. A manual workflow_dispatch triggers the full pipeline
+            end-to-end: dbt build → predict_today.py → rows appear in
+            daily_model_predictions for the triggered game_pk.

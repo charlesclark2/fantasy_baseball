@@ -346,7 +346,7 @@ def _write_predictions_to_snowflake(
             "consensus_win_prob":     cons_win,
             "calibrated_win_prob":    cal_win,
             "pick":                   picks[i],
-            "pred_total_runs":        float(loc_tot[i]),
+            "pred_total_runs":        float(np.exp(loc_tot[i])),
             "pred_total_runs_scale":  float(scale_tot[i]),
             "pred_run_diff_loc":      float(loc_diff[i]),
             "pred_run_diff_scale":    float(scale_diff[i]),

@@ -146,12 +146,172 @@ spec:
   graph:
     nodes:
 
+      - id: investigate-fix-totals-logspace-bug
+        kind: Task
+        description: >
+          Inspect predict_today.py to determine whether pred_total_runs is storing
+          the raw NGBoost LogNormal `loc` parameter (log-scale) instead of the
+          back-transformed natural scale value.
+
+          BACKGROUND: The v0 vs v1 comparison (2026-05-04) showed v1 total_runs
+          mean_pred = 2.01 vs mean_actual = 8.84. exp(2.01) ≈ 7.5, which is much
+          closer to actual. This pattern is the fingerprint of a log-space storage
+          bug: NGBoost LogNormal stores its `loc` parameter in log-space, and
+          calling .loc directly (without exp()) writes the raw log value to the DB.
+          If confirmed, v1 total_runs has never been fairly evaluated — the 6.869
+          MAE and 2.7% pct_over_edge are artifacts of the bug, not the model.
+
+          INVESTIGATION STEPS (code review only — user executes scripts):
+            1. Find the NGBoost prediction block in predict_today.py that writes
+               pred_total_runs to daily_model_predictions.
+            2. Verify whether the code calls dist.mean() (correct — natural scale)
+               or dist.loc / dist.params['loc'] (incorrect — log-scale for LogNormal).
+               NGBoost LogNormal: dist.loc is the mean of the underlying Normal
+               (i.e., mu in log-space). The correct natural-scale prediction is
+               np.exp(dist.loc + 0.5 * dist.scale**2) for the distribution mean,
+               or np.exp(dist.loc) for the median. Either is acceptable; the
+               important thing is that exp() is applied.
+            3. If the bug is confirmed: fix the code to call dist.mean() or
+               np.exp(dist.loc). Do NOT call dist.params directly.
+            4. Note that a full re-backfill of v1 total_runs predictions is required
+               after the fix before re-running compare_model_versions.py. The
+               re-backfill command follows the same pattern as Card 7.L2 backfills:
+                 uv run python betting_ml/scripts/predict_today.py \
+                   --start-date 2024-04-01 --end-date <today> \
+                   --model-tag v1
+               The user will execute this — document the command in the fix commit.
+
+          IF THE BUG IS NOT PRESENT (dist.mean() or np.exp() already used):
+            The directional bias in v1 total_runs is a genuine model quality issue,
+            not a code bug. Document this in the comparison report and note that
+            the bias is likely caused by new Phase 7 features over-weighting
+            low-run environments (bullpen IP, Stuff+, pythagorean win exp, pitch
+            archetype). In this case v1 total_runs remains DO NOT PROMOTE.
+
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py total_runs prediction does not use raw log-space loc
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                tree = ast.parse(src)
+                # Check that there is no bare .loc attribute access on a distribution
+                # object without an exp() wrapper in the total_runs prediction path.
+                # Heuristic: 'dist.loc' should not appear without 'np.exp' nearby
+                # in the same expression. We check that the source does not contain
+                # the pattern "dist.loc" without "exp" within 80 characters.
+                import re
+                matches = list(re.finditer(r'dist\.loc', src))
+                for m in matches:
+                    window = src[max(0, m.start()-80):m.end()+80]
+                    if 'exp' not in window and 'mean' not in window:
+                        raise AssertionError(
+                            f"Found bare 'dist.loc' without exp() or mean() at "
+                            f"offset {m.start()} — possible log-space bug: {window!r}"
+                        )
+                print("predict_today.py: no bare log-space dist.loc usage detected")
+          - type: manual
+            description: >
+              Code review confirms whether pred_total_runs is written in natural
+              scale (exp-transformed) or log-scale (raw loc). Finding documented
+              in betting_ml/evaluation/model_comparison_v0_v1.md under a new
+              "Log-Space Storage Bug Investigation" section. If bug confirmed and
+              fixed: re-backfill command documented in commit message; user
+              re-runs backfill and compare_model_versions.py before proceeding.
+
+      - id: formalize-per-target-promotion-decision
+        kind: Task
+        description: >
+          Document the per-target promotion decisions from the v0 vs v1 comparison
+          in the evaluation report, and ensure compare_model_versions.py produces
+          per-target verdicts going forward.
+
+          PROMOTION DECISIONS (based on 2026-05-04 comparison results):
+
+            run_differential v1: PROMOTE
+              MAE improved 3.539 → 3.434. Clear, unambiguous improvement.
+              No directional bias concerns.
+
+            home_win v1: PROMOTE WITH MONITORING
+              Mean h2h edge: −0.0143 → −0.0137 (marginal improvement).
+              Brier: 0.2412 → 0.2409 (marginal improvement).
+              pct_positive: 40.9% → 32.2% (significant regression — v1 generates
+              fewer positive-edge games; warrants monitoring during first 4 weeks).
+              Recommended action: promote, but add a monitoring alert in the Model
+              Performance page if pct_positive drops below 30% on a rolling 14-day
+              window.
+
+            total_runs v1: DECISION PENDING log-space bug investigation
+              If bug confirmed and fixed: re-run comparison with corrected backfill.
+              If bug not present: DO NOT PROMOTE. Keep v0 NGBoost for totals.
+              Do not make a final total_runs promotion decision until
+              investigate-fix-totals-logspace-bug is complete.
+
+          UPDATE compare_model_versions.py TO PRODUCE PER-TARGET VERDICTS:
+            The current script issues a single overall verdict. Add a per-target
+            breakdown section to the markdown report:
+
+              ## Per-Target Promotion Verdicts
+              | Target        | Champion | Challenger | Verdict               |
+              |---------------|----------|------------|-----------------------|
+              | home_win      | v0       | v1         | PROMOTE WITH MONITORING |
+              | total_runs    | v0       | v1         | PENDING / DO NOT PROMOTE |
+              | run_diff      | v0       | v1         | PROMOTE               |
+
+            The per-target verdict logic:
+              home_win:   PROMOTE if edge_delta > 0 AND brier_delta <= 0.002;
+                          add "WITH MONITORING" note if pct_positive_delta < -0.05
+              total_runs: PROMOTE if tots_mae_delta < 0 AND pct_over_edge in [0.35, 0.65];
+                          DO NOT PROMOTE if pct_over_edge < 0.10 or > 0.90
+              run_diff:   PROMOTE if run_diff_mae_delta < 0
+
+            Update model_comparison_v0_v1.md with the finalized per-target verdicts
+            after the log-space bug investigation is complete.
+
+        dependsOn:
+          - investigate-fix-totals-logspace-bug
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: compare_model_versions.py emits per-target verdict sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('scripts/compare_model_versions.py').read_text().lower()
+                for section in ['home_win', 'total_runs', 'run_diff', 'pct_over_edge',
+                                 'per-target', 'promote']:
+                    assert section in src, \
+                        f"compare_model_versions.py missing per-target section: '{section}'"
+                print('compare_model_versions.py: per-target verdict sections present — OK')
+          - type: manual
+            description: >
+              betting_ml/evaluation/model_comparison_v0_v1.md contains a
+              "Per-Target Promotion Verdicts" section with explicit PROMOTE /
+              DO NOT PROMOTE / PENDING verdicts for each of the three targets.
+              Total_runs verdict must not be finalized until the log-space bug
+              investigation result is known.
+
       - id: build-cv-harness
         kind: Task
         description: >
           Write betting_ml/scripts/model_evaluation/cv_harness.py — a reusable
           walk-forward fold generator and metric evaluator shared across all
           candidate models.
+
+          NOTE: This task may proceed in parallel with investigate-fix-totals-logspace-bug.
+          The CV harness trains all models from scratch on fold data and does not
+          depend on the v0/v1 production artifacts. However, select-and-document
+          must wait for formalize-per-target-promotion-decision to ensure the
+          final selection report correctly references the champion baseline.
 
           PREREQUISITES: confirm data completeness before building folds.
 
@@ -643,6 +803,11 @@ spec:
           training scripts if a challenger wins, and produce the final selection
           report.
 
+          PREREQUISITE: formalize-per-target-promotion-decision must complete
+          before this task so that the selection report can reference the
+          confirmed champion baseline (which per-target v0/v1 model is in
+          production) and integrate the promotion decision context.
+
           STEP 1 — Compile comparison table.
           Write a short script (or inline in the report) that loads all four
           results_{model}.parquet files and computes:
@@ -718,6 +883,7 @@ spec:
         dependsOn:
           - evaluate-isotonic-calibration
           - analyze-feature-importance
+          - formalize-per-target-promotion-decision
         acceptanceCriteria:
           - type: artifact_exists
             name: model selection report
