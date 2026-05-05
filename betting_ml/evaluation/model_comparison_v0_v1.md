@@ -1,6 +1,6 @@
 # Model Comparison: v0 (champion) vs v1 (challenger)
 
-Generated: 2026-05-05 04:51 UTC
+Generated: 2026-05-05 05:09 UTC
 Window: 2021-04-01 → 2026-05-04
 
 ## Per-Season Metrics
@@ -40,36 +40,31 @@ Window: 2021-04-01 → 2026-05-04
 
 ---
 
-## Per-Target Promotion Verdicts
+## Per-Target Verdicts (2024+)
 
-Evaluated on the 2024+ primary window unless noted. Each target model is an independent NGBoost artifact.
 
-### run_diff — PROMOTE
-
-| Metric | v0 | v1 | Delta |
-|--------|----|----|-------|
-| RunDiff_MAE (2024+) | 3.539 | 3.434 | −0.105 |
-
-v1 improves run differential MAE by ~3% consistently across all seasons (2021–2026). No regression observed in any year.
-
-### home_win — PROMOTE WITH MONITORING
+### run_diff
 
 | Metric | v0 | v1 | Delta |
-|--------|----|----|-------|
-| Brier (2024+) | 0.2412 | 0.2409 | −0.0003 |
-| Mean H2H Edge (2024+) | −0.0143 | −0.0137 | +0.0006 |
-| Pct_Positive (2024+) | 40.9% | 32.2% | −8.7 pp |
+|--------|---------|---------|-------|
+| RunDiff_MAE | 3.539 | 3.434 | -0.105 |
 
-Brier and edge improve marginally. However, v1 flags a positive home_win edge on significantly fewer games (−8.7 pp). The model is more selective but not clearly more accurate. Promote and monitor live 2026 Pct_Positive week-over-week; revert if selectivity degrades ROI.
+**PROMOTE** — challenger improves run_diff_mae (3.539 → 3.434).
 
-### total_runs — PROMOTE
+### home_win
 
 | Metric | v0 | v1 | Delta |
-|--------|----|----|-------|
-| Tot_MAE (2024+) | 3.862 | 3.472 | −0.390 |
+|--------|---------|---------|-------|
+| Brier | 0.2412 | 0.2409 | -0.0003 |
+| Pct_Positive | 40.9% | 32.2% | -8.7 pp |
 
-v1 improves total runs MAE by ~10% consistently across all seasons. This result is valid after fixing a log-space storage bug (see note below).
+**PROMOTE WITH MONITORING** — Brier improves (0.2412 → 0.2409) but Pct_Positive dropped 8.7 pp (40.9% → 32.2%). Monitor live selectivity.
 
-**Note — Log-Space Storage Bug (fixed 2026-05-05):** Prior to this date, `pred_total_runs` in `daily_model_predictions` stored the NGBoost LogNormal `loc` parameter (log-space mean, ~2.0) instead of the natural-scale median (`exp(loc)`, ~8.0). The bug was introduced in the backfill path of `predict_today.py`. The fix (`float(np.exp(loc_tot[i]))` at line 349) was applied on 2026-05-05. Existing rows were corrected via two Snowflake UPDATE statements: `EXP(pred_total_runs)` applied to all v1 rows and to v0 rows where `pred_total_runs < 3.5` (log-space range). The over/under probability (`p_over_ngboost`) and betting edge (`totals_edge`) were **never affected** — `p_over_line()` always applied `exp()` internally.
+### total_runs
 
-**Remaining concern — directional bias:** Even after the fix, v1 `pct_over_edge` is ~2.7% (v1 predicts the under on ~97% of games). This is a genuine model behavior issue, not a storage artifact, likely caused by Phase 7 bullpen/Stuff+/Pythagorean features over-weighting low-run environments. Totals betting signal should be used with caution until this bias is investigated in the Phase 9 retrain.
+| Metric | v0 | v1 | Delta |
+|--------|---------|---------|-------|
+| Tot_MAE | 3.862 | 3.472 | -0.390 |
+| Pct_Over_Edge | 20.5% | 4.2% | — |
+
+**PROMOTE WITH MONITORING** — challenger improves Tot_MAE (3.862 → 3.472) but shows directional bias: Pct_Over_Edge=4.2% (model predicts under on 95.8% of games). Investigate bias before relying on totals betting signal.

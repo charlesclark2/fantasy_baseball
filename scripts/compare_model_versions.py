@@ -34,6 +34,11 @@ _EDGE_IMPROVE_MIN   = 0.0      # challenger must strictly beat champion
 _BRIER_REGRESS_MAX  = 0.002    # challenger Brier can be at most +0.002 worse
 _MIN_ODDS_GAMES     = 100      # below this, INCONCLUSIVE regardless
 
+# Per-target thresholds
+_PCT_POS_DROP_WARN  = 5.0      # pp drop in pct_positive triggers MONITORING flag
+_PCT_OVER_WARN_LOW  = 10.0     # pct_over_edge below this flags directional bias
+_PCT_OVER_WARN_HIGH = 90.0     # pct_over_edge above this flags directional bias
+
 # ---------------------------------------------------------------------------
 # Snowflake queries
 # ---------------------------------------------------------------------------
@@ -139,6 +144,13 @@ def _compute_metrics(df: pd.DataFrame) -> dict:
     }
 
 
+def _pct_over_edge(df: pd.DataFrame) -> float | None:
+    mask = df["totals_edge"].notna()
+    if mask.sum() == 0:
+        return None
+    return float((df.loc[mask, "totals_edge"] > 0).mean() * 100)
+
+
 def _fmt(v: float | None, decimals: int = 4) -> str:
     if v is None:
         return "—"
@@ -149,6 +161,125 @@ def _fmt_pct(v: float | None) -> str:
     if v is None:
         return "—"
     return f"{v:.1f}%"
+
+
+# ---------------------------------------------------------------------------
+# Per-target verdict helpers
+# ---------------------------------------------------------------------------
+
+def _target_verdict_run_diff(champ_m: dict, chall_m: dict, champion: str, challenger: str) -> list[str]:
+    lines: list[str] = []
+    lines.append("\n### run_diff\n")
+
+    c0 = champ_m.get("run_diff_mae")
+    c1 = chall_m.get("run_diff_mae")
+    delta = (c1 - c0) if (c0 is not None and c1 is not None) else None
+    delta_str = f"{delta:+.3f}" if delta is not None else "—"
+
+    lines.append(f"| Metric | {champion} | {challenger} | Delta |")
+    lines.append("|--------|---------|---------|-------|")
+    lines.append(f"| RunDiff_MAE | {_fmt(c0, 3)} | {_fmt(c1, 3)} | {delta_str} |")
+    lines.append("")
+
+    if c0 is None or c1 is None:
+        lines.append("**INCONCLUSIVE** — missing run_diff_mae for one version.")
+    elif c1 < c0:
+        lines.append(f"**PROMOTE** — challenger improves run_diff_mae ({_fmt(c0,3)} → {_fmt(c1,3)}).")
+    else:
+        lines.append(f"**DO NOT PROMOTE** — challenger does not improve run_diff_mae ({_fmt(c0,3)} → {_fmt(c1,3)}).")
+    return lines
+
+
+def _target_verdict_home_win(champ_m: dict, chall_m: dict, champion: str, challenger: str) -> list[str]:
+    lines: list[str] = []
+    lines.append("\n### home_win\n")
+
+    b0 = champ_m.get("brier")
+    b1 = chall_m.get("brier")
+    p0 = champ_m.get("pct_positive")
+    p1 = chall_m.get("pct_positive")
+    delta_b = (b1 - b0) if (b0 is not None and b1 is not None) else None
+    delta_p = (p1 - p0) if (p0 is not None and p1 is not None) else None
+
+    lines.append(f"| Metric | {champion} | {challenger} | Delta |")
+    lines.append("|--------|---------|---------|-------|")
+    lines.append(f"| Brier | {_fmt(b0)} | {_fmt(b1)} | {f'{delta_b:+.4f}' if delta_b is not None else '—'} |")
+    lines.append(f"| Pct_Positive | {_fmt_pct(p0)} | {_fmt_pct(p1)} | {f'{delta_p:+.1f} pp' if delta_p is not None else '—'} |")
+    lines.append("")
+
+    if b0 is None or b1 is None:
+        lines.append("**INCONCLUSIVE** — missing Brier for one version.")
+        return lines
+
+    brier_improves = b1 < b0
+    brier_regresses = (b1 - b0) > _BRIER_REGRESS_MAX
+    pct_drops = (delta_p is not None and delta_p < -_PCT_POS_DROP_WARN)
+
+    if brier_regresses:
+        lines.append(
+            f"**DO NOT PROMOTE** — Brier regresses beyond threshold "
+            f"({_fmt(b0)} → {_fmt(b1)}, delta={_fmt(b1-b0)})."
+        )
+    elif brier_improves and not pct_drops:
+        lines.append(f"**PROMOTE** — Brier improves ({_fmt(b0)} → {_fmt(b1)}) with no selectivity concern.")
+    else:
+        lines.append(
+            f"**PROMOTE WITH MONITORING** — Brier {'improves' if brier_improves else 'is flat'} "
+            f"({_fmt(b0)} → {_fmt(b1)}) but Pct_Positive dropped "
+            f"{abs(delta_p):.1f} pp ({_fmt_pct(p0)} → {_fmt_pct(p1)}). "
+            "Monitor live selectivity."
+        )
+    return lines
+
+
+def _target_verdict_total_runs(champ_m: dict, chall_m: dict, champion: str, challenger: str,
+                                champ_df: pd.DataFrame, chall_df: pd.DataFrame) -> list[str]:
+    lines: list[str] = []
+    lines.append("\n### total_runs\n")
+
+    t0 = champ_m.get("totals_mae")
+    t1 = chall_m.get("totals_mae")
+    poe0 = _pct_over_edge(champ_df)
+    poe1 = _pct_over_edge(chall_df)
+    delta_t = (t1 - t0) if (t0 is not None and t1 is not None) else None
+
+    lines.append(f"| Metric | {champion} | {challenger} | Delta |")
+    lines.append("|--------|---------|---------|-------|")
+    lines.append(f"| Tot_MAE | {_fmt(t0, 3)} | {_fmt(t1, 3)} | {f'{delta_t:+.3f}' if delta_t is not None else '—'} |")
+    lines.append(f"| Pct_Over_Edge | {_fmt_pct(poe0)} | {_fmt_pct(poe1)} | — |")
+    lines.append("")
+
+    if t0 is None or t1 is None:
+        lines.append("**INCONCLUSIVE** — missing totals_mae for one version.")
+        return lines
+
+    mae_improves = t1 < t0
+    bias_flag = (
+        poe1 is not None
+        and (poe1 < _PCT_OVER_WARN_LOW or poe1 > _PCT_OVER_WARN_HIGH)
+    )
+
+    if mae_improves and not bias_flag:
+        lines.append(f"**PROMOTE** — challenger improves Tot_MAE ({_fmt(t0,3)} → {_fmt(t1,3)}).")
+    elif mae_improves and bias_flag:
+        direction = "under" if poe1 < 50 else "over"
+        lines.append(
+            f"**PROMOTE WITH MONITORING** — challenger improves Tot_MAE ({_fmt(t0,3)} → {_fmt(t1,3)}) "
+            f"but shows directional bias: Pct_Over_Edge={_fmt_pct(poe1)} "
+            f"(model predicts {direction} on {100-poe1:.1f}% of games). "
+            "Investigate bias before relying on totals betting signal."
+        )
+    else:
+        lines.append(
+            f"**DO NOT PROMOTE** — challenger does not improve Tot_MAE ({_fmt(t0,3)} → {_fmt(t1,3)})."
+        )
+        if bias_flag:
+            direction = "under" if poe1 < 50 else "over"
+            lines.append(
+                f"  Additional concern: Pct_Over_Edge={_fmt_pct(poe1)} "
+                f"(directional bias toward {direction})."
+            )
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +413,16 @@ def _build_report(
     lines.append(f"- Edge improvement: challenger > champion + {_EDGE_IMPROVE_MIN}")
     lines.append(f"- Brier regression limit: +{_BRIER_REGRESS_MAX}")
     lines.append(f"- Minimum odds-game sample: {_MIN_ODDS_GAMES}")
+
+    # Per-target verdicts (2024+)
+    lines.append("\n---\n")
+    lines.append("## Per-Target Verdicts (2024+)\n")
+    champ_df_2024 = df[(df["season"] >= 2024) & (df["model_version"] == champion)]
+    chall_df_2024 = df[(df["season"] >= 2024) & (df["model_version"] == challenger)]
+    lines.extend(_target_verdict_run_diff(champ_m, chall_m, champion, challenger))
+    lines.extend(_target_verdict_home_win(champ_m, chall_m, champion, challenger))
+    lines.extend(_target_verdict_total_runs(champ_m, chall_m, champion, challenger,
+                                             champ_df_2024, chall_df_2024))
 
     return "\n".join(lines) + "\n"
 
