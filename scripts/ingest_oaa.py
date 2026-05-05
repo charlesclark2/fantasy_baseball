@@ -50,7 +50,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-_KEY_PATH = os.path.expanduser(
+_KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
     "~/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem"
 )
 
@@ -118,10 +118,11 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         encryption_algorithm=serialization.NoEncryption(),
     )
     return snowflake.connector.connect(
-        account="IHUPICS-DP59975",
-        user="dbt_rw",
+        account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
+        user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
         private_key=pkb,
-        warehouse="COMPUTE_WH",
+        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+        role=os.environ.get("SNOWFLAKE_ROLE"),
         database="baseball_data",
     )
 
