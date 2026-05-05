@@ -542,7 +542,7 @@ df_display = pd.DataFrame(display_rows)
 
 st.dataframe(
     df_display.style.apply(_row_bg, axis=1),
-    use_container_width=True,
+    width='stretch',
     column_config={col: st.column_config.TextColumn(col, help=_COL_HELP[col]) for col in _COL_HELP},
     column_order=_STYLE_VISIBLE_COLS,
 )
@@ -669,7 +669,7 @@ if bet_rows:
 
     st.dataframe(
         df_bets.style.apply(_bet_row_style, axis=1),
-        use_container_width=True,
+        width='stretch',
         column_config={col: st.column_config.TextColumn(col, help=h) for col, h in bet_col_help.items()},
     )
 else:
@@ -759,7 +759,7 @@ with st.expander("📈 Market Movement", expanded=False):
 
             st.dataframe(
                 df_mv_display.style.apply(_mv_row_bg, axis=1),
-                use_container_width=True,
+                width='stretch',
                 column_config={col: st.column_config.TextColumn(col, help=h) for col, h in _MV_COL_HELP.items()},
                 column_order=_MV_VISIBLE,
             )
@@ -893,7 +893,7 @@ if not is_today:
 
             st.dataframe(
                 df_out.style.apply(_outcome_bg, axis=1),
-                use_container_width=True,
+                width='stretch',
                 column_config={col: st.column_config.TextColumn(col, help=h) for col, h in outcome_col_help.items()},
             )
         else:

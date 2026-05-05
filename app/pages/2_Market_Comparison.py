@@ -749,7 +749,7 @@ else:
         height=380,
         margin=dict(l=0, r=0, t=30, b=0),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     caption_parts = [f"{snap_count} pre-game ingestion snapshots. Dashed red line = model consensus."]
     if post_game_present:
         caption_parts.append("Dotted gray line = game start. Odds to the right of that line were captured after the game began and should be interpreted with caution.")
@@ -903,7 +903,7 @@ if not df_totals_all.empty and not df_totals_all["over_imp_prob"].isna().all():
             margin=dict(l=0, r=0, t=10, b=0),
             showlegend=False,
         )
-        st.plotly_chart(_fig_totals, use_container_width=True)
+        st.plotly_chart(_fig_totals, width='stretch')
         st.caption("Orange bar = model prediction. Blue bars = bookmakers.")
 else:
     st.info("No totals odds data for this game.")
@@ -981,7 +981,7 @@ else:
     )
     st.dataframe(
         df_display,
-        use_container_width=True,
+        width='stretch',
         column_config={
             "bookmaker_key": st.column_config.TextColumn("Bookmaker"),
             "home_price_american": st.column_config.NumberColumn("Home ML", format="%d"),

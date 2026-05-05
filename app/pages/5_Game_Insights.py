@@ -560,7 +560,7 @@ with form_col1:
         if home_form.empty:
             st.info("No prior games found for this team.")
         else:
-            st.dataframe(home_form, use_container_width=True, hide_index=True)
+            st.dataframe(home_form, width='stretch', hide_index=True)
 
 with form_col2:
     if away_team_id is None:
@@ -571,4 +571,4 @@ with form_col2:
         if away_form.empty:
             st.info("No prior games found for this team.")
         else:
-            st.dataframe(away_form, use_container_width=True, hide_index=True)
+            st.dataframe(away_form, width='stretch', hide_index=True)

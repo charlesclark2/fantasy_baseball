@@ -298,7 +298,7 @@ df_display = pd.DataFrame({
 
 st.dataframe(
     df_display,
-    use_container_width=True,
+    width='stretch',
     column_config={col: st.column_config.TextColumn(col, help=h) for col, h in _ALL_MARKETS_HELP.items()},
 )
 
@@ -385,7 +385,7 @@ else:
 
     edited = st.data_editor(
         df_slate,
-        use_container_width=True,
+        width='stretch',
         column_config=_slate_col_config,
         column_order=["Include", "Bet", "Odds", "Stake ($)", "Profit If Win ($)", "EV ($)"],
         hide_index=True,
@@ -703,7 +703,7 @@ else:
             return colors.get(val, "")
 
         styled = df_table.style.map(_outcome_color, subset=["Outcome"])
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.dataframe(styled, width='stretch', hide_index=True)
 
 # ---------------------------------------------------------------------------
 # Sidebar context

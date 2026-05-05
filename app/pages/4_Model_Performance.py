@@ -243,19 +243,67 @@ if n_total_logged < 5:
 # Global date range + model version filter
 # ---------------------------------------------------------------------------
 
+# Season selector (sidebar) — drives the default date range. Computed from
+# the full unfiltered df so every season with data shows up.
+if not df.empty and "prediction_date" in df.columns:
+    _all_seasons = sorted(df["prediction_date"].dt.year.dropna().unique().astype(int).tolist())
+else:
+    _all_seasons = []
+
+with st.sidebar:
+    st.divider()
+    st.subheader("Season")
+    if _all_seasons:
+        _season_options = ["All Seasons"] + [str(s) for s in _all_seasons]
+        _current_year = datetime.date.today().year
+        _default_idx = (
+            _season_options.index(str(_current_year))
+            if str(_current_year) in _season_options
+            else 0
+        )
+        _selected_season = st.selectbox(
+            "Show season",
+            options=_season_options,
+            index=_default_idx,
+            key="season_filter",
+        )
+    else:
+        _selected_season = "All Seasons"
+        st.caption("Season data not available.")
+
+# Resolve the season's [min, max] date bounds — these become the default for
+# the date range and constrain its allowed values.
 if not df.empty and "prediction_date" in df.columns:
     _all_min = df["prediction_date"].min().date()
     _all_max = df["prediction_date"].max().date()
+    if _selected_season == "All Seasons":
+        _season_min, _season_max = _all_min, _all_max
+    else:
+        _season_dates = df.loc[df["prediction_date"].dt.year == int(_selected_season), "prediction_date"]
+        _season_min = _season_dates.min().date()
+        _season_max = _season_dates.max().date()
+
+    # Date inputs are keyed by season so switching season resets the range to
+    # that season's bounds (rather than carrying over a stale prior selection).
+    _date_key_suffix = _selected_season
     _fcol1, _fcol2 = st.columns(2)
     _filter_from = _fcol1.date_input(
-        "Filter from", value=_all_min, min_value=_all_min, max_value=_all_max, key="global_from"
+        "Filter from",
+        value=_season_min,
+        min_value=_season_min,
+        max_value=_season_max,
+        key=f"global_from_{_date_key_suffix}",
     )
     _filter_to = _fcol2.date_input(
-        "Filter to", value=_all_max, min_value=_all_min, max_value=_all_max, key="global_to"
+        "Filter to",
+        value=_season_max,
+        min_value=_season_min,
+        max_value=_season_max,
+        key=f"global_to_{_date_key_suffix}",
     )
     if _filter_from > _filter_to:
         st.warning("'Filter from' date must be on or before 'Filter to' date.")
-        _filter_from, _filter_to = _all_min, _all_max
+        _filter_from, _filter_to = _season_min, _season_max
 
     df_view = df[
         (df["prediction_date"].dt.date >= _filter_from)
@@ -447,6 +495,19 @@ def _render_brier(df_src: pd.DataFrame) -> None:
             {"brier_model_14d": "Model (Brier)", "brier_market_14d": "Market (Brier)"}
         )
 
+    # Drop series with too few points to render meaningfully (avoids ghost
+    # legend entries when one version has only a handful of games tagged).
+    _MIN_POINTS_PER_SERIES = 5
+    _viable = (
+        long.groupby("series")["brier"]
+        .apply(lambda s: s.notna().sum())
+    )
+    _viable = _viable[_viable >= _MIN_POINTS_PER_SERIES].index
+    long = long[long["series"].isin(_viable)]
+    if long.empty:
+        st.info("Not enough data to draw the Brier trend for this filter.")
+        return
+
     tooltip = [
         alt.Tooltip("prediction_date:T", title="Date", format="%b %d"),
         alt.Tooltip("series:N", title="Series"),
@@ -467,7 +528,7 @@ def _render_brier(df_src: pd.DataFrame) -> None:
         )
         .properties(height=300)
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
     if few_days:
         st.caption("Fewer than 14 days of data — rolling average not yet meaningful.")
@@ -567,7 +628,7 @@ else:
         )
         .properties(title="Mean CLV by Week and Market")
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width='stretch')
 
 # ---------------------------------------------------------------------------
 # P&L Simulation
@@ -590,42 +651,74 @@ st.caption(
 if actionable.empty:
     st.info("No actionable predictions (ev > 0) found in the log yet.")
 else:
-    def _build_pnl_chart(df_subset: pd.DataFrame) -> alt.Chart:
-        """Compute cumulative P&L for a subset of actionable rows and return an Altair chart."""
+    def _build_pnl_charts(df_subset: pd.DataFrame) -> tuple[alt.Chart | None, alt.Chart | None]:
+        """Compute cumulative P&L for a subset of actionable rows.
+
+        Returns (units_chart, roi_chart):
+            - units_chart: cumulative dollar/unit P&L (per-strategy)
+            - roi_chart:   cumulative ROI% (= cumulative_pnl / cumulative_stake)
+        ROI% normalises away the stake-size difference between Kelly (tiny per-bet
+        fractions of bankroll) and Flat (1 unit per bet), making the two strategies
+        comparable on a common scale.
+        """
         if df_subset.empty:
-            return None
+            return None, None
         df_subset = df_subset.sort_values("prediction_date").copy()
-        df_subset["kelly_pnl"] = df_subset["kelly_fraction"] * (
+        df_subset["kelly_stake"] = df_subset["kelly_fraction"]
+        df_subset["flat_stake"]  = 1.0
+        df_subset["kelly_pnl"] = df_subset["kelly_stake"] * (
             df_subset["actual_outcome"] * (df_subset["decimal_odds"] - 1)
             - (1 - df_subset["actual_outcome"])
         )
-        df_subset["flat_pnl"] = 1.0 * (
+        df_subset["flat_pnl"] = df_subset["flat_stake"] * (
             df_subset["actual_outcome"] * (df_subset["decimal_odds"] - 1)
             - (1 - df_subset["actual_outcome"])
         )
-        df_subset["kelly_cumulative"] = df_subset["kelly_pnl"].cumsum()
-        df_subset["flat_cumulative"] = df_subset["flat_pnl"].cumsum()
+        df_subset["kelly_cumulative"]       = df_subset["kelly_pnl"].cumsum()
+        df_subset["flat_cumulative"]        = df_subset["flat_pnl"].cumsum()
+        df_subset["kelly_cumulative_stake"] = df_subset["kelly_stake"].cumsum()
+        df_subset["flat_cumulative_stake"]  = df_subset["flat_stake"].cumsum()
 
         daily = (
             df_subset.groupby(df_subset["prediction_date"].dt.date)
-            .agg(kelly_cumulative=("kelly_cumulative", "last"), flat_cumulative=("flat_cumulative", "last"))
+            .agg(
+                kelly_cumulative=("kelly_cumulative", "last"),
+                flat_cumulative=("flat_cumulative", "last"),
+                kelly_cumulative_stake=("kelly_cumulative_stake", "last"),
+                flat_cumulative_stake=("flat_cumulative_stake", "last"),
+            )
             .reset_index()
             .rename(columns={"prediction_date": "date"})
         )
         daily["date"] = pd.to_datetime(daily["date"])
 
-        long = daily.melt(
+        # ROI% = cumulative_pnl / cumulative_stake (avoid div-by-zero).
+        # Suppress the warmup period — with only 1–2 bets settled, ROI% swings
+        # between ±100% per outcome, which dominates the y-axis and hides the
+        # actual long-run trend. Only render ROI once enough stake has accrued.
+        _FLAT_STAKE_WARMUP = 10  # ~10 flat-unit bets before ROI% becomes informative
+        daily["kelly_roi_pct"] = (
+            daily["kelly_cumulative"] / daily["kelly_cumulative_stake"].replace(0, pd.NA) * 100.0
+        )
+        daily["flat_roi_pct"] = (
+            daily["flat_cumulative"] / daily["flat_cumulative_stake"].replace(0, pd.NA) * 100.0
+        )
+        warmup_mask = daily["flat_cumulative_stake"] < _FLAT_STAKE_WARMUP
+        daily.loc[warmup_mask, ["kelly_roi_pct", "flat_roi_pct"]] = pd.NA
+
+        # ----- Cumulative units chart -----
+        long_units = daily.melt(
             id_vars="date",
             value_vars=["kelly_cumulative", "flat_cumulative"],
             var_name="strategy",
             value_name="cumulative_units",
         )
-        long["strategy"] = long["strategy"].map(
+        long_units["strategy"] = long_units["strategy"].map(
             {"kelly_cumulative": "Kelly", "flat_cumulative": "Flat (1 unit)"}
         )
 
-        return (
-            alt.Chart(long)
+        units_chart = (
+            alt.Chart(long_units)
             .mark_line(point=True)
             .encode(
                 x=alt.X(
@@ -641,31 +734,68 @@ else:
                     alt.Tooltip("cumulative_units:Q", title="Cumulative Units", format="+.2f"),
                 ],
             )
-            .properties(height=350)
+            .properties(height=350, title="Cumulative P&L (Units)")
         )
+
+        # ----- Cumulative ROI% chart -----
+        long_roi = daily.melt(
+            id_vars="date",
+            value_vars=["kelly_roi_pct", "flat_roi_pct"],
+            var_name="strategy",
+            value_name="roi_pct",
+        )
+        long_roi["strategy"] = long_roi["strategy"].map(
+            {"kelly_roi_pct": "Kelly", "flat_roi_pct": "Flat (1 unit)"}
+        )
+        long_roi = long_roi.dropna(subset=["roi_pct"])
+
+        roi_chart = (
+            alt.Chart(long_roi)
+            .mark_line(point=True)
+            .encode(
+                x=alt.X(
+                    "date:T",
+                    title="Date",
+                    axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day"),
+                ),
+                y=alt.Y("roi_pct:Q", title="Cumulative ROI %"),
+                color=alt.Color("strategy:N", legend=alt.Legend(title="Strategy")),
+                tooltip=[
+                    alt.Tooltip("date:T", title="Date", format="%b %d"),
+                    alt.Tooltip("strategy:N", title="Strategy"),
+                    alt.Tooltip("roi_pct:Q", title="ROI %", format="+.2f"),
+                ],
+            )
+            .properties(height=300, title="Cumulative ROI % (stake-normalised)")
+        )
+
+        return units_chart, roi_chart
+
+    def _render_pnl_tab(df_subset: pd.DataFrame, empty_msg: str) -> None:
+        units_chart, roi_chart = _build_pnl_charts(df_subset)
+        if units_chart is None:
+            st.info(empty_msg)
+            return
+        st.altair_chart(units_chart, width='stretch')
+        st.caption(
+            "**ROI %** divides cumulative P&L by cumulative stake, so Kelly and Flat "
+            "are comparable on the same axis even though Kelly bets a much smaller "
+            "fraction of bankroll per pick."
+        )
+        st.altair_chart(roi_chart, width='stretch')
 
     tab_combined, tab_h2h, tab_totals = st.tabs(["Combined", "Moneyline (h2h)", "Totals"])
 
     with tab_combined:
-        chart = _build_pnl_chart(actionable)
-        if chart:
-            st.altair_chart(chart, use_container_width=True)
+        _render_pnl_tab(actionable, "No actionable predictions in this date range.")
 
     with tab_h2h:
         subset = actionable[actionable["market"] == "h2h"] if "market" in actionable.columns else pd.DataFrame()
-        chart = _build_pnl_chart(subset)
-        if chart:
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("No actionable h2h predictions in this date range.")
+        _render_pnl_tab(subset, "No actionable h2h predictions in this date range.")
 
     with tab_totals:
         subset = actionable[actionable["market"] == "totals"] if "market" in actionable.columns else pd.DataFrame()
-        chart = _build_pnl_chart(subset)
-        if chart:
-            st.altair_chart(chart, use_container_width=True)
-        else:
-            st.info("No actionable totals predictions in this date range.")
+        _render_pnl_tab(subset, "No actionable totals predictions in this date range.")
 
 # ---------------------------------------------------------------------------
 # Actual Bet Performance
@@ -753,6 +883,6 @@ else:
             color="grey", strokeDash=[4, 4]
         ).encode(y="y:Q")
 
-        st.altair_chart((line + zero_rule).properties(height=300), use_container_width=True)
+        st.altair_chart((line + zero_rule).properties(height=300), width='stretch')
     else:
         st.info("No bets have settled yet — check back after today's games are final.")
