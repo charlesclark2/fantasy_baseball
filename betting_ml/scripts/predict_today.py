@@ -678,10 +678,31 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-tag",
-        choices=["v0", "v1"],
         default="v1",
-        help="Which model version to score with: v1=current champion, v0=rollback/challenger. "
+        help="Default tag used for any per-target tag not explicitly set, "
+             "and the model_version label written to Snowflake. "
+             "For pure single-version backfills use 'v0' or 'v1'. "
+             "For mixed-version production scoring, use a distinct label like 'prod' "
+             "and set --home-win-tag, --total-runs-tag, --run-diff-tag explicitly. "
              "Default: v1",
+    )
+    parser.add_argument(
+        "--home-win-tag",
+        choices=["v0", "v1"],
+        default=None,
+        help="Artifact tag to load for the home_win model. Defaults to --model-tag.",
+    )
+    parser.add_argument(
+        "--total-runs-tag",
+        choices=["v0", "v1"],
+        default=None,
+        help="Artifact tag to load for the total_runs model. Defaults to --model-tag.",
+    )
+    parser.add_argument(
+        "--run-diff-tag",
+        choices=["v0", "v1"],
+        default=None,
+        help="Artifact tag to load for the run_differential model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--feature-version",
@@ -708,6 +729,18 @@ def _parse_args() -> argparse.Namespace:
         parser.error("--start-date and --end-date must be used together")
     if args.feature_version is None:
         args.feature_version = args.model_tag
+
+    # Per-target tags default to --model-tag if not set. Validate that defaults
+    # resolve to a known artifact tag.
+    for attr in ("home_win_tag", "total_runs_tag", "run_diff_tag"):
+        if getattr(args, attr) is None:
+            fallback = args.model_tag
+            if fallback not in ("v0", "v1"):
+                parser.error(
+                    f"--{attr.replace('_','-')} not set and --model-tag={fallback!r} is not "
+                    "an artifact tag (v0/v1). Provide an explicit per-target tag."
+                )
+            setattr(args, attr, fallback)
 
     return args
 
@@ -740,8 +773,18 @@ def _score_date(
     feature_version: str,
     dry_run: bool,
     log_snowflake: bool,
+    home_win_tag: str | None = None,
+    total_runs_tag: str | None = None,
+    run_diff_tag: str | None = None,
 ) -> None:
-    print(f"\n--- Scoring {target_date} (model_tag={model_tag}) ---")
+    home_win_tag = home_win_tag or model_tag
+    total_runs_tag = total_runs_tag or model_tag
+    run_diff_tag = run_diff_tag or model_tag
+    print(
+        f"\n--- Scoring {target_date} "
+        f"(model_tag={model_tag}, "
+        f"home_win={home_win_tag}, total_runs={total_runs_tag}, run_diff={run_diff_tag}) ---"
+    )
     df_today = load_todays_features(target_date)
 
     if df_today.empty:
@@ -767,9 +810,9 @@ def _score_date(
             raise ValueError(f"Required column '{col}' missing from today's features.")
 
     # ------ NGBoost feature matrices ------
-    X_ngb = _build_feature_matrix(df_today, df_hist, "total_runs", model_tag, ngb_total)
-    X_diff = _build_feature_matrix(df_today, df_hist, "run_differential", model_tag, ngb_diff)
-    X_clf  = _build_feature_matrix(df_today, df_hist, "home_win", model_tag, clf_hw)
+    X_ngb = _build_feature_matrix(df_today, df_hist, "total_runs", total_runs_tag, ngb_total)
+    X_diff = _build_feature_matrix(df_today, df_hist, "run_differential", run_diff_tag, ngb_diff)
+    X_clf  = _build_feature_matrix(df_today, df_hist, "home_win", home_win_tag, clf_hw)
 
     # ------ Score NGBoost total runs ------
     pred_dist_tot = ngb_total.pred_dist(X_ngb)
@@ -907,35 +950,42 @@ def _score_date(
 
 def main() -> None:
     args = _parse_args()
-    model_tag     = args.model_tag
+    model_tag      = args.model_tag
+    home_win_tag   = args.home_win_tag
+    total_runs_tag = args.total_runs_tag
+    run_diff_tag   = args.run_diff_tag
     feature_version = args.feature_version
     model_version = _model_version_label(model_tag)
     dry_run       = args.dry_run
     log_snowflake = not args.no_log_snowflake
 
+    target_tags_str = (
+        f"home_win={home_win_tag}, total_runs={total_runs_tag}, run_diff={run_diff_tag}"
+    )
+
     # Determine date range
     if args.start_date:
         dates = _date_range(args.start_date, args.end_date)
         print(f"Backfill mode: {len(dates)} dates from {args.start_date} to {args.end_date} "
-              f"(model_tag={model_tag}, feature_version={feature_version})")
+              f"(model_tag={model_tag}, {target_tags_str}, feature_version={feature_version})")
     else:
         target = args.date or date.today().isoformat()
         dates = [target]
-        print(f"Scoring {target} (model_tag={model_tag})")
+        print(f"Scoring {target} (model_tag={model_tag}, {target_tags_str})")
 
     # ------ Load historical data for imputation ------
     print("Loading historical features for imputation pipeline fitting...")
     df_hist = load_features(min_games_played=15)
     print(f"  Loaded {len(df_hist):,} historical rows")
 
-    # ------ Load models ------
-    print(f"Loading models (tag={model_tag})...")
-    ngb_total = _load_model_for_tag("total_runs", model_tag)
-    ngb_diff  = _load_model_for_tag("run_differential", model_tag)
-    clf_hw    = _load_model_for_tag("home_win", model_tag)
-    print(f"  total_runs: {type(ngb_total).__name__}")
-    print(f"  run_differential: {type(ngb_diff).__name__}")
-    print(f"  home_win: {type(clf_hw).__name__}")
+    # ------ Load models (per-target tags) ------
+    print(f"Loading models ({target_tags_str})...")
+    ngb_total = _load_model_for_tag("total_runs", total_runs_tag)
+    ngb_diff  = _load_model_for_tag("run_differential", run_diff_tag)
+    clf_hw    = _load_model_for_tag("home_win", home_win_tag)
+    print(f"  total_runs ({total_runs_tag}): {type(ngb_total).__name__}")
+    print(f"  run_differential ({run_diff_tag}): {type(ngb_diff).__name__}")
+    print(f"  home_win ({home_win_tag}): {type(clf_hw).__name__}")
 
     # ------ Load NGBoost distribution config ------
     _, ngb_tot_dist = _load_ngb_cfg(
@@ -965,6 +1015,9 @@ def main() -> None:
                 feature_version=feature_version,
                 dry_run=dry_run,
                 log_snowflake=log_snowflake,
+                home_win_tag=home_win_tag,
+                total_runs_tag=total_runs_tag,
+                run_diff_tag=run_diff_tag,
             )
         except Exception as exc:
             print(f"  Error scoring {target_date}: {exc}")

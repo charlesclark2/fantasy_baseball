@@ -40,19 +40,26 @@ ORDER BY b.score_date ASC, b.placed_at ASC
 """
 
 _PREDICTION_LOG_SQL = """
+WITH game_versions AS (
+    SELECT game_pk, MIN(model_version) AS model_version
+    FROM baseball_data.betting_ml.daily_model_predictions
+    GROUP BY game_pk
+)
 SELECT
-    prediction_date,
-    game_pk,
-    market,
-    model_prob,
-    market_prob_at_prediction,
-    closing_market_prob,
-    actual_outcome,
-    decimal_odds,
-    ev,
-    kelly_fraction
-FROM baseball_data.config.prediction_log
-ORDER BY prediction_date ASC
+    p.prediction_date,
+    p.game_pk,
+    p.market,
+    COALESCE(gv.model_version, 'v0') AS model_version,
+    p.model_prob,
+    p.market_prob_at_prediction,
+    p.closing_market_prob,
+    p.actual_outcome,
+    p.decimal_odds,
+    p.ev,
+    p.kelly_fraction
+FROM baseball_data.config.prediction_log p
+LEFT JOIN game_versions gv ON p.game_pk = gv.game_pk
+ORDER BY p.prediction_date ASC
 """
 
 _PREDICTION_LOG_STATS_SQL = """
@@ -207,6 +214,10 @@ with st.sidebar:
     if latest:
         st.write(f"**Latest prediction:** {pd.Timestamp(latest).date()}")
 
+    st.divider()
+    st.subheader("Model Version")
+    _all_versions: list[str] = []  # populated after data load below
+
 # ---------------------------------------------------------------------------
 # Load filtered data (actual_outcome IS NOT NULL)
 # ---------------------------------------------------------------------------
@@ -229,7 +240,7 @@ if n_total_logged < 5:
     st.stop()
 
 # ---------------------------------------------------------------------------
-# Global date range filter
+# Global date range + model version filter
 # ---------------------------------------------------------------------------
 
 if not df.empty and "prediction_date" in df.columns:
@@ -252,6 +263,25 @@ if not df.empty and "prediction_date" in df.columns:
     ]
 else:
     df_view = df
+
+# Model version sidebar filter (rendered here so we have data to inspect)
+if "model_version" in df_view.columns:
+    _all_versions = sorted(df_view["model_version"].dropna().unique().tolist())
+else:
+    _all_versions = []
+
+with st.sidebar:
+    if _all_versions:
+        _selected_versions = st.multiselect(
+            "Show versions",
+            options=_all_versions,
+            default=_all_versions,
+            key="version_filter",
+        )
+        if _selected_versions and set(_selected_versions) != set(_all_versions):
+            df_view = df_view[df_view["model_version"].isin(_selected_versions)]
+    else:
+        st.caption("Version data not available.")
 
 # ---------------------------------------------------------------------------
 # Compute P&L for actionable rows (ev > 0)
@@ -365,9 +395,14 @@ with _s_tab_totals:
 # ---------------------------------------------------------------------------
 
 def _render_brier(df_src: pd.DataFrame) -> None:
-    brier_src = df_src[["prediction_date", "model_prob", "market_prob_at_prediction", "actual_outcome"]].dropna(
-        subset=["model_prob", "actual_outcome"]
-    )
+    has_version = "model_version" in df_src.columns
+    multi_version = has_version and df_src["model_version"].nunique() > 1
+
+    cols_needed = ["prediction_date", "model_prob", "market_prob_at_prediction", "actual_outcome"]
+    if has_version:
+        cols_needed.append("model_version")
+
+    brier_src = df_src[cols_needed].dropna(subset=["model_prob", "actual_outcome"])
     if brier_src.empty:
         st.info("No Brier score data available for this market.")
         return
@@ -376,26 +411,49 @@ def _render_brier(df_src: pd.DataFrame) -> None:
     brier_src["brier_model"] = (brier_src["model_prob"] - brier_src["actual_outcome"]) ** 2
     brier_src["brier_market"] = (brier_src["market_prob_at_prediction"] - brier_src["actual_outcome"]) ** 2
 
+    group_cols = ["prediction_date"] + (["model_version"] if multi_version else [])
     grouped = (
-        brier_src.groupby("prediction_date")
+        brier_src.groupby(group_cols)
         .agg(brier_model=("brier_model", "mean"), brier_market=("brier_market", "mean"))
         .reset_index()
         .sort_values("prediction_date")
     )
 
-    few_days = len(grouped) < 14
-    grouped["brier_model_14d"] = grouped["brier_model"].rolling(14, min_periods=1).mean()
-    grouped["brier_market_14d"] = grouped["brier_market"].rolling(14, min_periods=1).mean()
+    few_days = grouped["prediction_date"].nunique() < 14
 
-    long = grouped[["prediction_date", "brier_model_14d", "brier_market_14d"]].melt(
-        id_vars="prediction_date",
-        value_vars=["brier_model_14d", "brier_market_14d"],
-        var_name="series",
-        value_name="brier",
-    )
-    long["series"] = long["series"].map(
-        {"brier_model_14d": "Model (Brier)", "brier_market_14d": "Market (Brier)"}
-    )
+    if multi_version:
+        for mv in grouped["model_version"].unique():
+            mask = grouped["model_version"] == mv
+            grouped.loc[mask, "brier_model_14d"] = grouped.loc[mask, "brier_model"].rolling(14, min_periods=1).mean()
+            grouped.loc[mask, "brier_market_14d"] = grouped.loc[mask, "brier_market"].rolling(14, min_periods=1).mean()
+        long = grouped[["prediction_date", "model_version", "brier_model_14d", "brier_market_14d"]].melt(
+            id_vars=["prediction_date", "model_version"],
+            value_vars=["brier_model_14d", "brier_market_14d"],
+            var_name="source",
+            value_name="brier",
+        )
+        long["source"] = long["source"].map({"brier_model_14d": "Model", "brier_market_14d": "Market"})
+        long["series"] = long["model_version"] + " — " + long["source"]
+    else:
+        grouped["brier_model_14d"] = grouped["brier_model"].rolling(14, min_periods=1).mean()
+        grouped["brier_market_14d"] = grouped["brier_market"].rolling(14, min_periods=1).mean()
+        long = grouped[["prediction_date", "brier_model_14d", "brier_market_14d"]].melt(
+            id_vars="prediction_date",
+            value_vars=["brier_model_14d", "brier_market_14d"],
+            var_name="series",
+            value_name="brier",
+        )
+        long["series"] = long["series"].map(
+            {"brier_model_14d": "Model (Brier)", "brier_market_14d": "Market (Brier)"}
+        )
+
+    tooltip = [
+        alt.Tooltip("prediction_date:T", title="Date", format="%b %d"),
+        alt.Tooltip("series:N", title="Series"),
+        alt.Tooltip("brier:Q", title="Brier Score", format=".4f"),
+    ]
+    if multi_version:
+        tooltip.insert(1, alt.Tooltip("model_version:N", title="Version"))
 
     chart = (
         alt.Chart(long)
@@ -405,11 +463,7 @@ def _render_brier(df_src: pd.DataFrame) -> None:
                     axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
             y=alt.Y("brier:Q", title="Brier Score", scale=alt.Scale(zero=False)),
             color=alt.Color("series:N", legend=alt.Legend(title=None)),
-            tooltip=[
-                alt.Tooltip("prediction_date:T", title="Date", format="%b %d"),
-                alt.Tooltip("series:N", title="Series"),
-                alt.Tooltip("brier:Q", title="Brier Score", format=".4f"),
-            ],
+            tooltip=tooltip,
         )
         .properties(height=300)
     )
