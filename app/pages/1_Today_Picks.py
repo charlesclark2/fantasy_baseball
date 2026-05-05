@@ -307,8 +307,18 @@ col_r1, col_r2 = st.columns([1, 1])
 with col_r1:
     if st.button("Refresh Predictions"):
         with st.spinner("Running predict_today.py…"):
+            # Per-target promotion (Card 7.MB): home_win and run_diff from v1,
+            # total_runs held at v0 pending Card 7.V retrain. model_version='prod'
+            # keeps these mixed-version rows separate from v0/v1 backfills.
             result = subprocess.run(
-                ["uv", "run", "python", "betting_ml/scripts/predict_today.py", "--date", date_str],
+                [
+                    "uv", "run", "python", "betting_ml/scripts/predict_today.py",
+                    "--date", date_str,
+                    "--model-tag", "prod",
+                    "--home-win-tag", "v1",
+                    "--total-runs-tag", "v0",
+                    "--run-diff-tag", "v1",
+                ],
                 capture_output=True,
                 text=True,
                 cwd=str(_PROJECT_ROOT),
@@ -532,7 +542,7 @@ df_display = pd.DataFrame(display_rows)
 
 st.dataframe(
     df_display.style.apply(_row_bg, axis=1),
-    use_container_width=True,
+    width='stretch',
     column_config={col: st.column_config.TextColumn(col, help=_COL_HELP[col]) for col in _COL_HELP},
     column_order=_STYLE_VISIBLE_COLS,
 )
@@ -659,7 +669,7 @@ if bet_rows:
 
     st.dataframe(
         df_bets.style.apply(_bet_row_style, axis=1),
-        use_container_width=True,
+        width='stretch',
         column_config={col: st.column_config.TextColumn(col, help=h) for col, h in bet_col_help.items()},
     )
 else:
@@ -749,7 +759,7 @@ with st.expander("📈 Market Movement", expanded=False):
 
             st.dataframe(
                 df_mv_display.style.apply(_mv_row_bg, axis=1),
-                use_container_width=True,
+                width='stretch',
                 column_config={col: st.column_config.TextColumn(col, help=h) for col, h in _MV_COL_HELP.items()},
                 column_order=_MV_VISIBLE,
             )
@@ -883,7 +893,7 @@ if not is_today:
 
             st.dataframe(
                 df_out.style.apply(_outcome_bg, axis=1),
-                use_container_width=True,
+                width='stretch',
                 column_config={col: st.column_config.TextColumn(col, help=h) for col, h in outcome_col_help.items()},
             )
         else:

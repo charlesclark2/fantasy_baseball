@@ -337,18 +337,67 @@ st.divider()
 # ===========================================================================
 
 _FEATURE_COLS_PATH = _PROJECT_ROOT / "model_artifacts" / "feature_columns.json"
+_REGISTRY_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
+
+
+def _resolve_feature_cols_for(target: str) -> list[str]:
+    """Return the feature column list for a given target's current production
+    artifact, falling back to the global feature_columns.json if the registry
+    has no per-target path."""
+    import yaml
+    if _REGISTRY_PATH.exists():
+        registry = yaml.safe_load(_REGISTRY_PATH.read_text()) or {}
+        entry = registry.get(target, {})
+        feat_path_str = entry.get("feature_columns_path")
+        if feat_path_str:
+            p = Path(feat_path_str)
+            if not p.is_absolute():
+                p = _PROJECT_ROOT / p
+            if p.exists():
+                return json.loads(p.read_text())
+    return json.loads(_FEATURE_COLS_PATH.read_text())
+
 
 @st.cache_resource
-def get_home_win_explainer():
+def get_home_win_explainer() -> tuple[object, list[str]]:
+    """Returns (shap_explainer, feature_columns) tuple for the home_win model.
+
+    Branches on artifact type so v0 (PlattCalibratedXGBClassifier) and
+    v1 (sklearn Pipeline / ElasticNet) both work.
+    """
     model = load_model("home_win")
-    inner = model.xgb_classifier if hasattr(model, "xgb_classifier") else model
-    return shap.TreeExplainer(inner)
+    feature_cols = _resolve_feature_cols_for("home_win")
+
+    # v0: Platt-calibrated XGB → use TreeExplainer on the inner XGB classifier
+    if hasattr(model, "xgb_classifier"):
+        return shap.TreeExplainer(model.xgb_classifier), feature_cols
+
+    # v1: sklearn Pipeline (elasticnet) → model-agnostic Explainer with
+    # historical background. shap.LinearExplainer can't handle a full Pipeline
+    # (preprocessor + estimator), so we wrap the prediction callable instead.
+    if hasattr(model, "named_steps") or hasattr(model, "steps"):
+        from betting_ml.utils.data_loader import load_features
+        df_hist = load_features(min_games_played=15)
+        X_bg = (
+            df_hist.reindex(columns=feature_cols, fill_value=0.0)
+            .fillna(0.0)
+            .head(100)
+        )
+        if hasattr(model, "predict_proba"):
+            predict_fn = lambda X: model.predict_proba(X)[:, 1]
+        else:
+            predict_fn = model.predict
+        return shap.Explainer(predict_fn, X_bg), feature_cols
+
+    # Fallback: assume tree-based
+    return shap.TreeExplainer(model), feature_cols
 
 
 @st.cache_resource
-def get_total_runs_explainer():
+def get_total_runs_explainer() -> tuple[object, list[str]]:
     model = load_model("total_runs")
-    return shap.TreeExplainer(model)
+    feature_cols = _resolve_feature_cols_for("total_runs")
+    return shap.TreeExplainer(model), feature_cols
 
 
 def _build_feature_df(raw_df: pd.DataFrame, feature_cols: list[str]) -> pd.DataFrame:
@@ -367,7 +416,13 @@ def _build_feature_df(raw_df: pd.DataFrame, feature_cols: list[str]) -> pd.DataF
 
 def _render_waterfall(explainer, X_df: pd.DataFrame, title: str) -> None:
     try:
-        sv = explainer(X_df)
+        # Permutation/Exact explainers need at least 2*n_features+1 evals;
+        # Tree/Linear explainers ignore this kwarg.
+        n_features = X_df.shape[1]
+        try:
+            sv = explainer(X_df, max_evals=2 * n_features + 64)
+        except TypeError:
+            sv = explainer(X_df)
         fig, _ = plt.subplots()
         shap.plots.waterfall(sv[0], max_display=10, show=False)
         fig = plt.gcf()
@@ -386,34 +441,28 @@ st.caption(
     "of influence for this specific game — not its overall importance across all games."
 )
 
-if not _FEATURE_COLS_PATH.exists():
-    st.warning(
-        "feature_columns.json not found — SHAP section unavailable. "
-        f"Expected at {_FEATURE_COLS_PATH}"
-    )
+raw_feat_df = load_full_feature_vector(game_pk, date_str)
+
+if raw_feat_df.empty:
+    st.warning("No feature data found for this game — SHAP section skipped.")
 else:
-    feature_cols = json.loads(_FEATURE_COLS_PATH.read_text())
-    raw_feat_df = load_full_feature_vector(game_pk, date_str)
+    shap_col1, shap_col2 = st.columns(2)
 
-    if raw_feat_df.empty:
-        st.warning("No feature data found for this game — SHAP section skipped.")
-    else:
-        X_df = _build_feature_df(raw_feat_df, feature_cols)
-        shap_col1, shap_col2 = st.columns(2)
+    with shap_col1:
+        try:
+            hw_explainer, hw_feature_cols = get_home_win_explainer()
+            X_hw = _build_feature_df(raw_feat_df, hw_feature_cols)
+            _render_waterfall(hw_explainer, X_hw, "Home Win Model")
+        except Exception as exc:
+            st.warning(f"Home Win SHAP explainer failed to load: {exc}")
 
-        with shap_col1:
-            try:
-                hw_explainer = get_home_win_explainer()
-                _render_waterfall(hw_explainer, X_df, "Home Win Model")
-            except Exception as exc:
-                st.warning(f"Home Win SHAP explainer failed to load: {exc}")
-
-        with shap_col2:
-            try:
-                tr_explainer = get_total_runs_explainer()
-                _render_waterfall(tr_explainer, X_df, "Total Runs Model")
-            except Exception as exc:
-                st.warning(f"Total Runs SHAP explainer failed to load: {exc}")
+    with shap_col2:
+        try:
+            tr_explainer, tr_feature_cols = get_total_runs_explainer()
+            X_tr = _build_feature_df(raw_feat_df, tr_feature_cols)
+            _render_waterfall(tr_explainer, X_tr, "Total Runs Model")
+        except Exception as exc:
+            st.warning(f"Total Runs SHAP explainer failed to load: {exc}")
 
 st.divider()
 
@@ -511,7 +560,7 @@ with form_col1:
         if home_form.empty:
             st.info("No prior games found for this team.")
         else:
-            st.dataframe(home_form, use_container_width=True, hide_index=True)
+            st.dataframe(home_form, width='stretch', hide_index=True)
 
 with form_col2:
     if away_team_id is None:
@@ -522,4 +571,4 @@ with form_col2:
         if away_form.empty:
             st.info("No prior games found for this team.")
         else:
-            st.dataframe(away_form, use_container_width=True, hide_index=True)
+            st.dataframe(away_form, width='stretch', hide_index=True)

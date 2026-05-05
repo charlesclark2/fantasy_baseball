@@ -1,0 +1,305 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: total-runs-model-retrain-bias-fix
+  namespace: default
+spec:
+  description: >
+    Retrain the total_runs NGBoost model to eliminate the variance shrinkage and
+    location bias discovered during Card 7.MB evaluation. The retrained model
+    must produce a prediction distribution wide enough to be useful for
+    over/under betting (i.e. it must cross above the consensus line on a
+    realistic fraction of games), and its mean prediction must be within
+    0.5 runs of the actual league average.
+
+    BACKGROUND: During 7.MB we discovered the v1 total_runs model had a severe
+    "predict-the-mean" failure mode after the 7.MA full retrain:
+      - Std of predictions: 0.90 runs (vs actual std 4.44 runs — 5x too narrow)
+      - Mean residual: -1.36 runs (systematically under-predicts)
+      - P10 / P50 / P90 predictions: 6.45 / 7.54 / 8.40 runs
+      - Typical consensus line: 8.38 runs
+      - Result: model crosses above the line on only 2.6% of games
+        (vs actual 48.8% of games landing over)
+      - pct_over_edge: 3.2% — model picks over relative to market on
+        practically no games
+
+    For comparison, v0 total_runs has its own bias (mean residual -2.28, std 1.28,
+    pct_pred_over 14.7%) but is currently the better choice. As a result of
+    7.MB, v0 was retained as the production total_runs model while v1 was
+    promoted for home_win and run_diff (per-target promotion via Card 7.L2
+    follow-on).
+
+    WHY THIS MATTERS: Totals are the market where bookmakers are weakest and
+    where a calibrated model is most valuable. A model that always predicts
+    near the mean is worse than useless — its MAE looks acceptable but it
+    provides zero discriminative signal for over/under decisions. Fixing this
+    is the highest-leverage modeling work in Phase 7.
+
+    HYPOTHESES (to investigate during diagnose-bias-root-cause):
+      1. NGBoost regularization too aggressive (high reg, shallow trees,
+         too few estimators) → trees can't fit the tails
+      2. New Phase 7 features (bullpen IP, Stuff+, Pythagorean, archetype)
+         all correlate with suppressed run environments → systematic downward
+         bias when stacked
+      3. Training cutoff (2021+) over-weights post-COVID pitching-dominated
+         seasons → mean shifts low
+      4. Feature imputation: zero-imputed values pull predictions toward
+         a low-mean attractor
+      5. LogNormal scale parameter is itself collapsing during boosting
+         (NGBoost learns scale jointly with loc; if scale shrinks, the natural-
+         scale prediction concentrates around exp(loc))
+
+    DEFINITION OF DONE: A v2 total_runs model promoted to production with
+    pct_pred_over >= 25% AND mean residual within ±0.5 runs of zero on the
+    2024+ holdout. If neither hyperparameter retuning nor training-window
+    expansion clears those gates, document the failure and defer to Phase 9
+    (architecture change).
+
+  acceptanceCriteria:
+    - description: >
+        betting_ml/evaluation/total_runs_bias_diagnosis.md created. Documents
+        the observed failure mode (variance shrinkage + location bias) with
+        the diagnostic numbers from the 7.MB analysis, ranks the five hypotheses
+        by likelihood after investigation, and proposes the chosen retraining
+        approach (hyperparameter tuning, training window change, feature
+        subset, etc.).
+    - description: >
+        New v2 total_runs model artifact saved to
+        betting_ml/models/total_runs/ngboost_tuned_v2.pkl. Backfill of v2
+        predictions written to daily_model_predictions with model_version='v2'
+        for the 2024+ window.
+    - description: >
+        v2 model passes promotion gates on the 2024+ holdout (computed via the
+        Snowflake diagnostic query in total_runs_bias_diagnosis.md):
+          - pct_pred_over >= 25.0
+          - abs(mean_residual) <= 0.5
+          - totals_mae <= v0 totals_mae (3.862) — must not regress
+          - std(pred_total_runs) >= 2.0 (vs current v1=0.90, v0=1.28)
+        If a gate fails, document why and either iterate on retraining choices
+        or defer to Phase 9 with the failure analysis recorded.
+    - description: >
+        compare_model_versions.py run with --champion v0 --challenger v2 on
+        2021–present produces a per-target verdict of PROMOTE for total_runs
+        (no MONITORING flag from pct_over_edge). Report saved to
+        betting_ml/evaluation/model_comparison_v0_v2_total_runs.md.
+    - description: >
+        On promotion, betting_ml/models/model_registry.yaml total_runs entry
+        updated: artifact_path -> v2 artifact, selected_at -> today's date,
+        notes record the bias gates achieved. Card 7.L2 per-target version
+        config updated so production scoring uses total_runs=v2 while keeping
+        home_win=v1 and run_differential=v1.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: total-runs-retrain-plan
+  namespace: default
+spec:
+  description: >
+    Five-task DAG. Task 1 documents the diagnosis. Task 2 explores hypotheses
+    via small-scale training experiments. Task 3 runs the full retrain with
+    the chosen approach. Task 4 backfills v2 predictions and validates against
+    the promotion gates. Task 5 promotes v2 (or documents failure).
+  goalRef:
+    name: total-runs-model-retrain-bias-fix
+  graph:
+    nodes:
+
+      - id: diagnose-bias-root-cause
+        kind: Task
+        description: >
+          Create betting_ml/evaluation/total_runs_bias_diagnosis.md documenting
+          the failure mode, then run targeted diagnostics to identify the most
+          likely root cause among the five hypotheses listed in the goal
+          BACKGROUND.
+
+          Required diagnostic queries (all in the diagnosis doc):
+
+            1. Distribution check (already run in 7.MB — copy results):
+               SELECT model_version, STDDEV(pred_total_runs),
+                      PERCENTILE_CONT(0.10/0.50/0.90) WITHIN GROUP (ORDER BY ...),
+                      AVG(pred_total_runs - actual_total_runs) AS mean_residual,
+                      AVG(CASE WHEN pred_total_runs > total_line_consensus THEN 1.0 ELSE 0.0 END)
+                          AS pct_pred_over
+
+            2. Per-season bias check: are some seasons much worse than others?
+               If 2021–22 (COVID-pitching era) drives the bias more than 2024+,
+               training cutoff is the lever.
+
+            3. Per-feature-group ablation: load v1 model, examine NGBoost
+               feature_importances_ for the loc parameter and the scale
+               parameter separately. If scale-parameter trees over-weight one
+               feature group, that group is shrinking variance.
+
+            4. Imputation check: query feature_pregame_game_features for
+               zero/null rates on Phase 7 features in the training window. A
+               feature that is null on ~50% of training rows and gets
+               zero-imputed will systematically bias predictions.
+
+          Output: rank the five hypotheses by likelihood and pick a primary
+          retraining approach (e.g. "loosen regularization + drop pre-2023
+          training data", or "retrain on 2024+ only with current
+          hyperparameters").
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Bias diagnosis document
+            path: betting_ml/evaluation/total_runs_bias_diagnosis.md
+          - type: command_succeeds
+            name: Diagnosis doc contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/total_runs_bias_diagnosis.md').read_text().lower()
+                required = ['variance shrinkage', 'mean residual', 'pct_pred_over',
+                            'hypothesis', 'chosen approach']
+                missing = [s for s in required if s not in content]
+                assert not missing, f'diagnosis doc missing sections: {missing}'
+                print('total_runs_bias_diagnosis.md complete')
+
+      - id: prototype-retrain-experiments
+        kind: Task
+        description: >
+          Run 2–4 small-scale training experiments to validate the chosen
+          approach from Task 1 before committing to a full retrain. Each
+          experiment should be quick (single config, no full grid search) and
+          report:
+            - cv_mae
+            - std(pred) on a 2024 holdout
+            - pct_pred_over on a 2024 holdout
+            - mean_residual on a 2024 holdout
+
+          Suggested experiments (pick those that match Task 1 hypothesis ranking):
+            A. Same config as v1 but with reg_alpha=0, reg_lambda=0,
+               max_depth=8 (loosen regularization)
+            B. Train only on 2024+ data (drop pre-COVID era)
+            C. Train without the new Phase 7 features that correlate with low
+               run environments (Stuff+, bullpen IP)
+            D. Switch to Normal distribution from LogNormal (eliminate the
+               log-space scale collapse possibility)
+
+          Pick the winning configuration (best pct_pred_over while not
+          regressing MAE beyond v0 baseline). Document the winner in
+          total_runs_bias_diagnosis.md under "Chosen Configuration".
+        dependsOn:
+          - diagnose-bias-root-cause
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Diagnosis doc records experiment results
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/total_runs_bias_diagnosis.md').read_text().lower()
+                assert 'chosen configuration' in content, \
+                    'diagnosis doc missing "Chosen Configuration" section from prototype experiments'
+                print('prototype experiments documented')
+
+      - id: full-retrain-v2
+        kind: Task
+        description: >
+          Run the full v2 retrain using the configuration chosen in Task 2.
+          Save artifact to betting_ml/models/total_runs/ngboost_tuned_v2.pkl.
+
+          Command (or modified equivalent based on Task 2 outcome):
+            uv run python betting_ml/scripts/run_ngboost_total_runs_search.py \
+                --output-suffix v2 \
+                <task-2-derived flags>
+
+          Record CV MAE and compare to v1 (3.4856 pre-bias-fix CV).
+        dependsOn:
+          - prototype-retrain-experiments
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: v2 total_runs model artifact
+            path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+          - type: command_succeeds
+            name: v2 model artifact is loadable
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import joblib
+                m = joblib.load('betting_ml/models/total_runs/ngboost_tuned_v2.pkl')
+                print(f'v2 total_runs model loaded: {type(m).__name__}')
+
+      - id: backfill-v2-predictions-and-validate
+        kind: Task
+        description: >
+          Backfill v2 predictions to daily_model_predictions for the 2021+
+          window using predict_today.py with the v2 artifact and
+          model_version='v2'. Then run the diagnostic query from Task 1 to
+          confirm the promotion gates are met.
+
+          Promotion gates (2024+ holdout):
+            - pct_pred_over >= 25.0
+            - abs(mean_residual) <= 0.5
+            - totals_mae <= 3.862 (v0 baseline)
+            - std(pred_total_runs) >= 2.0
+
+          If any gate fails, return to Task 2 (re-prototype) or document the
+          failure and defer to Phase 9.
+
+          On success, also run compare_model_versions.py with v0 vs v2 and
+          save the report to betting_ml/evaluation/model_comparison_v0_v2_total_runs.md.
+        dependsOn:
+          - full-retrain-v2
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: v0 vs v2 totals comparison report
+            path: betting_ml/evaluation/model_comparison_v0_v2_total_runs.md
+          - type: command_succeeds
+            name: Comparison report records promotion-gate outcomes
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/model_comparison_v0_v2_total_runs.md').read_text().lower()
+                required = ['pct_pred_over', 'mean_residual', 'std', 'gate']
+                missing = [s for s in required if s not in content]
+                assert not missing, f'comparison report missing: {missing}'
+                print('v0 vs v2 comparison report complete with promotion-gate metrics')
+
+      - id: promote-v2-or-defer
+        kind: Task
+        description: >
+          If gates passed in Task 4: update model_registry.yaml total_runs entry
+          to point to v2 artifact, update selected_at, record gate values in
+          notes. Update Card 7.L2 per-target version configuration so
+          production scoring uses total_runs=v2 (home_win and run_diff stay
+          at v1).
+
+          If gates failed: do NOT promote. Document the failure path in
+          total_runs_bias_diagnosis.md under "Final Outcome", create a
+          Phase 9 follow-up note (different architecture / feature engineering),
+          and leave production on v0 totals.
+        dependsOn:
+          - backfill-v2-predictions-and-validate
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Diagnosis doc records final outcome (promoted or deferred)
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                content = pathlib.Path('betting_ml/evaluation/total_runs_bias_diagnosis.md').read_text().lower()
+                assert 'final outcome' in content, \
+                    'diagnosis doc missing "Final Outcome" section'
+                print('final outcome recorded')

@@ -67,6 +67,31 @@ OPEN_METEO_ARCHIVE_LAG_DAYS = 5
 OPENWEATHERMAP_TIMEMACHINE_URL = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
 OPENWEATHERMAP_FORECAST_URL    = "https://api.openweathermap.org/data/3.0/onecall"
 
+# Open-Meteo can be slow under load; retry transient timeouts with backoff.
+_HTTP_TIMEOUT_SEC = 30
+_HTTP_MAX_ATTEMPTS = 3
+_HTTP_BACKOFF_BASE_SEC = 2.0
+
+
+def _get_with_retry(url: str, params: dict) -> dict | None:
+    """GET with retry/backoff. Returns parsed JSON dict or None on persistent failure."""
+    import time
+    last_exc: Exception | None = None
+    for attempt in range(1, _HTTP_MAX_ATTEMPTS + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=_HTTP_TIMEOUT_SEC)
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as exc:
+            last_exc = exc
+            if attempt < _HTTP_MAX_ATTEMPTS:
+                sleep_s = _HTTP_BACKOFF_BASE_SEC * (2 ** (attempt - 1))
+                log.warning("HTTP attempt %d/%d failed (%s); retrying in %.1fs",
+                            attempt, _HTTP_MAX_ATTEMPTS, exc, sleep_s)
+                time.sleep(sleep_s)
+    log.warning("HTTP request failed after %d attempts: %s", _HTTP_MAX_ATTEMPTS, last_exc)
+    return None
+
 # ── Snowflake connection ───────────────────────────────────────────────────────
 
 def _load_private_key() -> bytes | None:
@@ -147,12 +172,9 @@ def _fetch_open_meteo(lat: float, lon: float, game_dt: datetime) -> dict | None:
         "end_date":        game_date_str,
     }
 
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        log.warning("Open-Meteo request failed (lat=%.4f lon=%.4f): %s", lat, lon, exc)
+    data = _get_with_retry(url, params)
+    if data is None:
+        log.warning("Open-Meteo request failed (lat=%.4f lon=%.4f) after retries", lat, lon)
         return None
 
     hourly = data.get("hourly", {})
@@ -211,12 +233,9 @@ def _fetch_openweathermap(lat: float, lon: float, game_dt: datetime) -> dict | N
         url    = OPENWEATHERMAP_FORECAST_URL
         params = {"lat": lat, "lon": lon, "exclude": "minutely,daily,alerts", "appid": api_key}
 
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as exc:
-        log.warning("OpenWeatherMap request failed (lat=%.4f lon=%.4f): %s", lat, lon, exc)
+    data = _get_with_retry(url, params)
+    if data is None:
+        log.warning("OpenWeatherMap request failed (lat=%.4f lon=%.4f) after retries", lat, lon)
         return None
 
     hourly_list = data.get("hourly") or data.get("data", [])

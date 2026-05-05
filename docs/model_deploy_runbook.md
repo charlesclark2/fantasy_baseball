@@ -1,7 +1,7 @@
 # Model Deploy Runbook
 
 **Owner:** Charles Clark  
-**Last updated:** 2026-05-04 (Card 8.H2)  
+**Last updated:** 2026-05-04 (Card 7.L2)  
 **Applies to:** All three production targets — `home_win`, `total_runs`, `run_differential`
 
 ---
@@ -14,7 +14,7 @@ All production artifacts are listed in `betting_ml/models/model_registry.yaml`. 
 
 ---
 
-## Step 1 — Train and evaluate
+## Step 1a — Train and evaluate
 
 Run the appropriate training script and confirm the new artifact meets the acceptance bar:
 
@@ -27,6 +27,52 @@ Run the appropriate training script and confirm the new artifact meets the accep
 The training script prints a summary of CV metrics. Record these — they go into the registry and the evaluation doc in step 3.
 
 Write an evaluation doc in `betting_ml/evaluation/` summarising the results before proceeding. CI will block the merge (step 6) if no evaluation doc exists for the deploy.
+
+---
+
+## Step 1b — Champion/challenger comparison (required pre-promotion gate)
+
+Before promoting any challenger model, re-score the last two full seasons with the challenger
+and run the comparison script. A **DO NOT PROMOTE** verdict requires investigation before
+continuing; **PROMOTE** or **INCONCLUSIVE** may proceed.
+
+**1. Backfill the challenger's predictions** (idempotent — safe to re-run):
+
+```bash
+# 2021–2023: known feature gaps, tag as partial
+uv run python betting_ml/scripts/predict_today.py \
+    --start-date 2021-04-01 --end-date 2023-10-31 \
+    --model-tag v1 --feature-version v1_partial
+
+# 2024–present: full feature coverage
+uv run python betting_ml/scripts/predict_today.py \
+    --start-date 2024-04-01 --end-date $(date +%Y-%m-%d) \
+    --model-tag v1 --feature-version v1_full
+```
+
+Replace `--model-tag v1` with the actual challenger tag if it differs (e.g. `v2`).
+
+**2. Run the comparison:**
+
+```bash
+uv run python scripts/compare_model_versions.py \
+    --champion v0 \
+    --challenger v1 \
+    --start-date 2024-04-01 \
+    --end-date $(date +%Y-%m-%d) \
+    --output-md betting_ml/evaluation/model_comparison_v0_v1.md
+```
+
+The comparison report **must be committed** to `betting_ml/evaluation/` as part of the
+deploy commit in Step 5. Do not deploy without a committed comparison report.
+
+**Promotion rules** (enforced by `compare_model_versions.py`):
+
+| Verdict | Meaning | Action |
+|---|---|---|
+| `PROMOTE` | Challenger improves mean_h2h_edge (2024+) without Brier regression > +0.002 | Proceed to Step 2 |
+| `INCONCLUSIVE` | Sample too small, or edge improves but Brier regresses | Proceed with caution; document reason |
+| `DO NOT PROMOTE` | Challenger does not improve mean_h2h_edge | Stop. Investigate before continuing. |
 
 ---
 
@@ -110,6 +156,7 @@ git add betting_ml/models/{target}/{new_artifact}.pkl
 git add betting_ml/models/model_registry.yaml
 git add betting_ml/scripts/{training_script}.py           # if updated
 git add betting_ml/evaluation/{eval_doc}.md
+git add betting_ml/evaluation/model_comparison_v0_v1.md  # champion/challenger report (Step 1b)
 git commit -m "Deploy {model_name} as {target} v{N} (Card 7.D)"
 ```
 
@@ -138,8 +185,10 @@ git push origin model/{target}/v{N}   # push the tag explicitly
 
 Reviewer checklist before approving:
 - [ ] Evaluation doc present in `betting_ml/evaluation/`
+- [ ] `betting_ml/evaluation/model_comparison_v0_v1.md` committed with PROMOTE or INCONCLUSIVE verdict (Step 1b)
 - [ ] `model_registry.yaml` has both `artifact_path` and `rollback_artifact_path`
-- [ ] CV metrics are within acceptance bar (Step 1)
+- [ ] `model_registry.yaml` has both `feature_columns_path` and `rollback_feature_columns_path`
+- [ ] CV metrics are within acceptance bar (Step 1a)
 - [ ] `deployed_date` and `model_version` are updated
 - [ ] Git tag exists and points to the deploy commit
 
