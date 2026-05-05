@@ -31,7 +31,8 @@ Usage:
 
 import logging
 import os
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
@@ -102,7 +103,11 @@ def write_github_output(key: str, value: str) -> None:
 
 
 def main() -> None:
-    today = date.today().isoformat()
+    # Use America/New_York for "today" so late-night West Coast lineups (which
+    # confirm at ~02:00 UTC) still resolve to the correct MLB calendar day.
+    # GitHub Actions runs in UTC, so date.today() rolls over at 00:00 UTC and
+    # would otherwise miss confirmations between 00:00 UTC and ~05:00 UTC.
+    today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
     conn = get_connection()
     cur = conn.cursor()
 

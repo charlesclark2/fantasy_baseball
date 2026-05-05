@@ -328,6 +328,22 @@ else:
     df_actionable = df_actionable[df_actionable["_ev_rank"] == 1].copy()
 
     stake = df_actionable["kelly_capped"] * bankroll_input
+
+    # Per-bet Kelly is capped at 10% of bankroll, but with enough actionable
+    # bets the slate sum can exceed the full bankroll. Scale proportionally so
+    # the suggested slate never asks the user to wager more than they have.
+    _raw_slate_total = float(stake.sum())
+    _slate_scale = 1.0
+    if _raw_slate_total > bankroll_input and bankroll_input > 0:
+        _slate_scale = bankroll_input / _raw_slate_total
+        stake = stake * _slate_scale
+        st.warning(
+            f"Suggested Kelly stakes sum to ${_raw_slate_total:.2f}, which exceeds "
+            f"your ${bankroll_input:,.2f} bankroll. All stakes scaled by "
+            f"{_slate_scale:.1%} so the full slate fits within bankroll. "
+            "Uncheck bets below to reallocate (remaining bets stay at the scaled size)."
+        )
+
     to_win = stake * (df_actionable["decimal_odds"] - 1)
     ev_dollar = df_actionable["ev"] * stake
 
