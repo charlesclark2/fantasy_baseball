@@ -42,7 +42,7 @@ log = logging.getLogger(__name__)
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
     "baseball_data.savant.batter_pitches": {
         "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
-        "max_stale_hours": 36,
+        "max_stale_hours": 48,
         "game_day_only": False,
     },
     "baseball_data.oddsapi.mlb_odds_raw": {
@@ -66,8 +66,8 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "game_day_only": False,
     },
     "baseball_data.statsapi.monthly_schedule": {
-        "ts_col": "ingest_date",     # DATE; cast to TIMESTAMP_NTZ in query
-        "max_stale_hours": 2,
+        "ts_col": "month_end_date",  # DATE; future value when current month is loaded → always fresh
+        "max_stale_hours": 48,       # catches missing month (would show as weeks stale)
         "game_day_only": True,
     },
 }
@@ -127,12 +127,20 @@ def _get_connection() -> snowflake.connector.SnowflakeConnection:
 
 
 def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection) -> bool:
-    """Return True if there are scheduled games on check_date."""
+    """Return True if there are scheduled games on check_date.
+
+    Queries monthly_schedule directly so the answer is independent of whether
+    batter_pitches (and the dbt models built on it) have today's data yet.
+    """
     cur = con.cursor()
     cur.execute(
         """
-        SELECT COUNT(*) FROM baseball_data.betting_features.feature_pregame_game_features
-        WHERE game_date = %s
+        SELECT COUNT(*)
+        FROM baseball_data.statsapi.monthly_schedule,
+             LATERAL FLATTEN(input => json_field:dates) d,
+             LATERAL FLATTEN(input => d.value:games) g
+        WHERE g.value:officialDate::DATE = %s
+          AND g.value:gameType::VARCHAR = 'R'
         """,
         (check_date.isoformat(),),
     )
