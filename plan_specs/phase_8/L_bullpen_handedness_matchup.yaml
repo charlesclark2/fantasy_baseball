@@ -1,0 +1,156 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bullpen-handedness-matchup
+  namespace: default
+spec:
+  description: >
+    The current bullpen model tracks overall bullpen xwOBA-against and workload. This card
+    adds a handedness dimension: a right-heavy bullpen facing a left-heavy lineup is a
+    qualitatively different situation than the same bullpen facing a right-heavy lineup.
+    Markets price this; the current model treats all opposing batters the same.
+
+    TECHNICAL APPROACH:
+    - Extend `mart_bullpen_effectiveness` (or build `mart_bullpen_handedness_splits`) with
+      rolling 30-day xwOBA-against split by batter handedness: `bp_xwoba_vs_rhb_30d` and
+      `bp_xwoba_vs_lhb_30d` per team per game_date.
+    - Source: mart_pitch_play_event joined to mart_pitch_hitter_profile (for batter_side);
+      leakage guard enforced (only pitches where game_date < prediction game_date).
+    - Lineup LHB/RHB composition already exists (`home_lineup_pct_rhb`, `away_lineup_pct_rhb`)
+      in `feature_pregame_lineup_features` — no new ingestion needed.
+    - Compute matchup-adjusted bullpen quality:
+        home_bp_matchup_xwoba = home_lineup_pct_rhb * away_bp_xwoba_vs_rhb_30d
+                                + (1 - home_lineup_pct_rhb) * away_bp_xwoba_vs_lhb_30d
+        away_bp_matchup_xwoba = away_lineup_pct_rhb * home_bp_xwoba_vs_rhb_30d
+                                + (1 - away_lineup_pct_rhb) * home_bp_xwoba_vs_lhb_30d
+    - Add `home_bp_matchup_xwoba` and `away_bp_matchup_xwoba` to feature_pregame_game_features.
+    - Null rate < 5% for regular season games after May 1 (sufficient sample for rolling window).
+
+  acceptanceCriteria:
+    - description: >
+        Bullpen handedness splits computed with correct leakage guard; `bp_xwoba_vs_rhb_30d`
+        and `bp_xwoba_vs_lhb_30d` available per team per game_date; null rate < 5% for
+        regular season games after May 1.
+    - description: >
+        `home_bp_matchup_xwoba` and `away_bp_matchup_xwoba` present in
+        `feature_pregame_game_features`. Spot-check confirms a right-heavy bullpen facing
+        a right-heavy lineup produces a different `bp_matchup_xwoba` than the same bullpen
+        vs. a left-heavy lineup.
+    - description: >
+        `dbtf build --select +feature_pregame_game_features` passes all tests.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bullpen-handedness-matchup-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 builds bullpen handedness splits by extending
+    mart_bullpen_effectiveness or creating a new mart. Task 2 computes the weighted matchup
+    quality columns and adds them to feature_pregame_game_features. Task 3 validates via
+    dbtf tests and spot-check.
+  goalRef:
+    name: bullpen-handedness-matchup
+  graph:
+    nodes:
+
+      - id: build-bullpen-handedness-splits
+        kind: Task
+        description: >
+          Create `models/marts/mart_bullpen_handedness_splits.sql` (or extend
+          mart_bullpen_effectiveness to include handedness-split columns).
+
+          Query mart_pitch_play_event joined to mart_pitch_hitter_profile on batter_id
+          to get batter_side ('R' or 'L'). Group by team_id (pitching team), game_date,
+          batter_side. Compute rolling 30-day xwOBA-against using a window over game_date
+          strictly before current game_date (leakage guard).
+
+          Output columns (per team per game_date):
+            team_id, game_date,
+            bp_xwoba_vs_rhb_30d FLOAT,  -- rolling 30d xwOBA against right-handed batters
+            bp_xwoba_vs_lhb_30d FLOAT,  -- rolling 30d xwOBA against left-handed batters
+            bp_pa_vs_rhb_30d    INT,     -- PA count for reliability
+            bp_pa_vs_lhb_30d    INT
+
+          Null when < 20 PA in the trailing 30-day window for that handedness split.
+          Grain: team_id × game_date. Add dbt uniqueness test on this grain.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for bullpen handedness splits mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_bullpen_handedness_splits
+
+      - id: add-matchup-columns-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_game_features.sql` to join mart_bullpen_handedness_splits
+          and compute matchup-adjusted bullpen quality.
+
+          Join: game → home team's bullpen handedness splits (as away team faces home bullpen)
+          and away team's bullpen handedness splits (as home team faces away bullpen), on
+          team_id + game_date (with game_date < game_date for leakage guard).
+
+          Compute:
+            home_bp_matchup_xwoba =
+              home_lineup_pct_rhb * away_bp_xwoba_vs_rhb_30d
+              + (1 - home_lineup_pct_rhb) * away_bp_xwoba_vs_lhb_30d
+            away_bp_matchup_xwoba =
+              away_lineup_pct_rhb * home_bp_xwoba_vs_rhb_30d
+              + (1 - away_lineup_pct_rhb) * home_bp_xwoba_vs_lhb_30d
+
+          NULL when either bullpen splits or lineup composition are unknown.
+          Surface both columns in the final SELECT of feature_pregame_game_features.
+        dependsOn:
+          - build-bullpen-handedness-splits
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: validate-handedness-matchup
+        kind: Task
+        description: >
+          Validate via Snowflake MCP and spot-check.
+
+          Checks (run via mcp__snowflake__run_snowflake_query):
+          1. Null rate after May 1:
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_bp_matchup_xwoba IS NULL THEN 1 ELSE 0 END) AS nulls
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025 AND game_date >= '2025-05-01'
+             Expected: nulls / total < 0.05.
+          2. Spot-check: find a game with a right-heavy bullpen (home team bp_xwoba_vs_rhb >>
+             bp_xwoba_vs_lhb) paired with both a right-heavy and left-heavy lineup — confirm
+             bp_matchup_xwoba differs in the expected direction.
+        dependsOn:
+          - add-matchup-columns-to-game-features
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf test passes for mart_bullpen_handedness_splits
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_bullpen_handedness_splits
+          - type: command_succeeds
+            name: validation documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Validation via Snowflake MCP required:')
+                print('1. Null rate < 5% for games after May 1 in any training season')
+                print('2. Spot-check: right-heavy vs left-heavy lineup produces different bp_matchup_xwoba')

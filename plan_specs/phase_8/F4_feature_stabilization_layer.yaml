@@ -1,0 +1,232 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: feature-stabilization-layer
+  namespace: default
+spec:
+  description: >
+    Apply James-Stein-style shrinkage to key rolling stat features at inference
+    time, before model.predict(). Small-sample rolling windows are shrunk toward
+    a league-average prior. This is a Python preprocessing transform only — the
+    dbt feature store is unchanged.
+
+    STATUS: Not blocked. Card 7.MB is complete; the winning architecture is confirmed
+    (XGBoost for home_win, NGBoost Normal for total_runs and run_differential).
+    Conservative James-Stein shrinkage can only reduce small-sample variance — it
+    cannot introduce directional bias — so this card is safe to implement regardless
+    of the model's current edge status. No prerequisite on 8.F1.
+
+    SHRINKAGE FORMULA:
+      w = n / (n + k)
+      stabilized = w * rolling_value + (1 - w) * prior
+      where n = games_played_ytd (or pitch count / PA count as appropriate)
+
+    SHRINKAGE CONSTANTS:
+      | Stat column                                    | k   | Prior |
+      |------------------------------------------------|-----|-------|
+      | home_team_woba_30d, away_team_woba_30d         | 150 | 0.320 |
+      | home_bp_xwoba_against_30d, away_bp_...         | 150 | 0.310 |
+      | home_starter_k_pct_std, away_starter_k_pct_std | 60  | 0.215 |
+      | home_starter_xwoba_against_std, away_...        | 100 | 0.310 |
+      | home_bp_xwoba_against_30d (bullpen)            | 100 | 0.315 |
+
+    INFERENCE-ONLY: Call stabilize_features() after feature assembly and before
+    model.predict() in predict_today.py. Training pipeline (train_model.py) is
+    NOT modified — stabilization is inference-only until the next retrain checkpoint.
+
+  acceptanceCriteria:
+    - description: >
+        `stabilize_features(df, games_played_col)` function exists in `predict_today.py`
+        or a new `betting_ml/models/feature_stabilizer.py`, and is called before
+        `model.predict()` in `predict_today.py`.
+    - description: >
+        Stabilization constants and priors documented in `model_registry.yaml` under
+        a `feature_stabilization` block listing each stat, k value, and prior.
+    - description: >
+        Unit test: with n=0 games played, `stabilized_woba ≈ 0.320` (pure prior);
+        with n=150 games played, `stabilized_woba ≈ 0.5 * rolling + 0.5 * 0.320`.
+    - description: >
+        `train_model.py` does NOT import or call `stabilize_features()` — stabilization
+        is inference-only. Code inspection confirms this.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: feature-stabilization-layer-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 implements the stabilizer function with unit
+    tests. Task 2 wires it into predict_today.py. Task 3 updates model_registry.yaml
+    and verifies train_model.py is unmodified.
+  goalRef:
+    name: feature-stabilization-layer
+  graph:
+    nodes:
+
+      - id: implement-stabilizer
+        kind: Task
+        description: >
+          Create `betting_ml/models/feature_stabilizer.py` with:
+
+            STABILIZATION_CONSTANTS = {
+                'home_team_woba_30d':              {'k': 150, 'prior': 0.320},
+                'away_team_woba_30d':              {'k': 150, 'prior': 0.320},
+                'home_bp_xwoba_against_30d':       {'k': 100, 'prior': 0.315},
+                'away_bp_xwoba_against_30d':       {'k': 100, 'prior': 0.315},
+                'home_starter_k_pct_std':          {'k':  60, 'prior': 0.215},
+                'away_starter_k_pct_std':          {'k':  60, 'prior': 0.215},
+                'home_starter_xwoba_against_std':  {'k': 100, 'prior': 0.310},
+                'away_starter_xwoba_against_std':  {'k': 100, 'prior': 0.310},
+            }
+
+            def stabilize_features(df, games_played_col='home_games_played_ytd'):
+                df = df.copy()
+                n = df[games_played_col].fillna(0).clip(lower=0)
+                for col, params in STABILIZATION_CONSTANTS.items():
+                    if col not in df.columns:
+                        continue
+                    k, prior = params['k'], params['prior']
+                    w = n / (n + k)
+                    df[col] = w * df[col].fillna(prior) + (1 - w) * prior
+                return df
+
+          Note: use home_games_played_ytd as n for home stats and away_games_played_ytd
+          for away stats. You may need to pass n separately per column or split into
+          home/away calls. Implement whichever is cleaner, but ensure correct n
+          is used (home n for home columns, away n for away columns).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: feature stabilizer module
+            path: betting_ml/models/feature_stabilizer.py
+          - type: command_succeeds
+            name: boundary value unit tests pass
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys
+                sys.path.insert(0, '.')
+                import pandas as pd
+                from betting_ml.models.feature_stabilizer import stabilize_features
+
+                # n=0: pure prior (w=0, stabilized = prior)
+                df_cold = pd.DataFrame({
+                    'home_team_woba_30d': [0.400],
+                    'home_games_played_ytd': [0],
+                    'away_team_woba_30d': [0.400],
+                    'away_games_played_ytd': [0],
+                })
+                result = stabilize_features(df_cold)
+                woba_cold = result['home_team_woba_30d'].iloc[0]
+                assert abs(woba_cold - 0.320) < 0.001, \
+                    f'n=0 should return prior 0.320, got {woba_cold}'
+
+                # n=150: w=0.5, stabilized = 0.5 * rolling + 0.5 * 0.320
+                df_warm = pd.DataFrame({
+                    'home_team_woba_30d': [0.400],
+                    'home_games_played_ytd': [150],
+                    'away_team_woba_30d': [0.400],
+                    'away_games_played_ytd': [150],
+                })
+                result = stabilize_features(df_warm)
+                woba_warm = result['home_team_woba_30d'].iloc[0]
+                expected = 0.5 * 0.400 + 0.5 * 0.320
+                assert abs(woba_warm - expected) < 0.001, \
+                    f'n=150 should return {expected:.3f}, got {woba_warm}'
+
+                print(f'Boundary tests OK: cold={woba_cold:.3f}, warm={woba_warm:.3f}')
+
+      - id: wire-into-predict
+        kind: Task
+        description: >
+          Edit `betting_ml/scripts/predict_today.py` to import and call
+          `stabilize_features()` after feature assembly and before model.predict().
+
+          Import:
+            from betting_ml.models.feature_stabilizer import stabilize_features
+
+          Usage (after feature df is assembled, before predict calls):
+            features_df = stabilize_features(features_df)
+            # then: model.predict(features_df[feature_cols])
+
+          Ensure both home and away n values are handled correctly (see Task 1 note).
+        dependsOn:
+          - implement-stabilizer
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py imports and calls stabilize_features before predict
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                assert 'stabilize_features' in src, \
+                    'stabilize_features not called in predict_today.py'
+                assert 'feature_stabilizer' in src, \
+                    'feature_stabilizer not imported in predict_today.py'
+                # Verify call comes before predict — find positions in source
+                stab_pos = src.index('stabilize_features')
+                pred_pos = src.index('.predict(')
+                assert stab_pos < pred_pos, \
+                    'stabilize_features must be called before model.predict()'
+                print('predict_today.py wiring OK: stabilize before predict')
+
+      - id: update-registry-and-verify-train
+        kind: Task
+        description: >
+          1. Update `model_registry.yaml` to add a `feature_stabilization` block:
+               feature_stabilization:
+                 inference_only: true
+                 constants:
+                   home_team_woba_30d: {k: 150, prior: 0.320}
+                   away_team_woba_30d: {k: 150, prior: 0.320}
+                   home_bp_xwoba_against_30d: {k: 100, prior: 0.315}
+                   away_bp_xwoba_against_30d: {k: 100, prior: 0.315}
+                   home_starter_k_pct_std: {k: 60, prior: 0.215}
+                   away_starter_k_pct_std: {k: 60, prior: 0.215}
+                   home_starter_xwoba_against_std: {k: 100, prior: 0.310}
+                   away_starter_xwoba_against_std: {k: 100, prior: 0.310}
+
+          2. Verify train_model.py does NOT import stabilize_features.
+        dependsOn:
+          - wire-into-predict
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: model_registry.yaml has feature_stabilization block
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                reg = pathlib.Path('model_registry.yaml').read_text()
+                assert 'feature_stabilization' in reg, \
+                    'model_registry.yaml missing feature_stabilization block'
+                assert 'inference_only' in reg, \
+                    'feature_stabilization must note inference_only: true'
+                print('model_registry.yaml feature_stabilization block OK')
+          - type: command_succeeds
+            name: train_model.py does not import stabilize_features
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib, glob
+                train_candidates = glob.glob('betting_ml/**/*train*.py', recursive=True)
+                for path in train_candidates:
+                    src = pathlib.Path(path).read_text()
+                    assert 'stabilize_features' not in src, \
+                        f'stabilize_features must not appear in training pipeline: {path}'
+                print(f'Verified {len(train_candidates)} training script(s) — none import stabilize_features')

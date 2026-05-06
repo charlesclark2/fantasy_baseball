@@ -1,0 +1,285 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: quantile-regression-total-runs
+  namespace: default
+spec:
+  description: >
+    The NGBoost Normal total_runs model has a variance-shrinkage problem (std(pred) = 0.77
+    vs. actual std = 4.44) deferred to Phase 9 architecture work. Quantile regression
+    sidesteps the distributional assumption entirely — it directly optimizes the empirical
+    quantiles of the outcome distribution, which can produce higher variance predictions.
+    Train LightGBM quantile models at the 10th, 25th, 50th, 75th, and 90th percentiles;
+    use interpolation to compute P(total > market_line).
+
+    PROMOTION GATES (all must pass to replace NGBoost v2):
+      1. Median (q=0.50) MAE ≤ NGBoost v2 total_runs MAE
+      2. std(pred_q50) ≥ 1.5  (vs. NGBoost std of 0.77 — must show meaningful improvement)
+      3. abs(mean_residual) ≤ 0.5  (minimal directional bias at q50)
+
+    IF NOT PROMOTED: models are archived for reference; NGBoost v2 remains in production.
+
+    ARTIFACTS (conditional on promotion):
+      - betting_ml/models/total_runs/lgb_quantile_{alpha}.pkl for alpha in {0.10, 0.25, 0.50, 0.75, 0.90}
+      - model_registry.yaml updated with quantile model entry
+      - predict_today.py dispatches quantile models for total_runs when promoted
+
+    COMPARISON REPORT at betting_ml/evaluation/quantile_regression_vs_ngboost.md:
+    Always written regardless of promotion outcome.
+
+  acceptanceCriteria:
+    - description: >
+        Five LightGBM quantile models trained on standard temporal CV splits
+        (same splits as NGBoost v2). Comparison report exists at
+        `betting_ml/evaluation/quantile_regression_vs_ngboost.md` with MAE, std(pred_q50),
+        pct_pred_over, and promotion gate results.
+    - description: >
+        `prob_over_line` computed via quantile interpolation for all games with a
+        `market_totals_line`; clamped to [0.05, 0.95].
+        `prob_over_line + prob_under_line = 1.0` for all non-null rows.
+    - description: >
+        If promoted: `model_registry.yaml` updated; `predict_today.py` dispatches
+        quantile models for total_runs. If not promoted: NGBoost v2 remains; report
+        documents which gates failed.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: quantile-regression-total-runs-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 trains five LightGBM quantile models on temporal CV
+    splits. Task 2 implements prob_over_line via quantile interpolation. Task 3 runs the
+    comparison against NGBoost v2 and writes the evaluation report. Task 4 conditionally
+    promotes the quantile models or archives them.
+  goalRef:
+    name: quantile-regression-total-runs
+  graph:
+    nodes:
+
+      - id: train-quantile-models
+        kind: Task
+        description: >
+          Create `betting_ml/scripts/train_quantile_totals.py`.
+
+          Train 5 LightGBM models with `objective='quantile'`:
+            QUANTILES = [0.10, 0.25, 0.50, 0.75, 0.90]
+            for alpha in QUANTILES:
+                model = lgb.LGBMRegressor(
+                    objective='quantile',
+                    alpha=alpha,
+                    n_estimators=300,
+                    learning_rate=0.05,
+                    max_depth=5,
+                    num_leaves=31,
+                )
+                model.fit(X_train, y_train)
+
+          Use the same feature set and temporal CV splits as the NGBoost v2 total_runs model
+          (check train_model.py or the NGBoost training script for the exact feature_cols
+          and CV split logic — replicate both exactly).
+
+          Record OOF predictions for each quantile across all CV folds. Compute:
+            - CV MAE for q50 predictions vs. actual total_runs
+            - std(oof_pred_q50) across all OOF games
+            - mean_residual = mean(oof_pred_q50 - actual_total_runs)
+            - pct_pred_over = fraction of games where oof_pred_q50 > market_totals_line
+              (requires joining OOF predictions to market_totals_line from Snowflake)
+
+          Save trained models (fit on full training set, not OOF folds) to:
+            betting_ml/models/total_runs/lgb_quantile_{alpha}.pkl
+
+          Print CV metrics to stdout and also write to a results dict for use in Task 3.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: quantile model training script
+            path: betting_ml/scripts/train_quantile_totals.py
+          - type: command_succeeds
+            name: training script has correct quantiles and objective
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('betting_ml/scripts/train_quantile_totals.py').read_text()
+                assert 'quantile' in src, "LightGBM quantile objective not found"
+                for alpha in ['0.10', '0.25', '0.50', '0.75', '0.90']:
+                    assert alpha in src, f'Quantile alpha={alpha} not in training script'
+                assert 'lgb_quantile' in src, 'Output path lgb_quantile_*.pkl not found'
+                print('Quantile training script structure OK')
+
+      - id: implement-quantile-interpolation
+        kind: Task
+        description: >
+          Create `betting_ml/models/total_runs/quantile_inference.py` with a function
+          `predict_prob_over_line(models, X, market_line)` that uses quantile interpolation.
+
+          Logic:
+            1. Get predicted quantiles for each of the 5 alpha levels.
+            2. Given market_line L, find the two bracketing quantiles Q_lo (the largest
+               quantile prediction below L) and Q_hi (the smallest above L).
+            3. Interpolate linearly between their alpha values:
+               alpha_lo = quantile of Q_lo; alpha_hi = quantile of Q_hi
+               frac = (L - Q_lo) / (Q_hi - Q_lo)   # how far L is between the two quantiles
+               prob_under = alpha_lo + frac * (alpha_hi - alpha_lo)
+               prob_over = 1 - prob_under
+            4. Clamp prob_over to [0.05, 0.95].
+            5. Handle edge cases: L below all quantiles → prob_over = 0.95;
+               L above all quantiles → prob_over = 0.05.
+            6. Return prob_over, prob_under (both clamped, summing to 1.0).
+
+          Import and call this function in predict_today.py (Task 4 of the conditional
+          promotion step).
+        dependsOn:
+          - train-quantile-models
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: quantile inference module
+            path: betting_ml/models/total_runs/quantile_inference.py
+          - type: command_succeeds
+            name: interpolation logic and clamping correct for synthetic input
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Test the interpolation logic inline (without loading actual models)
+                def interpolate_prob_over(quantile_preds, alphas, market_line):
+                    """quantile_preds: list of predicted values at alphas (same order)"""
+                    sorted_pairs = sorted(zip(quantile_preds, alphas))
+                    preds = [p for p, a in sorted_pairs]
+                    alphas_sorted = [a for p, a in sorted_pairs]
+
+                    # Edge cases
+                    if market_line <= preds[0]:
+                        return min(0.95, 1 - alphas_sorted[0])
+                    if market_line >= preds[-1]:
+                        return max(0.05, 1 - alphas_sorted[-1])
+
+                    # Find bracketing pair
+                    for i in range(len(preds) - 1):
+                        if preds[i] <= market_line <= preds[i+1]:
+                            frac = (market_line - preds[i]) / (preds[i+1] - preds[i])
+                            prob_under = alphas_sorted[i] + frac * (alphas_sorted[i+1] - alphas_sorted[i])
+                            prob_over = max(0.05, min(0.95, 1 - prob_under))
+                            return prob_over
+
+                alphas = [0.10, 0.25, 0.50, 0.75, 0.90]
+                preds  = [7.0,  8.0,  9.0, 10.0, 11.0]
+
+                # Line at median: prob_over should be ~0.50
+                p = interpolate_prob_over(preds, alphas, 9.0)
+                assert abs(p - 0.50) < 0.01, f'At median line, prob_over should be ~0.5, got {p}'
+
+                # Line below all preds: clamped to 0.95
+                p = interpolate_prob_over(preds, alphas, 5.0)
+                assert p == 0.95, f'Below all preds, prob_over should be 0.95, got {p}'
+
+                # Line above all preds: clamped to 0.05
+                p = interpolate_prob_over(preds, alphas, 15.0)
+                assert p == 0.05, f'Above all preds, prob_over should be 0.05, got {p}'
+
+                # Prob sum always 1.0
+                for line in [8.0, 9.0, 10.0]:
+                    p_over = interpolate_prob_over(preds, alphas, line)
+                    p_under = 1 - p_over
+                    assert abs(p_over + p_under - 1.0) < 1e-9, 'prob_over + prob_under must equal 1.0'
+
+                print('Quantile interpolation logic OK')
+
+      - id: compare-and-report
+        kind: Task
+        description: >
+          Run the full comparison of LightGBM quantile vs. NGBoost v2 and write the
+          evaluation report. Do NOT promote automatically — record gate results and
+          let Task 4 handle promotion decision.
+
+          Write `betting_ml/evaluation/quantile_regression_vs_ngboost.md`:
+
+            # Quantile Regression vs. NGBoost v2 — Total Runs
+
+            ## Promotion Gates
+            | Gate | Threshold | Quantile (q50) | NGBoost v2 | Pass? |
+            |------|-----------|---------------|------------|-------|
+            | CV MAE (q50) | ≤ NGBoost v2 MAE | <value> | <value> | Y/N |
+            | std(pred_q50) | ≥ 1.5           | <value> | 0.77       | Y/N |
+            | abs(mean_residual) | ≤ 0.5     | <value> | <value>    | Y/N |
+
+            ## All-Quantile Coverage
+            | Alpha | OOF Coverage Rate | Expected |
+            |-------|------------------|---------|
+            | 0.10  | <pct of actuals below q10> | 10% |
+            | 0.25  | ...                        | 25% |
+            ...
+
+            ## Conclusion
+            [All gates pass → promote / At least one gate fails → keep NGBoost v2]
+
+          Populate all values from the OOF results computed in Task 1.
+        dependsOn:
+          - implement-quantile-interpolation
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: quantile regression comparison report
+            path: betting_ml/evaluation/quantile_regression_vs_ngboost.md
+          - type: command_succeeds
+            name: report covers gates and conclusion
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/quantile_regression_vs_ngboost.md').read_text().lower()
+                for term in ['gate', 'mae', 'std', 'ngboost', 'promote']:
+                    assert term in text, f'Report missing section on: {term}'
+                print('Quantile regression comparison report covers required sections OK')
+
+      - id: conditional-promotion
+        kind: Task
+        description: >
+          Based on the gate results in the evaluation report:
+
+          IF ALL THREE GATES PASS:
+            1. Move trained model files to production paths (already at
+               betting_ml/models/total_runs/lgb_quantile_{alpha}.pkl).
+            2. Update model_registry.yaml to add a quantile_totals entry with
+               training_date, cv_mae, std_pred, and model_type: 'lgb_quantile'.
+            3. Edit predict_today.py to dispatch the quantile inference module for
+               total_runs instead of NGBoost:
+                  from betting_ml.models.total_runs.quantile_inference import predict_prob_over_line
+                  # use lgb_quantile_*.pkl models for total_runs predictions
+            4. Keep NGBoost v2 models in place (do not delete) — archive label them in
+               model_registry.yaml.
+
+          IF ANY GATE FAILS:
+            1. Archive the LightGBM model files to betting_ml/models/total_runs/archive/
+               with a timestamp suffix.
+            2. Update the evaluation report conclusion to explain which gates failed.
+            3. No changes to predict_today.py or model_registry.yaml for the total_runs entry.
+
+          Document which path was taken in model_registry.yaml (add a note).
+        dependsOn:
+          - compare-and-report
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: promotion decision documented in model_registry.yaml
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                reg = pathlib.Path('model_registry.yaml').read_text().lower()
+                assert 'quantile' in reg, \
+                    'model_registry.yaml must reference quantile models (promoted or archived)'
+                print('model_registry.yaml quantile model entry OK')

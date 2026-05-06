@@ -1,0 +1,242 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bullpen-leverage-exhaustion
+  namespace: default
+spec:
+  description: >
+    Card 7.Q added bullpen IP and pitchers used over the trailing 1–2 days. Those metrics
+    capture volume of use but not situational intensity. A reliever who threw 2 innings of
+    mop-up work in a 10-run blowout is materially less fatigued than one who threw 2 innings
+    in the 8th and 9th of a one-run game. Leverage-weighted exhaustion — the sum of win
+    expectancy swing per pitch or at-bat for bullpen appearances over the trailing 3 days —
+    captures this distinction.
+
+    TECHNICAL APPROACH:
+    - Source: `mart_pitch_play_event` has `delta_home_win_exp` (change in home win expectancy
+      per pitch/event). This is our leverage proxy — a high |delta_home_win_exp| event
+      occurred in a high-stakes situation.
+    - Identify bullpen pitchers: any pitcher in `mart_pitch_play_event` for a game where
+      they are NOT the team's starting pitcher (starter = pitcher for the first at-bat of
+      the game for that team).
+    - For each reliever appearance per game per team, sum |delta_home_win_exp| across all
+      pitches → `appearance_leverage_score`.
+    - High-leverage appearance: `appearance_leverage_score > 0.05` (at least a 5pp swing
+      in win probability during the appearance). This threshold separates meaningful relief
+      work from low-stakes mop-up.
+    - Aggregate per team per game_date:
+        bp_leverage_sum_3d         — sum of appearance_leverage_score over trailing 3 days
+        bp_high_lev_appearances_3d — count of high-leverage appearances (score > 0.05)
+        bp_leverage_sum_1d         — same for trailing 1 day (freshness of exhaustion)
+    - Leakage guard: only appearances strictly before the prediction game_date.
+    - Add six columns to `feature_pregame_game_features` (home/away × 3 metrics).
+    - NULL when no bullpen appearances in the trailing window (e.g., off-day). Impute 0.0.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_bullpen_workload` extended (or `mart_bullpen_leverage` built) with
+        `appearance_leverage_score`, `bp_leverage_sum_3d`, `bp_high_lev_appearances_3d`,
+        and `bp_leverage_sum_1d`. Leakage guard enforced: only appearances before game_date.
+        Starter identification correct: first at-bat pitcher per team per game is excluded
+        from bullpen calculations.
+    - description: >
+        Six columns in `feature_pregame_game_features`: `home_bp_leverage_sum_3d`,
+        `away_bp_leverage_sum_3d`, `home_bp_high_lev_appearances_3d`,
+        `away_bp_high_lev_appearances_3d`, `home_bp_leverage_sum_1d`,
+        `away_bp_leverage_sum_1d`. Null rate < 5% for games after May 1.
+    - description: >
+        Spot-check: a team whose bullpen closed out a 1-run game the prior day should show
+        materially higher `bp_leverage_sum_1d` than a team whose bullpen only appeared in
+        a blowout. `dbtf build --select +feature_pregame_game_features` passes all tests.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bullpen-leverage-exhaustion-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 builds the leverage-scored bullpen appearance mart
+    using delta_home_win_exp from mart_pitch_play_event. Task 2 extends feature_pregame_game_features
+    with six leverage exhaustion columns. Task 3 validates coverage and spot-checks the
+    high-leverage vs. mop-up distinction.
+  goalRef:
+    name: bullpen-leverage-exhaustion
+  graph:
+    nodes:
+
+      - id: build-leverage-mart
+        kind: Task
+        description: >
+          Extend `mart_bullpen_workload` with leverage columns, or create
+          `models/marts/mart_bullpen_leverage.sql` if the workload mart is too large to extend.
+
+          Step 1 — identify starters per game per team (exclude from bullpen calcs):
+            starter_cte AS (
+              SELECT game_pk, pitcher_id,
+                     CASE WHEN home_team_flag THEN 'home' ELSE 'away' END AS team_side
+              FROM mart_pitch_play_event
+              QUALIFY ROW_NUMBER() OVER (
+                  PARTITION BY game_pk, home_team_flag
+                  ORDER BY at_bat_number ASC, pitch_number ASC
+              ) = 1   -- first pitch of game = starter
+            )
+
+          Step 2 — bullpen at-bat leverage scores:
+            SELECT p.game_pk, p.game_date,
+                   p.pitcher_id,
+                   CASE WHEN p.home_team_flag THEN 'home' ELSE 'away' END AS team_side,
+                   p.at_bat_number,
+                   SUM(ABS(p.delta_home_win_exp)) AS at_bat_leverage_score
+            FROM mart_pitch_play_event p
+            LEFT JOIN starter_cte s
+                ON s.game_pk = p.game_pk
+               AND s.pitcher_id = p.pitcher_id
+               AND s.team_side = CASE WHEN p.home_team_flag THEN 'home' ELSE 'away' END
+            WHERE s.pitcher_id IS NULL   -- exclude starters
+              AND p.delta_home_win_exp IS NOT NULL
+            GROUP BY 1,2,3,4,5
+
+          Step 3 — flag high-leverage at-bats and aggregate to game × team level:
+            SELECT game_pk, game_date, team_side,
+                   SUM(at_bat_leverage_score) AS game_bp_leverage_sum,
+                   SUM(CASE WHEN at_bat_leverage_score > 0.05 THEN 1 ELSE 0 END)
+                     AS game_bp_high_lev_appearances
+            FROM at_bat_leverage_cte
+            GROUP BY 1,2,3
+
+          Step 4 — rolling window aggregation per team per game_date (leakage guard:
+          ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING, ordered by game_date):
+            bp_leverage_sum_3d         = SUM(game_bp_leverage_sum) over prior 3 game-days
+            bp_high_lev_appearances_3d = SUM(game_bp_high_lev_appearances) over prior 3 game-days
+            bp_leverage_sum_1d         = game_bp_leverage_sum for game_date - 1
+
+          Output grain: team_id × game_date. Add dbt uniqueness test on (team_id, game_date).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for bullpen leverage mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_bullpen_leverage
+
+      - id: add-leverage-columns-to-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_game_features.sql` to join `mart_bullpen_leverage` for home
+          and away teams and surface the six leverage exhaustion columns.
+
+          Join pattern (same as existing mart_bullpen_workload join):
+            LEFT JOIN mart_bullpen_leverage home_blev
+                ON home_blev.team_id = g.home_team_id
+               AND home_blev.game_date = g.game_date
+            LEFT JOIN mart_bullpen_leverage away_blev
+                ON away_blev.team_id = g.away_team_id
+               AND away_blev.game_date = g.game_date
+
+          Add to final SELECT:
+            home_blev.bp_leverage_sum_3d         AS home_bp_leverage_sum_3d,
+            away_blev.bp_leverage_sum_3d         AS away_bp_leverage_sum_3d,
+            home_blev.bp_high_lev_appearances_3d AS home_bp_high_lev_appearances_3d,
+            away_blev.bp_high_lev_appearances_3d AS away_bp_high_lev_appearances_3d,
+            home_blev.bp_leverage_sum_1d         AS home_bp_leverage_sum_1d,
+            away_blev.bp_leverage_sum_1d         AS away_bp_leverage_sum_1d
+
+          No COALESCE in dbt. Add imputation to `betting_ml/utils/preprocessing.py`:
+            leverage_cols = [
+                'home_bp_leverage_sum_3d', 'away_bp_leverage_sum_3d',
+                'home_bp_high_lev_appearances_3d', 'away_bp_high_lev_appearances_3d',
+                'home_bp_leverage_sum_1d', 'away_bp_leverage_sum_1d',
+            ]
+            for col in leverage_cols:
+                if col in df.columns:
+                    df[col] = df[col].fillna(0.0)
+        dependsOn:
+          - build-leverage-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with leverage columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+          - type: command_succeeds
+            name: all six leverage columns present in game features SQL
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('models/**/*game_features*.sql', recursive=True)
+                assert len(candidates) > 0, 'feature_pregame_game_features.sql not found'
+                src = pathlib.Path(candidates[0]).read_text()
+                for col in [
+                    'home_bp_leverage_sum_3d', 'away_bp_leverage_sum_3d',
+                    'home_bp_high_lev_appearances_3d', 'away_bp_high_lev_appearances_3d',
+                    'home_bp_leverage_sum_1d', 'away_bp_leverage_sum_1d',
+                ]:
+                    assert col in src, f'{col} not found in game features model'
+                print('All six bullpen leverage columns present OK')
+          - type: command_succeeds
+            name: preprocessing.py imputes leverage columns to 0.0
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('betting_ml/utils/preprocessing.py').read_text()
+                assert 'bp_leverage_sum_3d' in src or 'leverage' in src.lower(), \
+                    'Leverage column imputation not found in preprocessing.py'
+                print('Leverage imputation in preprocessing.py OK')
+
+      - id: validate-and-spot-check
+        kind: Task
+        description: >
+          Validate coverage and verify the high-leverage vs. mop-up distinction is working.
+
+          1. Null rate after May 1 via Snowflake MCP:
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_bp_leverage_sum_3d IS NULL THEN 1 ELSE 0 END) AS nulls,
+                      AVG(home_bp_leverage_sum_3d) AS avg_leverage_sum,
+                      MAX(home_bp_leverage_sum_3d) AS max_leverage_sum
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025 AND game_date >= '2025-05-01'
+             Expected: null_pct < 0.05; avg in [0.05, 0.5]; max < 5.0 (very high leverage games).
+
+          2. Spot-check high-leverage distinction (find a walk-off game and a blowout on the
+             same day, compare team's bp_leverage_sum_1d the next day):
+               SELECT g.game_date, g.home_team_id, g.away_team_id,
+                      g.home_bp_leverage_sum_1d, g.away_bp_leverage_sum_1d
+               FROM baseball_data.dbt.feature_pregame_game_features g
+               WHERE season = 2025
+               ORDER BY g.home_bp_leverage_sum_1d DESC NULLS LAST
+               LIMIT 10
+             Verify that the highest leverage_sum_1d rows correspond to teams that played
+             close games the previous day (check game scores from mart_game_results).
+
+          3. Correlation with home_win (via Snowflake MCP): compute Pearson r for
+             home_bp_leverage_sum_3d vs. home_win. Expected: |r| < 0.10 (modest signal).
+
+          Write findings to `betting_ml/evaluation/bullpen_leverage_coverage.txt`.
+        dependsOn:
+          - add-leverage-columns-to-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: bullpen leverage coverage report
+            path: betting_ml/evaluation/bullpen_leverage_coverage.txt
+          - type: command_succeeds
+            name: dbtf test passes for mart_bullpen_leverage
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_bullpen_leverage

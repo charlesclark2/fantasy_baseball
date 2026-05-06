@@ -2,6 +2,7 @@
 # Project-level ignores
 .claude/
 .user.yml
+idea_notes.md
 
 # Python / notebook artifacts
 __pycache__/

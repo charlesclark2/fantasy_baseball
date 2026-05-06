@@ -1,0 +1,36 @@
+{
+  "target": "total_runs",
+  "model_version": "v2",
+  "dist": "Normal",
+  "max_depth": 3,
+  "n_estimators": 500,
+  "training_rows": 10264,
+  "training_cutoff": "2021+",
+  "n_features_in": 311,
+  "cv_mae": 3.5117551044271083,
+  "fold_maes": [
+    {
+      "eval_year": 2024,
+      "mae": 3.370293390912136,
+      "n_train": 5972,
+      "n_eval": 2000
+    },
+    {
+      "eval_year": 2025,
+      "mae": 3.614388985976776,
+      "n_train": 7972,
+      "n_eval": 2025
+    },
+    {
+      "eval_year": 2026,
+      "mae": 3.550582936392412,
+      "n_train": 9997,
+      "n_eval": 267
+    }
+  ],
+  "in_sample_mae": 3.343249259461755,
+  "in_sample_std_pred": 0.8458100048687702,
+  "in_sample_mean_residual": -2.7690675594703825e-16,
+  "artifact_path": "betting_ml/models/total_runs/ngboost_tuned_v2.pkl",
+  "feature_columns_path": "betting_ml/models/total_runs/feature_columns_v2.json"
+}

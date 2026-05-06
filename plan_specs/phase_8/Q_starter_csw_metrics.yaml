@@ -1,0 +1,210 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: starter-csw-metrics
+  namespace: default
+spec:
+  description: >
+    Called Strike plus Whiff rate (CSW%) — the fraction of pitches resulting in a called
+    strike or swinging strike — is a leading indicator of a starter's day-of effectiveness,
+    more responsive to current form than season-level Stuff+. CSW% from the trailing 3 starts
+    captures within-season command drift that Stuff+ misses.
+
+    TECHNICAL APPROACH:
+    - Source: `mart_pitch_play_event`; CSW events: `description` ∈
+      ('called_strike', 'swinging_strike', 'swinging_strike_blocked'); denominator: all pitches.
+    - Build `mart_starter_csw_rolling`: per starter per game_date, trailing 3-start CSW%,
+      season CSW%, and total pitches in trailing 3 starts (reliability flag).
+    - Leakage guard: only starts strictly before prediction game_date.
+    - Add four CSW% columns to `feature_pregame_starter_features` and surface in
+      `feature_pregame_game_features`:
+        home_starter_csw_pct_3start  (trailing 3-start CSW%)
+        home_starter_csw_pct_season  (season-to-date CSW%)
+        away_starter_csw_pct_3start
+        away_starter_csw_pct_season
+    - NULL when starter has < 1 prior start; impute with league-average CSW% (~0.285 for
+      2023–2025) in `preprocessing.py`.
+    - Null rate target: < 5% for games after May 1 of any training season.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_starter_csw_rolling` built with correct leakage guard and 3-start trailing
+        window. CSW% defined as (called_strike + swinging_strike + swinging_strike_blocked) /
+        total_pitches.
+    - description: >
+        Four CSW% columns in `feature_pregame_game_features`; null rate < 5% for games after
+        May 1. Imputation at league-average CSW% (~0.285) for debut starters confirmed in
+        `preprocessing.py`.
+    - description: >
+        Correlation with game targets reported in evaluation doc (expected: |r| ≈ 0.04–0.08
+        with home_win). `dbtf build --select +feature_pregame_game_features` passes all tests.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: starter-csw-metrics-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 builds mart_starter_csw_rolling with trailing 3-start
+    and season-to-date CSW%. Task 2 adds the four columns to feature starter and game features.
+    Task 3 adds imputation to preprocessing.py. Task 4 validates coverage, correlation, and
+    dbtf tests.
+  goalRef:
+    name: starter-csw-metrics
+  graph:
+    nodes:
+
+      - id: build-csw-rolling-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_starter_csw_rolling.sql`.
+
+          Source: mart_pitch_play_event. CSW pitch events:
+            description IN ('called_strike', 'swinging_strike', 'swinging_strike_blocked')
+
+          Aggregate from pitch level to start level:
+            SELECT
+              pitcher_id, game_pk, game_date,
+              SUM(CASE WHEN description IN ('called_strike', 'swinging_strike',
+                  'swinging_strike_blocked') THEN 1 ELSE 0 END) AS csw_pitches,
+              COUNT(*)                                            AS total_pitches
+            FROM mart_pitch_play_event
+            GROUP BY pitcher_id, game_pk, game_date
+
+          Then compute rolling windows per pitcher over ordered game dates (leakage guard:
+          only starts strictly before prediction_game_date, enforced at the feature join
+          layer by using window functions with ROWS BETWEEN ... PRECEDING EXCLUDE CURRENT ROW):
+
+            csw_pct_3start = SUM(csw_pitches over last 3 starts) / SUM(total_pitches over last 3 starts)
+            csw_pct_season = SUM(csw_pitches over current season) / SUM(total_pitches over current season)
+            pitches_3start = SUM(total_pitches over last 3 starts)  -- reliability flag
+
+          Output grain: pitcher_id × game_date (the game_date of the start being predicted).
+          NULL when fewer than 1 prior start in the season (debut starter).
+          Add a dbt uniqueness test on (pitcher_id, game_date).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for CSW rolling mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_starter_csw_rolling
+
+      - id: add-csw-columns-to-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_starter_features.sql` and `feature_pregame_game_features.sql`
+          to join mart_starter_csw_rolling for home and away starters.
+
+          Join on pitcher_id + game_date (using the prediction game_date, which selects the
+          pre-game row in mart_starter_csw_rolling for that starter's next start).
+
+          Add four columns to feature_pregame_starter_features:
+            csw_pct_3start  (from mart_starter_csw_rolling)
+            csw_pct_season  (from mart_starter_csw_rolling)
+
+          Surface in feature_pregame_game_features with home/away prefixes:
+            home_starter_csw_pct_3start
+            home_starter_csw_pct_season
+            away_starter_csw_pct_3start
+            away_starter_csw_pct_season
+
+          Leave NULLs in place at the dbt layer — imputation is handled downstream in
+          preprocessing.py (Task 3). Do not COALESCE to 0.285 here.
+        dependsOn:
+          - build-csw-rolling-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with CSW columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: add-imputation-to-preprocessing
+        kind: Task
+        description: >
+          Edit `betting_ml/utils/preprocessing.py` (or wherever imputation is handled)
+          to impute the four CSW% columns with the league-average value of 0.285 for
+          debut starters.
+
+          Add to the imputation section:
+            CSW_LEAGUE_AVG = 0.285
+            csw_cols = [
+                'home_starter_csw_pct_3start', 'home_starter_csw_pct_season',
+                'away_starter_csw_pct_3start', 'away_starter_csw_pct_season',
+            ]
+            for col in csw_cols:
+                if col in df.columns:
+                    df[col] = df[col].fillna(CSW_LEAGUE_AVG)
+
+          This ensures no NULLs reach the model at inference or training time.
+        dependsOn:
+          - add-csw-columns-to-features
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: preprocessing.py imputes CSW columns at 0.285
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('betting_ml/utils/preprocessing.py').read_text()
+                assert 'csw_pct' in src.lower() or 'csw' in src.lower(), \
+                    'CSW imputation not found in preprocessing.py'
+                assert '0.285' in src, \
+                    'League-average CSW% (0.285) not found in preprocessing.py'
+                print('CSW imputation in preprocessing.py OK')
+
+      - id: validate-and-correlate
+        kind: Task
+        description: >
+          Validate CSW% column coverage and compute target correlations.
+
+          Snowflake checks (run via mcp__snowflake__run_snowflake_query):
+          1. Null rate after May 1 (before imputation, at the dbt layer):
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_starter_csw_pct_3start IS NULL THEN 1 ELSE 0 END) AS nulls
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025 AND game_date >= '2025-05-01'
+             Expected: nulls / total < 0.05.
+          2. Sanity range: CSW% should be in [0.15, 0.45] for all non-null rows.
+          3. Correlation of home_starter_csw_pct_season with home_win outcome.
+             Expected: |r| ≈ 0.04–0.08 (confirm it's non-zero but not implausibly large).
+
+          Write correlation findings (brief note, not a full report) to the evaluation
+          section of docs or a short file at betting_ml/evaluation/csw_feature_correlation.txt.
+        dependsOn:
+          - add-imputation-to-preprocessing
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf test passes for mart_starter_csw_rolling
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_starter_csw_rolling
+          - type: artifact_exists
+            name: CSW feature correlation note
+            path: betting_ml/evaluation/csw_feature_correlation.txt
+          - type: command_succeeds
+            name: correlation note covers expected range
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/csw_feature_correlation.txt').read_text().lower()
+                assert 'correlation' in text or 'r =' in text or 'corr' in text, \
+                    'Correlation note missing correlation value'
+                print('CSW feature correlation note OK')

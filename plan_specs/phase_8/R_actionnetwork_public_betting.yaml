@@ -1,0 +1,421 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: actionnetwork-public-betting
+  namespace: default
+spec:
+  description: >
+    Ingest public betting percentage data from the Action Network API and surface
+    money% and ticket% for moneyline and totals markets as pre-game features.
+    Public betting percentages enable: (1) "public fade" signals when heavy public
+    consensus is historically wrong, (2) reverse line movement detection when the
+    line moves against public action (sharp money indicator), and (3) money/ticket
+    divergence as a proxy for sharp vs. recreational bet size.
+
+    API ENDPOINT:
+      https://api.actionnetwork.com/web/v2/scoreboard/publicbetting/mlb
+        ?bookIds=15,30,4727,4795,79,2988,69,68,75,123,71
+        &date=YYYYMMDD
+        &periods=event
+
+    RESPONSE STRUCTURE:
+      games[].markets[{book_id}].event.{market_type}[].bet_info:
+        money.percent    — % of public money wagered on this outcome
+        tickets.percent  — % of public bet count (ticket count) on this outcome
+      Market types: moneyline, spread, total (most useful: moneyline, total)
+
+    AUTH: No auth header required for percentage data. The `value` field
+    (raw dollar amounts) returns 0 but percentages are fully populated.
+    Endpoint is accessible with a Pro subscription session.
+
+    TARGET TABLE: baseball_data.actionnetwork.public_betting_raw
+    Grain: one row per game per ingestion run.
+    Aggregated across all bookIds in the request (Action Network blends them).
+
+    FEATURES TO ADD to feature_pregame_game_features:
+      home_ml_public_money_pct    FLOAT  — % of ML money on home team (0–100)
+      home_ml_public_ticket_pct   FLOAT  — % of ML tickets on home team (0–100)
+      over_public_money_pct       FLOAT  — % of totals money on Over (0–100)
+      over_public_ticket_pct      FLOAT  — % of totals tickets on Over (0–100)
+      ml_sharp_signal             FLOAT  — home_ml_money_pct - home_ml_ticket_pct
+                                           positive = money heavier than tickets (sharp lean home)
+                                           negative = money lighter than tickets (sharp lean away)
+      total_sharp_signal          FLOAT  — over_money_pct - over_ticket_pct (same logic)
+
+    GAME MATCHING: The Action Network response uses its own team abbreviations and
+    game IDs. Match to Snowflake game_pk by joining on game_date + home_team_abbr
+    (normalized) against the schedule in statsapi.monthly_schedule.
+
+    TIMING: Pull once per day at the same time as odds ingestion (08:00 EDT). Wire
+    as a step in daily_ingestion.yml immediately after the Odds API steps.
+
+    BACKFILL: The API accepts any historical date via the `date` parameter. A
+    separate `--backfill` mode should iterate over all game dates since 2021-04-01
+    (the start of the training window) to populate historical public betting data for
+    model training. Action Network may return sparse or empty data for early seasons
+    (2021–2023) — the script must log and skip empty responses gracefully rather than
+    failing, so we capture whatever historical depth the API actually provides.
+
+    FRESHNESS: Add to check_data_freshness.py thresholds:
+      baseball_data.actionnetwork.public_betting_raw: max_stale_hours=36, game_day_only=False
+
+  acceptanceCriteria:
+    - description: >
+        `baseball_data.actionnetwork.public_betting_raw` table exists with columns:
+        game_date, an_game_id, home_team_abbr, away_team_abbr,
+        home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct,
+        book_ids_used, ingestion_timestamp. Non-null for all games on any fetched date.
+    - description: >
+        `scripts/ingest_actionnetwork_betting.py` runs successfully for today's date
+        and for a historical date (e.g., 2025-09-01), producing rows in
+        public_betting_raw. Home + away money% sum to ~100; over + under ticket% sum to ~100.
+    - description: >
+        Six new columns (4 raw + 2 derived sharp signals) in `feature_pregame_game_features`.
+        Game matching succeeds for ≥ 95% of games where public_betting_raw has a row for
+        that date.
+    - description: >
+        `ingest_actionnetwork_betting.py` wired into `daily_ingestion.yml` after the
+        Odds API steps. `check_data_freshness.py` updated with the new table threshold.
+    - description: >
+        Backfill mode (`--backfill --start-date YYYY-MM-DD`) successfully populates
+        historical data from 2021-04-01 onward for use in model training. Script
+        gracefully skips dates where the API returns empty/no-game responses and
+        logs a warning (no exception raised) so the backfill completes for all
+        available historical seasons.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: actionnetwork-public-betting-plan
+  namespace: default
+spec:
+  description: >
+    Five-task sequential plan. Task 1 creates the DDL and ingestion script. Task 2
+    builds the dbt staging model and game-matching join. Task 3 adds the six feature
+    columns to feature_pregame_game_features. Task 4 runs the historical backfill.
+    Task 5 wires into daily_ingestion.yml and updates check_data_freshness.py.
+  goalRef:
+    name: actionnetwork-public-betting
+  graph:
+    nodes:
+
+      - id: ddl-and-ingestion-script
+        kind: Task
+        description: >
+          A. Create `scripts/ddl/create_actionnetwork_public_betting_raw.sql`:
+
+            CREATE SCHEMA IF NOT EXISTS baseball_data.actionnetwork;
+
+            CREATE TABLE IF NOT EXISTS baseball_data.actionnetwork.public_betting_raw (
+                game_date              DATE         NOT NULL,
+                an_game_id             VARCHAR(50),
+                home_team_abbr         VARCHAR(10),
+                away_team_abbr         VARCHAR(10),
+                home_ml_money_pct      FLOAT,
+                away_ml_money_pct      FLOAT,
+                home_ml_ticket_pct     FLOAT,
+                away_ml_ticket_pct     FLOAT,
+                over_money_pct         FLOAT,
+                under_money_pct        FLOAT,
+                over_ticket_pct        FLOAT,
+                under_ticket_pct       FLOAT,
+                book_ids_used          VARCHAR(200),
+                ingestion_timestamp    TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+            );
+
+          Apply via mcp__snowflake__run_snowflake_query.
+
+          B. Create `scripts/ingest_actionnetwork_betting.py` following the pattern of
+          odds_api_ingestion.py (private key auth, Snowflake connector, env vars, argparse).
+
+          KEY CONSTANTS (hardcode at top of script):
+            AN_BASE_URL = 'https://api.actionnetwork.com/web/v2/scoreboard/publicbetting/mlb'
+            AN_BOOK_IDS = '15,30,4727,4795,79,2988,69,68,75,123,71'
+
+          CLI modes:
+            uv run ingest_actionnetwork_betting.py                  # today
+            uv run ingest_actionnetwork_betting.py --date 2025-09-01
+            uv run ingest_actionnetwork_betting.py --backfill --start-date 2021-04-01
+
+          FETCH LOGIC per date:
+            date_str = date.strftime('%Y%m%d')  # YYYYMMDD format required by API
+            url = f'{AN_BASE_URL}?bookIds={AN_BOOK_IDS}&date={date_str}&periods=event'
+            resp = requests.get(url, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+
+          PARSE LOGIC — navigate the nested structure:
+            For each game in data['games']:
+              an_game_id  = game.get('id')
+              home_team   = game['teams']['home']['abbr']  # normalize to uppercase
+              away_team   = game['teams']['away']['abbr']
+              # Markets are nested: game['markets'] is a dict keyed by book_id;
+              # aggregate across books by averaging percentages (or use the first
+              # book that has non-zero data). Check the actual response structure
+              # carefully — the exact nesting may vary from the WebFetch summary.
+              moneyline   = extract_market(game, 'moneyline')
+              total       = extract_market(game, 'total')
+              home_ml_money_pct  = moneyline['home']['money']['percent']
+              home_ml_ticket_pct = moneyline['home']['tickets']['percent']
+              over_money_pct     = total['over']['money']['percent']
+              over_ticket_pct    = total['over']['tickets']['percent']
+              # Derive complementary values (should sum to ~100)
+              away_ml_money_pct  = moneyline['away']['money']['percent']
+              away_ml_ticket_pct = moneyline['away']['tickets']['percent']
+              under_money_pct    = total['under']['money']['percent']
+              under_ticket_pct   = total['under']['tickets']['percent']
+
+          IMPORTANT: Print the raw JSON for one game on first run to inspect the exact
+          nesting before finalizing the parse logic. Use --dry-run flag for this.
+
+          INSERT via Snowflake connector using executemany with an UPSERT / MERGE on
+          (game_date, an_game_id) so re-runs are idempotent. Follow the VARIANT insert
+          pattern from the project's feedback: do NOT use PARSE_JSON in VALUES with
+          executemany; insert flat columns directly.
+
+          Snowflake auth env vars (same as all other scripts):
+            SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE,
+            SNOWFLAKE_PRIVATE_KEY_PATH, SNOWFLAKE_ROLE
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: Action Network DDL script
+            path: scripts/ddl/create_actionnetwork_public_betting_raw.sql
+          - type: artifact_exists
+            name: Action Network ingestion script
+            path: scripts/ingest_actionnetwork_betting.py
+          - type: command_succeeds
+            name: DDL has all required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/create_actionnetwork_public_betting_raw.sql').read_text()
+                for col in [
+                    'game_date', 'an_game_id', 'home_team_abbr', 'away_team_abbr',
+                    'home_ml_money_pct', 'home_ml_ticket_pct',
+                    'over_money_pct', 'over_ticket_pct', 'ingestion_timestamp'
+                ]:
+                    assert col in sql, f'DDL missing column: {col}'
+                print('Action Network DDL columns OK')
+          - type: command_succeeds
+            name: ingestion script has AN_BOOK_IDS constant and correct date format
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('scripts/ingest_actionnetwork_betting.py').read_text()
+                assert 'AN_BOOK_IDS' in src, 'AN_BOOK_IDS constant not found'
+                assert '15,30,4727' in src, 'Book IDs not hardcoded in script'
+                assert 'YYYYMMDD' in src or '%Y%m%d' in src, 'Date format YYYYMMDD not in script'
+                assert 'backfill' in src.lower(), '--backfill mode not implemented'
+                assert 'sys.exit' in src or 'raise_for_status' in src, \
+                    'Script must fail on HTTP error'
+                print('Action Network ingestion script structure OK')
+
+      - id: build-staging-dbt-model
+        kind: Task
+        description: >
+          Create `models/staging/stg_actionnetwork_public_betting.sql` to normalize the
+          raw table and map Action Network team abbreviations to the project's standard
+          team codes.
+
+          The staging model must:
+          1. Select from baseball_data.actionnetwork.public_betting_raw (use a source
+             definition in schema.yml if the actionnetwork schema is not already defined).
+          2. Normalize team abbreviations: Action Network uses abbreviations that may
+             differ from MLB StatsAPI (e.g. "WSH" vs. "WSN", "CWS" vs. "CHA"). Build a
+             CASE WHEN lookup or join a seed file to standardize to the team_id format
+             used in monthly_schedule. Check 5–10 actual rows from the raw table to
+             identify any mismatches before writing the CASE statement.
+          3. Compute sharp signal columns:
+               ml_sharp_signal    = home_ml_money_pct - home_ml_ticket_pct
+               total_sharp_signal = over_money_pct    - over_ticket_pct
+          4. Output columns: game_date, an_game_id, home_team_id (normalized),
+             away_team_id (normalized), home_ml_money_pct, home_ml_ticket_pct,
+             away_ml_money_pct, away_ml_ticket_pct, over_money_pct, over_ticket_pct,
+             under_money_pct, under_ticket_pct, ml_sharp_signal, total_sharp_signal,
+             ingestion_timestamp.
+
+          Add dbt tests: not_null on game_date, accepted_values range check on
+          home_ml_money_pct (0 to 100).
+        dependsOn:
+          - ddl-and-ingestion-script
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for staging model
+            command: dbtf
+            args:
+              - build
+              - --select
+              - stg_actionnetwork_public_betting
+
+      - id: add-features-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_game_features.sql` to join stg_actionnetwork_public_betting
+          and surface the six feature columns.
+
+          GAME MATCHING strategy — join on game_date + normalized team abbreviations:
+            LEFT JOIN stg_actionnetwork_public_betting pb
+              ON pb.game_date = g.game_date
+             AND pb.home_team_id = g.home_team_id   -- both normalized to same abbr convention
+             AND pb.away_team_id = g.away_team_id
+
+          This is a LEFT JOIN — games without a public betting row (off days, no data yet)
+          get NULL for all six columns. NULL is the correct signal for the model (no public
+          data available for that game).
+
+          Six columns to add to the final SELECT:
+            pb.home_ml_money_pct,
+            pb.home_ml_ticket_pct,
+            pb.over_money_pct,
+            pb.over_ticket_pct,
+            pb.ml_sharp_signal,
+            pb.total_sharp_signal
+
+          No imputation at the dbt layer — nulls propagate to preprocessing.py where
+          they can be filled with 50.0 (neutral: no public lean) for training rows.
+          Add a comment noting the 50.0 imputation convention.
+        dependsOn:
+          - build-staging-dbt-model
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with public betting columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+          - type: command_succeeds
+            name: game features references all six public betting columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('models/**/*game_features*.sql', recursive=True)
+                assert len(candidates) > 0, 'feature_pregame_game_features.sql not found'
+                src = pathlib.Path(candidates[0]).read_text()
+                for col in ['home_ml_money_pct', 'home_ml_ticket_pct',
+                            'over_money_pct', 'over_ticket_pct',
+                            'ml_sharp_signal', 'total_sharp_signal']:
+                    assert col in src, f'{col} not found in game features model'
+                print('All six public betting columns present in game features OK')
+
+      - id: historical-backfill
+        kind: Task
+        description: >
+          Run the historical backfill from 2021-04-01 (start of training window) to
+          populate as much historical public betting data as the Action Network API
+          provides. The API may have sparse or no data for 2021–2023 seasons — the
+          script must log a warning and continue rather than raising an exception on
+          empty responses.
+
+          Command:
+            uv run python scripts/ingest_actionnetwork_betting.py \
+              --backfill --start-date 2021-04-01 --end-date $(date +%Y-%m-%d)
+
+          The backfill iterates over each game date in the range, fetching one date at a
+          time. Add a polite sleep between requests (0.5–1.0 seconds) to avoid rate
+          limiting. Skip dates that already have rows in public_betting_raw (idempotent).
+          Log "[SKIP] No games returned for {date}" for empty API responses without
+          treating them as errors.
+
+          After backfill completes, validate row counts via Snowflake MCP:
+            SELECT YEAR(game_date) AS season, COUNT(*) AS rows
+            FROM baseball_data.actionnetwork.public_betting_raw
+            WHERE game_date >= '2021-04-01'
+            GROUP BY 1
+            ORDER BY 1
+          Expected: ~15 rows per game day for whatever seasons the API provides.
+          2024–2025 should have near-complete coverage; earlier seasons may be partial
+          or empty — document actual coverage in a comment within the task output.
+          Spot-check: home_ml_money_pct + away_ml_money_pct ≈ 100 for all non-null rows.
+        dependsOn:
+          - ddl-and-ingestion-script
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: backfill validation documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Backfill validation via Snowflake MCP required:')
+                print('SELECT YEAR(game_date) AS season, COUNT(*) AS rows')
+                print('FROM baseball_data.actionnetwork.public_betting_raw')
+                print('WHERE game_date >= \'2021-04-01\' GROUP BY 1 ORDER BY 1')
+                print('Document actual coverage per season (API may not have 2021-2023 data).')
+                print('Spot-check: home_ml_money_pct + away_ml_money_pct ≈ 100 for all rows')
+
+      - id: wire-into-pipeline
+        kind: Task
+        description: >
+          Wire the ingestion script into daily_ingestion.yml and update the freshness check.
+
+          1. Add a new step to `.github/workflows/daily_ingestion.yml` after the Odds API
+             steps (before the dbt-build job):
+
+               - name: Ingest Action Network public betting percentages
+                 working-directory: scripts
+                 env:
+                   SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                   SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+                   SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+                   SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+                   SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+                 run: uv run ingest_actionnetwork_betting.py --date $(date +%Y-%m-%d)
+
+             Note: No AN_API_KEY env var needed — the endpoint is publicly accessible.
+
+          2. Update `scripts/check_data_freshness.py` to add the new table to
+             FRESHNESS_THRESHOLDS:
+               'baseball_data.actionnetwork.public_betting_raw':
+                   {'max_stale_hours': 36, 'game_day_only': False},
+
+             This ensures the H3 monitoring check catches a missed public betting pull.
+        dependsOn:
+          - add-features-to-game-features
+          - historical-backfill
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: daily_ingestion.yml contains Action Network step
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('.github/workflows/daily_ingestion.yml').read_text()
+                assert 'ingest_actionnetwork_betting' in src, \
+                    'ingest_actionnetwork_betting not wired into daily_ingestion.yml'
+                assert 'continue-on-error: true' not in src or \
+                    'ingest_actionnetwork_betting' not in src.split('continue-on-error')[0], \
+                    'Action Network step must not have continue-on-error: true'
+                print('daily_ingestion.yml Action Network step OK')
+          - type: command_succeeds
+            name: check_data_freshness.py includes actionnetwork table
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('scripts/check_data_freshness.py').read_text()
+                assert 'actionnetwork' in src or 'public_betting_raw' in src, \
+                    'public_betting_raw not added to check_data_freshness.py thresholds'
+                print('check_data_freshness.py includes actionnetwork table OK')

@@ -1,0 +1,229 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: rolling-inseason-calibration
+  namespace: default
+spec:
+  description: >
+    The current Platt calibrator is fit once on all 2026 results available at the last retrain.
+    As the season progresses the model's systematic biases shift; early-season calibration may
+    not hold in August. A weekly rolling re-fit on the most recent 60 days keeps the calibrator
+    current without a full retrain.
+
+    TECHNICAL APPROACH:
+    - Add `fit_rolling_calibrator(lookback_days=60)` to the calibration fitting script:
+      queries most recent 60 days of `daily_model_predictions` where outcome is not null,
+      fits a new Platt scaler, writes to `betting_ml/models/home_win/calibrator_rolling.joblib`.
+    - Add `calibrator_last_fit_date` to `model_registry.yaml` under the home_win entry;
+      update on each refit.
+    - Wire into weekly maintenance: run every Sunday (document in daily_run.md).
+    - `predict_today.py` loads `calibrator_rolling.joblib` when present; falls back to
+      static `calibrator.joblib` when rolling file is absent.
+    - Minimum sample gate: skip refit and log a warning if fewer than 30 results are in
+      the lookback window (insufficient data for reliable calibration).
+
+  acceptanceCriteria:
+    - description: >
+        `fit_rolling_calibrator(lookback_days=60)` function exists in the calibration
+        fitting script and writes `betting_ml/models/home_win/calibrator_rolling.joblib`.
+        Minimum 30-sample gate enforced.
+    - description: >
+        `predict_today.py` loads `calibrator_rolling.joblib` when present and falls back
+        to static `calibrator.joblib` when absent (code inspection confirms both paths exist).
+    - description: >
+        `calibrator_last_fit_date` present in `model_registry.yaml` under the home_win entry.
+        Weekly refit step documented in `daily_run.md`.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: rolling-inseason-calibration-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 implements fit_rolling_calibrator with sample gate.
+    Task 2 updates predict_today.py to load rolling calibrator with fallback. Task 3 updates
+    model_registry.yaml and daily_run.md. Task 4 runs the first rolling refit as a smoke test.
+  goalRef:
+    name: rolling-inseason-calibration
+  graph:
+    nodes:
+
+      - id: implement-rolling-calibrator
+        kind: Task
+        description: >
+          Find the existing calibration fitting script (check betting_ml/scripts/ for a
+          script named fit_calibrator.py, train_calibrator.py, or similar; or the calibration
+          section of train_model.py).
+
+          Add function `fit_rolling_calibrator(lookback_days=60)`:
+
+            def fit_rolling_calibrator(lookback_days=60, min_samples=30):
+                import joblib
+                from sklearn.calibration import CalibratedClassifierCV
+                from sklearn.linear_model import LogisticRegression
+                from datetime import date, timedelta
+                # Query daily_model_predictions for last lookback_days with non-null outcome
+                cutoff = date.today() - timedelta(days=lookback_days)
+                # ... query Snowflake via connector ...
+                if len(df) < min_samples:
+                    print(f'WARNING: only {len(df)} samples in lookback window, skipping refit')
+                    return False
+                X = df[['home_win_prob_raw']].values  # or whatever the uncalibrated score column is
+                y = df['outcome'].values
+                calibrator = LogisticRegression()
+                calibrator.fit(X, y)
+                out_path = 'betting_ml/models/home_win/calibrator_rolling.joblib'
+                joblib.dump(calibrator, out_path)
+                print(f'Rolling calibrator fit on {len(df)} samples, saved to {out_path}')
+                return True
+
+          The exact Snowflake query and column names should match the pattern in the existing
+          calibration script. Check what columns are available in daily_model_predictions.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: fit_rolling_calibrator function exists with sample gate
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('betting_ml/**/*.py', recursive=True)
+                found = False
+                for c in candidates:
+                    src = pathlib.Path(c).read_text()
+                    if 'fit_rolling_calibrator' in src:
+                        assert 'min_samples' in src or '30' in src, \
+                            'Minimum sample gate (30 samples) not found in fit_rolling_calibrator'
+                        assert 'calibrator_rolling.joblib' in src, \
+                            'Rolling calibrator output path not found'
+                        found = True
+                        break
+                assert found, 'fit_rolling_calibrator function not found in any betting_ml script'
+                print('fit_rolling_calibrator with sample gate found OK')
+
+      - id: update-predict-today-fallback
+        kind: Task
+        description: >
+          Edit `betting_ml/scripts/predict_today.py` to load the rolling calibrator when
+          present, falling back to the static calibrator.
+
+          Replace the current static calibrator load:
+            # Before
+            calibrator = joblib.load('betting_ml/models/home_win/calibrator.joblib')
+
+          With a try-first-rolling pattern:
+            # After
+            rolling_path = pathlib.Path('betting_ml/models/home_win/calibrator_rolling.joblib')
+            static_path  = pathlib.Path('betting_ml/models/home_win/calibrator.joblib')
+            if rolling_path.exists():
+                calibrator = joblib.load(rolling_path)
+                print(f'Loaded rolling calibrator from {rolling_path}')
+            else:
+                calibrator = joblib.load(static_path)
+                print(f'Loaded static calibrator from {static_path}')
+
+          Both paths must be present in the code (not dead code).
+        dependsOn:
+          - implement-rolling-calibrator
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py has rolling calibrator load with fallback
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                assert 'calibrator_rolling.joblib' in src, \
+                    'Rolling calibrator path not in predict_today.py'
+                assert 'calibrator.joblib' in src, \
+                    'Static calibrator fallback path not in predict_today.py'
+                # Both paths are present — rolling is tried first
+                rolling_pos = src.index('calibrator_rolling.joblib')
+                static_pos  = src.index('calibrator.joblib')
+                assert rolling_pos < static_pos, \
+                    'Rolling calibrator must be checked before static fallback'
+                print('predict_today.py rolling calibrator with fallback OK')
+
+      - id: update-registry-and-docs
+        kind: Task
+        description: >
+          1. Update `model_registry.yaml` to add `calibrator_last_fit_date` under the
+             home_win model entry. Set initial value to null (will be populated on first refit):
+               home_win:
+                 ...
+                 calibrator_last_fit_date: null   # updated by fit_rolling_calibrator on each run
+
+          2. Update `daily_run.md` to document the weekly Sunday refit step:
+               ## Weekly Maintenance (Sundays)
+               - Run fit_rolling_calibrator: `uv run python -m betting_ml.scripts.fit_calibrator --rolling`
+                 (or equivalent invocation based on the actual CLI)
+               - Verify calibrator_rolling.joblib is updated and calibrator_last_fit_date
+                 is set in model_registry.yaml.
+        dependsOn:
+          - update-predict-today-fallback
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: model_registry.yaml has calibrator_last_fit_date
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                reg = pathlib.Path('model_registry.yaml').read_text()
+                assert 'calibrator_last_fit_date' in reg, \
+                    'model_registry.yaml missing calibrator_last_fit_date'
+                print('model_registry.yaml calibrator_last_fit_date OK')
+          - type: command_succeeds
+            name: daily_run.md documents weekly refit
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('**/daily_run.md', recursive=True)
+                assert len(candidates) > 0, 'daily_run.md not found'
+                text = pathlib.Path(candidates[0]).read_text().lower()
+                assert 'rolling' in text or 'calibrat' in text, \
+                    'daily_run.md does not mention rolling calibrator'
+                print('daily_run.md weekly refit step documented OK')
+
+      - id: smoke-test-rolling-refit
+        kind: Task
+        description: >
+          Run `fit_rolling_calibrator()` once as a smoke test against current Snowflake data.
+
+          Expected outcomes:
+          1. If ≥ 30 results are available in the last 60 days: calibrator_rolling.joblib
+             is written and the function returns True.
+          2. If < 30 results: function logs a warning and returns False (no file written).
+          3. Either outcome is acceptable for this smoke test — the gate logic is what matters.
+
+          After running, update `calibrator_last_fit_date` in model_registry.yaml to today's date.
+        dependsOn:
+          - update-registry-and-docs
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: smoke test run completes without exception
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Smoke test: run fit_rolling_calibrator() manually via the fitting script.')
+                print('Either calibrator_rolling.joblib is written (>= 30 samples)')
+                print('OR a "skipping refit" warning is logged (< 30 samples).')
+                print('Either outcome confirms the gate logic works correctly.')

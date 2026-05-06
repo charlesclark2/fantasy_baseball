@@ -1,0 +1,234 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: bookmaker-disagreement-features
+  namespace: default
+spec:
+  description: >
+    When bookmakers disagree on a line, there is usually information asymmetry — one book
+    has digested sharp action that others have not yet priced in. The dispersion of implied
+    probabilities across books at prediction time is itself a predictive feature: high
+    disagreement indicates genuine uncertainty or price discovery in progress; low
+    disagreement across all books signals a well-settled market. Sharp/soft spreads
+    (sharp books vs. recreational books) identify whether the public or sharp money
+    is driving the consensus.
+
+    TECHNICAL APPROACH:
+    - Source: existing `mlb_odds_raw` — already contains multi-book snapshots per game.
+    - Leakage guard: use only snapshots on game_date where ingestion_ts <= 08:30 ET
+      (morning snapshot, before market has moved substantially from sharp action).
+    - Bookmaker tier classification (hardcoded in a seed or CASE statement):
+        Sharp-leaning: lowvig, betonlineag, bovada (tighter vig, faster price discovery)
+        Soft/recreational: williamhill_us, betmgm, caesars, fanduel (slower to move)
+      Note: Pinnacle is the canonical sharp book but is not on The Odds API; lowvig is
+      the closest equivalent available.
+    - Feature set:
+        ml_implied_prob_std      FLOAT  — std dev of vig-free home win prob across books
+        ml_implied_prob_range    FLOAT  — max minus min vig-free home win prob across books
+        totals_line_std          FLOAT  — std dev of total line across books
+        totals_line_range        FLOAT  — max minus min total line across books
+        sharp_soft_ml_spread     FLOAT  — avg vig-free home prob (sharp books) -
+                                          avg vig-free home prob (soft books)
+        n_books_available        INT    — number of books with odds at prediction time
+        stale_book_flag          INT    — 1 if any book's snapshot is >60 min older than
+                                          the freshest book's snapshot (stale = not digested
+                                          sharp action)
+    - Add all seven columns to `feature_pregame_game_features` via LEFT JOIN on game_pk.
+    - NULL when fewer than 2 books have odds at prediction time. Impute in preprocessing.py:
+        ml_implied_prob_std → 0.0 (no disagreement signal)
+        sharp_soft_ml_spread → 0.0 (no differential)
+        n_books_available → 1
+        stale_book_flag → 0
+
+  acceptanceCriteria:
+    - description: >
+        `mart_bookmaker_disagreement` built with correct leakage guard (morning snapshot only).
+        Vig-free implied probabilities computed per bookmaker. Bookmaker tier classification
+        applied. Seven feature columns computed at game_pk grain.
+    - description: >
+        Seven columns added to `feature_pregame_game_features`. Null rate < 5% for games
+        after May 1 of any season where odds data is available. `dbtf build --select
+        +feature_pregame_game_features` passes all tests.
+    - description: >
+        Sanity checks: `ml_implied_prob_std` is in [0.0, 0.15] for all non-null rows
+        (extreme disagreement above 15pp is implausible). `sharp_soft_ml_spread` in
+        [−0.10, 0.10]. `n_books_available` ≥ 1 for all non-null rows.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: bookmaker-disagreement-features-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 builds mart_bookmaker_disagreement with bookmaker
+    tier classification and morning-snapshot leakage guard. Task 2 adds seven columns to
+    feature_pregame_game_features. Task 3 validates coverage and sanity ranges.
+  goalRef:
+    name: bookmaker-disagreement-features
+  graph:
+    nodes:
+
+      - id: build-disagreement-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_bookmaker_disagreement.sql`.
+
+          Step 1 — morning snapshot per bookmaker per game (leakage-guarded):
+            SELECT event_id, game_pk, bookmaker, home_price, away_price, total_line,
+                   ingestion_ts, commence_time
+            FROM mlb_odds_raw
+            WHERE CONVERT_TIMEZONE('UTC', 'America/New_York', ingestion_ts)
+                  BETWEEN DATEADD('hour', 6, game_date::TIMESTAMP)
+                      AND DATEADD('hour', 8.5, game_date::TIMESTAMP)
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY event_id, bookmaker
+                ORDER BY ingestion_ts ASC
+            ) = 1
+
+          Step 2 — vig-free implied probability per bookmaker:
+            raw_home   = 1.0 / home_price
+            raw_away   = 1.0 / away_price
+            vf_home    = raw_home / (raw_home + raw_away)
+
+          Step 3 — bookmaker tier classification (CASE WHEN):
+            tier = CASE bookmaker
+                     WHEN 'lowvig'      THEN 'sharp'
+                     WHEN 'betonlineag' THEN 'sharp'
+                     WHEN 'bovada'      THEN 'sharp'
+                     WHEN 'williamhill_us' THEN 'soft'
+                     WHEN 'betmgm'     THEN 'soft'
+                     WHEN 'caesars'    THEN 'soft'
+                     WHEN 'fanduel'    THEN 'soft'
+                     ELSE 'neutral'
+                   END
+
+          Step 4 — aggregate to game_pk grain:
+            SELECT game_pk, game_date,
+                   STDDEV(vf_home)           AS ml_implied_prob_std,
+                   MAX(vf_home) - MIN(vf_home) AS ml_implied_prob_range,
+                   STDDEV(total_line)        AS totals_line_std,
+                   MAX(total_line) - MIN(total_line) AS totals_line_range,
+                   AVG(CASE WHEN tier='sharp' THEN vf_home END)
+                     - AVG(CASE WHEN tier='soft' THEN vf_home END) AS sharp_soft_ml_spread,
+                   COUNT(DISTINCT bookmaker)  AS n_books_available,
+                   MAX(DATEDIFF('minute',
+                       MIN(ingestion_ts) OVER (PARTITION BY game_pk),
+                       ingestion_ts))
+                     > 60                     AS stale_book_flag
+            FROM snapshot_cte
+            GROUP BY game_pk, game_date
+
+          NULL sharp_soft_ml_spread when fewer than 1 sharp or 1 soft book has odds.
+          Add dbt uniqueness test on game_pk.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for bookmaker disagreement mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_bookmaker_disagreement
+
+      - id: add-columns-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_game_features.sql` to join `mart_bookmaker_disagreement`
+          on game_pk and add all seven columns.
+
+          LEFT JOIN (games without multi-book odds get NULL for all seven columns):
+            LEFT JOIN mart_bookmaker_disagreement bd ON bd.game_pk = g.game_pk
+
+          Add to final SELECT:
+            bd.ml_implied_prob_std,
+            bd.ml_implied_prob_range,
+            bd.totals_line_std,
+            bd.totals_line_range,
+            bd.sharp_soft_ml_spread,
+            bd.n_books_available,
+            bd.stale_book_flag
+
+          Do not COALESCE in dbt. Imputation in preprocessing.py (Task 3 of this card):
+            ml_implied_prob_std   → 0.0
+            ml_implied_prob_range → 0.0
+            totals_line_std       → 0.0
+            totals_line_range     → 0.0
+            sharp_soft_ml_spread  → 0.0
+            n_books_available     → 1
+            stale_book_flag       → 0
+
+          Also add imputation block to `betting_ml/utils/preprocessing.py`.
+        dependsOn:
+          - build-disagreement-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with disagreement columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+          - type: command_succeeds
+            name: all seven disagreement columns present in game features SQL
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('models/**/*game_features*.sql', recursive=True)
+                assert len(candidates) > 0, 'feature_pregame_game_features.sql not found'
+                src = pathlib.Path(candidates[0]).read_text()
+                for col in [
+                    'ml_implied_prob_std', 'ml_implied_prob_range',
+                    'totals_line_std', 'totals_line_range',
+                    'sharp_soft_ml_spread', 'n_books_available', 'stale_book_flag'
+                ]:
+                    assert col in src, f'{col} not found in game features model'
+                print('All seven bookmaker disagreement columns present OK')
+
+      - id: validate-coverage-and-sanity
+        kind: Task
+        description: >
+          Validate feature coverage and sanity ranges via mcp__snowflake__run_snowflake_query.
+
+          1. Null rate after May 1 (seasons with odds data):
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN ml_implied_prob_std IS NULL THEN 1 ELSE 0 END) AS nulls,
+                      SUM(CASE WHEN n_books_available >= 2 THEN 1 ELSE 0 END) AS multi_book
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025 AND game_date >= '2025-05-01'
+             Expected: nulls / total < 0.05 for seasons with full odds coverage.
+
+          2. Sanity range check:
+               SELECT MIN(ml_implied_prob_std), MAX(ml_implied_prob_std),
+                      MIN(sharp_soft_ml_spread), MAX(sharp_soft_ml_spread),
+                      AVG(n_books_available)
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE ml_implied_prob_std IS NOT NULL
+             Expected: std in [0.0, 0.15], spread in [-0.10, 0.10], avg books ≥ 3.
+
+          3. Distribution of stale_book_flag:
+               SELECT stale_book_flag, COUNT(*) AS n
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season >= 2024 GROUP BY 1
+             Expected: stale flag = 1 for < 20% of games (most books update morning of game).
+
+          Document findings in `betting_ml/evaluation/bookmaker_disagreement_coverage.txt`.
+        dependsOn:
+          - add-columns-to-game-features
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: bookmaker disagreement coverage report
+            path: betting_ml/evaluation/bookmaker_disagreement_coverage.txt
+          - type: command_succeeds
+            name: dbtf test passes for mart_bookmaker_disagreement
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_bookmaker_disagreement

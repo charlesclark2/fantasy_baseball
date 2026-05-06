@@ -1,0 +1,311 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: correlation-aware-bet-sizing
+  namespace: default
+spec:
+  description: >
+    The Kelly Criterion as currently implemented assumes each bet is independent. In practice,
+    moneyline and totals bets on the same game are positively correlated (if the favored team
+    wins by a large margin, the over is more likely). Betting both sides of the same game
+    effectively doubles game exposure; standard Kelly ignores this and leads to overbetting
+    when multiple correlated positions are placed. A portfolio-level optimizer that accounts
+    for the covariance structure of a day's slate produces risk-adjusted stake sizing without
+    sacrificing expected value.
+
+    TECHNICAL APPROACH:
+    - Compute empirical correlations between same-game bet outcomes from historical
+      `daily_model_predictions`: corr(home_win, total_runs_over_line) per game.
+    - Build a covariance matrix for a day's slate: same-game ML + totals share a covariance
+      parameter; cross-game bets are treated as independent (covariance = 0).
+    - Implement `optimize_stakes(bets, ev_estimates, cov_matrix, bankroll)` using
+      `scipy.optimize.minimize` (or `cvxpy` if available): maximize sum(EV * stake) subject to
+        1. sum(stake) <= bankroll * max_exposure  (total exposure cap, default 20%)
+        2. stake_i >= 0 for all i  (no negative stakes)
+        3. portfolio_variance <= max_variance  (risk budget)
+    - Same-game correlation parameter: use empirical estimate from historical outcomes.
+      Expected empirical correlation: ML win × totals over ≈ +0.25 to +0.45 (winning by a
+      lot correlates with high-scoring games, but pitching dominance can decouple them).
+    - Update the EV Tracker (`app/pages/3_EV_Kelly.py`) to show both standard Kelly and
+      correlation-adjusted stakes side by side.
+    - GATE: Display a warning banner in the Streamlit page when mean CLV from Card 8.S is
+      negative (i.e., no confirmed edge yet). The optimizer is still shown for reference but
+      the warning explains the results are not yet meaningful.
+
+  acceptanceCriteria:
+    - description: >
+        `betting_ml/utils/portfolio_optimizer.py` exists with `compute_game_correlations(df)`,
+        `build_covariance_matrix(bets, corr_params)`, and `optimize_stakes(bets, ev_estimates,
+        cov_matrix, bankroll, max_exposure=0.20)` functions. All three have unit tests covering
+        the independent-bets edge case and the same-game correlation case.
+    - description: >
+        Empirical same-game ML/totals correlation computed from historical `daily_model_predictions`
+        and stored in `betting_ml/evaluation/bet_correlation_params.json`. Value in [0.0, 0.60];
+        if outside this range, investigation required before wiring into production.
+    - description: >
+        EV Tracker page updated with a "Correlation-Adjusted Sizing" column next to standard
+        Kelly. Displays portfolio-optimized stake per bet. Aggregate portfolio metrics shown:
+        expected portfolio EV, portfolio variance, total exposure. CLV warning banner present
+        when mean CLV is not yet positive.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: correlation-aware-bet-sizing-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 computes empirical bet correlations from historical
+    outcomes. Task 2 implements the portfolio optimizer module with unit tests. Task 3
+    wires the optimizer into the EV Tracker Streamlit page. Task 4 validates the optimizer
+    produces sensible output on a real day's slate.
+  goalRef:
+    name: correlation-aware-bet-sizing
+  graph:
+    nodes:
+
+      - id: compute-empirical-correlations
+        kind: Task
+        description: >
+          Compute empirical correlations between same-game bet outcomes using historical
+          `daily_model_predictions` and game results.
+
+          Via mcp__snowflake__run_snowflake_query — join predictions to outcomes:
+            SELECT p.game_pk, p.game_date,
+                   -- ML outcome: 1 if home team won, 0 if away won
+                   r.home_win                              AS ml_home_win,
+                   -- Totals outcome: 1 if total runs > market line, 0 otherwise
+                   CASE WHEN r.total_runs > p.market_totals_line
+                        THEN 1 ELSE 0 END                 AS totals_over,
+                   -- Both bets present on the same game
+                   p.market_totals_line,
+                   p.calibrated_win_prob                  AS model_home_win_prob,
+                   p.pred_total_runs
+            FROM baseball_data.config.daily_model_predictions p
+            JOIN baseball_data.betting.mart_game_results r USING (game_pk)
+            WHERE p.market_totals_line IS NOT NULL
+              AND r.home_win IS NOT NULL
+              AND p.model_version IN ('v1', 'prod')
+
+          Compute:
+            corr(ml_home_win, totals_over)  -- empirical same-game ML/totals correlation
+            corr(ml_home_win, total_runs)   -- continuous version
+
+          Also compute by season to check stability across years.
+
+          Write output to `betting_ml/evaluation/bet_correlation_params.json`:
+            {
+              "same_game_ml_totals_corr": <float>,
+              "same_game_ml_total_runs_corr": <float>,
+              "n_games_used": <int>,
+              "seasons": [2023, 2024, 2025, 2026],
+              "per_season": {"2024": <float>, "2025": <float>, ...},
+              "computed_date": "YYYY-MM-DD"
+            }
+
+          If the correlation is outside [0.0, 0.60], log a warning and document why before
+          proceeding (e.g., the current biased total_runs model may distort the estimate;
+          recompute after Card 8.P quantile model promotion).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: bet correlation parameters
+            path: betting_ml/evaluation/bet_correlation_params.json
+          - type: command_succeeds
+            name: correlation params in valid range
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import json, pathlib
+                params = json.loads(pathlib.Path(
+                    'betting_ml/evaluation/bet_correlation_params.json').read_text())
+                corr = params['same_game_ml_totals_corr']
+                assert isinstance(corr, (int, float)), 'Correlation must be numeric'
+                assert -1.0 <= corr <= 1.0, f'Correlation out of range: {corr}'
+                assert params['n_games_used'] >= 100, \
+                    f'Too few games for reliable correlation: {params["n_games_used"]}'
+                print(f'Bet correlation params OK: corr={corr:.3f}, n={params["n_games_used"]}')
+
+      - id: implement-portfolio-optimizer
+        kind: Task
+        description: >
+          Create `betting_ml/utils/portfolio_optimizer.py` with three functions.
+
+          FUNCTION 1: compute_game_correlations(df)
+            Given a DataFrame of today's bets (columns: game_pk, market_type, ev, kelly_stake),
+            build a correlation lookup: same-game ML + totals pairs get the empirical correlation
+            from bet_correlation_params.json; all other pairs get 0.0.
+
+          FUNCTION 2: build_covariance_matrix(bets, corr_params)
+            Returns a (n_bets × n_bets) covariance matrix where:
+            - Diagonal: var_i = ev_i * (1 - ev_i)  (approximation for binary outcomes)
+            - Off-diagonal: cov_ij = corr_ij * sqrt(var_i * var_j)
+            - corr_ij = same_game_ml_totals_corr if game_pk_i == game_pk_j and
+                        one is 'h2h' and one is 'totals'; else 0.0
+
+          FUNCTION 3: optimize_stakes(bets, ev_estimates, cov_matrix, bankroll,
+                                      max_exposure=0.20, max_var_target=None)
+            Minimize -sum(ev_i * stake_i) subject to:
+              sum(stake_i) <= bankroll * max_exposure
+              stake_i >= 0 for all i
+              stake_i <= bankroll * 0.10  (per-bet cap, same as current Kelly cap)
+              If max_var_target is set: stake @ cov_matrix @ stake <= max_var_target
+
+            Use scipy.optimize.minimize with method='SLSQP'.
+            Returns: dict of {bet_id: optimal_stake_fraction}  (fraction of bankroll, not dollars)
+
+          UNIT TESTS inline (run with `uv run python -c ...`):
+          - If all bets are independent: result should match naive Kelly fractions (within rounding)
+          - If two same-game bets have high correlation: each gets reduced stake vs. naive Kelly
+          - If bankroll = 1000, max_exposure = 0.20: total stakes <= 200
+
+          Import note: use scipy only (do not require cvxpy — it may not be installed).
+        dependsOn:
+          - compute-empirical-correlations
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: portfolio optimizer module
+            path: betting_ml/utils/portfolio_optimizer.py
+          - type: command_succeeds
+            name: portfolio optimizer unit tests pass
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys
+                sys.path.insert(0, '.')
+                import numpy as np
+                from betting_ml.utils.portfolio_optimizer import (
+                    build_covariance_matrix, optimize_stakes
+                )
+
+                # Test 1: independent bets — optimizer should not reduce stakes below Kelly
+                bets = [
+                    {'bet_id': 'A', 'game_pk': 1, 'market_type': 'h2h',   'ev': 0.05, 'kelly_frac': 0.03},
+                    {'bet_id': 'B', 'game_pk': 2, 'market_type': 'h2h',   'ev': 0.04, 'kelly_frac': 0.02},
+                ]
+                ev = np.array([b['ev'] for b in bets])
+                cov = build_covariance_matrix(bets, same_game_corr=0.0)
+                result = optimize_stakes(bets, ev, cov, bankroll=1000, max_exposure=0.20)
+                assert sum(result.values()) <= 1000 * 0.20 + 1e-6, \
+                    'Total stakes exceed max_exposure'
+                assert all(v >= 0 for v in result.values()), 'Negative stakes not allowed'
+
+                # Test 2: correlated same-game bets — each bet reduced vs. independent case
+                bets_corr = [
+                    {'bet_id': 'C', 'game_pk': 3, 'market_type': 'h2h',    'ev': 0.05, 'kelly_frac': 0.03},
+                    {'bet_id': 'D', 'game_pk': 3, 'market_type': 'totals', 'ev': 0.04, 'kelly_frac': 0.02},
+                ]
+                ev_corr = np.array([b['ev'] for b in bets_corr])
+                cov_corr = build_covariance_matrix(bets_corr, same_game_corr=0.35)
+                result_corr = optimize_stakes(bets_corr, ev_corr, cov_corr, bankroll=1000, max_exposure=0.20)
+                # With correlation, total exposure should be less than with independence
+                cov_indep = build_covariance_matrix(bets_corr, same_game_corr=0.0)
+                result_indep = optimize_stakes(bets_corr, ev_corr, cov_indep, bankroll=1000, max_exposure=0.20)
+                # Both should still be within cap
+                assert sum(result_corr.values()) <= 1000 * 0.20 + 1e-6, \
+                    'Correlated case exceeds max_exposure'
+
+                print('Portfolio optimizer unit tests PASS')
+
+      - id: wire-into-ev-tracker
+        kind: Task
+        description: >
+          Update `app/pages/3_EV_Kelly.py` to show correlation-adjusted stakes.
+
+          1. After computing the existing Kelly stakes, call the portfolio optimizer:
+               from betting_ml.utils.portfolio_optimizer import (
+                   build_covariance_matrix, optimize_stakes
+               )
+               import json, pathlib
+               corr_params = json.loads(pathlib.Path(
+                   'betting_ml/evaluation/bet_correlation_params.json').read_text())
+               same_game_corr = corr_params['same_game_ml_totals_corr']
+
+               cov_matrix = build_covariance_matrix(todays_bets, same_game_corr)
+               corr_stakes = optimize_stakes(
+                   todays_bets, ev_estimates, cov_matrix,
+                   bankroll=bankroll_input, max_exposure=0.20
+               )
+
+          2. Add a "Corr. Adj. Stake ($)" column to the All Markets EV table alongside the
+             existing "Suggested Stake ($)" column. Show both so the user can see the
+             correlation-driven reduction on same-game bets.
+
+          3. Add a portfolio metrics expander below the table:
+               - Total Standard Kelly exposure: $X
+               - Total Correlation-Adjusted exposure: $Y  (should be ≤ standard for correlated slates)
+               - Portfolio Variance (approx): $Z²
+
+          4. CLV warning banner (conditional on mart_prediction_clv being available):
+               If mean_clv_ml (last 30 days) <= 0:
+                 st.warning("⚠️ Mean CLV is currently non-positive — no confirmed edge yet.
+                             Correlation-adjusted sizing optimizes risk structure but does not
+                             create edge where none exists.")
+
+          Handle the case where `bet_correlation_params.json` does not exist yet (show
+          standard Kelly only, with an info message "CLV correlation params not yet computed").
+        dependsOn:
+          - implement-portfolio-optimizer
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: EV Tracker page imports portfolio optimizer
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('app/pages/3_EV_Kelly.py').read_text()
+                assert 'portfolio_optimizer' in src or 'optimize_stakes' in src, \
+                    'Portfolio optimizer not imported in EV Tracker page'
+                assert 'corr' in src.lower(), \
+                    'Correlation-adjusted sizing not referenced in EV Tracker'
+                print('EV Tracker page correlation-adjusted sizing OK')
+
+      - id: validate-optimizer-on-live-slate
+        kind: Task
+        description: >
+          Run the optimizer on a real day's slate (today or a recent game day) and verify
+          the output is sensible.
+
+          Expected behavior:
+          1. For a typical slate of 8–15 games with 1–3 actionable bets:
+             - If no same-game correlated bets: corr-adjusted stakes ≈ standard Kelly stakes
+             - If same-game ML + totals both actionable: each gets ~15–30% reduced stake
+               vs. naive Kelly (the exact reduction depends on the correlation estimate)
+          2. Total portfolio exposure stays within max_exposure (20% bankroll by default).
+          3. No negative stakes or NaN values in output.
+
+          Document the output in `betting_ml/evaluation/portfolio_optimizer_validation.txt`:
+            - Date used for validation
+            - N bets in slate, N same-game correlated pairs
+            - Standard Kelly total exposure vs. corr-adjusted total exposure
+            - Largest single stake reduction due to correlation
+        dependsOn:
+          - wire-into-ev-tracker
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: portfolio optimizer validation report
+            path: betting_ml/evaluation/portfolio_optimizer_validation.txt
+          - type: command_succeeds
+            name: validation report covers required fields
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/portfolio_optimizer_validation.txt').read_text().lower()
+                for term in ['exposure', 'corr', 'stake', 'slate']:
+                    assert term in text, f'Validation report missing section on: {term}'
+                print('Portfolio optimizer validation report covers required fields OK')

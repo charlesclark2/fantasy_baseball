@@ -1,0 +1,266 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: closing-line-value
+  namespace: default
+spec:
+  description: >
+    Closing Line Value (CLV) is the gold standard for measuring model quality in sports betting.
+    If a model consistently identifies value that the market subsequently prices out by game time,
+    it has demonstrated real predictive edge regardless of short-term realized P&L. CLV for a
+    pick is computed as: closing_vig_free_prob - opening_vig_free_prob (for moneyline), or
+    closing_total_line - opening_total_line (for totals). Positive CLV means the market moved
+    toward the model's prediction.
+
+    TECHNICAL APPROACH:
+    - No new data ingestion required. Source: existing `mlb_odds_raw` table which has multiple
+      timestamped snapshots per game per bookmaker.
+    - Opening snapshot: the snapshot closest to 08:00 EDT on game day (when predict_today.py runs).
+    - Closing snapshot: the last snapshot per event_id where `ingestion_ts < commence_time`.
+    - Vig-free implied probabilities: use the additive method
+        vig_free_home = raw_home / (raw_home + raw_away)
+      where raw_home = 1 / decimal_home_price and raw_away = 1 / decimal_away_price.
+    - Build `mart_closing_line_value` in dbt: one row per game_pk with opening and closing
+      vig-free probabilities and CLV metrics.
+    - Join to `daily_model_predictions` on game_pk + game_date; add CLV columns to the table
+      or surface via mart.
+    - Report CLV metrics in the Model Performance Streamlit page (rolling mean CLV, distribution,
+      cumulative CLV by model version).
+    - PRIMARY METRIC: mean_clv_ml across all has_odds games. Positive mean_clv confirms edge.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_closing_line_value` built with correct opening/closing snapshot logic. Opening =
+        min(ingestion_ts) snapshot on game_date where ingestion_ts >= game_date 06:00 ET.
+        Closing = max(ingestion_ts) snapshot where ingestion_ts < commence_time. Vig-free implied
+        probabilities computed for both. CLV = closing_vig_free_home - opening_vig_free_home.
+        Null when no closing snapshot exists (game not yet played or no odds data).
+    - description: >
+        CLV columns surfaced in `daily_model_predictions` (or joined view): `opening_vig_free_home`,
+        `closing_vig_free_home`, `clv_home_ml`, `opening_total_line`, `closing_total_line`,
+        `clv_total`. Populated for all has_odds games in the historical window.
+    - description: >
+        Model Performance Streamlit page updated with a CLV section: rolling 14-day mean CLV
+        chart, CLV distribution histogram, cumulative CLV by model_version. Median CLV and
+        95th percentile displayed as summary metrics.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: closing-line-value-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 builds mart_closing_line_value in dbt using existing
+    mlb_odds_raw snapshots. Task 2 adds CLV columns to the daily_model_predictions surface.
+    Task 3 backfills CLV for all historical has_odds predictions. Task 4 adds the CLV section
+    to the Model Performance Streamlit page.
+  goalRef:
+    name: closing-line-value
+  graph:
+    nodes:
+
+      - id: build-clv-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_closing_line_value.sql`.
+
+          Source: `mlb_odds_raw` (columns: event_id, game_pk, ingestion_ts, commence_time,
+          bookmaker, home_price, away_price, over_price, under_price, total_line).
+
+          Step 1 — opening snapshot (prices closest to model prediction time):
+            SELECT event_id, bookmaker,
+                   home_price AS open_home_price,
+                   away_price AS open_away_price,
+                   total_line AS open_total_line,
+                   ingestion_ts AS open_ingestion_ts
+            FROM mlb_odds_raw
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY event_id, bookmaker
+                ORDER BY ABS(DATEDIFF('minute', ingestion_ts,
+                             CONVERT_TIMEZONE('America/New_York', commence_time::TIMESTAMP)
+                             - INTERVAL '12 hours'))
+            ) = 1
+            -- selects the snapshot closest to 08:00 ET on game day
+
+          Step 2 — closing snapshot (last snapshot before game start):
+            SELECT event_id, bookmaker,
+                   home_price AS close_home_price,
+                   away_price AS close_away_price,
+                   total_line AS close_total_line,
+                   ingestion_ts AS close_ingestion_ts
+            FROM mlb_odds_raw
+            WHERE ingestion_ts < commence_time
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY event_id, bookmaker ORDER BY ingestion_ts DESC
+            ) = 1
+
+          Step 3 — join and compute vig-free CLV per bookmaker, then average across bookmakers:
+            open_raw_home  = 1.0 / open_home_price
+            open_raw_away  = 1.0 / open_away_price
+            open_vf_home   = open_raw_home / (open_raw_home + open_raw_away)
+
+            close_raw_home = 1.0 / close_home_price
+            close_raw_away = 1.0 / close_away_price
+            close_vf_home  = close_raw_home / (close_raw_home + close_raw_away)
+
+            clv_home_ml    = close_vf_home - open_vf_home
+            clv_total      = close_total_line - open_total_line
+
+          Final grain: one row per game_pk (average CLV across all bookmakers that have both
+          an opening and closing snapshot).
+
+          Output columns: game_pk, game_date, open_vf_home, close_vf_home, clv_home_ml,
+          open_total_line, close_total_line, clv_total, n_books_with_clv.
+
+          Add dbt uniqueness test on game_pk.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for CLV mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_closing_line_value
+
+      - id: surface-clv-in-predictions
+        kind: Task
+        description: >
+          Surface CLV metrics alongside model predictions.
+
+          Option A (preferred): Create `models/marts/mart_prediction_clv.sql` that joins
+          `mart_closing_line_value` to `daily_model_predictions` on game_pk:
+            SELECT p.*, c.clv_home_ml, c.clv_total, c.open_vf_home, c.close_vf_home,
+                   c.open_total_line, c.close_total_line, c.n_books_with_clv
+            FROM daily_model_predictions p
+            LEFT JOIN mart_closing_line_value c USING (game_pk)
+
+          This view is what the Streamlit Model Performance page queries for CLV data.
+          Avoids DDL migration to add columns to the base predictions table.
+
+          Compute aggregate CLV metrics for evaluation:
+            mean_clv_ml       = AVG(clv_home_ml) WHERE clv_home_ml IS NOT NULL
+            mean_clv_total    = AVG(clv_total)   WHERE clv_total IS NOT NULL
+            pct_positive_clv  = AVG(CASE WHEN clv_home_ml > 0 THEN 1 ELSE 0 END)
+
+          If mean_clv_ml > 0: model is finding edge before the market closes it.
+          If mean_clv_ml < 0: model is systematically betting into steam.
+        dependsOn:
+          - build-clv-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for prediction CLV mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_prediction_clv
+          - type: command_succeeds
+            name: mart_prediction_clv has required CLV columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('models/**/*prediction_clv*.sql', recursive=True)
+                assert len(candidates) > 0, 'mart_prediction_clv.sql not found'
+                src = pathlib.Path(candidates[0]).read_text().lower()
+                for col in ['clv_home_ml', 'clv_total', 'open_vf_home', 'close_vf_home']:
+                    assert col in src, f'{col} not found in mart_prediction_clv'
+                print('mart_prediction_clv has all CLV columns OK')
+
+      - id: backfill-clv-validation
+        kind: Task
+        description: >
+          Validate CLV coverage and compute aggregate metrics over the historical window.
+
+          Run the following via mcp__snowflake__run_snowflake_query:
+
+          1. Coverage check:
+               SELECT COUNT(*) AS total_preds,
+                      SUM(CASE WHEN clv_home_ml IS NOT NULL THEN 1 ELSE 0 END) AS has_clv,
+                      AVG(clv_home_ml) AS mean_clv_ml,
+                      AVG(clv_total)   AS mean_clv_total,
+                      AVG(CASE WHEN clv_home_ml > 0 THEN 1.0 ELSE 0.0 END) AS pct_positive_clv
+               FROM baseball_data.betting.mart_prediction_clv
+               WHERE has_odds = TRUE AND model_version IN ('v1', 'prod')
+
+          2. CLV by month (seasonality check):
+               SELECT DATE_TRUNC('month', game_date) AS month,
+                      COUNT(*) AS n_games, AVG(clv_home_ml) AS mean_clv_ml
+               FROM baseball_data.betting.mart_prediction_clv
+               WHERE has_odds = TRUE
+               GROUP BY 1 ORDER BY 1
+
+          Document findings: coverage rate, mean CLV, pct_positive_clv. If coverage < 70%,
+          investigate whether closing snapshots are missing from mlb_odds_raw (the ingestion
+          script may not run close enough to game time).
+
+          Write findings to `betting_ml/evaluation/clv_baseline_report.txt`.
+        dependsOn:
+          - surface-clv-in-predictions
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: CLV baseline report
+            path: betting_ml/evaluation/clv_baseline_report.txt
+          - type: command_succeeds
+            name: CLV baseline report contains required fields
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/clv_baseline_report.txt').read_text().lower()
+                for term in ['mean_clv', 'coverage', 'pct_positive']:
+                    assert term in text or 'clv' in text, f'CLV baseline report missing: {term}'
+                print('CLV baseline report OK')
+
+      - id: update-model-performance-page
+        kind: Task
+        description: >
+          Add a CLV section to `app/pages/4_Model_Performance.py`.
+
+          Query mart_prediction_clv from Snowflake. Add a new "Closing Line Value" section
+          below the existing Brier score section, with:
+
+          1. Summary metrics row:
+               - Mean CLV (moneyline): `{mean_clv_ml:.3f}` (positive = finding value)
+               - Pct predictions with positive CLV: `{pct_positive:.1%}`
+               - Mean CLV (totals): `{mean_clv_total:.2f}` lines
+
+          2. Rolling 14-day mean CLV chart (line chart, same date axis as Brier chart).
+             Add a horizontal reference line at y=0.
+
+          3. CLV distribution histogram (over all has_odds games, by model_version if multiple).
+
+          Respect the existing Season selector and model_version multiselect filters.
+          Use the Snowflake session already established at the top of the page — do not
+          open a new connection.
+
+          Add a tooltip or expander explaining CLV: "Positive CLV means the closing line
+          moved toward our model's prediction. Consistently positive CLV is the strongest
+          evidence of model edge, independent of short-term P&L."
+        dependsOn:
+          - backfill-clv-validation
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Model Performance page references CLV mart
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('app/pages/4_Model_Performance.py').read_text()
+                assert 'clv' in src.lower(), 'CLV section not found in Model Performance page'
+                assert 'mart_prediction_clv' in src or 'clv_home_ml' in src, \
+                    'CLV data query not found in Model Performance page'
+                print('Model Performance page CLV section OK')
