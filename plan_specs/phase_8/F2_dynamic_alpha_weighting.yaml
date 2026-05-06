@@ -1,0 +1,198 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: dynamic-alpha-weighting
+  namespace: default
+spec:
+  description: >
+    Replace the global `best_alpha = 0.0` scalar in `compute_posterior()` with a
+    per-game weight driven by `game_uncertainty_score`. At full uncertainty, the model
+    gets up to 15% weight in the posterior blend; at mid-season stability the weight
+    converges back to 0 (matching the current global result).
+
+    BLOCKED: Blocked on positive model edge. Card 7.MB is complete and the calibration
+    approach is confirmed. The remaining block is conceptual: giving the model non-zero
+    weight in `compute_posterior()` is only beneficial if the model has positive edge
+    in at least some regimes. Currently mean h2h edge is −0.014 globally. Implementing
+    dynamic alpha now — even at MAX_MODEL_WEIGHT = 0.15 — would actively hurt posterior
+    quality in any game where `game_uncertainty_score > 0`. Unblock when the model
+    demonstrates mean h2h edge > 0.0 across ≥50 has_odds games.
+
+    PREREQUISITE: Card 8.F1 (game_uncertainty_score) must be implemented first.
+    The `game_uncertainty_score` column must exist in `daily_model_predictions` and
+    be populated by `predict_today.py` before this card can be implemented.
+
+    FORMULA:
+      dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT
+      MAX_MODEL_WEIGHT = 0.15 (conservative starting value; re-evaluate after 200+ scored games)
+
+    AUDIT COLUMN: `dynamic_alpha` is written per game to `daily_model_predictions`
+    so each game's blending weight is queryable after the fact.
+
+  acceptanceCriteria:
+    - description: >
+        `compute_posterior()` no longer uses a global scalar `best_alpha`. Uses
+        `game_uncertainty_score * MAX_MODEL_WEIGHT` as the per-game alpha instead.
+    - description: >
+        `dynamic_alpha` column persisted in `daily_model_predictions` for all
+        scored games after DDL migration.
+    - description: >
+        `MAX_MODEL_WEIGHT` documented in `model_registry.yaml` under a `bayesian_layer`
+        block with `formula`, `last_evaluated`, and `evaluation_note` fields.
+    - description: >
+        Spot-check: `dynamic_alpha` = 0.0 for games where `game_uncertainty_score`
+        = 0.0; `dynamic_alpha` = 0.15 for games where `game_uncertainty_score` = 1.0.
+    - description: >
+        Evaluation query exists (written, not yet run): stratify `daily_model_predictions`
+        by `game_uncertainty_score` bucket (0–0.25, 0.25–0.5, 0.5–0.75, 0.75–1.0)
+        and compute mean h2h edge per bucket.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: dynamic-alpha-weighting-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 adds DDL columns. Task 2 edits compute_posterior()
+    and predict_today.py. Task 3 updates model_registry.yaml and writes the evaluation
+    query template. Do not start this card until 8.F1 is complete AND mean h2h edge
+    is > 0.0 across ≥50 has_odds games.
+  goalRef:
+    name: dynamic-alpha-weighting
+  graph:
+    nodes:
+
+      - id: ddl-migration
+        kind: Task
+        description: >
+          Create `scripts/ddl/add_dynamic_alpha.sql` and apply to Snowflake.
+
+          SQL content:
+            ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+            ADD COLUMN IF NOT EXISTS dynamic_alpha FLOAT;
+
+          Apply via mcp__snowflake__run_snowflake_query.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL migration script
+            path: scripts/ddl/add_dynamic_alpha.sql
+          - type: command_succeeds
+            name: DDL contains dynamic_alpha column
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/add_dynamic_alpha.sql').read_text()
+                assert 'dynamic_alpha' in sql, 'DDL must add dynamic_alpha'
+                print('DDL OK')
+
+      - id: implement-dynamic-alpha
+        kind: Task
+        description: >
+          Edit `betting_ml/models/bayesian_posterior.py` (or wherever `compute_posterior()`
+          lives): replace the global `alpha = best_alpha` (or `alpha = 0.0`) scalar
+          with per-game dynamic alpha.
+
+          Change:
+            # Before
+            alpha = best_alpha  # or 0.0
+
+          To:
+            MAX_MODEL_WEIGHT = 0.15
+            alpha = game_uncertainty_score * MAX_MODEL_WEIGHT
+
+          The function signature must accept `game_uncertainty_score` as a parameter.
+          `compute_posterior(market_prob, model_prob, game_uncertainty_score)` — ensure
+          all callers in `predict_today.py` pass the score.
+
+          Also: write `dynamic_alpha` value (= alpha used for this game) to the
+          prediction row before inserting into `daily_model_predictions`.
+        dependsOn:
+          - ddl-migration
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: compute_posterior uses dynamic alpha not global scalar
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib, glob
+                candidates = glob.glob('betting_ml/**/*.py', recursive=True)
+                found_dynamic = False
+                for c in candidates:
+                    src = pathlib.Path(c).read_text()
+                    if 'compute_posterior' in src and 'MAX_MODEL_WEIGHT' in src:
+                        found_dynamic = True
+                        assert 'best_alpha' not in src or src.count('best_alpha') == 0, \
+                            f'best_alpha global scalar still referenced in {c}'
+                        break
+                assert found_dynamic, 'MAX_MODEL_WEIGHT not found in any compute_posterior implementation'
+                print('Dynamic alpha implementation found OK')
+          - type: command_succeeds
+            name: dynamic_alpha written to predict_today output
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                assert 'dynamic_alpha' in src, 'predict_today.py must write dynamic_alpha column'
+                print('dynamic_alpha referenced in predict_today.py OK')
+
+      - id: update-registry-and-eval-template
+        kind: Task
+        description: >
+          Update `model_registry.yaml` to add a `bayesian_layer` block:
+            bayesian_layer:
+              MAX_MODEL_WEIGHT: 0.15
+              formula: "dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT"
+              last_evaluated: null
+              evaluation_note: "Re-evaluate after 200+ scored games"
+
+          Also write `betting_ml/evaluation/dynamic_alpha_eval_template.sql` with the
+          stratified edge query:
+            SELECT
+              CASE
+                WHEN game_uncertainty_score < 0.25 THEN '0.00-0.25'
+                WHEN game_uncertainty_score < 0.50 THEN '0.25-0.50'
+                WHEN game_uncertainty_score < 0.75 THEN '0.50-0.75'
+                ELSE '0.75-1.00'
+              END AS uncertainty_bucket,
+              COUNT(*) AS n,
+              AVG(h2h_edge) AS mean_edge,
+              STDDEV(h2h_edge) AS std_edge
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE has_odds = true
+              AND outcome IS NOT NULL
+            GROUP BY 1
+            ORDER BY 1
+        dependsOn:
+          - implement-dynamic-alpha
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: model_registry.yaml has bayesian_layer block
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                reg = pathlib.Path('model_registry.yaml').read_text()
+                assert 'bayesian_layer' in reg, 'model_registry.yaml missing bayesian_layer block'
+                assert 'MAX_MODEL_WEIGHT' in reg, 'MAX_MODEL_WEIGHT not in registry'
+                print('model_registry.yaml bayesian_layer OK')
+          - type: artifact_exists
+            name: dynamic alpha evaluation query template
+            path: betting_ml/evaluation/dynamic_alpha_eval_template.sql

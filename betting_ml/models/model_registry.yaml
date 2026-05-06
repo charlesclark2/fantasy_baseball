@@ -1,20 +1,34 @@
 total_runs:
   model_name: ngboost_tuned
-  model_version: v1
+  model_version: v2
   eval_year: 2026
-  cv_mae: 3.5190
-  dist: LogNormal
+  cv_mae: 3.5118
+  dist: Normal
   n_estimators: 500
-  training_rows: 10256
+  max_depth: 3
+  training_rows: 10264
   training_cutoff: "2021+"
-  features: 294
-  artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
-  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
-  feature_columns_path: betting_ml/models/feature_columns.json
+  features: 311
+  artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
   rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  deployed_date: "2026-05-04"
-  selected_at: "2026-05-04T00:00:00Z"
-  notes: "Card 7.MA retrain on full Phase 7 feature set (294 features per feature_columns.json, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.5190 vs 7.F baseline 3.4856 (+0.96% regression — within CV noise, below 1% revert threshold). New features include umpire, injury, pitch archetype, cluster matchup, bullpen IP, pythagorean. LogNormal dist retained. Rollback: ngboost_tuned_prod.pkl (pre-7.MA, same 294-feature set)."
+  # Per-tag overrides for backfill / champion-challenger comparisons.
+  # The default (no prefix) is the production model (v2). The explicit
+  # *_artifact_path / *_feature_columns_path / *_dist keys let predict_today.py
+  # load any historical tag side-by-side without rewriting the main entry.
+  v0_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+  v0_feature_columns_path: betting_ml/models/feature_columns.json
+  v0_dist: LogNormal
+  v1_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  v1_feature_columns_path: betting_ml/models/feature_columns.json
+  v1_dist: LogNormal
+  v2_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+  v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  v2_dist: Normal
+  deployed_date: "2026-05-05"
+  selected_at: "2026-05-05T00:00:00Z"
+  notes: "Card 7.V v2 retrain. NGBoost Normal, max_depth=3, n_estimators=500, full 2021+ window (10,264 rows, 311 post-pipeline features). CV MAE 3.5118 (vs v1 3.5190). 2024+ holdout gates: pct_pred_over=83.7% (PASS, threshold 25%); abs(mean_residual)=0.048 (PASS, threshold 0.5); totals_mae=3.346 (PASS, vs v0 baseline 3.862); std(pred_total_runs)=0.77 (FAIL, threshold 2.0 — known feature-set limitation, deferred to Phase 9). Rollback: ngboost_tuned_2026.pkl (v1, LogNormal, 294-feature set). See betting_ml/evaluation/total_runs_bias_diagnosis.md and betting_ml/evaluation/model_comparison_v0_v2_total_runs.md."
 
 run_differential:
   model_name: ngboost_tuned

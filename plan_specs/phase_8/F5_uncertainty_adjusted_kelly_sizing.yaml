@@ -1,0 +1,248 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: uncertainty-adjusted-kelly-sizing
+  namespace: default
+spec:
+  description: >
+    Apply a monotone uncertainty discount to the Kelly fraction at bet-sizing time,
+    using `game_uncertainty_score`. Higher uncertainty → smaller Kelly fraction →
+    more conservative position sizing. The floor at 0.1 prevents bets from being
+    zeroed even at maximum uncertainty.
+
+    PREREQUISITE: Card 8.F1 (game_uncertainty_score) must be complete. The score
+    must exist in `daily_model_predictions` and be passed through to the EV/Kelly
+    calculation.
+
+    FORMULA:
+      uncertainty_discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * game_uncertainty_score)
+      adjusted_kelly_fraction = kelly_fraction * uncertainty_discount
+      KELLY_UNCERTAINTY_DISCOUNT = 0.5
+        (at full uncertainty, Kelly fraction is halved; floor at 0.1 prevents zeroing)
+
+    AUDIT: `adjusted_kelly_fraction` and `uncertainty_discount` written per game to
+    `daily_model_predictions`. The Streamlit EV Kelly page displays `adjusted_kelly_fraction`
+    (not raw `kelly_fraction`) as the recommended bet size.
+
+    EVALUATION: After 100+ scored games, compare Sharpe ratio and mean P&L of
+    `adjusted_kelly_fraction` vs. base `kelly_fraction` in
+    `betting_ml/evaluation/phase8_kelly_results.md`.
+
+  acceptanceCriteria:
+    - description: >
+        `adjusted_kelly_fraction` and `uncertainty_discount` columns present in
+        `daily_model_predictions` after DDL migration.
+    - description: >
+        Spot-check: `uncertainty_discount = 1.0` when `game_uncertainty_score = 0.0`;
+        `uncertainty_discount = 0.5` when `game_uncertainty_score = 1.0`; floor
+        enforced (`uncertainty_discount >= 0.1` always for any score in [0, 1]).
+    - description: >
+        `KELLY_UNCERTAINTY_DISCOUNT` documented in `model_registry.yaml` under
+        the `bayesian_layer` block.
+    - description: >
+        EV Kelly page in the Streamlit app displays `adjusted_kelly_fraction` (not raw
+        `kelly_fraction`) as the recommended bet size, with a visible label distinguishing
+        it from the unadjusted fraction.
+    - description: >
+        Evaluation report template exists at `betting_ml/evaluation/phase8_kelly_results.md`
+        (header and placeholder rows written; to be populated after 100+ scored games).
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: uncertainty-adjusted-kelly-sizing-plan
+  namespace: default
+spec:
+  description: >
+    Four-task plan. Task 1 adds DDL columns. Task 2 implements the discount formula
+    in the Kelly sizing logic. Task 3 updates the Streamlit EV Kelly page. Task 4
+    updates model_registry.yaml and creates the evaluation report template.
+    Requires Card 8.F1 to be complete before starting.
+  goalRef:
+    name: uncertainty-adjusted-kelly-sizing
+  graph:
+    nodes:
+
+      - id: ddl-migration
+        kind: Task
+        description: >
+          Create `scripts/ddl/add_adjusted_kelly.sql` and apply to Snowflake.
+
+          SQL content:
+            ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+            ADD COLUMN IF NOT EXISTS uncertainty_discount FLOAT,
+            ADD COLUMN IF NOT EXISTS adjusted_kelly_fraction FLOAT;
+
+          Apply via mcp__snowflake__run_snowflake_query.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL migration script
+            path: scripts/ddl/add_adjusted_kelly.sql
+          - type: command_succeeds
+            name: DDL adds both Kelly columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/add_adjusted_kelly.sql').read_text()
+                assert 'uncertainty_discount' in sql, 'DDL missing uncertainty_discount'
+                assert 'adjusted_kelly_fraction' in sql, 'DDL missing adjusted_kelly_fraction'
+                print('DDL OK')
+
+      - id: implement-kelly-discount
+        kind: Task
+        description: >
+          Edit `betting_ml/scripts/predict_today.py` or `app/utils/ev_kelly.py`
+          (wherever Kelly fraction is computed) to apply the uncertainty discount.
+
+          KELLY_UNCERTAINTY_DISCOUNT = 0.5
+
+          After computing the raw kelly_fraction:
+            uncertainty_discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * game_uncertainty_score)
+            adjusted_kelly_fraction = kelly_fraction * uncertainty_discount
+
+          Write both `uncertainty_discount` and `adjusted_kelly_fraction` to the
+          daily_model_predictions INSERT alongside other prediction outputs.
+
+          IMPORTANT: `game_uncertainty_score` must be computed (8.F1) before this
+          code runs. If 8.F1 is not yet complete, do not start this task.
+        dependsOn:
+          - ddl-migration
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: kelly discount formula boundary values correct
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                KELLY_UNCERTAINTY_DISCOUNT = 0.5
+
+                def compute_adjusted_kelly(kelly_fraction, game_uncertainty_score):
+                    discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * game_uncertainty_score)
+                    return kelly_fraction * discount, discount
+
+                # score=0.0 → no discount
+                adj, disc = compute_adjusted_kelly(0.08, 0.0)
+                assert abs(disc - 1.0) < 1e-6, f'score=0 should give discount=1.0, got {disc}'
+                assert abs(adj - 0.08) < 1e-6, f'score=0 should not change kelly, got {adj}'
+
+                # score=1.0 → half discount (0.5)
+                adj, disc = compute_adjusted_kelly(0.08, 1.0)
+                assert abs(disc - 0.5) < 1e-6, f'score=1 should give discount=0.5, got {disc}'
+                assert abs(adj - 0.04) < 1e-6, f'score=1 should halve kelly to 0.04, got {adj}'
+
+                # floor: discount never below 0.1 (even at score=1.0 with high DISCOUNT constant)
+                KELLY_UNCERTAINTY_DISCOUNT_HIGH = 2.0
+                adj_floor, disc_floor = compute_adjusted_kelly.__wrapped__(0.08, 1.0) \
+                    if hasattr(compute_adjusted_kelly, '__wrapped__') else (None, None)
+                disc_floor = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT_HIGH * 1.0)
+                assert disc_floor >= 0.1, f'Floor not enforced: {disc_floor}'
+
+                print(f'Kelly discount boundary tests OK')
+          - type: command_succeeds
+            name: adjusted_kelly_fraction referenced in scoring output
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = ['betting_ml/scripts/predict_today.py',
+                              'app/utils/ev_kelly.py']
+                found = False
+                for c in candidates:
+                    p = pathlib.Path(c)
+                    if p.exists() and 'adjusted_kelly_fraction' in p.read_text():
+                        found = True
+                        break
+                assert found, 'adjusted_kelly_fraction not found in predict_today.py or ev_kelly.py'
+                print('adjusted_kelly_fraction referenced in Kelly output OK')
+
+      - id: update-streamlit-ev-kelly
+        kind: Task
+        description: >
+          Update the EV Kelly page in the Streamlit app (`app/pages/` or similar)
+          to display `adjusted_kelly_fraction` instead of (or alongside) `kelly_fraction`.
+
+          Changes needed:
+          1. Read `adjusted_kelly_fraction` from the data source (Snowflake or predict_today output)
+          2. Display it as the primary "Recommended Bet Size" metric with a label like
+             "Kelly (uncertainty-adjusted)" to distinguish from the raw fraction
+          3. Show `uncertainty_discount` as a secondary info metric so the user can see
+             how much the score reduced the sizing
+          4. Keep raw `kelly_fraction` visible but clearly labeled as "Kelly (unadjusted)"
+             for comparison
+
+          Do NOT remove the raw kelly_fraction display — keep both visible.
+        dependsOn:
+          - implement-kelly-discount
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: Streamlit EV Kelly page references adjusted_kelly_fraction
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                ev_pages = glob.glob('app/**/*.py', recursive=True)
+                found = False
+                for p in ev_pages:
+                    src = pathlib.Path(p).read_text()
+                    if 'kelly' in src.lower() and 'adjusted_kelly_fraction' in src:
+                        found = True
+                        break
+                assert found, 'adjusted_kelly_fraction not displayed in any Streamlit Kelly page'
+                print('Streamlit EV Kelly page updated OK')
+
+      - id: update-registry-and-eval-template
+        kind: Task
+        description: >
+          1. Add `KELLY_UNCERTAINTY_DISCOUNT: 0.5` to the `bayesian_layer` block in
+             `model_registry.yaml`.
+
+          2. Create `betting_ml/evaluation/phase8_kelly_results.md` with:
+               # Phase 8 Kelly Sizing — Uncertainty-Adjusted Results
+
+               ## Evaluation Status
+               **To be populated after 100+ scored games.**
+
+               ## Metrics to Compare
+               | Metric | Raw Kelly | Adjusted Kelly |
+               |---|---|---|
+               | Mean P&L per game | — | — |
+               | Sharpe ratio | — | — |
+               | Max drawdown | — | — |
+               | Win rate | — | — |
+
+               ## Conclusion
+               (To be written after data accumulates.)
+        dependsOn:
+          - update-streamlit-ev-kelly
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: model_registry.yaml has KELLY_UNCERTAINTY_DISCOUNT
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                reg = pathlib.Path('model_registry.yaml').read_text()
+                assert 'KELLY_UNCERTAINTY_DISCOUNT' in reg, \
+                    'KELLY_UNCERTAINTY_DISCOUNT not in model_registry.yaml'
+                print('model_registry.yaml Kelly discount constant OK')
+          - type: artifact_exists
+            name: Kelly evaluation report template
+            path: betting_ml/evaluation/phase8_kelly_results.md

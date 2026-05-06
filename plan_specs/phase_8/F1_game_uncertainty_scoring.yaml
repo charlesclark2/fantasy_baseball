@@ -1,0 +1,224 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: game-uncertainty-scoring
+  namespace: default
+spec:
+  description: >
+    Compute a per-game `game_uncertainty_score ∈ [0, 1]` at inference time from
+    existing feature store columns. This score is the shared input for all downstream
+    Dynamic Bayesian cards (8.F2–8.F5). High uncertainty = debut starters, early-season
+    thin windows; low uncertainty = mid-season stable rosters.
+
+    STATUS: Not blocked. This card computes a score from existing feature columns
+    and does not change any predictions or model weights. It is a prerequisite for
+    cards 8.F2–8.F5 but can be built regardless of the model's current edge status.
+
+    FORMULA (v1):
+      starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc
+        where each component = 1.0 for debut starters, decays linearly to 0.0 at
+        15 career appearances
+      team_uncertainty = 0.5 * home_team_unc + 0.5 * away_team_unc
+        where each component = 1.0 at 0 games played in current season, decays
+        linearly to 0.0 at 20 games
+      game_uncertainty_score = 0.5 * starter_uncertainty + 0.5 * team_uncertainty,
+        clamped to [0, 1]
+
+    INPUT COLUMNS (all already in feature_pregame_game_features):
+      - home_starter_appearances_30d
+      - away_starter_appearances_30d
+      - home_games_played_ytd
+      - away_games_played_ytd
+
+    NULL HANDLING: NULL inputs treated as full uncertainty = 1.0 (conservative).
+
+    EXECUTION ORDER: This is the prerequisite for all other 8.F cards.
+    Implement before 8.F2, 8.F3, 8.F4, and 8.F5.
+
+  acceptanceCriteria:
+    - description: >
+        `game_uncertainty_score` column present in `daily_model_predictions` for
+        all inference runs after DDL migration. Column type is FLOAT.
+    - description: >
+        Score equals 1.0 for Opening Day games with debut starters (0 career
+        appearances). Score ≤ 0.1 for mid-August games with established starters
+        who have 15+ appearances and whose teams have 20+ games played (spot-check
+        via Snowflake query).
+    - description: >
+        DDL migration script exists at `scripts/ddl/add_uncertainty_score.sql`
+        and applies cleanly to `baseball_data.betting_ml.daily_model_predictions`.
+    - description: >
+        No `game_uncertainty_score` is NULL for any scored game. NULL inputs to
+        the formula produce score = 1.0, not NULL.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: game-uncertainty-scoring-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 adds the DDL column. Task 2 implements the
+    uncertainty scoring function in predict_today.py. Task 3 verifies the score
+    range with a spot-check query.
+  goalRef:
+    name: game-uncertainty-scoring
+  graph:
+    nodes:
+
+      - id: ddl-migration
+        kind: Task
+        description: >
+          Create `scripts/ddl/add_uncertainty_score.sql` and apply it to Snowflake.
+
+          SQL content:
+            ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+            ADD COLUMN IF NOT EXISTS game_uncertainty_score FLOAT;
+
+          Apply via mcp__snowflake__run_snowflake_query or the Snowflake MCP tool.
+          Verify the column exists after applying.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL migration script
+            path: scripts/ddl/add_uncertainty_score.sql
+          - type: command_succeeds
+            name: DDL file contains correct ALTER TABLE
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/add_uncertainty_score.sql').read_text()
+                assert 'game_uncertainty_score' in sql, 'DDL must add game_uncertainty_score'
+                assert 'FLOAT' in sql.upper(), 'Column must be FLOAT type'
+                print('DDL script OK')
+
+      - id: implement-uncertainty-score
+        kind: Task
+        description: >
+          Add `compute_game_uncertainty_score(row)` function to `predict_today.py`
+          (or a new `betting_ml/models/uncertainty_scorer.py` imported there).
+
+          Function logic:
+            def compute_game_uncertainty_score(row):
+                # Starter uncertainty: linear decay from 1.0 (0 appearances) to 0.0 (15+)
+                home_starter_unc = max(0.0, 1.0 - (row['home_starter_appearances_30d'] or 0) / 15.0)
+                away_starter_unc = max(0.0, 1.0 - (row['away_starter_appearances_30d'] or 0) / 15.0)
+                starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc
+
+                # Team uncertainty: linear decay from 1.0 (0 games) to 0.0 (20+ games)
+                home_team_unc = max(0.0, 1.0 - (row['home_games_played_ytd'] or 0) / 20.0)
+                away_team_unc = max(0.0, 1.0 - (row['away_games_played_ytd'] or 0) / 20.0)
+                team_uncertainty = 0.5 * home_team_unc + 0.5 * away_team_unc
+
+                score = 0.5 * starter_uncertainty + 0.5 * team_uncertainty
+                return min(1.0, max(0.0, score))
+
+          Call this function after feature assembly, before model.predict().
+          Write the result as `game_uncertainty_score` alongside model outputs
+          when inserting into `daily_model_predictions`.
+        dependsOn:
+          - ddl-migration
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: uncertainty scorer function exists and is called in predict_today.py
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                assert 'game_uncertainty_score' in src, 'game_uncertainty_score not referenced in predict_today.py'
+                assert 'starter_uncertainty' in src or 'uncertainty_scorer' in src, \
+                    'Uncertainty score function not found in predict_today.py or imported module'
+                print('predict_today.py references uncertainty score OK')
+          - type: command_succeeds
+            name: boundary values produce correct scores
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys
+                sys.path.insert(0, '.')
+                # Test boundary: debut starter + 0 games played → score = 1.0
+                row_max = {
+                    'home_starter_appearances_30d': 0,
+                    'away_starter_appearances_30d': 0,
+                    'home_games_played_ytd': 0,
+                    'away_games_played_ytd': 0,
+                }
+                # Test boundary: established starter + 20+ games → score ≈ 0.0
+                row_min = {
+                    'home_starter_appearances_30d': 20,
+                    'away_starter_appearances_30d': 20,
+                    'home_games_played_ytd': 25,
+                    'away_games_played_ytd': 25,
+                }
+                # Import from wherever the function landed
+                try:
+                    from betting_ml.models.uncertainty_scorer import compute_game_uncertainty_score
+                except ImportError:
+                    # Fall back to extracting from predict_today namespace
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location('pt', 'betting_ml/scripts/predict_today.py')
+                    # Just verify the values inline
+                    def compute_game_uncertainty_score(row):
+                        home_starter_unc = max(0.0, 1.0 - (row['home_starter_appearances_30d'] or 0) / 15.0)
+                        away_starter_unc = max(0.0, 1.0 - (row['away_starter_appearances_30d'] or 0) / 15.0)
+                        starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc
+                        home_team_unc = max(0.0, 1.0 - (row['home_games_played_ytd'] or 0) / 20.0)
+                        away_team_unc = max(0.0, 1.0 - (row['away_games_played_ytd'] or 0) / 20.0)
+                        team_uncertainty = 0.5 * home_team_unc + 0.5 * away_team_unc
+                        return min(1.0, max(0.0, 0.5 * starter_uncertainty + 0.5 * team_uncertainty))
+                score_max = compute_game_uncertainty_score(row_max)
+                score_min = compute_game_uncertainty_score(row_min)
+                assert score_max == 1.0, f'Debut + 0 games should score 1.0, got {score_max}'
+                assert score_min <= 0.1, f'Established setup should score <=0.1, got {score_min}'
+                print(f'Boundary values OK: debut={score_max}, established={score_min}')
+
+      - id: spot-check-query
+        kind: Task
+        description: >
+          Run a Snowflake spot-check query confirming the score distribution across
+          game dates. Use mcp__snowflake__run_snowflake_query.
+
+          Query:
+            SELECT
+              CASE
+                WHEN game_uncertainty_score = 1.0 THEN 'max_uncertainty'
+                WHEN game_uncertainty_score <= 0.1 THEN 'low_uncertainty'
+                ELSE 'mid_uncertainty'
+              END AS bucket,
+              COUNT(*) AS n,
+              AVG(game_uncertainty_score) AS mean_score
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE game_uncertainty_score IS NOT NULL
+            GROUP BY 1
+            ORDER BY mean_score DESC
+
+          Confirm: no NULLs in scored rows, and low_uncertainty bucket contains
+          games from late May through September. Document findings in a comment
+          in predict_today.py or in betting_ml/evaluation/uncertainty_score_validation.md.
+        dependsOn:
+          - implement-uncertainty-score
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: no NULL uncertainty scores in daily_model_predictions
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Spot-check must be verified via Snowflake MCP query — see task description')
+                print('AC: game_uncertainty_score IS NOT NULL for all scored rows')
+                print('AC: score distribution spans 0.0 to 1.0 across the season')

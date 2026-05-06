@@ -1,0 +1,170 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pitcher-batter-matchup-history
+  namespace: default
+spec:
+  description: >
+    Compute historical wOBA and xwOBA allowed by each starting pitcher against each batter
+    in the opposing lineup, using full Statcast pitch-level history. Bayesian-shrink toward
+    batter's overall rolling wOBA and pitcher's overall rolling xwOBA-against at low PA counts.
+    Aggregate to lineup-level matchup quality scores.
+
+    This is distinct from the archetype-based matchup features (Cards 7.J, 7.K, 7.K2), which
+    capture stylistic matchup types — this card captures actual historical outcomes between
+    specific pitchers and batters.
+
+    TECHNICAL APPROACH:
+    - Source: `mart_pitch_play_event` joined to pitcher and hitter profile marts — gives
+      plate appearance outcomes per `pitcher_id × batter_id` pair.
+    - Build `mart_pitcher_batter_history`: aggregate career PA, wOBA, xwOBA per
+      (pitcher_id, batter_id); leakage guard: only PA where game_date < prediction game_date.
+    - Bayesian shrinkage: `adjusted_woba = (pa * raw_woba + k * league_prior) / (pa + k)`
+      where k=50, league_prior=0.320; zero-PA debut matchups return the prior automatically.
+    - For each game: join the opposing lineup (from stg_statsapi_lineups_wide) to
+      mart_pitcher_batter_history; compute lineup-level weighted average adjusted wOBA and
+      xwOBA against the day's starter.
+    - Six new columns added to feature_pregame_game_features (3 home, 3 away):
+        home_lineup_vs_away_starter_h2h_woba
+        home_lineup_vs_away_starter_h2h_xwoba
+        home_lineup_h2h_pa_coverage
+        away_lineup_vs_home_starter_h2h_woba
+        away_lineup_vs_home_starter_h2h_xwoba
+        away_lineup_h2h_pa_coverage
+      where h2h_pa_coverage = fraction of lineup with ≥10 PA against this starter.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_pitcher_batter_history` built with correct leakage guard (PA grain is
+        pitcher_id × batter_id × game_date). Bayesian shrinkage applied at k=50;
+        adjusted_woba converges to raw_woba for batters with >200 PA against this pitcher.
+    - description: >
+        Six new columns in `feature_pregame_game_features` (3 home, 3 away): h2h_woba,
+        h2h_xwoba, h2h_pa_coverage. Non-null for all games where both starter and lineup
+        are known; debut starters produce shrinkage-to-prior values (non-null).
+    - description: >
+        `dbtf build --select +feature_pregame_game_features` passes all tests.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pitcher-batter-matchup-history-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 builds mart_pitcher_batter_history with shrinkage.
+    Task 2 adds the six lineup-level matchup columns to feature_pregame_game_features.
+    Task 3 validates coverage via dbtf tests and Snowflake spot-check.
+  goalRef:
+    name: pitcher-batter-matchup-history
+  graph:
+    nodes:
+
+      - id: build-pitcher-batter-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_pitcher_batter_history.sql`.
+
+          Aggregate from mart_pitch_play_event (PA-level events) joined to pitch hitter
+          profile for batter_id:
+            SELECT
+              pitcher_id,
+              batter_id,
+              game_date,
+              COUNT(*)                                                          AS career_pa,
+              SUM(woba_value) / NULLIF(SUM(woba_denom), 0)                     AS raw_woba,
+              AVG(estimated_woba_using_speedangle)                             AS raw_xwoba
+            FROM mart_pitch_play_event
+            WHERE game_date < :prediction_date  -- leakage guard applied at join time
+            GROUP BY pitcher_id, batter_id, game_date
+
+          Apply Bayesian shrinkage as a computed column (not a separate CTE):
+            adjusted_woba = (career_pa * raw_woba + 50 * 0.320) / (career_pa + 50)
+            adjusted_xwoba = (career_pa * raw_xwoba + 50 * 0.310) / (career_pa + 50)
+
+          The leakage guard is enforced at the feature join layer (Task 2), not in the
+          mart itself — the mart stores all historical PA. The mart grain is
+          pitcher_id × batter_id (career aggregation, not per game_date). Add a dbt
+          test: unique on (pitcher_id, batter_id).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf parse succeeds after mart creation
+            command: dbtf
+            args: [parse]
+          - type: command_succeeds
+            name: dbtf build succeeds for pitcher-batter mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_pitcher_batter_history
+
+      - id: add-h2h-columns-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_game_features.sql` to join mart_pitcher_batter_history
+          for each game's home and away lineups.
+
+          For the home lineup vs. away starter:
+            1. Join each home batter from stg_statsapi_lineups_wide to
+               mart_pitcher_batter_history on (away_starter_pitcher_id, batter_id)
+               with game_date < game_date (leakage guard).
+            2. Compute lineup-level weighted averages (weight by adjusted career_pa):
+               home_lineup_vs_away_starter_h2h_woba  = AVG(adjusted_woba) across home lineup
+               home_lineup_vs_away_starter_h2h_xwoba = AVG(adjusted_xwoba) across home lineup
+               home_lineup_h2h_pa_coverage = fraction of lineup with career_pa >= 10
+            3. Repeat symmetrically for away lineup vs. home starter.
+
+          NULL when either starter or full lineup is unknown. All six columns must be
+          surfaced in the final SELECT of feature_pregame_game_features.
+        dependsOn:
+          - build-pitcher-batter-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: validate-coverage
+        kind: Task
+        description: >
+          Validate via Snowflake MCP and dbtf tests.
+
+          Snowflake checks (run via mcp__snowflake__run_snowflake_query):
+          1. Non-null rate for h2h_woba in 2025 regular season games where lineup is known:
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_lineup_vs_away_starter_h2h_woba IS NOT NULL THEN 1 ELSE 0 END) AS non_null
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025 AND has_full_lineup = true
+             Expected: non_null / total > 0.90.
+          2. Spot-check shrinkage: find a batter-pitcher pair with 0 PA — confirm
+             adjusted_woba = 0.320 (the prior).
+          3. Confirm adjusted_woba converges toward raw_woba for high-PA pairs (>200 PA).
+        dependsOn:
+          - add-h2h-columns-to-game-features
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf test passes for mart_pitcher_batter_history
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_pitcher_batter_history
+          - type: command_succeeds
+            name: validation documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Validation via Snowflake MCP required:')
+                print('1. Non-null rate for h2h_woba in 2025 season with known lineups > 90%')
+                print('2. Zero-PA pair adjusted_woba == 0.320 (prior)')
+                print('3. High-PA pair adjusted_woba converges toward raw_woba')

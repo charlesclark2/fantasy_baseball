@@ -1,0 +1,166 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: starter-arsenal-drift
+  namespace: default
+spec:
+  description: >
+    Stuff+ is a season-level arsenal quality metric updated slowly. A starter who added
+    a sweeper mid-season looks identical to the model before and after the change. Arsenal
+    drift — pitch mix percentage change from season-opening to a trailing 5-start window —
+    captures meaningful within-season adaptation that markets price in real time.
+
+    TECHNICAL APPROACH:
+    - Source: `mart_pitch_characteristics` gives pitch type per pitch; aggregate to
+      `mart_starter_pitch_mix_rolling`: pitch type percentage per starter per game_date
+      for trailing 5 starts and season-to-date; leakage guard: only starts strictly before
+      the prediction game_date.
+    - Pitch type groups:
+        fastball: FF, SI, FC (four-seam, sinker, cutter)
+        breaking:  SL, CU, SV, KC (slider, curveball, sweeper, knuckle-curve)
+        offspeed:  CH, FS, FO (changeup, splitter, forkball)
+    - Compute drift columns per pitch group:
+        drift = trailing_5start_pct − season_to_date_pct
+        positive = more usage recently vs. season average; negative = less usage
+    - Six drift columns (2 starters × 3 pitch type groups) added to
+      feature_pregame_starter_features and surfaced in feature_pregame_game_features:
+        home_starter_fastball_pct_drift_5start
+        home_starter_breaking_pct_drift_5start
+        home_starter_offspeed_pct_drift_5start
+        away_starter_fastball_pct_drift_5start
+        away_starter_breaking_pct_drift_5start
+        away_starter_offspeed_pct_drift_5start
+    - NULL for starters with < 5 career starts; impute at 0.0 (no drift = league average).
+
+  acceptanceCriteria:
+    - description: >
+        `mart_starter_pitch_mix_rolling` built with 5-start trailing and season-to-date
+        views; leakage guard enforced (only starts strictly before prediction game_date).
+        Grain: pitcher_id × game_date.
+    - description: >
+        Six drift columns in `feature_pregame_game_features`. Spot-check: a starter who
+        increased slider usage mid-season shows positive `breaking_pct_drift_5start` for
+        games after the adoption date.
+    - description: >
+        `dbtf build --select +feature_pregame_game_features` passes all tests. NULL rate
+        < 5% for games where starter has ≥5 prior starts; imputed to 0.0 for debuts.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: starter-arsenal-drift-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 builds mart_starter_pitch_mix_rolling with trailing
+    5-start and season-to-date pitch mix percentages. Task 2 computes drift columns and
+    adds them to game features. Task 3 validates via dbtf tests and spot-check.
+  goalRef:
+    name: starter-arsenal-drift
+  graph:
+    nodes:
+
+      - id: build-pitch-mix-rolling-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_starter_pitch_mix_rolling.sql`.
+
+          Source: mart_pitch_characteristics, grouped by pitcher_id, game_pk, game_date.
+          Leakage guard: only games where game_date < prediction_game_date (enforced at
+          the feature join layer by using window functions over ordered game dates).
+
+          Aggregate pitches to game-level pitch counts by type group per start. Then compute:
+
+          Season-to-date pct (from season start through game N-1):
+            fastball_pct_season = SUM(fastball_pitches over season) / SUM(total_pitches over season)
+            (and equivalents for breaking, offspeed)
+
+          Trailing 5-start pct (from game N-5 through game N-1):
+            fastball_pct_5start = SUM(fastball_pitches in last 5 starts) / SUM(total_pitches in last 5 starts)
+            (and equivalents)
+
+          Output grain: pitcher_id × game_date (the game the pitcher is ABOUT to start).
+          Include total_pitches_5start and career_starts_before_game for nulling/imputation.
+
+          NULL fastball/breaking/offspeed pct when career_starts_before_game < 5.
+          Fastball/breaking/offspeed groups must sum to 1.0 (assign remaining pitch types
+          to 'other' group, do not include other in feature columns).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for pitch mix rolling mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_starter_pitch_mix_rolling
+
+      - id: add-drift-columns-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_starter_features.sql` and `feature_pregame_game_features.sql`
+          to join mart_starter_pitch_mix_rolling and compute drift columns.
+
+          For each starter (home and away), join on pitcher_id + game_date (game_date matching
+          the prediction game_date, which selects the pre-game row with trailing windows ending
+          the day before).
+
+          Compute drift for each pitch group:
+            fastball_pct_drift_5start = fastball_pct_5start - fastball_pct_season
+            breaking_pct_drift_5start = breaking_pct_5start - breaking_pct_season
+            offspeed_pct_drift_5start = offspeed_pct_5start - offspeed_pct_season
+
+          Impute 0.0 when NULL (starter with < 5 career starts; COALESCE to 0.0).
+          Surface all six columns (3 per starter) in feature_pregame_game_features
+          with home_ and away_ prefixes.
+        dependsOn:
+          - build-pitch-mix-rolling-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with arsenal drift
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: validate-drift-columns
+        kind: Task
+        description: >
+          Validate arsenal drift columns via Snowflake MCP spot-check.
+
+          Checks (run via mcp__snowflake__run_snowflake_query):
+          1. Non-null rate for experienced starters (>= 5 starts):
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_starter_fastball_pct_drift_5start IS NOT NULL THEN 1 ELSE 0 END) AS non_null
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2025
+          2. Spot-check a known sweeper adopter: find a 2024 or 2025 starter who added
+             a sweeper mid-season; confirm positive breaking_pct_drift_5start in games
+             after adoption vs. 0.0 before.
+          3. Confirm drift columns sum to approximately 0 for most starters (arsenal shifts
+             should be zero-sum across pitch groups).
+        dependsOn:
+          - add-drift-columns-to-game-features
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf test passes for pitch mix rolling mart
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_starter_pitch_mix_rolling
+          - type: command_succeeds
+            name: validation documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Validation via Snowflake MCP required:')
+                print('1. Non-null rate for experienced starters (>= 5 starts)')
+                print('2. Spot-check: known sweeper adopter shows positive breaking_pct_drift post-adoption')
+                print('3. Drift columns approximately zero-sum across groups for most starters')

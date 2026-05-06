@@ -1,0 +1,217 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: time-decay-training-weighting
+  namespace: default
+spec:
+  description: >
+    All training rows currently receive equal weight. A 2021 game contributes as much
+    to the loss function as a game from last week. Rule changes (2023 pitch clock, shift ban),
+    roster evolution, and model feature drift mean recent games should be more predictive.
+    Apply exponential decay via `sample_weight` — no change to feature set or model architecture.
+
+    FORMULA:
+      weight_i = exp(-lambda * days_since_game_i)
+      lambda = ln(2) / 162   (half-life of one season ≈ 162 games / ~6 months)
+      Normalize weights to sum to n (preserves effective sample size for regularization scaling).
+
+    SCOPE: Pass `sample_weight` to:
+      - `XGBClassifier.fit()` for home_win
+      - `NGBRegressor.fit()` for total_runs
+      - `NGBRegressor.fit()` for run_differential
+
+    RETRAIN REQUIRED: All three models must be retrained with decay weights. Compare CV
+    metrics (Brier, MAE) against non-weighted baseline. Document in evaluation report.
+
+    TRAINING ONLY: sample_weights are a training-time transform. No change to predict_today.py.
+
+  acceptanceCriteria:
+    - description: >
+        `compute_sample_weights(df, date_col, half_life_games=162)` function exists in
+        `betting_ml/utils/sample_weights.py` (or preprocessing.py) and returns a float
+        array summing to n (number of training rows).
+    - description: >
+        `sample_weight` parameter verified in all three model `.fit()` calls — code inspection
+        confirms it is passed, not omitted. Training set composition unchanged.
+    - description: >
+        All three models retrained with decay weights; CV metric comparison report exists at
+        `betting_ml/evaluation/time_decay_weighting_impact.md` with Brier (home_win) and
+        MAE (total_runs, run_differential) for weighted vs. unweighted baseline.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: time-decay-training-weighting-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 implements compute_sample_weights with unit tests.
+    Task 2 wires sample_weight into all three model training calls and retrains. Task 3
+    compares CV metrics and writes the impact report.
+  goalRef:
+    name: time-decay-training-weighting
+  graph:
+    nodes:
+
+      - id: implement-sample-weights
+        kind: Task
+        description: >
+          Create `betting_ml/utils/sample_weights.py` with:
+
+            import numpy as np
+
+            def compute_sample_weights(df, date_col='game_date', half_life_games=162):
+                """
+                Exponential decay weights: more recent games have higher weight.
+                half_life_games: number of games after which weight is halved.
+                Returns normalized weights summing to len(df).
+                """
+                import math
+                lam = math.log(2) / half_life_games
+                ref_date = df[date_col].max()
+                days_since = (ref_date - df[date_col]).dt.days.clip(lower=0)
+                weights = np.exp(-lam * days_since)
+                # Normalize to sum to n
+                weights = weights * (len(df) / weights.sum())
+                return weights.values
+
+          Include boundary checks:
+          - A row from today (days_since=0) should have weight ≈ 1.0 before normalization.
+          - A row from ~162 games ago (~6 months, ~182 days) should have weight ≈ 0.5 before
+            normalization.
+          - All weights must be positive.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: sample weights module
+            path: betting_ml/utils/sample_weights.py
+          - type: command_succeeds
+            name: compute_sample_weights boundary tests
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import sys, math
+                import numpy as np
+                import pandas as pd
+                sys.path.insert(0, '.')
+                from betting_ml.utils.sample_weights import compute_sample_weights
+
+                from datetime import date, timedelta
+                today = date.today()
+                dates = [today, today - timedelta(days=182), today - timedelta(days=365)]
+                df = pd.DataFrame({'game_date': pd.to_datetime(dates)})
+                weights = compute_sample_weights(df)
+
+                # All positive
+                assert (weights > 0).all(), 'All weights must be positive'
+                # Sums to n
+                assert abs(weights.sum() - len(df)) < 1e-6, f'Weights must sum to n={len(df)}, got {weights.sum()}'
+                # Recent row has higher weight than 6-month-old row
+                assert weights[0] > weights[1], 'Recent games must have higher weight'
+                assert weights[1] > weights[2], 'Mid-age games must have higher weight than old games'
+
+                # Half-life check (before normalization — check ratio)
+                lam = math.log(2) / 162
+                w_today = math.exp(-lam * 0)
+                w_182d = math.exp(-lam * 182)
+                ratio = w_182d / w_today
+                assert abs(ratio - 0.5) < 0.05, f'Half-life should be ~0.5 at 182 days, got {ratio:.3f}'
+
+                print(f'compute_sample_weights OK: weights={weights.round(3)}, ratio_at_182d={ratio:.3f}')
+
+      - id: wire-into-training-and-retrain
+        kind: Task
+        description: >
+          Edit all three model training scripts to pass `sample_weight` to `.fit()`.
+
+          Locate the training scripts for each target:
+          - home_win:         betting_ml/scripts/train_model.py or similar
+          - total_runs:       same or a separate script
+          - run_differential: same or a separate script
+          (Check the actual file paths — they may all be in one script or separate files.)
+
+          For each training call:
+            from betting_ml.utils.sample_weights import compute_sample_weights
+            sample_weights = compute_sample_weights(train_df)
+            model.fit(X_train, y_train, sample_weight=sample_weights)
+
+          NOTE: NGBRegressor.fit() accepts sample_weight as a keyword argument.
+          XGBClassifier.fit() accepts sample_weight as a keyword argument.
+          Verify the parameter name for each library before wiring.
+
+          After wiring, retrain all three models via the existing training CLI.
+          Record CV fold metrics (Brier for home_win, MAE for runs targets) for both
+          the new weighted run and the prior unweighted baseline from model_registry.yaml.
+        dependsOn:
+          - implement-sample-weights
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: sample_weight wired into all training scripts
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                train_files = glob.glob('betting_ml/**/*train*.py', recursive=True)
+                assert len(train_files) > 0, 'No training scripts found'
+                for f in train_files:
+                    src = pathlib.Path(f).read_text()
+                    if 'fit(' in src:
+                        assert 'sample_weight' in src, \
+                            f'sample_weight not passed to fit() in {f}'
+                        assert 'compute_sample_weights' in src or 'sample_weights' in src, \
+                            f'sample_weights not computed in {f}'
+                print(f'sample_weight wired in {len(train_files)} training script(s) OK')
+
+      - id: compare-and-report
+        kind: Task
+        description: >
+          Compare CV metrics for weighted vs. unweighted models and write the impact report.
+
+          Report structure for `betting_ml/evaluation/time_decay_weighting_impact.md`:
+
+            # Time-Decay Training Weighting — Impact Report
+
+            ## Method
+            Exponential decay: weight_i = exp(-lambda * days_since_game_i), lambda = ln(2)/162.
+            Weights normalized to sum to n.
+
+            ## CV Metric Comparison
+            | Target          | Metric | Unweighted | Weighted | Delta |
+            |-----------------|--------|------------|---------|-------|
+            | home_win        | Brier  | <from registry> | <new> | <delta> |
+            | total_runs      | MAE    | <from registry> | <new> | <delta> |
+            | run_differential| MAE    | <from registry> | <new> | <delta> |
+
+            ## Conclusion
+            [Whether weighting improved metrics and whether models were promoted]
+
+          Populate the table with actual CV fold results from the retrain run.
+          If any metric improved (lower Brier, lower MAE), promote the weighted model and
+          update model_registry.yaml with new CV metrics and training_date.
+        dependsOn:
+          - wire-into-training-and-retrain
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: time decay weighting impact report
+            path: betting_ml/evaluation/time_decay_weighting_impact.md
+          - type: command_succeeds
+            name: report contains required sections
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('betting_ml/evaluation/time_decay_weighting_impact.md').read_text().lower()
+                for term in ['brier', 'mae', 'unweighted', 'weighted', 'half-life']:
+                    assert term in text, f'Report missing section on: {term}'
+                print('Time decay weighting impact report covers required sections OK')

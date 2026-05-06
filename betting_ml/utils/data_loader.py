@@ -419,12 +419,17 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
         rows = cur.fetchall()
         if rows:
             df = pd.DataFrame(rows, columns=columns)
+            df["data_source"] = "feature_store"
             return _numeric_convert(df)
     finally:
         conn.close()
 
     print(f"  No rows in feature table for {target_date}; assembling from Stats API schedule...")
-    return load_todays_features_via_statsapi(target_date)
+    print("[WARN] Intraday fallback active — lineup features unavailable; predictions scored on team rolling stats only.")
+    df = load_todays_features_via_statsapi(target_date)
+    if not df.empty:
+        df["data_source"] = "intraday_fallback"
+    return df
 
 
 def load_features(min_games_played: int = 15) -> pd.DataFrame:

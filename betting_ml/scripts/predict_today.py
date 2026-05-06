@@ -58,6 +58,10 @@ def _load_registry() -> dict:
 
 
 def _registry_artifact_path(entry: dict, model_tag: str) -> str:
+    # Per-tag explicit override wins (e.g. v2_artifact_path)
+    explicit = entry.get(f"{model_tag}_artifact_path")
+    if explicit:
+        return explicit
     if model_tag == "v0":
         return entry.get("rollback_artifact_path") or entry["artifact_path"]
     return entry["artifact_path"]
@@ -68,15 +72,30 @@ def _registry_feature_columns_path(entry: dict, model_tag: str) -> Path | None:
 
     Returns None if the registry entry has no feature_columns_path (legacy entries).
     """
-    if model_tag == "v0":
-        key = "rollback_feature_columns_path"
+    # Per-tag explicit override wins (e.g. v2_feature_columns_path)
+    explicit = entry.get(f"{model_tag}_feature_columns_path")
+    if explicit:
+        path_str = explicit
     else:
-        key = "feature_columns_path"
-    path_str = entry.get(key)
+        key = "rollback_feature_columns_path" if model_tag == "v0" else "feature_columns_path"
+        path_str = entry.get(key)
     if not path_str:
         return None
     p = Path(path_str)
     return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def _registry_dist_for_tag(target: str, model_tag: str) -> str:
+    """Return NGBoost distribution name (Normal | LogNormal) for the requested tag.
+
+    Looks up `{tag}_dist` first, then falls back to entry-level `dist`, then to
+    LogNormal (legacy default for Card 4.12d).
+    """
+    entry = _load_registry()[target]
+    explicit = entry.get(f"{model_tag}_dist")
+    if explicit:
+        return explicit
+    return entry.get("dist", "LogNormal")
 
 
 def _load_model_for_tag(target: str, model_tag: str) -> object:
@@ -211,7 +230,8 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     totals_model_prob       FLOAT,
     totals_posterior_prob   FLOAT,
     totals_edge             FLOAT,
-    totals_kelly_fraction   FLOAT
+    totals_kelly_fraction   FLOAT,
+    data_source             VARCHAR(50)    -- 'feature_store' or 'intraday_fallback'
 )
 """
 
@@ -233,7 +253,8 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     alpha,
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
-    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
+    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
+    data_source
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -246,7 +267,8 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     %(alpha)s,
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
-    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s
+    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
+    %(data_source)s
 )
 """
 
@@ -257,7 +279,7 @@ def _write_predictions_to_snowflake(
     inserted_at: datetime,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
-    loc_tot: np.ndarray,
+    pred_total_mean: np.ndarray,
     scale_tot: np.ndarray,
     loc_diff: np.ndarray,
     scale_diff: np.ndarray,
@@ -270,6 +292,7 @@ def _write_predictions_to_snowflake(
     picks: list[str],
     model_version: str,
     feature_version: str,
+    data_source: str = "feature_store",
     dry_run: bool = False,
 ) -> None:
     def _f(arr, i) -> float | None:
@@ -346,7 +369,7 @@ def _write_predictions_to_snowflake(
             "consensus_win_prob":     cons_win,
             "calibrated_win_prob":    cal_win,
             "pick":                   picks[i],
-            "pred_total_runs":        float(np.exp(loc_tot[i])),
+            "pred_total_runs":        float(pred_total_mean[i]),
             "pred_total_runs_scale":  float(scale_tot[i]),
             "pred_run_diff_loc":      float(loc_diff[i]),
             "pred_run_diff_scale":    float(scale_diff[i]),
@@ -362,6 +385,7 @@ def _write_predictions_to_snowflake(
             "totals_posterior_prob":  tot_post,
             "totals_edge":            tot_edge,
             "totals_kelly_fraction":  tot_kelly,
+            "data_source":            data_source,
         }))
 
     if dry_run:
@@ -688,19 +712,19 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--home-win-tag",
-        choices=["v0", "v1"],
+        choices=["v0", "v1", "v2"],
         default=None,
         help="Artifact tag to load for the home_win model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--total-runs-tag",
-        choices=["v0", "v1"],
+        choices=["v0", "v1", "v2"],
         default=None,
         help="Artifact tag to load for the total_runs model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--run-diff-tag",
-        choices=["v0", "v1"],
+        choices=["v0", "v1", "v2"],
         default=None,
         help="Artifact tag to load for the run_differential model. Defaults to --model-tag.",
     )
@@ -735,10 +759,10 @@ def _parse_args() -> argparse.Namespace:
     for attr in ("home_win_tag", "total_runs_tag", "run_diff_tag"):
         if getattr(args, attr) is None:
             fallback = args.model_tag
-            if fallback not in ("v0", "v1"):
+            if fallback not in ("v0", "v1", "v2"):
                 parser.error(
                     f"--{attr.replace('_','-')} not set and --model-tag={fallback!r} is not "
-                    "an artifact tag (v0/v1). Provide an explicit per-target tag."
+                    "an artifact tag (v0/v1/v2). Provide an explicit per-target tag."
                 )
             setattr(args, attr, fallback)
 
@@ -765,7 +789,6 @@ def _score_date(
     ngb_total: object,
     ngb_diff: object,
     clf_hw: object,
-    ngb_tot_dist: str,
     ngb_diff_dist: str,
     best_alpha: float,
     model_tag: str,
@@ -791,6 +814,10 @@ def _score_date(
         print(f"  No games found for {target_date}.")
         return
 
+    data_source = df_today["data_source"].iloc[0] if "data_source" in df_today.columns else "feature_store"
+    if data_source == "intraday_fallback":
+        print("[WARN] Intraday fallback active — lineup features unavailable; predictions scored on team rolling stats only.")
+
     print(f"  Found {len(df_today)} game(s)")
 
     lineup_cols = ("home_lineup_slot_1", "away_lineup_slot_1")
@@ -815,6 +842,8 @@ def _score_date(
     X_clf  = _build_feature_matrix(df_today, df_hist, "home_win", home_win_tag, clf_hw)
 
     # ------ Score NGBoost total runs ------
+    # Per-tag dist dispatch: v0/v1 = LogNormal (legacy), v2+ = Normal.
+    tot_dist = _registry_dist_for_tag("total_runs", total_runs_tag)
     pred_dist_tot = ngb_total.pred_dist(X_ngb)
     if "s" in pred_dist_tot.params:
         scale_tot = pred_dist_tot.params["s"]
@@ -823,13 +852,21 @@ def _score_date(
         loc_tot   = pred_dist_tot.params["loc"]
         scale_tot = pred_dist_tot.params["scale"]
 
+    # Stored pred_total_runs is the natural-scale point estimate. For Normal,
+    # loc IS the predicted mean; for LogNormal we historically stored the
+    # median (= exp(loc)) — preserve that behaviour for v0/v1.
+    if tot_dist == "Normal":
+        pred_total_mean = loc_tot
+    else:
+        pred_total_mean = np.exp(loc_tot)
+
     total_line_vals = (
         df_today["total_line_consensus"].values
         if "total_line_consensus" in df_today.columns
         else np.full(len(df_today), np.nan)
     )
     p_over_total = p_over_line(
-        ngb_tot_dist, {"loc": loc_tot, "scale": scale_tot}, total_line=total_line_vals
+        tot_dist, {"loc": loc_tot, "scale": scale_tot}, total_line=total_line_vals
     )
 
     # ------ Score NGBoost run diff ------
@@ -927,7 +964,7 @@ def _score_date(
         inserted_at=run_ts,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
-        loc_tot=loc_tot,
+        pred_total_mean=pred_total_mean,
         scale_tot=scale_tot,
         loc_diff=loc_diff,
         scale_diff=scale_diff,
@@ -940,6 +977,7 @@ def _score_date(
         picks=picks_list,
         model_version=model_version,
         feature_version=feature_version,
+        data_source=data_source,
         dry_run=dry_run,
     )
 
@@ -987,10 +1025,7 @@ def main() -> None:
     print(f"  run_differential ({run_diff_tag}): {type(ngb_diff).__name__}")
     print(f"  home_win ({home_win_tag}): {type(clf_hw).__name__}")
 
-    # ------ Load NGBoost distribution config ------
-    _, ngb_tot_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_total_runs.json", "total_runs"
-    )
+    # ------ Load NGBoost run-diff distribution config (totals dist is per-tag) ------
     _, ngb_diff_dist = _load_ngb_cfg(
         "betting_ml/evaluation/tuning_results_ngboost_run_diff.json", "run_differential"
     )
@@ -1007,7 +1042,6 @@ def main() -> None:
                 ngb_total=ngb_total,
                 ngb_diff=ngb_diff,
                 clf_hw=clf_hw,
-                ngb_tot_dist=ngb_tot_dist,
                 ngb_diff_dist=ngb_diff_dist,
                 best_alpha=best_alpha,
                 model_tag=model_tag,

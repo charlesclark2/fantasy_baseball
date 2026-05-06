@@ -307,16 +307,16 @@ col_r1, col_r2 = st.columns([1, 1])
 with col_r1:
     if st.button("Refresh Predictions"):
         with st.spinner("Running predict_today.py…"):
-            # Per-target promotion (Card 7.MB): home_win and run_diff from v1,
-            # total_runs held at v0 pending Card 7.V retrain. model_version='prod'
-            # keeps these mixed-version rows separate from v0/v1 backfills.
+            # Per-target promotion: home_win=v1 (Card 7.MB), run_diff=v1 (Card 7.MB),
+            # total_runs=v2 (Card 7.V). model_version='prod' keeps these mixed-version
+            # rows separate from v0/v1/v2 backfills.
             result = subprocess.run(
                 [
                     "uv", "run", "python", "betting_ml/scripts/predict_today.py",
                     "--date", date_str,
                     "--model-tag", "prod",
                     "--home-win-tag", "v1",
-                    "--total-runs-tag", "v0",
+                    "--total-runs-tag", "v2",
                     "--run-diff-tag", "v1",
                 ],
                 capture_output=True,

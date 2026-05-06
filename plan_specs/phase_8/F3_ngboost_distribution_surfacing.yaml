@@ -1,0 +1,212 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ngboost-distribution-surfacing
+  namespace: default
+spec:
+  description: >
+    Extract the Normal distribution parameters (loc, scale) from the NGBoost v2
+    total_runs model at inference time and persist `prob_over_line`, `prob_under_line`,
+    and `total_variance` to `daily_model_predictions`. These are already computed
+    internally by NGBoost — this card makes them queryable outputs rather than
+    ephemeral internal state.
+
+    STATUS: Not blocked on model edge. Card 7.MB is complete; NGBoost v2 survives as
+    the total_runs model. No prerequisite on 8.F1 — can be implemented independently.
+
+    IMPORTANT DISTRIBUTION NOTE: The v2 total_runs model uses a NORMAL distribution
+    (NGBoost Normal), NOT LogNormal. All formulas below use scipy.stats.norm, not
+    scipy.stats.lognorm:
+      - mu = dist.loc          (mean of the Normal distribution in run-scale)
+      - sigma = dist.scale     (std dev of the Normal distribution)
+      - total_variance = sigma^2
+      - prob_over_line = 1 - norm.cdf(market_totals_line, loc=mu, scale=sigma)
+      - prob_under_line = 1 - prob_over_line
+
+    Do NOT use the LogNormal variance formula or lognorm.cdf. The project_context.md
+    card description still references the old LogNormal formulas — use the Normal
+    formulas above.
+
+    FIVE NEW COLUMNS added to daily_model_predictions:
+      - ngb_total_mu FLOAT       (Normal mean, run-scale)
+      - ngb_total_sigma FLOAT    (Normal std dev)
+      - total_variance FLOAT     (= sigma^2)
+      - prob_over_line FLOAT     (probability predicted total exceeds market totals line)
+      - prob_under_line FLOAT    (= 1 - prob_over_line)
+
+    NULL HANDLING: All five columns are NULL when `market_totals_line` is unavailable.
+
+  acceptanceCriteria:
+    - description: >
+        Five new columns present in `daily_model_predictions` after DDL migration:
+        `ngb_total_mu`, `ngb_total_sigma`, `total_variance`, `prob_over_line`,
+        `prob_under_line`.
+    - description: >
+        `prob_over_line + prob_under_line = 1.0` (within float tolerance 1e-6) for
+        all non-NULL rows.
+    - description: >
+        All five columns are NULL when `market_totals_line` IS NULL; non-NULL for
+        games with a totals line.
+    - description: >
+        `ngb_total_mu` and `ngb_total_sigma` are positive finite floats for all
+        non-NULL rows. `total_variance = ngb_total_sigma^2` (within float tolerance).
+    - description: >
+        Implementation uses scipy.stats.norm (not lognorm). Code inspection confirms
+        `lognorm` is NOT imported or used for the prob_over_line calculation.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ngboost-distribution-surfacing-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 adds the DDL columns. Task 2 extracts
+    distribution parameters in predict_today.py. Task 3 validates the probability
+    sum constraint and NULL behavior.
+  goalRef:
+    name: ngboost-distribution-surfacing
+  graph:
+    nodes:
+
+      - id: ddl-migration
+        kind: Task
+        description: >
+          Create `scripts/ddl/add_ngb_distribution_columns.sql` and apply to Snowflake.
+
+          SQL content:
+            ALTER TABLE baseball_data.betting_ml.daily_model_predictions
+            ADD COLUMN IF NOT EXISTS ngb_total_mu FLOAT,
+            ADD COLUMN IF NOT EXISTS ngb_total_sigma FLOAT,
+            ADD COLUMN IF NOT EXISTS total_variance FLOAT,
+            ADD COLUMN IF NOT EXISTS prob_over_line FLOAT,
+            ADD COLUMN IF NOT EXISTS prob_under_line FLOAT;
+
+          Apply via mcp__snowflake__run_snowflake_query.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: DDL migration script
+            path: scripts/ddl/add_ngb_distribution_columns.sql
+          - type: command_succeeds
+            name: DDL adds all five columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/add_ngb_distribution_columns.sql').read_text()
+                for col in ['ngb_total_mu', 'ngb_total_sigma', 'total_variance',
+                            'prob_over_line', 'prob_under_line']:
+                    assert col in sql, f'DDL missing column: {col}'
+                print('All five distribution columns in DDL OK')
+
+      - id: implement-distribution-extraction
+        kind: Task
+        description: >
+          Edit `betting_ml/scripts/predict_today.py` (or the inference module that
+          calls the NGBoost total_runs model) to extract distribution parameters
+          at inference time.
+
+          After `ngb_totals.predict(X)`, also call `ngb_totals.pred_dist(X)` to get
+          the distribution object. Extract:
+            dist = ngb_totals.pred_dist(X)
+            mu = dist.loc           # shape: (n_games,)
+            sigma = dist.scale      # shape: (n_games,)
+
+          Compute per-game:
+            from scipy.stats import norm
+            total_variance = sigma ** 2
+            prob_over = 1 - norm.cdf(market_totals_line, loc=mu, scale=sigma)
+            prob_under = 1 - prob_over
+
+          Set all five to None/NULL when market_totals_line is None or NaN.
+
+          Write ngb_total_mu, ngb_total_sigma, total_variance, prob_over_line,
+          prob_under_line to the daily_model_predictions INSERT.
+
+          IMPORTANT: use scipy.stats.norm, not lognorm.
+        dependsOn:
+          - ddl-migration
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: predict_today.py references pred_dist and scipy.stats.norm
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
+                assert 'pred_dist' in src, 'pred_dist call not found in predict_today.py'
+                assert 'norm' in src, 'scipy.stats.norm not referenced in predict_today.py'
+                assert 'lognorm' not in src, 'lognorm must NOT be used — model is Normal, not LogNormal'
+                assert 'prob_over_line' in src, 'prob_over_line not written in predict_today.py'
+                print('Distribution extraction implementation OK')
+          - type: command_succeeds
+            name: prob sum constraint holds for synthetic input
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                from scipy.stats import norm
+                # Simulate what the code does for a single game
+                mu, sigma, line = 8.5, 1.2, 8.5
+                prob_over = 1 - norm.cdf(line, loc=mu, scale=sigma)
+                prob_under = 1 - prob_over
+                assert abs(prob_over + prob_under - 1.0) < 1e-6, \
+                    f'Prob sum != 1.0: {prob_over + prob_under}'
+                # Symmetric line → prob_over ≈ 0.5
+                assert abs(prob_over - 0.5) < 0.01, \
+                    f'When line=mu, prob_over should ≈ 0.5, got {prob_over}'
+                print(f'Prob sum constraint OK: over={prob_over:.4f}, under={prob_under:.4f}')
+
+      - id: validate-in-snowflake
+        kind: Task
+        description: >
+          After a live scoring run (or backfill), validate via Snowflake MCP:
+
+          1. Null check:
+               SELECT COUNT(*) AS nulls
+               FROM baseball_data.betting_ml.daily_model_predictions
+               WHERE market_totals_line IS NOT NULL
+                 AND prob_over_line IS NULL
+
+             Expected: 0 nulls when totals line is available.
+
+          2. Prob sum check:
+               SELECT COUNT(*) AS sum_violations
+               FROM baseball_data.betting_ml.daily_model_predictions
+               WHERE prob_over_line IS NOT NULL
+                 AND ABS(prob_over_line + prob_under_line - 1.0) > 0.000001
+
+             Expected: 0 violations.
+
+          3. Variance check:
+               SELECT MAX(ABS(total_variance - ngb_total_sigma * ngb_total_sigma)) AS max_variance_err
+               FROM baseball_data.betting_ml.daily_model_predictions
+               WHERE total_variance IS NOT NULL
+
+             Expected: < 1e-6.
+        dependsOn:
+          - implement-distribution-extraction
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: validation queries documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Validation must be run via Snowflake MCP after a live scoring run')
+                print('AC1: 0 NULL prob_over_line rows where market_totals_line IS NOT NULL')
+                print('AC2: 0 rows where ABS(prob_over + prob_under - 1.0) > 1e-6')
+                print('AC3: total_variance = sigma^2 within 1e-6 for all non-NULL rows')

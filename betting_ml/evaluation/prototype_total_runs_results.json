@@ -1,0 +1,54 @@
+[
+  {
+    "id": "A",
+    "dist": "LogNormal",
+    "max_depth": 3,
+    "n_estimators": 500,
+    "desc": "Reproduce v1 baseline behavior",
+    "fit_time_sec": 352.41092705726624,
+    "mae_2025": 3.630339094609522,
+    "std_pred": 0.80142900165442,
+    "mean_residual": 0.017072117191536,
+    "pct_pred_over": 0.8202469135802469,
+    "viable": true
+  },
+  {
+    "id": "B",
+    "dist": "Normal",
+    "max_depth": 3,
+    "n_estimators": 500,
+    "desc": "Isolate LogNormal vs Normal effect",
+    "fit_time_sec": 351.3147439956665,
+    "mae_2025": 3.6168632363755995,
+    "std_pred": 0.8069445063719856,
+    "mean_residual": 0.10761687223706685,
+    "pct_pred_over": 0.8469135802469135,
+    "viable": true
+  },
+  {
+    "id": "C",
+    "dist": "Normal",
+    "max_depth": 8,
+    "n_estimators": 200,
+    "desc": "Chosen approach: Normal + deeper trees",
+    "fit_time_sec": 368.66266894340515,
+    "mae_2025": 3.6262450848060586,
+    "std_pred": 0.8327496721833335,
+    "mean_residual": 0.14596222638021197,
+    "pct_pred_over": 0.8237037037037037,
+    "viable": true
+  },
+  {
+    "id": "D",
+    "dist": "LogNormal",
+    "max_depth": 8,
+    "n_estimators": 200,
+    "desc": "Deeper trees alone (keep LogNormal)",
+    "fit_time_sec": 370.5255677700043,
+    "mae_2025": 3.6066800155809915,
+    "std_pred": 0.8532509594292413,
+    "mean_residual": -0.30123030940641626,
+    "pct_pred_over": 0.6311111111111111,
+    "viable": true
+  }
+]

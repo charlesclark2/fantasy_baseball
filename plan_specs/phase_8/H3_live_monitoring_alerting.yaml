@@ -1,0 +1,386 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: live-monitoring-alerting
+  namespace: default
+spec:
+  description: >
+    Detect model degradation, data staleness, and prediction coverage failures before
+    they affect bets. Three monitoring targets: (1) calibration drift via rolling ECE,
+    (2) data freshness across all ingestion sources, (3) prediction coverage vs. the
+    scheduled game slate.
+
+    STATUS: Not started. Next up after 8.H2 completion. No upstream blockers.
+
+    MONITORING TARGET 1 — Calibration Drift (ECE):
+      Script: scripts/compute_model_health.py
+      Logic: Compute rolling 14-day ECE on prediction_log rows where outcome IS NOT NULL.
+      Output: Write to new Snowflake table `model_health_log`:
+        (run_date DATE, target VARCHAR, window_days INT, ece FLOAT, brier FLOAT,
+         sample_n INT, alert_fired BOOLEAN)
+      Alert threshold: ECE > 0.04 (2× elasticnet baseline of 0.0202)
+      Alert mechanism: exit non-zero + write alert_fired = true; GHA step failure
+        surfaces the alert in the daily run log.
+
+    MONITORING TARGET 2 — Data Freshness:
+      Script: scripts/check_data_freshness.py
+      Logic: Query MAX(ingestion_timestamp) per source table against thresholds:
+        | Source table                       | Expected freshness | Alert if stale > |
+        |------------------------------------|-------------------|-----------------|
+        | savant.batter_pitches              | Daily             | 36h             |
+        | oddsapi.mlb_odds_raw               | 6× daily          | 6h on game days |
+        | fangraphs.fg_stuff_plus_raw        | Sunday            | 8 days          |
+        | statsapi.umpire_game_log           | Daily             | 36h             |
+        | statsapi.player_transactions       | Daily             | 36h             |
+        | statsapi.monthly_schedule (lineups)| Hourly game days  | 2h on game days |
+      Script exits non-zero on any threshold breach.
+      Wired as a step in daily_ingestion.yml after all ingestion steps.
+
+    MONITORING TARGET 3 — Prediction Coverage:
+      Script: scripts/check_prediction_coverage.py
+      Logic: After predict_today.py runs, verify daily_model_predictions has a row
+        for every scheduled game with has_full_lineup = true.
+      Alert: Coverage < 90% on any game day is a failure; exits non-zero.
+      Wired as a step in daily_ingestion.yml immediately after the scoring step.
+
+    DELIVERABLES:
+      - scripts/check_data_freshness.py
+      - scripts/compute_model_health.py
+      - scripts/check_prediction_coverage.py
+      - scripts/ddl/create_model_health_log.sql
+      - docs/monitoring_runbook.md
+      - All three scripts wired into .github/workflows/daily_ingestion.yml
+
+  acceptanceCriteria:
+    - description: >
+        `model_health_log` table exists in Snowflake at
+        `baseball_data.betting_ml.model_health_log` with columns:
+        run_date, target, window_days, ece, brier, sample_n, alert_fired.
+        ECE computed daily on rolling 14-day window.
+    - description: >
+        ECE alert fires (exits non-zero) when threshold is exceeded — verified via
+        a manual test with synthetic data injected into prediction_log.
+    - description: >
+        `check_data_freshness.py` passes locally on current data and exits non-zero
+        when given a simulated stale timestamp (> threshold hours old).
+    - description: >
+        Prediction coverage check step present in `daily_ingestion.yml` and passes
+        on current `daily_model_predictions` data.
+    - description: >
+        All three scripts wired into `daily_ingestion.yml` at the correct positions:
+        freshness check after ingestion steps; model health after scoring; coverage
+        check immediately after predict_today.py.
+    - description: >
+        `docs/monitoring_runbook.md` documents: all thresholds, what each alert means,
+        how to silence a false positive, and manual resolution steps for each alert type.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: live-monitoring-alerting-plan
+  namespace: default
+spec:
+  description: >
+    Five-task plan. Tasks 1–3 can run in parallel (each script is independent).
+    Task 4 wires all three into daily_ingestion.yml. Task 5 writes the runbook.
+  goalRef:
+    name: live-monitoring-alerting
+  graph:
+    nodes:
+
+      - id: model-health-script
+        kind: Task
+        description: >
+          Build two artifacts for calibration drift monitoring:
+
+          A. `scripts/ddl/create_model_health_log.sql`:
+               CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.model_health_log (
+                   run_date DATE NOT NULL,
+                   target VARCHAR(50) NOT NULL,
+                   window_days INT,
+                   ece FLOAT,
+                   brier FLOAT,
+                   sample_n INT,
+                   alert_fired BOOLEAN DEFAULT FALSE,
+                   created_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
+               );
+
+          Apply via mcp__snowflake__run_snowflake_query.
+
+          B. `scripts/compute_model_health.py`:
+            - Query last 14 days of prediction_log where outcome IS NOT NULL
+            - For home_win target: compute ECE = mean |p_bin - freq_bin| over
+              10 probability bins; compute Brier = mean((prob - outcome)^2)
+            - Write row to model_health_log via mcp__snowflake__run_snowflake_query
+              or snowflake-connector-python
+            - If ECE > 0.04: write alert_fired=True and sys.exit(1)
+            - Accept --target flag (default: home_win) so the script is reusable
+              for total_runs and run_differential targets later
+
+          ECE implementation:
+            bins = np.linspace(0, 1, 11)  # 10 equal-width bins
+            bin_idx = np.digitize(probs, bins) - 1
+            ece = 0
+            for b in range(10):
+                mask = bin_idx == b
+                if mask.sum() == 0: continue
+                ece += (mask.sum() / n) * abs(probs[mask].mean() - outcomes[mask].mean())
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: model_health_log DDL
+            path: scripts/ddl/create_model_health_log.sql
+          - type: artifact_exists
+            name: compute_model_health script
+            path: scripts/compute_model_health.py
+          - type: command_succeeds
+            name: script has correct ECE threshold and exit behavior
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import ast, pathlib
+                src = pathlib.Path('scripts/compute_model_health.py').read_text()
+                assert '0.04' in src, 'ECE alert threshold 0.04 not found in script'
+                assert 'sys.exit' in src or 'exit(1)' in src, \
+                    'Script must exit non-zero on alert'
+                assert 'alert_fired' in src, 'alert_fired column not written by script'
+                print('compute_model_health.py structure OK')
+          - type: command_succeeds
+            name: ECE computation correct for synthetic data
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import numpy as np
+                # Perfect calibration should give ECE ≈ 0
+                np.random.seed(42)
+                probs = np.random.uniform(0, 1, 1000)
+                # Generate outcomes where P(outcome=1) = prob (perfectly calibrated)
+                outcomes = (np.random.uniform(0, 1, 1000) < probs).astype(float)
+                bins = np.linspace(0, 1, 11)
+                bin_idx = np.digitize(probs, bins) - 1
+                ece = 0
+                n = len(probs)
+                for b in range(10):
+                    mask = bin_idx == b
+                    if mask.sum() == 0:
+                        continue
+                    ece += (mask.sum() / n) * abs(probs[mask].mean() - outcomes[mask].mean())
+                assert ece < 0.04, f'Perfect calibration ECE should be < 0.04, got {ece:.4f}'
+                print(f'ECE computation OK: perfectly calibrated ECE = {ece:.4f}')
+
+      - id: data-freshness-script
+        kind: Task
+        description: >
+          Create `scripts/check_data_freshness.py`.
+
+          The script:
+          1. Defines a FRESHNESS_THRESHOLDS dict mapping table names to thresholds:
+               FRESHNESS_THRESHOLDS = {
+                   'baseball_data.savant.batter_pitches':
+                       {'max_stale_hours': 36, 'game_day_only': False},
+                   'baseball_data.oddsapi.mlb_odds_raw':
+                       {'max_stale_hours': 6, 'game_day_only': True},
+                   'baseball_data.fangraphs.fg_stuff_plus_raw':
+                       {'max_stale_hours': 192, 'game_day_only': False},  # 8 days
+                   'baseball_data.statsapi.umpire_game_log':
+                       {'max_stale_hours': 36, 'game_day_only': False},
+                   'baseball_data.statsapi.player_transactions':
+                       {'max_stale_hours': 36, 'game_day_only': False},
+                   'baseball_data.statsapi.monthly_schedule':
+                       {'max_stale_hours': 2, 'game_day_only': True},
+               }
+
+          2. For each table, queries MAX(ingestion_timestamp) via Snowflake connector
+             (or prints the query for manual verification if run in --dry-run mode).
+          3. Computes hours since last ingest = (now() - max_timestamp).
+          4. For game_day_only tables: only check on days with scheduled games.
+          5. Prints a table of results. Exits non-zero if any threshold is breached.
+          6. Accepts --date flag (default: today ET) for reproducible testing.
+
+          Use snowflake-connector-python (already in the project) or the Snowflake
+          MCP tool pattern for queries. Check how predict_today.py or other scripts
+          connect to Snowflake for the pattern to follow.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: data freshness check script
+            path: scripts/check_data_freshness.py
+          - type: command_succeeds
+            name: script has all six source tables and exits non-zero on breach
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('scripts/check_data_freshness.py').read_text()
+                tables = [
+                    'batter_pitches',
+                    'mlb_odds_raw',
+                    'fg_stuff_plus_raw',
+                    'umpire_game_log',
+                    'player_transactions',
+                    'monthly_schedule',
+                ]
+                for t in tables:
+                    assert t in src, f'Table {t} not found in freshness check script'
+                assert 'sys.exit' in src or 'exit(1)' in src, \
+                    'Script must exit non-zero on stale data'
+                print('check_data_freshness.py structure OK — all 6 tables present')
+
+      - id: prediction-coverage-script
+        kind: Task
+        description: >
+          Create `scripts/check_prediction_coverage.py`.
+
+          The script:
+          1. Accepts --date flag (default: today ET).
+          2. Queries the count of games with has_full_lineup = true from the schedule:
+               SELECT COUNT(*) AS expected_games
+               FROM baseball_data.statsapi.monthly_schedule
+               WHERE game_date = :date AND has_full_lineup = true
+          3. Queries the count of rows in daily_model_predictions for that date:
+               SELECT COUNT(*) AS scored_games
+               FROM baseball_data.betting_ml.daily_model_predictions
+               WHERE game_date = :date
+          4. Computes coverage = scored_games / expected_games (handle division by zero).
+          5. Prints coverage rate and game counts.
+          6. Exits non-zero if coverage < 0.90 (configurable via --min-coverage flag,
+             default 0.90).
+
+          Edge case: if expected_games = 0 (off day), print "No games scheduled" and
+          exit 0 (not a failure).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: prediction coverage check script
+            path: scripts/check_prediction_coverage.py
+          - type: command_succeeds
+            name: coverage script has correct logic and threshold
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('scripts/check_prediction_coverage.py').read_text()
+                assert '0.90' in src or '0.9' in src, '90% coverage threshold not found'
+                assert 'has_full_lineup' in src, 'has_full_lineup filter not in script'
+                assert 'daily_model_predictions' in src, \
+                    'daily_model_predictions not queried in script'
+                assert 'sys.exit' in src or 'exit(1)' in src, \
+                    'Script must exit non-zero below threshold'
+                print('check_prediction_coverage.py structure OK')
+
+      - id: wire-into-github-actions
+        kind: Task
+        description: >
+          Edit `.github/workflows/daily_ingestion.yml` to add three new steps at the
+          correct positions:
+
+          STEP 1 — After all ingestion steps (before scoring):
+            - name: Check data freshness
+              run: uv run python scripts/check_data_freshness.py
+
+          STEP 2 — After predict_today.py runs:
+            - name: Check prediction coverage
+              run: uv run python scripts/check_prediction_coverage.py
+
+          STEP 3 — After scoring (can be same position as Step 2 or later):
+            - name: Compute model health (ECE drift)
+              run: uv run python scripts/compute_model_health.py
+
+          All three steps must use `continue-on-error: false` (default) so CI fails
+          visibly on any alert. Do not add `continue-on-error: true`.
+        dependsOn:
+          - model-health-script
+          - data-freshness-script
+          - prediction-coverage-script
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: all three monitoring steps present in daily_ingestion.yml
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                src = pathlib.Path('.github/workflows/daily_ingestion.yml').read_text()
+                assert 'check_data_freshness.py' in src, \
+                    'check_data_freshness.py not in daily_ingestion.yml'
+                assert 'check_prediction_coverage.py' in src, \
+                    'check_prediction_coverage.py not in daily_ingestion.yml'
+                assert 'compute_model_health.py' in src, \
+                    'compute_model_health.py not in daily_ingestion.yml'
+                assert 'continue-on-error: true' not in src or \
+                    src.count('continue-on-error: true') == 0, \
+                    'Monitoring steps must not have continue-on-error: true'
+                print('All three monitoring steps wired into daily_ingestion.yml OK')
+
+      - id: write-monitoring-runbook
+        kind: Task
+        description: >
+          Create `docs/monitoring_runbook.md` with the following sections:
+
+          # Monitoring Runbook
+
+          ## Overview
+          Three automated checks run daily via daily_ingestion.yml GitHub Actions.
+
+          ## Check 1: Data Freshness (check_data_freshness.py)
+          - What it checks: MAX(ingestion_timestamp) per source table vs. threshold
+          - Thresholds: [table with all 6 sources and thresholds]
+          - Alert behavior: exits non-zero, GHA step fails
+          - Resolution: [how to identify which table is stale; how to trigger a manual re-ingest]
+          - False positive: [game day vs. off day distinction for game_day_only tables]
+
+          ## Check 2: Prediction Coverage (check_prediction_coverage.py)
+          - What it checks: scored games / expected games (has_full_lineup=true)
+          - Alert threshold: coverage < 90%
+          - Alert behavior: exits non-zero
+          - Resolution: [how to check why lineups weren't confirmed; how to run predict_today.py manually]
+
+          ## Check 3: Calibration Drift / Model Health (compute_model_health.py)
+          - What it checks: rolling 14-day ECE for home_win predictions
+          - Alert threshold: ECE > 0.04 (2× elasticnet baseline of 0.0202)
+          - Alert behavior: exits non-zero; writes alert_fired=True to model_health_log
+          - Resolution: [how to query model_health_log; when to consider recalibration;
+            how to trigger a calibrator refit]
+          - Silencing a false positive: [process to acknowledge and skip a one-off alert]
+
+          ## Querying Alert History
+          [SQL query to check model_health_log for recent alerts]
+        dependsOn:
+          - wire-into-github-actions
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: monitoring runbook
+            path: docs/monitoring_runbook.md
+          - type: command_succeeds
+            name: runbook covers all three checks and resolution steps
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                text = pathlib.Path('docs/monitoring_runbook.md').read_text().lower()
+                required = [
+                    'freshness', 'coverage', 'calibration',
+                    'resolution', 'threshold', 'alert'
+                ]
+                for term in required:
+                    assert term in text, f'Runbook missing section on: {term}'
+                print('Monitoring runbook covers all required sections OK')

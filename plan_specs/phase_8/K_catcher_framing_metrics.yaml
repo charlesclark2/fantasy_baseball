@@ -1,0 +1,191 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: catcher-framing-metrics
+  namespace: default
+spec:
+  description: >
+    A catcher's called-strike rate above expectation is a quantifiable, persistent skill
+    that affects walk rate, strikeout rate, and runs scored. Markets price catcher framing;
+    the current model does not. Statcast framing data (runs_above_average) is available
+    via Baseball Savant from 2015 onward.
+
+    TECHNICAL APPROACH:
+    - Ingest catcher framing data from Baseball Savant catcher framing leaderboard (CSV
+      export via Statcast search endpoint, same pattern as OAA ingestion in Card 8.C);
+      columns: player_id, season, framing_runs_above_average, n_called_pitches.
+    - Store in `baseball_data.savant.catcher_framing_raw`.
+    - Build `mart_catcher_framing` with season-level and blended metric:
+      70% current season + 30% prior season; regress toward 0 for catchers with
+      < 500 called pitches in the window.
+    - Identify home and away catcher from confirmed lineup (stg_statsapi_lineups_wide;
+      use position tag when available, fall back to batting slot 2).
+    - Add `home_catcher_framing_runs` and `away_catcher_framing_runs` to
+      `feature_pregame_lineup_features` and surface in `feature_pregame_game_features`.
+    - NULL handled gracefully: impute 0 (= league average) when catcher is not identified.
+
+  acceptanceCriteria:
+    - description: >
+        `catcher_framing_raw` populated for 2021–2026; `mart_catcher_framing` built with
+        blended metric (70% current season + 30% prior season); regression toward 0 for
+        catchers with < 500 called pitches.
+    - description: >
+        Catcher identified correctly for ≥ 90% of 2026 regular season games (spot-check
+        20 games); imputed to 0 when not identified (no nulls in final feature columns).
+    - description: >
+        `home_catcher_framing_runs` and `away_catcher_framing_runs` present in
+        `feature_pregame_game_features`; `dbtf build --select +feature_pregame_game_features`
+        passes all tests.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: catcher-framing-metrics-plan
+  namespace: default
+spec:
+  description: >
+    Four-task sequential plan. Task 1 ingests catcher framing raw data. Task 2 builds
+    mart_catcher_framing with blended metric and reliability regression. Task 3 adds
+    framing columns to lineup and game features. Task 4 validates catcher identification
+    rate and non-null coverage.
+  goalRef:
+    name: catcher-framing-metrics
+  graph:
+    nodes:
+
+      - id: ingest-framing-data
+        kind: Task
+        description: >
+          Ingest catcher framing data from Baseball Savant and load into
+          `baseball_data.savant.catcher_framing_raw`.
+
+          Data source: Baseball Savant catcher framing leaderboard, available at
+          https://baseballsavant.mlb.com/leaderboard/catcher-framing (CSV export).
+          Same ingestion pattern as Card 8.C OAA data (inspect scripts/ingest_oaa.py
+          or equivalent for the pattern to follow).
+
+          Target schema for catcher_framing_raw:
+            player_id VARCHAR, season INT, framing_runs_above_average FLOAT,
+            n_called_pitches INT, ingestion_timestamp TIMESTAMP_NTZ
+
+          Ingest seasons 2021–2026. Create DDL in scripts/ddl/create_catcher_framing_raw.sql
+          and apply via mcp__snowflake__run_snowflake_query. Write ingestion script at
+          scripts/ingest_catcher_framing.py following the existing Savant ingestion pattern.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: catcher framing DDL
+            path: scripts/ddl/create_catcher_framing_raw.sql
+          - type: artifact_exists
+            name: catcher framing ingestion script
+            path: scripts/ingest_catcher_framing.py
+          - type: command_succeeds
+            name: DDL contains required columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib
+                sql = pathlib.Path('scripts/ddl/create_catcher_framing_raw.sql').read_text()
+                for col in ['player_id', 'season', 'framing_runs_above_average', 'n_called_pitches']:
+                    assert col in sql, f'DDL missing column: {col}'
+                print('Catcher framing DDL columns OK')
+
+      - id: build-catcher-framing-mart
+        kind: Task
+        description: >
+          Create `models/marts/mart_catcher_framing.sql`.
+
+          Logic:
+          1. Join catcher_framing_raw for current season (year N) to prior season (year N-1)
+             on player_id.
+          2. Compute blended metric:
+               framing_runs_blended = 0.70 * current_season_runs + 0.30 * prior_season_runs
+               (NULL prior season → use 100% current; NULL current season → exclude)
+          3. Reliability regression: where n_called_pitches_current < 500, regress toward 0:
+               framing_runs_regressed = framing_runs_blended * (n_called_pitches / 500.0)
+               capped at framing_runs_blended when n_called_pitches >= 500
+          4. Output columns: player_id, season, framing_runs_above_average (regressed),
+             n_called_pitches, is_reliable (BOOLEAN: n_called_pitches >= 500).
+
+          Grain: player_id × season.
+        dependsOn:
+          - ingest-framing-data
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for catcher framing mart
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_catcher_framing
+
+      - id: add-framing-to-game-features
+        kind: Task
+        description: >
+          Edit `feature_pregame_lineup_features.sql` (or `feature_pregame_game_features.sql`)
+          to identify the home and away catcher and join their framing metrics.
+
+          Catcher identification:
+          1. Primary: join stg_statsapi_lineups_wide on game_pk, filter where position = 'C'.
+          2. Fallback: use batting slot 2 from the lineup (convention for catchers in most
+             batting orders). Document this fallback in a SQL comment.
+
+          Join to mart_catcher_framing on (player_id, season = game_year):
+            home_catcher_framing_runs = COALESCE(home_catcher.framing_runs_above_average, 0)
+            away_catcher_framing_runs = COALESCE(away_catcher.framing_runs_above_average, 0)
+
+          COALESCE to 0 (league average) ensures no NULLs in the final feature columns.
+          Surface both columns in feature_pregame_game_features.
+        dependsOn:
+          - build-catcher-framing-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf build succeeds for game features with framing
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: validate-catcher-identification
+        kind: Task
+        description: >
+          Validate catcher identification rate and framing column coverage via Snowflake MCP.
+
+          Checks (run via mcp__snowflake__run_snowflake_query):
+          1. Identification rate in 2026 season:
+               SELECT COUNT(*) AS total,
+                      SUM(CASE WHEN home_catcher_framing_runs != 0 THEN 1 ELSE 0 END) AS identified
+               FROM baseball_data.dbt.feature_pregame_game_features
+               WHERE season = 2026
+             Expected: identified / total >= 0.90.
+          2. Spot-check 5 games: confirm home_catcher_framing_runs matches the starting
+             catcher for that game.
+          3. Confirm no NULLs: both columns always have a value (0 or actual).
+        dependsOn:
+          - add-framing-to-game-features
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: dbtf test passes for mart_catcher_framing
+            command: dbtf
+            args:
+              - test
+              - --select
+              - mart_catcher_framing
+          - type: command_succeeds
+            name: validation documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Validation via Snowflake MCP required:')
+                print('1. Catcher identification rate >= 90% in 2026 games')
+                print('2. Spot-check 5 games: framing_runs matches starting catcher')
+                print('3. No NULLs in home/away_catcher_framing_runs (COALESCE to 0 applied)')
