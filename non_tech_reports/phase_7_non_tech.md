@@ -216,3 +216,4 @@ The system is ready to be taken seriously. It is not yet ready to be bet with re
 ---
 
 *This report covers Phase 7 work completed between May 2 and May 5, 2026. For technical details on specific cards, see the evaluation reports in `betting_ml/evaluation/`. For the Phase 8 roadmap, see `project_context.md`.*
+

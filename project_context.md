@@ -3712,6 +3712,61 @@ Deferred pending 8.H4 (Snowflake Environment Isolation). Once a dev schema exist
 
 Cards identified during Phase 8 brainstorming as the highest-probability paths to positive market edge. Independent of the Bayesian inference engine (8.F series) and can be worked in parallel with infrastructure cards (8.H3, 8.I1). Feature/prediction drift monitoring is scoped as an extension of Card 8.H3 (Live Monitoring & Alerting) rather than a standalone card.
 
+**Execution is organized into five waves.** Key principle: Wave 1 must come first because CLV (8.S) establishes whether the model has market edge at all — every subsequent wave is building on sand until that number is known.
+
+#### Wave 1 — Establish Baselines + Infrastructure
+*Do these first. CLV tells us whether the model has edge; monitoring catches regressions during all subsequent work.*
+
+| Card | Title | Rationale |
+|---|---|---|
+| 8.S | Closing Line Value (CLV) Tracking | Primary quality metric for the entire project. No new ingestion — uses existing `mlb_odds_raw`. Positive mean CLV is the prerequisite signal for 8.V, 8.F2, and Phase 9 sizing work. |
+| 8.H3 | Live Monitoring & Alerting | Operational hygiene. Catches model drift, data staleness, and prediction gaps during all subsequent feature work. |
+| 8.I1 | dbt Compilation Check | ~0.5 day. Adds a CI gate that prevents broken `ref()` or Jinja errors from silently corrupting the feature matrix. |
+
+#### Wave 2 — Feature Engineering (No New Ingestion)
+*All use existing warehouse data. Can be worked sequentially or in parallel. Prioritized by expected signal and implementation speed.*
+
+| Card | Title | Source Data |
+|---|---|---|
+| 8.T | Bookmaker Disagreement Features | Existing `mlb_odds_raw` — sharp/soft spread, line dispersion |
+| 8.U | Bullpen Leverage Exhaustion | Existing `mart_pitch_play_event` — leverage-weighted fatigue |
+| 8.K | Catcher Framing Metrics | Baseball Savant framing leaderboard (same ingestion pattern as 8.C) |
+| 8.Q | Starter CSW% | Existing `mart_pitch_play_event` — trailing 3-start command/control |
+| 8.E | Bat Tracking Matchup Features | Existing `mart_pitch_play_event` — bat speed vs. starter velocity |
+| 8.J | Individual Pitcher-Batter Matchup History | Existing `mart_pitch_play_event` — career H2H wOBA, Bayesian-shrunk |
+| 8.L | Bullpen Handedness Matchup Quality | Existing `mart_pitch_play_event` — LHB/RHB split xwOBA-against |
+| 8.M | Starter Arsenal Drift | Existing `mart_pitch_characteristics` — trailing 5-start pitch mix change |
+
+#### Wave 3 — New Ingestion
+*Kept separate from Wave 2 to avoid mixing operational complexity with pure-SQL feature work.*
+
+| Card | Title | Rationale |
+|---|---|---|
+| 8.R | Action Network Public Betting Percentages | New API ingestion with backfill to 2021. Graceful empty-response handling required for early seasons. |
+
+#### Wave 4 — Model Changes
+*Batched after features stabilize to minimize retrain cycles. Order within wave: fix known variance problem first (8.P), then weight adjustments (8.N), then calibration (8.O).*
+
+| Card | Title | Rationale |
+|---|---|---|
+| 8.P | Quantile Regression for Total Runs | Directly addresses the `std(pred) = 0.77 vs. actual 4.44` variance-shrinkage ceiling from Card 7.V. |
+| 8.N | Time-Decay Training Weighting | Exponential sample weights; low-risk change to training loop. |
+| 8.O | Rolling In-Season Calibration | Weekly calibrator refit on most recent 60 days; requires stable underlying model. |
+
+#### Wave 5 — Betting App + Bayesian Engine
+*Depends on stable feature/model state from Waves 1–4. 8.V can technically start after 8.S; 8.F2 is blocked on confirmed positive model edge.*
+
+| Card | Title | Dependency |
+|---|---|---|
+| 8.V | Correlation-Aware Bet Sizing | Needs 8.S (CLV warning banner). Portfolio optimizer can be built regardless of CLV sign. |
+| 8.F1 | Game Uncertainty Scoring | No blocking condition. Prerequisite for all other 8.F cards. |
+| 8.F3 | NGBoost Distribution Surfacing | Requires 8.F1. Not blocked on positive edge. |
+| 8.F4 | Feature Stabilization Layer | Requires 8.F1. Not blocked on positive edge. |
+| 8.F2 | Dynamic Alpha Weighting | Requires 8.F1. **Blocked on positive model edge** (mean h2h edge > 0.0 over ≥50 games). |
+| 8.F5 | Uncertainty-Adjusted Kelly Sizing | Requires 8.F2. |
+
+---
+
 | Card | Title | Type | Status |
 |---|---|---|---|
 | 8.J | Individual Pitcher-Batter Matchup History | Feature | [ ] Not started |
@@ -3723,7 +3778,7 @@ Cards identified during Phase 8 brainstorming as the highest-probability paths t
 | 8.P | Quantile Regression for Total Runs | Model | [ ] Not started |
 | 8.Q | Starter Command/Control Metrics (CSW%) | Feature | [ ] Not started |
 | 8.R | Action Network Public Betting Percentages | Ingestion + Feature | [ ] Not started |
-| 8.S | Closing Line Value (CLV) Tracking | Evaluation + App | [ ] Not started |
+| 8.S | Closing Line Value (CLV) Tracking | Evaluation + App | [x] Complete |
 | 8.T | Bookmaker Disagreement Features | Feature | [ ] Not started |
 | 8.U | Bullpen Leverage Exhaustion | Feature | [ ] Not started |
 | 8.V | Correlation-Aware Bet Sizing | Betting App | [ ] Not started |
@@ -3933,9 +3988,11 @@ Closing Line Value is the gold standard for measuring betting model quality. If 
 - **Primary metric:** `mean_clv_ml` — positive means the market is consistently moving toward model predictions (confirmed edge). Full spec: `plan_specs/phase_8/S_closing_line_value.yaml`
 
 **Acceptance Criteria:**
-- [ ] `mart_closing_line_value` built with correct opening/closing snapshot logic; CLV columns in `mart_prediction_clv`
-- [ ] CLV populated for all `has_odds` games in the historical window; coverage ≥ 70%
-- [ ] Model Performance page updated with CLV section (rolling mean, distribution, cumulative by version)
+- [x] `mart_closing_line_value` built with correct opening/closing snapshot logic; CLV columns in `mart_prediction_clv`
+- [x] CLV populated for all `has_odds` games in the historical window; coverage ≥ 70%
+- [x] Model Performance page updated with CLV section (rolling mean, distribution, cumulative by version)
+
+**Completed 2026-05-06.** `mart_closing_line_value` and `mart_prediction_clv` built and materialized. `daily_model_predictions` backfilled with `prediction_type` column (`morning`/`post_lineup`); mart deduplicates via `row_number()` preferring `post_lineup` over `morning`. Morning predictions automated in `daily_ingestion.yml` (`predict` job after `dbt-build`). `odds_snapshot.yml` dbt-fusion install fixed to match other workflows. CLV section live in Model Performance page (rolling 14-day chart, distribution histogram, summary metrics). Baseline report: coverage 91.2%, mean CLV +0.0027, pct_positive 38.3%.
 
 ---
 

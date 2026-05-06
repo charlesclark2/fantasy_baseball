@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     model_version           VARCHAR(20)    NOT NULL,
     inserted_at             TIMESTAMP_NTZ  NOT NULL,
     score_date              DATE           NOT NULL,
+    prediction_type         VARCHAR(20),
 
     -- Game identifiers
     game_pk                 INTEGER,
@@ -121,7 +122,7 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
 
 _INSERT_PREDICTION = """
 INSERT INTO baseball_data.betting_ml.daily_model_predictions (
-    model_version, inserted_at, score_date,
+    model_version, inserted_at, score_date, prediction_type,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
     has_odds,
@@ -134,7 +135,7 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
 ) VALUES (
-    %(model_version)s, %(inserted_at)s, %(score_date)s,
+    %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
     %(home_team)s, %(away_team)s, %(home_team_abbrev)s, %(away_team_abbrev)s,
     %(has_odds)s,
@@ -154,6 +155,7 @@ def _write_predictions_to_snowflake(
     df_today: pd.DataFrame,
     target_date: str,
     inserted_at: datetime,
+    prediction_type: str,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -228,6 +230,7 @@ def _write_predictions_to_snowflake(
             "model_version":          MODEL_VERSION,
             "inserted_at":            inserted_at,
             "score_date":             score_date,
+            "prediction_type":        prediction_type,
             "game_pk":                _s(df_today, "game_pk", i),
             "game_date":              score_date,
             "game_datetime":          game_dt,
@@ -541,6 +544,18 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="Skip writing to prediction_log (dry-run mode)",
     )
+    parser.add_argument(
+        "--game-pks",
+        metavar="PK1,PK2,...",
+        default=None,
+        help="Comma-separated game_pks to score (default: all games on --date)",
+    )
+    parser.add_argument(
+        "--prediction-type",
+        choices=["morning", "post_lineup"],
+        default="morning",
+        help="Label written to prediction_type column (default: morning)",
+    )
     return parser.parse_args()
 
 
@@ -571,6 +586,16 @@ def main() -> None:
         print(f"  Lineup filter: {before} → {len(df_today)} game(s) with confirmed lineups")
         if df_today.empty:
             print("No games with confirmed lineups found.")
+            sys.exit(0)
+
+    if args.game_pks:
+        target_pks = {int(pk.strip()) for pk in args.game_pks.split(",") if pk.strip()}
+        before = len(df_today)
+        if "game_pk" in df_today.columns:
+            df_today = df_today[df_today["game_pk"].isin(target_pks)]
+        print(f"  game-pks filter: {before} → {len(df_today)} game(s) matching {sorted(target_pks)}")
+        if df_today.empty:
+            print("No matching games found for the specified game_pks.")
             sys.exit(0)
 
     for col in ("has_odds", "home_win_prob_consensus"):
@@ -797,6 +822,7 @@ def main() -> None:
         df_today=df_today,
         target_date=target_date,
         inserted_at=run_ts,
+        prediction_type=args.prediction_type,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
         loc_tot=loc_tot,

@@ -3,6 +3,104 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_closing_line_value
+  # ============================================================================
+  - name: mart_closing_line_value
+    description: >
+      One row per game_pk. Vig-free opening and closing implied home-win
+      probability and O/U total line, averaged across all bookmakers that have
+      both an opening and closing pre-game snapshot. Opening = first snapshot on
+      game day (ET date = game_date). Closing = last snapshot before
+      commence_time. CLV = close_vf_home - open_vf_home: positive means the
+      market moved toward the home team winning by close. Sources:
+      odds_snapshots_historical (2021-2025, approximated vig-free) and
+      mart_odds_outcomes + mart_game_odds_bridge (2026+, proper vig-free via
+      additive method). Card 8.S.
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Calendar date of the game.
+        tests:
+          - not_null
+
+      - name: open_vf_home
+        description: >
+          Vig-free implied home win probability at the opening snapshot
+          (first snapshot on game day). Approximated for historical data
+          (2021-2025); proper additive vig-free for live data (2026+).
+
+      - name: close_vf_home
+        description: >
+          Vig-free implied home win probability at the closing snapshot
+          (last pre-game snapshot before commence_time).
+
+      - name: clv_home_ml
+        description: >
+          close_vf_home - open_vf_home. Positive = market moved toward home
+          team winning by close. NULL when no closing snapshot exists.
+
+      - name: open_total_line
+        description: O/U total line at the opening snapshot. NULL when no totals data.
+
+      - name: close_total_line
+        description: O/U total line at the closing snapshot.
+
+      - name: clv_total
+        description: >
+          close_total_line - open_total_line. Positive = total moved up (more
+          runs expected by close). NULL when totals unavailable.
+
+      - name: n_books_with_clv
+        description: Number of bookmakers contributing to the averaged CLV metrics.
+
+      - name: data_source
+        description: "'historical' (2021-2025) or 'live' (2026+)."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['historical', 'live']
+
+  # ============================================================================
+  # mart_prediction_clv
+  # ============================================================================
+  - name: mart_prediction_clv
+    description: >
+      One row per (score_date, game_pk, model_version). Joins
+      daily_model_predictions to mart_closing_line_value to surface CLV metrics
+      alongside model predictions. CLV columns are null for games with no
+      closing snapshot (games not yet played or no odds data). The primary
+      metric for model edge assessment is mean(clv_home_ml) across has_odds
+      games: positive mean CLV confirms the model was consistently ahead of
+      where the market settled. Card 8.S.
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+
+      - name: score_date
+        description: Date on which the prediction was scored.
+        tests: [not_null]
+
+      - name: clv_home_ml
+        description: >
+          close_vf_home - open_vf_home from mart_closing_line_value. Null
+          when the game has no closing snapshot (not yet played or no odds).
+
+      - name: clv_total
+        description: >
+          close_total_line - open_total_line. Null when totals CLV unavailable.
+
+      - name: has_clv
+        description: True when clv_home_ml is populated (game has both open and close snapshots).
+
+  # ============================================================================
   # mart_odds_line_movement
   # ============================================================================
   - name: mart_odds_line_movement

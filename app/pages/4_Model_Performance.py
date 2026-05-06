@@ -72,6 +72,23 @@ SELECT
 FROM baseball_data.config.prediction_log
 """
 
+_MART_CLV_SQL = """
+SELECT
+    game_date,
+    score_date,
+    model_version,
+    clv_home_ml,
+    clv_total,
+    has_clv,
+    has_odds,
+    open_vf_home,
+    close_vf_home,
+    n_books_with_clv
+FROM baseball_data.betting.mart_prediction_clv
+WHERE has_odds = TRUE
+ORDER BY game_date ASC
+"""
+
 # ---------------------------------------------------------------------------
 # Cached data loading
 # ---------------------------------------------------------------------------
@@ -154,6 +171,25 @@ def load_prediction_log() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
+def load_mart_clv_data() -> pd.DataFrame:
+    try:
+        df = run_query(_MART_CLV_SQL)
+    except Exception as exc:
+        if _table_missing(exc):
+            return pd.DataFrame()
+        raise
+    if df.empty:
+        return pd.DataFrame()
+    df.columns = [c.lower() for c in df.columns]
+    for col in ["clv_home_ml", "clv_total", "open_vf_home", "close_vf_home", "n_books_with_clv"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    if "game_date" in df.columns:
+        df["game_date"] = pd.to_datetime(df["game_date"])
+    return df
+
+
+@st.cache_data(ttl=3600)
 def load_prediction_log_stats() -> dict:
     try:
         df = run_query(_PREDICTION_LOG_STATS_SQL)
@@ -194,6 +230,7 @@ if st.button("Refresh Data", help="Clear cached results and reload from Snowflak
     get_snowflake_session.clear()
     load_prediction_log.clear()
     load_prediction_log_stats.clear()
+    load_mart_clv_data.clear()
     st.rerun()
 
 # ---------------------------------------------------------------------------
@@ -555,6 +592,170 @@ with _b_tab_h2h:
 
 with _b_tab_totals:
     _render_brier(df_view[df_view["market"] == "totals"] if "market" in df_view.columns else df_view)
+
+# ---------------------------------------------------------------------------
+# Closing Line Value — Market Movement (mart_prediction_clv)
+# ---------------------------------------------------------------------------
+
+st.header("Closing Line Value (Market Movement)")
+
+with st.expander("What is CLV?", expanded=False):
+    st.markdown(
+        "**Closing Line Value (CLV)** measures whether the market moved *toward* our "
+        "model's view between the opening line (morning prediction run, ~08:00 EDT) and "
+        "the closing line (last snapshot before first pitch).\n\n"
+        "- **clv_home_ml > 0** on a game: the closing market assigned *more* probability "
+        "to the home team winning than the opening market did. If our model also predicted "
+        "home team edge, that is CLV evidence of real edge.\n"
+        "- **Positive mean CLV** across all predictions is the strongest long-run indicator "
+        "of model edge, independent of short-term win/loss P&L.\n\n"
+        "Source: `mart_prediction_clv` (dbt) — averages vig-free implied probabilities "
+        "across up to 19 bookmakers per game."
+    )
+
+_mart_clv_raw = load_mart_clv_data()
+
+if _mart_clv_raw.empty:
+    st.info(
+        "CLV data not yet available from mart_prediction_clv. "
+        "Run `dbtf build --select mart_closing_line_value mart_prediction_clv` to populate."
+    )
+else:
+    # Apply season filter using game_date (same logic as global sidebar filter)
+    _mclv = _mart_clv_raw.copy()
+    if not _mclv.empty and "game_date" in _mclv.columns:
+        if "_filter_from" in dir() and _filter_from is not None:
+            _mclv = _mclv[
+                (_mclv["game_date"].dt.date >= _filter_from)
+                & (_mclv["game_date"].dt.date <= _filter_to)
+            ]
+    # Apply model_version filter
+    if "_selected_versions" in dir() and _selected_versions and "model_version" in _mclv.columns:
+        _mclv = _mclv[_mclv["model_version"].isin(_selected_versions)]
+
+    _mclv_has_clv = _mclv[_mclv["has_clv"] == True].copy() if not _mclv.empty else pd.DataFrame()
+
+    # ── Summary metrics ───────────────────────────────────────────────────────
+    if not _mclv_has_clv.empty:
+        _mean_clv_ml  = _mclv_has_clv["clv_home_ml"].mean()
+        _pct_positive = (_mclv_has_clv["clv_home_ml"] > 0).mean()
+        _mean_clv_tot = _mclv_has_clv["clv_total"].dropna().mean() if "clv_total" in _mclv_has_clv.columns else float("nan")
+        _n_with_clv   = int(_mclv_has_clv["has_clv"].sum())
+        _coverage_pct = _n_with_clv / max(len(_mclv), 1) * 100
+
+        _cm1, _cm2, _cm3, _cm4 = st.columns(4)
+        _cm1.metric(
+            "Mean CLV (moneyline)",
+            f"{_mean_clv_ml:+.4f}",
+            help="Average (close_vf_home − open_vf_home). Positive = market moved toward home team.",
+        )
+        _cm2.metric(
+            "Pct Predictions with Positive CLV",
+            f"{_pct_positive:.1%}",
+            help="Fraction of games where clv_home_ml > 0 (market moved toward home by close).",
+        )
+        _cm3.metric(
+            "Median CLV (moneyline)",
+            f"{_mclv_has_clv['clv_home_ml'].median():+.4f}",
+            help="Median CLV across all has_clv games.",
+        )
+        _cm4.metric(
+            "Mean CLV (totals)",
+            f"{_mean_clv_tot:+.3f} lines" if not pd.isna(_mean_clv_tot) else "—",
+            help="Average (close_total_line − open_total_line). Negative = market moved toward under.",
+        )
+    else:
+        st.info("No CLV data available for the selected filters.")
+
+    # ── Rolling 14-day mean CLV chart ─────────────────────────────────────────
+    if not _mclv_has_clv.empty and "game_date" in _mclv_has_clv.columns:
+        _has_versions_clv = "model_version" in _mclv_has_clv.columns and _mclv_has_clv["model_version"].nunique() > 1
+
+        if _has_versions_clv:
+            _daily_clv = (
+                _mclv_has_clv.groupby(["game_date", "model_version"])
+                .agg(mean_clv_ml=("clv_home_ml", "mean"))
+                .reset_index()
+                .sort_values(["model_version", "game_date"])
+            )
+            for _mv in _daily_clv["model_version"].unique():
+                _mask = _daily_clv["model_version"] == _mv
+                _daily_clv.loc[_mask, "clv_14d"] = (
+                    _daily_clv.loc[_mask, "mean_clv_ml"].rolling(14, min_periods=1).mean()
+                )
+            _clv_long = _daily_clv[["game_date", "model_version", "clv_14d"]].dropna()
+            _clv_color = alt.Color("model_version:N", legend=alt.Legend(title="Version"))
+        else:
+            _daily_clv = (
+                _mclv_has_clv.groupby("game_date")
+                .agg(mean_clv_ml=("clv_home_ml", "mean"))
+                .reset_index()
+                .sort_values("game_date")
+            )
+            _daily_clv["clv_14d"] = _daily_clv["mean_clv_ml"].rolling(14, min_periods=1).mean()
+            _daily_clv["model_version"] = "All"
+            _clv_long = _daily_clv[["game_date", "model_version", "clv_14d"]].dropna()
+            _clv_color = alt.value("#1f77b4")
+
+        if not _clv_long.empty:
+            _zero_line = (
+                alt.Chart(pd.DataFrame({"y": [0]}))
+                .mark_rule(color="grey", strokeDash=[4, 4])
+                .encode(y="y:Q")
+            )
+            _clv_chart = (
+                alt.Chart(_clv_long)
+                .mark_line()
+                .encode(
+                    x=alt.X("game_date:T", title="Game Date",
+                            axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="week")),
+                    y=alt.Y("clv_14d:Q", title="14-Day Rolling Mean CLV"),
+                    color=_clv_color,
+                    tooltip=[
+                        alt.Tooltip("game_date:T", title="Date", format="%b %d"),
+                        alt.Tooltip("model_version:N", title="Version"),
+                        alt.Tooltip("clv_14d:Q", title="14d Mean CLV", format="+.4f"),
+                    ],
+                )
+                .properties(height=280, title="Rolling 14-Day Mean CLV (Moneyline)")
+            )
+            st.altair_chart((_clv_chart + _zero_line).properties(height=280), width="stretch")
+            st.caption(
+                "Rolling 14-day mean of (close_vf_home − open_vf_home) across all has_clv games. "
+                "Dashed line = 0 reference. Consistently above zero confirms the model is "
+                "identifying value before the market corrects."
+            )
+
+    # ── CLV distribution histogram ────────────────────────────────────────────
+    if not _mclv_has_clv.empty:
+        _has_multi_mv = "model_version" in _mclv_has_clv.columns and _mclv_has_clv["model_version"].nunique() > 1
+        _95th = float(_mclv_has_clv["clv_home_ml"].quantile(0.95))
+
+        _hist_base = alt.Chart(_mclv_has_clv)
+        _hist_encode = dict(
+            x=alt.X("clv_home_ml:Q", bin=alt.Bin(maxbins=40), title="CLV (Moneyline)"),
+            y=alt.Y("count():Q", title="Game Count"),
+            tooltip=[
+                alt.Tooltip("clv_home_ml:Q", bin=True, title="CLV Bin"),
+                alt.Tooltip("count():Q", title="Count"),
+            ],
+        )
+        if _has_multi_mv:
+            _hist_encode["color"] = alt.Color("model_version:N", legend=alt.Legend(title="Version"))
+
+        _hist_chart = _hist_base.mark_bar(opacity=0.7).encode(**_hist_encode).properties(
+            height=220, title="CLV Distribution (Moneyline)"
+        )
+        _zero_rule_hist = (
+            alt.Chart(pd.DataFrame({"x": [0]}))
+            .mark_rule(color="red", strokeDash=[4, 4])
+            .encode(x="x:Q")
+        )
+        st.altair_chart((_hist_chart + _zero_rule_hist).properties(height=220), width="stretch")
+        st.caption(
+            f"CLV distribution across all has_clv games in the selected date range. "
+            f"Red dashed line = 0. 95th percentile: {_95th:+.4f}."
+        )
 
 # ---------------------------------------------------------------------------
 # CLV Tracker

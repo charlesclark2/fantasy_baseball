@@ -1,22 +1,51 @@
 name: Odds Snapshot
 
-# Re-ingests odds on top of the 08:00 UTC morning run in daily_ingestion.yml,
-# giving 6 snapshots per game day for line-movement tracking and T-1h pre-bet quality.
+# CLV ARCHITECTURE — odds capture timeline (all UTC, EDT = UTC-4):
 #
-# Schedule (all UTC → EDT offset -4):
-#   17:00 UTC = 1:00 PM EDT   — pre-afternoon games
-#   18:30 UTC = 2:30 PM EDT   — T-1h for afternoon first pitches (1:10pm, 3:10pm starts)
-#   22:00 UTC = 6:00 PM EDT   — pre-evening games
-#   23:30 UTC = 7:30 PM EDT   — T-~30min to T-1h for evening first pitches (7:08pm–7:10pm starts)
-#   03:00 UTC = 11:00 PM EDT  — late-game / closing lines (covers west coast 9pm–10pm ET starts)
+# Step 1 — Opening snapshot (08:00 EDT = 12:00 UTC):
+#   Captured by daily_ingestion.yml (morning prediction run). This is the
+#   "opening market" baseline used to compute CLV in mart_closing_line_value.
+#
+# Step 2 — Hourly line-movement path (10:00–19:00 EDT = 14:00–23:00 UTC):
+#   Captures market drift through the day. Feeds mart_odds_line_movement and
+#   provides the post-lineup snapshot needed after confirmed lineups trigger
+#   a second predictions run in lineup_monitor.yml.
+#
+# Step 3 — Near-close snapshots (~5 min before typical first pitches):
+#   23:00 UTC = 19:00 EDT — 5 min before 7:05 PM ET starts (most common)
+#   23:55 UTC = 19:55 EDT — 5 min before 8:00 PM ET (Saturday primetime)
+#   00:05 UTC = 20:05 EDT — closing line for 8:10 PM ET late starts
+#   01:30 UTC = 21:30 EDT — closing line for early west coast (9:05 PM ET)
+#   02:00 UTC = 22:00 EDT — closing line for late west coast (10:05 PM ET)
+#   03:00 UTC = 23:00 EDT — safety net for extra-late starts and late innings
+#
+# This schedule gives ~15 snapshots per game day, sufficient for:
+#   - Hourly line-movement path tracking (Step 3 of CLV architecture)
+#   - True closing lines for standard, primetime, and west-coast start times
+#   - Post-lineup feature rebuild + second predictions pass (lineup_monitor.yml)
 
 on:
   schedule:
-    - cron: '0 17 * * *'
-    - cron: '30 18 * * *'
-    - cron: '0 22 * * *'
-    - cron: '30 23 * * *'
-    - cron: '0 3 * * *'
+    # ── Hourly morning / midday coverage (10:00–17:00 EDT) ───────────────────
+    - cron: '0 14 * * *'   # 10:00 EDT
+    - cron: '0 15 * * *'   # 11:00 EDT
+    - cron: '0 16 * * *'   # 12:00 EDT (noon)
+    - cron: '0 17 * * *'   # 13:00 EDT — also ~5 min before 1:05 PM afternoon starts
+    - cron: '0 18 * * *'   # 14:00 EDT
+    - cron: '30 18 * * *'  # 14:30 EDT — T-1h pre-afternoon
+    - cron: '0 19 * * *'   # 15:00 EDT
+    - cron: '0 20 * * *'   # 16:00 EDT
+    - cron: '0 21 * * *'   # 17:00 EDT
+    # ── Pre-evening coverage (18:00–19:00 EDT) ───────────────────────────────
+    - cron: '0 22 * * *'   # 18:00 EDT — pre-evening games
+    - cron: '0 23 * * *'   # 19:00 EDT — ~5 min before 7:05 PM ET starts
+    - cron: '30 23 * * *'  # 19:30 EDT — T-30min for typical 8:00 PM ET starts
+    # ── Near-close snapshots (closing line for each start-time band) ─────────
+    - cron: '55 23 * * *'  # 19:55 EDT — closing line for 8:00 PM ET primetime
+    - cron: '5 0 * * *'    # 20:05 EDT — closing line for 8:10 PM ET late starts
+    - cron: '30 1 * * *'   # 21:30 EDT — closing line for 9:05 PM ET (west coast early)
+    - cron: '0 2 * * *'    # 22:00 EDT — closing line for 10:05 PM ET (west coast late)
+    - cron: '0 3 * * *'    # 23:00 EDT — safety net: extra-late starts, extra innings
   workflow_dispatch: {}
 
 jobs:
@@ -30,8 +59,8 @@ jobs:
 
       - name: Install dbt-fusion
         run: |
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sudo sh -s -- --to /usr/local/bin
+          sudo ln -sf /usr/local/bin/dbt /usr/local/bin/dbtf
 
       - name: Write Snowflake private key
         run: |
@@ -121,4 +150,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbt build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ --project-dir dbt --profiles-dir dbt
+        run: dbtf build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt
