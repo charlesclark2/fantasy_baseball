@@ -99,9 +99,9 @@ def run(check_date: date, min_coverage: float = DEFAULT_MIN_COVERAGE) -> None:
         cur.execute(
             """
             SELECT COUNT(*) AS expected_games
-            FROM baseball_data.statsapi.monthly_schedule
+            FROM baseball_data.betting_features.feature_pregame_game_features
             WHERE game_date = %s
-              AND has_full_lineup = true
+              AND has_full_data = true
             """,
             (check_date.isoformat(),),
         )

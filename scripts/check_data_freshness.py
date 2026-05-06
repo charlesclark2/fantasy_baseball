@@ -125,7 +125,7 @@ def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection)
     cur = con.cursor()
     cur.execute(
         """
-        SELECT COUNT(*) FROM baseball_data.statsapi.monthly_schedule
+        SELECT COUNT(*) FROM baseball_data.betting_features.feature_pregame_game_features
         WHERE game_date = %s
         """,
         (check_date.isoformat(),),

@@ -76,10 +76,10 @@ Exits non-zero. The GHA `predict` job step fails.
 
 1. Check which games were expected vs. scored:
    ```sql
-   -- Expected games (confirmed lineups)
+   -- Expected games (confirmed lineups via feature store)
    SELECT game_pk, home_team, away_team
-   FROM baseball_data.statsapi.monthly_schedule
-   WHERE game_date = CURRENT_DATE AND has_full_lineup = true;
+   FROM baseball_data.betting_features.feature_pregame_game_features
+   WHERE game_date = CURRENT_DATE AND has_full_data = true;
 
    -- Scored games
    SELECT game_pk, game_date

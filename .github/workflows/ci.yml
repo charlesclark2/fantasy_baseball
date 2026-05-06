@@ -63,3 +63,32 @@ jobs:
           assert 0.0 < p < 1.0, f'Bad probability: {p}'
           print(f'OK — p={p:.4f}, n_features={m.n_features_in_}')
           "
+
+  dbt-compile:
+    name: dbt Compilation Check
+    runs-on: ubuntu-latest
+    env:
+      DBT_FUSION_VERSION: latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache dbt-fusion binary
+        id: cache-dbtf
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/dbtf
+          key: dbtf-${{ runner.os }}-${{ env.DBT_FUSION_VERSION }}
+
+      - name: Install dbt-fusion
+        if: steps.cache-dbtf.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/bin
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
+          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+
+      - name: Add ~/.local/bin to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Compile dbt project (static analysis — no Snowflake required)
+        run: dbtf compile --project-dir dbt --profiles-dir dbt
