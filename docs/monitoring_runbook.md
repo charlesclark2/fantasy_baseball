@@ -22,12 +22,12 @@ Queries `MAX(ingestion_timestamp)` for each source table and compares the elapse
 
 | Source table | Max stale (hours) | Game day only? |
 |---|---|---|
-| `savant.batter_pitches` | 36h | No |
-| `oddsapi.mlb_odds_raw` | 6h | Yes |
-| `fangraphs.fg_stuff_plus_raw` | 192h (8 days) | No |
-| `statsapi.umpire_game_log` | 36h | No |
-| `statsapi.player_transactions` | 36h | No |
-| `statsapi.monthly_schedule` | 2h | Yes |
+| `savant.batter_pitches` | `game_date` (DATE) | 36h | No |
+| `oddsapi.mlb_odds_raw` | `ingestion_ts` | 6h | Yes |
+| `fangraphs.fg_stuff_plus_raw` | `ingestion_ts` | 192h (8 days) | No |
+| `statsapi.umpire_game_log` | `loaded_at` | 36h | No |
+| `statsapi.player_transactions` | `effective_date` (DATE) | 168h (7 days) | No |
+| `statsapi.monthly_schedule` | `ingest_date` (DATE) | 2h | Yes |
 
 ### Alert behavior
 

@@ -41,26 +41,32 @@ log = logging.getLogger(__name__)
 
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
     "baseball_data.savant.batter_pitches": {
+        "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
         "max_stale_hours": 36,
         "game_day_only": False,
     },
     "baseball_data.oddsapi.mlb_odds_raw": {
+        "ts_col": "ingestion_ts",
         "max_stale_hours": 6,
         "game_day_only": True,
     },
     "baseball_data.fangraphs.fg_stuff_plus_raw": {
+        "ts_col": "ingestion_ts",
         "max_stale_hours": 192,  # 8 days — weekly Sunday ingest
         "game_day_only": False,
     },
     "baseball_data.statsapi.umpire_game_log": {
+        "ts_col": "loaded_at",
         "max_stale_hours": 36,
         "game_day_only": False,
     },
     "baseball_data.statsapi.player_transactions": {
-        "max_stale_hours": 36,
+        "ts_col": "effective_date",  # DATE; no ingestion_ts column exists
+        "max_stale_hours": 168,      # 7 days — ingest backfills a 7-day window
         "game_day_only": False,
     },
     "baseball_data.statsapi.monthly_schedule": {
+        "ts_col": "ingest_date",     # DATE; cast to TIMESTAMP_NTZ in query
         "max_stale_hours": 2,
         "game_day_only": True,
     },
@@ -136,11 +142,12 @@ def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection)
 
 def _max_ingestion_timestamp(
     table: str,
+    ts_col: str,
     con: snowflake.connector.SnowflakeConnection,
 ) -> datetime | None:
-    """Query MAX(ingestion_timestamp) for a table. Returns None if table is empty."""
+    """Query MAX of the table's freshness column. DATE columns are cast to TIMESTAMP_NTZ."""
     cur = con.cursor()
-    cur.execute(f"SELECT MAX(ingestion_timestamp) FROM {table}")
+    cur.execute(f"SELECT MAX({ts_col}::TIMESTAMP_NTZ) FROM {table}")
     row = cur.fetchone()
     if row and row[0] is not None:
         ts = row[0]
@@ -176,13 +183,14 @@ def run(check_date: date, dry_run: bool = False) -> None:
         for table, cfg in FRESHNESS_THRESHOLDS.items():
             max_stale_hours: int = cfg["max_stale_hours"]
             game_day_only: bool = cfg["game_day_only"]
+            ts_col: str = cfg["ts_col"]
 
             if game_day_only and not game_day:
                 log.info("  %-55s SKIP (off day)", table)
                 results.append({"table": table, "status": "SKIP (off day)", "hours_stale": None})
                 continue
 
-            max_ts = _max_ingestion_timestamp(table, con)
+            max_ts = _max_ingestion_timestamp(table, ts_col, con)
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})
