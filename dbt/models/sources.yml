@@ -634,3 +634,35 @@ sources:
           season-start regression = 0.667 * elo + 0.333 * 1500 (FiveThirtyEight MLB).
           Grain: game_pk × team_abbrev.
           Only elo_before_game is used as a pre-game feature.
+
+  - name: betting_ml
+    database: baseball_data
+    schema: betting_ml
+    description: >
+      Output tables written by the betting_ml Python pipeline (predict_today.py
+      and related scripts). These tables are written directly by Python, not
+      managed by dbt. Used here as sources for downstream mart models.
+
+    tables:
+      - name: daily_model_predictions
+        description: >
+          One row per (score_date, game_pk, model_version). Model predictions
+          for every game on the prediction date, including win probability,
+          run totals, edge, and Kelly fraction. Written by predict_today.py.
+          Score_date is the date predictions were made; game_date is the game's
+          actual calendar date (may differ by one day for prediction-vs-game timing).
+        columns:
+          - name: game_pk
+            description: MLB Stats API game identifier.
+            tests: [not_null]
+          - name: score_date
+            description: Date on which the prediction was scored (predict_today.py run date).
+            tests: [not_null]
+          - name: model_version
+            description: Model version tag (e.g. v0, v1, v2).
+          - name: has_odds
+            description: Whether odds data was available for this game at prediction time.
+          - name: calibrated_win_prob
+            description: Platt-scaled home win probability (Card 7.C).
+          - name: data_source
+            description: "'feature_store' or 'intraday_fallback' (Card 7.O)."

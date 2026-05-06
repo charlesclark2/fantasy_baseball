@@ -73,3 +73,46 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: dbtf build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
+
+      # CLV architecture step 4: run predictions only for the games that just got
+      # lineups confirmed. Passing --game-pks avoids re-scoring games that were
+      # already predicted in the morning run.
+      - name: Run predictions for newly-lined-up games
+        if: steps.lineup_check.outputs.has_new_games == 'true'
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run predict_today.py --game-pks "${{ steps.lineup_check.outputs.new_game_pks }}" --prediction-type post_lineup
+
+      # Capture odds after lineup confirmation so the post-lineup snapshot reflects
+      # the market's reaction to confirmed lineups. This becomes the "post-lineup"
+      # market reference in mart_closing_line_value.
+      - name: Capture odds snapshot after lineup confirmation
+        if: steps.lineup_check.outputs.has_new_games == 'true'
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+        run: |
+          uv run odds_api_ingestion.py events
+          uv run odds_api_ingestion.py odds
+
+      # Rebuild CLV mart to incorporate the new post-lineup odds snapshot
+      - name: Rebuild CLV mart after post-lineup odds capture
+        if: steps.lineup_check.outputs.has_new_games == 'true'
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        run: dbtf build --select mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt
