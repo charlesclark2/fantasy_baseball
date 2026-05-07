@@ -42,7 +42,7 @@ from betting_ml.models.total_runs_trainer import p_over_line
 
 MODEL_VERSION = "v0"
 
-_CALIBRATOR_PATH = Path('betting_ml/models/home_win/calibrator.joblib')
+_CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'
 
 
 def _load_calibrator():
@@ -285,7 +285,7 @@ def _write_predictions_to_snowflake(
 
 
 def _load_ngb_cfg(path: str, target_label: str) -> tuple[int, str]:
-    p = Path(path)
+    p = PROJECT_ROOT / path
     if not p.exists():
         raise FileNotFoundError(
             f"NGBoost tuning results not found: {path}. "
