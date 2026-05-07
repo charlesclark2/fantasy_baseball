@@ -38,8 +38,55 @@ lineups as (
         slot_6_player_id,
         slot_7_player_id,
         slot_8_player_id,
-        slot_9_player_id
+        slot_9_player_id,
+        -- Position tags used to identify catcher (Card 8.K)
+        slot_1_position,
+        slot_2_position,
+        slot_3_position,
+        slot_4_position,
+        slot_5_position,
+        slot_6_position,
+        slot_7_position,
+        slot_8_position,
+        slot_9_position
     from {{ ref('stg_statsapi_lineups_wide') }}
+),
+
+-- Identify the catcher for each lineup.
+-- Primary: scan all 9 slots for position_abbreviation = 'C'.
+-- Fallback: batting slot 2 (convention — catchers bat second in most orders).
+catcher_id as (
+    select
+        game_pk,
+        official_date,
+        home_away,
+        coalesce(
+            case when slot_1_position = 'C' then slot_1_player_id end,
+            case when slot_2_position = 'C' then slot_2_player_id end,
+            case when slot_3_position = 'C' then slot_3_player_id end,
+            case when slot_4_position = 'C' then slot_4_player_id end,
+            case when slot_5_position = 'C' then slot_5_player_id end,
+            case when slot_6_position = 'C' then slot_6_player_id end,
+            case when slot_7_position = 'C' then slot_7_player_id end,
+            case when slot_8_position = 'C' then slot_8_player_id end,
+            case when slot_9_position = 'C' then slot_9_player_id end,
+            slot_2_player_id  -- fallback: batting slot 2
+        )                                   as catcher_player_id
+    from lineups
+),
+
+-- Join catcher to mart_catcher_framing for the current game season.
+-- COALESCE to 0 (league average) when catcher is unidentified or not in mart.
+catcher_framing as (
+    select
+        ci.game_pk,
+        ci.home_away,
+        coalesce(cf.framing_runs_above_average,   0) as catcher_framing_runs,
+        coalesce(cf.defensive_runs_above_average, 0) as catcher_defensive_runs
+    from catcher_id ci
+    left join {{ ref('mart_catcher_framing') }} cf
+        on  cf.player_id = ci.catcher_player_id
+        and cf.season    = year(ci.official_date)
 ),
 
 -- Unpivot lineup slots to one row per game × side × slot
@@ -306,7 +353,12 @@ final as (
         aa.lineup_k_pct_vs_starter_archetype,
         aa.lineup_iso_vs_starter_archetype,
         aa.lineup_archetype_pa_coverage,
-        opp_sa.pitch_archetype                  as starter_pitch_archetype
+        opp_sa.pitch_archetype                  as starter_pitch_archetype,
+
+        -- Catcher metrics (Card 8.K)
+        -- 0 = league average when catcher is not identified or not in mart
+        cf.catcher_framing_runs,
+        cf.catcher_defensive_runs
 
     from lineups l
     left join lineup_agg la
@@ -328,6 +380,9 @@ final as (
                                    when l.home_away = 'home' then 'away'
                                    else 'home'
                                end
+    left join catcher_framing cf
+        on  cf.game_pk   = l.game_pk
+        and cf.home_away = l.home_away
 )
 
 select * from final

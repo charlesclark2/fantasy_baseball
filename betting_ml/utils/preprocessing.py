@@ -54,6 +54,27 @@ _DAYS_REST_COLS = [
     "away_starter_days_rest",
 ]
 _BULLPEN_XWOBA_PATTERN = "bp_xwoba_against"
+# Patterns for the bullpen state feature table (feature_pregame_bullpen_state_features)
+_BULLPEN_STATE_XWOBA_PATTERNS = (
+    "bullpen_lhb_xwoba_against",
+    "bullpen_rhb_xwoba_against",
+    "bullpen_matchup_quality_vs_lineup",
+    "home_bp_matchup_xwoba",
+    "away_bp_matchup_xwoba",
+)
+_BULLPEN_STATE_ZERO_COLS = [
+    "bullpen_leverage_pitches_prev_1d",
+    "bullpen_leverage_pitches_prev_3d",
+    "high_leverage_arms_used_prev_2d",
+]
+_BULLPEN_LEVERAGE_ZERO_COLS = [
+    "home_bp_leverage_sum_3d",
+    "away_bp_leverage_sum_3d",
+    "home_bp_high_lev_appearances_3d",
+    "away_bp_high_lev_appearances_3d",
+    "home_bp_leverage_sum_1d",
+    "away_bp_leverage_sum_1d",
+]
 _ROLLING_SUFFIXES = ("_7d", "_14d", "_30d", "_std")
 _GAMES_PLAYED_COLS = {
     "_7d": ("home_games_played_7d", "away_games_played_7d"),
@@ -197,6 +218,17 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
             X["n_books_available"] = X["n_books_available"].fillna(1)
         if "stale_book_flag" in X.columns:
             X["stale_book_flag"] = X["stale_book_flag"].fillna(0)
+        # Bullpen state workload columns: no usage = 0 pitches
+        for col in _BULLPEN_STATE_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # Bullpen leverage exhaustion columns (Card 8.U): no appearances = 0.0
+        for col in _BULLPEN_LEVERAGE_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # closer_availability_proxy: null means unknown → assume available (1)
+        if "closer_availability_proxy" in X.columns:
+            X["closer_availability_proxy"] = X["closer_availability_proxy"].fillna(1)
         return X
 
 
@@ -204,7 +236,11 @@ class _BullpenXwobaImputer(BaseEstimator, TransformerMixin):
     """Group 5: Fill bullpen xwOBA nulls with training-set mean."""
 
     def fit(self, X: pd.DataFrame, y=None):
-        self._cols = [c for c in X.columns if _BULLPEN_XWOBA_PATTERN in c]
+        self._cols = [
+            c for c in X.columns
+            if _BULLPEN_XWOBA_PATTERN in c
+            or any(c == pat for pat in _BULLPEN_STATE_XWOBA_PATTERNS)
+        ]
         self._means = {
             c: (X[c].mean() if X[c].notna().any() else 0.310) for c in self._cols
         }

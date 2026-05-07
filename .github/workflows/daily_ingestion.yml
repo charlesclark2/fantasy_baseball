@@ -103,6 +103,18 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
         run: uv run ingest_fangraphs_stuff_plus.py --season $(date +%Y) --window-types 14d,30d,season
 
+      # FanGraphs: Catcher framing runs weekly (Sundays) — cumulative season stats
+      - name: Ingest FanGraphs catcher framing (weekly, Sundays only)
+        if: ${{ github.event_name == 'workflow_dispatch' || format('{0}', github.event.schedule) == '0 12 * * 0' || startsWith(github.event.schedule, '0 12 * * 0') }}
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run ingest_catcher_framing.py --season $(date +%Y)
+
       # FanGraphs: Hitting leaderboard runs daily during the season
       - name: Ingest FanGraphs hitting leaderboard (daily)
         working-directory: scripts

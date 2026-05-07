@@ -528,6 +528,29 @@ sources:
           - name: sv_id
             description: "Non-unique play event ID. Not suitable as a key."
 
+      # ── Catcher framing leaderboard (Card 8.K) ───────────────────────────────
+      - name: catcher_framing_raw
+        description: >
+          Season-level catcher framing data from the Baseball Savant catcher
+          framing leaderboard. One row per player_id × season. Ingested by
+          scripts/ingest_catcher_framing.py. Grain: player_id × season.
+
+        columns:
+          - name: player_id
+            description: MLB player ID.
+            tests: [not_null]
+          - name: season
+            description: Season year.
+            tests: [not_null]
+          - name: framing_runs_above_average
+            description: >
+              Catcher framing runs above average from Baseball Savant
+              (runs_above_average column). Positive = above average framer.
+          - name: n_called_pitches
+            description: Number of called pitches in the sample window.
+          - name: ingestion_timestamp
+            description: Timestamp when this row was last written/updated.
+
       # ── Reference: players ────────────────────────────────────────────────────
       - name: ref_players
         description: >
