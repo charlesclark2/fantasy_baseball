@@ -112,6 +112,19 @@ spec:
 
           IMPORTANT: `game_uncertainty_score` must be computed (8.F1) before this
           code runs. If 8.F1 is not yet complete, do not start this task.
+
+          PIPELINE ORDERING WITH 8.V (correlation-aware bet sizing):
+          `adjusted_kelly_fraction` is the value that Card 8.V's portfolio optimizer
+          must receive as its input kelly_frac — not the raw kelly_fraction. The
+          ordering in predict_today.py / the EV Tracker must be:
+            1. compute kelly_fraction (base Kelly)
+            2. apply uncertainty discount → adjusted_kelly_fraction  [this card, 8.F5]
+            3. pass adjusted_kelly_fraction into optimize_stakes()   [Card 8.V]
+          When wiring 8.V's EV Tracker update (wire-into-ev-tracker task in 8.V),
+          confirm that the bets dict uses adjusted_kelly_fraction as 'kelly_frac',
+          not the raw kelly_fraction. If 8.F5 has not yet been implemented when
+          8.V is wired, use kelly_fraction as a temporary placeholder and leave a
+          TODO comment noting the required handoff.
         dependsOn:
           - ddl-migration
         acceptanceCriteria:
@@ -246,3 +259,86 @@ spec:
           - type: artifact_exists
             name: Kelly evaluation report template
             path: betting_ml/evaluation/phase8_kelly_results.md
+
+      - id: end-to-end-pipeline-smoke-test
+        kind: Task
+        description: >
+          Run a synthetic end-to-end smoke test verifying that the full Bayesian
+          inference pipeline produces correct, non-null output for all intermediate
+          and final columns. This test covers all 8.F cards in sequence on a single
+          synthetic game row and catches cross-card wiring bugs.
+
+          Create `betting_ml/evaluation/test_bayesian_pipeline.py` and run it:
+
+            import sys, math
+            import numpy as np
+            import pandas as pd
+            sys.path.insert(0, '.')
+
+            # --- Synthetic game row ---
+            row = {
+                'home_starter_appearances_30d': 5,   # moderate starter experience
+                'away_starter_appearances_30d': 0,   # debut starter
+                'home_games_played_ytd': 20,
+                'away_games_played_ytd': 0,          # away team on opening day
+                'home_team_woba_30d': 0.340,
+                'away_team_woba_30d': 0.290,
+                'home_games_played_ytd': 20,
+                'away_games_played_ytd': 0,
+                # ... other feature cols at typical values ...
+            }
+            df = pd.DataFrame([row])
+
+            # Step 1: feature stabilization (8.F4)
+            from betting_ml.models.feature_stabilizer import stabilize_features
+            df_stable = stabilize_features(df)
+            assert df_stable['away_team_woba_30d'].iloc[0] == pytest.approx(0.320, abs=0.001), \
+                'away n=0 should be shrunk fully to prior 0.320'
+            assert df_stable['home_team_woba_30d'].iloc[0] > 0.320, \
+                'home n=20 should be partially shrunk (above pure prior)'
+
+            # Step 2: uncertainty scoring (8.F1)
+            from betting_ml.models.uncertainty_scorer import compute_game_uncertainty_score
+            score = compute_game_uncertainty_score(row)
+            assert 0.0 <= score <= 1.0, f'score out of range: {score}'
+            assert score > 0.5, 'debut away starter + 0 away games should produce high uncertainty'
+
+            # Step 3: Kelly discount (8.F5)
+            KELLY_UNCERTAINTY_DISCOUNT = 0.5
+            raw_kelly = 0.06
+            discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * score)
+            adj_kelly = raw_kelly * discount
+            assert adj_kelly < raw_kelly, 'Adjusted Kelly must be less than raw Kelly for high uncertainty'
+            assert adj_kelly >= raw_kelly * 0.1, 'Floor must prevent zeroing Kelly'
+
+            # Step 4: portfolio optimizer (8.V) receives adjusted_kelly_fraction
+            from betting_ml.utils.portfolio_optimizer import build_covariance_matrix, optimize_stakes
+            bets = [{'bet_id': 'test', 'game_pk': 1, 'market_type': 'h2h',
+                     'ev': 0.04, 'kelly_frac': adj_kelly}]  # <-- adjusted, not raw
+            ev = np.array([0.04])
+            cov = build_covariance_matrix(bets, same_game_corr=0.0)
+            stakes = optimize_stakes(bets, ev, cov, bankroll=1000, max_exposure=0.20)
+            assert sum(stakes.values()) <= 200 + 1e-6, 'Total exposure exceeds 20%'
+            assert all(v >= 0 for v in stakes.values()), 'Negative stakes not allowed'
+
+            print('End-to-end Bayesian pipeline smoke test PASS')
+            print(f'  uncertainty_score={score:.3f}  discount={discount:.3f}')
+            print(f'  raw_kelly={raw_kelly:.4f}  adj_kelly={adj_kelly:.4f}')
+            print(f'  portfolio_stake={sum(stakes.values()):.2f}')
+
+          This test requires 8.F1, 8.F4, 8.F5, and 8.V to all be implemented.
+          Run it after all four are complete. If any assertion fails, the failure
+          message identifies which stage broke.
+        dependsOn:
+          - update-registry-and-eval-template
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: end-to-end pipeline smoke test script
+            path: betting_ml/evaluation/test_bayesian_pipeline.py
+          - type: command_succeeds
+            name: smoke test passes end-to-end
+            command: uv
+            args:
+              - run
+              - python
+              - betting_ml/evaluation/test_bayesian_pipeline.py

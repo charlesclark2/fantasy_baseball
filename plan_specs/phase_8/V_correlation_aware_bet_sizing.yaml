@@ -220,7 +220,15 @@ spec:
         description: >
           Update `app/pages/3_EV_Kelly.py` to show correlation-adjusted stakes.
 
-          1. After computing the existing Kelly stakes, call the portfolio optimizer:
+          1. After computing the existing Kelly stakes, call the portfolio optimizer.
+             IMPORTANT — kelly_frac input selection:
+               If Card 8.F5 (uncertainty-adjusted Kelly) is implemented, pass
+               `adjusted_kelly_fraction` as the 'kelly_frac' in the bets dict.
+               If 8.F5 is not yet available, use raw kelly_fraction as a temporary
+               placeholder and leave a TODO comment marking the handoff point.
+               The optimizer must receive the uncertainty-discounted fraction so
+               both sizing adjustments compound correctly.
+
                from betting_ml.utils.portfolio_optimizer import (
                    build_covariance_matrix, optimize_stakes
                )
@@ -229,9 +237,16 @@ spec:
                    'betting_ml/evaluation/bet_correlation_params.json').read_text())
                same_game_corr = corr_params['same_game_ml_totals_corr']
 
-               cov_matrix = build_covariance_matrix(todays_bets, same_game_corr)
+               # Use adjusted_kelly_fraction when 8.F5 is wired; raw kelly_fraction otherwise
+               kelly_frac_col = 'adjusted_kelly_fraction' \
+                   if 'adjusted_kelly_fraction' in todays_bets.columns else 'kelly_fraction'
+               # TODO(8.F5): confirm kelly_frac_col resolves to adjusted_kelly_fraction
+               bets_list = todays_bets.rename(
+                   columns={kelly_frac_col: 'kelly_frac'}).to_dict('records')
+
+               cov_matrix = build_covariance_matrix(bets_list, same_game_corr)
                corr_stakes = optimize_stakes(
-                   todays_bets, ev_estimates, cov_matrix,
+                   bets_list, ev_estimates, cov_matrix,
                    bankroll=bankroll_input, max_exposure=0.20
                )
 

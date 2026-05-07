@@ -37,6 +37,19 @@ spec:
 
     NULL HANDLING: All five columns are NULL when `market_totals_line` is unavailable.
 
+    CONDITIONAL — QUANTILE MODEL FORK (Card 8.P interaction):
+    If Card 8.P promoted LightGBM quantile models to production
+    (model_registry.yaml total_runs model_type = 'lgb_quantile'), the pred_dist()
+    call is unavailable. In that case:
+    - prob_over_line and prob_under_line are already computed by quantile_inference.py
+      — read them directly from the quantile inference output, do not recompute.
+    - ngb_total_mu, ngb_total_sigma, and total_variance are set to NULL for all rows.
+      These are Normal-distribution-specific parameters meaningless for the LGB model.
+    - The DDL columns still exist — they are just universally NULL when quantile model
+      is in production. This is expected and not an error.
+    Before implementing, check model_registry.yaml: if total_runs.model_type is
+    'lgb_quantile', follow the quantile fork path; otherwise follow the NGBoost path.
+
   acceptanceCriteria:
     - description: >
         Five new columns present in `daily_model_predictions` after DDL migration:
@@ -109,27 +122,35 @@ spec:
         kind: Task
         description: >
           Edit `betting_ml/scripts/predict_today.py` (or the inference module that
-          calls the NGBoost total_runs model) to extract distribution parameters
-          at inference time.
+          calls the total_runs model) to extract distribution parameters at inference
+          time. Implementation depends on which model is in production — check
+          model_registry.yaml before writing code.
 
-          After `ngb_totals.predict(X)`, also call `ngb_totals.pred_dist(X)` to get
-          the distribution object. Extract:
-            dist = ngb_totals.pred_dist(X)
-            mu = dist.loc           # shape: (n_games,)
-            sigma = dist.scale      # shape: (n_games,)
+          BRANCH A — NGBoost v2 in production (total_runs model_type = 'ngboost'):
+            After `ngb_totals.predict(X)`, also call `ngb_totals.pred_dist(X)`:
+              dist = ngb_totals.pred_dist(X)
+              mu = dist.loc           # shape: (n_games,)
+              sigma = dist.scale      # shape: (n_games,)
+            Compute per-game:
+              from scipy.stats import norm
+              total_variance = sigma ** 2
+              prob_over = 1 - norm.cdf(market_totals_line, loc=mu, scale=sigma)
+              prob_under = 1 - prob_over
+            IMPORTANT: use scipy.stats.norm, not lognorm.
 
-          Compute per-game:
-            from scipy.stats import norm
-            total_variance = sigma ** 2
-            prob_over = 1 - norm.cdf(market_totals_line, loc=mu, scale=sigma)
-            prob_under = 1 - prob_over
+          BRANCH B — LightGBM quantile models in production (model_type = 'lgb_quantile')
+            (this branch applies if Card 8.P was promoted):
+              from betting_ml.models.total_runs.quantile_inference import predict_prob_over_line
+              prob_over, prob_under = predict_prob_over_line(lgb_models, X, market_totals_line)
+              # ngb_total_mu, ngb_total_sigma, total_variance stay None — not applicable
+              mu = sigma = total_variance = None
 
-          Set all five to None/NULL when market_totals_line is None or NaN.
-
-          Write ngb_total_mu, ngb_total_sigma, total_variance, prob_over_line,
-          prob_under_line to the daily_model_predictions INSERT.
-
-          IMPORTANT: use scipy.stats.norm, not lognorm.
+          In both branches:
+            - Set all five to None/NULL when market_totals_line is None or NaN.
+            - Write ngb_total_mu, ngb_total_sigma, total_variance, prob_over_line,
+              prob_under_line to the daily_model_predictions INSERT.
+            - Add a model_type check at the top of the inference block so the correct
+              branch runs automatically based on model_registry.yaml.
         dependsOn:
           - ddl-migration
         acceptanceCriteria:
@@ -141,13 +162,22 @@ spec:
               - python
               - "-c"
               - |-
-                import ast, pathlib
+                import pathlib, yaml
                 src = pathlib.Path('betting_ml/scripts/predict_today.py').read_text()
-                assert 'pred_dist' in src, 'pred_dist call not found in predict_today.py'
-                assert 'norm' in src, 'scipy.stats.norm not referenced in predict_today.py'
                 assert 'lognorm' not in src, 'lognorm must NOT be used — model is Normal, not LogNormal'
                 assert 'prob_over_line' in src, 'prob_over_line not written in predict_today.py'
-                print('Distribution extraction implementation OK')
+                # Determine which branch should be active
+                reg_text = pathlib.Path('model_registry.yaml').read_text().lower()
+                if 'lgb_quantile' in reg_text:
+                    # Quantile branch: pred_dist not needed; quantile_inference must be imported
+                    assert 'quantile_inference' in src or 'predict_prob_over_line' in src, \
+                        'Quantile model in registry but quantile_inference not imported in predict_today.py'
+                    print('Quantile fork active — distribution extraction uses quantile_inference OK')
+                else:
+                    # NGBoost branch: pred_dist and scipy norm required
+                    assert 'pred_dist' in src, 'NGBoost in registry but pred_dist call not found'
+                    assert 'norm' in src, 'scipy.stats.norm not referenced in predict_today.py'
+                    print('NGBoost fork active — distribution extraction uses pred_dist OK')
           - type: command_succeeds
             name: prob sum constraint holds for synthetic input
             command: uv

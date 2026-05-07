@@ -68,6 +68,54 @@ spec:
   graph:
     nodes:
 
+      - id: verify-input-columns
+        kind: Task
+        description: >
+          Before writing any code, verify that all four input columns used by the
+          uncertainty scoring formula exist in `feature_pregame_game_features`.
+          Run via mcp__snowflake__run_snowflake_query:
+
+            SELECT column_name
+            FROM baseball_data.information_schema.columns
+            WHERE table_schema = 'DBT'
+              AND table_name = 'FEATURE_PREGAME_GAME_FEATURES'
+              AND column_name IN (
+                'HOME_STARTER_APPEARANCES_30D', 'AWAY_STARTER_APPEARANCES_30D',
+                'HOME_GAMES_PLAYED_YTD', 'AWAY_GAMES_PLAYED_YTD'
+              )
+            ORDER BY column_name
+
+          Expected: all 4 column names returned. If any are missing, find the
+          nearest equivalent:
+            SELECT column_name FROM baseball_data.information_schema.columns
+            WHERE table_schema = 'DBT'
+              AND table_name = 'FEATURE_PREGAME_GAME_FEATURES'
+              AND (column_name LIKE '%STARTER%APPEAR%'
+                   OR column_name LIKE '%GAMES_PLAYED%'
+                   OR column_name LIKE '%GAMES_YTD%')
+            ORDER BY column_name
+
+          If home_starter_appearances_30d does not exist, find the column that
+          captures starter recency (e.g., home_starter_games_started_30d or similar).
+          If home_games_played_ytd does not exist, find the team games-played counter.
+          Update compute_game_uncertainty_score() in implement-uncertainty-score to
+          use the actual column names. A NULL input still produces uncertainty=1.0
+          (conservative fallback) so missing columns produce a safe result, but
+          non-NULL values from the correct column produce a better score.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: column verification query documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Column verification must be run via Snowflake MCP before implementing.')
+                print('Verify all 4 inputs exist: home/away starter_appearances_30d, home/away games_played_ytd')
+                print('Update compute_game_uncertainty_score() with actual column names if different.')
+
       - id: ddl-migration
         kind: Task
         description: >
@@ -79,7 +127,8 @@ spec:
 
           Apply via mcp__snowflake__run_snowflake_query or the Snowflake MCP tool.
           Verify the column exists after applying.
-        dependsOn: []
+        dependsOn:
+          - verify-input-columns
         acceptanceCriteria:
           - type: artifact_exists
             name: DDL migration script

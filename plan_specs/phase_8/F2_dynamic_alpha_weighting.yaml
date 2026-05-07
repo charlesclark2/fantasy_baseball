@@ -159,9 +159,35 @@ spec:
               formula: "dynamic_alpha = game_uncertainty_score * MAX_MODEL_WEIGHT"
               last_evaluated: null
               evaluation_note: "Re-evaluate after 200+ scored games"
+              unblock_condition: >
+                mean h2h edge > 0.0 across >= 50 has_odds games with non-null outcomes.
+                Run unblock_eval_query below to check. Do NOT remove this block after
+                unblocking — update last_evaluated and add a note on the result.
+              unblock_eval_query: >
+                SELECT COUNT(*) AS n_games,
+                       AVG(h2h_edge) AS mean_h2h_edge,
+                       SUM(CASE WHEN h2h_edge > 0 THEN 1 ELSE 0 END) AS n_positive_edge
+                FROM baseball_data.betting_ml.daily_model_predictions
+                WHERE has_odds = true AND outcome IS NOT NULL
+                  AND model_version IN ('v1', 'prod')
+                HAVING COUNT(*) >= 50
+                -- Unblock when mean_h2h_edge > 0.0 in this query result
 
           Also write `betting_ml/evaluation/dynamic_alpha_eval_template.sql` with the
-          stratified edge query:
+          stratified edge query AND the unblock condition check:
+
+            -- UNBLOCK CONDITION CHECK
+            -- Run this first. If mean_h2h_edge <= 0.0 or n_games < 50, do not implement 8.F2.
+            SELECT COUNT(*) AS n_games,
+                   AVG(h2h_edge) AS mean_h2h_edge,
+                   SUM(CASE WHEN h2h_edge > 0 THEN 1 ELSE 0 END) AS n_positive_edge
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE has_odds = true AND outcome IS NOT NULL
+              AND model_version IN ('v1', 'prod');
+
+            -- STRATIFIED EDGE BY UNCERTAINTY BUCKET
+            -- Run after unblock condition passes to understand which uncertainty regimes
+            -- benefit most from dynamic alpha weighting.
             SELECT
               CASE
                 WHEN game_uncertainty_score < 0.25 THEN '0.00-0.25'
@@ -192,7 +218,9 @@ spec:
                 reg = pathlib.Path('model_registry.yaml').read_text()
                 assert 'bayesian_layer' in reg, 'model_registry.yaml missing bayesian_layer block'
                 assert 'MAX_MODEL_WEIGHT' in reg, 'MAX_MODEL_WEIGHT not in registry'
-                print('model_registry.yaml bayesian_layer OK')
+                assert 'unblock_condition' in reg, 'unblock_condition not documented in bayesian_layer'
+                assert 'unblock_eval_query' in reg, 'unblock_eval_query not documented in bayesian_layer'
+                print('model_registry.yaml bayesian_layer with unblock condition OK')
           - type: artifact_exists
             name: dynamic alpha evaluation query template
             path: betting_ml/evaluation/dynamic_alpha_eval_template.sql
