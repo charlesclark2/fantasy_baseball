@@ -90,5 +90,10 @@ jobs:
       - name: Add ~/.local/bin to PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Create stub private key for compile check
+        run: touch /tmp/snowflake_rsa_key.pem
+
       - name: Compile dbt project (static analysis — no Snowflake required)
+        env:
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
         run: dbtf compile --project-dir dbt --profiles-dir dbt
