@@ -674,7 +674,7 @@ def main() -> None:
         'humidity_pct', 'temp_f', 'wind_component_mph', 'wind_direction_deg',
     })
     clf_cols = [c for c in X_today_imp.columns if c not in _FEATURES_ADDED_AFTER_LAST_RETRAIN]
-    _expected_n = clf_hw.base_clf.n_features_in_
+    _expected_n = clf_hw.n_features_in_
     if len(clf_cols) != _expected_n:
         warnings.warn(
             f"clf_hw expects {_expected_n} features but got {len(clf_cols)} after excluding "
