@@ -42,6 +42,7 @@ log = logging.getLogger(__name__)
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
     "baseball_data.savant.batter_pitches": {
         "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
+        "eod_offset_hours": 33,      # games end ~11pm ET; Statcast publishes ~9am ET next day ≈ 33h after UTC midnight
         "max_stale_hours": 48,
         "game_day_only": False,
     },
@@ -152,10 +153,22 @@ def _max_ingestion_timestamp(
     table: str,
     ts_col: str,
     con: snowflake.connector.SnowflakeConnection,
+    eod_offset_hours: int = 0,
 ) -> datetime | None:
-    """Query MAX of the table's freshness column. DATE columns are cast to TIMESTAMP_NTZ."""
+    """Query MAX of the table's freshness column, optionally offset by eod_offset_hours.
+
+    DATE columns store a calendar date (no timezone). eod_offset_hours shifts the reference
+    forward to approximate when the data is actually available — e.g. for game_date columns
+    where Statcast publishes the following morning rather than at UTC midnight.
+    """
     cur = con.cursor()
-    cur.execute(f"SELECT MAX({ts_col}::TIMESTAMP_NTZ) FROM {table}")
+    if eod_offset_hours:
+        cur.execute(
+            f"SELECT DATEADD(hour, %s, MAX({ts_col}::TIMESTAMP_NTZ)) FROM {table}",
+            (eod_offset_hours,),
+        )
+    else:
+        cur.execute(f"SELECT MAX({ts_col}::TIMESTAMP_NTZ) FROM {table}")
     row = cur.fetchone()
     if row and row[0] is not None:
         ts = row[0]
@@ -192,13 +205,14 @@ def run(check_date: date, dry_run: bool = False) -> None:
             max_stale_hours: int = cfg["max_stale_hours"]
             game_day_only: bool = cfg["game_day_only"]
             ts_col: str = cfg["ts_col"]
+            eod_offset_hours: int = cfg.get("eod_offset_hours", 0)
 
             if game_day_only and not game_day:
                 log.info("  %-55s SKIP (off day)", table)
                 results.append({"table": table, "status": "SKIP (off day)", "hours_stale": None})
                 continue
 
-            max_ts = _max_ingestion_timestamp(table, ts_col, con)
+            max_ts = _max_ingestion_timestamp(table, ts_col, con, eod_offset_hours)
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})
