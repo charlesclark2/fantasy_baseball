@@ -6857,3 +6857,47 @@ models:
         description: >
           TRUE when innings_caught >= 60 (no regression applied).
           FALSE when below the 60-inning reliability threshold.
+
+  # ============================================================================
+  # mart_starter_csw_rolling
+  # ============================================================================
+  - name: mart_starter_csw_rolling
+    description: >
+      One row per pitcher_id × game_pk (regular season starts with ≥ 20 pitches).
+      CSW% = (called_strike + swinging_strike + swinging_strike_blocked) / total_pitches.
+      Rolling windows include the current start — leakage guard is enforced at the
+      feature join layer in feature_pregame_starter_features via strict
+      game_date < prediction_game_date. NULL for a pitcher's first start of the
+      season (debut row). Card 8.Q.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, game_pk]
+
+    columns:
+      - name: pitcher_id
+        description: Statcast/BAM integer pitcher ID.
+        tests: [not_null]
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date of the start.
+        tests: [not_null]
+      - name: game_year
+        description: Season year.
+        tests: [not_null]
+      - name: csw_pct_3start
+        description: >
+          Trailing 3-start CSW%: SUM(csw_pitches) / SUM(total_pitches) over the
+          current start and the 2 preceding starts in the same season. NULL for
+          the pitcher's first start of the season.
+      - name: csw_pct_season
+        description: >
+          Season-to-date CSW% through this start (inclusive). NULL for the
+          pitcher's first start of the season.
+      - name: pitches_3start
+        description: >
+          Total pitches in the trailing 3 starts (reliability flag). Values
+          below ~150 indicate a thin sample. NULL for debut starts.

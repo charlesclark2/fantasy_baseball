@@ -75,6 +75,15 @@ _BULLPEN_LEVERAGE_ZERO_COLS = [
     "home_bp_leverage_sum_1d",
     "away_bp_leverage_sum_1d",
 ]
+# CSW% league average (~28.5% across 2023–2025 starters).
+# Applied to debut starters with no prior starts.
+CSW_LEAGUE_AVG = 0.285
+_CSW_COLS = [
+    "home_starter_csw_pct_3start",
+    "home_starter_csw_pct_season",
+    "away_starter_csw_pct_3start",
+    "away_starter_csw_pct_season",
+]
 _ROLLING_SUFFIXES = ("_7d", "_14d", "_30d", "_std")
 _GAMES_PLAYED_COLS = {
     "_7d": ("home_games_played_7d", "away_games_played_7d"),
@@ -312,6 +321,21 @@ class _BayesianShrinkageTransformer(BaseEstimator, TransformerMixin):
         return X
 
 
+class _CSWImputer(BaseEstimator, TransformerMixin):
+    """Impute CSW% columns with league-average (0.285) for debut starters."""
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        for col in _CSW_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(CSW_LEAGUE_AVG)
+        return X
+
+
 class _FallbackImputer(BaseEstimator, TransformerMixin):
     """Final fallback: fill any remaining nulls (numeric → mean, object → mode)."""
 
@@ -340,7 +364,7 @@ class _FallbackImputer(BaseEstimator, TransformerMixin):
 
 
 def build_imputation_pipeline(k: int = 15) -> Pipeline:
-    """Build a sklearn Pipeline that handles all six null groups.
+    """Build a sklearn Pipeline that handles all null groups.
 
     Steps (in order):
       normalize_types  — convert Snowflake Decimal columns to float64
@@ -349,6 +373,7 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
       park             — Group 2: park run factor cascade → league avg → 1.000
       constants        — Groups 3 & 4: win% → 0.500; days_rest → 4; pythagorean → 0.5 / 0.0
       bullpen_xwoba    — Group 5: bullpen xwOBA → training-set mean
+      csw              — CSW% columns → league-average 0.285 (Card 8.Q)
       bayesian         — Group 6: rolling stats → Bayesian shrinkage
       fallback         — catch-all mean/mode fill for any remaining nulls
     """
@@ -360,6 +385,7 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
             ("park", _ParkRunFactorImputer()),
             ("constants", _ConstantImputer()),
             ("bullpen_xwoba", _BullpenXwobaImputer()),
+            ("csw", _CSWImputer()),
             ("bayesian", _BayesianShrinkageTransformer(k=k)),
             ("fallback", _FallbackImputer()),
         ]

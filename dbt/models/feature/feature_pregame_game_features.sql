@@ -318,6 +318,11 @@ final as (
         h_st.starter_trailing_ra9_30g           as home_starter_trailing_ra9_30g,
         h_st.starter_fip_ra9_gap                as home_starter_fip_ra9_gap,
 
+        -- ── Home starter: CSW% rolling stats (Card 8.Q) ──────────────────────
+        -- NULL for debut starters; imputed to ~0.285 in preprocessing.py.
+        h_st.csw_pct_3start                     as home_starter_csw_pct_3start,
+        h_st.csw_pct_season                     as home_starter_csw_pct_season,
+
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
         a_st.pitcher_name                       as away_starter_pitcher_name,
@@ -392,6 +397,11 @@ final as (
         a_st.starter_trailing_fip_30g           as away_starter_trailing_fip_30g,
         a_st.starter_trailing_ra9_30g           as away_starter_trailing_ra9_30g,
         a_st.starter_fip_ra9_gap                as away_starter_fip_ra9_gap,
+
+        -- ── Away starter: CSW% rolling stats (Card 8.Q) ──────────────────────
+        -- NULL for debut starters; imputed to ~0.285 in preprocessing.py.
+        a_st.csw_pct_3start                     as away_starter_csw_pct_3start,
+        a_st.csw_pct_season                     as away_starter_csw_pct_season,
 
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
