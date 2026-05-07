@@ -1128,3 +1128,66 @@ models:
           Cluster ID of the away starter from the most recent pitcher_clusters
           snapshot strictly before game_date. Null for same reasons as
           home_starter_cluster_id.
+
+      - name: ml_implied_prob_std
+        description: >
+          Standard deviation of vig-free home win probability across all
+          bookmakers with morning h2h coverage (6:00–8:30 AM ET on game_date).
+          Higher values indicate genuine disagreement between books. NULL when
+          fewer than 2 books have morning coverage. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.15
+              config:
+                where: "ml_implied_prob_std is not null"
+
+      - name: ml_implied_prob_range
+        description: >
+          Max minus min vig-free home win probability across morning-snapshot
+          books. NULL when fewer than 2 books have morning coverage. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+
+      - name: totals_line_std
+        description: >
+          Standard deviation of the total line across bookmakers with morning
+          totals coverage. NULL when fewer than 2 books have totals odds. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+
+      - name: totals_line_range
+        description: >
+          Max minus min total line across morning-snapshot books. NULL when fewer
+          than 2 books have totals odds. Card 8.T. Imputed to 0.0 in
+          preprocessing.py.
+
+      - name: sharp_soft_ml_spread
+        description: >
+          Average vig-free home win prob (sharp books: lowvig, betonlineag,
+          bovada) minus average vig-free home win prob (soft books: williamhill_us,
+          betmgm, caesars, fanduel). Positive = sharp books favor home more than
+          soft books. NULL when fewer than 1 sharp or 1 soft book has morning
+          coverage. Expected range: [-0.10, 0.10]. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -0.10
+                max_value: 0.10
+              config:
+                where: "sharp_soft_ml_spread is not null"
+
+      - name: n_books_available
+        description: >
+          Number of distinct bookmakers with h2h morning snapshot coverage for
+          this game. Always >= 1 for non-null rows (games without any morning
+          odds coverage are excluded from mart_bookmaker_disagreement and receive
+          NULL here via LEFT JOIN). Imputed to 1 in preprocessing.py. Card 8.T.
+
+      - name: stale_book_flag
+        description: >
+          1 if any bookmaker's morning snapshot is more than 60 minutes older
+          than the freshest bookmaker's morning snapshot (indicating that book
+          has not yet digested sharp action). 0 otherwise, including single-book
+          games. Imputed to 0 in preprocessing.py. Card 8.T.

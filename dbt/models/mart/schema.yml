@@ -529,6 +529,81 @@ models:
           through as a model signal feature in feature_pregame_odds_features.
 
   # ============================================================================
+  # mart_bookmaker_disagreement
+  # ============================================================================
+  - name: mart_bookmaker_disagreement
+    description: >
+      Bookmaker disagreement features at morning snapshot grain. One row per
+      game_pk for games with at least one h2h morning snapshot (6:00–8:30 AM ET
+      on game_date). Captures cross-book dispersion in implied probabilities and
+      totals lines as ML features. Card 8.T.
+
+      Leakage guard: only ingestion_ts values between 6:00 AM and 8:30 AM ET on
+      game_date are included. The earliest snapshot per game × bookmaker in that
+      window is used — this is the morning consensus before sharp action has
+      meaningfully moved lines.
+
+      Bookmaker tiers: sharp = lowvig, betonlineag, bovada;
+      soft = williamhill_us, betmgm, caesars, fanduel; neutral = all others.
+
+      NULL rules: all features are NULL when n_books_available < 2 except
+      sharp_soft_ml_spread (which is NULL when fewer than 1 sharp or 1 soft
+      book is present) and n_books_available/stale_book_flag (always populated).
+      Imputed in preprocessing.py — no COALESCE in this mart.
+
+    columns:
+
+      - name: game_pk
+        description: MLB Stats API game identifier. Primary key.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Calendar date of the game.
+        tests:
+          - not_null
+
+      - name: ml_implied_prob_std
+        description: >
+          Standard deviation of vig-free home win probability across all books
+          with morning h2h coverage. NULL when fewer than 2 books are available.
+          Values above 0.15 are implausible (sanity check threshold).
+
+      - name: ml_implied_prob_range
+        description: >
+          Max minus min vig-free home win probability across all books. NULL when
+          fewer than 2 books are available.
+
+      - name: totals_line_std
+        description: >
+          Standard deviation of the total line across all books with morning
+          totals coverage. NULL when fewer than 2 books have totals odds.
+
+      - name: totals_line_range
+        description: >
+          Max minus min total line across books. NULL when fewer than 2 books
+          have totals odds.
+
+      - name: sharp_soft_ml_spread
+        description: >
+          Average vig-free home win prob (sharp books) minus average vig-free
+          home win prob (soft books). NULL when fewer than 1 sharp or 1 soft
+          book has morning coverage. Range expected within [-0.10, 0.10].
+
+      - name: n_books_available
+        description: >
+          Number of distinct bookmakers with h2h morning snapshot coverage.
+          Always >= 1 for rows in this mart. Used to null-guard disagreement
+          features when only one book is present.
+
+      - name: stale_book_flag
+        description: >
+          1 if any book's morning snapshot is more than 60 minutes older than
+          the freshest book's morning snapshot (stale = book has not yet digested
+          sharp action). 0 for all normal cases including single-book games.
+
+  # ============================================================================
   # mart_pitch_game_context
   # ============================================================================
   - name: mart_pitch_game_context

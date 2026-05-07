@@ -98,6 +98,10 @@ line_movement as (
     -- Future enhancement: make bookmaker configurable via a dbt variable
 ),
 
+bookmaker_disagreement as (
+    select * from {{ ref('mart_bookmaker_disagreement') }}
+),
+
 game_context as (
     select
         game_pk,
@@ -772,6 +776,17 @@ final as (
         coalesce(lm.total_line_movement, 0.0)   as total_line_movement,
         lm.open_total_line,
 
+        -- ── Bookmaker disagreement features (Card 8.T) ───────────────────────────
+        -- Morning snapshot dispersion across books. NULL when fewer than 2 books
+        -- have morning odds coverage. Imputed in preprocessing.py.
+        bd.ml_implied_prob_std,
+        bd.ml_implied_prob_range,
+        bd.totals_line_std,
+        bd.totals_line_range,
+        bd.sharp_soft_ml_spread,
+        bd.n_books_available,
+        bd.stale_book_flag,
+
         -- ── Percentage-difference encoded matchup features (Card 8.A) ─────────────
         -- (home_val - away_val) / ABS(away_val) * 100; positive = home advantage.
         -- NULL when away denominator is 0 or NULL.
@@ -832,6 +847,8 @@ final as (
         on  bam.game_pk = g.game_pk
     left join line_movement lm
         on  lm.game_pk = g.game_pk
+    left join bookmaker_disagreement bd
+        on  bd.game_pk = g.game_pk
 )
 
 select * from final

@@ -1,0 +1,63 @@
+Card 8.T — Bookmaker Disagreement Feature Validation
+Run date: 2026-05-07
+======================================================
+
+TASK 1 / TASK 2: dbt builds
+  mart_bookmaker_disagreement          SUCCEEDED (all tests passed)
+  feature_pregame_game_features        SUCCEEDED (all tests passed)
+
+----------------------------------------------------------------------
+RANGE SANITY (game_year >= 2024, rows with morning odds)
+----------------------------------------------------------------------
+  ml_implied_prob_std   : [0.0021, 0.0140]   spec limit [0.00, 0.15]  PASS
+  sharp_soft_ml_spread  : [-0.010, +0.015]   spec limit [-0.10, 0.10] PASS
+  avg books per game    : 17.10              (max 19)
+  stale_book_flag = 0   : 63 games (100% of games with morning odds)
+
+----------------------------------------------------------------------
+NULL RATE AUDIT
+----------------------------------------------------------------------
+  game_year = 2025, game_date >= 2025-05-01  (1,972 rows)
+    All 7 features: 100% NULL
+    Reason: 2025 games predate morning snapshot collection entirely.
+
+  game_year = 2026 (537 rows, 2026-03-25 through 2026-05-05)
+    Overall null rate for ml_implied_prob_std: 88.3%
+    Breakdown by date:
+      2026-03-25 through 2026-04-25 : 0% morning odds coverage (474 games)
+      2026-04-26 through 2026-04-30 : 100% coverage (63 of 63 games)  ← collection active
+      2026-05-01 through 2026-05-05 : 0% coverage (70 games)          ← collection lapsed
+
+  Plan spec AC: "null rate < 5% after May 1 for seasons with odds"
+    Status: FAIL (100% null for 2026-05-01 through 2026-05-05)
+
+----------------------------------------------------------------------
+ROOT CAUSE
+----------------------------------------------------------------------
+Morning odds collection ran for exactly 5 days (2026-04-26 through
+2026-04-30) then stopped. The mart_bookmaker_disagreement SQL is
+correct and achieved 100% game coverage on days when morning snapshots
+were ingested. The issue is in the upstream collection job: the script
+that snapshots odds during the 6:00–8:30 AM ET window is not running
+daily.
+
+----------------------------------------------------------------------
+RECOMMENDATIONS
+----------------------------------------------------------------------
+1. Ensure the morning odds collection job (collect_odds.py or
+   equivalent) runs every day before 8:30 AM ET.
+2. Once collection is stable, rebuild feature_pregame_game_features
+   and re-run this audit — expect null rate to drop to ~0% for
+   current-season games.
+3. Historical backfill is not possible (morning prices are not
+   available retroactively); all pre-2026-04-26 games will remain
+   NULL and rely on preprocessing.py imputation (0.0 for dispersion
+   metrics, 1 for n_books_available, 0 for stale_book_flag).
+
+----------------------------------------------------------------------
+IMPUTATION BEHAVIOR (preprocessing.py _ConstantImputer)
+----------------------------------------------------------------------
+  ml_implied_prob_std / _range / totals_line_std / _range /
+  sharp_soft_ml_spread → 0.0   (no morning odds = no disagreement)
+  n_books_available    → 1     (single-book default)
+  stale_book_flag      → 0

@@ -36,6 +36,13 @@ _PLATOON_SUFFIXES = ("_vs_lhb", "_vs_rhb", "_vs_lhp", "_vs_rhp", "_adj")
 _WIN_PCT_COLS = ["home_win_pct", "away_win_pct"]
 _PYTHAGOREAN_COLS = ["home_pythagorean_win_exp", "away_pythagorean_win_exp"]
 _PYTHAGOREAN_DIFF_COLS = ["pythagorean_win_exp_diff"]
+_BOOKMAKER_DISAGREEMENT_ZERO_COLS = [
+    "ml_implied_prob_std",
+    "ml_implied_prob_range",
+    "totals_line_std",
+    "totals_line_range",
+    "sharp_soft_ml_spread",
+]
 _VELO_DELTA_COLS = [
     "home_starter_velo_delta_3start",
     "away_starter_velo_delta_3start",
@@ -180,6 +187,16 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
         for col in _VELO_DELTA_COLS:
             if col in X.columns:
                 X[col] = X[col].fillna(0.0)
+        # Bookmaker disagreement features (Card 8.T): no morning odds = no
+        # disagreement signal, so impute dispersion metrics to 0.0 and counts
+        # to their single-book defaults.
+        for col in _BOOKMAKER_DISAGREEMENT_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        if "n_books_available" in X.columns:
+            X["n_books_available"] = X["n_books_available"].fillna(1)
+        if "stale_book_flag" in X.columns:
+            X["stale_book_flag"] = X["stale_book_flag"].fillna(0)
         return X
 
 
