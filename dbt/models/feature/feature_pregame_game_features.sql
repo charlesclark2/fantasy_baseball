@@ -98,6 +98,10 @@ line_movement as (
     -- Future enhancement: make bookmaker configurable via a dbt variable
 ),
 
+bookmaker_disagreement as (
+    select * from {{ ref('mart_bookmaker_disagreement') }}
+),
+
 game_context as (
     select
         game_pk,
@@ -772,6 +776,17 @@ final as (
         coalesce(lm.total_line_movement, 0.0)   as total_line_movement,
         lm.open_total_line,
 
+        -- ── Bookmaker disagreement features (Card 8.T) ───────────────────────────
+        -- Morning snapshot dispersion across books. NULL when fewer than 2 books
+        -- have morning odds coverage. Imputed in preprocessing.py.
+        bd.ml_implied_prob_std,
+        bd.ml_implied_prob_range,
+        bd.totals_line_std,
+        bd.totals_line_range,
+        bd.sharp_soft_ml_spread,
+        bd.n_books_available,
+        bd.stale_book_flag,
+
         -- ── Percentage-difference encoded matchup features (Card 8.A) ─────────────
         -- (home_val - away_val) / ABS(away_val) * 100; positive = home advantage.
         -- NULL when away denominator is 0 or NULL.
@@ -805,7 +820,50 @@ final as (
 
         case when a_tm.pythagorean_win_exp = 0 or a_tm.pythagorean_win_exp is null then null
              else round((h_tm.pythagorean_win_exp - a_tm.pythagorean_win_exp) / abs(a_tm.pythagorean_win_exp) * 100, 4)
-        end                                     as home_away_pythagorean_win_exp_pct_diff
+        end                                     as home_away_pythagorean_win_exp_pct_diff,
+
+        -- ── Bullpen handedness matchup quality (Card 8.L) ────────────────────
+        -- home_bp_matchup_xwoba: expected xwOBA the home lineup generates vs the
+        -- away bullpen, weighted by the home lineup's LHB/RHB composition.
+        -- away_bp_matchup_xwoba: same metric for the away lineup vs the home bullpen.
+        -- Higher value = more permissive bullpen for that lineup composition.
+        -- NULL when bullpen handedness splits or lineup counts are unavailable.
+        round(
+            a_bph.bp_xwoba_vs_rhb_30d
+                * (h_ln.rhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+            + a_bph.bp_xwoba_vs_lhb_30d
+                * (h_ln.lhb_count::float / nullif(h_ln.lhb_count + h_ln.rhb_count, 0))
+        , 4)                                    as home_bp_matchup_xwoba,
+
+        round(
+            h_bph.bp_xwoba_vs_rhb_30d
+                * (a_ln.rhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+            + h_bph.bp_xwoba_vs_lhb_30d
+                * (a_ln.lhb_count::float / nullif(a_ln.lhb_count + a_ln.rhb_count, 0))
+        , 4)                                    as away_bp_matchup_xwoba,
+
+        -- ── Bullpen leverage exhaustion (Card 8.U) ───────────────────────────
+        -- Leverage = sum |delta_home_win_exp| per reliever plate appearance,
+        -- rolling over the trailing 1 and 3 calendar days. Captures situational
+        -- intensity beyond raw inning/pitch counts from mart_bullpen_workload.
+        -- NULL when no reliever appearances in the trailing window. Impute 0.0.
+        h_blev.bp_leverage_sum_3d               as home_bp_leverage_sum_3d,
+        a_blev.bp_leverage_sum_3d               as away_bp_leverage_sum_3d,
+        h_blev.bp_high_lev_appearances_3d       as home_bp_high_lev_appearances_3d,
+        a_blev.bp_high_lev_appearances_3d       as away_bp_high_lev_appearances_3d,
+        h_blev.bp_leverage_sum_1d               as home_bp_leverage_sum_1d,
+        a_blev.bp_leverage_sum_1d               as away_bp_leverage_sum_1d,
+
+        -- ── Catcher metrics (Card 8.K) ────────────────────────────────────────
+        -- Source: FanGraphs leaderboard API (xMLBAMID → MLBAM player_id).
+        -- Blended 70% current + 30% prior season, regressed toward 0 for < 60 innings.
+        -- 0 = league average; imputed to 0 when catcher or lineup is unavailable.
+        -- framing_runs: CFraming (pure pitch-framing)
+        -- defensive_runs: FRP (framing + blocking + arm + range — comprehensive)
+        coalesce(h_ln.catcher_framing_runs,   0) as home_catcher_framing_runs,
+        coalesce(a_ln.catcher_framing_runs,   0) as away_catcher_framing_runs,
+        coalesce(h_ln.catcher_defensive_runs, 0) as home_catcher_defensive_runs,
+        coalesce(a_ln.catcher_defensive_runs, 0) as away_catcher_defensive_runs
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -832,6 +890,20 @@ final as (
         on  bam.game_pk = g.game_pk
     left join line_movement lm
         on  lm.game_pk = g.game_pk
+    left join bookmaker_disagreement bd
+        on  bd.game_pk = g.game_pk
+    left join {{ ref('mart_bullpen_handedness_splits') }} h_bph
+        on  h_bph.team_abbrev = g.home_team
+        and h_bph.game_pk     = g.game_pk
+    left join {{ ref('mart_bullpen_handedness_splits') }} a_bph
+        on  a_bph.team_abbrev = g.away_team
+        and a_bph.game_pk     = g.game_pk
+    left join {{ ref('mart_bullpen_leverage') }} h_blev
+        on  h_blev.team_abbrev = g.home_team
+        and h_blev.game_pk     = g.game_pk
+    left join {{ ref('mart_bullpen_leverage') }} a_blev
+        on  a_blev.team_abbrev = g.away_team
+        and a_blev.game_pk     = g.game_pk
 )
 
 select * from final

@@ -529,6 +529,81 @@ models:
           through as a model signal feature in feature_pregame_odds_features.
 
   # ============================================================================
+  # mart_bookmaker_disagreement
+  # ============================================================================
+  - name: mart_bookmaker_disagreement
+    description: >
+      Bookmaker disagreement features at morning snapshot grain. One row per
+      game_pk for games with at least one h2h morning snapshot (6:00–8:30 AM ET
+      on game_date). Captures cross-book dispersion in implied probabilities and
+      totals lines as ML features. Card 8.T.
+
+      Leakage guard: only ingestion_ts values between 6:00 AM and 8:30 AM ET on
+      game_date are included. The earliest snapshot per game × bookmaker in that
+      window is used — this is the morning consensus before sharp action has
+      meaningfully moved lines.
+
+      Bookmaker tiers: sharp = lowvig, betonlineag, bovada;
+      soft = williamhill_us, betmgm, caesars, fanduel; neutral = all others.
+
+      NULL rules: all features are NULL when n_books_available < 2 except
+      sharp_soft_ml_spread (which is NULL when fewer than 1 sharp or 1 soft
+      book is present) and n_books_available/stale_book_flag (always populated).
+      Imputed in preprocessing.py — no COALESCE in this mart.
+
+    columns:
+
+      - name: game_pk
+        description: MLB Stats API game identifier. Primary key.
+        tests:
+          - not_null
+          - unique
+
+      - name: game_date
+        description: Calendar date of the game.
+        tests:
+          - not_null
+
+      - name: ml_implied_prob_std
+        description: >
+          Standard deviation of vig-free home win probability across all books
+          with morning h2h coverage. NULL when fewer than 2 books are available.
+          Values above 0.15 are implausible (sanity check threshold).
+
+      - name: ml_implied_prob_range
+        description: >
+          Max minus min vig-free home win probability across all books. NULL when
+          fewer than 2 books are available.
+
+      - name: totals_line_std
+        description: >
+          Standard deviation of the total line across all books with morning
+          totals coverage. NULL when fewer than 2 books have totals odds.
+
+      - name: totals_line_range
+        description: >
+          Max minus min total line across books. NULL when fewer than 2 books
+          have totals odds.
+
+      - name: sharp_soft_ml_spread
+        description: >
+          Average vig-free home win prob (sharp books) minus average vig-free
+          home win prob (soft books). NULL when fewer than 1 sharp or 1 soft
+          book has morning coverage. Range expected within [-0.10, 0.10].
+
+      - name: n_books_available
+        description: >
+          Number of distinct bookmakers with h2h morning snapshot coverage.
+          Always >= 1 for rows in this mart. Used to null-guard disagreement
+          features when only one book is present.
+
+      - name: stale_book_flag
+        description: >
+          1 if any book's morning snapshot is more than 60 minutes older than
+          the freshest book's morning snapshot (stale = book has not yet digested
+          sharp action). 0 for all normal cases including single-book games.
+
+  # ============================================================================
   # mart_pitch_game_context
   # ============================================================================
   - name: mart_pitch_game_context
@@ -6615,3 +6690,170 @@ models:
               arguments:
                 min_value: 0
                 max_value: 2
+
+  # mart_bullpen_handedness_splits
+  # ============================================================================
+  - name: mart_bullpen_handedness_splits
+    description: >
+      Grain: team_abbrev × game_pk. One row per team per game where the team
+      deployed at least one reliever against a batter with known handedness.
+      Provides rolling 30-day bullpen xwOBA-against split by batter handedness
+      (L or R). Leakage guard: rolling window upper bound is 1 day preceding.
+
+      Reliever definition: same as mart_bullpen_effectiveness — any pitcher NOT
+      identified as the qualifying starter per mart_starting_pitcher_game_log.
+
+      PA-count columns (bp_pa_vs_rhb_30d / bp_pa_vs_lhb_30d) indicate sample
+      size. Values may be null early in the season or for teams with few
+      appearances against a given handedness in the 30-day window.
+
+      Companion to mart_bullpen_workload and mart_bullpen_effectiveness.
+      Join all three on team_abbrev + game_pk for a complete pre-game bullpen view.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_abbrev, game_pk]
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: Statcast abbreviation of the pitching team. Matches pitching_team in mart_bullpen_workload.
+        tests:
+          - not_null
+
+      - name: bp_xwoba_vs_rhb_30d
+        description: >
+          Rolling 30-day bullpen xwOBA against right-handed batters.
+          Null when fewer than 1 PA vs RHB in the window.
+
+      - name: bp_xwoba_vs_lhb_30d
+        description: >
+          Rolling 30-day bullpen xwOBA against left-handed batters.
+          Null when fewer than 1 PA vs LHB in the window.
+
+      - name: bp_pa_vs_rhb_30d
+        description: PA count against right-handed batters in the rolling 30-day window. Sample size indicator.
+
+      - name: bp_pa_vs_lhb_30d
+        description: PA count against left-handed batters in the rolling 30-day window. Sample size indicator.
+
+  # mart_bullpen_leverage
+  # ============================================================================
+  - name: mart_bullpen_leverage
+    description: >
+      Grain: team_abbrev × game_pk. Pre-game bullpen leverage exhaustion per team.
+      Measures situational intensity of recent bullpen use via |delta_home_win_exp|
+      summed within each reliever plate appearance and rolled up over trailing 1
+      and 3 calendar days. Distinguishes a closer who worked a 1-run game (high
+      leverage) from a mop-up reliever in a blowout (low leverage) — both scenarios
+      produce similar raw inning counts but very different delta_home_win_exp sums.
+
+      Leakage guard: rolling window upper bound is 1 day preceding. Only appearances
+      strictly before the game date are included.
+
+      Starter exclusion: pitchers listed in mart_starting_pitcher_game_log are
+      excluded from all calculations.
+
+      Doubleheader handling: stats are aggregated to the calendar-date level before
+      rolling windows, so both games in a doubleheader share the same prior-day values.
+
+      NULL when no reliever appearances in the trailing window. Impute to 0.0 in
+      betting_ml/utils/preprocessing.py. Card 8.U.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_abbrev, game_pk]
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: Statcast abbreviation of the pitching team.
+        tests:
+          - not_null
+
+      - name: bp_leverage_sum_3d
+        description: >
+          Sum of |delta_home_win_exp| for all reliever plate appearances over the
+          trailing 3 calendar days. Higher = more high-leverage recent use.
+          Null when no reliever appearances in the window.
+
+      - name: bp_high_lev_appearances_3d
+        description: >
+          Count of reliever plate appearances where the at-bat-level
+          |delta_home_win_exp| exceeded 0.05 (5pp win-probability swing) over the
+          trailing 3 calendar days. Null when no reliever appearances in the window.
+
+      - name: bp_leverage_sum_1d
+        description: >
+          Sum of |delta_home_win_exp| for all reliever plate appearances on the
+          calendar day immediately preceding the game. Captures freshness of
+          leverage exhaustion. Null when no reliever appearances on that day.
+
+  # ============================================================================
+  # mart_catcher_framing
+  # ============================================================================
+  - name: mart_catcher_framing
+    description: >
+      Season-level catcher defensive metrics with reliability regression.
+      Source: FanGraphs leaderboard API (xMLBAMID → MLBAM player_id).
+      Grain: player_id × season (latest weekly snapshot).
+      Blended: 70% current season + 30% prior season (NULL prior → 100% current).
+      Regressed toward 0 for catchers with < 60 innings caught.
+      Card 8.K.
+
+    columns:
+      - name: player_id
+        description: MLBAM player ID (xMLBAMID from FanGraphs).
+        tests: [not_null]
+      - name: season
+        description: Season year.
+        tests: [not_null]
+      - name: innings_caught
+        description: Innings caught in the current season (sample size proxy).
+      - name: framing_runs_above_average
+        description: >
+          CFraming blended and regressed. Pure pitch-framing runs above average.
+          0 = league average. Positive = better-than-average framer.
+      - name: defensive_runs_above_average
+        description: >
+          FRP blended and regressed. Total catcher defensive value: framing +
+          blocking + arm strength + range. More comprehensive than framing alone.
+      - name: stolen_base_runs_above_average
+        description: >
+          rSB blended and regressed. Arm/throwing runs saved on stolen base attempts.
+      - name: is_reliable
+        description: >
+          TRUE when innings_caught >= 60 (no regression applied).
+          FALSE when below the 60-inning reliability threshold.

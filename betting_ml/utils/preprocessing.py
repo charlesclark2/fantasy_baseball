@@ -36,6 +36,13 @@ _PLATOON_SUFFIXES = ("_vs_lhb", "_vs_rhb", "_vs_lhp", "_vs_rhp", "_adj")
 _WIN_PCT_COLS = ["home_win_pct", "away_win_pct"]
 _PYTHAGOREAN_COLS = ["home_pythagorean_win_exp", "away_pythagorean_win_exp"]
 _PYTHAGOREAN_DIFF_COLS = ["pythagorean_win_exp_diff"]
+_BOOKMAKER_DISAGREEMENT_ZERO_COLS = [
+    "ml_implied_prob_std",
+    "ml_implied_prob_range",
+    "totals_line_std",
+    "totals_line_range",
+    "sharp_soft_ml_spread",
+]
 _VELO_DELTA_COLS = [
     "home_starter_velo_delta_3start",
     "away_starter_velo_delta_3start",
@@ -47,6 +54,27 @@ _DAYS_REST_COLS = [
     "away_starter_days_rest",
 ]
 _BULLPEN_XWOBA_PATTERN = "bp_xwoba_against"
+# Patterns for the bullpen state feature table (feature_pregame_bullpen_state_features)
+_BULLPEN_STATE_XWOBA_PATTERNS = (
+    "bullpen_lhb_xwoba_against",
+    "bullpen_rhb_xwoba_against",
+    "bullpen_matchup_quality_vs_lineup",
+    "home_bp_matchup_xwoba",
+    "away_bp_matchup_xwoba",
+)
+_BULLPEN_STATE_ZERO_COLS = [
+    "bullpen_leverage_pitches_prev_1d",
+    "bullpen_leverage_pitches_prev_3d",
+    "high_leverage_arms_used_prev_2d",
+]
+_BULLPEN_LEVERAGE_ZERO_COLS = [
+    "home_bp_leverage_sum_3d",
+    "away_bp_leverage_sum_3d",
+    "home_bp_high_lev_appearances_3d",
+    "away_bp_high_lev_appearances_3d",
+    "home_bp_leverage_sum_1d",
+    "away_bp_leverage_sum_1d",
+]
 _ROLLING_SUFFIXES = ("_7d", "_14d", "_30d", "_std")
 _GAMES_PLAYED_COLS = {
     "_7d": ("home_games_played_7d", "away_games_played_7d"),
@@ -180,6 +208,27 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
         for col in _VELO_DELTA_COLS:
             if col in X.columns:
                 X[col] = X[col].fillna(0.0)
+        # Bookmaker disagreement features (Card 8.T): no morning odds = no
+        # disagreement signal, so impute dispersion metrics to 0.0 and counts
+        # to their single-book defaults.
+        for col in _BOOKMAKER_DISAGREEMENT_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        if "n_books_available" in X.columns:
+            X["n_books_available"] = X["n_books_available"].fillna(1)
+        if "stale_book_flag" in X.columns:
+            X["stale_book_flag"] = X["stale_book_flag"].fillna(0)
+        # Bullpen state workload columns: no usage = 0 pitches
+        for col in _BULLPEN_STATE_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # Bullpen leverage exhaustion columns (Card 8.U): no appearances = 0.0
+        for col in _BULLPEN_LEVERAGE_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # closer_availability_proxy: null means unknown → assume available (1)
+        if "closer_availability_proxy" in X.columns:
+            X["closer_availability_proxy"] = X["closer_availability_proxy"].fillna(1)
         return X
 
 
@@ -187,7 +236,11 @@ class _BullpenXwobaImputer(BaseEstimator, TransformerMixin):
     """Group 5: Fill bullpen xwOBA nulls with training-set mean."""
 
     def fit(self, X: pd.DataFrame, y=None):
-        self._cols = [c for c in X.columns if _BULLPEN_XWOBA_PATTERN in c]
+        self._cols = [
+            c for c in X.columns
+            if _BULLPEN_XWOBA_PATTERN in c
+            or any(c == pat for pat in _BULLPEN_STATE_XWOBA_PATTERNS)
+        ]
         self._means = {
             c: (X[c].mean() if X[c].notna().any() else 0.310) for c in self._cols
         }

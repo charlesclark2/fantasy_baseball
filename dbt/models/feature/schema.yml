@@ -110,6 +110,20 @@ models:
                 warn_if: ">= 100"
                 error_if: ">= 10000"
 
+      - name: catcher_framing_runs
+        description: >
+          CFraming blended (70% current + 30% prior) and regressed toward 0 for
+          catchers with < 60 innings. 0 = league average. Source: FanGraphs.
+          Imputed to 0 when catcher cannot be identified from lineup data.
+      - name: catcher_defensive_runs
+        description: >
+          FRP blended and regressed. Total catcher defensive value (framing +
+          blocking + arm + range). Source: FanGraphs.
+          Imputed to 0 when catcher cannot be identified from lineup data.
+          Card 8.K.
+        tests:
+          - not_null
+
   - name: feature_pregame_starter_features
     description: >
       Pre-game starting pitcher features for ML. One row per game_pk × pitcher_id.
@@ -723,6 +737,191 @@ models:
           Average vig-adjusted over probability across bookmakers with totals coverage.
           Null when no totals coverage exists.
 
+      - name: temp_f
+        description: >
+          Temperature at scheduled first pitch (degrees Fahrenheit).
+          Sourced from feature_pregame_weather_features. Null for dome parks
+          and games with no weather row in weather_raw.
+
+      - name: wind_speed_mph
+        description: >
+          Wind speed at first pitch (mph). Null for dome parks and games
+          with no weather data.
+
+      - name: wind_direction_deg
+        description: >
+          Meteorological wind direction (degrees). 0/360 = wind from North,
+          90 = wind from East. Null for dome parks.
+
+      - name: wind_component_mph
+        description: >
+          Wind component along the home-plate-to-center-field axis (mph).
+          Positive = wind blowing out toward CF (favors offense, increases runs).
+          Negative = wind blowing in toward home plate (suppresses scoring).
+          Computed as wind_speed_mph × cos(wind_direction_deg − park_facing_degrees).
+          Null for dome parks (is_dome = true).
+
+      - name: humidity_pct
+        description: >
+          Relative humidity at first pitch (percent). Null for dome parks
+          and games with no weather data.
+
+      - name: is_dome
+        description: >
+          True for games played in permanently enclosed dome parks (roof_type =
+          'fixed'). False for open-air and convertible-roof parks. Used to
+          distinguish NULL wind columns (dome) from genuinely missing weather
+          data (outdoor parks with no row in weather_raw).
+
+      - name: ml_implied_prob_std
+        description: >
+          Standard deviation of vig-free home win probability across all
+          bookmakers with morning h2h coverage (6:00–8:30 AM ET on game_date).
+          Higher values indicate genuine disagreement between books. NULL when
+          fewer than 2 books have morning coverage. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.15
+              config:
+                where: "ml_implied_prob_std is not null"
+
+      - name: ml_implied_prob_range
+        description: >
+          Max minus min vig-free home win probability across morning-snapshot
+          books. NULL when fewer than 2 books have morning coverage. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+
+      - name: totals_line_std
+        description: >
+          Standard deviation of the total line across bookmakers with morning
+          totals coverage. NULL when fewer than 2 books have totals odds. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+
+      - name: totals_line_range
+        description: >
+          Max minus min total line across morning-snapshot books. NULL when fewer
+          than 2 books have totals odds. Card 8.T. Imputed to 0.0 in
+          preprocessing.py.
+
+      - name: sharp_soft_ml_spread
+        description: >
+          Average vig-free home win prob (sharp books: lowvig, betonlineag,
+          bovada) minus average vig-free home win prob (soft books: williamhill_us,
+          betmgm, caesars, fanduel). Positive = sharp books favor home more than
+          soft books. NULL when fewer than 1 sharp or 1 soft book has morning
+          coverage. Expected range: [-0.10, 0.10]. Card 8.T.
+          Imputed to 0.0 in preprocessing.py.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: -0.10
+                max_value: 0.10
+              config:
+                where: "sharp_soft_ml_spread is not null"
+
+      - name: n_books_available
+        description: >
+          Number of distinct bookmakers with h2h morning snapshot coverage for
+          this game. Always >= 1 for non-null rows (games without any morning
+          odds coverage are excluded from mart_bookmaker_disagreement and receive
+          NULL here via LEFT JOIN). Imputed to 1 in preprocessing.py. Card 8.T.
+
+      - name: stale_book_flag
+        description: >
+          1 if any bookmaker's morning snapshot is more than 60 minutes older
+          than the freshest bookmaker's morning snapshot (indicating that book
+          has not yet digested sharp action). 0 otherwise, including single-book
+          games. Imputed to 0 in preprocessing.py. Card 8.T.
+
+      - name: home_bp_matchup_xwoba
+        description: >
+          Expected xwOBA the home lineup generates against the away bullpen,
+          weighted by the home lineup's LHB/RHB composition:
+            away_bp_xwoba_vs_rhb_30d * (home_rhb_count / total)
+            + away_bp_xwoba_vs_lhb_30d * (home_lhb_count / total)
+          Higher = more permissive away bullpen for this home lineup. Null when
+          away bullpen handedness splits or home lineup counts are unavailable.
+          Impute to league average (~0.315) in preprocessing. Card 8.L.
+
+      - name: away_bp_matchup_xwoba
+        description: >
+          Expected xwOBA the away lineup generates against the home bullpen,
+          weighted by the away lineup's LHB/RHB composition:
+            home_bp_xwoba_vs_rhb_30d * (away_rhb_count / total)
+            + home_bp_xwoba_vs_lhb_30d * (away_lhb_count / total)
+          Higher = more permissive home bullpen for this away lineup. Null when
+          home bullpen handedness splits or away lineup counts are unavailable.
+          Impute to league average (~0.315) in preprocessing. Card 8.L.
+
+      - name: home_bp_leverage_sum_3d
+        description: >
+          Sum of |delta_home_win_exp| for all home-team reliever plate appearances
+          over the trailing 3 calendar days. Higher = more situational exhaustion
+          (high-leverage work), regardless of raw inning volume. Null when no
+          home reliever appearances in the trailing window. Impute 0.0. Card 8.U.
+
+      - name: away_bp_leverage_sum_3d
+        description: >
+          Sum of |delta_home_win_exp| for all away-team reliever plate appearances
+          over the trailing 3 calendar days. Null when no away reliever appearances
+          in the trailing window. Impute 0.0. Card 8.U.
+
+      - name: home_bp_high_lev_appearances_3d
+        description: >
+          Count of home-team reliever plate appearances where the at-bat-level
+          |delta_home_win_exp| exceeded 0.05 (5pp win-probability swing) over the
+          trailing 3 calendar days. Null when no home reliever appearances in the
+          trailing window. Impute 0.0. Card 8.U.
+
+      - name: away_bp_high_lev_appearances_3d
+        description: >
+          Count of away-team reliever plate appearances where the at-bat-level
+          |delta_home_win_exp| exceeded 0.05 (5pp win-probability swing) over the
+          trailing 3 calendar days. Null when no away reliever appearances in the
+          trailing window. Impute 0.0. Card 8.U.
+
+      - name: home_bp_leverage_sum_1d
+        description: >
+          Sum of |delta_home_win_exp| for all home-team reliever plate appearances
+          on the calendar day immediately preceding the game. Captures freshness of
+          exhaustion (yesterday's high-leverage work). Null when no home reliever
+          appearances on that day. Impute 0.0. Card 8.U.
+
+      - name: away_bp_leverage_sum_1d
+        description: >
+          Sum of |delta_home_win_exp| for all away-team reliever plate appearances
+          on the calendar day immediately preceding the game. Null when no away
+          reliever appearances on that day. Impute 0.0. Card 8.U.
+
+      - name: home_catcher_framing_runs
+        description: >
+          Home catcher CFraming blended (70% current + 30% prior) and regressed
+          for < 60 innings. 0 = league average / unidentified catcher. Card 8.K.
+        tests:
+          - not_null
+
+      - name: away_catcher_framing_runs
+        description: >
+          Away catcher CFraming. Same construction as home_catcher_framing_runs. Card 8.K.
+        tests:
+          - not_null
+
+      - name: home_catcher_defensive_runs
+        description: >
+          Home catcher FRP blended and regressed. Total catcher defensive value
+          (framing + blocking + arm + range). 0 = league average / unidentified. Card 8.K.
+        tests:
+          - not_null
+
+      - name: away_catcher_defensive_runs
+        description: >
+          Away catcher FRP. Same construction as home_catcher_defensive_runs. Card 8.K.
+        tests:
+          - not_null
+
   - name: feature_pregame_odds_features
     description: >
       Pre-game betting market features. One row per game_pk (regular season only).
@@ -905,42 +1104,6 @@ models:
           Average vig-adjusted over probability across all bookmakers with
           pre-game totals prices. Null when no bookmaker has totals coverage.
           Source: mart_odds_consensus.
-
-      - name: temp_f
-        description: >
-          Temperature at scheduled first pitch (degrees Fahrenheit).
-          Sourced from feature_pregame_weather_features. Null for dome parks
-          and games with no weather row in weather_raw.
-
-      - name: wind_speed_mph
-        description: >
-          Wind speed at first pitch (mph). Null for dome parks and games
-          with no weather data.
-
-      - name: wind_direction_deg
-        description: >
-          Meteorological wind direction (degrees). 0/360 = wind from North,
-          90 = wind from East. Null for dome parks.
-
-      - name: wind_component_mph
-        description: >
-          Wind component along the home-plate-to-center-field axis (mph).
-          Positive = wind blowing out toward CF (favors offense, increases runs).
-          Negative = wind blowing in toward home plate (suppresses scoring).
-          Computed as wind_speed_mph × cos(wind_direction_deg − park_facing_degrees).
-          Null for dome parks (is_dome = true).
-
-      - name: humidity_pct
-        description: >
-          Relative humidity at first pitch (percent). Null for dome parks
-          and games with no weather data.
-
-      - name: is_dome
-        description: >
-          True for games played in permanently enclosed dome parks (roof_type =
-          'fixed'). False for open-air and convertible-roof parks. Used to
-          distinguish NULL wind columns (dome) from genuinely missing weather
-          data (outdoor parks with no row in weather_raw).
 
   - name: feature_pregame_weather_features
     description: >
@@ -1128,3 +1291,104 @@ models:
           Cluster ID of the away starter from the most recent pitcher_clusters
           snapshot strictly before game_date. Null for same reasons as
           home_starter_cluster_id.
+
+  # feature_pregame_bullpen_state_features
+  # ============================================================================
+  - name: feature_pregame_bullpen_state_features
+    description: >
+      Grain: one row per game_pk × team_abbrev (home and away). Pre-game
+      bullpen state for each team entering a given game. Combines workload
+      (mart_bullpen_workload), handedness-split effectiveness
+      (mart_bullpen_handedness_splits), and opposing lineup composition
+      (feature_pregame_lineup_features) into seven ML-ready bullpen features.
+
+      All rolling windows use an upper bound of 1 day preceding — no current-game
+      data leaks into any feature column. NULL values should be imputed to 0.0
+      (workload/availability columns) or league-average xwOBA ~0.315
+      (quality columns) in preprocessing.py.
+
+      Intended use: join on game_pk + side (or game_pk + team_abbrev) to add
+      bullpen context to the game-level prediction row.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, team_abbrev]
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Season year.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: Statcast abbreviation of the team whose bullpen is profiled.
+        tests:
+          - not_null
+
+      - name: side
+        description: Whether this team is the home or away team in this game.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: opposing_team
+        description: Statcast abbreviation of the opposing team (the batting team).
+        tests:
+          - not_null
+
+      - name: bullpen_leverage_pitches_prev_1d
+        description: >
+          Total pitches thrown by this team's bullpen in the prior 1 calendar day.
+          Null when the team had no relievers appear the previous day (off-day or
+          complete-game starter). Impute to 0.0 in preprocessing.
+
+      - name: bullpen_leverage_pitches_prev_3d
+        description: >
+          Total pitches thrown by this team's bullpen in the prior 3 calendar days.
+          Null when no reliever appearances in the window. Impute to 0.0.
+
+      - name: high_leverage_arms_used_prev_2d
+        description: >
+          1 if any reliever pitched in inning 7 or later in the prior 2 calendar
+          days; 0 otherwise. Null when workload data is unavailable.
+
+      - name: closer_availability_proxy
+        description: >
+          1 = closer was NOT used yesterday (rested and available); 0 = closer was
+          used yesterday. Derived as 1 - closer_used_prev_1d. Null when workload
+          data is unavailable. Impute to 1 (assume available) in preprocessing.
+
+      - name: bullpen_lhb_xwoba_against
+        description: >
+          Rolling 30-day xwOBA this team's bullpen has allowed against
+          left-handed batters. Null early in season or when no prior LHB
+          appearances exist. Impute to league average (~0.315) in preprocessing.
+
+      - name: bullpen_rhb_xwoba_against
+        description: >
+          Rolling 30-day xwOBA this team's bullpen has allowed against
+          right-handed batters. Null early in season or when no prior RHB
+          appearances exist. Impute to league average (~0.315) in preprocessing.
+
+      - name: bullpen_matchup_quality_vs_lineup
+        description: >
+          This team's bullpen xwOBA weighted by the opposing lineup's actual
+          LHB/RHB composition. Higher values = more permissive bullpen for the
+          opposing lineup. Computed as:
+            bp_xwoba_vs_rhb * (opposing rhb_count / total_batters)
+            + bp_xwoba_vs_lhb * (opposing lhb_count / total_batters)
+          Null when handedness splits or lineup composition data are unavailable.
