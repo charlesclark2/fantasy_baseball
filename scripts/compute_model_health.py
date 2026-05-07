@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sys
 from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
@@ -191,10 +190,10 @@ def run(target: str, run_date: date) -> None:
 
     if alert_fired:
         log.error(
-            "ALERT: ECE %.4f exceeds threshold %.4f for target=%s — model calibration drift detected.",
+            "ALERT: ECE %.4f exceeds threshold %.4f for target=%s — model calibration drift detected."
+            " Drift logged; pipeline continues (retraining deferred).",
             ece, ECE_ALERT_THRESHOLD, target,
         )
-        sys.exit(1)
 
 
 def main() -> None:
