@@ -22,12 +22,12 @@ Queries `MAX(ingestion_timestamp)` for each source table and compares the elapse
 
 | Source table | Max stale (hours) | Game day only? |
 |---|---|---|
-| `savant.batter_pitches` | 36h | No |
-| `oddsapi.mlb_odds_raw` | 6h | Yes |
-| `fangraphs.fg_stuff_plus_raw` | 192h (8 days) | No |
-| `statsapi.umpire_game_log` | 36h | No |
-| `statsapi.player_transactions` | 36h | No |
-| `statsapi.monthly_schedule` | 2h | Yes |
+| `savant.batter_pitches` | `game_date` (DATE) | 48h | No |
+| `oddsapi.mlb_odds_raw` | `ingestion_ts` | 6h | Yes |
+| `fangraphs.fg_stuff_plus_raw` | `ingestion_ts` | 192h (8 days) | No |
+| `statsapi.umpire_game_log` | `loaded_at` | 36h | No |
+| `statsapi.player_transactions` | `effective_date` (DATE) | 168h (7 days) | No |
+| `statsapi.monthly_schedule` | `month_end_date` (DATE) | 48h | Yes |
 
 ### Alert behavior
 
@@ -76,10 +76,10 @@ Exits non-zero. The GHA `predict` job step fails.
 
 1. Check which games were expected vs. scored:
    ```sql
-   -- Expected games (confirmed lineups)
+   -- Expected games (confirmed lineups via feature store)
    SELECT game_pk, home_team, away_team
-   FROM baseball_data.statsapi.monthly_schedule
-   WHERE game_date = CURRENT_DATE AND has_full_lineup = true;
+   FROM baseball_data.betting_features.feature_pregame_game_features
+   WHERE game_date = CURRENT_DATE AND has_full_data = true;
 
    -- Scored games
    SELECT game_pk, game_date

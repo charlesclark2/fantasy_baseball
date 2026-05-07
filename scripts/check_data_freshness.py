@@ -41,27 +41,34 @@ log = logging.getLogger(__name__)
 
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
     "baseball_data.savant.batter_pitches": {
-        "max_stale_hours": 36,
+        "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
+        "eod_offset_hours": 33,      # games end ~11pm ET; Statcast publishes ~9am ET next day ≈ 33h after UTC midnight
+        "max_stale_hours": 48,
         "game_day_only": False,
     },
     "baseball_data.oddsapi.mlb_odds_raw": {
+        "ts_col": "ingestion_ts",
         "max_stale_hours": 6,
         "game_day_only": True,
     },
     "baseball_data.fangraphs.fg_stuff_plus_raw": {
+        "ts_col": "ingestion_ts",
         "max_stale_hours": 192,  # 8 days — weekly Sunday ingest
         "game_day_only": False,
     },
     "baseball_data.statsapi.umpire_game_log": {
+        "ts_col": "loaded_at",
         "max_stale_hours": 36,
         "game_day_only": False,
     },
     "baseball_data.statsapi.player_transactions": {
-        "max_stale_hours": 36,
+        "ts_col": "effective_date",  # DATE; no ingestion_ts column exists
+        "max_stale_hours": 168,      # 7 days — ingest backfills a 7-day window
         "game_day_only": False,
     },
     "baseball_data.statsapi.monthly_schedule": {
-        "max_stale_hours": 2,
+        "ts_col": "month_end_date",  # DATE; future value when current month is loaded → always fresh
+        "max_stale_hours": 48,       # catches missing month (would show as weeks stale)
         "game_day_only": True,
     },
 }
@@ -121,12 +128,20 @@ def _get_connection() -> snowflake.connector.SnowflakeConnection:
 
 
 def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection) -> bool:
-    """Return True if there are scheduled games on check_date."""
+    """Return True if there are scheduled games on check_date.
+
+    Queries monthly_schedule directly so the answer is independent of whether
+    batter_pitches (and the dbt models built on it) have today's data yet.
+    """
     cur = con.cursor()
     cur.execute(
         """
-        SELECT COUNT(*) FROM baseball_data.statsapi.monthly_schedule
-        WHERE game_date = %s
+        SELECT COUNT(*)
+        FROM baseball_data.statsapi.monthly_schedule,
+             LATERAL FLATTEN(input => json_field:dates) d,
+             LATERAL FLATTEN(input => d.value:games) g
+        WHERE g.value:officialDate::DATE = %s
+          AND g.value:gameType::VARCHAR = 'R'
         """,
         (check_date.isoformat(),),
     )
@@ -136,11 +151,24 @@ def _is_game_day(check_date: date, con: snowflake.connector.SnowflakeConnection)
 
 def _max_ingestion_timestamp(
     table: str,
+    ts_col: str,
     con: snowflake.connector.SnowflakeConnection,
+    eod_offset_hours: int = 0,
 ) -> datetime | None:
-    """Query MAX(ingestion_timestamp) for a table. Returns None if table is empty."""
+    """Query MAX of the table's freshness column, optionally offset by eod_offset_hours.
+
+    DATE columns store a calendar date (no timezone). eod_offset_hours shifts the reference
+    forward to approximate when the data is actually available — e.g. for game_date columns
+    where Statcast publishes the following morning rather than at UTC midnight.
+    """
     cur = con.cursor()
-    cur.execute(f"SELECT MAX(ingestion_timestamp) FROM {table}")
+    if eod_offset_hours:
+        cur.execute(
+            f"SELECT DATEADD(hour, %s, MAX({ts_col}::TIMESTAMP_NTZ)) FROM {table}",
+            (eod_offset_hours,),
+        )
+    else:
+        cur.execute(f"SELECT MAX({ts_col}::TIMESTAMP_NTZ) FROM {table}")
     row = cur.fetchone()
     if row and row[0] is not None:
         ts = row[0]
@@ -176,13 +204,15 @@ def run(check_date: date, dry_run: bool = False) -> None:
         for table, cfg in FRESHNESS_THRESHOLDS.items():
             max_stale_hours: int = cfg["max_stale_hours"]
             game_day_only: bool = cfg["game_day_only"]
+            ts_col: str = cfg["ts_col"]
+            eod_offset_hours: int = cfg.get("eod_offset_hours", 0)
 
             if game_day_only and not game_day:
                 log.info("  %-55s SKIP (off day)", table)
                 results.append({"table": table, "status": "SKIP (off day)", "hours_stale": None})
                 continue
 
-            max_ts = _max_ingestion_timestamp(table, con)
+            max_ts = _max_ingestion_timestamp(table, ts_col, con, eod_offset_hours)
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})

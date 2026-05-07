@@ -26,10 +26,15 @@ spec:
       | Stat column                                    | k   | Prior |
       |------------------------------------------------|-----|-------|
       | home_team_woba_30d, away_team_woba_30d         | 150 | 0.320 |
-      | home_bp_xwoba_against_30d, away_bp_...         | 150 | 0.310 |
+      | home_bp_xwoba_against_30d, away_bp_...         | 100 | 0.315 |
       | home_starter_k_pct_std, away_starter_k_pct_std | 60  | 0.215 |
       | home_starter_xwoba_against_std, away_...        | 100 | 0.310 |
-      | home_bp_xwoba_against_30d (bullpen)            | 100 | 0.315 |
+
+    COLUMN NAME VERIFICATION: Before implementing, verify these column names exist
+    in feature_pregame_game_features by running the verify-column-names task first.
+    The _std suffix columns (home_starter_k_pct_std, home_starter_xwoba_against_std)
+    are season-level standardized starter stats — confirm their exact names in the
+    feature store before assuming they match the constants table above.
 
     INFERENCE-ONLY: Call stabilize_features() after feature assembly and before
     model.predict() in predict_today.py. Training pipeline (train_model.py) is
@@ -66,6 +71,54 @@ spec:
   graph:
     nodes:
 
+      - id: verify-column-names
+        kind: Task
+        description: >
+          Before writing any code, verify that all eight stabilization target columns
+          actually exist in `feature_pregame_game_features` in Snowflake. Run via
+          mcp__snowflake__run_snowflake_query:
+
+            SELECT column_name
+            FROM baseball_data.information_schema.columns
+            WHERE table_schema = 'DBT'
+              AND table_name = 'FEATURE_PREGAME_GAME_FEATURES'
+              AND column_name IN (
+                'HOME_TEAM_WOBA_30D', 'AWAY_TEAM_WOBA_30D',
+                'HOME_BP_XWOBA_AGAINST_30D', 'AWAY_BP_XWOBA_AGAINST_30D',
+                'HOME_STARTER_K_PCT_STD', 'AWAY_STARTER_K_PCT_STD',
+                'HOME_STARTER_XWOBA_AGAINST_STD', 'AWAY_STARTER_XWOBA_AGAINST_STD'
+              )
+            ORDER BY column_name
+
+          Expected: all 8 column names returned (Snowflake stores names in UPPER_CASE).
+          If any are missing, query the full column list to find the actual names:
+            SELECT column_name FROM baseball_data.information_schema.columns
+            WHERE table_schema = 'DBT'
+              AND table_name = 'FEATURE_PREGAME_GAME_FEATURES'
+              AND (column_name LIKE '%WOBA%' OR column_name LIKE '%STARTER%'
+                   OR column_name LIKE '%BULLPEN%')
+            ORDER BY column_name
+
+          Update STABILIZATION_CONSTANTS in implement-stabilizer to use the actual
+          column names found here. The _std suffix columns in particular
+          (home_starter_k_pct_std, home_starter_xwoba_against_std) may use a
+          different suffix in practice — use whatever the feature store actually has.
+          Document any name corrections in a comment at the top of feature_stabilizer.py.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: column verification query documented
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                print('Column verification must be run via Snowflake MCP before implementing.')
+                print('Check all 8 columns exist in feature_pregame_game_features.')
+                print('Update STABILIZATION_CONSTANTS with actual column names if different.')
+                print('Document any name corrections in feature_stabilizer.py.')
+
       - id: implement-stabilizer
         kind: Task
         description: >
@@ -82,22 +135,28 @@ spec:
                 'away_starter_xwoba_against_std':  {'k': 100, 'prior': 0.310},
             }
 
-            def stabilize_features(df, games_played_col='home_games_played_ytd'):
+            def stabilize_features(df):
+                """
+                James-Stein shrinkage applied at inference time.
+                Uses home_games_played_ytd as n for home_* columns and
+                away_games_played_ytd as n for away_* columns.
+                Logs a warning to stderr for any configured column absent from df.
+                """
+                import sys
                 df = df.copy()
-                n = df[games_played_col].fillna(0).clip(lower=0)
+                home_n = df['home_games_played_ytd'].fillna(0).clip(lower=0)
+                away_n = df['away_games_played_ytd'].fillna(0).clip(lower=0)
                 for col, params in STABILIZATION_CONSTANTS.items():
                     if col not in df.columns:
+                        print(f'WARNING: stabilization column {col!r} not in features, skipping', file=sys.stderr)
                         continue
                     k, prior = params['k'], params['prior']
+                    n = home_n if col.startswith('home_') else away_n
                     w = n / (n + k)
                     df[col] = w * df[col].fillna(prior) + (1 - w) * prior
                 return df
-
-          Note: use home_games_played_ytd as n for home stats and away_games_played_ytd
-          for away stats. You may need to pass n separately per column or split into
-          home/away calls. Implement whichever is cleaner, but ensure correct n
-          is used (home n for home columns, away n for away columns).
-        dependsOn: []
+        dependsOn:
+          - verify-column-names
         acceptanceCriteria:
           - type: artifact_exists
             name: feature stabilizer module
@@ -115,7 +174,7 @@ spec:
                 import pandas as pd
                 from betting_ml.models.feature_stabilizer import stabilize_features
 
-                # n=0: pure prior (w=0, stabilized = prior)
+                # Test 1: n=0 for both sides → pure prior
                 df_cold = pd.DataFrame({
                     'home_team_woba_30d': [0.400],
                     'home_games_played_ytd': [0],
@@ -123,24 +182,37 @@ spec:
                     'away_games_played_ytd': [0],
                 })
                 result = stabilize_features(df_cold)
-                woba_cold = result['home_team_woba_30d'].iloc[0]
-                assert abs(woba_cold - 0.320) < 0.001, \
-                    f'n=0 should return prior 0.320, got {woba_cold}'
+                home_cold = result['home_team_woba_30d'].iloc[0]
+                away_cold = result['away_team_woba_30d'].iloc[0]
+                assert abs(home_cold - 0.320) < 0.001, \
+                    f'home n=0 should return prior 0.320, got {home_cold}'
+                assert abs(away_cold - 0.320) < 0.001, \
+                    f'away n=0 should return prior 0.320, got {away_cold}'
 
-                # n=150: w=0.5, stabilized = 0.5 * rolling + 0.5 * 0.320
-                df_warm = pd.DataFrame({
+                # Test 2: home n=150, away n=0 → home gets w=0.5 blend, away stays at prior
+                df_asymmetric = pd.DataFrame({
                     'home_team_woba_30d': [0.400],
                     'home_games_played_ytd': [150],
                     'away_team_woba_30d': [0.400],
-                    'away_games_played_ytd': [150],
+                    'away_games_played_ytd': [0],
                 })
-                result = stabilize_features(df_warm)
-                woba_warm = result['home_team_woba_30d'].iloc[0]
-                expected = 0.5 * 0.400 + 0.5 * 0.320
-                assert abs(woba_warm - expected) < 0.001, \
-                    f'n=150 should return {expected:.3f}, got {woba_warm}'
+                result = stabilize_features(df_asymmetric)
+                home_warm = result['home_team_woba_30d'].iloc[0]
+                away_still_cold = result['away_team_woba_30d'].iloc[0]
+                expected_home = 0.5 * 0.400 + 0.5 * 0.320
+                assert abs(home_warm - expected_home) < 0.001, \
+                    f'home n=150 should return {expected_home:.3f}, got {home_warm}'
+                assert abs(away_still_cold - 0.320) < 0.001, \
+                    f'away n=0 should stay at prior 0.320, got {away_still_cold}'
 
-                print(f'Boundary tests OK: cold={woba_cold:.3f}, warm={woba_warm:.3f}')
+                # Test 3: no second arg (stabilize_features takes only df now)
+                try:
+                    stabilize_features(df_cold, 'home_games_played_ytd')
+                    raise AssertionError('Function must not accept a games_played_col argument')
+                except TypeError:
+                    pass  # correct — new signature accepts only df
+
+                print(f'Boundary tests OK: home_cold={home_cold:.3f}, home_warm={home_warm:.3f}, away_cold={away_still_cold:.3f}')
 
       - id: wire-into-predict
         kind: Task
@@ -173,6 +245,8 @@ spec:
                     'stabilize_features not called in predict_today.py'
                 assert 'feature_stabilizer' in src, \
                     'feature_stabilizer not imported in predict_today.py'
+                assert 'games_played_col' not in src, \
+                    'games_played_col arg must not be passed — new signature accepts only df'
                 # Verify call comes before predict — find positions in source
                 stab_pos = src.index('stabilize_features')
                 pred_pos = src.index('.predict(')
