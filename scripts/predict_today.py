@@ -670,17 +670,14 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    _FEATURES_ADDED_AFTER_LAST_RETRAIN = frozenset({
-        'humidity_pct', 'temp_f', 'wind_component_mph', 'wind_direction_deg',
-    })
-    clf_cols = [c for c in X_today_imp.columns if c not in _FEATURES_ADDED_AFTER_LAST_RETRAIN]
-    _expected_n = clf_hw.n_features_in_
-    if len(clf_cols) != _expected_n:
-        warnings.warn(
-            f"clf_hw expects {_expected_n} features but got {len(clf_cols)} after excluding "
-            f"known post-retrain features. Retraining needed."
-        )
-    X_clf = X_today_imp[clf_cols].values
+    _clf_feature_path = PROJECT_ROOT / "betting_ml/models/home_win/elasticnet_feature_columns.json"
+    with open(_clf_feature_path) as _f:
+        _elasticnet_cols = json.load(_f)
+    X_clf = (
+        df_today
+        .reindex(columns=_elasticnet_cols, fill_value=np.nan)
+        .values.astype(np.float32)
+    )
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
 
     has_odds_col = df_today["has_odds"].fillna(False).astype(bool)
