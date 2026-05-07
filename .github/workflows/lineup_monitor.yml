@@ -50,7 +50,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select stg_statsapi_lineups stg_statsapi_lineups_wide stg_statsapi_probable_pitchers --project-dir dbt --profiles-dir dbt
+        run: dbtf run --select stg_statsapi_lineups stg_statsapi_lineups_wide stg_statsapi_probable_pitchers --project-dir dbt --profiles-dir dbt
 
       - name: Check for newly confirmed lineups
         id: lineup_check
@@ -72,7 +72,7 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
+        run: dbtf run --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
 
       # CLV architecture step 4: run predictions only for the games that just got
       # lineups confirmed. Passing --game-pks avoids re-scoring games that were
@@ -115,4 +115,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt
+        run: dbtf run --select mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt

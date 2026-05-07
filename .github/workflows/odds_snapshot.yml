@@ -150,4 +150,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select +stg_oddsapi_events+ +stg_oddsapi_odds+ mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt
+        run: dbtf run --select +stg_oddsapi_events+ +stg_oddsapi_odds+ mart_closing_line_value mart_prediction_clv --project-dir dbt --profiles-dir dbt

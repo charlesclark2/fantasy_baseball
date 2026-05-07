@@ -29,7 +29,7 @@ jobs:
           echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
           chmod 600 /tmp/snowflake_rsa_key.pem
 
-      - name: Run dbtf build for lineup-dependent models
+      - name: Run dbtf run for lineup-dependent models
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -37,4 +37,4 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-        run: dbtf build --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
+        run: dbtf run --select +stg_statsapi_lineups+ --project-dir dbt --profiles-dir dbt
