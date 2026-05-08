@@ -198,6 +198,7 @@ season_record as (
         tsr.games_played,
         tsr.win_pct,
         tsr.pythagorean_win_exp,
+        tsr.pythagorean_residual_season,   -- Card 8.X
         tsr.games_back,
         tsr.streak_direction,
         tsr.streak_length
@@ -205,6 +206,16 @@ season_record as (
     left join {{ ref('mart_team_season_record') }} tsr
         on  tsr.team_abbrev = g.team_abbrev
         and tsr.record_date = dateadd('day', -1, g.game_date::date)
+),
+
+-- ── Pythagorean rolling residual (trailing 30 days, pre-game) ─────────────────
+-- Card 8.X. Leakage guard already enforced inside the mart's window.
+pythagorean_30d as (
+    select
+        game_pk,
+        team_abbrev,
+        pythagorean_residual_30d
+    from {{ ref('mart_team_pythagorean_rolling') }}
 ),
 
 -- ── Elo rating as of before this game (Card 8.D) ─────────────────────────────
@@ -230,6 +241,8 @@ final as (
         sr.games_played,
         sr.win_pct,
         sr.pythagorean_win_exp,
+        sr.pythagorean_residual_season,         -- Card 8.X
+        py30.pythagorean_residual_30d,          -- Card 8.X
         sr.games_back,
         sr.streak_direction,
         sr.streak_length,
@@ -377,6 +390,9 @@ final as (
     left join season_record sr
         on  sr.game_pk      = g.game_pk
         and sr.team_abbrev  = g.team_abbrev
+    left join pythagorean_30d py30
+        on  py30.game_pk     = g.game_pk
+        and py30.team_abbrev = g.team_abbrev
     left join {{ ref('mart_bullpen_workload') }} bw
         on  bw.pitching_team = g.team_abbrev
         and bw.game_pk       = g.game_pk

@@ -71,6 +71,11 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 48,       # catches missing month (would show as weeks stale)
         "game_day_only": True,
     },
+    "baseball_data.actionnetwork.public_betting_raw": {
+        "ts_col": "ingestion_timestamp",
+        "max_stale_hours": 36,
+        "game_day_only": False,
+    },
 }
 
 # ---------------------------------------------------------------------------

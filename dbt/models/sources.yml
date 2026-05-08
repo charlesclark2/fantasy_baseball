@@ -625,6 +625,44 @@ sources:
           (Dashboard type=8). Grain: one row per ingestion run × batter ×
           window_type × window date range. Window types: 7d, 14d, 30d, season.
 
+  - name: actionnetwork
+    database: baseball_data
+    schema: actionnetwork
+    description: >
+      Public betting percentage data from the Action Network public-betting
+      endpoint, ingested via scripts/ingest_actionnetwork_betting.py (Card 8.R).
+
+    tables:
+      - name: public_betting_raw
+        description: >
+          One row per (game_date, an_game_id). Aggregated public money% and
+          ticket% for the moneyline and total markets. Action Network only
+          populates these percentages on book 15 (FanDuel) in practice; the
+          ingestion script prefers that book and falls back to any other book
+          with non-zero percentages.
+        columns:
+          - name: game_date
+            description: Calendar date the game was scheduled (Action Network "date" param).
+            tests: [not_null]
+          - name: an_game_id
+            description: Action Network game identifier (string form).
+          - name: home_team_abbr
+            description: Action Network home team abbreviation (e.g. WSH, ARI). Normalized in staging.
+          - name: away_team_abbr
+            description: Action Network away team abbreviation. Normalized in staging.
+          - name: home_ml_money_pct
+            description: Percent of public money on the home team moneyline (0–100).
+          - name: home_ml_ticket_pct
+            description: Percent of public tickets on the home team moneyline (0–100).
+          - name: over_money_pct
+            description: Percent of public money on the Over of the totals market (0–100).
+          - name: over_ticket_pct
+            description: Percent of public tickets on the Over of the totals market (0–100).
+          - name: book_ids_used
+            description: Comma-separated Action Network book IDs that contributed the populated percentages.
+          - name: ingestion_timestamp
+            description: Wall-clock UTC timestamp of the most recent upsert for this row.
+
   - name: external
     database: baseball_data
     schema: external

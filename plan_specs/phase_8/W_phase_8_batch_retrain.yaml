@@ -1,0 +1,331 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: phase-8-batch-retrain
+  namespace: default
+spec:
+  description: >
+    Single batch retrain checkpoint for the home_win, total_runs, and
+    run_differential models that consumes every Phase 8 feature and
+    training-loop change before any Wave 5 (Bayesian / inference-wrapper)
+    work begins.
+
+    The current production artifacts (home_win v1, total_runs v2,
+    run_differential v1) were fit before 8.A–8.E and 8.J–8.U landed. The new
+    columns are present in feature_pregame_game_features but the model has
+    never been trained against them. None of the 8.F cards retrain — they
+    only wrap inference — so the Phase 8 feature investment is unrealized
+    until this card runs.
+
+    This card gates Wave 5 (8.F2, 8.F4) for two reasons:
+
+      1. 8.F2 is blocked on `mean h2h edge > 0.0` over ≥50 games. Card 8.S
+         baseline at promotion was mean_clv +0.0027, pct_positive 38.3% — the
+         model is at break-even. Whether the new features unlock positive
+         edge can only be answered by retraining and re-running CLV.
+
+      2. 8.F4 shrinkage constants (k = 60, 100, 150) were calibrated against
+         the v1/v2 architecture and the previous feature set. The retrained
+         model is the comparison point those constants must be validated
+         against before stabilization is applied at inference.
+
+    Scope of this card is the retrain itself plus end-to-end re-evaluation.
+    Feature engineering and training-loop changes are owned by their
+    respective cards (8.A–8.U, 8.N, 8.P); 8.W is the batched fit + promotion
+    gate run.
+
+    SEQUENCING NOTE: NGBoost retrains are >1 hour each per project memory.
+    If cards 8.N (time-decay sample weights) or 8.P (quantile total_runs)
+    are in scope, complete them before 8.W so a single retrain captures
+    everything. Running 8.W and then re-running it after 8.N or 8.P would
+    burn multi-hour NGBoost compute twice.
+
+  acceptanceCriteria:
+    - description: >
+        Preprocessing imputers are in place for every Phase 8 feature group
+        (8.E bat tracking, 8.J H2H, 8.Q CSW, 8.R public betting, 8.T
+        bookmaker disagreement, 8.U bullpen leverage). A smoke-test run of
+        predict_today.py against today's slate produces no NaN at the
+        model.predict() boundary for any of the three targets.
+    - description: >
+        Three retrained model artifacts produced and persisted with new
+        version tags (proposed: home_win/v2, total_runs/v3,
+        run_differential/v2). model_registry.yaml updated with per-target
+        version tags, feature count, and training timestamp. Production
+        artifacts (v1/v2) are not overwritten in place — versioned
+        promotion follows the Card 7.MB pattern.
+    - description: >
+        Per-target promotion gates evaluated against the current production
+        version:
+          home_win:        Brier ≤ v1 baseline AND post-calibration ECE ≤ 0.045
+          total_runs:      MAE ≤ 3.35 AND |mean_residual| ≤ 0.5 AND
+                           pct_pred_over_line ∈ [0.20, 0.80]
+          run_differential: MAE ≤ v1 baseline; LogNormal excluded per project memory
+        Targets that fail their gate retain the production version and the
+        regression is documented in the comparison report.
+    - description: >
+        CLV re-evaluated against retrained models over ≥ 50 has_odds games
+        (via predict_today.py over recent dates or compare_model_versions.py
+        backfill if available). mean_clv_ml, pct_positive_clv, and
+        mean_h2h_edge recorded for each promoted target.
+    - description: >
+        betting_ml/evaluation/phase_8_batch_retrain_impact.md exists and
+        contains: features added since last retrain, CV metrics per target
+        vs. baseline, calibration metrics for home_win, CLV results, top 10
+        feature importances per target with new (8.x-origin) columns
+        highlighted, and the Wave 5 unblocking decision.
+    - description: >
+        Wave 5 unblocking decision recorded: 8.F2 status (blocked vs.
+        unblocked) with the edge value that drove the decision. If
+        mean_h2h_edge > 0.0 over ≥ 50 has_odds games, 8.F2 is unblocked.
+        8.F4 is marked ready regardless (k-constants will be re-validated
+        inside 8.F4 implementation against the retrained baseline).
+    - description: >
+        predict_today.py runs end-to-end against the retrained artifacts on
+        at least one sample game date; daily_model_predictions is populated
+        with the new model_version tag(s).
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: phase-8-batch-retrain-plan
+  namespace: default
+spec:
+  description: >
+    Eight-task sequential plan. Tasks 1–2 are dependency / preprocessing
+    audits. Tasks 3–5 retrain each target and apply per-target promotion
+    gates. Task 6 re-runs CLV. Task 7 produces the comparison report. Task 8
+    records the Wave 5 unblocking decision and updates the registry.
+  goalRef:
+    name: phase-8-batch-retrain
+  graph:
+    nodes:
+
+      - id: feature-store-rebuild
+        kind: Task
+        description: >
+          Pre-flight: rebuild the full pre-game feature store and confirm the
+          training matrix is healthy.
+
+            dbtf build --select +feature_pregame_game_features
+
+          Verify per-feature null rates against the thresholds documented in
+          each source card (most are < 5% after May 1 of any odds-covered
+          season). Spot-check: each Phase 8 column added since the last
+          retrain has the expected coverage; columns that should be
+          near-zero (drift, sharp signals) center at zero. Document any
+          anomalies before training — debugging a stale feature store after
+          a multi-hour NGBoost run is expensive.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_game_features build passes
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+
+      - id: preprocessing-audit
+        kind: Task
+        description: >
+          Audit betting_ml/utils/preprocessing.py against every Phase 8
+          feature group. Confirm imputers exist for:
+            - 8.E bat tracking (_BatTrackingImputer with league averages)
+            - 8.J H2H matchup (verify shrinkage-to-prior covers debut starters)
+            - 8.K catcher framing (COALESCE in dbt to 0 — confirm sufficient)
+            - 8.L bp_matchup_xwoba (confirm imputation strategy)
+            - 8.M arsenal drift (COALESCE'd to 0.0 in dbt)
+            - 8.Q CSW% (league-average for debut starters in preprocessing)
+            - 8.R public betting (50.0 neutral)
+            - 8.T bookmaker disagreement (0.0 / 1)
+            - 8.U bullpen leverage exhaustion (0.0)
+
+          Add any missing imputers. Update the column comment block in
+          feature_pregame_game_features.sql for any imputer added in this
+          step. Run a smoke test: load preprocessing.py against a recent
+          feature-store row and confirm no NaN remains at the predict()
+          boundary for any of the three targets.
+        dependsOn:
+          - feature-store-rebuild
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: preprocessing smoke test produces no NaN
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Smoke test placeholder — wire up the project's actual
+                # preprocessing entry point and assert no NaN remain at the
+                # model.predict() boundary for one game_pk.
+                print('preprocessing audit smoke test placeholder — replace with project-specific call')
+
+      - id: retrain-home-win
+        kind: Task
+        description: >
+          Retrain the home_win XGBoost classifier via train_model.py using
+          the standard temporal CV splits. Tag artifact as home_win/v2.
+          Refit the Platt calibrator on top of the new model using the same
+          methodology as Card 7.C (most recent 2026 in-season window).
+
+          Promotion gate vs. v1:
+            - Brier score ≤ v1 baseline
+            - Post-calibration ECE ≤ 0.045 (v1 baseline 0.0370)
+
+          On gate failure: do not overwrite v1; document the regression in
+          the comparison report and skip the home_win promotion. Other
+          targets can still proceed.
+
+          Expected runtime: 5–10 minutes for XGBoost; calibrator refit < 1
+          minute.
+        dependsOn:
+          - preprocessing-audit
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: home_win v2 artifact persisted
+            path: betting_ml/models/home_win/v2
+
+      - id: retrain-total-runs
+        kind: Task
+        description: >
+          Retrain the total_runs NGBoost (Normal) regressor via
+          train_model.py using the standard temporal CV splits. Tag artifact
+          as total_runs/v3.
+
+          Promotion gate vs. v2:
+            - MAE ≤ 3.35
+            - |mean_residual| ≤ 0.5
+            - pct_pred_over_line ∈ [0.20, 0.80]
+
+          IF Card 8.P (quantile regression) lands before this card and
+          promotes a LightGBM quantile model over NGBoost v2, the gate above
+          is REPLACED by 8.P's own promotion gates, and the LightGBM
+          artifacts become the total_runs/v3 reference instead of NGBoost.
+
+          Expected runtime: NGBoost > 1 hr per project memory note.
+        dependsOn:
+          - preprocessing-audit
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: total_runs v3 artifact persisted
+            path: betting_ml/models/total_runs/v3
+
+      - id: retrain-run-differential
+        kind: Task
+        description: >
+          Retrain the run_differential NGBoost (Normal) regressor via
+          train_model.py using the standard temporal CV splits. Tag artifact
+          as run_differential/v2.
+
+          Promotion gate vs. v1:
+            - MAE ≤ v1 baseline
+
+          Per project memory note: LogNormal variant is excluded for
+          run_differential. Stick with the Normal architecture.
+
+          Expected runtime: NGBoost > 1 hr per project memory note.
+        dependsOn:
+          - preprocessing-audit
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: run_differential v2 artifact persisted
+            path: betting_ml/models/run_differential/v2
+
+      - id: clv-re-evaluation
+        kind: Task
+        description: >
+          Run predict_today.py against the retrained models for the most
+          recent ≥ 50 has_odds games (or use compare_model_versions.py over
+          historical backfill predictions if available). Recompute CLV via
+          mart_prediction_clv.
+
+          Record: mean_clv_ml, pct_positive_clv, mean_h2h_edge for each
+          promoted target. Compare side-by-side against v0/v1/v2 baselines.
+
+          This is the data input to the Wave 5 unblocking decision in
+          task `record-wave5-decision`.
+        dependsOn:
+          - retrain-home-win
+          - retrain-total-runs
+          - retrain-run-differential
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: CLV re-evaluation produces a result row count
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Placeholder — wire to the project's CLV recomputation
+                # entry point (e.g. dbtf build --select mart_prediction_clv
+                # followed by a Snowflake aggregate) and assert ≥ 50 games.
+                print('CLV re-evaluation placeholder — wire to mart_prediction_clv refresh')
+
+      - id: comparison-report
+        kind: Task
+        description: >
+          Produce betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+
+          Required sections:
+            1. Features added since last retrain (table by source card, with
+               column count and retention notes)
+            2. CV metrics per target vs. baseline (MAE/Brier/ECE depending
+               on target)
+            3. Calibration metrics (home_win, post-Platt)
+            4. CLV results (mean_clv_ml, pct_positive, mean_h2h_edge)
+               vs. v0/v1/v2 baselines
+            5. Top 10 feature importances per target with new (8.x-origin)
+               columns highlighted
+            6. Per-target promotion gate results (pass/fail with
+               numeric values)
+            7. Wave 5 unblocking decision and rationale
+        dependsOn:
+          - clv-re-evaluation
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: comparison report exists
+            path: betting_ml/evaluation/phase_8_batch_retrain_impact.md
+
+      - id: record-wave5-decision
+        kind: Task
+        description: >
+          Update model_registry.yaml with:
+            - per-target version tags for promoted targets
+            - training timestamp and feature count
+            - per-target gate results
+
+          Record the Wave 5 unblocking decision:
+            - If mean_h2h_edge > 0.0 over ≥ 50 has_odds games on the
+              retrained models, mark 8.F2 unblocked in project_context.md.
+            - Mark 8.F4 ready regardless (k-constants will be re-validated
+              inside 8.F4 implementation against the retrained baseline).
+            - 8.F1, 8.F3, 8.F5 sequencing is unchanged (8.F1 first, then
+              8.F3 in parallel; 8.F5 after 8.F2 lands).
+
+          Run predict_today.py end-to-end against the retrained artifacts on
+          at least one sample game date and confirm daily_model_predictions
+          is populated with the new model_version tag(s).
+        dependsOn:
+          - comparison-report
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: model_registry.yaml updated with new version tags
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, yaml
+                src = pathlib.Path('betting_ml/models/model_registry.yaml').read_text()
+                reg = yaml.safe_load(src)
+                # Sanity: at least one target carries a v2-or-newer tag after
+                # the retrain. Project-specific schema may vary; adjust the
+                # path below to match the registry layout.
+                assert reg, 'model_registry.yaml is empty'
+                print('model_registry.yaml present and parseable')

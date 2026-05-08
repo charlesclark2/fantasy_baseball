@@ -8,9 +8,13 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phases 1–6 are complete as of 2026-05-01.** The active phase is **Phase 7 — Model Refinement and Production Infrastructure.**
+**Phases 1–7 are complete as of 2026-05-05.** The active phase is **Phase 8 — Advanced Feature Engineering + Infrastructure Hardening.**
 
-The Phase 6 post-mortem (Card 6.H) established the v0 model baseline: mean h2h edge −0.036 (NGBoost alone) / −0.017 (consensus blend), ~35% positive-edge predictions. The model is not yet beating the market. Phase 7A focuses on feature expansion and recalibration before any production infrastructure work (Phase 7B).
+Phase 7 retrained the v0 baseline into the production v1/v2 set: home_win v1 (Platt-calibrated, ECE 0.0370), total_runs v2 (NGBoost Normal, MAE 3.35), run_differential v1. Card 8.S CLV baseline is `mean_clv +0.0027`, `pct_positive 38.3%` over 91.2% game coverage — the model is at break-even, not yet beating the market. Phase 8 has shipped a large round of new features that the production model has not yet been trained against; Card 8.W (Phase 8 Batch Retrain & Re-evaluation) is the gate that lets those features into the model and unblocks the Wave 5 Bayesian / inference-wrapper cards (8.F1–8.F5).
+
+**Phase 8 cards complete:** 8.A–8.E (pct-diff encoding, ZiPS FIP, OAA, Elo, bat tracking matchup), 8.H3 (live monitoring), 8.I1 (dbt compilation gate), 8.J (pitcher-batter H2H), 8.K (catcher framing), 8.L (bullpen handedness), 8.M (starter arsenal drift), 8.Q (starter CSW%), 8.R (Action Network public betting), 8.S (CLV tracking), 8.T (bookmaker disagreement), 8.U (bullpen leverage exhaustion), 8.X (pythagorean residual), 8.Y (base-state-split metrics).
+
+**Phase 8 cards remaining:** 8.N (time-decay weighting), 8.O (rolling calibration), 8.P (quantile total_runs), 8.V (correlation-aware sizing), 8.W (batch retrain), 8.F1–8.F5 (Bayesian engine — gated on 8.W).
 
 | Domain | Status |
 |---|---|
@@ -19,18 +23,27 @@ The Phase 6 post-mortem (Card 6.H) established the v0 model baseline: mean h2h e
 | Player rolling performance (batter + pitcher) | Complete |
 | Team rolling offense, pitching, and splits | Complete |
 | Starting pitcher game log | Complete |
-| Bullpen workload and effectiveness | Complete |
+| Bullpen workload and effectiveness | Complete — base + handedness splits (8.L) + leverage exhaustion (8.U) |
 | Confirmed batting lineups (staging) | Complete — 100% coverage 2015–present |
 | Probable starting pitchers (staging) | Complete — 97–100% coverage for completed seasons |
 | Ballpark context and run factors | Complete |
-| Betting odds (staging + mart) | Events backfilled 2021–present (72–76% game coverage); odds prices partial (2023 + live 2026 only — credit gap); see data_quality/data_availability_windows.md |
-| Schedule fatigue context | Complete |
-| ML feature store | Complete (Phase 2, 2026-04-23) — delta/momentum, handedness matchup, reliability flags, starter IP depth, era flags + game context |
-| EDA | Complete (Phase 3, 2026-04-24) — 7 Marimo notebooks; Cards 3.7–3.11 (feature lift, bullpen/starter decomp, home/away asymmetry, era-split stability, bookmaker calibration) |
-| ML pipeline + models | Complete (Phase 4, 2026-04-25) — baselines, hyperparameter optimization (Optuna), Bayesian probability layer (best_alpha=0.0) |
-| Model registry + prediction CLI | Complete (Phase 5) — `model_registry.yaml`, `predict_today.py`, lineup monitor (22/23 ACs) |
-| Betting application layer | Complete (Phase 6, 2026-05-01) — Diamond Edge Streamlit app: Today's Picks, Market Comparison, EV Tracker, Model Performance |
-| Model quality / market edge | Phase 7A in progress — v0 baseline: mean h2h edge −0.017 (consensus blend), ~35% positive |
+| Weather (Phase 7) | Complete — temp / wind component / humidity ingested + backfilled 2021+ |
+| FanGraphs Stuff+ and ZiPS (Phase 7) | Complete — pre-season ZiPS + in-season Stuff+ rolling windows |
+| Umpire tendencies (Phase 7) | Complete — 99.4% coverage for 2026 regular season |
+| Injury / IL tracking (Phase 7) | Complete — 66,497 transactions 2021–2026; injury-adjusted lineup wOBA |
+| Pitcher / batter clustering + H2H (Phase 7 + 8.J) | Complete — archetype matchup features + per-pair Bayesian-shrunk H2H wOBA / xwOBA |
+| Catcher framing (8.K) | Complete — blended framing + defensive runs ≥99.8% coverage |
+| Defensive fielding OAA (8.C) | Complete — 2016–2026 ingested via `ingest_oaa.py` |
+| Elo team strength (8.D) | Complete — `team_elo_history`; `elo_diff` is 4th-strongest feature (`|r|=0.1854`) |
+| Bookmaker disagreement (8.T) | Complete — 7 columns from morning-snapshot dispersion across sharp/soft tiers |
+| Action Network public betting (8.R) | Complete (2026-05-08) — 6,439 rows backfilled (2024–2026; API empty for 2021–2023); 99.1% game-matching on 2025; sum check 100.001 |
+| Betting odds (staging + mart) | Events backfilled 2021–present; odds prices: 2023 partial + live 2026 |
+| ML feature store | Complete — every Phase 8 column wired into `feature_pregame_game_features`; production models do not yet consume them (gated on 8.W) |
+| EDA | Complete (Phase 3, 2026-04-24) — 7 Marimo notebooks |
+| ML pipeline + models (production) | Phase 7 v1/v2 baseline — home_win v1 ECE 0.0370, total_runs v2 MAE 3.35, run_differential v1; per-target version tags supported |
+| Model versioning + prediction CLI | Complete (Phase 7) — independent per-target promotion; data_source tagging (`feature_store` vs. `intraday_fallback`) |
+| Betting application layer | Complete (Phase 6, 2026-05-01) — Diamond Edge Streamlit app: Today's Picks, Market Comparison, EV Tracker, Model Performance (now with CLV section) |
+| Model quality / market edge | Break-even: CLV +0.0027 mean / 38.3% positive over 91.2% coverage. 8.W batch retrain is the gate to evaluate whether Phase 8 features unlock positive edge. |
 
 ---
 
@@ -112,9 +125,10 @@ The Phase 6 post-mortem (Card 6.H) established the v0 model baseline: mean h2h e
 ├── plan_specs/                 # Declarative PlanSpec YAML files for agentic execution
 │   ├── phase_3/                # EDA analysis cards (3.8–3.11)
 │   ├── phase_4/                # ML pipeline cards (4.6–4.13)
-│   ├── phase_6/                # Betting application cards (6.B–6.I) — all complete
-│   └── phase_7/                # Model refinement + production infra (active)
-│       └── D_model_retraining_cadence.yaml  # Blocked until Phase 7A produces mean edge > +0.01
+│   ├── phase_6/                # Betting application cards (6.B–6.I) — complete
+│   ├── phase_7/                # Model refinement + production infra — complete
+│   └── phase_8/                # Advanced feature engineering + infra hardening (active)
+│       # A–E, H3, I1, J–U, R complete; N/O/P/V remain; W (batch retrain) gates Wave 5 (8.F1–8.F5)
 ├── model_registry.yaml         # Canonical _prod model artifacts for all three targets
 ├── .mcp.json                   # Snowflake MCP server config for Claude Code
 ├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)
@@ -178,7 +192,13 @@ streamlit run app/streamlit_app.py
 | Baseball Savant (Statcast) | 2015-04-05 – present | ~7.5M pitches; updated daily |
 | MLB Stats API schedule | 2015 – present | Lineups + probable pitchers via `monthly_schedule` JSON |
 | MLB Stats API venues | All active parks | Field dimensions, surface, roof, elevation |
-| The Odds API | 2021 regular season – present | Events backfilled 2021–present; odds prices: 2023 partial + live 2026 (credit gap stopped full backfill) |
+| MLB Stats API transactions | 2021 – present | 66,497 IL placements / activations / reinstatements |
+| The Odds API | 2021 regular season – present | Events backfilled 2021–present; odds prices: 2023 partial + live 2026 |
+| FanGraphs (Stuff+, ZiPS, hitting leaderboard, catcher framing) | 2020 – present | Daily / weekly / preseason cadence per leaderboard |
+| Baseball Savant OAA / DRS | 2016 – present | Team-season fielding aggregates |
+| UmpScorecards + MLB Stats API umpire feed | 2018 – present | HP umpire tendency z-scores + daily assignments |
+| Open-Meteo (weather) | 2021 – present | Temp / wind component / humidity at first pitch for outdoor parks |
+| Action Network public betting | 2021+ (sparse early seasons) – present | Public money% / ticket% for ML and totals; ingested via `ingest_actionnetwork_betting.py` |
 
 Key data availability notes (verified against actual row counts — see [`data_quality/data_availability_windows.md`](data_quality/data_availability_windows.md)):
 - **Bat tracking** (`bat_speed`, `swing_length`, `attack_angle`, `attack_direction`, `swing_path_tilt`): 2023-07-14+, swing events only (~45% of pitches)
