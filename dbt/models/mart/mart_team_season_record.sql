@@ -312,6 +312,26 @@ final as (
             else null
         end                        as pythagorean_win_exp,
 
+        -- Pythagorean residual = actual win pct minus pythagorean expectation.
+        -- Positive = team is winning more than run differential implies (sequencing
+        -- "luck"); negative = team is winning less than expected. Cumulative through
+        -- end-of-day on this record_date — leakage guard at consuming layer pulls
+        -- record_date = dateadd('day', -1, game_date). Card 8.X.
+        case
+            when games_played >= 10
+            then round(
+                (wins::numeric / nullif(games_played, 0))
+                - (pow(runs_scored_ytd::float, 1.83)
+                   / nullif(
+                       pow(runs_scored_ytd::float, 1.83)
+                     + pow(runs_allowed_ytd::float, 1.83),
+                       0
+                     )),
+                4
+            )
+            else null
+        end                        as pythagorean_residual_season,
+
         -- ── Division standing ────────────────────────────────────────────────────
         (
             (max(wins)   over (partition by division, game_year, record_date) - wins)

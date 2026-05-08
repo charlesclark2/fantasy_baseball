@@ -1,0 +1,176 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: pythagorean-residual-features
+  namespace: default
+spec:
+  description: >
+    Surface the pythagorean win-expectation residual as a pre-game feature
+    at season and 30-day rolling horizons. The residual measures the gap
+    between actual winning percentage and run-differential-implied
+    expectation; Joe Peta (Trading Bases) and the broader sabermetric
+    literature treat it as the strongest single regression-to-mean signal
+    in baseball — teams running materially above pythagorean tend to
+    underperform their record going forward.
+
+    The current model has `pythagorean_win_exp_diff` (Phase 7) but never
+    sees the residual itself. This card adds five orthogonal residual
+    columns so the model can learn how the market underprices regression.
+
+    All source data is already in the warehouse — no ingestion required.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_team_season_record` includes a `pythagorean_residual_season`
+        column computed as `cum_win_pct − pythagorean_win_exp`. Leakage
+        guard verified: cumulative inputs include only games strictly
+        before the row's game_date.
+    - description: >
+        `mart_team_pythagorean_rolling` built with one row per team per
+        game_date. Trailing 30-day actual win pct and trailing 30-day
+        pythagorean expectation (RS^1.83 / (RS^1.83 + RA^1.83) over the
+        window). Doubleheader-safe (aggregate to calendar date before
+        windowing). 10-game gate enforced — output NULL when fewer than
+        10 prior-window games. Window upper bound `interval '1 day'
+        preceding`.
+    - description: >
+        Five columns surfaced in `feature_pregame_game_features`:
+        home/away_pythagorean_residual_season,
+        home/away_pythagorean_residual_30d, pythagorean_residual_diff
+        (home minus away, season-level). Null rate < 5% for games after
+        May 1 of any training season.
+    - description: >
+        Spot-check directional sanity — known historical outliers
+        (e.g. 2010 Tampa Bay Rays as referenced in Trading Bases) carry
+        positive `pythagorean_residual_season` for the bulk of late-season
+        games. Across the full 2021–2025 training window the residual
+        centers at approximately 0 (it is a residual; league average must
+        be ~0).
+    - description: >
+        Imputer for the five columns added to `preprocessing.py`: 0.0 for
+        NULLs from the 10-game gate (zero residual = exactly to
+        expectation). No COALESCE in dbt.
+    - description: >
+        `dbtf build --select +feature_pregame_game_features` passes all
+        tests, including the existing `unique` and `not_null` checks on
+        game_pk.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: pythagorean-residual-features-plan
+  namespace: default
+spec:
+  description: >
+    Three-task sequential plan. Task 1 extends mart_team_season_record
+    with the season-level residual column. Task 2 builds the rolling
+    30-day mart. Task 3 wires the five columns into the master feature
+    table and adds the preprocessing imputer.
+  goalRef:
+    name: pythagorean-residual-features
+  graph:
+    nodes:
+
+      - id: extend-mart-team-season-record
+        kind: Task
+        description: >
+          Add `pythagorean_residual_season` column to
+          `dbt/models/mart/mart_team_season_record.sql` as
+          `cum_win_pct − pythagorean_win_exp`. Update the model's column
+          documentation in `schema.yml` (description + not_null test if
+          appropriate; expect NULL only on Opening Day where both inputs
+          are NULL). Reuse the existing leakage-safe cumulative inputs —
+          no new joins.
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: mart_team_season_record builds with the new column
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_team_season_record
+
+      - id: build-rolling-pythagorean-mart
+        kind: Task
+        description: >
+          Create `dbt/models/mart/mart_team_pythagorean_rolling.sql`.
+          Grain: team_abbrev × game_pk. For each (team, game_date):
+            * Aggregate runs_scored / runs_allowed per team per game from
+              mart_game_results (calendar-date safe — collapse
+              doubleheaders to a single (team, calendar_date) pair so the
+              window is over distinct days, not individual games).
+            * Compute trailing 30-day actual_win_pct (wins / games
+              played in window, doubleheaders count as separate games).
+            * Compute trailing 30-day pythagorean expectation as
+              SUM(RS)^1.83 / (SUM(RS)^1.83 + SUM(RA)^1.83) over the
+              window.
+            * `pythagorean_residual_30d = actual_win_pct_30d −
+              pythagorean_win_exp_30d`.
+            * Window upper bound `interval '1 day' preceding` to keep the
+              guard strict.
+            * NULL output when fewer than 10 prior-window games.
+          Document the model in `schema.yml` and add a `not_null` test on
+          `team_abbrev + game_pk` plus the unique combination check.
+        dependsOn:
+          - extend-mart-team-season-record
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: mart_team_pythagorean_rolling builds
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_team_pythagorean_rolling
+
+      - id: wire-into-feature-pregame-game-features
+        kind: Task
+        description: >
+          In `dbt/models/feature/feature_pregame_game_features.sql`:
+            * Add CTEs that select per-team season residual (from
+              mart_team_season_record) and rolling residual (from
+              mart_team_pythagorean_rolling). Two left joins per side:
+              home_pyth_season, away_pyth_season, home_pyth_30d,
+              away_pyth_30d.
+            * Surface five columns:
+              home_pythagorean_residual_season,
+              away_pythagorean_residual_season,
+              home_pythagorean_residual_30d,
+              away_pythagorean_residual_30d,
+              pythagorean_residual_diff (home minus away, season-level).
+            * Add a comment block explaining the 0.0 imputation
+              convention.
+          In `betting_ml/utils/preprocessing.py`: add an imputer that
+          fills the five columns with 0.0 when null.
+        dependsOn:
+          - build-rolling-pythagorean-mart
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_game_features builds with the five new columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+          - type: command_succeeds
+            name: feature_pregame_game_features references all five columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('dbt/models/**/feature_pregame_game_features.sql', recursive=True)
+                src = pathlib.Path(candidates[0]).read_text()
+                for col in [
+                    'home_pythagorean_residual_season',
+                    'away_pythagorean_residual_season',
+                    'home_pythagorean_residual_30d',
+                    'away_pythagorean_residual_30d',
+                    'pythagorean_residual_diff',
+                ]:
+                    assert col in src, f'missing column: {col}'
+                print('All five pythagorean residual columns present')

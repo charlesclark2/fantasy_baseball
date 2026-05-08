@@ -92,6 +92,10 @@ batter_archetype_matchups as (
     select * from {{ ref('feature_batter_archetype_matchups') }}
 ),
 
+h2h_matchups as (
+    select * from {{ ref('feature_pitcher_batter_h2h_matchups') }}
+),
+
 line_movement as (
     select * from {{ ref('mart_odds_line_movement') }}
     where bookmaker = 'bovada'
@@ -100,6 +104,36 @@ line_movement as (
 
 bookmaker_disagreement as (
     select * from {{ ref('mart_bookmaker_disagreement') }}
+),
+
+-- Card 8.R — Action Network public betting percentages (joined on
+-- game_date + normalized team abbreviations). Doubleheaders produce two
+-- distinct an_game_id rows on the same date for the same matchup; dedupe
+-- to one row per (game_date, home, away) to keep the join 1:1 against
+-- mart_game_results. Both halves of a doubleheader inherit the same
+-- aggregated public-betting percentages (Action Network does not
+-- differentiate the two games at the public-betting grain).
+public_betting as (
+    select
+        game_date,
+        home_team_id,
+        away_team_id,
+        home_ml_money_pct,
+        home_ml_ticket_pct,
+        over_money_pct,
+        over_ticket_pct,
+        ml_sharp_signal,
+        total_sharp_signal
+    from (
+        select
+            *,
+            row_number() over (
+                partition by game_date, home_team_id, away_team_id
+                order by ingestion_timestamp desc, an_game_id
+            ) as rn
+        from {{ ref('stg_actionnetwork_public_betting') }}
+    )
+    where rn = 1
 ),
 
 game_context as (
@@ -318,6 +352,18 @@ final as (
         h_st.starter_trailing_ra9_30g           as home_starter_trailing_ra9_30g,
         h_st.starter_fip_ra9_gap                as home_starter_fip_ra9_gap,
 
+        -- ── Home starter: CSW% rolling stats (Card 8.Q) ──────────────────────
+        -- NULL for debut starters; imputed to ~0.285 in preprocessing.py.
+        h_st.csw_pct_3start                     as home_starter_csw_pct_3start,
+        h_st.csw_pct_season                     as home_starter_csw_pct_season,
+
+        -- ── Home starter: arsenal drift (Card 8.M) ───────────────────────────
+        -- Trailing 5-start mix pct minus season-to-date mix pct, per pitch
+        -- group. 0.0 (no drift) for starters with < 5 career starts.
+        h_st.fastball_pct_drift_5start          as home_starter_fastball_pct_drift_5start,
+        h_st.breaking_pct_drift_5start          as home_starter_breaking_pct_drift_5start,
+        h_st.offspeed_pct_drift_5start          as home_starter_offspeed_pct_drift_5start,
+
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
         a_st.pitcher_name                       as away_starter_pitcher_name,
@@ -393,12 +439,26 @@ final as (
         a_st.starter_trailing_ra9_30g           as away_starter_trailing_ra9_30g,
         a_st.starter_fip_ra9_gap                as away_starter_fip_ra9_gap,
 
+        -- ── Away starter: CSW% rolling stats (Card 8.Q) ──────────────────────
+        -- NULL for debut starters; imputed to ~0.285 in preprocessing.py.
+        a_st.csw_pct_3start                     as away_starter_csw_pct_3start,
+        a_st.csw_pct_season                     as away_starter_csw_pct_season,
+
+        -- ── Away starter: arsenal drift (Card 8.M) ───────────────────────────
+        -- Trailing 5-start mix pct minus season-to-date mix pct, per pitch
+        -- group. 0.0 (no drift) for starters with < 5 career starts.
+        a_st.fastball_pct_drift_5start          as away_starter_fastball_pct_drift_5start,
+        a_st.breaking_pct_drift_5start          as away_starter_breaking_pct_drift_5start,
+        a_st.offspeed_pct_drift_5start          as away_starter_offspeed_pct_drift_5start,
+
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
         h_tm.losses                             as home_losses,
         h_tm.games_played                       as home_games_played,
         h_tm.win_pct                            as home_win_pct,
         h_tm.pythagorean_win_exp                as home_pythagorean_win_exp,
+        h_tm.pythagorean_residual_season        as home_pythagorean_residual_season,   -- Card 8.X
+        h_tm.pythagorean_residual_30d           as home_pythagorean_residual_30d,      -- Card 8.X
         h_tm.games_back                         as home_games_back,
         h_tm.streak_direction                   as home_streak_direction,
         h_tm.streak_length                      as home_streak_length,
@@ -507,6 +567,8 @@ final as (
         a_tm.games_played                       as away_games_played,
         a_tm.win_pct                            as away_win_pct,
         a_tm.pythagorean_win_exp                as away_pythagorean_win_exp,
+        a_tm.pythagorean_residual_season        as away_pythagorean_residual_season,   -- Card 8.X
+        a_tm.pythagorean_residual_30d           as away_pythagorean_residual_30d,      -- Card 8.X
         a_tm.games_back                         as away_games_back,
         a_tm.streak_direction                   as away_streak_direction,
         a_tm.streak_length                      as away_streak_length,
@@ -628,6 +690,14 @@ final as (
             h_tm.pythagorean_win_exp - a_tm.pythagorean_win_exp,
             4
         )                                       as pythagorean_win_exp_diff,
+
+        -- Card 8.X — pythagorean residual differential (home − away, season-level).
+        -- Imputed to 0.0 in preprocessing.py when either side is NULL (early
+        -- season; reliability gate is 10 games of cumulative play).
+        round(
+            h_tm.pythagorean_residual_season - a_tm.pythagorean_residual_season,
+            4
+        )                                       as pythagorean_residual_diff,
 
         -- ── Lineup-vs-starter handedness matchup adjustments ─────────────────
         -- Weighted average of the opposing starter's platoon splits, weighted by
@@ -863,7 +933,69 @@ final as (
         coalesce(h_ln.catcher_framing_runs,   0) as home_catcher_framing_runs,
         coalesce(a_ln.catcher_framing_runs,   0) as away_catcher_framing_runs,
         coalesce(h_ln.catcher_defensive_runs, 0) as home_catcher_defensive_runs,
-        coalesce(a_ln.catcher_defensive_runs, 0) as away_catcher_defensive_runs
+        coalesce(a_ln.catcher_defensive_runs, 0) as away_catcher_defensive_runs,
+
+        -- ── Bat tracking matchup features (Card 8.E) ─────────────────────────
+        -- NULL for pre-2023-07-14 games (Hawk-Eye bat sensors not available).
+        -- ~50% of 2021+ training rows will be NULL; impute league average in
+        -- preprocessing.py. lineup_bat_speed_vs_starter_velo > 1.0 means the
+        -- lineup's bat speed exceeds the opposing starter's fastball velocity.
+        h_ln.lineup_avg_bat_speed               as home_lineup_avg_bat_speed,
+        h_ln.lineup_avg_swing_length            as home_lineup_avg_swing_length,
+        h_ln.lineup_avg_attack_angle            as home_lineup_avg_attack_angle,
+        h_ln.lineup_bat_speed_vs_starter_velo   as home_lineup_bat_speed_vs_starter_velo,
+        a_ln.lineup_avg_bat_speed               as away_lineup_avg_bat_speed,
+        a_ln.lineup_avg_swing_length            as away_lineup_avg_swing_length,
+        a_ln.lineup_avg_attack_angle            as away_lineup_avg_attack_angle,
+        a_ln.lineup_bat_speed_vs_starter_velo   as away_lineup_bat_speed_vs_starter_velo,
+
+        -- ── Pitcher-batter H2H matchup history (Card 8.J) ────────────────────
+        -- Lineup-average Bayesian-shrunk wOBA / xwOBA each batter has produced
+        -- against the OPPOSING starter, weighted toward a league prior at low
+        -- PA counts (k=50, woba_prior=0.320, xwoba_prior=0.310). Coverage is
+        -- the fraction of the 9 lineup slots with >= 10 career PA vs. the
+        -- starter. NULL only when the lineup or the opposing starter is
+        -- unknown — debut starters return shrinkage-to-prior values.
+        h2h.home_lineup_vs_away_starter_h2h_woba,
+        h2h.home_lineup_vs_away_starter_h2h_xwoba,
+        h2h.home_lineup_h2h_pa_coverage,
+        h2h.away_lineup_vs_home_starter_h2h_woba,
+        h2h.away_lineup_vs_home_starter_h2h_xwoba,
+        h2h.away_lineup_h2h_pa_coverage,
+
+        -- ── Base-state-split performance metrics (Card 8.Y) ──────────────────
+        -- Trailing 30-day pre-game wOBA / xwOBA splits by base state at PA
+        -- start, plus a pure sequencing rate (runs scored per PA with runners
+        -- on). Defensive equivalents for the headline wOBA splits. NULL when
+        -- the trailing 30-day window contains fewer than 50 PAs with runners
+        -- on; per-column league-average priors imputed in preprocessing.py.
+        h_bs.woba_with_runners_on_30d           as home_woba_with_runners_on_30d,
+        h_bs.xwoba_with_runners_on_30d          as home_xwoba_with_runners_on_30d,
+        h_bs.woba_with_risp_30d                 as home_woba_with_risp_30d,
+        h_bs.xwoba_with_risp_30d                as home_xwoba_with_risp_30d,
+        h_bs.runs_per_baserunner_30d            as home_runs_per_baserunner_30d,
+        h_bs.woba_against_with_runners_on_30d   as home_woba_against_with_runners_on_30d,
+        h_bs.woba_against_with_risp_30d         as home_woba_against_with_risp_30d,
+        a_bs.woba_with_runners_on_30d           as away_woba_with_runners_on_30d,
+        a_bs.xwoba_with_runners_on_30d          as away_xwoba_with_runners_on_30d,
+        a_bs.woba_with_risp_30d                 as away_woba_with_risp_30d,
+        a_bs.xwoba_with_risp_30d                as away_xwoba_with_risp_30d,
+        a_bs.runs_per_baserunner_30d            as away_runs_per_baserunner_30d,
+        a_bs.woba_against_with_runners_on_30d   as away_woba_against_with_runners_on_30d,
+        a_bs.woba_against_with_risp_30d         as away_woba_against_with_risp_30d,
+
+        -- ── Public betting percentages (Card 8.R) ────────────────────────────
+        -- Action Network money% / ticket% on the home moneyline and the Over of
+        -- the totals market, plus money−ticket "sharp signal" derivatives.
+        -- NULL for games without an Action Network row (off-days, dates the
+        -- API never tracked, pre-coverage seasons). Imputed to 50.0 (neutral)
+        -- in preprocessing.py.
+        pb.home_ml_money_pct,
+        pb.home_ml_ticket_pct,
+        pb.over_money_pct,
+        pb.over_ticket_pct,
+        pb.ml_sharp_signal,
+        pb.total_sharp_signal
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -888,6 +1020,8 @@ final as (
         on  cm.game_pk = g.game_pk
     left join batter_archetype_matchups bam
         on  bam.game_pk = g.game_pk
+    left join h2h_matchups h2h
+        on  h2h.game_pk = g.game_pk
     left join line_movement lm
         on  lm.game_pk = g.game_pk
     left join bookmaker_disagreement bd
@@ -904,6 +1038,16 @@ final as (
     left join {{ ref('mart_bullpen_leverage') }} a_blev
         on  a_blev.team_abbrev = g.away_team
         and a_blev.game_pk     = g.game_pk
+    left join {{ ref('mart_team_base_state_splits') }} h_bs
+        on  h_bs.team_abbrev = g.home_team
+        and h_bs.game_pk     = g.game_pk
+    left join {{ ref('mart_team_base_state_splits') }} a_bs
+        on  a_bs.team_abbrev = g.away_team
+        and a_bs.game_pk     = g.game_pk
+    left join public_betting pb
+        on  pb.game_date    = g.game_date
+        and pb.home_team_id = g.home_team
+        and pb.away_team_id = g.away_team
 )
 
 select * from final

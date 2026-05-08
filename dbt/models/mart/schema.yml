@@ -3,6 +3,43 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_batter_bat_tracking_profile
+  # ============================================================================
+  - name: mart_batter_bat_tracking_profile
+    description: >
+      One row per batter_id × game_date (regular season, 2023-07-14+ only).
+      30-day rolling bat tracking averages from Hawk-Eye bat sensors: bat speed,
+      swing length, and attack angle. Pre-2023 rows are absent; joins in
+      feature_pregame_lineup_features produce NULLs for those games.
+      Apply game_date < official_date leakage guard when joining. Card 8.E.
+
+    columns:
+      - name: batter_id
+        description: MLB Stats API player identifier for the batter.
+        tests: [not_null]
+
+      - name: game_date
+        description: Calendar date of the game(s) contributing to this profile row.
+        tests: [not_null]
+
+      - name: bat_speed_30d
+        description: >
+          Swing-count-weighted average bat speed (mph) over the trailing 30
+          calendar days including the current game date. NULL before 2023-07-14.
+
+      - name: swing_length_30d
+        description: >
+          Swing-count-weighted average swing length (ft) over the trailing 30
+          calendar days including the current game date. NULL before 2023-07-14.
+
+      - name: attack_angle_30d
+        description: >
+          Swing-count-weighted average attack angle (degrees) over the trailing
+          30 calendar days including the current game date. NULL before
+          2023-07-14. Positive = upward swing plane; higher values favor
+          fly-ball contact against groundball pitchers.
+
+  # ============================================================================
   # mart_closing_line_value
   # ============================================================================
   - name: mart_closing_line_value
@@ -2495,6 +2532,15 @@ models:
           Number of consecutive games in the current streak as of record_date.
           Resets after each result change.
 
+      - name: pythagorean_residual_season
+        description: >
+          Card 8.X. actual_win_pct − pythagorean_win_exp as of record_date.
+          Positive = team is winning more than run-differential implies
+          (sequencing "luck"); negative = winning less than expected. Cumulative
+          through end-of-day on record_date — the consuming feature layer applies
+          a leakage guard by joining on record_date = dateadd('day', -1, game_date).
+          NULL when games_played < 10.
+
       - name: record_effective_date
         description: >
           SCD2. The date on which this W-L record was first achieved — i.e., the
@@ -2514,6 +2560,143 @@ models:
           For completed seasons this marks the team's final season record.
         tests:
           - not_null
+
+
+  # ============================================================================
+  # mart_team_pythagorean_rolling
+  # ============================================================================
+  - name: mart_team_pythagorean_rolling
+    description: >
+      Card 8.X. Pre-game trailing 30-day pythagorean residual per team per
+      regular-season game. Grain: team_abbrev × game_pk. Aggregates daily
+      runs-scored / runs-allowed from mart_game_results, rolls them strictly
+      before each calendar date (`range between interval '30 days' preceding
+      and interval '1 day' preceding`), and computes
+      `pythagorean_residual_30d = actual_win_pct_30d − pythagorean_win_exp_30d`.
+      NULL outputs when fewer than 10 games occurred in the trailing 30-day
+      window. Doubleheader-safe: aggregation occurs at the calendar-date level
+      before windowing; both halves of a doubleheader inherit identical pre-game
+      values when the rolling row is joined back to the team × game_pk grain.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - team_abbrev
+              - game_pk
+
+    columns:
+      - name: team_id
+        description: Integer franchise identifier from ref_teams.
+        tests: [not_null]
+      - name: team_abbrev
+        description: Statcast team abbreviation as found in mart_game_results.
+        tests: [not_null]
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date the game was played.
+        tests: [not_null]
+      - name: game_year
+        description: Regular season year.
+        tests: [not_null]
+      - name: games_30d
+        description: >
+          Number of games this team played in the trailing 30-day window
+          (strictly before game_date). NULL when < 10 games — used as the
+          reliability gate.
+      - name: actual_win_pct_30d
+        description: >
+          Wins divided by games_played over the trailing 30-day pre-game window,
+          rounded to four decimal places. NULL when games_30d < 10.
+      - name: pythagorean_win_exp_30d
+        description: >
+          Bill James pythagorean expectation (exponent 1.83) computed from the
+          trailing 30-day pre-game runs scored / runs allowed totals. Rounded to
+          four decimal places. NULL when games_30d < 10.
+      - name: pythagorean_residual_30d
+        description: >
+          actual_win_pct_30d − pythagorean_win_exp_30d. Positive ⇒ winning more
+          than the run-differential implies (sequencing "luck"); negative ⇒
+          winning less. NULL when games_30d < 10.
+
+
+  # ============================================================================
+  # mart_team_base_state_splits
+  # ============================================================================
+  - name: mart_team_base_state_splits
+    description: >
+      Card 8.Y. Pre-game trailing 30-day wOBA / xwOBA splits by base state
+      (any runners on; runners in scoring position) plus a sequencing rate
+      (runs scored per PA with runners on) per team per regular-season game.
+      Defensive equivalents for the headline wOBA splits are also surfaced
+      under the `*_against_*` prefix. Grain: team_abbrev × game_pk.
+
+      Source: stg_batter_pitches. Base state is captured at the FIRST pitch
+      of each PA (the pre-PA convention used in standard wOBA-with-RISP
+      reporting). Doubleheader-safe — aggregation collapses to calendar-date
+      level before windowing. Leakage guard: rolling window upper bound
+      `interval '1 day' preceding`. Reliability gate: outputs NULL when fewer
+      than 50 PAs with runners on occurred in the trailing 30-day window.
+
+      Imputation priors live in betting_ml/utils/preprocessing.py — never
+      COALESCE in dbt.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - team_abbrev
+              - game_pk
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date the game was played.
+        tests: [not_null]
+      - name: game_year
+        description: Regular season year.
+        tests: [not_null]
+      - name: team_abbrev
+        description: Team abbreviation as found in stg_batter_pitches.home_team / .away_team.
+        tests: [not_null]
+      - name: pa_with_runners_on_30d
+        description: >
+          Total PAs with runners on across the trailing 30-day pre-game window.
+          Drives the 50-PA reliability gate; rolling outputs are NULL below it.
+      - name: woba_with_runners_on_30d
+        description: >
+          Trailing 30-day team-offensive wOBA on PAs that started with at least
+          one runner on base. NULL when pa_with_runners_on_30d < 50.
+      - name: xwoba_with_runners_on_30d
+        description: >
+          Trailing 30-day team-offensive xwOBA on PAs that started with at
+          least one runner on base. NULL when pa_with_runners_on_30d < 50.
+      - name: woba_with_risp_30d
+        description: >
+          Trailing 30-day team-offensive wOBA on PAs that started with a runner
+          on 2nd or 3rd. NULL when pa_with_runners_on_30d < 50.
+      - name: xwoba_with_risp_30d
+        description: >
+          Trailing 30-day team-offensive xwOBA on PAs that started with a
+          runner on 2nd or 3rd. NULL when pa_with_runners_on_30d < 50.
+      - name: runs_per_baserunner_30d
+        description: >
+          Runs scored on PAs with runners on, divided by total PAs with runners
+          on, over the trailing 30-day pre-game window. Pure sequencing rate.
+          NULL when pa_with_runners_on_30d < 50.
+      - name: woba_against_with_runners_on_30d
+        description: >
+          Trailing 30-day team-defensive wOBA-against on PAs that started with
+          at least one runner on base (pitching-team perspective). NULL when
+          pa_with_runners_on_30d < 50.
+      - name: woba_against_with_risp_30d
+        description: >
+          Trailing 30-day team-defensive wOBA-against on PAs that started with
+          a runner on 2nd or 3rd. NULL when pa_with_runners_on_30d < 50.
 
 
   # ============================================================================
@@ -6822,6 +7005,49 @@ models:
           leverage exhaustion. Null when no reliever appearances on that day.
 
   # ============================================================================
+  # mart_pitcher_batter_history (Card 8.J)
+  # ============================================================================
+  - name: mart_pitcher_batter_history
+    description: >
+      Per-game plate-appearance aggregates between each pitcher-batter pair.
+      Source for the head-to-head historical wOBA / xwOBA features in
+      feature_pitcher_batter_h2h_matchups. Grain: (pitcher_id, batter_id,
+      game_date) — one row per pair per game on which they faced each other.
+
+      Bayesian shrinkage and the leakage guard
+      (history.game_date < prediction_game_date) are applied at the feature
+      join layer, NOT here. The mart stores all historical PA. Card 8.J.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, batter_id, game_date]
+
+    columns:
+      - name: pitcher_id
+        description: MLBAM pitcher identifier.
+        tests: [not_null]
+      - name: batter_id
+        description: MLBAM batter identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date the PA(s) occurred on.
+        tests: [not_null]
+      - name: pa_count
+        description: Number of plate appearances between the pair on this date.
+        tests: [not_null]
+      - name: woba_value_sum
+        description: Sum of Statcast woba_value across the date's PAs (numerator for wOBA).
+      - name: woba_denom_sum
+        description: >
+          Sum of Statcast woba_denom across the date's PAs (denominator for wOBA;
+          excludes IBB and similar non-counting events).
+      - name: xwoba_sum
+        description: Sum of xwOBA across PAs where xwOBA is observed (numerator for AVG xwOBA).
+      - name: xwoba_obs
+        description: Count of PAs with non-null xwOBA on the date (denominator for AVG xwOBA).
+
+  # ============================================================================
   # mart_catcher_framing
   # ============================================================================
   - name: mart_catcher_framing
@@ -6857,3 +7083,99 @@ models:
         description: >
           TRUE when innings_caught >= 60 (no regression applied).
           FALSE when below the 60-inning reliability threshold.
+
+  # ============================================================================
+  # mart_starter_csw_rolling
+  # ============================================================================
+  - name: mart_starter_csw_rolling
+    description: >
+      One row per pitcher_id × game_pk (regular season starts with ≥ 20 pitches).
+      CSW% = (called_strike + swinging_strike + swinging_strike_blocked) / total_pitches.
+      Rolling windows include the current start — leakage guard is enforced at the
+      feature join layer in feature_pregame_starter_features via strict
+      game_date < prediction_game_date. NULL for a pitcher's first start of the
+      season (debut row). Card 8.Q.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, game_pk]
+
+    columns:
+      - name: pitcher_id
+        description: Statcast/BAM integer pitcher ID.
+        tests: [not_null]
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date of the start.
+        tests: [not_null]
+      - name: game_year
+        description: Season year.
+        tests: [not_null]
+      - name: csw_pct_3start
+        description: >
+          Trailing 3-start CSW%: SUM(csw_pitches) / SUM(total_pitches) over the
+          current start and the 2 preceding starts in the same season. NULL for
+          the pitcher's first start of the season.
+      - name: csw_pct_season
+        description: >
+          Season-to-date CSW% through this start (inclusive). NULL for the
+          pitcher's first start of the season.
+      - name: pitches_3start
+        description: >
+          Total pitches in the trailing 3 starts (reliability flag). Values
+          below ~150 indicate a thin sample. NULL for debut starts.
+
+  # ============================================================================
+  # mart_starter_pitch_mix_rolling
+  # ============================================================================
+  - name: mart_starter_pitch_mix_rolling
+    description: >
+      One row per pitcher_id × game_pk (starts with ≥ 20 pitches). Trailing
+      5-start and season-to-date pitch mix percentages by pitch group:
+      fastball (FF/SI/FC), breaking (SL/CU/SV/KC), offspeed (CH/FS/FO).
+      Rolling windows include the current start — leakage guard is enforced
+      at the feature join layer (feature_pregame_starter_features) via strict
+      game_date < prediction_game_date. Mix percentages are NULL when
+      career_starts_before_game < 5; the consuming feature model imputes
+      drift to 0.0 in that case. Card 8.M.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, game_pk]
+
+    columns:
+      - name: pitcher_id
+        description: Statcast/BAM integer pitcher ID.
+        tests: [not_null]
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date of the start.
+        tests: [not_null]
+      - name: game_year
+        description: Season year.
+        tests: [not_null]
+      - name: career_starts_before_game
+        description: >
+          Count of strictly-prior career starts (excluding the current row).
+          Used as the gate for nulling pct columns; values < 5 produce NULL
+          mix percentages.
+      - name: total_pitches_5start
+        description: Total pitches across the trailing 5 starts (reliability flag).
+      - name: fastball_pct_5start
+        description: Trailing 5-start fastball usage (FF+SI+FC) / total. NULL when career_starts_before_game < 5.
+      - name: breaking_pct_5start
+        description: Trailing 5-start breaking usage (SL+CU+SV+KC) / total. NULL when career_starts_before_game < 5.
+      - name: offspeed_pct_5start
+        description: Trailing 5-start offspeed usage (CH+FS+FO) / total. NULL when career_starts_before_game < 5.
+      - name: fastball_pct_season
+        description: Season-to-date fastball usage through this start. NULL when career_starts_before_game < 5.
+      - name: breaking_pct_season
+        description: Season-to-date breaking usage through this start. NULL when career_starts_before_game < 5.
+      - name: offspeed_pct_season
+        description: Season-to-date offspeed usage through this start. NULL when career_starts_before_game < 5.

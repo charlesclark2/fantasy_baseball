@@ -36,6 +36,16 @@ _PLATOON_SUFFIXES = ("_vs_lhb", "_vs_rhb", "_vs_lhp", "_vs_rhp", "_adj")
 _WIN_PCT_COLS = ["home_win_pct", "away_win_pct"]
 _PYTHAGOREAN_COLS = ["home_pythagorean_win_exp", "away_pythagorean_win_exp"]
 _PYTHAGOREAN_DIFF_COLS = ["pythagorean_win_exp_diff"]
+# Card 8.X — pythagorean residual columns. Zero residual = team is winning
+# exactly to run-differential expectation, which is the natural prior. NULLs
+# come from the 10-game reliability gate (early season).
+_PYTHAGOREAN_RESIDUAL_COLS = [
+    "home_pythagorean_residual_season",
+    "away_pythagorean_residual_season",
+    "home_pythagorean_residual_30d",
+    "away_pythagorean_residual_30d",
+    "pythagorean_residual_diff",
+]
 _BOOKMAKER_DISAGREEMENT_ZERO_COLS = [
     "ml_implied_prob_std",
     "ml_implied_prob_range",
@@ -75,6 +85,50 @@ _BULLPEN_LEVERAGE_ZERO_COLS = [
     "home_bp_leverage_sum_1d",
     "away_bp_leverage_sum_1d",
 ]
+# CSW% league average (~28.5% across 2023–2025 starters).
+# Applied to debut starters with no prior starts.
+CSW_LEAGUE_AVG = 0.285
+_CSW_COLS = [
+    "home_starter_csw_pct_3start",
+    "home_starter_csw_pct_season",
+    "away_starter_csw_pct_3start",
+    "away_starter_csw_pct_season",
+]
+# Bat tracking matchup features (Card 8.E). League-average values measured
+# from populated 2024–2026 rows in feature_pregame_game_features.
+# Applied to pre-2023-07-14 rows (no Hawk-Eye coverage) and opening-day
+# starters with no avg_fastball_velo_7d populated yet.
+_BAT_TRACKING_FILLS = {
+    "home_lineup_avg_bat_speed": 69.6,
+    "away_lineup_avg_bat_speed": 69.6,
+    "home_lineup_avg_swing_length": 7.2,
+    "away_lineup_avg_swing_length": 7.2,
+    "home_lineup_avg_attack_angle": 9.1,
+    "away_lineup_avg_attack_angle": 9.1,
+    "home_lineup_bat_speed_vs_starter_velo": 0.747,
+    "away_lineup_bat_speed_vs_starter_velo": 0.747,
+}
+# Card 8.Y — base-state-split priors. Applied when the trailing 30-day window
+# carries fewer than 50 PAs with runners on (early-season noise floor).
+# Priors are slightly elevated vs. league wOBA (~0.320) — pitchers pitch
+# carefully with traffic, so league average wOBA-with-runners-on sits above
+# unconditional league wOBA. Defensive priors mirror offensive ones.
+_BASE_STATE_FILLS = {
+    "home_woba_with_runners_on_30d":            0.330,
+    "away_woba_with_runners_on_30d":            0.330,
+    "home_xwoba_with_runners_on_30d":           0.325,
+    "away_xwoba_with_runners_on_30d":           0.325,
+    "home_woba_with_risp_30d":                  0.335,
+    "away_woba_with_risp_30d":                  0.335,
+    "home_xwoba_with_risp_30d":                 0.325,
+    "away_xwoba_with_risp_30d":                 0.325,
+    "home_runs_per_baserunner_30d":             0.25,
+    "away_runs_per_baserunner_30d":             0.25,
+    "home_woba_against_with_runners_on_30d":    0.330,
+    "away_woba_against_with_runners_on_30d":    0.330,
+    "home_woba_against_with_risp_30d":          0.335,
+    "away_woba_against_with_risp_30d":          0.335,
+}
 _ROLLING_SUFFIXES = ("_7d", "_14d", "_30d", "_std")
 _GAMES_PLAYED_COLS = {
     "_7d": ("home_games_played_7d", "away_games_played_7d"),
@@ -205,6 +259,11 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
         for col in _PYTHAGOREAN_DIFF_COLS:
             if col in X.columns:
                 X[col] = X[col].fillna(0.0)
+        # Card 8.X — pythagorean residual columns: zero residual = exactly
+        # to expectation (the natural prior).
+        for col in _PYTHAGOREAN_RESIDUAL_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
         for col in _VELO_DELTA_COLS:
             if col in X.columns:
                 X[col] = X[col].fillna(0.0)
@@ -312,6 +371,54 @@ class _BayesianShrinkageTransformer(BaseEstimator, TransformerMixin):
         return X
 
 
+class _CSWImputer(BaseEstimator, TransformerMixin):
+    """Impute CSW% columns with league-average (0.285) for debut starters."""
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        for col in _CSW_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(CSW_LEAGUE_AVG)
+        return X
+
+
+class _BatTrackingImputer(BaseEstimator, TransformerMixin):
+    """Impute bat tracking matchup columns with league-average values for
+    pre-Hawk-Eye-coverage rows (pre-2023-07-14) and opening-day starters."""
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        for col, fill in _BAT_TRACKING_FILLS.items():
+            if col in X.columns:
+                X[col] = X[col].fillna(fill)
+        return X
+
+
+class _BaseStateSplitImputer(BaseEstimator, TransformerMixin):
+    """Card 8.Y. Fill base-state-split columns with per-column league-average
+    priors when the trailing 30-day window had fewer than 50 PAs with runners
+    on (early-season noise floor)."""
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        for col, fill in _BASE_STATE_FILLS.items():
+            if col in X.columns:
+                X[col] = X[col].fillna(fill)
+        return X
+
+
 class _FallbackImputer(BaseEstimator, TransformerMixin):
     """Final fallback: fill any remaining nulls (numeric → mean, object → mode)."""
 
@@ -340,7 +447,7 @@ class _FallbackImputer(BaseEstimator, TransformerMixin):
 
 
 def build_imputation_pipeline(k: int = 15) -> Pipeline:
-    """Build a sklearn Pipeline that handles all six null groups.
+    """Build a sklearn Pipeline that handles all null groups.
 
     Steps (in order):
       normalize_types  — convert Snowflake Decimal columns to float64
@@ -349,6 +456,9 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
       park             — Group 2: park run factor cascade → league avg → 1.000
       constants        — Groups 3 & 4: win% → 0.500; days_rest → 4; pythagorean → 0.5 / 0.0
       bullpen_xwoba    — Group 5: bullpen xwOBA → training-set mean
+      csw              — CSW% columns → league-average 0.285 (Card 8.Q)
+      bat_tracking     — bat tracking matchup columns → league avgs (Card 8.E)
+      base_state       — base-state-split columns → per-column priors (Card 8.Y)
       bayesian         — Group 6: rolling stats → Bayesian shrinkage
       fallback         — catch-all mean/mode fill for any remaining nulls
     """
@@ -360,6 +470,9 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
             ("park", _ParkRunFactorImputer()),
             ("constants", _ConstantImputer()),
             ("bullpen_xwoba", _BullpenXwobaImputer()),
+            ("csw", _CSWImputer()),
+            ("bat_tracking", _BatTrackingImputer()),
+            ("base_state", _BaseStateSplitImputer()),
             ("bayesian", _BayesianShrinkageTransformer(k=k)),
             ("fallback", _FallbackImputer()),
         ]

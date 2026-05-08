@@ -271,6 +271,58 @@ fip_stats as (
     group by game_pk, pitcher_id
 ),
 
+-- CSW% rolling stats (Card 8.Q)
+-- Trailing 3-start and season-to-date called-strike-plus-whiff rate.
+-- LEAKAGE GUARD: strict < on game_date; rn=1 selects the most recent start
+-- completed before the prediction game.
+csw_ranked as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        cs.csw_pct_3start,
+        cs.csw_pct_season,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by cs.game_date::date desc
+        ) as rn
+    from probable_pitchers pp
+    left join {{ ref('mart_starter_csw_rolling') }} cs
+        on  cs.pitcher_id      = pp.pitcher_id
+        and cs.game_date::date < pp.game_date   -- LEAKAGE GUARD
+),
+
+csw_pre_game as (
+    select * from csw_ranked where rn = 1
+),
+
+-- Pitch mix rolling stats (Card 8.M)
+-- Trailing 5-start vs. season-to-date pitch group percentages used to compute
+-- arsenal drift columns. LEAKAGE GUARD: strict < on game_date; rn=1 selects
+-- the most recent completed start before the prediction game.
+pitch_mix_ranked as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        pmr.fastball_pct_5start,
+        pmr.breaking_pct_5start,
+        pmr.offspeed_pct_5start,
+        pmr.fastball_pct_season,
+        pmr.breaking_pct_season,
+        pmr.offspeed_pct_season,
+        row_number() over (
+            partition by pp.game_pk, pp.pitcher_id
+            order by pmr.game_date::date desc
+        ) as rn
+    from probable_pitchers pp
+    left join {{ ref('mart_starter_pitch_mix_rolling') }} pmr
+        on  pmr.pitcher_id      = pp.pitcher_id
+        and pmr.game_date::date < pp.game_date   -- LEAKAGE GUARD
+),
+
+pitch_mix_pre_game as (
+    select * from pitch_mix_ranked where rn = 1
+),
+
 -- Prior-season platoon splits vs LHB (game_year - 1 to prevent in-season leakage)
 platoon_lhb as (
     select
@@ -419,7 +471,31 @@ final as (
         fs.trailing_fip_30g                      as starter_trailing_fip_30g,
         fs.trailing_ra9_30g                      as starter_trailing_ra9_30g,
         round(fs.trailing_fip_30g - fs.trailing_ra9_30g, 2)
-                                                 as starter_fip_ra9_gap
+                                                 as starter_fip_ra9_gap,
+
+        -- ── CSW% rolling stats (Card 8.Q) ────────────────────────────────────
+        -- NULL for debut starters or when no prior starts exist before this game.
+        -- Imputed to league-average (~0.285) in preprocessing.py.
+        cswg.csw_pct_3start,
+        cswg.csw_pct_season,
+
+        -- ── Arsenal drift (Card 8.M) ─────────────────────────────────────────
+        -- drift = trailing_5start_pct − season_to_date_pct. Positive = more
+        -- recent usage than season average; negative = less. Imputed to 0.0
+        -- (no drift = league-average behavior) for starters with < 5 career
+        -- starts, where the source mart returns NULL pcts.
+        coalesce(
+            round(pmpg.fastball_pct_5start - pmpg.fastball_pct_season, 4),
+            0.0
+        )                                       as fastball_pct_drift_5start,
+        coalesce(
+            round(pmpg.breaking_pct_5start - pmpg.breaking_pct_season, 4),
+            0.0
+        )                                       as breaking_pct_drift_5start,
+        coalesce(
+            round(pmpg.offspeed_pct_5start - pmpg.offspeed_pct_season, 4),
+            0.0
+        )                                       as offspeed_pct_drift_5start
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -449,6 +525,12 @@ final as (
     left join fip_stats fs
         on  fs.game_pk      = pp.game_pk
         and fs.pitcher_id   = pp.pitcher_id
+    left join csw_pre_game cswg
+        on  cswg.game_pk    = pp.game_pk
+        and cswg.pitcher_id = pp.pitcher_id
+    left join pitch_mix_pre_game pmpg
+        on  pmpg.game_pk    = pp.game_pk
+        and pmpg.pitcher_id = pp.pitcher_id
 )
 
 select * from final

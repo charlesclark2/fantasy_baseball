@@ -1109,3 +1109,54 @@ models:
         description: StubHub venue ID for ticket market data integration.
       - name: xref_weatherbug_station_id
         description: WeatherBug station code for hyperlocal weather data.
+
+  # ── Action Network public betting (Card 8.R) ─────────────────────────────────
+
+  - name: stg_actionnetwork_public_betting
+    description: >
+      Normalized Action Network public-betting percentages. Grain: one row per
+      (game_date, an_game_id). Source: baseball_data.actionnetwork.public_betting_raw.
+      Team abbreviations are normalized to ref_teams.team_abbrev convention
+      (ARI → AZ); other AN abbreviations match the project's convention as-is.
+      Adds derived sharp signal columns (money% − ticket%) for moneyline and totals.
+
+    columns:
+      - name: game_date
+        description: Calendar date the game was scheduled.
+        tests: [not_null]
+      - name: an_game_id
+        description: Action Network game identifier (string form).
+      - name: home_team_id
+        description: Normalized home-team abbreviation matching ref_teams.team_abbrev.
+      - name: away_team_id
+        description: Normalized away-team abbreviation matching ref_teams.team_abbrev.
+      - name: home_ml_money_pct
+        description: Percent of public money on the home team moneyline (0–100).
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 100
+              config:
+                where: "home_ml_money_pct is not null"
+                severity: warn
+      - name: home_ml_ticket_pct
+        description: Percent of public tickets on the home team moneyline (0–100).
+      - name: away_ml_money_pct
+        description: Percent of public money on the away team moneyline (0–100).
+      - name: away_ml_ticket_pct
+        description: Percent of public tickets on the away team moneyline (0–100).
+      - name: over_money_pct
+        description: Percent of public money on the Over of the totals market (0–100).
+      - name: under_money_pct
+        description: Percent of public money on the Under of the totals market (0–100).
+      - name: over_ticket_pct
+        description: Percent of public tickets on the Over of the totals market (0–100).
+      - name: under_ticket_pct
+        description: Percent of public tickets on the Under of the totals market (0–100).
+      - name: ml_sharp_signal
+        description: home_ml_money_pct − home_ml_ticket_pct. Positive ⇒ sharp lean home.
+      - name: total_sharp_signal
+        description: over_money_pct − over_ticket_pct. Positive ⇒ sharp lean over.
+      - name: ingestion_timestamp
+        description: Wall-clock UTC timestamp of the most recent upsert for this row.

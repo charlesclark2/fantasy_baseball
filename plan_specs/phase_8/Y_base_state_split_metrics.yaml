@@ -1,0 +1,197 @@
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: base-state-split-performance-metrics
+  namespace: default
+spec:
+  description: >
+    Build wOBA / xwOBA splits by base state (runners on, RISP) plus a
+    pure sequencing rate (runs per baserunner) at the team-rolling level.
+    The classic sabermetric finding (Tango / Lichtman) is that
+    hitting-with-RISP is mostly noise that regresses to overall wOBA, but
+    the gap `wOBA − xwOBA` split by base state isolates the
+    sequencing-luck component the model otherwise can't see — a team
+    converting traffic into runs above what contact quality predicts is
+    a regression candidate the market may not fully price.
+
+    Adds defensive equivalents (`*_against`) for symmetry — pitching
+    staffs that limit damage with traffic also have a wOBA/xwOBA gap
+    worth surfacing.
+
+    All source data is already in `mart_pitch_play_event` joined to
+    `mart_pitch_game_context` (which carries base state per pitch). No
+    ingestion required.
+
+  acceptanceCriteria:
+    - description: >
+        `mart_team_base_state_splits` built with grain team_abbrev ×
+        game_pk. Trailing 30-day rolling aggregates restricted to
+        terminal pitches (one row per PA). Two base-state filters
+        applied independently — `runners_on` (1B, 2B, or 3B occupied)
+        and `risp` (2B or 3B occupied). Doubleheader-safe (aggregate to
+        calendar-date level before windowing). Window upper bound
+        `interval '1 day' preceding`.
+    - description: >
+        Reliability gate enforced — model output is NULL when
+        `pa_with_runners_on_30d < 50`. Avoids spurious early-season
+        rolling-window noise.
+    - description: >
+        14 columns surfaced in `feature_pregame_game_features`. Per side
+        (home / away):
+          *_woba_with_runners_on_30d,
+          *_xwoba_with_runners_on_30d,
+          *_woba_with_risp_30d,
+          *_xwoba_with_risp_30d,
+          *_runs_per_baserunner_30d,
+          *_woba_against_with_runners_on_30d,
+          *_woba_against_with_risp_30d.
+        Null rate < 8% for games after May 1 of any training season.
+    - description: >
+        Sanity ranges across the 2021–2025 training window:
+          * League mean (woba_with_runners_on_30d −
+            xwoba_with_runners_on_30d) ≈ 0 (it's a residual; the gap
+            should center at zero).
+          * League mean runs_per_baserunner_30d in [0.18, 0.32]
+            (typical ~25% conversion).
+    - description: >
+        Imputers added to `preprocessing.py` for all 14 columns with
+        league-average priors (~0.330 wOBA / ~0.325 xwOBA on the runners-
+        on side, ~0.335 wOBA / ~0.325 xwOBA on the RISP side, ~0.25 for
+        runs_per_baserunner). Priors documented in the dbt model header
+        comment.
+    - description: >
+        `dbtf build --select +feature_pregame_game_features` passes all
+        tests, including the existing `unique` and `not_null` checks on
+        game_pk.
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: base-state-split-metrics-plan
+  namespace: default
+spec:
+  description: >
+    Two-task plan. Task 1 builds the new mart with rolling 30-day base-
+    state splits. Task 2 wires the 14 columns into the master feature
+    table and adds the preprocessing imputers.
+  goalRef:
+    name: base-state-split-performance-metrics
+  graph:
+    nodes:
+
+      - id: build-mart-team-base-state-splits
+        kind: Task
+        description: >
+          Create `dbt/models/mart/mart_team_base_state_splits.sql`.
+          Grain: team_abbrev × game_pk. Per (team, game_date), compute
+          trailing 30-day rolling aggregates restricted to terminal
+          pitches (one row per PA), filtered by base state.
+
+          Source structure: join mart_pitch_play_event to
+          mart_pitch_game_context (carries base state) and
+          mart_game_results (for calendar date + team_abbrev). Two
+          base-state filters applied independently:
+            * runners_on: ANY of 1B / 2B / 3B occupied at PA start
+            * risp: 2B or 3B occupied at PA start
+
+          For each filter, compute:
+            * woba_with_<state>_30d = SUM(woba_value) / SUM(woba_denom)
+              over the window
+            * xwoba_with_<state>_30d = AVG(estimated_woba_using_speedangle)
+              for in-play PAs over the window (or use the project's
+              standard xwoba aggregation pattern — match
+              mart_team_rolling_offense)
+            * pa_with_<state>_30d = COUNT(*) over the window
+
+          Plus the sequencing rate column:
+            * runs_per_baserunner_30d =
+              SUM(runs_scored_in_pa with runners_on) /
+              SUM(pa_with_runners_on)
+
+          Defensive equivalents (suffix `_against`): same aggregates
+          attributed to the pitching team:
+            * woba_against_with_runners_on_30d,
+              xwoba_against_with_runners_on_30d,
+              woba_against_with_risp_30d,
+              xwoba_against_with_risp_30d
+
+          Doubleheader-safe: aggregate to calendar-date level before
+          applying the rolling window (same pattern as
+          mart_bullpen_handedness_splits, Card 8.L). Window upper bound
+          `interval '1 day' preceding`. Reliability gate: NULL when
+          `pa_with_runners_on_30d < 50`.
+
+          Document the model in `schema.yml` with column descriptions
+          and not_null + unique combination tests on
+          (team_abbrev, game_pk).
+        dependsOn: []
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: mart_team_base_state_splits builds
+            command: dbtf
+            args:
+              - build
+              - --select
+              - mart_team_base_state_splits
+
+      - id: wire-into-feature-pregame-game-features
+        kind: Task
+        description: >
+          In `dbt/models/feature/feature_pregame_game_features.sql`:
+            * Add CTEs joining mart_team_base_state_splits twice (home,
+              away) on team_abbrev + game_pk.
+            * Surface 14 columns — 7 per side (home / away):
+                *_woba_with_runners_on_30d,
+                *_xwoba_with_runners_on_30d,
+                *_woba_with_risp_30d,
+                *_xwoba_with_risp_30d,
+                *_runs_per_baserunner_30d,
+                *_woba_against_with_runners_on_30d,
+                *_woba_against_with_risp_30d.
+            * Add a comment block explaining the league-average
+              imputation convention (priors documented in the source
+              mart's header).
+
+          In `betting_ml/utils/preprocessing.py`: add per-column
+          imputers — wOBA priors ~0.330 with-runners-on / ~0.335
+          with-RISP, xwOBA priors ~0.325, runs_per_baserunner ~0.25.
+          Defensive priors mirror the offensive ones (pitcher tightening
+          with traffic is symmetric to batter performance).
+        dependsOn:
+          - build-mart-team-base-state-splits
+        acceptanceCriteria:
+          - type: command_succeeds
+            name: feature_pregame_game_features builds with the 14 new columns
+            command: dbtf
+            args:
+              - build
+              - --select
+              - +feature_pregame_game_features
+          - type: command_succeeds
+            name: feature_pregame_game_features references all 14 columns
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                import pathlib, glob
+                candidates = glob.glob('dbt/models/**/feature_pregame_game_features.sql', recursive=True)
+                src = pathlib.Path(candidates[0]).read_text()
+                expected = []
+                for side in ('home', 'away'):
+                    for suffix in (
+                        '_woba_with_runners_on_30d',
+                        '_xwoba_with_runners_on_30d',
+                        '_woba_with_risp_30d',
+                        '_xwoba_with_risp_30d',
+                        '_runs_per_baserunner_30d',
+                        '_woba_against_with_runners_on_30d',
+                        '_woba_against_with_risp_30d',
+                    ):
+                        expected.append(f'{side}{suffix}')
+                missing = [c for c in expected if c not in src]
+                assert not missing, f'missing columns: {missing}'
+                print(f'All {len(expected)} base-state-split columns present')

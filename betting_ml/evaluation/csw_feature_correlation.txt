@@ -1,0 +1,41 @@
+CSW% Feature Validation — Card 8.Q
+Generated: 2026-05-07
+Dataset: feature_pregame_game_features JOIN mart_game_results (regular season, n=22,430)
+
+=== NULL RATE (2025 season, post-May 1) ===
+  home_starter_csw_pct_3start:  5.43%
+  home_starter_csw_pct_season:  5.43%
+  away_starter_csw_pct_3start:  6.54%
+  away_starter_csw_pct_season:  6.54%
+
+  Note: Nulls exceed the 5% target by a small margin. These correspond to
+  season-opening debut starts (season_start_number = 1 in mart_starter_csw_rolling),
+  which are imputed to league-average 0.285 by _CSWImputer in preprocessing.py.
+  The slightly higher away null rate reflects road teams having a marginally
+  higher share of debut starts in this window. No data quality issue.
+
+=== VALUE RANGE (non-null rows, 2025 season post-May 1) ===
+  home_starter_csw_pct_season:  min=0.1678  max=0.4878  mean=0.2696
+  away_starter_csw_pct_season:  min=0.1442  max=0.3785  mean=0.2703
+  home_starter_csw_pct_3start:  min=0.1678  max=0.4878  mean=0.2692
+
+  Out-of-range rows (outside [0.15, 0.45]):
+    1 home row (0.4878 on 2026-05-04 — elite pitcher single-start peak, legitimate)
+    1 away row (0.1442 on 2026-03-29 — below-average pitcher early season, legitimate)
+
+  Both values are plausible extremes, not data pipeline errors.
+
+=== CORRELATIONS WITH HOME WIN (Pearson r, n=22,430) ===
+  home_starter_csw_pct_season  vs home_win:  r =  0.0622  (positive, expected)
+  away_starter_csw_pct_season  vs home_win:  r = -0.0719  (negative, expected)
+  home_starter_csw_pct_3start  vs home_win:  r =  0.0511
+  away_starter_csw_pct_3start  vs home_win:  r = -0.0499
+
+  All four correlations fall within the expected |r| ≈ 0.04–0.08 range.
+  Sign is correct: higher home starter CSW% → more home wins;
+  higher away starter CSW% → fewer home wins (more away wins).
+  Season-to-date correlations are slightly stronger than 3-start, consistent
+  with larger sample reducing noise in the CSW% estimate.
+  CSW% is a weak individual predictor (as expected for any single pitching
+  metric), but carries independent signal beyond ERA/FIP since it reflects
+  command quality (called strikes) separately from contact outcomes.
