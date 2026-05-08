@@ -1292,6 +1292,73 @@ models:
           snapshot strictly before game_date. Null for same reasons as
           home_starter_cluster_id.
 
+  # ============================================================================
+  # feature_pitcher_batter_h2h_matchups (Card 8.J)
+  # ============================================================================
+  - name: feature_pitcher_batter_h2h_matchups
+    description: >
+      Pre-game lineup-level head-to-head matchup history features for ML.
+      One row per game_pk (regular season).
+
+      For each batter in the lineup vs. the OPPOSING starter, aggregates
+      mart_pitcher_batter_history with strict leakage guard
+      (history.game_date < game.game_date) and applies Bayesian shrinkage
+      toward the league prior at low PA counts (k=50, woba_prior=0.320,
+      xwoba_prior=0.310). Lineup-level columns are simple averages across
+      the 9 lineup slots; coverage tracks the fraction of slots with at
+      least 10 career PA against the starter.
+
+      Distinct from the archetype-based matchup models
+      (feature_pitcher_cluster_matchups, feature_batter_archetype_matchups)
+      which capture stylistic matchup types — this model captures actual
+      historical outcomes between specific pitcher-batter pairs.
+
+      Null pattern: per-side columns are null only when the lineup or the
+      opposing probable starter is unknown. Debut starters return shrinkage-
+      to-prior values (non-null). Card 8.J.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: home_lineup_vs_away_starter_h2h_woba
+        description: >
+          Lineup-average Bayesian-shrunk wOBA the home lineup has produced
+          against the away starter across prior PA. Returns the league prior
+          (0.320) for batters with no prior PA against this starter.
+
+      - name: home_lineup_vs_away_starter_h2h_xwoba
+        description: >
+          Lineup-average Bayesian-shrunk xwOBA against the away starter.
+          Returns the league prior (0.310) for batters with no prior PA.
+
+      - name: home_lineup_h2h_pa_coverage
+        description: >
+          Fraction of the home lineup's 9 slots with >= 10 career PA against
+          the away starter. 0 when no slot meets the threshold.
+
+      - name: away_lineup_vs_home_starter_h2h_woba
+        description: >
+          Lineup-average Bayesian-shrunk wOBA the away lineup has produced
+          against the home starter across prior PA.
+
+      - name: away_lineup_vs_home_starter_h2h_xwoba
+        description: >
+          Lineup-average Bayesian-shrunk xwOBA against the home starter.
+
+      - name: away_lineup_h2h_pa_coverage
+        description: >
+          Fraction of the away lineup's 9 slots with >= 10 career PA against
+          the home starter.
+
   # feature_pregame_bullpen_state_features
   # ============================================================================
   - name: feature_pregame_bullpen_state_features

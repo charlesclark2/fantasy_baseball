@@ -3,6 +3,43 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_batter_bat_tracking_profile
+  # ============================================================================
+  - name: mart_batter_bat_tracking_profile
+    description: >
+      One row per batter_id × game_date (regular season, 2023-07-14+ only).
+      30-day rolling bat tracking averages from Hawk-Eye bat sensors: bat speed,
+      swing length, and attack angle. Pre-2023 rows are absent; joins in
+      feature_pregame_lineup_features produce NULLs for those games.
+      Apply game_date < official_date leakage guard when joining. Card 8.E.
+
+    columns:
+      - name: batter_id
+        description: MLB Stats API player identifier for the batter.
+        tests: [not_null]
+
+      - name: game_date
+        description: Calendar date of the game(s) contributing to this profile row.
+        tests: [not_null]
+
+      - name: bat_speed_30d
+        description: >
+          Swing-count-weighted average bat speed (mph) over the trailing 30
+          calendar days including the current game date. NULL before 2023-07-14.
+
+      - name: swing_length_30d
+        description: >
+          Swing-count-weighted average swing length (ft) over the trailing 30
+          calendar days including the current game date. NULL before 2023-07-14.
+
+      - name: attack_angle_30d
+        description: >
+          Swing-count-weighted average attack angle (degrees) over the trailing
+          30 calendar days including the current game date. NULL before
+          2023-07-14. Positive = upward swing plane; higher values favor
+          fly-ball contact against groundball pitchers.
+
+  # ============================================================================
   # mart_closing_line_value
   # ============================================================================
   - name: mart_closing_line_value
@@ -6820,6 +6857,49 @@ models:
           Sum of |delta_home_win_exp| for all reliever plate appearances on the
           calendar day immediately preceding the game. Captures freshness of
           leverage exhaustion. Null when no reliever appearances on that day.
+
+  # ============================================================================
+  # mart_pitcher_batter_history (Card 8.J)
+  # ============================================================================
+  - name: mart_pitcher_batter_history
+    description: >
+      Per-game plate-appearance aggregates between each pitcher-batter pair.
+      Source for the head-to-head historical wOBA / xwOBA features in
+      feature_pitcher_batter_h2h_matchups. Grain: (pitcher_id, batter_id,
+      game_date) — one row per pair per game on which they faced each other.
+
+      Bayesian shrinkage and the leakage guard
+      (history.game_date < prediction_game_date) are applied at the feature
+      join layer, NOT here. The mart stores all historical PA. Card 8.J.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, batter_id, game_date]
+
+    columns:
+      - name: pitcher_id
+        description: MLBAM pitcher identifier.
+        tests: [not_null]
+      - name: batter_id
+        description: MLBAM batter identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Calendar date the PA(s) occurred on.
+        tests: [not_null]
+      - name: pa_count
+        description: Number of plate appearances between the pair on this date.
+        tests: [not_null]
+      - name: woba_value_sum
+        description: Sum of Statcast woba_value across the date's PAs (numerator for wOBA).
+      - name: woba_denom_sum
+        description: >
+          Sum of Statcast woba_denom across the date's PAs (denominator for wOBA;
+          excludes IBB and similar non-counting events).
+      - name: xwoba_sum
+        description: Sum of xwOBA across PAs where xwOBA is observed (numerator for AVG xwOBA).
+      - name: xwoba_obs
+        description: Count of PAs with non-null xwOBA on the date (denominator for AVG xwOBA).
 
   # ============================================================================
   # mart_catcher_framing

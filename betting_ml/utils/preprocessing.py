@@ -84,6 +84,20 @@ _CSW_COLS = [
     "away_starter_csw_pct_3start",
     "away_starter_csw_pct_season",
 ]
+# Bat tracking matchup features (Card 8.E). League-average values measured
+# from populated 2024–2026 rows in feature_pregame_game_features.
+# Applied to pre-2023-07-14 rows (no Hawk-Eye coverage) and opening-day
+# starters with no avg_fastball_velo_7d populated yet.
+_BAT_TRACKING_FILLS = {
+    "home_lineup_avg_bat_speed": 69.6,
+    "away_lineup_avg_bat_speed": 69.6,
+    "home_lineup_avg_swing_length": 7.2,
+    "away_lineup_avg_swing_length": 7.2,
+    "home_lineup_avg_attack_angle": 9.1,
+    "away_lineup_avg_attack_angle": 9.1,
+    "home_lineup_bat_speed_vs_starter_velo": 0.747,
+    "away_lineup_bat_speed_vs_starter_velo": 0.747,
+}
 _ROLLING_SUFFIXES = ("_7d", "_14d", "_30d", "_std")
 _GAMES_PLAYED_COLS = {
     "_7d": ("home_games_played_7d", "away_games_played_7d"),
@@ -336,6 +350,22 @@ class _CSWImputer(BaseEstimator, TransformerMixin):
         return X
 
 
+class _BatTrackingImputer(BaseEstimator, TransformerMixin):
+    """Impute bat tracking matchup columns with league-average values for
+    pre-Hawk-Eye-coverage rows (pre-2023-07-14) and opening-day starters."""
+
+    def fit(self, X: pd.DataFrame, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        X = X.copy()
+        for col, fill in _BAT_TRACKING_FILLS.items():
+            if col in X.columns:
+                X[col] = X[col].fillna(fill)
+        return X
+
+
 class _FallbackImputer(BaseEstimator, TransformerMixin):
     """Final fallback: fill any remaining nulls (numeric → mean, object → mode)."""
 
@@ -374,6 +404,7 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
       constants        — Groups 3 & 4: win% → 0.500; days_rest → 4; pythagorean → 0.5 / 0.0
       bullpen_xwoba    — Group 5: bullpen xwOBA → training-set mean
       csw              — CSW% columns → league-average 0.285 (Card 8.Q)
+      bat_tracking     — bat tracking matchup columns → league avgs (Card 8.E)
       bayesian         — Group 6: rolling stats → Bayesian shrinkage
       fallback         — catch-all mean/mode fill for any remaining nulls
     """
@@ -386,6 +417,7 @@ def build_imputation_pipeline(k: int = 15) -> Pipeline:
             ("constants", _ConstantImputer()),
             ("bullpen_xwoba", _BullpenXwobaImputer()),
             ("csw", _CSWImputer()),
+            ("bat_tracking", _BatTrackingImputer()),
             ("bayesian", _BayesianShrinkageTransformer(k=k)),
             ("fallback", _FallbackImputer()),
         ]

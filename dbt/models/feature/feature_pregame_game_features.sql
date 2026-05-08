@@ -92,6 +92,10 @@ batter_archetype_matchups as (
     select * from {{ ref('feature_batter_archetype_matchups') }}
 ),
 
+h2h_matchups as (
+    select * from {{ ref('feature_pitcher_batter_h2h_matchups') }}
+),
+
 line_movement as (
     select * from {{ ref('mart_odds_line_movement') }}
     where bookmaker = 'bovada'
@@ -873,7 +877,35 @@ final as (
         coalesce(h_ln.catcher_framing_runs,   0) as home_catcher_framing_runs,
         coalesce(a_ln.catcher_framing_runs,   0) as away_catcher_framing_runs,
         coalesce(h_ln.catcher_defensive_runs, 0) as home_catcher_defensive_runs,
-        coalesce(a_ln.catcher_defensive_runs, 0) as away_catcher_defensive_runs
+        coalesce(a_ln.catcher_defensive_runs, 0) as away_catcher_defensive_runs,
+
+        -- ── Bat tracking matchup features (Card 8.E) ─────────────────────────
+        -- NULL for pre-2023-07-14 games (Hawk-Eye bat sensors not available).
+        -- ~50% of 2021+ training rows will be NULL; impute league average in
+        -- preprocessing.py. lineup_bat_speed_vs_starter_velo > 1.0 means the
+        -- lineup's bat speed exceeds the opposing starter's fastball velocity.
+        h_ln.lineup_avg_bat_speed               as home_lineup_avg_bat_speed,
+        h_ln.lineup_avg_swing_length            as home_lineup_avg_swing_length,
+        h_ln.lineup_avg_attack_angle            as home_lineup_avg_attack_angle,
+        h_ln.lineup_bat_speed_vs_starter_velo   as home_lineup_bat_speed_vs_starter_velo,
+        a_ln.lineup_avg_bat_speed               as away_lineup_avg_bat_speed,
+        a_ln.lineup_avg_swing_length            as away_lineup_avg_swing_length,
+        a_ln.lineup_avg_attack_angle            as away_lineup_avg_attack_angle,
+        a_ln.lineup_bat_speed_vs_starter_velo   as away_lineup_bat_speed_vs_starter_velo,
+
+        -- ── Pitcher-batter H2H matchup history (Card 8.J) ────────────────────
+        -- Lineup-average Bayesian-shrunk wOBA / xwOBA each batter has produced
+        -- against the OPPOSING starter, weighted toward a league prior at low
+        -- PA counts (k=50, woba_prior=0.320, xwoba_prior=0.310). Coverage is
+        -- the fraction of the 9 lineup slots with >= 10 career PA vs. the
+        -- starter. NULL only when the lineup or the opposing starter is
+        -- unknown — debut starters return shrinkage-to-prior values.
+        h2h.home_lineup_vs_away_starter_h2h_woba,
+        h2h.home_lineup_vs_away_starter_h2h_xwoba,
+        h2h.home_lineup_h2h_pa_coverage,
+        h2h.away_lineup_vs_home_starter_h2h_woba,
+        h2h.away_lineup_vs_home_starter_h2h_xwoba,
+        h2h.away_lineup_h2h_pa_coverage
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
@@ -898,6 +930,8 @@ final as (
         on  cm.game_pk = g.game_pk
     left join batter_archetype_matchups bam
         on  bam.game_pk = g.game_pk
+    left join h2h_matchups h2h
+        on  h2h.game_pk = g.game_pk
     left join line_movement lm
         on  lm.game_pk = g.game_pk
     left join bookmaker_disagreement bd

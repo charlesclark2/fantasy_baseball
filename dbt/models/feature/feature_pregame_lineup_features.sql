@@ -244,12 +244,15 @@ slot_platoon as (
     group by ls.game_pk, ls.home_away
 ),
 
--- Starter pitch archetype for each game × side (prior-season LEAKAGE GUARD)
+-- Starter pitch archetype and fastball velocity for each game × side
+-- pitch_archetype: prior-season LEAKAGE GUARD (game_year - 1)
+-- avg_fastball_velo_7d: rolling pre-game window already leakage-free in source
 starter_archetype as (
     select
         sf.game_pk,
         sf.side                                     as home_away,
         sf.pitcher_id,
+        sf.avg_fastball_velo_7d,
         pa.pitch_archetype
     from {{ ref('feature_pregame_starter_features') }} sf
     left join {{ ref('mart_pitcher_pitch_archetype') }} pa
@@ -295,6 +298,46 @@ archetype_agg as (
         round(avg(batter_iso_vs_archetype),   3) as lineup_iso_vs_starter_archetype,
         round(avg(batter_archetype_pa),       0) as lineup_archetype_pa_coverage
     from slot_archetype_stats
+    group by game_pk, home_away
+),
+
+-- Per-slot bat tracking profile (most recent pre-game row)
+-- LEAKAGE GUARD: game_date < official_date ensures only prior-day data
+slot_bat_tracking_ranked as (
+    select
+        ls.game_pk,
+        ls.official_date,
+        ls.home_away,
+        ls.slot,
+        ls.batter_id,
+        bt.bat_speed_30d,
+        bt.swing_length_30d,
+        bt.attack_angle_30d,
+        row_number() over (
+            partition by ls.game_pk, ls.home_away, ls.slot
+            order by bt.game_date::date desc
+        )                                           as rn
+    from lineup_slots ls
+    left join {{ ref('mart_batter_bat_tracking_profile') }} bt
+        on  bt.batter_id       = ls.batter_id
+        and bt.game_date::date < ls.official_date   -- LEAKAGE GUARD
+    where ls.batter_id is not null
+),
+
+slot_bat_tracking as (
+    select * from slot_bat_tracking_ranked where rn = 1
+),
+
+-- Lineup-level bat tracking aggregates across all 9 slots (Card 8.E)
+-- NULL when no batter in the lineup has 2023+ bat tracking data
+bat_tracking_agg as (
+    select
+        game_pk,
+        home_away,
+        round(avg(bat_speed_30d),    2)             as lineup_avg_bat_speed,
+        round(avg(swing_length_30d), 2)             as lineup_avg_swing_length,
+        round(avg(attack_angle_30d), 2)             as lineup_avg_attack_angle
+    from slot_bat_tracking
     group by game_pk, home_away
 ),
 
@@ -358,7 +401,16 @@ final as (
         -- Catcher metrics (Card 8.K)
         -- 0 = league average when catcher is not identified or not in mart
         cf.catcher_framing_runs,
-        cf.catcher_defensive_runs
+        cf.catcher_defensive_runs,
+
+        -- Bat tracking matchup features (Card 8.E)
+        -- NULL for all pre-2023-07-14 games; ~50% null in 2021+ training set
+        bta.lineup_avg_bat_speed,
+        bta.lineup_avg_swing_length,
+        bta.lineup_avg_attack_angle,
+        round(
+            bta.lineup_avg_bat_speed / nullif(opp_sa.avg_fastball_velo_7d, 0)
+        , 4)                                        as lineup_bat_speed_vs_starter_velo
 
     from lineups l
     left join lineup_agg la
@@ -383,6 +435,9 @@ final as (
     left join catcher_framing cf
         on  cf.game_pk   = l.game_pk
         and cf.home_away = l.home_away
+    left join bat_tracking_agg bta
+        on  bta.game_pk   = l.game_pk
+        and bta.home_away = l.home_away
 )
 
 select * from final
