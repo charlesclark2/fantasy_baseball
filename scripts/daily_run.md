@@ -239,6 +239,27 @@ dbtf build
 
 ---
 
+## Weekly Maintenance (Sundays)
+
+Run the rolling calibrator refit every Sunday to keep the win-probability calibration
+current as the season progresses (Card 8.O).
+
+```bash
+cd /path/to/baseball_betting_and_fantasy
+uv run python betting_ml/scripts/train_calibrator.py --rolling
+```
+
+What it does: queries the last 60 days of `daily_model_predictions` joined to
+`mart_game_results`, fits a new Platt scaler, writes
+`betting_ml/models/home_win/calibrator_rolling.joblib`, and updates
+`calibrator_last_fit_date` in `betting_ml/models/model_registry.yaml`.
+
+If fewer than 30 results are in the lookback window (early season), the refit is
+skipped and a warning is logged — `predict_today.py` will continue using the static
+`calibrator.joblib` fallback.
+
+---
+
 ## Credit Budget — OddsAPI Historical Backfill (Card 7.P2)
 
 **Documented 2026-05-03.**

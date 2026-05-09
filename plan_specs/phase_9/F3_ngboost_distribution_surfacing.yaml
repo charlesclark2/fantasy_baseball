@@ -13,7 +13,7 @@ spec:
     ephemeral internal state.
 
     STATUS: Not blocked on model edge. Card 7.MB is complete; NGBoost v2 survives as
-    the total_runs model. No prerequisite on 8.F1 — can be implemented independently.
+    the total_runs model. No prerequisite on 9.F1 — can be implemented independently.
 
     IMPORTANT DISTRIBUTION NOTE: The v2 total_runs model uses a NORMAL distribution
     (NGBoost Normal), NOT LogNormal. All formulas below use scipy.stats.norm, not

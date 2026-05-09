@@ -995,7 +995,25 @@ final as (
         pb.over_money_pct,
         pb.over_ticket_pct,
         pb.ml_sharp_signal,
-        pb.total_sharp_signal
+        pb.total_sharp_signal,
+
+        -- ── Public betting: era indicator + masked variants (Card 8.W) ───────
+        -- has_public_betting_data: 1 when an Action Network row exists for this
+        -- game (2024+ coverage); 0 for all pre-coverage games and within-era
+        -- gaps. Lets the model distinguish "no data → neutral 50.0 imputation"
+        -- from a genuine 50/50 split.
+        (pb.home_ml_money_pct is not null)::integer             as has_public_betting_data,
+
+        -- Masked variants: actual value when data exists, 0 when no coverage.
+        -- Complement the raw columns: the raw column uses 50.0 neutral
+        -- imputation for nulls; the masked column uses 0, so a linear model
+        -- can learn separate coefficients for the data-available regime.
+        coalesce(pb.home_ml_money_pct,  0)                      as home_ml_money_pct_active,
+        coalesce(pb.home_ml_ticket_pct, 0)                      as home_ml_ticket_pct_active,
+        coalesce(pb.over_money_pct,     0)                      as over_money_pct_active,
+        coalesce(pb.over_ticket_pct,    0)                      as over_ticket_pct_active,
+        coalesce(pb.ml_sharp_signal,    0)                      as ml_sharp_signal_active,
+        coalesce(pb.total_sharp_signal, 0)                      as total_sharp_signal_active
 
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk

@@ -15,7 +15,7 @@ spec:
     (XGBoost for home_win, NGBoost Normal for total_runs and run_differential).
     Conservative James-Stein shrinkage can only reduce small-sample variance — it
     cannot introduce directional bias — so this card is safe to implement regardless
-    of the model's current edge status. No prerequisite on 8.F1.
+    of the model's current edge status. No prerequisite on 9.F1.
 
     SHRINKAGE FORMULA:
       w = n / (n + k)

@@ -1,25 +1,40 @@
-"""Card 7.C — Fit and persist the in-season win-probability calibrator.
+"""Card 7.C / 8.O — Fit and persist the in-season win-probability calibrator.
 
-Fetches 2026 completed game results joined to daily_model_predictions,
-fits Platt scaling and isotonic regression on the first 80% (chronological),
-evaluates on the held-out 20%, keeps whichever method produces lower ECE,
-and persists:
-  betting_ml/models/home_win/calibrator.joblib
-  betting_ml/models/home_win/calibrator_meta.json
+Static calibrator (Card 7.C):
+  Fetches all 2026 completed game results joined to daily_model_predictions,
+  fits Platt scaling and isotonic regression on the first 80% (chronological),
+  evaluates on the held-out 20%, keeps whichever method produces lower ECE.
+  Outputs:
+    betting_ml/models/home_win/calibrator.joblib
+    betting_ml/models/home_win/calibrator_meta.json
+
+Rolling calibrator (Card 8.O):
+  Queries the most recent `lookback_days` (default 60) of results, fits a new
+  Platt scaler, and writes:
+    betting_ml/models/home_win/calibrator_rolling.joblib
+  Updates `calibrator_last_fit_date` in model_registry.yaml.
+  Skips refit if fewer than `min_samples` (default 30) results are available.
 
 Run from project root:
-    uv run python betting_ml/scripts/train_calibrator.py
+    uv run python betting_ml/scripts/train_calibrator.py           # static
+    uv run python betting_ml/scripts/train_calibrator.py --rolling  # rolling
+
+NOTE — sample_weights: time-decay weighting (Card 8.N) is NOT applied here.
+This calibrator is fit on 2026 in-season prediction data (already recent by
+definition); sample_weight=None throughout. Decay sample_weights belong only
+in the base model training scripts (train_time_decay_weighted.py et al.).
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import joblib
 import numpy as np
+import yaml
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 
@@ -56,6 +71,7 @@ def _fetch_2026_data() -> tuple[np.ndarray, np.ndarray]:
         JOIN baseball_data.betting.mart_game_results r ON p.game_pk = r.game_pk
         WHERE p.has_odds = TRUE
           AND YEAR(p.score_date) = 2026
+          AND p.model_version = 'v1'
           AND r.home_team_won IS NOT NULL
           AND p.consensus_win_prob IS NOT NULL
         ORDER BY p.score_date, p.game_pk
@@ -164,5 +180,78 @@ def main() -> None:
     print(json.dumps(meta, indent=2))
 
 
+def fit_rolling_calibrator(lookback_days: int = 60, min_samples: int = 30) -> bool:
+    """Card 8.O — Fit a rolling Platt calibrator on the most recent lookback_days of results.
+
+    Returns True if the calibrator was fit and saved, False if skipped (< min_samples).
+    Updates calibrator_last_fit_date in model_registry.yaml on success.
+    """
+    cutoff = date.today() - timedelta(days=lookback_days)
+    sql = f"""
+        SELECT
+            p.score_date,
+            p.consensus_win_prob,
+            CASE WHEN r.home_team_won THEN 1 ELSE 0 END AS actual_outcome
+        FROM baseball_data.betting_ml.daily_model_predictions p
+        JOIN baseball_data.betting.mart_game_results r ON p.game_pk = r.game_pk
+        WHERE p.has_odds = TRUE
+          AND p.score_date >= '{cutoff}'
+          AND p.model_version = 'v1'
+          AND r.home_team_won IS NOT NULL
+          AND p.consensus_win_prob IS NOT NULL
+        ORDER BY p.score_date, p.game_pk
+    """
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    n = len(rows)
+    print(f"Rolling window ({lookback_days}d since {cutoff}): {n} samples found")
+    if n < min_samples:
+        print(f"WARNING: only {n} samples in lookback window (min {min_samples}), skipping refit")
+        return False
+
+    probs    = np.array([float(r[1]) for r in rows])
+    outcomes = np.array([float(r[2]) for r in rows])
+
+    cal = LogisticRegression(C=1.0)
+    cal.fit(probs.reshape(-1, 1), outcomes)
+
+    out_dir  = PROJECT_ROOT / "betting_ml" / "models" / "home_win"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "calibrator_rolling.joblib"
+    joblib.dump(cal, out_path)
+    print(f"Rolling calibrator fit on {n} samples → {out_path}")
+
+    # Smoke-test
+    test_in  = np.array([0.40, 0.50, 0.60])
+    test_out = cal.predict_proba(test_in.reshape(-1, 1))[:, 1]
+    assert all(0.0 <= p <= 1.0 for p in test_out), "Smoke-test failed: out-of-range probability"
+    print(f"Smoke-test OK: {test_in} → {np.round(test_out, 4)}")
+
+    # Update model_registry.yaml
+    reg_path = PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
+    if reg_path.exists():
+        reg = yaml.safe_load(reg_path.read_text()) or {}
+        if "home_win" in reg:
+            reg["home_win"]["calibrator_last_fit_date"] = date.today().isoformat()
+            reg_path.write_text(yaml.dump(reg, default_flow_style=False, sort_keys=False))
+            print(f"Updated calibrator_last_fit_date → {date.today().isoformat()}")
+
+    return True
+
+
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--rolling", action="store_true",
+                        help="Fit rolling calibrator (lookback 60 days) instead of full static fit")
+    args = parser.parse_args()
+    if args.rolling:
+        fit_rolling_calibrator()
+    else:
+        main()

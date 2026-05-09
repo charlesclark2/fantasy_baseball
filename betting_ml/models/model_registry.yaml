@@ -1,66 +1,211 @@
-total_runs:
-  model_name: ngboost_tuned
-  model_version: v2
-  eval_year: 2026
-  cv_mae: 3.5118
-  dist: Normal
-  n_estimators: 500
-  max_depth: 3
-  training_rows: 10264
-  training_cutoff: "2021+"
-  features: 311
-  artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
-  feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
-  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
-  rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  # Per-tag overrides for backfill / champion-challenger comparisons.
-  # The default (no prefix) is the production model (v2). The explicit
-  # *_artifact_path / *_feature_columns_path / *_dist keys let predict_today.py
-  # load any historical tag side-by-side without rewriting the main entry.
-  v0_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
-  v0_feature_columns_path: betting_ml/models/feature_columns.json
-  v0_dist: LogNormal
-  v1_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
-  v1_feature_columns_path: betting_ml/models/feature_columns.json
-  v1_dist: LogNormal
-  v2_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
-  v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
-  v2_dist: Normal
-  deployed_date: "2026-05-05"
-  selected_at: "2026-05-05T00:00:00Z"
-  notes: "Card 7.V v2 retrain. NGBoost Normal, max_depth=3, n_estimators=500, full 2021+ window (10,264 rows, 311 post-pipeline features). CV MAE 3.5118 (vs v1 3.5190). 2024+ holdout gates: pct_pred_over=83.7% (PASS, threshold 25%); abs(mean_residual)=0.048 (PASS, threshold 0.5); totals_mae=3.346 (PASS, vs v0 baseline 3.862); std(pred_total_runs)=0.77 (FAIL, threshold 2.0 — known feature-set limitation, deferred to Phase 9). Rollback: ngboost_tuned_2026.pkl (v1, LogNormal, 294-feature set). See betting_ml/evaluation/total_runs_bias_diagnosis.md and betting_ml/evaluation/model_comparison_v0_v2_total_runs.md."
-
-run_differential:
-  model_name: ngboost_tuned
-  model_version: v1
-  eval_year: 2026
-  cv_mae: 3.4724
-  dist: Normal
-  n_estimators: 200
-  training_rows: 10256
-  training_cutoff: "2021+"
-  features: 294
-  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
-  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
-  feature_columns_path: betting_ml/models/feature_columns.json
-  rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  deployed_date: "2026-05-04"
-  selected_at: "2026-05-04T00:00:00Z"
-  notes: "Card 7.MA retrain on full Phase 7 feature set (294 features per feature_columns.json, 10,256 rows, 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression — within CV noise). Normal distribution only; LogNormal excluded because run_diff can be negative. Rollback: ngboost_tuned_prod.pkl (pre-7.MA, same 294-feature set)."
-
 home_win:
+  artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  calibrator_last_fit_date: '2026-05-08'
+  cv_brier: 0.2422
+  deployed_date: '2026-05-04'
+  ece_raw: 0.0202
+  eval_year: 2026
+  feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
+  features: 487
   model_name: elasticnet
   model_version: v1
-  eval_year: 2026
-  cv_brier: 0.2422
-  ece_raw: 0.0202
-  training_rows: 10272
-  training_cutoff: "2021+"
-  features: 487
-  artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  notes: 'Card 7.L2 retrain. LogisticRegression (elasticnet, l1_ratio=0.5, inner-CV
+    C=0.01) on full 487 all-numeric feature set from load_features(). CV Brier 0.2422,
+    in-sample Brier 0.2377. Feature columns saved to elasticnet_feature_columns.json
+    (487 features). Rollback: xgb_classifier_tuned_2026.pkl (v0, 294-feature set).
+
+    '
   rollback_artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
-  feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
   rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  deployed_date: "2026-05-04"
-  selected_at: "2026-05-04T00:00:00Z"
-  notes: "Card 7.L2 retrain. LogisticRegression (elasticnet, l1_ratio=0.5, inner-CV C=0.01) on full 487 all-numeric feature set from load_features(). CV Brier 0.2422, in-sample Brier 0.2377. Feature columns saved to elasticnet_feature_columns.json (487 features). Rollback: xgb_classifier_tuned_2026.pkl (v0, uses feature_columns.json 294-feature set)."
+  selected_at: '2026-05-04T00:00:00Z'
+  training_cutoff: 2021+
+  training_rows: 10272
+  wave5_gates:
+    card: 8.W
+    evaluated: '2026-05-08'
+    cv_brier:
+      value: 0.2422
+      threshold: "< 0.2439 (7.MA baseline)"
+      pass: true
+    ece_after_calibrator_fix:
+      value: 0.0053
+      threshold: "<= 0.045"
+      pass: true
+    decision: PROMOTED
+    notes: >
+      8.W per-target feature importance revealed market circularity:
+      away_moneyline_decimal (#3), home_win_prob_sharp (#6), home_open_win_prob (#11)
+      in top-20 elasticnet coefficients. _MARKET_COLS_TO_EXCLUDE populated in
+      train_elasticnet_prod.py for ~2026-05-22 market-blind retrain. 4 all-NaN
+      columns dropped by SimpleImputer: home_starter_proj_xfip, away_starter_proj_xfip,
+      home_consecutive_away_games, away_consecutive_home_games. Report:
+      betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+  challengers:
+  - card: 7.L2
+    model_name: xgboost
+    artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+    feature_columns_path: betting_ml/models/feature_columns.json
+    features: 294
+    cv_brier: 0.2439
+    promoted: false
+    rejection_reason: 'Elasticnet CV Brier 0.2422 beat XGBoost 0.2439 on the 487-feature
+      set. XGBoost retained as rollback artifact (v0).
+
+      '
+    eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_xgboost_ngboost.parquet
+  - card: 7.L2
+    model_name: catboost
+    artifact_path: null
+    features: 294
+    cv_brier: null
+    promoted: false
+    rejection_reason: 'CatBoost did not beat elasticnet in 7.L2 CV sweep. Artifact
+      not retained.
+
+      '
+    eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_catboost.parquet
+  - card: 7.L2
+    model_name: lightgbm
+    artifact_path: null
+    features: 294
+    cv_brier: null
+    promoted: false
+    rejection_reason: 'LightGBM did not beat elasticnet in 7.L2 CV sweep. Artifact
+      not retained.
+
+      '
+    eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_lightgbm.parquet
+  - card: 7.L2
+    model_name: ensemble_stacked
+    artifact_path: null
+    features: 294
+    cv_brier: null
+    promoted: false
+    rejection_reason: 'Stacked ensemble did not beat elasticnet in 7.L2 CV sweep.
+      Deferred to Phase 9 per project memory (stacked ensemble architecture candidate).
+
+      '
+    eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
+run_differential:
+  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  cv_mae: 3.4724
+  deployed_date: '2026-05-04'
+  dist: Normal
+  eval_year: 2026
+  feature_columns_path: betting_ml/models/feature_columns.json
+  features: 294
+  model_name: ngboost_tuned
+  model_version: v1
+  n_estimators: 200
+  notes: "Card 7.MA retrain on full Phase 7 feature set (294 features, 10,256 rows,\
+    \ 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression\
+    \ \u2014 within CV noise). Normal distribution only; LogNormal excluded because\
+    \ run_diff can be negative.\n"
+  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
+  rollback_feature_columns_path: betting_ml/models/feature_columns.json
+  selected_at: '2026-05-04T00:00:00Z'
+  training_cutoff: 2021+
+  training_rows: 10256
+  wave5_gates:
+    card: 8.W
+    evaluated: '2026-05-08'
+    decision: NOT RETRAINED
+    notes: >
+      Model still uses 294-feature pre-Phase-8 set from feature_columns.json (7.MA
+      retrain). Phase 8 features: 0 \u2014 none of the 8.A-8.Y feature groups are in the
+      training matrix. Market circularity: home_win_prob_consensus is the #1
+      permutation-importance feature; 61% of features are exclusion candidates (noise
+      ratio). Most urgent retrain at ~2026-05-22: switch to load_features() full
+      feature set + add market exclusion equivalent to _MARKET_COLS_TO_EXCLUDE. See
+      betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+  challengers: []
+total_runs:
+  artifact_path: betting_ml/models/total_runs/ngboost_decay_weighted.pkl
+  cv_mae: 3.5107
+  deployed_date: '2026-05-08'
+  dist: Normal
+  eval_year: 2026
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  features: 311
+  max_depth: 3
+  model_name: ngboost_tuned
+  model_version: v2
+  n_estimators: 500
+  notes: 'Card 8.N decay-weighted retrain (half_life=162). Weighted MAE=3.5107 vs
+    unweighted 3.5118. Card 7.V v2 retrain: NGBoost Normal, max_depth=3, n_estimators=500,
+    full 2021+ window (10,264 rows, 311 post-pipeline features). CV MAE 3.5118 (vs
+    v1 3.5190). 2024+ holdout gates: pct_pred_over=83.7% (PASS); abs(mean_residual)=0.048
+    (PASS); totals_mae=3.346 (PASS vs v0 baseline 3.862); std(pred_total_runs)=0.77
+    (FAIL, known feature-set variance ceiling, deferred to Phase 9). Rollback: ngboost_tuned_2026.pkl
+    (v1, LogNormal, 294-feature set). See total_runs_bias_diagnosis.md and model_comparison_v0_v2_total_runs.md.
+
+    '
+  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+  rollback_feature_columns_path: betting_ml/models/feature_columns.json
+  selected_at: '2026-05-05T00:00:00Z'
+  training_cutoff: 2021+
+  training_rows: 10264
+  wave5_gates:
+    card: 8.W
+    evaluated: '2026-05-08'
+    cv_mae:
+      value: 3.5107
+      threshold: "<= 3.5190 (v1 baseline)"
+      pass: true
+    pct_pred_over:
+      value: 83.7
+      threshold: ">= 25%"
+      pass: true
+    mean_residual:
+      value: 0.048
+      threshold: "|x| <= 0.5"
+      pass: true
+    std_pred:
+      value: 0.77
+      threshold: ">= 2.0"
+      pass: false
+      deferred: "Phase 9 — variance-shrinkage ceiling; not addressable without new features or architecture change"
+    decision: PROMOTED (std gate deferred to Phase 9)
+    notes: >
+      8.W permutation importance: home_win_prob_sharp (#1), home_moneyline_decimal (#2)
+      are top features — market circularity confirmed. 4 Phase 8 features identified as
+      noise candidates (mean_imp <= 0). Next retrain (~2026-05-22): add market exclusion
+      analogous to home_win _MARKET_COLS_TO_EXCLUDE to NGBoost training script; drop
+      4 noise features. See betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+  v0_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+  v0_dist: LogNormal
+  v0_feature_columns_path: betting_ml/models/feature_columns.json
+  v1_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  v1_dist: LogNormal
+  v1_feature_columns_path: betting_ml/models/feature_columns.json
+  v2_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+  v2_dist: Normal
+  v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  challengers:
+  - card: 8.P
+    model_name: lgb_quantile
+    model_type: lgb_quantile
+    artifact_path: betting_ml/models/total_runs/archive
+    feature_columns_path: betting_ml/models/total_runs/lgb_quantile_feature_columns.json
+    promoted: false
+    archived_at: '2026-05-08T17:15:41.142777+00:00'
+    gate_results:
+      mae_q50:
+        value: 3.4791
+        threshold: "\u2264 3.5107"
+        pass: true
+      std_q50:
+        value: 0.9325
+        threshold: "\u2265 1.5"
+        pass: false
+      mean_residual:
+        value: -0.5951
+        threshold: "|x| \u2264 0.5"
+        pass: false
+    rejection_reason: "Card 8.P \u2014 Failed std and residual gates. Both failures\
+      \ trace to the same variance-shrinkage ceiling as NGBoost; the current feature\
+      \ set cannot produce sufficient prediction spread regardless of algorithm. MAE\
+      \ gate passed (3.4791 beats NGBoost 3.5107), confirming LightGBM quantile has\
+      \ better point accuracy. Deferred to Phase 9 when feature set is expanded. See\
+      \ evaluation/quantile_regression_vs_ngboost.md.\n"
+    eval_report: betting_ml/evaluation/quantile_regression_vs_ngboost.md

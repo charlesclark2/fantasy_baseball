@@ -46,6 +46,7 @@ def train_logistic(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     X_eval: pd.DataFrame,
+    sample_weights: np.ndarray | None = None,
 ) -> dict:
     """Fit LogisticRegression and return P(home win) on X_eval.
 
@@ -58,7 +59,7 @@ def train_logistic(
     _validate_numeric(X_train, "X_train")
     _validate_numeric(X_eval, "X_eval")
     model = LogisticRegression(max_iter=5000, C=1.0, solver="lbfgs")
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     y_pred_proba = model.predict_proba(X_eval)[:, 1]
     return {"y_pred_proba": y_pred_proba, "model": model}
 
@@ -69,6 +70,7 @@ def train_xgboost_classifier(
     X_eval: pd.DataFrame,
     y_eval: pd.Series,
     calibration: str = "sigmoid",
+    sample_weights: np.ndarray | None = None,
 ) -> dict:
     """Fit XGBClassifier and apply post-hoc calibration on the eval fold.
 
@@ -100,7 +102,7 @@ def train_xgboost_classifier(
         random_state=42,
         n_jobs=-1,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     y_raw = model.predict_proba(X_eval)[:, 1]
 
     # Fit calibrator on raw XGBoost scores vs. true labels from the eval fold.

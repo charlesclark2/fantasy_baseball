@@ -8,12 +8,12 @@ spec:
   description: >
     Compute a per-game `game_uncertainty_score ∈ [0, 1]` at inference time from
     existing feature store columns. This score is the shared input for all downstream
-    Dynamic Bayesian cards (8.F2–8.F5). High uncertainty = debut starters, early-season
+    Dynamic Bayesian cards (9.F2–9.F5). High uncertainty = debut starters, early-season
     thin windows; low uncertainty = mid-season stable rosters.
 
     STATUS: Not blocked. This card computes a score from existing feature columns
     and does not change any predictions or model weights. It is a prerequisite for
-    cards 8.F2–8.F5 but can be built regardless of the model's current edge status.
+    cards 9.F2–9.F5 but can be built regardless of the model's current edge status.
 
     FORMULA (v1):
       starter_uncertainty = 0.5 * home_starter_unc + 0.5 * away_starter_unc
@@ -34,7 +34,7 @@ spec:
     NULL HANDLING: NULL inputs treated as full uncertainty = 1.0 (conservative).
 
     EXECUTION ORDER: This is the prerequisite for all other 8.F cards.
-    Implement before 8.F2, 8.F3, 8.F4, and 8.F5.
+    Implement before 9.F2, 9.F3, 9.F4, and 9.F5.
 
   acceptanceCriteria:
     - description: >
