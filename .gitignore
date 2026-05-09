@@ -26,6 +26,7 @@ betting_ml/models/**/*.pkl
 
 # Model evaluation artifacts (large binary fold data — regenerated each retrain, not tracked in git)
 betting_ml/evaluation/model_evaluation/*.parquet
+betting_ml/evaluation/model_evaluation/**/*.parquet
 
 # Daily prediction outputs (written by predict_today.py — tracked in Snowflake, not git)
 betting_ml/outputs/predictions*.csv

@@ -338,6 +338,7 @@ CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
     decimal_odds              FLOAT,
     ev                        FLOAT,
     kelly_fraction            FLOAT,
+    model_version             VARCHAR(20),
     loaded_at                 TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
 )
 """
@@ -345,11 +346,12 @@ CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
 _INSERT_PREDICTION_LOG = """
 INSERT INTO baseball_data.config.prediction_log (
     prediction_date, game_pk, market, model_prob, market_prob_at_prediction,
-    closing_market_prob, actual_outcome, decimal_odds, ev, kelly_fraction
+    closing_market_prob, actual_outcome, decimal_odds, ev, kelly_fraction,
+    model_version
 ) VALUES (
     %(prediction_date)s, %(game_pk)s, %(market)s, %(model_prob)s,
     %(market_prob_at_prediction)s, %(closing_market_prob)s, %(actual_outcome)s,
-    %(decimal_odds)s, %(ev)s, %(kelly_fraction)s
+    %(decimal_odds)s, %(ev)s, %(kelly_fraction)s, %(model_version)s
 )
 """
 
@@ -381,6 +383,7 @@ def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None
             "decimal_odds":              decimal_odds,
             "ev":                        ev,
             "kelly_fraction":            r.get("implied_kelly_fraction"),
+            "model_version":             MODEL_VERSION,
         })
     conn = get_snowflake_connection()
     try:

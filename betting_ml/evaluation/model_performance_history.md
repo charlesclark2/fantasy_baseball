@@ -92,3 +92,56 @@ The raw model is the best-calibrated artifact; calibrator saved but monitor befo
 **Feature count:** 267 (7.F) → 292 retained + 2 pipeline-generated = **294 total model inputs**
 
 ---
+
+## Phase 8 Pre-8.W Production Baseline (2026-05-08) — Gate Targets for 8.W
+
+These are the exact metrics the Card 8.W batch retrain must beat to promote
+new versions. Snapshotted before any 8.W training runs.
+
+| Model | Architecture | Training loop | Metric | CV Score | Features | Training rows |
+|---|---|---|---|---|---|---|
+| home_win | Elasticnet (v1) | Standard (no decay) | Brier (↓) | **0.2422** | 487 | 10,272 |
+| total_runs | NGBoost Normal (v2) | 8.N decay weights (half_life=162) | Weighted MAE (↓) | **3.5107** | 311 | 10,264 |
+| run_differential | NGBoost Normal (v1) | Standard (no decay) | MAE (↓) | **3.4724** | 294 | 10,256 |
+| home_win calibrator | Platt (rolling, 8.O) | — | ECE (↓) | — | — | rolling 60d |
+
+**8.W promotion gates (must beat these to promote):**
+
+| Target | Gate | Threshold | Baseline value |
+|---|---|---|---|
+| home_win | Brier | ≤ 0.2422 | 0.2422 |
+| home_win | Post-calibration ECE | ≤ 0.045 | 0.0202 (raw) |
+| total_runs | MAE | ≤ 3.35 | 3.5107 |
+| total_runs | \|mean_residual\| | ≤ 0.5 | 0.048 |
+| total_runs | pct_pred_over_line | ∈ [0.20, 0.80] | 83.7% (historical; expect improvement with Phase 8 features) |
+| run_differential | MAE | ≤ 3.4724 | 3.4724 |
+
+**Phase 8 feature groups NOT yet captured in any production artifact** (first
+consumed by 8.W):
+
+| Card | Feature group | Approx column count |
+|---|---|---|
+| 8.A–8.E | Bat tracking matchup (exit velo, whiff%, CSW by batter segment) | ~20 |
+| 8.J | H2H pitcher-batter matchup history (xwOBA, K%, BB%) | ~12 |
+| 8.K | Catcher framing and pitch-calling metrics | ~8 |
+| 8.L | Bullpen pitcher-batter matchup xwOBA | ~6 |
+| 8.M | Starter arsenal drift (4-week rolling Δ) | ~8 |
+| 8.Q | CSW% for starters (contact+swinging strike rate) | ~6 |
+| 8.R | Public betting percentages and sharp/public split | ~10 |
+| 8.T | Bookmaker disagreement / line dispersion | ~8 |
+| 8.U | Bullpen leverage exhaustion index | ~4 |
+| 8.X | Pythagorean residual (luck-adjusted team strength) | ~4 |
+| 8.Y | Base state run-scoring splits | ~8 |
+
+**Training-loop changes captured:**
+- 8.N: Decay-weighted sample weights (half_life=162) applied to total_runs
+  and run_differential; home_win uses standard weights (logistic regression
+  does not benefit from game-recency decay in the same way)
+- 8.O: Rolling Platt calibrator for home_win probabilities (weekly Sunday refit)
+
+**Evaluation artifacts preserved at this snapshot:**
+- Fold-level parquets: `betting_ml/evaluation/model_evaluation/v1/`
+- Feature importance: `model_evaluation/v1/feature_importance_v1.parquet`
+- SHAP visualization: `model_evaluation/v1/shap_importance_fold2025.png`
+
+---

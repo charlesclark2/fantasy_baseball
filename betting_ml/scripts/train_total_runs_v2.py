@@ -27,11 +27,16 @@ from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
 from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.preprocessing import build_imputation_pipeline
+from betting_ml.utils.sample_weights import compute_sample_weights
 
 
 _ARTIFACT_PATH = PROJECT_ROOT / "betting_ml" / "models" / "total_runs" / "ngboost_tuned_v2.pkl"
 _FEATURE_COLS_PATH = PROJECT_ROOT / "betting_ml" / "models" / "total_runs" / "feature_columns_v2.json"
 _RESULTS_PATH = PROJECT_ROOT / "betting_ml" / "evaluation" / "v2_train_results.json"
+
+# Pass --weighted to enable exponential decay sample_weights (Card 8.N)
+import argparse as _argparse
+_WEIGHTED_FLAG = "--weighted" in sys.argv
 
 _DIST_NAME = "Normal"
 _MAX_DEPTH = 3
@@ -42,6 +47,9 @@ def main() -> None:
     from ngboost import NGBRegressor
     from ngboost.distns import Normal
     from sklearn.tree import DecisionTreeRegressor
+
+    if _WEIGHTED_FLAG:
+        print("=== WEIGHTED MODE (Card 8.N time-decay sample_weights) ===")
 
     print("Loading historical features (2021+)...")
     df = load_features(min_games_played=15)
@@ -65,10 +73,11 @@ def main() -> None:
         Xtr = pipe.fit_transform(Xtr_raw).select_dtypes(include=[np.number])
         Xev = pipe.transform(Xev_raw).reindex(columns=Xtr.columns, fill_value=0.0)
 
+        sample_weights = compute_sample_weights(df.loc[train_idx], date_col="game_date") if _WEIGHTED_FLAG and "game_date" in df.columns else None
         base = DecisionTreeRegressor(criterion="friedman_mse", max_depth=_MAX_DEPTH)
         ngb = NGBRegressor(Dist=Normal, n_estimators=_N_ESTIMATORS, Base=base, verbose=False)
         t0 = time.time()
-        ngb.fit(Xtr.values, ytr)
+        ngb.fit(Xtr.values, ytr, sample_weight=sample_weights)
         pred = ngb.predict(Xev.values)
         mae = float(np.mean(np.abs(pred - yev)))
         dur = time.time() - t0
@@ -90,10 +99,11 @@ def main() -> None:
     final_feature_cols = X_full.columns.tolist()
     print(f"  Final feature matrix: {X_full.shape}")
 
+    sample_weights_full = compute_sample_weights(df, date_col="game_date") if _WEIGHTED_FLAG and "game_date" in df.columns else None
     base = DecisionTreeRegressor(criterion="friedman_mse", max_depth=_MAX_DEPTH)
     ngb_final = NGBRegressor(Dist=Normal, n_estimators=_N_ESTIMATORS, Base=base, verbose=False)
     t0 = time.time()
-    ngb_final.fit(X_full.values, y_full)
+    ngb_final.fit(X_full.values, y_full, sample_weight=sample_weights_full)
     fit_dur = time.time() - t0
     print(f"  Fit complete in {fit_dur:.0f}s")
 

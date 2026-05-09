@@ -185,11 +185,33 @@ def _build_feature_matrix(
 
 
 # ---------------------------------------------------------------------------
-# Calibrator (home_win v1 elasticnet is natively calibrated)
+# Calibrator — rolling (Card 8.O) with static fallback (Card 7.C)
 # ---------------------------------------------------------------------------
 
+_ROLLING_CAL_PATH = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "calibrator_rolling.joblib"
+_STATIC_CAL_PATH  = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "calibrator.joblib"
+
+
+def _load_calibrator():
+    if _ROLLING_CAL_PATH.exists():
+        print(f"Loaded rolling calibrator from {_ROLLING_CAL_PATH}")
+        return joblib.load(_ROLLING_CAL_PATH)
+    if _STATIC_CAL_PATH.exists():
+        print(f"Loaded static calibrator from {_STATIC_CAL_PATH}")
+        return joblib.load(_STATIC_CAL_PATH)
+    return None
+
+
+_CALIBRATOR = _load_calibrator()
+
+
 def _apply_calibrator(consensus_win_prob: float) -> float:
-    return consensus_win_prob
+    if _CALIBRATOR is None:
+        return consensus_win_prob
+    try:
+        return float(_CALIBRATOR.predict_proba([[consensus_win_prob]])[0, 1])
+    except AttributeError:
+        return float(_CALIBRATOR.predict([consensus_win_prob])[0])
 
 
 # ---------------------------------------------------------------------------

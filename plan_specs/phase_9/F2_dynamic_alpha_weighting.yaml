@@ -19,7 +19,7 @@ spec:
     quality in any game where `game_uncertainty_score > 0`. Unblock when the model
     demonstrates mean h2h edge > 0.0 across ≥50 has_odds games.
 
-    PREREQUISITE: Card 8.F1 (game_uncertainty_score) must be implemented first.
+    PREREQUISITE: Card 9.F1 (game_uncertainty_score) must be implemented first.
     The `game_uncertainty_score` column must exist in `daily_model_predictions` and
     be populated by `predict_today.py` before this card can be implemented.
 
@@ -58,7 +58,7 @@ spec:
   description: >
     Three-task sequential plan. Task 1 adds DDL columns. Task 2 edits compute_posterior()
     and predict_today.py. Task 3 updates model_registry.yaml and writes the evaluation
-    query template. Do not start this card until 8.F1 is complete AND mean h2h edge
+    query template. Do not start this card until 9.F1 is complete AND mean h2h edge
     is > 0.0 across ≥50 has_odds games.
   goalRef:
     name: dynamic-alpha-weighting
@@ -177,7 +177,7 @@ spec:
           stratified edge query AND the unblock condition check:
 
             -- UNBLOCK CONDITION CHECK
-            -- Run this first. If mean_h2h_edge <= 0.0 or n_games < 50, do not implement 8.F2.
+            -- Run this first. If mean_h2h_edge <= 0.0 or n_games < 50, do not implement 9.F2.
             SELECT COUNT(*) AS n_games,
                    AVG(h2h_edge) AS mean_h2h_edge,
                    SUM(CASE WHEN h2h_edge > 0 THEN 1 ELSE 0 END) AS n_positive_edge

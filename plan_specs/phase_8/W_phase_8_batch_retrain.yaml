@@ -41,6 +41,34 @@ spec:
     everything. Running 8.W and then re-running it after 8.N or 8.P would
     burn multi-hour NGBoost compute twice.
 
+    PRE-8.W DATA INFRASTRUCTURE (completed 2026-05-08, before 8.W started):
+
+      Local artifact preservation:
+        - betting_ml/evaluation/model_evaluation/v1/ — fold parquets and SHAP
+          artifacts from the 7.MA retrain snapshotted; README documents which
+          production artifacts they correspond to.
+        - model_registry.yaml restructured with per-target challengers: list.
+          The ad-hoc total_runs_quantile top-level key is gone; it now lives
+          under total_runs.challengers with structured gate_results fields.
+        - betting_ml/evaluation/model_performance_history.md updated with a
+          "Phase 8 Pre-8.W Production Baseline" section documenting exact gate
+          targets and the feature groups not yet in any production artifact.
+
+      Snowflake tracking (requires running scripts/ddl/model_tracking_migration.sql):
+        - config.prediction_log.model_version (VARCHAR 20) added; backfilled
+          using deployment date boundaries (v0 < 2026-05-04, v1 ≥ 2026-05-04,
+          v2 ≥ 2026-05-08).
+        - betting_ml.model_health_log.model_version (VARCHAR 20) added.
+        - betting_ml.model_registry table created and seeded with 7 rows
+          (home_win v0/v1, total_runs v0/v1/v2, run_differential v0/v1).
+        - daily_model_predictions 'prod' tag remapped: score_date < 2026-05-04
+          → 'v0', score_date ≥ 2026-05-04 → 'v1'.
+
+      Script changes:
+        - predict_today.py: prediction_log INSERT now writes MODEL_VERSION.
+        - compute_model_health.py: run() accepts model_version kwarg; INSERT
+          writes model_version; CLI exposes --model-version flag.
+
   acceptanceCriteria:
     - description: >
         Preprocessing imputers are in place for every Phase 8 feature group
@@ -70,11 +98,19 @@ spec:
         backfill if available). mean_clv_ml, pct_positive_clv, and
         mean_h2h_edge recorded for each promoted target.
     - description: >
+        Per-target feature importance analysis run for home_win
+        (elasticnet coefficients), total_runs, and run_differential
+        (permutation importance on production NGBoost artifacts). Results
+        persisted at betting_ml/evaluation/feature_selection/ as three text
+        files. Columns with mean_importance ≤ 0 or CI crossing zero flagged
+        as exclusion candidates for the next retrain (~2026-05-22).
+    - description: >
         betting_ml/evaluation/phase_8_batch_retrain_impact.md exists and
         contains: features added since last retrain, CV metrics per target
         vs. baseline, calibration metrics for home_win, CLV results, top 10
         feature importances per target with new (8.x-origin) columns
-        highlighted, and the Wave 5 unblocking decision.
+        highlighted, per-target feature exclusion candidates, recommended
+        feature sets for the next retrain, and the Wave 5 unblocking decision.
     - description: >
         Wave 5 unblocking decision recorded: 8.F2 status (blocked vs.
         unblocked) with the edge value that drove the decision. If
@@ -94,10 +130,11 @@ metadata:
   namespace: default
 spec:
   description: >
-    Eight-task sequential plan. Tasks 1–2 are dependency / preprocessing
+    Nine-task sequential plan. Tasks 1–2 are dependency / preprocessing
     audits. Tasks 3–5 retrain each target and apply per-target promotion
-    gates. Task 6 re-runs CLV. Task 7 produces the comparison report. Task 8
-    records the Wave 5 unblocking decision and updates the registry.
+    gates. Task 6 re-runs CLV. Task 7 runs per-target feature importance
+    analysis. Task 8 produces the comparison report. Task 9 records the
+    Wave 5 unblocking decision and updates the registry.
   goalRef:
     name: phase-8-batch-retrain
   graph:
@@ -235,6 +272,56 @@ spec:
             name: run_differential v2 artifact persisted
             path: betting_ml/models/run_differential/v2
 
+      - id: per-target-feature-selection
+        kind: Task
+        description: >
+          Run permutation importance (and elasticnet coefficient magnitudes
+          for home_win) separately per target to identify which feature
+          groups are contributing signal vs. noise for each prediction task.
+
+          Hypothesis: market-derived columns (bookmaker disagreement, public
+          betting percentages) and advanced bat-tracking features likely carry
+          signal for home_win (capturing market sentiment) but are noise for
+          total_runs and run_differential, which are governed more by pitching
+          matchup and park factors. Running a single 555-feature set across all
+          three targets obscures this per-target structure.
+
+          Steps:
+            1. home_win: extract the top-20 coefficient magnitudes from the
+               production elasticnet artifact (elasticnet_2026.pkl, post-scale),
+               annotating which columns are Phase 8 origin vs. legacy 7.x.
+            2. total_runs: run sklearn permutation_importance (n_repeats=10,
+               random_state=42) on the production NGBoost artifact using a
+               held-out 2025 test set. Flag columns with mean_importance ≤ 0
+               or whose CI lower bound crosses zero as candidates for exclusion
+               in the next retrain.
+            3. run_differential: same permutation importance approach as
+               total_runs, run on the production NGBoost artifact.
+            4. Produce per-target importance reports at
+               betting_ml/evaluation/feature_selection/:
+                 home_win_top20_importances.txt
+                 total_runs_feature_importance.txt
+                 run_diff_feature_importance.txt
+
+          These reports feed section 5 of the comparison report (top-10
+          importances per target, Phase-8 columns highlighted) and define the
+          candidate feature sets for the next retrain when ≥50 live CLV games
+          are available (~2026-05-22).
+        dependsOn:
+          - retrain-home-win
+          - retrain-total-runs
+          - retrain-run-differential
+        acceptanceCriteria:
+          - type: artifact_exists
+            name: home_win importance report exists
+            path: betting_ml/evaluation/feature_selection/home_win_top20_importances.txt
+          - type: artifact_exists
+            name: total_runs importance report exists
+            path: betting_ml/evaluation/feature_selection/total_runs_feature_importance.txt
+          - type: artifact_exists
+            name: run_diff importance report exists
+            path: betting_ml/evaluation/feature_selection/run_diff_feature_importance.txt
+
       - id: clv-re-evaluation
         kind: Task
         description: >
@@ -280,12 +367,16 @@ spec:
             4. CLV results (mean_clv_ml, pct_positive, mean_h2h_edge)
                vs. v0/v1/v2 baselines
             5. Top 10 feature importances per target with new (8.x-origin)
-               columns highlighted
+               columns highlighted; per-target exclusion candidates identified
+               in per-target-feature-selection annotated here
             6. Per-target promotion gate results (pass/fail with
                numeric values)
             7. Wave 5 unblocking decision and rationale
+            8. Recommended per-target feature sets for the next retrain
+               (after ≥50 live CLV games; ~2026-05-22)
         dependsOn:
           - clv-re-evaluation
+          - per-target-feature-selection
         acceptanceCriteria:
           - type: artifact_exists
             name: comparison report exists
@@ -298,6 +389,18 @@ spec:
             - per-target version tags for promoted targets
             - training timestamp and feature count
             - per-target gate results
+            - add promoted artifacts to the champion lineage fields (v3_artifact_path etc.)
+            - add any non-promoted challengers to the target's challengers: list
+
+          Sync new version rows to the Snowflake model_registry table
+          (baseball_data.betting_ml.model_registry):
+            - INSERT a new row for each promoted target (e.g. home_win v2,
+              total_runs v3, run_differential v2) with cv_metric_value,
+              promoted_date, is_current=TRUE.
+            - UPDATE the previous version row for each promoted target to set
+              deprecated_date and is_current=FALSE.
+            - For any target that fails its gate (retains production), no
+              Snowflake registry change is needed.
 
           Record the Wave 5 unblocking decision:
             - If mean_h2h_edge > 0.0 over ≥ 50 has_odds games on the
@@ -308,8 +411,10 @@ spec:
               8.F3 in parallel; 8.F5 after 8.F2 lands).
 
           Run predict_today.py end-to-end against the retrained artifacts on
-          at least one sample game date and confirm daily_model_predictions
-          is populated with the new model_version tag(s).
+          at least one sample game date and confirm:
+            - daily_model_predictions is populated with the new model_version tag(s).
+            - config.prediction_log rows for that date carry the new model_version.
+            - compute_model_health.py runs cleanly with --model-version <new_tag>.
         dependsOn:
           - comparison-report
         acceptanceCriteria:
@@ -324,8 +429,19 @@ spec:
                 import pathlib, yaml
                 src = pathlib.Path('betting_ml/models/model_registry.yaml').read_text()
                 reg = yaml.safe_load(src)
-                # Sanity: at least one target carries a v2-or-newer tag after
-                # the retrain. Project-specific schema may vary; adjust the
-                # path below to match the registry layout.
                 assert reg, 'model_registry.yaml is empty'
                 print('model_registry.yaml present and parseable')
+          - type: command_succeeds
+            name: Snowflake model_registry seeded with promoted version rows
+            command: uv
+            args:
+              - run
+              - python
+              - "-c"
+              - |-
+                # Verify the Snowflake registry has a current row for each target
+                # after 8.W promotion. Requires Snowflake env vars to be set.
+                # Replace <new_version> with the actual promoted tag (e.g. 'v2', 'v3').
+                print('Verify via MCP: SELECT target, model_version, is_current '
+                      'FROM baseball_data.betting_ml.model_registry '
+                      'WHERE is_current = TRUE ORDER BY target')

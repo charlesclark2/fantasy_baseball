@@ -28,6 +28,7 @@ def train_ridge(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     X_eval: pd.DataFrame,
+    sample_weights: np.ndarray | None = None,
 ) -> dict:
     """Fit Ridge regression and return point predictions on X_eval.
 
@@ -40,7 +41,7 @@ def train_ridge(
     _validate_numeric(X_train, "X_train")
     _validate_numeric(X_eval, "X_eval")
     model = Ridge(alpha=1.0)
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     y_pred = model.predict(X_eval)
     return {"y_pred": y_pred, "model": model}
 
@@ -49,6 +50,7 @@ def train_xgboost(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     X_eval: pd.DataFrame,
+    sample_weights: np.ndarray | None = None,
 ) -> dict:
     """Fit XGBRegressor and return point predictions on X_eval.
 
@@ -70,7 +72,7 @@ def train_xgboost(
         random_state=42,
         n_jobs=-1,
     )
-    model.fit(X_train, y_train)
+    model.fit(X_train, y_train, sample_weight=sample_weights)
     y_pred = model.predict(X_eval)
     return {"y_pred": y_pred, "model": model}
 
@@ -81,6 +83,7 @@ def train_ngboost(
     X_eval: pd.DataFrame,
     dist: str = "Normal",
     n_estimators: int = 300,
+    sample_weights: np.ndarray | None = None,
 ) -> dict:
     """Fit NGBRegressor with Normal or LogNormal distribution.
 
@@ -108,7 +111,7 @@ def train_ngboost(
         random_state=42,
         verbose=False,
     )
-    model.fit(X_train.values, y_train.values)
+    model.fit(X_train.values, y_train.values, sample_weight=sample_weights)
 
     pred_dist = model.pred_dist(X_eval.values)
 

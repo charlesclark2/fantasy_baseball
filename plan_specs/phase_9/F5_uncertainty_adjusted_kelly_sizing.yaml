@@ -11,7 +11,7 @@ spec:
     more conservative position sizing. The floor at 0.1 prevents bets from being
     zeroed even at maximum uncertainty.
 
-    PREREQUISITE: Card 8.F1 (game_uncertainty_score) must be complete. The score
+    PREREQUISITE: Card 9.F1 (game_uncertainty_score) must be complete. The score
     must exist in `daily_model_predictions` and be passed through to the EV/Kelly
     calculation.
 
@@ -59,7 +59,7 @@ spec:
     Four-task plan. Task 1 adds DDL columns. Task 2 implements the discount formula
     in the Kelly sizing logic. Task 3 updates the Streamlit EV Kelly page. Task 4
     updates model_registry.yaml and creates the evaluation report template.
-    Requires Card 8.F1 to be complete before starting.
+    Requires Card 9.F1 to be complete before starting.
   goalRef:
     name: uncertainty-adjusted-kelly-sizing
   graph:
@@ -110,19 +110,19 @@ spec:
           Write both `uncertainty_discount` and `adjusted_kelly_fraction` to the
           daily_model_predictions INSERT alongside other prediction outputs.
 
-          IMPORTANT: `game_uncertainty_score` must be computed (8.F1) before this
-          code runs. If 8.F1 is not yet complete, do not start this task.
+          IMPORTANT: `game_uncertainty_score` must be computed (9.F1) before this
+          code runs. If 9.F1 is not yet complete, do not start this task.
 
           PIPELINE ORDERING WITH 8.V (correlation-aware bet sizing):
           `adjusted_kelly_fraction` is the value that Card 8.V's portfolio optimizer
           must receive as its input kelly_frac — not the raw kelly_fraction. The
           ordering in predict_today.py / the EV Tracker must be:
             1. compute kelly_fraction (base Kelly)
-            2. apply uncertainty discount → adjusted_kelly_fraction  [this card, 8.F5]
+            2. apply uncertainty discount → adjusted_kelly_fraction  [this card, 9.F5]
             3. pass adjusted_kelly_fraction into optimize_stakes()   [Card 8.V]
           When wiring 8.V's EV Tracker update (wire-into-ev-tracker task in 8.V),
           confirm that the bets dict uses adjusted_kelly_fraction as 'kelly_frac',
-          not the raw kelly_fraction. If 8.F5 has not yet been implemented when
+          not the raw kelly_fraction. If 9.F5 has not yet been implemented when
           8.V is wired, use kelly_fraction as a temporary placeholder and leave a
           TODO comment noting the required handoff.
         dependsOn:
@@ -289,7 +289,7 @@ spec:
             }
             df = pd.DataFrame([row])
 
-            # Step 1: feature stabilization (8.F4)
+            # Step 1: feature stabilization (9.F4)
             from betting_ml.models.feature_stabilizer import stabilize_features
             df_stable = stabilize_features(df)
             assert df_stable['away_team_woba_30d'].iloc[0] == pytest.approx(0.320, abs=0.001), \
@@ -297,13 +297,13 @@ spec:
             assert df_stable['home_team_woba_30d'].iloc[0] > 0.320, \
                 'home n=20 should be partially shrunk (above pure prior)'
 
-            # Step 2: uncertainty scoring (8.F1)
+            # Step 2: uncertainty scoring (9.F1)
             from betting_ml.models.uncertainty_scorer import compute_game_uncertainty_score
             score = compute_game_uncertainty_score(row)
             assert 0.0 <= score <= 1.0, f'score out of range: {score}'
             assert score > 0.5, 'debut away starter + 0 away games should produce high uncertainty'
 
-            # Step 3: Kelly discount (8.F5)
+            # Step 3: Kelly discount (9.F5)
             KELLY_UNCERTAINTY_DISCOUNT = 0.5
             raw_kelly = 0.06
             discount = max(0.1, 1.0 - KELLY_UNCERTAINTY_DISCOUNT * score)
@@ -326,7 +326,7 @@ spec:
             print(f'  raw_kelly={raw_kelly:.4f}  adj_kelly={adj_kelly:.4f}')
             print(f'  portfolio_stake={sum(stakes.values()):.2f}')
 
-          This test requires 8.F1, 8.F4, 8.F5, and 8.V to all be implemented.
+          This test requires 9.F1, 9.F4, 9.F5, and 8.V to all be implemented.
           Run it after all four are complete. If any assertion fails, the failure
           message identifies which stage broke.
         dependsOn:

@@ -8,13 +8,13 @@ See [`project_context.md`](project_context.md) for the full architecture referen
 
 ## Current Status
 
-**Phases 1–7 are complete as of 2026-05-05.** The active phase is **Phase 8 — Advanced Feature Engineering + Infrastructure Hardening.**
+**Phases 1–8 are complete as of 2026-05-09.** The active phase is **Phase 9 — Advanced Model Architecture.**
 
-Phase 7 retrained the v0 baseline into the production v1/v2 set: home_win v1 (Platt-calibrated, ECE 0.0370), total_runs v2 (NGBoost Normal, MAE 3.35), run_differential v1. Card 8.S CLV baseline is `mean_clv +0.0027`, `pct_positive 38.3%` over 91.2% game coverage — the model is at break-even, not yet beating the market. Phase 8 has shipped a large round of new features that the production model has not yet been trained against; Card 8.W (Phase 8 Batch Retrain & Re-evaluation) is the gate that lets those features into the model and unblocks the Wave 5 Bayesian / inference-wrapper cards (8.F1–8.F5).
+**Phase 8 summary:** 19 cards shipped across two waves. The feature store grew from 294 to 487 features covering bat tracking matchup profiles, pitcher-batter H2H history, catcher framing, bullpen leverage exhaustion, Pythagorean residuals, base-state splits, public betting signals, bookmaker disagreement, and more. Card 8.W (batch retrain, 2026-05-08) promoted home_win v1 (elasticnet, CV Brier 0.2422, ECE 0.0053) and total_runs v2 (NGBoost Normal, MAE 3.5107). Run_diff was not retrained (8.W found zero Phase 8 features in the training matrix — most urgent fix in Phase 9). Key finding: market circularity across all three models (market consensus features in top-2 for total_runs and run_diff; top-3 for home_win), compressing CLV. Phase 9 market-blind retrains (~2026-05-22) are the first priority. The 5-card Bayesian inference engine (formerly 8.F1–8.F5, now 9.F1–9.F5) moved to Phase 9 as the edge-gate (9.F2) is blocked until market-blind models show positive h2h edge (currently −0.011).
 
-**Phase 8 cards complete:** 8.A–8.E (pct-diff encoding, ZiPS FIP, OAA, Elo, bat tracking matchup), 8.H3 (live monitoring), 8.I1 (dbt compilation gate), 8.J (pitcher-batter H2H), 8.K (catcher framing), 8.L (bullpen handedness), 8.M (starter arsenal drift), 8.Q (starter CSW%), 8.R (Action Network public betting), 8.S (CLV tracking), 8.T (bookmaker disagreement), 8.U (bullpen leverage exhaustion), 8.X (pythagorean residual), 8.Y (base-state-split metrics).
+**Phase 8 cards complete:** 8.A–8.E, 8.H3, 8.I1, 8.J, 8.K, 8.L, 8.M, 8.N, 8.O, 8.P (archived — gates failed), 8.Q, 8.R, 8.S, 8.T, 8.U, 8.V, 8.W, 8.X, 8.Y.
 
-**Phase 8 cards remaining:** 8.N (time-decay weighting), 8.O (rolling calibration), 8.P (quantile total_runs), 8.V (correlation-aware sizing), 8.W (batch retrain), 8.F1–8.F5 (Bayesian engine — gated on 8.W).
+**Phase 9 priority queue:** (1) Market-blind retrains for all three models (~2026-05-22); (2) Re-evaluate CLV over ≥50 games to check if edge turns positive; (3) 9.F1–9.F5 Bayesian engine once edge gate clears; (4) Stacked ensemble and decomposed architecture experiments.
 
 | Domain | Status |
 |---|---|
@@ -43,7 +43,7 @@ Phase 7 retrained the v0 baseline into the production v1/v2 set: home_win v1 (Pl
 | ML pipeline + models (production) | Phase 7 v1/v2 baseline — home_win v1 ECE 0.0370, total_runs v2 MAE 3.35, run_differential v1; per-target version tags supported |
 | Model versioning + prediction CLI | Complete (Phase 7) — independent per-target promotion; data_source tagging (`feature_store` vs. `intraday_fallback`) |
 | Betting application layer | Complete (Phase 6, 2026-05-01) — Diamond Edge Streamlit app: Today's Picks, Market Comparison, EV Tracker, Model Performance (now with CLV section) |
-| Model quality / market edge | Break-even: CLV +0.0027 mean / 38.3% positive over 91.2% coverage. 8.W batch retrain is the gate to evaluate whether Phase 8 features unlock positive edge. |
+| Model quality / market edge | Break-even: CLV mean h2h edge −0.011 (v1 elasticnet, 2026 live games). Market-blind retrain (~2026-05-22) is the Phase 9 gate to evaluate whether removing market features unlocks positive edge. |
 
 ---
 
@@ -127,8 +127,8 @@ Phase 7 retrained the v0 baseline into the production v1/v2 set: home_win v1 (Pl
 │   ├── phase_4/                # ML pipeline cards (4.6–4.13)
 │   ├── phase_6/                # Betting application cards (6.B–6.I) — complete
 │   ├── phase_7/                # Model refinement + production infra — complete
-│   └── phase_8/                # Advanced feature engineering + infra hardening (active)
-│       # A–E, H3, I1, J–U, R complete; N/O/P/V remain; W (batch retrain) gates Wave 5 (8.F1–8.F5)
+│   ├── phase_8/                # Advanced feature engineering + infra hardening — complete
+│   └── phase_9/                # Advanced model architecture (active) — 9.F1–9.F5 Bayesian engine
 ├── model_registry.yaml         # Canonical _prod model artifacts for all three targets
 ├── .mcp.json                   # Snowflake MCP server config for Claude Code
 ├── snowflake_mcp_config.yaml   # MCP service permissions (read-only)

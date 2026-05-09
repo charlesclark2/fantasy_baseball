@@ -85,6 +85,41 @@ _BULLPEN_LEVERAGE_ZERO_COLS = [
     "home_bp_leverage_sum_1d",
     "away_bp_leverage_sum_1d",
 ]
+# Card 8.J — H2H pitcher-batter matchup. PA coverage = 0 when no historical
+# matchup data exists (debut starters). wOBA/xwOBA priors ≈ league average.
+_H2H_PA_COVERAGE_COLS = [
+    "home_lineup_h2h_pa_coverage",
+    "away_lineup_h2h_pa_coverage",
+]
+_H2H_WOBA_PRIOR = 0.320
+_H2H_WOBA_COLS = [
+    "home_lineup_vs_away_starter_h2h_woba",
+    "home_lineup_vs_away_starter_h2h_xwoba",
+    "away_lineup_vs_home_starter_h2h_woba",
+    "away_lineup_vs_home_starter_h2h_xwoba",
+]
+# Card 8.R — public betting. Neutral prior: 50/50 money-ticket split; no sharp
+# signal (difference = 0). Used when no Action Network data is available.
+_PUBLIC_BETTING_NEUTRAL_50_COLS = [
+    "home_ml_money_pct",
+    "home_ml_ticket_pct",
+    "over_money_pct",
+    "over_ticket_pct",
+]
+_PUBLIC_BETTING_ZERO_COLS = [
+    "ml_sharp_signal",
+    "total_sharp_signal",
+]
+# Card 8.W — masked public betting variants. Computed in dbt as COALESCE(col, 0),
+# so they are never null in practice. Zero-fill here is a safety net only.
+_PUBLIC_BETTING_ACTIVE_COLS = [
+    "home_ml_money_pct_active",
+    "home_ml_ticket_pct_active",
+    "over_money_pct_active",
+    "over_ticket_pct_active",
+    "ml_sharp_signal_active",
+    "total_sharp_signal_active",
+]
 # CSW% league average (~28.5% across 2023–2025 starters).
 # Applied to debut starters with no prior starts.
 CSW_LEAGUE_AVG = 0.285
@@ -288,6 +323,30 @@ class _ConstantImputer(BaseEstimator, TransformerMixin):
         # closer_availability_proxy: null means unknown → assume available (1)
         if "closer_availability_proxy" in X.columns:
             X["closer_availability_proxy"] = X["closer_availability_proxy"].fillna(1)
+        # Card 8.J H2H pa_coverage: 0 = no historical matchup data (debut starters)
+        for col in _H2H_PA_COVERAGE_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # Card 8.J H2H wOBA/xwOBA: league-average prior when no matchup history
+        for col in _H2H_WOBA_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(_H2H_WOBA_PRIOR)
+        # Card 8.R public betting: neutral 50/50 split when no Action Network data
+        for col in _PUBLIC_BETTING_NEUTRAL_50_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(50.0)
+        # Card 8.R sharp signal: 0.0 = no money/ticket divergence detected
+        for col in _PUBLIC_BETTING_ZERO_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # Card 8.W masked public betting variants: 0 = no data era (dbt COALESCE
+        # already handles this; zero-fill here is a safety net only)
+        for col in _PUBLIC_BETTING_ACTIVE_COLS:
+            if col in X.columns:
+                X[col] = X[col].fillna(0.0)
+        # Card 8.W era indicator: 0 = no Action Network coverage for this game
+        if "has_public_betting_data" in X.columns:
+            X["has_public_betting_data"] = X["has_public_betting_data"].fillna(0)
         return X
 
 

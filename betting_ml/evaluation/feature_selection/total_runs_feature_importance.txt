@@ -1,0 +1,106 @@
+total_runs — permutation importance on 2025 held-out test set
+Model: ngboost_decay_weighted.pkl  |  Test rows: 2025  |  n_repeats=10
+Baseline MAE: 3.3571
+Total features: 311 | Exclusion candidates: 68 | Phase 8 features: 16
+
+TOP 20 features by mean permutation importance (larger = shuffling hurts more = important):
+Rank  Feature                                                Mean Imp      Std   CI Lower Origin     Excl?
+---------------------------------------------------------------------------------------------------------
+1     total_line_consensus                                    0.06366  0.00779    0.05587  legacy     
+2     ml_consensus_std                                        0.02734  0.01289    0.01444  legacy     
+3     humidity_pct                                            0.02353  0.00295    0.02058  legacy     
+4     home_starter_fastball_stuff_plus                        0.02254  0.00475    0.01778  legacy     
+5     series_game_number                                      0.01492  0.00251    0.01241  legacy     
+6     away_pit_k_pct_7d                                       0.01397  0.00269    0.01128  legacy     
+7     home_pit_woba_against_std                               0.01276  0.00252    0.01024  legacy     
+8     temp_f                                                  0.01226  0.00296    0.00930  legacy     
+9     home_starter_xwoba_vs_rhb                               0.01171  0.00173    0.00999  legacy     
+10    home_starter_whiff_rate_14d                             0.01171  0.00167    0.01004  legacy     
+11    home_vs_lhp_xwoba_30d                                   0.01168  0.00130    0.01039  legacy     
+12    away_bp_whiff_rate_30d                                  0.01165  0.00293    0.00872  legacy     
+13    home_starter_barrel_pct_7d                              0.00915  0.00151    0.00764  legacy     
+14    home_starter_xwoba_7d_minus_std                         0.00861  0.00092    0.00769  legacy     
+15    home_avg_barrel_pct_std                                 0.00815  0.00130    0.00686  legacy     
+16    away_avg_hard_hit_pct_vs_lhp                            0.00784  0.00130    0.00654  legacy     
+17    away_starter_xwoba_vs_lhb                               0.00737  0.00165    0.00572  legacy     
+18    home_avg_hard_hit_pct_vs_lhp                            0.00729  0.00171    0.00558  legacy     
+19    home_vs_rhp_woba_std                                    0.00720  0.00219    0.00501  legacy     
+20    home_bp_hard_hit_pct_14d                                0.00664  0.00202    0.00462  legacy     
+
+EXCLUSION CANDIDATES (mean_imp ≤ 0 or ci_lower < −0.001)  — 68 total:
+Feature                                                Mean Imp      Std Origin
+--------------------------------------------------------------------------------
+home_starter_bb_pct_vs_rhb                              0.00000  0.00000  legacy
+away_off_runs_per_game_30d                              0.00000  0.00000  legacy
+has_starter_platoon_data                                0.00000  0.00000  legacy
+away_pit_woba_against_14d                               0.00000  0.00000  legacy
+away_games_back                                         0.00000  0.00000  legacy
+post_2022_rules                                         0.00000  0.00000  legacy
+pythagorean_win_exp_diff                                0.00000  0.00000  legacy
+home_off_k_pct_std                                      0.00000  0.00000  legacy
+away_elo                                                0.00000  0.00000  8.D
+home_away_off_xwoba_30d_pct_diff                        0.00000  0.00000  8.A
+away_starter_appearances_std                            0.00000  0.00000  legacy
+home_closer_used_prev_2d                                0.00000  0.00000  legacy
+away_off_runs_per_game_std                              0.00000  0.00000  legacy
+home_games_back                                         0.00000  0.00000  legacy
+game_year                                               0.00000  0.00000  legacy
+home_h2h_line_movement                                  0.00000  0.00000  legacy
+away_injured_player_count                               0.00000  0.00000  legacy
+home_pit_k_pct_std                                      0.00000  0.00000  legacy
+away_starter_days_rest                                  0.00000  0.00000  legacy
+away_starter_whiff_rate_14d                             0.00000  0.00000  legacy
+is_new_venue                                            0.00000  0.00000  legacy
+home_starter_cluster_id                                 0.00000  0.00000  legacy
+away_lineup_xwoba_vs_starter_archetype                  0.00000  0.00000  legacy
+away_lineup_avg_woba_vs_cluster                         0.00000  0.00000  legacy
+home_team_oaa_blended                                   0.00000  0.00000  8.C
+away_pit_hard_hit_pct_30d                               0.00000  0.00000  legacy
+away_off_k_pct_7d                                       0.00000  0.00000  legacy
+home_starter_bb_pct_std                                 0.00000  0.00000  legacy
+home_off_hard_hit_pct_std                               0.00000  0.00000  legacy
+away_bp_k_pct_14d                                       0.00000  0.00000  legacy
+away_off_k_pct_30d                                      0.00000  0.00000  legacy
+home_pit_hard_hit_pct_7d                                0.00000  0.00000  legacy
+home_pit_bb_pct_std                                     0.00000  0.00000  legacy
+home_vs_lhp_xwoba_std                                   0.00000  0.00000  legacy
+home_avg_woba_vs_rhp                                    0.00000  0.00000  legacy
+away_off_xwoba_14d                                      0.00000  0.00000  legacy
+away_lineup_woba_vs_starter_archetype                   0.00000  0.00000  legacy
+home_lineup_iso_vs_starter_archetype                    0.00000  0.00000  legacy
+total_line_movement                                     0.00000  0.00000  legacy
+home_vs_lhp_hard_hit_pct_30d                            0.00000  0.00000  legacy
+away_high_leverage_used_prev_2d                         0.00000  0.00000  legacy
+right_line_ft                                           0.00000  0.00000  legacy
+home_avg_woba_std                                       0.00000  0.00000  legacy
+home_starter_bb_pct_30d                                 0.00000  0.00000  legacy
+market_bookmaker_count                                  0.00000  0.00000  legacy
+away_avg_k_pct_vs_rhp                                   0.00000  0.00000  legacy
+center_ft                                              -0.00000  0.00000  legacy
+home_vs_lhp_slugging_30d                               -0.00000  0.00000  legacy
+home_lineup_woba_vs_starter_archetype                  -0.00000  0.00000  legacy
+away_avg_hard_hit_pct_std                              -0.00000  0.00004  legacy
+home_pit_woba_against_14d                              -0.00000  0.00002  legacy
+away_off_woba_7d                                       -0.00001  0.00012  legacy
+away_wins                                              -0.00001  0.00007  legacy
+away_vs_rhp_woba_30d                                   -0.00001  0.00043  legacy
+home_away_starter_k_pct_std_pct_diff                   -0.00002  0.00009  8.A
+away_off_bb_pct_7d                                     -0.00003  0.00007  legacy
+away_vs_lhp_xwoba_std                                  -0.00006  0.00004  legacy
+away_bp_k_pct_30d                                      -0.00008  0.00015  legacy
+away_starter_whiff_rate_vs_lhb                         -0.00010  0.00006  legacy
+home_off_xwoba_std                                     -0.00020  0.00063  legacy
+home_games_last_7d                                     -0.00032  0.00071  legacy
+under_american                                         -0.00033  0.00074  legacy
+away_avg_xwoba_vs_rhp                                  -0.00035  0.00029  legacy
+away_losses                                            -0.00036  0.00101  legacy
+home_starter_whiff_rate_vs_lhb                         -0.00055  0.00026  legacy
+home_starter_batter_chase_rate_std                     -0.00194  0.00403  legacy
+away_pit_woba_against_30d                              -0.00249  0.00210  legacy
+home_avg_hard_hit_pct_vs_rhp                           -0.00980  0.00388  legacy
+
+PHASE 8 EXCLUSION CANDIDATES (4) — consider dropping from next retrain:
+  away_elo  (8.D)  mean=0.00000
+  home_away_off_xwoba_30d_pct_diff  (8.A)  mean=0.00000
+  home_team_oaa_blended  (8.C)  mean=0.00000
+  home_away_starter_k_pct_std_pct_diff  (8.A)  mean=-0.00002

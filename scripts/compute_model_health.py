@@ -129,27 +129,41 @@ def _market_for_target(target: str) -> str:
     return mapping.get(target, target)
 
 
-def run(target: str, run_date: date) -> None:
+def run(target: str, run_date: date, model_version: str | None = None) -> None:
     window_start = run_date - timedelta(days=WINDOW_DAYS)
     market = _market_for_target(target)
 
-    log.info("Fetching prediction_log rows for target=%s window=[%s, %s]",
-             target, window_start, run_date)
+    log.info("Fetching prediction_log rows for target=%s version=%s window=[%s, %s]",
+             target, model_version or "all", window_start, run_date)
 
-    fetch_sql = """
-        SELECT model_prob, actual_outcome
-        FROM baseball_data.config.prediction_log
-        WHERE market = %s
-          AND prediction_date >= %s
-          AND prediction_date < %s
-          AND actual_outcome IS NOT NULL
-          AND model_prob IS NOT NULL
-    """
+    if model_version:
+        fetch_sql = """
+            SELECT model_prob, actual_outcome
+            FROM baseball_data.config.prediction_log
+            WHERE market = %s
+              AND prediction_date >= %s
+              AND prediction_date < %s
+              AND actual_outcome IS NOT NULL
+              AND model_prob IS NOT NULL
+              AND model_version = %s
+        """
+        fetch_params = (market, window_start.isoformat(), run_date.isoformat(), model_version)
+    else:
+        fetch_sql = """
+            SELECT model_prob, actual_outcome
+            FROM baseball_data.config.prediction_log
+            WHERE market = %s
+              AND prediction_date >= %s
+              AND prediction_date < %s
+              AND actual_outcome IS NOT NULL
+              AND model_prob IS NOT NULL
+        """
+        fetch_params = (market, window_start.isoformat(), run_date.isoformat())
 
     con = _get_connection()
     try:
         cur = con.cursor()
-        cur.execute(fetch_sql, (market, window_start.isoformat(), run_date.isoformat()))
+        cur.execute(fetch_sql, fetch_params)
         rows = cur.fetchall()
     finally:
         con.close()
@@ -168,12 +182,13 @@ def run(target: str, run_date: date) -> None:
     brier = compute_brier(probs, outcomes)
     alert_fired = ece > ECE_ALERT_THRESHOLD
 
-    log.info("ECE=%.4f  Brier=%.4f  n=%d  alert_fired=%s", ece, brier, sample_n, alert_fired)
+    log.info("ECE=%.4f  Brier=%.4f  n=%d  version=%s  alert_fired=%s",
+             ece, brier, sample_n, model_version or "all", alert_fired)
 
     insert_sql = """
         INSERT INTO baseball_data.betting_ml.model_health_log
-            (run_date, target, window_days, ece, brier, sample_n, alert_fired)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+            (run_date, target, window_days, ece, brier, sample_n, alert_fired, model_version)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
 
     con2 = _get_connection()
@@ -181,10 +196,10 @@ def run(target: str, run_date: date) -> None:
         cur2 = con2.cursor()
         cur2.execute(insert_sql, (
             run_date.isoformat(), target, WINDOW_DAYS,
-            ece, brier, sample_n, alert_fired,
+            ece, brier, sample_n, alert_fired, model_version,
         ))
         con2.commit()
-        log.info("Wrote row to model_health_log")
+        log.info("Wrote row to model_health_log (version=%s)", model_version or "NULL")
     finally:
         con2.close()
 
@@ -203,6 +218,9 @@ def main() -> None:
                         help="Prediction target to evaluate (default: home_win)")
     parser.add_argument("--date", default=None,
                         help="Run date in YYYY-MM-DD format (default: today ET)")
+    parser.add_argument("--model-version", default=None,
+                        help="Filter prediction_log to a specific model version tag "
+                             "(e.g. v1, v2). If omitted, all versions in the window are used.")
     args = parser.parse_args()
 
     if args.date:
@@ -211,7 +229,7 @@ def main() -> None:
         from zoneinfo import ZoneInfo
         run_date = datetime.now(ZoneInfo("America/New_York")).date()
 
-    run(target=args.target, run_date=run_date)
+    run(target=args.target, run_date=run_date, model_version=args.model_version)
 
 
 if __name__ == "__main__":

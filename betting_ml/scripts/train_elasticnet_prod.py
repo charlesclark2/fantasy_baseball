@@ -38,20 +38,50 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import load_features
+from betting_ml.utils.sample_weights import compute_sample_weights
 from betting_ml.scripts.model_evaluation.cv_harness import _NON_FEATURE_COLS
 
-_OUTPUT_PATH = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "elasticnet_2026.pkl"
+_OUTPUT_PATH_V1 = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "elasticnet_2026.pkl"
 _C_GRID = [0.001, 0.01, 0.1, 1.0]
 _INNER_FOLDS = 5
 
 # Columns excluded from features (targets + identifiers + market signals)
 _NON_FEAT = _NON_FEATURE_COLS | {"split"}
-# Exclude market-derived columns (same 18 excluded in elastic_no_market evaluation)
-# elasticnet uses ALL features including market signals — no exclusions here
-_MARKET_COLS_TO_EXCLUDE: set[str] = set()
+
+# Market-derived columns excluded from model training so the model generates
+# independent signal. These stay in the feature store for use in the betting
+# signal comparison layer (model prob vs. market price) but must not flow into
+# model training — including them creates circularity that compresses CLV.
+# Populated 2026-05-08 based on 8.W per-target feature importance analysis
+# (away_moneyline_decimal #3, home_win_prob_sharp #6, home_open_win_prob #11).
+_MARKET_COLS_TO_EXCLUDE: set[str] = {
+    # Raw decimal / American odds
+    "home_moneyline_decimal", "away_moneyline_decimal",
+    "home_moneyline", "away_moneyline",
+    # Opening / closing implied probabilities (sharp-book derived)
+    "home_win_prob_sharp", "away_win_prob_sharp",
+    "home_open_win_prob", "away_open_win_prob",
+    "home_close_win_prob", "away_close_win_prob",
+    # Consensus win probability (market composite)
+    "home_win_prob_consensus", "away_win_prob_consensus",
+    # Line movement
+    "home_h2h_line_movement", "away_h2h_line_movement",
+    "home_open_line", "away_open_line",
+    # Totals market
+    "open_total", "close_total", "total_line",
+    # Public betting signals (8.R)
+    "pct_home_ml", "pct_away_ml",
+    "ml_sharp_signal", "total_sharp_signal",
+    "has_public_betting",
+    # Market consensus spread / book availability (8.T)
+    "ml_implied_prob_std", "ml_implied_prob_range",
+    "sharp_soft_ml_spread", "n_books_available",
+    "stale_book_flag", "totals_line_std", "totals_line_range",
+    "ml_consensus_std",
+}
 
 
-def _tune_C(X: np.ndarray, y: np.ndarray) -> float:
+def _tune_C(X: np.ndarray, y: np.ndarray, sample_weights: np.ndarray | None = None) -> float:
     tss = TimeSeriesSplit(n_splits=_INNER_FOLDS)
     best_c, best_ll = _C_GRID[0], float("inf")
     for c in _C_GRID:
@@ -59,6 +89,7 @@ def _tune_C(X: np.ndarray, y: np.ndarray) -> float:
         for inner_tr, inner_te in tss.split(X):
             Xi_tr, Xi_te = X[inner_tr], X[inner_te]
             yi_tr, yi_te = y[inner_tr], y[inner_te]
+            sw_tr = sample_weights[inner_tr] if sample_weights is not None else None
             pre = Pipeline([
                 ("impute", SimpleImputer(strategy="median")),
                 ("scale", StandardScaler()),
@@ -69,7 +100,7 @@ def _tune_C(X: np.ndarray, y: np.ndarray) -> float:
                 penalty="elasticnet", solver="saga", l1_ratio=0.5,
                 C=c, max_iter=1000, random_state=42,
             )
-            clf.fit(Xi_tr_p, yi_tr)
+            clf.fit(Xi_tr_p, yi_tr, sample_weight=sw_tr)
             p = np.clip(clf.predict_proba(Xi_te_p)[:, 1], 1e-7, 1 - 1e-7)
             ll = float(-np.mean(yi_te * np.log(p) + (1 - yi_te) * np.log(1 - p)))
             lls.append(ll)
@@ -81,7 +112,25 @@ def _tune_C(X: np.ndarray, y: np.ndarray) -> float:
 
 
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--weighted", action="store_true",
+                        help="Apply exponential decay sample_weights (Card 8.N)")
+    parser.add_argument("--version", default=None,
+                        help="Version tag for the output artifact (e.g. v2). "
+                             "Omitting uses the default v1 production path. "
+                             "With --version v2, saves to elasticnet_v2_2026.pkl.")
+    args, _ = parser.parse_known_args()
+
+    global _OUTPUT_PATH
+    if args.version:
+        _OUTPUT_PATH = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / f"elasticnet_{args.version}_2026.pkl"
+    else:
+        _OUTPUT_PATH = _OUTPUT_PATH_V1
+
     print("=== ELASTICNET PRODUCTION RETRAIN (Card 7.MB) ===\n")
+    if args.weighted:
+        print("  Weighted mode: exponential decay sample_weights enabled (Card 8.N)\n")
 
     print("Loading full feature dataset from Snowflake...")
     df = load_features(min_games_played=15)
@@ -105,9 +154,15 @@ def main() -> None:
     y = df.loc[valid_mask, "home_win"].values.astype(np.float32)
     print(f"  Training rows (non-null home_win): {len(X):,}")
 
+    # Compute decay sample_weights aligned to valid rows (Card 8.N)
+    sample_weights = None
+    if args.weighted and "game_date" in df.columns:
+        sample_weights = compute_sample_weights(df.loc[valid_mask], date_col="game_date").astype(np.float32)
+        print(f"  Decay sample_weights: min={sample_weights.min():.3f} max={sample_weights.max():.3f} sum={sample_weights.sum():.1f}")
+
     print(f"\nInner CV C-tuning over {_C_GRID} ({_INNER_FOLDS}-fold TimeSeriesSplit)...")
     t0 = time.time()
-    best_c = _tune_C(X, y)
+    best_c = _tune_C(X, y, sample_weights=sample_weights)
     print(f"\n  Best C = {best_c} (tuning took {time.time() - t0:.1f}s)")
 
     print("\nFitting final pipeline on all training data...")
@@ -120,7 +175,7 @@ def main() -> None:
             C=best_c, max_iter=2000, random_state=42,
         )),
     ])
-    pipeline.fit(X, y)
+    pipeline.fit(X, y, clf__sample_weight=sample_weights)
     fit_time = time.time() - t1
     print(f"  Fit complete in {fit_time:.1f}s")
 
