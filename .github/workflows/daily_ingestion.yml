@@ -91,7 +91,12 @@ jobs:
           OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
         run: uv run ingest_weather.py --date $(date +%Y-%m-%d)
 
-      - name: Ingest HP umpire assignments for today
+      # MLB Stats API does not post HP umpire assignments until ~10-11 AM ET.
+      # This early attempt (run ~9:30 AM ET) will often find no officials and
+      # write nothing. continue-on-error keeps the pipeline moving; the predict
+      # job retries after dbt-build when assignments are reliably available.
+      - name: Ingest HP umpire assignments for today (early attempt)
+        continue-on-error: true
         working-directory: scripts
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -206,6 +211,29 @@ jobs:
         run: |
           echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
           chmod 600 /tmp/snowflake_rsa_key.pem
+
+      # Retry umpire ingest here (~11 AM ET after dbt-build completes) when
+      # assignments are reliably posted. Rebuild umpire feature chain so
+      # predict_today.py uses real umpire features rather than imputed priors.
+      - name: Ingest HP umpire assignments for today (late retry)
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: uv run ingest_umpires.py --date $(date +%Y-%m-%d)
+
+      - name: Rebuild umpire feature chain with fresh assignments
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+        run: dbtf build --select stg_statsapi_umpire_game_log feature_pregame_umpire_features feature_pregame_game_features --project-dir dbt --profiles-dir dbt
 
       - name: Run morning predictions
         working-directory: scripts

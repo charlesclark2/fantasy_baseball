@@ -58,8 +58,8 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     },
     "baseball_data.statsapi.umpire_game_log": {
         "ts_col": "loaded_at",
-        "max_stale_hours": 36,
-        "game_day_only": False,
+        "max_stale_hours": 48,
+        "game_day_only": True,
     },
     "baseball_data.statsapi.player_transactions": {
         "ts_col": "effective_date",  # DATE; no ingestion_ts column exists
