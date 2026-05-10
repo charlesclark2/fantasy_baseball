@@ -156,6 +156,7 @@ jobs:
             --workflow dbt_daily_build.yml \
             --name dbt-manifest \
             --dir dbt/state \
+            --status success \
           || echo "No manifest artifact available — will fall back to full build"
 
       - name: Build modified models in CI schemas
