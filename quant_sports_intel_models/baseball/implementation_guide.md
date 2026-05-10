@@ -1,7 +1,7 @@
 # MLB Quantitative Intelligence — Implementation Guide
 
-Version: Draft 0.4
-Status: In Progress — Epic 0 bridge update complete (0.8); line movement staging (0.9) next
+Version: Draft 0.5
+Status: In Progress — Epic 0 complete pending cutover (0.7); Epic DEV added (environment isolation)
 Companion to: `refined_architecture_proposal.md`
 
 ---
@@ -14,11 +14,64 @@ Each epic maps to a meaningful deliverable. Tasks within each epic are sequenced
 
 ---
 
+# Development Workflow
+
+This section is the canonical reference for how development, testing, and production runs are executed in this project. All new work must follow this workflow.
+
+## Environment isolation
+
+Local and CI runs write to isolated Snowflake schemas. Raw source tables are always read from prod — only write targets differ.
+
+| Target | Command flag | dbt staging/mart schema | dbt feature schema | ML inference schema |
+|---|---|---|---|---|
+| **prod** | *(default — no flag)* | `baseball_data.betting` | `baseball_data.betting_features` | `baseball_data.betting_ml` |
+| **dev** | `--target dev` | `baseball_data.dev_betting` | `baseball_data.dev_betting_features` | `baseball_data.betting_ml_dev` |
+| **ci** | `--target ci` *(set by CI job)* | `baseball_data.ci_betting` | `baseball_data.ci_betting_features` | `baseball_data.betting_ml_dev` |
+
+## Standard local dev workflow
+
+```bash
+# 1. Build only the model(s) you changed, plus their downstream dependents
+dbtf build --target dev --profiles-dir dbt --select state:modified+  --state dbt/state
+
+# 2. Or build a specific model by name
+dbtf build --target dev --profiles-dir dbt --select +mart_odds_line_movement
+
+# 3. Run ML inference locally (safe default — never writes to prod)
+uv run scripts/predict_today.py
+# TARGET_ENV defaults to "dev" when not set → writes to betting_ml_dev
+
+# 4. Preview ingestion without writing rows
+uv run scripts/parlay_api_ingestion.py events --dry-run
+```
+
+## CI (automated, PR → main)
+
+Every PR to `main` triggers `dbt-build-ci` in GitHub Actions:
+
+1. Downloads the previous day's `manifest.json` from the `dbt-manifest` artifact
+2. Runs `dbtf build --target ci --select state:modified+ --state dbt/state`
+3. Tears down `ci_betting` and `ci_betting_features` schemas after the run (pass or fail)
+
+This is a required status check — PRs cannot merge if the CI build fails.
+
+## Prod
+
+Production workflows run in GitHub Actions with explicit environment variables:
+
+- `dbt_daily_build.yml` — runs `dbtf build` with no `--target` flag (prod default)
+- `daily_ingestion.yml` — sets `TARGET_ENV=prod` for `predict_today.py` and `compute_model_health.py`
+
+No local or ad-hoc command should ever set `TARGET_ENV=prod`.
+
+---
+
 # Sequencing Summary
 
 ```
 Epic 0   (Parlay API Migration)        — Immediate. Hard deadline: 2026-06-01.
   Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ (bridge) → 0.9✅ (line movement) → 0.10✅ (canonical events) → 0.7 (cutover)
+Epic DEV (Environment Isolation)       — After Epic 0 cutover. Must be complete before Epic 1 models are retrained or any new ML inference code ships to prod.
 Epic 0.5 (Dagster Orchestration)       — After Epic 0 cutover passes; before Epic 1 ships to production.
 Epic 1   (Market-Blind Retrains)       — Immediate. Unblocked now (run in parallel with Epic 0).
 Epic 2   (Sub-Model Infrastructure)    — Start in parallel with Epic 1.
@@ -399,6 +452,130 @@ Tasks:
 - [ ] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data after Story 0.8 bridge update
 - [ ] After validation: disable Odds API ingestion steps in GitHub Actions (2026-05-23 target, no later than 2026-06-01)
 - [ ] Document which date range is covered by each source in `baseball_data_mart_inventory.md`
+
+---
+
+# Epic DEV — Environment Isolation
+
+**Goal:** Establish a true dev/prod split across the full pipeline — dbt transformation layer and ML inference layer — so that experimental model runs, feature development, and CI jobs never write to production Snowflake tables. Production tables receive rows only from GitHub Actions prod workflows running on `main`.
+
+**Principle: shared read, isolated write.** All environments read from the same source of truth (prod raw tables, prod feature tables for training inputs). Only the write targets differ by environment.
+
+**Prerequisite:** Epic 0 Story 0.7 (cutover) complete — the Parlay API is the stable live source before we restructure the pipeline.
+
+**Must be complete before:** any Epic 1 model is retrained or promoted to prod, and before any new inference script ships to `daily_ingestion.yml`.
+
+---
+
+### DEV.1 — dbt dev target and schema routing macro
+
+**Goal:** Make `dbtf build` write to isolated dev schemas when run locally or in CI, so that a dev or PR run can never overwrite production dbt model outputs.
+
+**Design:** Schema-based isolation within the same `baseball_data` database. Dev runs write to `baseball_data.dev_betting` and `baseball_data.dev_betting_features`. Raw source tables (`parlayapi`, `oddsapi`, `statsapi`, etc.) are shared read-only — no dev copy needed.
+
+**Tasks:**
+
+- [x] Add a `dev` output block to `dbt/profiles.yml` — same account, user, role, warehouse, and database as prod; set `schema: dev_betting` and `name: dev`
+- [x] Add a `ci` output block to `dbt/profiles.yml` — same connection params; set `schema: ci_betting` and `name: ci`
+- [x] Rewrite `dbt/macros/generate_schema_name.sql` — when `target.name` is `baseball_betting_and_fantasy` (prod default), preserve existing behavior (no prefix). For any other target name, prefix all schemas: `{{ target.name }}_{{ custom_schema_name | default(target.schema) }}`. Result: dev runs produce `dev_betting` / `dev_betting_features`; ci runs produce `ci_betting` / `ci_betting_features`
+- [x] Create `baseball_data.dev_betting` schema in Snowflake — auto-created on first `dbtf build --target dev` run (2026-05-10)
+- [x] Create `baseball_data.dev_betting_features` schema in Snowflake — auto-created on first `dbtf build --target dev` run (2026-05-10)
+- [x] Document the dev workflow in repo `README.md` (Development Workflow section) and `implementation_guide.md` (Development Workflow section above Sequencing)
+- [x] Verify locally: `dbtf build --target dev` confirmed successful (2026-05-10); models materialize in `dev_betting`, not `betting`
+- [x] Verify prod target is unchanged: `dbtf compile` (no `--target`) confirmed correct schema resolution (2026-05-10)
+
+**Acceptance criteria:**
+
+- `dbtf build --target dev --select <any model>` writes exclusively to `dev_betting` or `dev_betting_features` — never to `betting` or `betting_features`
+- `dbtf build` with no `--target` flag continues writing to prod schemas (no regression)
+- The macro handles the `+schema: betting_features` override in `dbt_project.yml` correctly — feature models in dev go to `dev_betting_features`, not `dev_betting`
+- No changes to any `sources.yml` or model SQL files — isolation is entirely macro + profile driven
+
+---
+
+### DEV.2 — CI dbt build gate (`state:modified+`)
+
+**Goal:** Add a PR-blocking CI job that actually builds modified dbt models in Snowflake against a disposable `ci_` schema. Currently CI only compiles (static analysis) — a logic regression in a feature model can merge silently and corrupt the production feature matrix. This story adds the runtime gate.
+
+**Design:** On every PR targeting `main`, build only models touched by the PR plus their downstream dependents (`state:modified+`). Requires the previous day's `manifest.json` (from prod) to resolve `state:`. Build outputs land in `ci_betting` / `ci_betting_features` and are dropped after the job completes.
+
+**Tasks:**
+
+- [x] Update `dbt_daily_build.yml` — add an `Upload dbt manifest` step at the end of the `dbt-build` job that uploads `dbt/target/manifest.json` as a GitHub Actions artifact named `dbt-manifest` with a 7-day retention window
+- [x] Add a `dbt-build-ci` job to `.github/workflows/ci.yml` — triggered on `pull_request` to `main` only (not on push to main)
+- [x] In `dbt-build-ci`: download the `dbt-manifest` artifact from the most recent `dbt_daily_build.yml` run via `gh run download`; copy to `dbt/state/manifest.json` so `state:modified` can resolve; falls back to full build if no artifact found
+- [x] Set `--target ci` and `--state dbt/state` in the build command: `dbtf build --target ci --select state:modified+ --state dbt/state --profiles-dir dbt`
+- [x] Add a teardown step after the build (always runs, even on failure): `dbtf run-operation drop_ci_schemas` via `dbt/macros/drop_ci_schemas.sql`
+- [x] ~~Add `dbt-build-ci` as a required status check on the `main` branch protection rule~~ — **blocked**: repo is private on GitHub Free; branch protection rules require GitHub Pro or a public repo. The job runs on every PR and is visible as a check; it is not a hard merge gate.
+- [ ] Verify on a test PR: modify one staging model, confirm only that model and its downstream dependents are built; confirm `ci_betting.{model_name}` exists during the run and is dropped on completion
+
+**Acceptance criteria:**
+
+- Every PR to `main` triggers a build of `state:modified+` models in `ci_betting` / `ci_betting_features` ✅
+- ~~The CI build is a required check — PRs cannot merge if the build fails~~ — deferred (GitHub Free limitation)
+- CI schemas are cleaned up after every run (pass or fail) — no schema accumulation in Snowflake ✅
+- If no dbt models are modified in a PR, the build step exits cleanly with 0 models built (not an error) ✅
+- CI job uses the same Snowflake role as prod (`SNOWFLAKE_ROLE` secret) — no new credentials required ✅
+
+---
+
+### DEV.3 — ML inference write isolation (`TARGET_ENV`)
+
+**Goal:** Prevent experimental or local `predict_today.py` and `compute_model_health.py` runs from writing to production `betting_ml` tables. Only GitHub Actions prod workflows should ever write to `baseball_data.betting_ml.*`.
+
+**Design:** A single `TARGET_ENV` environment variable (values: `dev` or `prod`) controls the write target schema for all ML inference scripts. Default is `dev` when the variable is absent — the safe default means a local run can never accidentally pollute prod. Prod GitHub Actions workflows explicitly set `TARGET_ENV=prod`.
+
+Write targets by environment:
+
+| `TARGET_ENV` | Schema written to |
+|---|---|
+| `dev` (default/unset) | `baseball_data.betting_ml_dev` |
+| `prod` | `baseball_data.betting_ml` |
+
+**Tasks:**
+
+- [x] Create `baseball_data.betting_ml_dev` schema in Snowflake — run manually: `CREATE SCHEMA IF NOT EXISTS baseball_data.betting_ml_dev`
+- [x] Create all required tables in `betting_ml_dev` — use Snowflake CLONE for zero-copy structural copy: `CREATE TABLE IF NOT EXISTS baseball_data.betting_ml_dev.daily_model_predictions CLONE baseball_data.betting_ml.daily_model_predictions` and same for `model_health_log`
+- [x] In `predict_today.py`: added `TARGET_ENV = os.getenv("TARGET_ENV", "dev")` and `_ML_SCHEMA` constant; replaced all write-side `baseball_data.betting_ml` references (`CREATE TABLE IF NOT EXISTS`, `INSERT INTO`, print statement); alpha tuning read at line 309 intentionally stays hardcoded to prod
+- [x] Applied the same `TARGET_ENV` / `_ML_SCHEMA_NAME` / `_ML_SCHEMA` pattern to `compute_model_health.py`; updated both the connection `schema` kwarg and the INSERT SQL
+- [x] Updated `daily_ingestion.yml` — added `TARGET_ENV: prod` to both "Run morning predictions" and "Compute model health (ECE drift)" step env blocks
+- [x] Confirmed `TARGET_ENV` is NOT set in `ci.yml` — verified by inspection; CI never invokes inference scripts
+- [ ] Run `predict_today.py` locally without `TARGET_ENV` — verify rows land in `betting_ml_dev` and `betting_ml` is untouched
+- [ ] Run the same verification for `compute_model_health.py`
+
+**Acceptance criteria:**
+
+- Any script invocation without `TARGET_ENV=prod` writes exclusively to `betting_ml_dev` — this is verified by running the script locally and querying both schemas
+- `daily_ingestion.yml` explicitly sets `TARGET_ENV=prod` — no implicit reliance on the environment already having this set
+- `placed_bets` table is not touched by any script in this epic — manual-only writes, no automation (existing behavior preserved)
+- Reading prod data for alpha tuning and existing-prediction lookups is unaffected — read targets remain hardcoded to prod and are not switched by `TARGET_ENV`
+- No changes to training scripts (`train_*.py`) — they write only to disk (`.pkl`, `.json`) and are not in scope
+
+---
+
+### DEV.4 — Ingestion script dev mode (`--dry-run`) ✅
+
+**Goal:** Allow `parlay_api_ingestion.py` (and `odds_api_ingestion.py`) to be tested locally without writing to production raw tables. This is lower priority than DEV.1–DEV.3 — raw table schema rarely changes — but it would have saved a manual cleanup step during Story 0.3 development.
+
+**Design:** A `--dry-run` flag that executes all API calls and logs what would be written, but skips all Snowflake writes. Optionally, a `--target dev` flag that redirects writes to `*_dev` tables (`baseball_data.parlayapi_dev.*`) for cases where you want real rows for debugging but not in prod.
+
+**Tasks:**
+
+- [x] Add `--dry-run` flag to the top-level argument parser in `parlay_api_ingestion.py` — propagated as a boolean through all six runner functions (`run_events`, `run_odds`, `run_historical_odds`, `run_historical_matches`, `run_line_movement`, `run_canonical_events`)
+- [x] In each runner function, wrap the Snowflake write call: `if not dry_run: insert_row(...)` — logs `[DRY RUN] Would insert N row(s) to <target.qualified_name>` in the dry-run path; historical subcommands skip idempotency check and force-deletes; Snowflake reads needed for computation (game dates, event ID resolution) still run
+- [x] Add the same `--dry-run` flag to `odds_api_ingestion.py` with the same pattern — applied to all four runner functions
+- [x] Add `--target {prod,dev}` flag to both scripts — `--target dev` patches `PARLAY_TARGET_SCHEMA=parlayapi_dev` (or `ODDS_TARGET_SCHEMA=oddsapi_dev`) before `resolve_targets()` is called; flags are top-level (must precede subcommand name, documented in `--help`)
+- [x] Create `baseball_data.parlayapi_dev` and `baseball_data.oddsapi_dev` schemas in Snowflake with tables mirrored via `CREATE TABLE ... LIKE` — DDL at `scripts/ddl/dev_ingestion_schemas.sql`; provisioned 2026-05-10
+- [x] Fixed `date_inserted` uninitialized bug in `run_historical_odds` (parlay) dry-run path — moved initialization to outer `for game_date` loop
+- [x] Both scripts verified clean via `uv run python -m py_compile` and live-tested with `--target dev`
+
+**Acceptance criteria:**
+
+- `uv run parlay_api_ingestion.py --dry-run events` makes the API call, logs the payload summary and row count, and exits without inserting any rows into Snowflake ✅
+- Dry-run mode is verified by confirming the ingestion timestamp does not appear in `mlb_events_raw` after the run ✅
+- `--dry-run` works for all subcommands: `events`, `odds`, `events-canonical`, `line-movement`, `historical-odds`, `historical-matches` ✅
+- `--target dev` writes to `parlayapi_dev` tables (verified by querying both schemas post-run) ✅
+- No changes to the Snowflake connection setup or auth logic — only the write path is conditional ✅
 
 ---
 

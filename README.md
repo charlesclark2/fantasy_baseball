@@ -167,6 +167,52 @@ uv run predict_today.py
 
 ---
 
+## Development Workflow
+
+Local and CI development runs write to isolated Snowflake schemas so they can never overwrite production dbt model outputs. Raw source tables are always read from prod (shared read-only); only write targets differ by environment.
+
+### Schema routing
+
+| Target | Command flag | dbt staging/mart schema | dbt feature schema | ML inference schema |
+|---|---|---|---|---|
+| **prod** | *(default — no flag)* | `baseball_data.betting` | `baseball_data.betting_features` | `baseball_data.betting_ml` |
+| **dev** | `--target dev` | `baseball_data.dev_betting` | `baseball_data.dev_betting_features` | `baseball_data.betting_ml_dev` |
+| **ci** | `--target ci` *(set by CI)* | `baseball_data.ci_betting` | `baseball_data.ci_betting_features` | `baseball_data.betting_ml_dev` |
+
+### Running a dev dbt build
+
+```bash
+# Build all models in dev schemas (full rebuild)
+dbtf build --target dev --profiles-dir dbt
+
+# Build only a specific model and its dependencies
+dbtf build --target dev --profiles-dir dbt --select +mart_odds_line_movement
+
+# Build only models changed in your branch vs prod manifest (CI-style)
+dbtf build --target dev --profiles-dir dbt --select state:modified+ --state dbt/state
+```
+
+### Running ML inference locally (safe default)
+
+Without `TARGET_ENV=prod` set, all ML inference scripts write to `betting_ml_dev`:
+
+```bash
+# Safe — writes to baseball_data.betting_ml_dev
+uv run scripts/predict_today.py
+
+# Explicit prod (GitHub Actions only)
+TARGET_ENV=prod uv run scripts/predict_today.py
+```
+
+### Running ingestion in dry-run mode (coming DEV.4)
+
+```bash
+# Preview API call + log payload; no rows written to Snowflake
+uv run scripts/parlay_api_ingestion.py events --dry-run
+```
+
+---
+
 ## Diamond Edge App
 
 The Phase 6 Streamlit app (`app/`) is the primary interface for daily betting analysis.

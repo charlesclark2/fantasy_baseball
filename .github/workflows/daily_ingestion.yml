@@ -283,6 +283,7 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          TARGET_ENV: prod
         run: uv run predict_today.py --prediction-type morning
 
       - name: Check prediction coverage
@@ -313,6 +314,7 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          TARGET_ENV: prod
         run: uv run python compute_model_health.py
 
   backfill:

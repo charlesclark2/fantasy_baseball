@@ -3,10 +3,30 @@ baseball_betting_and_fantasy:
   outputs:
     baseball_betting_and_fantasy:
       type: snowflake
-      account: IHUPICS-DP59975        
+      account: IHUPICS-DP59975
       user: dbt_rw
-      role: ACCOUNTADMIN                        
-      database: baseball_data                 
-      warehouse: COMPUTE_WH                
-      schema: betting                      
+      role: ACCOUNTADMIN
+      database: baseball_data
+      warehouse: COMPUTE_WH
+      schema: betting
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
+
+    dev:
+      type: snowflake
+      account: IHUPICS-DP59975
+      user: dbt_rw
+      role: ACCOUNTADMIN
+      database: baseball_data
+      warehouse: COMPUTE_WH
+      schema: dev_betting
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
+
+    ci:
+      type: snowflake
+      account: IHUPICS-DP59975
+      user: dbt_rw
+      role: ACCOUNTADMIN
+      database: baseball_data
+      warehouse: COMPUTE_WH
+      schema: ci_betting
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"

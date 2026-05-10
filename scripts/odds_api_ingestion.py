@@ -485,6 +485,7 @@ def run_events(
     target: SnowflakeTarget,
     commence_time_from: str,
     commence_time_to: str,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch MLB events within the given UTC time window and store the complete
@@ -516,9 +517,13 @@ def run_events(
     event_count = len(result.payload) if isinstance(result.payload, list) else 0
     log.info("  %d event(s) in response", event_count)
 
-    # Store the full response array as a single row. The per-event extracted
-    # columns (event_id, etc.) are not applicable at this grain and are left
-    # null; downstream dbt models flatten raw_json into individual event rows.
+    if dry_run:
+        log.info(
+            "[DRY RUN] Would insert 1 row to %s (%d event(s) in payload)",
+            target.qualified_name, event_count,
+        )
+        return
+
     try:
         insert_event_row(
             conn,
@@ -552,6 +557,7 @@ def run_odds(
     regions: list[str],
     odds_format: str,
     date_format: str,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch MLB odds for each (market, region) combination and insert each
@@ -592,6 +598,14 @@ def run_odds(
 
             events: list[dict] = result.payload if isinstance(result.payload, list) else []
             log.info("  %d event(s) with odds returned", len(events))
+
+            if dry_run:
+                log.info(
+                    "  [DRY RUN] Would insert %d row(s) to %s",
+                    len(events), target.qualified_name,
+                )
+                time.sleep(REQUEST_DELAY)
+                continue
 
             inserted = 0
             for event in events:
@@ -668,6 +682,7 @@ def run_historical_events(
     target: SnowflakeTarget,
     start_date: date,
     end_date: date,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch historical MLB events for every regular-season game date in
@@ -764,6 +779,14 @@ def run_historical_events(
         event_count = len(events_array)
         log.info("  %d event(s) in response", event_count)
 
+        if dry_run:
+            log.info(
+                "  [DRY RUN] Would insert 1 row to %s (%d event(s) in payload)",
+                target.qualified_name, event_count,
+            )
+            time.sleep(REQUEST_DELAY)
+            continue
+
         try:
             insert_event_row(
                 conn,
@@ -834,6 +857,7 @@ def run_historical_odds(
     start_date: date,
     end_date: date,
     force: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch historical odds for every regular-season game date in [start_date,
@@ -864,9 +888,12 @@ def run_historical_odds(
         )
         return
 
-    if force:
-        log.info("--force: skipping already-loaded check, all dates will be re-fetched")
+    if dry_run:
+        log.info("[DRY RUN] Skipping idempotency check.")
         already_loaded: set[tuple[date, str]] = set()
+    elif force:
+        log.info("--force: skipping already-loaded check, all dates will be re-fetched")
+        already_loaded = set()
     else:
         log.info("Checking for already-loaded (game_date, market) pairs ...")
         already_loaded = fetch_already_loaded_odds_combos(conn, target, start_date, end_date)
@@ -916,7 +943,7 @@ def run_historical_odds(
                 )
                 continue
 
-            if force:
+            if force and not dry_run:
                 with conn.cursor() as cur:
                     cur.execute(
                         f"""
@@ -982,6 +1009,15 @@ def run_historical_odds(
 
             log.info("  %d event(s) in response", len(data_array))
 
+            if dry_run:
+                log.info(
+                    "  [DRY RUN] Would insert %d row(s) to %s",
+                    len(data_array), target.qualified_name,
+                )
+                rows_inserted += len(data_array)
+                time.sleep(REQUEST_DELAY)
+                continue
+
             date_inserted = 0
             for event_obj in data_array:
                 bookmakers = event_obj.get("bookmakers")
@@ -1029,6 +1065,26 @@ def run_historical_odds(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Ingest MLB odds data from The Odds API into Snowflake.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Make API calls but skip all Snowflake writes. "
+            "Logs the endpoint, row count, and target that would be written. "
+            "Must be placed before the subcommand name."
+        ),
+    )
+    parser.add_argument(
+        "--target",
+        choices=["prod", "dev"],
+        default="prod",
+        help=(
+            "Write target: 'prod' uses oddsapi schema (default); "
+            "'dev' redirects all writes to oddsapi_dev. "
+            "Must be placed before the subcommand name."
+        ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -1152,6 +1208,13 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = build_parser().parse_args()
 
+    if args.target == "dev":
+        os.environ["ODDS_TARGET_SCHEMA"] = "oddsapi_dev"
+
+    dry_run = args.dry_run
+    if dry_run:
+        log.info("[DRY RUN] No Snowflake writes will be performed.")
+
     events_target, odds_target = resolve_targets()
     log.info(
         "Connecting to Snowflake  events→%s  odds→%s",
@@ -1168,6 +1231,7 @@ def main() -> None:
                 events_target,
                 commence_time_from = args.commence_time_from or window_from,
                 commence_time_to   = args.commence_time_to   or window_to,
+                dry_run            = dry_run,
             )
 
         elif args.command == "historical-events":
@@ -1176,6 +1240,7 @@ def main() -> None:
                 events_target,
                 start_date = date.fromisoformat(args.start_date),
                 end_date   = date.fromisoformat(args.end_date),
+                dry_run    = dry_run,
             )
 
         elif args.command == "historical-odds":
@@ -1185,6 +1250,7 @@ def main() -> None:
                 start_date = date.fromisoformat(args.start_date),
                 end_date   = date.fromisoformat(args.end_date),
                 force      = args.force,
+                dry_run    = dry_run,
             )
 
         elif args.command == "odds":
@@ -1195,6 +1261,7 @@ def main() -> None:
                 regions     = args.regions,
                 odds_format = args.odds_format,
                 date_format = args.date_format,
+                dry_run     = dry_run,
             )
 
     finally:

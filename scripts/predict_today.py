@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import warnings
 from datetime import date, datetime, timezone
@@ -43,6 +44,11 @@ from betting_ml.models.total_runs_trainer import p_over_line
 
 MODEL_VERSION = "v0"
 
+# Write isolation: dev/unset → betting_ml_dev; prod (set explicitly in CI/CD) → betting_ml.
+# Never set TARGET_ENV=prod locally — only GitHub Actions daily_ingestion.yml should do this.
+TARGET_ENV = os.getenv("TARGET_ENV", "dev")
+_ML_SCHEMA = "baseball_data.betting_ml" if TARGET_ENV == "prod" else "baseball_data.betting_ml_dev"
+
 _CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'
 
 
@@ -68,8 +74,8 @@ def _apply_calibrator(consensus_win_prob: float) -> float:
     return consensus_win_prob
 
 
-_CREATE_PREDICTIONS_TABLE = """
-CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
+_CREATE_PREDICTIONS_TABLE = f"""
+CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- Run metadata
     model_version           VARCHAR(20)    NOT NULL,
     inserted_at             TIMESTAMP_NTZ  NOT NULL,
@@ -121,8 +127,8 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
 )
 """
 
-_INSERT_PREDICTION = """
-INSERT INTO baseball_data.betting_ml.daily_model_predictions (
+_INSERT_PREDICTION = f"""
+INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     model_version, inserted_at, score_date, prediction_type,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
@@ -271,7 +277,7 @@ def _write_predictions_to_snowflake(
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
-                  f"baseball_data.betting_ml.daily_model_predictions "
+                  f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={MODEL_VERSION}, inserted_at={inserted_at.isoformat()})")
         finally:
             conn.close()

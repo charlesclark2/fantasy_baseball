@@ -424,8 +424,10 @@ models:
         tests: [not_null]
 
       - name: snapshot_under_price
-        description: American odds for the under/away outcome at this snapshot.
-        tests: [not_null]
+        description: >
+          American odds for the under/away outcome at this snapshot. Null for one-sided
+          markets (milestones, some player props) and for snapshots where the API has not
+          yet populated both sides.
 
       - name: snapshot_line
         description: Total or prop line value at this snapshot. Null for moneyline snapshots.

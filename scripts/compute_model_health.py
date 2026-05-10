@@ -24,6 +24,10 @@ import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import numpy as np
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
@@ -39,6 +43,11 @@ log = logging.getLogger(__name__)
 
 ECE_ALERT_THRESHOLD = 0.04
 WINDOW_DAYS = 14
+
+# Write isolation: dev/unset → betting_ml_dev; prod (set by daily_ingestion.yml) → betting_ml.
+TARGET_ENV = os.getenv("TARGET_ENV", "dev")
+_ML_SCHEMA_NAME = "betting_ml" if TARGET_ENV == "prod" else "betting_ml_dev"
+_ML_SCHEMA = f"baseball_data.{_ML_SCHEMA_NAME}"
 
 # ---------------------------------------------------------------------------
 # Snowflake connection
@@ -68,7 +77,7 @@ def _get_connection() -> snowflake.connector.SnowflakeConnection:
         "user":      os.environ["SNOWFLAKE_USER"],
         "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
         "database":  "baseball_data",
-        "schema":    "betting_ml",
+        "schema":    _ML_SCHEMA_NAME,
     }
 
     pk_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
@@ -185,8 +194,8 @@ def run(target: str, run_date: date, model_version: str | None = None) -> None:
     log.info("ECE=%.4f  Brier=%.4f  n=%d  version=%s  alert_fired=%s",
              ece, brier, sample_n, model_version or "all", alert_fired)
 
-    insert_sql = """
-        INSERT INTO baseball_data.betting_ml.model_health_log
+    insert_sql = f"""
+        INSERT INTO {_ML_SCHEMA}.model_health_log
             (run_date, target, window_days, ece, brier, sample_n, alert_fired, model_version)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     """
