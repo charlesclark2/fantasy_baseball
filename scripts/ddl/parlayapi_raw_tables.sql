@@ -5,10 +5,11 @@
 -- All tables use fully qualified names (database.schema.table) — no USE statements.
 --
 -- Tables:
---   mlb_events_raw         — one row per call to /v1/sports/baseball_mlb/events
---   mlb_odds_raw           — one row per call to /v1/sports/baseball_mlb/odds
---   mlb_matches_raw        — one row per call to /v1/historical/sports/baseball_mlb/matches
---   mlb_line_movement_raw  — one row per call to /v1/sports/baseball_mlb/line-movement
+--   mlb_events_raw            — one row per call to /v1/sports/baseball_mlb/events
+--   mlb_odds_raw              — one row per call to /v1/sports/baseball_mlb/odds
+--   mlb_matches_raw           — one row per call to /v1/historical/sports/baseball_mlb/matches
+--   mlb_line_movement_raw     — one row per call to /v1/sports/baseball_mlb/line-movement
+--   mlb_canonical_events_raw  — one row per call to /v1/sports/baseball_mlb/events/canonical
 --
 -- Design principles:
 --   • Append-only: rows are never updated; every ingest run adds new rows.
@@ -160,4 +161,35 @@ CREATE TABLE IF NOT EXISTS baseball_data.parlayapi.mlb_line_movement_raw (
     away_team               VARCHAR(128),               -- from first record in response array
     record_count            NUMBER,                     -- ARRAY_SIZE(response) — number of (source × market) records returned
     markets_captured        VARIANT                     -- ARRAY_AGG of distinct market_key values (for auditing coverage)
+);
+
+-- ---------------------------------------------------------------------------
+-- mlb_canonical_events_raw
+-- One row per ingestion run against /v1/sports/baseball_mlb/events/canonical.
+-- This is the ONLY Parlay API endpoint that returns real per-game start times.
+-- All other live endpoints (events, odds) return 19:00:00Z as a placeholder.
+--
+-- Auth note: this endpoint requires apiKey as a query parameter. The X-API-Key
+-- header that all other endpoints accept is rejected here. The ingestion script
+-- uses a separate call path (call_parlay_api_query_auth) for this reason.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS baseball_data.parlayapi.mlb_canonical_events_raw (
+
+    -- ── Ingestion metadata ──────────────────────────────────────────────────
+    ingestion_ts            TIMESTAMP_NTZ   NOT NULL,   -- wall-clock time the row was written to Snowflake
+    load_id                 VARCHAR(64),                -- UUID grouping rows from the same run
+    source_system           VARCHAR(64)     DEFAULT 'parlay_api',
+    process_name            VARCHAR(128)    DEFAULT 'parlay_api_ingestion.py',
+    source_endpoint         VARCHAR(256),               -- e.g. /v1/sports/baseball_mlb/events/canonical
+    request_url             VARCHAR(2048),              -- fully resolved URL including query string
+    request_params          VARIANT,                    -- parameters dict sent with the request
+    http_status_code        NUMBER(3),
+    call_sequence           NUMBER,
+
+    -- ── Raw payload ─────────────────────────────────────────────────────────
+    raw_json                VARIANT         NOT NULL,   -- full response array exactly as received
+
+    -- ── Extracted relational fields (convenience; not authoritative) ────────
+    sport_key               VARCHAR(64),                -- 'baseball_mlb' for all rows
+    event_count             NUMBER                      -- ARRAY_SIZE(response) — events in payload
 );

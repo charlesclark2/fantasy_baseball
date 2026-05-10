@@ -1,7 +1,7 @@
 # MLB Quantitative Intelligence — Implementation Guide
 
-Version: Draft 0.2
-Status: Planning
+Version: Draft 0.4
+Status: In Progress — Epic 0 bridge update complete (0.8); line movement staging (0.9) next
 Companion to: `refined_architecture_proposal.md`
 
 ---
@@ -18,6 +18,7 @@ Each epic maps to a meaningful deliverable. Tasks within each epic are sequenced
 
 ```
 Epic 0   (Parlay API Migration)        — Immediate. Hard deadline: 2026-06-01.
+  Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ (bridge) → 0.9✅ (line movement) → 0.10✅ (canonical events) → 0.7 (cutover)
 Epic 0.5 (Dagster Orchestration)       — After Epic 0 cutover passes; before Epic 1 ships to production.
 Epic 1   (Market-Blind Retrains)       — Immediate. Unblocked now (run in parallel with Epic 0).
 Epic 2   (Sub-Model Infrastructure)    — Start in parallel with Epic 1.
@@ -65,12 +66,125 @@ Tasks:
 - Historical `/events` path does not exist — replaced by `/matches` endpoint with a different flat schema (scores, results, `has_odds` flag)
 - Historical `/odds` verified compatible — same bookmakers/markets structure; requires `oddsFormat=american`
 - Credit headers (`x-requests-used`, `x-requests-remaining`) are not present in Parlay API responses — use call-count logging in ingestion script instead
-- **`/line-movement` endpoint verified** — provides full opening-to-close price history per (event × book × market) in a single call; highest-value new capability for Epic 12 (CLV meta-model)
+- **`/line-movement` endpoint verified** — provides full opening-to-close price history, but **player props only** (zero h2h/totals/spreads confirmed via live testing 2026-05-10); original assessment as "highest-value new capability for CLV" is revised — see Deep Endpoint Evaluation section
 - `/ev` and `/consensus` worth evaluating post-migration as additional CLV inputs
 - See `quant_sports_intel_models/parlay_api_endpoint_mapping.md` for full details
 
 **Pipeline snapshot awareness note:**
 Any pipeline consuming `parlayapi.mlb_line_movement_raw` must account for the nested `snapshots[]` array in `raw_json`. Each top-level record represents one (event × book × market) combination; `snapshots` is an arbitrary-length array of timestamped price changes. Decide before building any staging model whether to explode snapshots for time-series features or summarize to opening/closing price only. Do not assume a flat row-per-event schema.
+
+---
+
+### Parlay API — Deep Endpoint Evaluation (2026-05-10)
+
+Full hands-on evaluation of all endpoints tested via direct API calls using the Business-tier key. This section is the authoritative reference for what the API actually delivers vs. what the docs describe. Updated findings here supersede any earlier assumptions in Story 0.1 or the endpoint mapping doc.
+
+---
+
+#### Temporal model (applies to all live endpoints)
+
+- `commence_time` in `/events` and `/odds` responses is always `19:00:00Z` — a per-date slate placeholder, not a real game time. It is useful only as a date bucket.
+- `bookmaker_last_update` (on the bookmaker object) is the authoritative signal for when a line actually moved. Use this — not `ingestion_ts` and not `commence_time` — to reason about the age of a price at capture time.
+- `market_last_update` (on the market object) is more granular — a book may update their h2h line without touching totals.
+- **Real per-game start times are only available from `/events/canonical`** (see below). The live `/events` and `/odds` endpoints do not carry them.
+- `stg_parlayapi_odds` schema.yml has been updated to reflect these semantics on `ingestion_ts`, `bookmaker_last_update`, and `market_last_update`.
+
+---
+
+#### `/v1/sports/baseball_mlb/events/canonical`
+
+**Status: Works. High-value ancillary endpoint.**
+
+Returns one record per upcoming game with:
+- `canonical_event_id` — a stable 16-char hex ID that is consistent across all bookmaker sources (e.g., `4953d9e905ba1241`). Already ingested into `mlb_events_raw.canonical_event_id`.
+- `commence_time` — **actual per-game scheduled start time** (e.g., `2026-05-10T20:10Z`), not a placeholder. This is the only Parlay API endpoint that returns real start times.
+- `sources` — a dictionary mapping each bookmaker key to their raw team name strings. Useful for normalization auditing; confirms that most major books already use canonical team names (no translation needed beyond our existing "Oakland Athletics" → "Athletics" case).
+- `source_count` — number of books covering this game.
+
+**Observations (24 events on 2026-05-10):**
+- Some events have an empty `commence_time` — appears on games without a confirmed start time (e.g., second-game doubleheader slots, or late-add games).
+- Includes events for upcoming days (2026-05-11, 2026-05-12) in addition to today's games.
+- Auth requires `apiKey` query param — the `X-API-Key` header is **not** accepted on this endpoint (unlike the live odds endpoint which accepts both).
+
+**Action item:** Evaluate whether to call this endpoint during daily ingestion and store `commence_time` in `mlb_events_raw`. It is the only way to get real game start times without Stats API.
+
+---
+
+#### `/v1/sports/baseball_mlb/line-movement`
+
+**Status: Works, but limited scope — player props only.**
+
+Tested with today's ARI vs NYM event ID (`891b1925afceb099a2d27776e0aa1b97`). Response: 155 records. **All 155 are `player_*` market keys (player props).** Zero h2h, totals, or spreads.
+
+This contradicts the endpoint's documentation positioning as a general line-movement feed. In practice:
+- **Player props**: full opening-to-close snapshot history available ✓
+- **H2H (moneyline)**: not present ✗
+- **Totals**: not present ✗
+- **F5 / first half**: not present ✗
+
+**Impact on Epic 12 (CLV meta-model):** Story 0.1 identified `/line-movement` as "highest-value new capability" for CLV tracking. That assessment must be revised. For h2h and totals CLV, the Parlay API `/line-movement` endpoint contributes nothing. Our own snapshot-based tracking via `odds_snapshot.yml` (~15 snapshots/game-day) remains the **only viable path** for h2h/totals line movement. The line-movement endpoint is valuable only for player-prop CLV if that use case is added in future.
+
+**`mlb_events_raw` design note:** The table is append-only (not overwritten daily). The `resolve_event_ids` function uses a 26-hour rolling window to find event IDs for the line-movement call — but old rows persist indefinitely. No pre-2026-05-10 Parlay API event IDs exist because ingestion only started that date; the historical matches endpoint does not expose event IDs.
+
+---
+
+#### `/v1/historical/sports/baseball_mlb/period_markets`
+
+**Status: No data. Not usable.**
+
+Documented as "Durable per-distinct-state archive of period market line movement" at 5 credits/call. Tested with every parameter combination:
+- With/without `matchId` (using both Parlay event IDs and canonical event IDs)
+- With/without `dateFrom`/`dateTo` (tested 2025-09-01 through 2026-05-10)
+- All period values: `FT`, `F5`, `1H`, `2H`, `all`
+- With no filters at all
+
+**Every call returns `count: 0, results: []`.** No error — the endpoint is accessible and our Business tier has no restrictions — but it has zero MLB data.
+
+Valid period keys confirmed from API error response: `1H`, `2H`, `F5`, `F7`, `FT`, `OT`, `P1`, `P2`, `P3`, `Q1`, `Q2`, `Q3`, `Q4`. The `match_id` field referenced in the docs does not correspond to any ID exposed by other Parlay API endpoints (`event_id`, `canonical_event_id`, and historical `match` records all return zero results when used as `matchId`).
+
+**Likely explanation:** The endpoint is designed for sports with timed periods (basketball, hockey, football). MLB has no populated data pipeline for this endpoint. Do not plan any architecture around it.
+
+---
+
+#### `/v1/historical/sports/baseball_mlb/closing-odds`
+
+**Status: Works, but narrow coverage.**
+
+Returns Pinnacle closing ML lines. Tested 2026-05-07 through 2026-05-09:
+- **Bookmakers:** Pinnacle only
+- **Market:** H2H moneyline only — no totals, no F5, no spreads
+- **Coverage:** ~3-4 games/day (not full slate — roughly 30-40% of games)
+- **Scores:** `result` is empty, `home_score`/`away_score` are null even for completed games (no game result data)
+- **Schema:** `game_date`, `home_team`, `away_team`, `bookmaker`, `home_odds`, `away_odds`, `draw_odds` (always null for MLB)
+
+This is effectively the same data as `source=pinnacle` in the historical matches endpoint, just in a cleaner flat schema. The spotty per-game coverage makes it unreliable as a standalone closing-line source. Pinnacle closing lines from the historical matches endpoint (`mlb_matches_raw`) are the better path since that endpoint covers more games per date.
+
+---
+
+#### `/v1/historical/sports/baseball_mlb/matches`
+
+**Status: Works. Primary historical odds source.**
+
+The correct historical equivalent of the Odds API historical endpoints. Key characteristics:
+- Returns one record per (game, source) — e.g., one row for `bet365_an`, one for `draftkings_an`, one for `pinnacle`, one for `pinnacle_open`, etc.
+- `pinnacle_open` = Pinnacle's opening line; `pinnacle` = Pinnacle's closing line. The pair together gives opening vs. closing movement for Pinnacle.
+- ML odds are nested inside an `odds` object: `odds.home_ml`, `odds.away_ml` — not top-level fields.
+- **No `event_id` field** in any record. Cannot use to look up Parlay API event IDs for historical games.
+- Coverage spotty for some sources/dates; Pinnacle coverage is most consistent.
+
+---
+
+#### Summary table
+
+| Endpoint | Status | What it delivers | Gaps |
+|---|---|---|---|
+| `/events` | ✓ Works | Today's event IDs, bookmakers, markets | `commence_time` is a placeholder (19:00:00Z) |
+| `/odds` | ✓ Works | Live snapshot of all book ML/totals/props | `commence_time` placeholder; no real start times |
+| `/events/canonical` | ✓ Works | Real game start times; stable cross-source ID; per-book team name map | Auth requires `apiKey` param (not header) |
+| `/historical/matches` | ✓ Works | Closing ML by source per game; Pinnacle open/close pair | ML only; no totals/F5; no event_id; spotty coverage |
+| `/historical/closing-odds` | ✓ Works | Pinnacle closing ML | Pinnacle only; ML only; ~3-4 games/day; no scores |
+| `/line-movement` | ⚠ Partial | Full snapshot history for player props | Zero h2h / totals / F5 — player props only |
+| `/historical/period_markets` | ✗ No data | Nothing — 0 results for all param combinations | No MLB data pipeline; `match_id` not discoverable |
 
 ---
 
@@ -91,7 +205,7 @@ Tasks:
 
 ---
 
-### 0.3 — Parlay API ingestion script
+### 0.3 — Parlay API ingestion script ✅
 
 **Goal:** Build `scripts/parlay_api_ingestion.py` mirroring the structure of `odds_api_ingestion.py`.
 
@@ -107,21 +221,40 @@ Tasks:
 - [x] Six env var overrides for target tables (PARLAY_TARGET_DATABASE, PARLAY_TARGET_SCHEMA, PARLAY_EVENTS_TABLE, PARLAY_ODDS_TABLE, PARLAY_MATCHES_TABLE, PARLAY_LINE_MOVEMENT_TABLE)
 - [x] Single-key auth via `X-API-Key` header; no credit headers — call_sequence counter logged instead
 - [x] Historical backfill defaults to 90 days prior to run date (Business plan data limit)
-- [ ] **Run 90-day historical backfill** — execute `historical-odds` and `historical-matches` for 2026-02-08 → 2026-05-09 after script is tested
-- [ ] Test against live tables before production cutover (per test-before-deploy protocol)
+- [x] **90-day historical backfill complete** — `historical-odds` and `historical-matches` executed for 2026-02-08 → 2026-05-09
+- [x] **Tested against live tables** — deployed to prod via GitHub Actions 2026-05-10; `events` and `odds` running daily
+
+**Post-backfill data quality notes (2026-05-10):**
+- `mlb_matches_raw`: 25 rows for dates 2026-02-09 to 2026-03-05 contained stale 1000-record arrays from an earlier broken run; the idempotency check protected them from being overwritten. Deleted via:
+  ```sql
+  DELETE FROM baseball_data.parlayapi.mlb_matches_raw
+  WHERE game_date BETWEEN '2026-02-09' AND '2026-03-05';
+  ```
+  These are spring training dates — data not needed for models. No re-fetch required.
+- `mlb_events_raw`: table was accidentally truncated after backfill. Recovered via Snowflake Time Travel at `AT (offset => -3600)` — 1 row recovered (live events ingested 2026-05-10T05:11:51; 15 events). Table is append-only from live daily runs only; no historical events endpoint exists in Parlay API.
+- `mlb_odds_raw`: coverage confirmed 2026-02-08 → 2026-05-09, 90 rows, correct record counts (40–105 per day for regular-season dates; pre-season dates have lower counts).
 
 ---
 
-### 0.4 — dbt staging model for Parlay API odds
+### 0.4 — dbt staging model for Parlay API odds ✅
 
 **Goal:** Add a `stg_parlayapi_odds` staging model that produces the same output schema as `stg_oddsapi_odds`, enabling all downstream dbt models and mart joins to consume both sources without changes.
 
 Tasks:
-- [ ] Create `dbt/models/staging/stg_parlayapi_odds.sql` — parse `raw_json` from `parlayapi.mlb_odds_raw` into normalized rows (one row per bookmaker per market per event per snapshot)
-- [ ] Match column names and types to `stg_oddsapi_odds` exactly
-- [ ] Add `source_system = 'parlay_api'` discriminator column so downstream models can filter by source if needed
-- [ ] Add source entry to `dbt/models/sources.yml`
-- [ ] Add schema tests (not null on `event_id`, `bookmaker_key`, `market_key`, `commence_time`)
+- [x] Create `dbt/models/staging/stg_parlayapi_odds.sql` — three-level lateral flatten: bookmakers[] → markets[] → outcomes[]
+- [x] Match column names and types to `stg_oddsapi_odds` exactly
+- [x] Add `source_system = 'parlay_api'` discriminator column
+- [x] Add `canonical_event_id` column (Parlay API cross-source stable ID; null for historical rows)
+- [x] Add `game_date` convenience column (`commence_time::date`)
+- [x] Add `doubleheader_ambiguous` boolean flag (left join to `stg_statsapi_games` on game_date + team names; true when `double_header IN ('Y','S')`)
+- [x] Add source entry (`parlayapi`) to `dbt/models/sources.yml` with table descriptions and not_null tests
+- [x] Add full column documentation to `dbt/models/staging/schema.yml` — all 19 output columns documented with descriptions and tests
+- [x] All 15 schema tests passing — `dbtf build --select stg_parlayapi_odds` green
+
+**Implementation notes:**
+- No deduplication CTE needed — Parlay API has no dual-region overlap (unlike Odds API's us/us2 pattern)
+- `outcome_price_decimal` CASE expression includes a `when outcome_price_american = 0 then null` guard to prevent division by zero on malformed data
+- **Snowflake VARIANT null bug fixed:** Parlay API sends explicit JSON `null` for some away-side prices (confirmed: Caesars, Bovada, others). In Snowflake, JSON null in a VARIANT field is a VARIANT null — it passes `IS NOT NULL` but produces SQL NULL on `::integer` cast. The WHERE filter was changed from `where out.value:price is not null` to `where out.value:price::integer is not null` to catch both missing keys and explicit JSON nulls.
 
 **Blocking investigation — doubleheader disambiguation (RESOLVED 2026-05-10, support ticket open):**
 
@@ -146,27 +279,115 @@ Additional findings from live API testing 2026-05-10:
 
 ---
 
-### 0.5 — Update downstream mart joins to union both sources
+### 0.5 — Update downstream mart joins to union both sources ✅
 
 **Goal:** Any mart that joins `stg_oddsapi_odds` should be able to consume `stg_parlayapi_odds` for dates after the cutover without breaking historical data.
 
 Tasks:
-- [ ] Audit which dbt marts currently join `stg_oddsapi_odds` or `mart_bookmaker_disagreement` (check `mart_bookmaker_disagreement.sql`, `feature_pregame_game_features.sql`, and any CLV-related models)
-- [ ] Decide on union vs. coalesce strategy: option A = UNION ALL both staging models into a single intermediate `int_odds_combined`; option B = add Parlay API as a second branch in `mart_bookmaker_disagreement`
-- [ ] Implement chosen strategy — preserve `source_system` column so historical Odds API rows are distinguishable from new Parlay API rows
-- [ ] Verify no historical rows are dropped or duplicated after the change
+- [x] Audit which dbt marts currently join `stg_oddsapi_odds` — single choke point is `mart_odds_outcomes`; all downstream models (`mart_odds_consensus`, `mart_bookmaker_disagreement` live path, `mart_odds_line_movement`, `mart_closing_line_value`, `feature_pregame_odds_features`) flow through it
+- [x] Decided on single change point: UNION ALL both staging models inside `mart_odds_outcomes` rather than a new intermediate — all downstream models inherit the union automatically with zero changes to those files
+- [x] Updated `mart_odds_outcomes.sql` — UNION ALL `stg_oddsapi_odds` and `stg_parlayapi_odds`; added `source_system` discriminator ('odds_api' | 'parlay_api') and `doubleheader_ambiguous` column to output schema; Odds API side gets `'odds_api'::varchar` and `false::boolean` literals for the new columns
+- [x] Updated `mart/schema.yml` — rewrote `mart_odds_outcomes` description and all column docs to reflect unified source; added `source_system` not_null + accepted_values tests; updated `doubleheader_ambiguous`, `commence_time`, `bookmaker_key`, and `outcome_price_decimal` descriptions with Parlay-specific caveats
+- [x] All 22 `mart_odds_outcomes` tests passing; all 17 downstream model tests passing
+- [x] Verified in Snowflake: 733,731 Odds API rows + 11,509 Parlay API rows; 60 doubleheader-ambiguous Parlay rows correctly flagged
+
+**Implementation notes:**
+- `mart_bookmaker_disagreement` has a separate historical path (2021–2025) that reads `baseball_data.oddsapi.mlb_odds_raw` directly — no change needed there
+- During the parallel overlap period, Parlay API rows in `mart_odds_outcomes` are effectively orphaned at the mart level because `mart_game_odds_bridge` only maps Odds API event_ids to `game_pk`. The bridge fix is Story 0.8.
+- After Odds API cutover, the live path in `mart_bookmaker_disagreement`, `mart_odds_line_movement`, and `feature_pregame_odds_features` will stop receiving data for new games until the bridge is updated (Story 0.8 blocks cutover validation).
 
 ---
 
-### 0.6 — Update GitHub Actions workflow for daily ingestion
+### 0.6 — Update GitHub Actions workflow for daily ingestion ✅
 
 **Goal:** Wire the new Parlay API ingestion script into the daily GitHub Actions workflow that currently runs `odds_api_ingestion.py`.
 
 Tasks:
-- [ ] Add steps to `.github/workflows/daily_ingestion.yml` to call `parlay_api_ingestion.py events` and `parlay_api_ingestion.py odds` on the same schedule as the current Odds API steps
-- [ ] Disable (comment out or condition-gate) the Odds API ingestion steps after 2026-05-23 — do not delete, retain for reference and potential reactivation
-- [ ] Verify daily dbt refresh still completes correctly after the workflow change
-- [ ] Add `PARLAY_API_KEY` (or equivalent) to GitHub Actions secrets
+- [x] Added two steps to `.github/workflows/daily_ingestion.yml`: `parlay_api_ingestion.py events` and `parlay_api_ingestion.py odds` — run in parallel with Odds API steps during overlap period
+- [x] Added comment on Odds API steps: "DISABLE after 2026-05-23 (credits expire). Do not delete..."
+- [x] Added `PARLAY_API_KEY` secret to GitHub Actions repository secrets — deployed 2026-05-10
+- [ ] Verify daily dbt refresh still completes correctly after the workflow change — will be confirmed as part of 0.7 parallel ingestion monitoring
+
+---
+
+### 0.8 — Update mart_game_odds_bridge to include Parlay API event_ids ✅
+
+**Goal:** `mart_game_odds_bridge` currently maps `game_pk → event_id` using only Odds API events. After the cutover, new 2026 games will have no Odds API event_id and `has_odds` will be false for all of them, breaking the entire live-path feature pipeline. Add Parlay API event_ids as a second source and prioritize them in the coalesced `event_id` column.
+
+**Blocks:** Story 0.7 (cutover validation). Must be complete before Odds API ingestion is disabled.
+
+Tasks:
+- [x] Added `odds_api_event_id` and `parlay_api_event_id` as separate output columns — preserves both source identifiers for auditing and avoids information loss
+- [x] Sourced Parlay API events directly from `stg_parlayapi_odds` — no separate staging model needed; used `ROW_NUMBER() OVER (PARTITION BY game_date, home_team, away_team ORDER BY ingestion_ts DESC) = 1` to get one canonical Parlay event_id per matchup per date
+- [x] Applied same team name normalization to Parlay API events as exists for Odds API events ("Cleveland Indians" → "Cleveland Guardians", "Oakland Athletics" → "Athletics") — applied defensively on both sides
+- [x] Coalesced `event_id` column = `COALESCE(parlay_api_event_id, odds_api_event_id)` — Parlay API takes priority when both exist (overlap period), falls back to Odds API for historical games (2021–2025)
+- [x] Updated `has_odds` = `COALESCE(parlay_api_event_id, odds_api_event_id) IS NOT NULL`
+- [x] Updated `mart/schema.yml` — rewrote bridge description and added docs for `odds_api_event_id`, `parlay_api_event_id`, and updated `event_id` and `has_odds` descriptions
+- [x] All 10 bridge tests passing; all 28 downstream model tests passing (mart_bookmaker_disagreement, mart_odds_line_movement, mart_closing_line_value, feature_pregame_odds_features)
+- [x] Validated in Snowflake: 2026 regular season — 514 games have both sources; 74 have Odds API only (pre-backfill dates); 99.5% overall coverage
+
+**Validation results (2026-05-10):**
+
+| season | total games | has_odds_api | has_parlay_api | has_both | pct_coverage |
+|---|---|---|---|---|---|
+| 2021 | 2,429 | 1,800 | 0 | 0 | 74.1% |
+| 2022 | 2,430 | 1,789 | 0 | 0 | 73.6% |
+| 2023 | 2,430 | 1,802 | 0 | 0 | 74.2% |
+| 2024 | 2,429 | 1,809 | 0 | 0 | 74.5% |
+| 2025 | 2,430 | 1,844 | 0 | 0 | 75.9% |
+| 2026 | 591 | 588 | 514 | 514 | 99.5% |
+
+**Design notes:**
+- During overlap (now → 2026-05-23): bridge resolves to Parlay event_id for 2026 games; downstream joins land on Parlay API rows in `mart_odds_outcomes`; Odds API rows for the same games are orphaned (intentional — prioritize Parlay)
+- After cutover (2026-05-23+): `odds_api_event_id` stays null for new games; coalesced event_id = `parlay_api_event_id`; no disruption to downstream models
+- Historical (2021–2025): `parlay_api_event_id` is null; coalesced event_id = `odds_api_event_id`; no change to historical data path
+- Doubleheader limitation: for DH games the Parlay API has one event_id for both games; the bridge maps it to whichever `game_pk` matches first — the second DH game_pk will have `parlay_api_event_id = null`; not fixable until Parlay API support ticket is resolved
+
+---
+
+### 0.9 — Parlay API line movement staging model ✅
+
+**Goal:** Build a dbt staging model that flattens the `snapshots[]` array inside `mlb_line_movement_raw`, then update `mart_odds_line_movement` to reflect the Parlay API as the live data source.
+
+**Scope revision (2026-05-10):** The original goal of replacing `mart_odds_outcomes` with `stg_parlayapi_line_movement` as the live path source is not viable — the `/line-movement` endpoint is player props only (zero h2h/totals). The live path in `mart_odds_line_movement` correctly stays on the `mart_odds_outcomes` snapshot approach (Parlay API hourly captures via `odds_snapshot.yml`). The `stg_parlayapi_line_movement` staging model is built and available for future player-prop CLV work.
+
+Tasks:
+- [x] Add `line-movement` step to `.github/workflows/odds_snapshot.yml` — wired at the hourly snapshot level (runs ~15×/day alongside odds ingestion); not added to `daily_ingestion.yml` since per-event calls require today's event_ids which are populated by the events step in `odds_snapshot.yml`
+- [x] Create `dbt/models/staging/stg_parlayapi_line_movement.sql` — two lateral flattens over `mlb_line_movement_raw`; grain: `(ingestion_ts, event_id, bookmaker_key, market_key, player, snapshot_ts)`; all 20+ columns including decimal conversions and market type flags
+- [x] Add source entry for `mlb_line_movement_raw` to `dbt/models/sources.yml` (under the `parlayapi` source block)
+- [x] Document all output columns in `dbt/models/staging/schema.yml` with not_null tests on grain columns
+- [x] Updated `mart_odds_line_movement.sql` header — documents that 2026+ live path uses Parlay API hourly snapshots via `mart_odds_outcomes`; adds leakage guard caveat (commence_time = 19:00:00Z placeholder); fix deferred to Story 0.10
+- [x] Verified `mart_odds_line_movement` live data: 224 games (2026-04-23 → 2026-05-09), bovada confirmed present in Parlay API rows (10,660 h2h/totals rows); snapshot_count distribution 1–31 per game
+- [x] Updated `mart/schema.yml` for `mart_odds_line_movement` — updated description to reference Parlay API as 2026+ source and document the commence_time leakage guard caveat; removed "OddsAPI" from bookmaker column description
+
+**Known limitation (deferred to 0.10):** Parlay API `commence_time` is `19:00:00Z` for all games (a date-bucket placeholder). The live path leakage guard `ingestion_ts < commence_time` therefore excludes all same-day snapshots captured after 19:00 UTC, dropping the afternoon/evening window for most evening games, while potentially allowing a narrow post-first-pitch window for afternoon starts. This will be fixed in Story 0.10 by joining to `stg_parlayapi_canonical_events` for real per-game start times.
+
+**Design note:** `mlb_line_movement_raw` grain is one row per ingestion run per event_id; `raw_json` contains an array of `(source × market)` records, each with a nested `snapshots[]` array of timestamped price changes. The staging model requires two lateral flattens: first over the top-level records array, then over each record's `snapshots` array. See Section 2.4 of `parlay_api_endpoint_mapping.md` for the full response schema.
+
+---
+
+### 0.10 — Canonical events ingestion (real game start times) ✅
+
+**Goal:** Integrate the `/events/canonical` endpoint into daily ingestion to capture real per-game scheduled start times. The live `/events` and `/odds` endpoints only return `19:00:00Z` as a placeholder — actual game times are only available from this endpoint. Real start times are needed for leakage guards in time-series features and for future display/alerting use.
+
+**Prerequisite:** Story 0.3 (ingestion script) complete. Can run in parallel with Story 0.9.
+
+- [x] Add `events-canonical` subcommand to `scripts/parlay_api_ingestion.py` — uses `call_parlay_api_query_auth` (apiKey query param, not X-API-Key header); stores one row per run in `mlb_canonical_events_raw`
+- [x] Add DDL for `mlb_canonical_events_raw` to `scripts/ddl/parlayapi_raw_tables.sql`; provisioned in Snowflake 2026-05-10
+- [x] Create `dbt/models/staging/stg_parlayapi_canonical_events.sql` — grain: one row per `(ingestion_ts, canonical_event_id)` (no `event_id` — endpoint does not return the ephemeral Parlay id); output columns: `canonical_event_id`, `commence_time`, `game_date`, `source_count`, `ingestion_ts`
+- [x] Add source entry for `mlb_canonical_events_raw` to `dbt/models/sources.yml`
+- [x] Document all output columns in `dbt/models/staging/schema.yml` with not_null test on `canonical_event_id`
+- [x] Add `events-canonical` step to `.github/workflows/daily_ingestion.yml` after the `events` step
+- [x] Wire real `commence_time` into `mart_odds_line_movement.sql` live_raw leakage guard — added `event_canonical_bridge` CTE (from `stg_parlayapi_odds`, which has both `event_id` and `canonical_event_id`) then `canonical_times` CTE joining through it; `coalesce(ct.commence_time, o.commence_time)` ensures graceful fallback to placeholder when canonical data is absent
+
+**Confirmed 2026-05-10 (live test):**
+- API call succeeds; 25 canonical events returned for today's slate
+- Real game times confirmed (e.g., ARI vs NYM 20:10Z, CIN vs HOU 17:40Z, KC vs DET 23:20Z — not 19:00:00Z)
+- `commence_time` is empty string `""` (converted to null via NULLIF) for games not yet confirmed
+- `game_date` field present in response and reliable even when `commence_time` is null
+- Response does NOT include Parlay's ephemeral `event_id` — join to `stg_parlayapi_odds` on `canonical_event_id` required to bridge back to `event_id`
+
+**Scope revision note:** The KNOWN LIMITATION in `mart_odds_line_movement.sql` (19:00:00Z leakage guard) is now fixed. The mart header and `mart/schema.yml` updated accordingly.
 
 ---
 
@@ -175,7 +396,7 @@ Tasks:
 Tasks:
 - [ ] Run parallel ingestion for at least 3–5 days: ingest from both APIs simultaneously, compare event coverage and odds values
 - [ ] Verify that `mart_bookmaker_disagreement` consensus line and bookmaker spread are consistent across sources for the overlap period
-- [ ] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data
+- [ ] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data after Story 0.8 bridge update
 - [ ] After validation: disable Odds API ingestion steps in GitHub Actions (2026-05-23 target, no later than 2026-06-01)
 - [ ] Document which date range is covered by each source in `baseball_data_mart_inventory.md`
 
@@ -679,6 +900,21 @@ Tasks:
 **Gate:** Do NOT begin production training until 500+ live CLV-labeled games are available.
 
 **Current status:** ~41 games as of May 2026. Realistically unblocked late July or August 2026.
+
+---
+
+**Historical CLV path — Odds API is the only viable source for 2021–2025.**
+
+The Parlay API does not provide a usable historical line movement source for h2h or totals:
+- `/historical/period_markets` returns zero MLB data for all parameter combinations (confirmed via exhaustive testing 2026-05-10) — do not plan around this endpoint
+- `/line-movement` covers player props only — zero h2h, totals, or F5 records; cannot be used for game-level CLV
+- `/historical/matches` and `/historical/closing-odds` provide Pinnacle closing ML only — no opening lines for most books, no totals/F5, spotty game coverage (~30-40% of slate)
+
+**Practical approach:**
+- **2021–2025 historical CLV:** Use Odds API historical odds (`baseball_data.oddsapi.mlb_odds_raw`) for opening lines paired with Odds API closing snapshots. This is the existing `mart_closing_line_value` historical path — no new data source needed.
+- **2026+ live CLV (h2h/totals):** Our own snapshot-based tracking via `odds_snapshot.yml` (~15 snapshots/game-day, operational from 2026-05-10) is the only viable source for h2h and totals line movement. The Parlay API contributes nothing here.
+- **Player-prop CLV:** Feasible in future using Parlay API `/line-movement` data (props only). Not a current priority — defer until player-prop model infrastructure exists.
+- **Meta-model training matrix:** When building Story 12.2, the "line movement" feature group must be sourced from our snapshot pipeline, not Parlay API's line-movement endpoint. Budget ~15 snapshots/game-day as the resolution ceiling for any line-movement feature.
 
 ---
 

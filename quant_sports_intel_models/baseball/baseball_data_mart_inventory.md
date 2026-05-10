@@ -1,5 +1,5 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-05-09
+## Current State Reference — As of 2026-05-10
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -9,9 +9,9 @@ This document inventories every Snowflake table created via DDL scripts and ever
 
 | Layer | Count | Location |
 |---|---|---|
-| Raw source tables (DDL) | 13 tables + 2 tasks + 4 procedures | `scripts/ddl/` |
-| dbt sources | 30+ raw tables across 8 schemas | `dbt/models/sources.yml` |
-| dbt staging models | 18 models | `dbt/models/staging/` |
+| Raw source tables (DDL) | 18 tables + 2 tasks + 4 procedures | `scripts/ddl/` |
+| dbt sources | 35+ raw tables across 9 schemas | `dbt/models/sources.yml` |
+| dbt staging models | 21 models | `dbt/models/staging/` |
 | dbt mart models | 57 models | `dbt/models/mart/` |
 | dbt feature models | 12 models (~400 columns) | `dbt/models/feature/` |
 
@@ -91,7 +91,19 @@ All raw tables follow an append-only design with `load_id` and `ingestion_ts` me
 | `pipeline_run_log` | `baseball_data.config` | one row per (task_name, run_ts) | Orchestration audit. Written by Snowflake task DAG. |
 | `lineup_monitor_state` | `baseball_data.config` | one row per (game_pk) | Lineup confirmation state tracking for re-scoring trigger. |
 
-## 1.8 Snowflake Tasks & Procedures
+## 1.8 Parlay API
+
+Parlay API is the replacement for The Odds API (hard cutover 2026-06-01). All tables live in `baseball_data.parlayapi`. Provisioned via `scripts/ddl/parlayapi_raw_tables.sql`. Auth: X-API-Key header for most endpoints; `/events/canonical` requires `apiKey` query param instead.
+
+| Table | Schema | Grain | Key Columns | Notes |
+|---|---|---|---|---|
+| `mlb_events_raw` | `baseball_data.parlayapi` | one row per ingestion run | `ingestion_ts`, `load_id`, `event_id`, `canonical_event_id`, `commence_time`, `home_team`, `away_team`, `raw_json` | Full response from `/v1/sports/baseball_mlb/events`. `commence_time` is 19:00:00Z placeholder for all games. |
+| `mlb_odds_raw` | `baseball_data.parlayapi` | one row per ingestion run | `ingestion_ts`, `load_id`, `event_id`, `canonical_event_id`, `bookmakers_count`, `raw_json` | Full response from `/v1/sports/baseball_mlb/odds`. Nested bookmaker→market→outcome JSON. |
+| `mlb_matches_raw` | `baseball_data.parlayapi` | one row per ingestion run | `ingestion_ts`, `load_id`, `game_date`, `record_count`, `raw_json` | From `/v1/historical/sports/baseball_mlb/matches`. Flat per-source array with game results and `has_odds` flag. |
+| `mlb_line_movement_raw` | `baseball_data.parlayapi` | one row per ingestion run per event_id | `ingestion_ts`, `load_id`, `event_id`, `record_count`, `markets_captured`, `raw_json` | From `/v1/sports/baseball_mlb/line-movement`. `raw_json` contains a nested `snapshots[]` array of timestamped price changes per (source × market). |
+| `mlb_canonical_events_raw` | `baseball_data.parlayapi` | one row per ingestion run | `ingestion_ts`, `load_id`, `sport_key`, `event_count`, `raw_json` | From `/v1/sports/baseball_mlb/events/canonical`. **Only Parlay API endpoint with real per-game start times.** Response has no `event_id` — only `canonical_event_id`. Added Story 0.10. |
+
+## 1.10 Snowflake Tasks & Procedures
 
 | Object | Type | Schedule | Purpose |
 |---|---|---|---|
@@ -146,6 +158,14 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 | `stg_fangraphs__zips_pitching` | (fg_pitcher_id, season, projection_type) — latest | Deduplicates. Unpacks ZiPS/Steamer pitching projections. | table |
 | `stg_fangraphs__zips_hitting` | (fg_batter_id, season, projection_type) — latest | Deduplicates. Unpacks ZiPS/Steamer hitting projections. | table |
 
+## 2.6 Parlay API Staging
+
+| Model | Grain | Key Transformation | Materialization |
+|---|---|---|---|
+| `stg_parlayapi_odds` | `(ingestion_ts, event_id, bookmaker_key, market_key, outcome_name)` | 3-level lateral flatten: events → bookmakers → markets → outcomes. Includes `canonical_event_id` and `source_system = 'parlay_api'` discriminator. `commence_time` is 19:00:00Z placeholder for all rows. | table |
+| `stg_parlayapi_line_movement` | `(ingestion_ts, event_id, bookmaker_key, market_key, player, snapshot_ts)` | Two-level lateral flatten: response array → per-(source × market), then `snapshots[]` → one row per timestamped price point. Live-data-only (no historical `_an`-suffix books). | table |
+| `stg_parlayapi_canonical_events` | `(ingestion_ts, canonical_event_id)` | Lateral flatten of `raw_json` array. Converts empty-string `commence_time` to NULL via `NULLIF`. Exposes real per-game scheduled start times. No `event_id` present — join via `stg_parlayapi_odds` bridge on `canonical_event_id`. **Added Story 0.10.** | table |
+
 ---
 
 # 3. dbt Mart Models
@@ -160,11 +180,11 @@ All mart models output to `baseball_data.betting`. Most materialize as `table`; 
 | `mart_odds_events` | (ingestion_ts, event_id) | table | Cleaned event snapshots from Odds API. |
 | `mart_odds_outcomes` | (event_id, bookmaker, market, outcome) | table | All bookmaker lines per market per event. |
 | `mart_odds_consensus` | (event_id, market_key) | table | Vig-free consensus probability across all books. |
-| `mart_odds_line_movement` | (event_id, market_key, snapshot_ts) | table | Intraday line movement deltas. |
+| `mart_odds_line_movement` | `game_pk` | table | Opening and pre-game implied probabilities per game. h2h and totals line movement as signed deltas (pregame − open). 2021–2025: Odds API historical snapshots. 2026+: Parlay API hourly snapshots with real commence_time leakage guard sourced from `stg_parlayapi_canonical_events` (Story 0.10). Bookmaker: bovada. |
 | `mart_closing_line_value` | (game_pk, prediction_date) | table | Model probability vs closing market odds. CLV computation. |
 | `mart_prediction_clv` | (game_pk, prediction_date) | table | Full CLV evaluation: model edge, market edge, CLV, realized outcome. |
 | `mart_bookmaker_disagreement` | (game_pk, snapshot_date) | table | Morning-snapshot spread across sharp and soft book tiers. 7 disagreement features. |
-| `mart_game_odds_bridge` | (game_pk, event_id) | table | Maps Stats API game_pk to Odds API event_id. Crosswalk for joining odds to game features. |
+| `mart_game_odds_bridge` | (game_pk, event_id) | table | Maps Stats API game_pk to Parlay API event_id (2026+) or Odds API event_id (historical). Crosswalk for joining odds snapshots to game features. |
 
 ## 3.2 Team Rolling Stats
 
@@ -388,8 +408,8 @@ This section identifies what is missing or incomplete relative to the architectu
 
 | Architecture Layer | Current State | Gap Size |
 |---|---|---|
-| Raw data ingestion | Comprehensive. Statcast, FanGraphs, Odds API, Stats API, Action Network, weather, umpires, OAA. | Small — historical weather backfill unknown. |
-| Staging layer | Complete for all current sources. | None — add new staging models as new sources are added. |
+| Raw data ingestion | Comprehensive. Statcast, FanGraphs, Odds API (historical), Parlay API (live, 2026+), Stats API, Action Network, weather, umpires, OAA. | Small — historical weather backfill unknown. Parlay API cutover 2026-06-01. |
+| Staging layer | Complete for all current sources including all 3 Parlay API staging models. | None — add new staging models as new sources are added. |
 | Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | Small — sub-model output marts not yet created. |
 | Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. | Medium — ZiPS features partially unused; sub-model signals not yet flowing. |
 | Market-blind model retrains | Ready but not yet run. | Small — scripts need updates; target date ~2026-05-22. |

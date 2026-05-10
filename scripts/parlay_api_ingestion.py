@@ -1,7 +1,7 @@
 """
 parlay_api_ingestion.py
 -----------------------
-Ingests MLB data from the Parlay API into Snowflake. Five subcommands:
+Ingests MLB data from the Parlay API into Snowflake. Six subcommands:
 
   events              — Calls /v1/sports/baseball_mlb/events and inserts the
                         full response array as a single row in the events table.
@@ -28,6 +28,16 @@ Ingests MLB data from the Parlay API into Snowflake. Five subcommands:
                         Event IDs are auto-resolved from mlb_events_raw
                         (today + tomorrow) or accepted explicitly via --event-ids.
 
+  events-canonical    — Calls /v1/sports/baseball_mlb/events/canonical and inserts
+                        the full response array as a single row in
+                        mlb_canonical_events_raw. This is the ONLY endpoint that
+                        returns real per-game start times; all other live endpoints
+                        return 19:00:00Z as a placeholder. Used by
+                        stg_parlayapi_canonical_events to supply accurate
+                        commence_time for leakage guards in mart models.
+                        Auth note: uses apiKey query param — X-API-Key header is
+                        rejected on this endpoint.
+
 Key differences from odds_api_ingestion.py:
   • Single key only — PARLAY_API_KEY; no starter-key fallback.
   • Header auth — X-API-Key header (not ?apiKey= query param).
@@ -43,12 +53,13 @@ new set of rows tagged with a shared load_id.
 
 Target tables are resolved from env vars, falling back to production defaults:
 
-    PARLAY_TARGET_DATABASE    (default: baseball_data)
-    PARLAY_TARGET_SCHEMA      (default: parlayapi)
-    PARLAY_EVENTS_TABLE       (default: mlb_events_raw)
-    PARLAY_ODDS_TABLE         (default: mlb_odds_raw)
-    PARLAY_MATCHES_TABLE      (default: mlb_matches_raw)
-    PARLAY_LINE_MOVEMENT_TABLE (default: mlb_line_movement_raw)
+    PARLAY_TARGET_DATABASE         (default: baseball_data)
+    PARLAY_TARGET_SCHEMA           (default: parlayapi)
+    PARLAY_EVENTS_TABLE            (default: mlb_events_raw)
+    PARLAY_ODDS_TABLE              (default: mlb_odds_raw)
+    PARLAY_MATCHES_TABLE           (default: mlb_matches_raw)
+    PARLAY_LINE_MOVEMENT_TABLE     (default: mlb_line_movement_raw)
+    PARLAY_CANONICAL_EVENTS_TABLE  (default: mlb_canonical_events_raw)
 
 Snowflake authentication — private key (preferred) or password fallback:
     SNOWFLAKE_ACCOUNT
@@ -78,6 +89,9 @@ Usage:
     uv run parlay_api_ingestion.py line-movement
     # Or pass specific event IDs
     uv run parlay_api_ingestion.py line-movement --event-ids id1 id2 id3
+
+    # Canonical events — real per-game start times (apiKey query param auth)
+    uv run parlay_api_ingestion.py events-canonical
 """
 
 import argparse
@@ -114,22 +128,24 @@ log = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-PARLAY_BASE_URL          = "https://parlay-api.com/v1"
-EVENTS_ENDPOINT          = "/sports/baseball_mlb/events"
-ODDS_ENDPOINT            = "/sports/baseball_mlb/odds"
-HIST_ODDS_ENDPOINT       = "/historical/sports/baseball_mlb/odds"
-HIST_MATCHES_ENDPOINT    = "/historical/sports/baseball_mlb/matches"
-LINE_MOVEMENT_ENDPOINT   = "/sports/baseball_mlb/line-movement"
+PARLAY_BASE_URL              = "https://parlay-api.com/v1"
+EVENTS_ENDPOINT              = "/sports/baseball_mlb/events"
+CANONICAL_EVENTS_ENDPOINT    = "/sports/baseball_mlb/events/canonical"
+ODDS_ENDPOINT                = "/sports/baseball_mlb/odds"
+HIST_ODDS_ENDPOINT           = "/historical/sports/baseball_mlb/odds"
+HIST_MATCHES_ENDPOINT        = "/historical/sports/baseball_mlb/matches"
+LINE_MOVEMENT_ENDPOINT       = "/sports/baseball_mlb/line-movement"
 
 SOURCE_SYSTEM = "parlay_api"
 PROCESS_NAME  = "parlay_api_ingestion.py"
 
-_DEFAULT_DATABASE             = "baseball_data"
-_DEFAULT_SCHEMA               = "parlayapi"
-_DEFAULT_EVENTS_TABLE         = "mlb_events_raw"
-_DEFAULT_ODDS_TABLE           = "mlb_odds_raw"
-_DEFAULT_MATCHES_TABLE        = "mlb_matches_raw"
-_DEFAULT_LINE_MOVEMENT_TABLE  = "mlb_line_movement_raw"
+_DEFAULT_DATABASE                   = "baseball_data"
+_DEFAULT_SCHEMA                     = "parlayapi"
+_DEFAULT_EVENTS_TABLE               = "mlb_events_raw"
+_DEFAULT_ODDS_TABLE                 = "mlb_odds_raw"
+_DEFAULT_MATCHES_TABLE              = "mlb_matches_raw"
+_DEFAULT_LINE_MOVEMENT_TABLE        = "mlb_line_movement_raw"
+_DEFAULT_CANONICAL_EVENTS_TABLE     = "mlb_canonical_events_raw"
 
 DEFAULT_MARKETS     = ["h2h", "totals"]
 DEFAULT_REGIONS     = ["us", "us2"]
@@ -168,6 +184,7 @@ class Targets:
     odds: SnowflakeTarget
     matches: SnowflakeTarget
     line_movement: SnowflakeTarget
+    canonical_events: SnowflakeTarget
 
 
 def resolve_targets() -> Targets:
@@ -189,6 +206,10 @@ def resolve_targets() -> Targets:
         line_movement = SnowflakeTarget(
             database, schema,
             os.environ.get("PARLAY_LINE_MOVEMENT_TABLE", _DEFAULT_LINE_MOVEMENT_TABLE),
+        ),
+        canonical_events = SnowflakeTarget(
+            database, schema,
+            os.environ.get("PARLAY_CANONICAL_EVENTS_TABLE", _DEFAULT_CANONICAL_EVENTS_TABLE),
         ),
     )
 
@@ -284,6 +305,29 @@ def call_parlay_api(endpoint: str, params: dict) -> ParlayApiResponse:
         url,
         headers={"X-API-Key": api_key},
         params=params,
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    result = ParlayApiResponse(response)
+    result.log_request_id()
+    return result
+
+
+def call_parlay_api_query_auth(endpoint: str, params: dict) -> ParlayApiResponse:
+    """
+    Make a GET request using apiKey as a query parameter instead of the X-API-Key
+    header. Required for /events/canonical, which rejects the header auth method.
+    The API key is NOT logged.
+    """
+    url     = f"{PARLAY_BASE_URL}{endpoint}"
+    api_key = _get_api_key()
+
+    log.info("GET %s  params=%s  (apiKey query auth)", url, params)
+
+    response = requests.get(
+        url,
+        params={**params, "apiKey": api_key},
         timeout=30,
     )
     response.raise_for_status()
@@ -568,6 +612,61 @@ def insert_line_movement_row(
             "away_team":        away_team,
             "record_count":     record_count,
             "markets_captured": json.dumps(sorted(set(markets_captured))),
+        })
+
+
+def insert_canonical_events_row(
+    conn: snowflake.connector.SnowflakeConnection,
+    *,
+    target: SnowflakeTarget,
+    ingestion_ts: datetime,
+    load_id: str,
+    call_sequence: int,
+    source_endpoint: str,
+    request_url: str,
+    request_params: dict,
+    http_status_code: int,
+    raw_json: Any,
+    sport_key: str | None,
+    event_count: int,
+) -> None:
+    sql = f"""
+        INSERT INTO {target.qualified_name} (
+            ingestion_ts, load_id,
+            source_system, process_name,
+            source_endpoint, request_url, request_params,
+            http_status_code, call_sequence,
+            raw_json,
+            sport_key, event_count
+        )
+        SELECT
+            %(ingestion_ts)s::timestamp_ntz,
+            %(load_id)s,
+            %(source_system)s,
+            %(process_name)s,
+            %(source_endpoint)s,
+            %(request_url)s,
+            PARSE_JSON(%(request_params)s),
+            %(http_status_code)s,
+            %(call_sequence)s,
+            PARSE_JSON(%(raw_json)s),
+            %(sport_key)s,
+            %(event_count)s
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, {
+            "ingestion_ts":     ingestion_ts.isoformat(),
+            "load_id":          load_id,
+            "source_system":    SOURCE_SYSTEM,
+            "process_name":     PROCESS_NAME,
+            "source_endpoint":  source_endpoint,
+            "request_url":      request_url,
+            "request_params":   json.dumps(request_params),
+            "http_status_code": http_status_code,
+            "call_sequence":    call_sequence,
+            "raw_json":         json.dumps(raw_json),
+            "sport_key":        sport_key,
+            "event_count":      event_count,
         })
 
 
@@ -1212,6 +1311,68 @@ def run_line_movement(
     )
 
 
+# ── Canonical events ─────────────────────────────────────────────────────────
+
+def run_canonical_events(
+    conn: snowflake.connector.SnowflakeConnection,
+    target: SnowflakeTarget,
+) -> None:
+    """
+    Fetch canonical events (real per-game start times) for the MLB and store
+    the full response as one row per ingestion run.
+
+    Auth: apiKey query parameter — X-API-Key header is rejected on this endpoint.
+    The endpoint returns upcoming events with their actual scheduled start times,
+    unlike /events which returns 19:00:00Z for all games in a daily slate.
+    """
+    load_id      = str(uuid.uuid4())
+    ingestion_ts = datetime.now(tz=timezone.utc)
+    params: dict = {}   # no filter params; endpoint returns all upcoming MLB events
+
+    log.info(
+        "Canonical events ingest → %s  load_id=%s",
+        target.qualified_name, load_id,
+    )
+
+    try:
+        result = call_parlay_api_query_auth(CANONICAL_EVENTS_ENDPOINT, params)
+    except requests.HTTPError as exc:
+        log.error("HTTP error fetching canonical events: %s", exc)
+        return
+    except requests.RequestException as exc:
+        log.error("Request failed fetching canonical events: %s", exc)
+        return
+
+    payload     = result.payload
+    event_count = len(payload) if isinstance(payload, list) else 0
+    log.info("  %d canonical event(s) in response", event_count)
+
+    first_event = payload[0] if isinstance(payload, list) and payload else {}
+    sport_key   = first_event.get("sport_key")
+
+    try:
+        insert_canonical_events_row(
+            conn,
+            target            = target,
+            ingestion_ts      = ingestion_ts,
+            load_id           = load_id,
+            call_sequence     = 1,
+            source_endpoint   = CANONICAL_EVENTS_ENDPOINT,
+            request_url       = result.url,
+            request_params    = params,
+            http_status_code  = result.status_code,
+            raw_json          = payload,
+            sport_key         = sport_key,
+            event_count       = event_count,
+        )
+        log.info(
+            "Canonical events ingest complete — 1 row inserted, %d event(s) in payload (load_id=%s)",
+            event_count, load_id,
+        )
+    except Exception as exc:
+        log.error("Snowflake write failed: %s", exc)
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1346,6 +1507,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # events-canonical
+    sub.add_parser(
+        "events-canonical",
+        help=(
+            "Fetch canonical MLB events with real per-game start times. "
+            "Auth via apiKey query param (X-API-Key header rejected on this endpoint). "
+            "Stores one row per run in mlb_canonical_events_raw."
+        ),
+    )
+
     return parser
 
 
@@ -1398,6 +1569,9 @@ def main() -> None:
                 targets.line_movement,
                 event_ids = args.event_ids,
             )
+
+        elif args.command == "events-canonical":
+            run_canonical_events(conn, targets.canonical_events)
 
     finally:
         conn.close()

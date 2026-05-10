@@ -160,6 +160,357 @@ models:
       - name: x_requests_remaining
         description: API credits remaining as of this request. Null if header absent.
 
+  # ── Parlay API staging models ────────────────────────────────────────────────
+
+  - name: stg_parlayapi_odds
+    description: >
+      Staged MLB betting odds from baseball_data.parlayapi.mlb_odds_raw.
+      Grain: one row per (ingestion_ts, event_id, bookmaker_key, market_key,
+      outcome_name). Three levels of lateral flatten expand the nested structure:
+      bookmakers[] → markets[] → outcomes[]. Rows where raw_json is null or
+      missing the bookmakers array are excluded. Rows where the outcome price is
+      null are excluded (Parlay API omits the away-side price for some bookmakers
+      in the live endpoint).
+
+      Schema differences vs stg_oddsapi_odds:
+        • source_system is always 'parlay_api' (discriminator column).
+        • canonical_event_id is a Parlay API cross-source stable event ID; null
+          for historical rows ingested via the historical-odds endpoint.
+        • game_date is derived from commence_time::date (convenience column).
+        • doubleheader_ambiguous is true when StatsAPI records a traditional (Y)
+          or split (S) doubleheader for the same (game_date, home_team, away_team).
+          The Parlay API collapses both DH games into a single event; this flag
+          surfaces the ambiguity. Support ticket open as of 2026-05-10.
+        • commence_time is always 19:00:00Z (slate placeholder) — not actual start time;
+          use game_date for the calendar date and ingestion_ts for snapshot timing.
+        • bookmaker_last_update is the authoritative signal for when a line moved on
+          live endpoint rows; placeholder/null on historical rows.
+        • market_last_update is more granular than bookmaker_last_update (per-market);
+          null for historical rows.
+        • region_requested is always null — Parlay API has no region parameter.
+        • x_requests_used/remaining are always null — Parlay API does not expose these headers.
+        • bookmaker keys use _an suffix in historical data (draftkings_an, fanduel_an)
+          vs non-suffixed in live data (draftkings, fanduel) — same books, different key strings.
+        • No deduplication CTE — Parlay API has no dual-region overlap like Odds API.
+
+    columns:
+      - name: ingestion_ts
+        description: >
+          Wall-clock UTC timestamp of when this snapshot was captured by the
+          ingestion pipeline. Together with bookmaker_last_update, this gives
+          the full temporal picture: ingestion_ts is when we sampled the market;
+          bookmaker_last_update is when the bookmaker last moved their line.
+        tests: [not_null]
+
+      - name: load_id
+        description: UUID identifying the ingestion run.
+        tests: [not_null]
+
+      - name: market_requested
+        description: >
+          Market key passed in the API request that produced this row
+          (from request_params). Useful for tracing which call generated the row.
+
+      - name: region_requested
+        description: >
+          Always null — Parlay API has no region parameter. Retained for
+          schema symmetry with stg_oddsapi_odds.
+
+      - name: x_requests_used
+        description: Always null — Parlay API does not expose the x-requests-used header.
+
+      - name: x_requests_remaining
+        description: Always null — Parlay API does not expose the x-requests-remaining header.
+
+      - name: source_system
+        description: Always 'parlay_api'. Discriminator column for downstream UNION ALL with stg_oddsapi_odds.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['parlay_api']
+
+      - name: event_id
+        description: >
+          Parlay API event identifier. Joins to the parlayapi source system. Note: for
+          historical data, the event_id format may differ from live endpoint event IDs.
+        tests: [not_null]
+
+      - name: canonical_event_id
+        description: >
+          Parlay API cross-source stable event ID. Null for historical rows ingested
+          via the historical-odds endpoint (field absent from that endpoint's response).
+
+      - name: sport_key
+        description: Sport key. Always 'baseball_mlb' for this source.
+
+      - name: sport_title
+        description: Human-readable sport title. Always 'MLB' for this source.
+
+      - name: commence_time
+        description: >
+          Scheduled game start time. NOTE: Parlay API returns 19:00:00Z as a slate
+          placeholder for ALL games — this is not the actual game start time.
+        tests: [not_null]
+
+      - name: game_date
+        description: >
+          Calendar date derived from commence_time::date. Convenience column; equivalent
+          to commence_time::date. Because commence_time is a slate placeholder (19:00:00Z),
+          game_date reliably represents the game's calendar date.
+        tests: [not_null]
+
+      - name: home_team
+        description: Full team name of the home team.
+        tests: [not_null]
+
+      - name: away_team
+        description: Full team name of the away team.
+        tests: [not_null]
+
+      - name: doubleheader_ambiguous
+        description: >
+          True when StatsAPI records a traditional (Y) or split (S) doubleheader for
+          the same (game_date, home_team, away_team) combination. The Parlay API
+          collapses both games of a doubleheader into a single event with one set
+          of odds — this flag surfaces that ambiguity so downstream models can
+          exclude or caveat affected rows. Support ticket open as of 2026-05-10;
+          expected to be resolved before the 2026-06-01 cutover deadline.
+        tests: [not_null]
+
+      - name: bookmaker_key
+        description: >
+          Slug identifying the bookmaker. Historical data uses an _an suffix
+          (e.g. 'draftkings_an', 'fanduel_an'); live data omits it ('draftkings',
+          'fanduel'). Same underlying bookmakers, different key strings.
+        tests: [not_null]
+
+      - name: bookmaker_title
+        description: Display name of the bookmaker.
+
+      - name: bookmaker_last_update
+        description: >
+          UTC timestamp when this bookmaker last updated their odds, as reported by
+          the Parlay API. For live endpoint rows this is the primary signal for when
+          a line actually moved — use this (not ingestion_ts) to reason about the
+          age of a price at capture time. Null or a placeholder value in historical
+          rows (historical endpoint does not carry meaningful last_update timestamps).
+
+      - name: market_key
+        description: >
+          Market type (e.g. 'h2h' for moneyline, 'totals' for over/under,
+          'spreads' for run line).
+        tests: [not_null]
+
+      - name: market_last_update
+        description: >
+          UTC timestamp when this specific market last updated, as reported by the
+          Parlay API. More granular than bookmaker_last_update — a book may update
+          their h2h line without touching totals. Null for historical odds rows
+          (historical endpoint does not include this field).
+
+      - name: outcome_name
+        description: >
+          Name of the outcome. For h2h: team name (home or away). For totals:
+          'Over' or 'Under'. For spreads: team name.
+        tests: [not_null]
+
+      - name: outcome_price_american
+        description: >
+          American-format odds for this outcome (e.g. -110, +150). Rows where
+          this is null after ::integer cast are filtered out in the staging model.
+          Parlay API sends explicit JSON null for some away-side prices (e.g. Caesars);
+          in Snowflake VARIANT, JSON null passes IS NOT NULL but produces SQL NULL
+          on cast — so the filter targets the cast result directly.
+        tests: [not_null]
+
+      - name: outcome_price_decimal
+        description: >
+          Decimal-format odds derived from outcome_price_american.
+          Positive American (≥100): (american / 100.0) + 1. Negative American (<0):
+          (100.0 / ABS(american)) + 1. Zero prices produce null (guard against
+          division by zero on malformed API responses).
+          E.g. +150 → 2.50, -110 → ~1.909, -200 → 1.50.
+        tests:
+          - not_null:
+              config:
+                where: "outcome_price_american is not null and outcome_price_american != 0"
+
+      - name: outcome_point
+        description: >
+          Total line or spread value for this outcome. Non-null for totals (e.g. 9.5)
+          and spreads markets. Null for h2h outcomes.
+
+  - name: stg_parlayapi_line_movement
+    description: >
+      Staged Parlay API line-movement data from parlayapi.mlb_line_movement_raw.
+      Grain: one row per (ingestion_ts, event_id, bookmaker_key, market_key,
+      player, snapshot_ts). Two lateral flattens: the top-level raw_json array
+      (one record per source × market_key × player) and the snapshots[] array
+      within each record (one row per timestamped price point).
+      Covers team markets (moneyline, totals) and player props (strikeouts,
+      total bases, home runs, etc.). Use snapshot_ts — not ingestion_ts — as
+      the authoritative timestamp for leakage guards. Live endpoint only;
+      no historical backfill path exists.
+
+    columns:
+
+      - name: ingestion_ts
+        description: Wall-clock UTC time the row was written to Snowflake (from the raw table).
+        tests: [not_null]
+
+      - name: load_id
+        description: UUID grouping all rows produced by the same ingestion run.
+        tests: [not_null]
+
+      - name: event_id
+        description: Parlay API event identifier. Joins to stg_parlayapi_odds.event_id and mart_game_odds_bridge.parlay_api_event_id.
+        tests: [not_null]
+
+      - name: home_team
+        description: Full home team name as returned by the Parlay API.
+        tests: [not_null]
+
+      - name: away_team
+        description: Full away team name as returned by the Parlay API.
+        tests: [not_null]
+
+      - name: bookmaker_key
+        description: Bookmaker slug (e.g. 'fanduel', 'draftkings'). Non-suffixed live keys only — this endpoint is live-only.
+        tests: [not_null]
+
+      - name: player
+        description: Player name for player prop markets. Null for team markets (moneyline, totals).
+
+      - name: market_key
+        description: Market type (e.g. 'moneyline', 'totals', 'player_strikeouts').
+        tests: [not_null]
+
+      - name: current_line
+        description: Current total or prop line value. Null for moneyline markets.
+
+      - name: snapshot_count
+        description: Total number of snapshots Parlay API has captured for this (source × market × player) series.
+
+      - name: hours_tracked
+        description: Number of hours this market has been tracked by Parlay API.
+
+      - name: opening_over_price
+        description: American odds at the first snapshot captured for the over/home outcome.
+
+      - name: opening_under_price
+        description: American odds at the first snapshot captured for the under/away outcome.
+
+      - name: current_over_price
+        description: American odds at the most recent snapshot for the over/home outcome.
+
+      - name: current_under_price
+        description: American odds at the most recent snapshot for the under/away outcome.
+
+      - name: over_movement
+        description: Price movement in American odds points (current_over - opening_over). Negative = odds shortened.
+
+      - name: snapshot_ts
+        description: >
+          UTC timestamp of this specific price snapshot. Use this column — not ingestion_ts —
+          as the authoritative timestamp for leakage guards and time-series feature engineering.
+        tests: [not_null]
+
+      - name: snapshot_ts_ms
+        description: Millisecond epoch timestamp of this snapshot (raw from API).
+
+      - name: snapshot_over_price
+        description: American odds for the over/home outcome at this snapshot.
+        tests: [not_null]
+
+      - name: snapshot_under_price
+        description: American odds for the under/away outcome at this snapshot.
+        tests: [not_null]
+
+      - name: snapshot_line
+        description: Total or prop line value at this snapshot. Null for moneyline snapshots.
+
+      - name: snapshot_over_price_decimal
+        description: >
+          Decimal-format odds for the over/home outcome at this snapshot. Positive American
+          (≥100): (american / 100.0) + 1. Negative (<0): (100.0 / ABS(american)) + 1.
+          Zero prices produce null.
+
+      - name: snapshot_under_price_decimal
+        description: >
+          Decimal-format odds for the under/away outcome at this snapshot. Same conversion
+          as snapshot_over_price_decimal.
+
+      - name: is_player_prop
+        description: True when player is non-null (this row is a player prop market).
+        tests: [not_null]
+
+      - name: is_h2h_market
+        description: True when market_key = 'moneyline'.
+        tests: [not_null]
+
+      - name: is_totals_market
+        description: True when market_key = 'totals'.
+        tests: [not_null]
+
+  - name: stg_parlayapi_canonical_events
+    description: >
+      Staged canonical events from parlayapi.mlb_canonical_events_raw.
+      Grain: one row per (ingestion_ts, canonical_event_id). Flattens the
+      raw_json response array from the /sports/baseball_mlb/events/canonical
+      endpoint, which is the ONLY Parlay API endpoint that returns real
+      per-game scheduled start times. All other live endpoints return
+      19:00:00Z as a placeholder. The response contains no ephemeral event_id
+      (Parlay-specific id) — only the stable canonical_event_id. To map back
+      to event_id, join to stg_parlayapi_odds on canonical_event_id.
+      Primary use: supply accurate commence_time to mart_odds_line_movement for
+      the ingestion_ts < commence_time leakage guard (Story 0.10).
+
+    columns:
+
+      - name: ingestion_ts
+        description: Wall-clock UTC timestamp when the raw row was written to Snowflake.
+        tests: [not_null]
+
+      - name: load_id
+        description: UUID grouping all rows produced by the same ingestion run.
+        tests: [not_null]
+
+      - name: canonical_event_id
+        description: >
+          Stable cross-source event identifier (16-char hex). Consistent across
+          API calls and bookmakers for the same game. Join key for downstream
+          models. Also present in stg_parlayapi_odds.canonical_event_id.
+          Note: the /events/canonical response does NOT include the ephemeral
+          Parlay event_id — this is the only identifier available here.
+        tests: [not_null]
+
+      - name: home_team
+        description: Full home team name as returned by the Parlay API.
+
+      - name: away_team
+        description: Full away team name as returned by the Parlay API.
+
+      - name: sport_key
+        description: Sport key. Always 'baseball_mlb' for this source.
+
+      - name: commence_time
+        description: >
+          Real scheduled game start time in UTC (TIMESTAMP_NTZ). This is the
+          authoritative start time for leakage guards. Null when Parlay API has
+          not yet confirmed the start time — the API returns an empty string in
+          this case, which is converted to null via NULLIF. Downstream joins must
+          treat null as unknown — do not use as a hard exclusion filter.
+
+      - name: game_date
+        description: >
+          Calendar date of the game, sourced directly from the game_date field
+          in the API response (YYYY-MM-DD string). Reliable even when
+          commence_time is null (unscheduled games still carry a game_date).
+
+      - name: source_count
+        description: Number of bookmaker sources tracking this event per the canonical response.
+
   # ── Statcast / Savant staging models ─────────────────────────────────────────
 
   - name: stg_batter_pitches
