@@ -66,6 +66,19 @@ jobs:
           PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
         run: uv run parlay_api_ingestion.py events
 
+      # Canonical events: real per-game start times (placeholder commence_time fix).
+      # Auth uses apiKey query param — X-API-Key header rejected on this endpoint.
+      - name: Ingest Parlay API canonical events
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+        run: uv run parlay_api_ingestion.py events-canonical
+
       - name: Ingest Parlay API odds
         working-directory: scripts
         env:

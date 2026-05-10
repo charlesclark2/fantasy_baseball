@@ -1,6 +1,162 @@
 version: 2
 
 sources:
+  - name: parlayapi
+    database: baseball_data
+    schema: parlayapi
+    description: >
+      Raw betting market data from Parlay API, ingested via
+      scripts/parlay_api_ingestion.py. Replaces The Odds API as the primary live
+      odds source after 2026-05-23. All tables are append-only; raw JSON stored
+      at full fidelity. No x_requests_used/remaining headers — credit tracking
+      is handled via call-count logging in the ingestion script.
+
+    tables:
+      - name: mlb_odds_raw
+        description: >
+          One row per event per ingestion call of the /sports/baseball_mlb/odds
+          or /historical/sports/baseball_mlb/odds endpoint. raw_json holds the
+          full event object including the nested bookmakers → markets → outcomes
+          structure. Identical nesting to oddsapi.mlb_odds_raw with two
+          differences: canonical_event_id is present (null for historical rows),
+          and commence_time is a slate placeholder (19:00:00Z) for all games —
+          not the actual scheduled start time.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: raw_json
+            description: >
+              Full event object as VARIANT. Nested structure:
+              bookmakers[] → markets[] → outcomes[]. Each bookmaker entry
+              includes key, title, last_update, and a markets array. Each market
+              entry includes key, optionally last_update (absent in historical
+              rows), and an outcomes array. Each outcome includes name and price
+              (American odds); optionally point for totals markets. Some
+              bookmakers return null for the away-side price in the live endpoint.
+            tests: [not_null]
+          - name: event_id
+            description: Parlay API event identifier. Joins to stg_parlayapi_odds.event_id.
+          - name: canonical_event_id
+            description: >
+              Cross-source stable event ID. Present in live endpoint responses;
+              null in historical odds responses.
+          - name: bookmakers_count
+            description: Number of bookmakers in the raw_json payload. Convenience field.
+
+      - name: mlb_events_raw
+        description: >
+          One row per ingestion call of the /sports/baseball_mlb/events endpoint.
+          raw_json holds the full response array of upcoming MLB events for the
+          requested time window. The live events endpoint returns canonical_event_id
+          (cross-source stable ID) in addition to the Parlay-specific event id.
+          Note: commence_time is a slate placeholder (19:00:00Z) for all games.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: raw_json
+            description: Full API response as VARIANT. Array of event objects.
+            tests: [not_null]
+
+      - name: mlb_matches_raw
+        description: >
+          One row per date queried against /historical/sports/baseball_mlb/matches.
+          raw_json holds the full response array; one element per (game × bookmaker
+          source). Includes home_score, away_score, result, and has_odds flag. The
+          matches endpoint collapses doubleheader games into a single record — the
+          same limitation as the odds endpoint (support ticket open 2026-05-10).
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: game_date
+            description: Calendar date the matches were queried for.
+            tests: [not_null]
+          - name: raw_json
+            description: >
+              Full response array as VARIANT. Each element is one (game × source)
+              record with fields: home_team, away_team, home_score, away_score,
+              result, has_odds, season, source, sport_key, sport_title, game_date.
+            tests: [not_null]
+
+      - name: mlb_line_movement_raw
+        description: >
+          One row per event_id per ingestion call of the
+          /sports/baseball_mlb/line-movement endpoint. Called once per event_id
+          per odds_snapshot.yml run. raw_json holds the full response array for
+          that event: one element per (source × market_key × player). Each element
+          contains opening/current/movement summary fields plus a snapshots[]
+          array of timestamped price points. Grain is intentionally coarse at the
+          raw layer — the staging model (stg_parlayapi_line_movement) explodes both
+          arrays to one row per (ingestion_ts, event_id, source, market_key,
+          player, snapshot_ts).
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: event_id
+            description: Parlay API event identifier that was queried.
+            tests: [not_null]
+          - name: raw_json
+            description: >
+              Full response array as VARIANT. Each element is one
+              (source × market_key × player) record with fields: event_id,
+              home_team, away_team, source, player, market_key, line,
+              opening_over, current_over, over_movement, opening_under,
+              current_under, count, hours_tracked, snapshots[].
+              snapshots[] contains: timestamp_ms, time, over_price,
+              under_price, line.
+            tests: [not_null]
+          - name: record_count
+            description: Number of (source × market × player) records in raw_json.
+          - name: markets_captured
+            description: >
+              VARIANT array of distinct market_key values present in the
+              response. Convenience field for auditing market coverage.
+
+      - name: mlb_canonical_events_raw
+        description: >
+          One row per ingestion call of the
+          /sports/baseball_mlb/events/canonical endpoint. This is the ONLY Parlay
+          API endpoint that returns real per-game scheduled start times. All other
+          live endpoints (/events, /odds) return 19:00:00Z as a date-bucket
+          placeholder for every game in a daily slate.
+          Auth uses apiKey as a query parameter — the X-API-Key header is rejected
+          on this endpoint. Ingested daily via events-canonical subcommand in
+          parlay_api_ingestion.py. raw_json holds the full response array; the
+          staging model (stg_parlayapi_canonical_events) flattens to one row per
+          (ingestion_ts, event_id) with the real commence_time exposed.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: raw_json
+            description: >
+              Full response array as VARIANT. Each element is one event object
+              with fields: id (Parlay event_id), canonical_event_id, sport_key,
+              home_team, away_team, commence_time (real scheduled UTC start),
+              source_count (number of bookmaker sources tracking the event).
+              commence_time may be null for games without a confirmed start time.
+            tests: [not_null]
+          - name: event_count
+            description: Number of events in the raw_json array. Convenience field.
+
   - name: oddsapi
     database: baseball_data
     schema: oddsapi

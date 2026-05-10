@@ -7,15 +7,18 @@
 --
 -- Data sources by era:
 --   2021–2025  baseball_data.oddsapi.odds_snapshots_historical  (Card 7.P2 backfill)
---   2026+      mart_odds_outcomes filtered to ingestion_ts < commence_time
+--   2026+      mart_odds_outcomes (Parlay API hourly snapshots via odds_snapshot.yml,
+--              ~15 captures/game-day) filtered to ingestion_ts < commence_time
 --
 -- Bookmaker: bovada (hardcoded). The Card 7.P2 historical backfill used bovada;
---   using the same bookmaker for live 2026 data ensures consistent implied-prob
---   scale across eras. Future enhancement: make bookmaker configurable.
+--   Parlay API also carries bovada, ensuring consistent implied-prob scale across
+--   eras. Future enhancement: make bookmaker configurable.
 --
 -- Leakage guard: all snapshots must have snapshot_ts < game commence_time.
 --   For historical rows the guard uses stg_statsapi_games.game_date (TIMESTAMP_TZ).
---   For live rows the guard uses mart_odds_outcomes.commence_time directly.
+--   For live rows the guard uses the real commence_time from
+--   stg_parlayapi_canonical_events, with fallback to mart_odds_outcomes.commence_time
+--   (the 19:00:00Z placeholder) when canonical data is absent for an event.
 --
 -- Null handling:
 --   h2h_line_movement / total_line_movement are NULL when snapshot_count = 1
@@ -60,6 +63,37 @@ historical as (
       and (gt.commence_time is null or h.snapshot_ts < gt.commence_time)
 ),
 
+-- ── Real game start times (Story 0.10) ───────────────────────────────────────
+-- Parlay API /events and /odds return 19:00:00Z as a placeholder for all games.
+-- /events/canonical is the only endpoint with real per-game start times, but it
+-- exposes only canonical_event_id (no ephemeral event_id).
+--
+-- Bridge: stg_parlayapi_odds maps event_id ↔ canonical_event_id for Parlay rows.
+-- canonical_times resolves to one real commence_time per event_id.
+-- Left-joined in live_raw so the mart degrades gracefully when canonical data is
+-- absent (falls back to the 19:00:00Z placeholder).
+event_canonical_bridge as (
+    select distinct
+        event_id,
+        canonical_event_id
+    from {{ ref('stg_parlayapi_odds') }}
+    where source_system = 'parlay_api'
+      and canonical_event_id is not null
+),
+
+canonical_times as (
+    select
+        b.event_id,
+        c.commence_time
+    from {{ ref('stg_parlayapi_canonical_events') }} c
+    inner join event_canonical_bridge b
+        on  b.canonical_event_id = c.canonical_event_id
+    qualify row_number() over (
+        partition by b.event_id
+        order by c.ingestion_ts desc
+    ) = 1
+),
+
 -- ── Live snapshots (2026+) ────────────────────────────────────────────────────
 -- mart_odds_outcomes has one row per (ingestion_ts, event_id, bookmaker_key,
 -- market_key, outcome_name). Pivot to game-level row with home_win_prob + total_line.
@@ -67,7 +101,8 @@ live_raw as (
     select
         o.ingestion_ts                                              as snapshot_ts,
         o.event_id,
-        o.commence_time,
+        -- Use real game start time from canonical events; fall back to placeholder.
+        coalesce(ct.commence_time, o.commence_time)                 as commence_time,
         o.home_team,
         o.away_team,
         o.bookmaker_key                                             as bookmaker,
@@ -82,9 +117,11 @@ live_raw as (
             then o.outcome_point
         end                                                         as total_line_val
     from {{ ref('mart_odds_outcomes') }} o
+    left join canonical_times ct
+        on  ct.event_id = o.event_id
     where o.bookmaker_key = 'bovada'
       and o.market_key in ('h2h', 'totals')
-      and o.ingestion_ts < o.commence_time   -- leakage guard
+      and o.ingestion_ts < coalesce(ct.commence_time, o.commence_time)
 ),
 
 live_pivoted as (

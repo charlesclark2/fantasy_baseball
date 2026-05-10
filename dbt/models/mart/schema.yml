@@ -145,8 +145,12 @@ models:
       One row per game_pk. Opening and pre-game implied home-win probability and
       O/U total line, computed from intraday odds snapshots. Exposes h2h and
       totals line movement as signed deltas (pregame − open). Bookmaker: bovada.
-      Sources: odds_snapshots_historical (2021–2025, Card 7.P2) and
-      mart_odds_outcomes filtered to pre-game ingestions (2026+). Card 7.P3.
+      Sources: odds_snapshots_historical (2021–2025, Card 7.P2 backfill) and
+      mart_odds_outcomes filtered to pre-game ingestions (2026+, Parlay API
+      hourly snapshots via odds_snapshot.yml). Card 7.P3.
+      Leakage guard (2026+ live path): ingestion_ts < real commence_time sourced
+      from stg_parlayapi_canonical_events (Story 0.10). Falls back to the Parlay
+      API placeholder (19:00:00Z) for events not yet in the canonical table.
 
     columns:
 
@@ -182,7 +186,7 @@ models:
                 values: ['historical', 'live']
 
       - name: bookmaker
-        description: OddsAPI bookmaker key used (bovada).
+        description: Bookmaker key used (bovada for all eras).
 
   # ============================================================================
   # mart_game_odds_bridge
@@ -190,16 +194,18 @@ models:
   - name: mart_game_odds_bridge
     description: >
       Bridge table linking every game in mart_game_results to its corresponding
-      event in mart_odds_events. Enables downstream models to combine game
-      outcomes with pre-game betting odds.
+      odds event_id(s) from The Odds API and/or Parlay API. Enables downstream
+      models to combine game outcomes with pre-game betting odds from either source.
+      Two source-specific columns (odds_api_event_id, parlay_api_event_id) preserve
+      the full audit trail. The coalesced event_id column prefers Parlay API when
+      both exist, falling back to Odds API for historical games — use this column
+      for all downstream joins to mart_odds_outcomes.
+      Priority by era: 2021–2025 = Odds API only; 2026 overlap = Parlay preferred;
+      2026 post-cutover = Parlay API only.
       Join logic: game_date = commence_date AND home_team_name = odds home_team
       AND away_team_name = odds away_team (full team names, after normalization).
-      Odds API team names are normalized to Stats API canonical names before
-      joining: "Cleveland Indians" → "Cleveland Guardians" (2021 only),
-      "Oakland Athletics" → "Athletics" (2021-2025).
-      All game_pk rows are preserved; event_id is null when no odds event was
-      ingested for that game (not all games appear in The Odds API historical
-      data; ~74-77% of regular season games have a matching event 2021-2025).
+      Both sources are normalized: "Cleveland Indians" → "Cleveland Guardians"
+      (2021), "Oakland Athletics" → "Athletics" (2021–2025).
       Grain: one row per game_pk.
 
     columns:
@@ -245,17 +251,31 @@ models:
         tests:
           - not_null
 
+      - name: odds_api_event_id
+        description: >
+          The Odds API event identifier for this game. Sourced from mart_odds_events.
+          Null for games after the Odds API cutover (2026-05-23) and for any historical
+          game not covered by The Odds API (~23-26% of regular season games 2021–2025).
+
+      - name: parlay_api_event_id
+        description: >
+          The Parlay API event identifier for this game. Sourced from stg_parlayapi_odds.
+          Null for historical games (2021–2025) that predate Parlay API ingestion.
+          For doubleheader games, Parlay API collapses both games into one event_id —
+          the second DH game_pk will have this column null (support ticket open).
+
       - name: event_id
         description: >
-          The Odds API event identifier. Foreign key to
-          mart_odds_events.event_id. Null when no odds event was ingested for
-          this game.
+          Coalesced event identifier: COALESCE(parlay_api_event_id, odds_api_event_id).
+          Parlay API is preferred when both are present (overlap period). Use this
+          column for all downstream joins to mart_odds_outcomes — it automatically
+          routes to Parlay API rows for 2026 games and Odds API rows for 2021–2025.
+          Null only when neither source has odds for this game.
 
       - name: has_odds
         description: >
-          True when event_id is not null, indicating at least one odds snapshot
-          exists for this game. False for all historical games predating odds
-          ingestion.
+          True when at least one odds source (Odds API or Parlay API) has an event_id
+          for this game. False for games with no odds coverage from either source.
         tests:
           - not_null
 
@@ -332,16 +352,17 @@ models:
   # ============================================================================
   - name: mart_odds_outcomes
     description: >
-      Full history of odds outcomes from The Odds API across all bookmakers
-      and markets. One row per (ingestion_ts, event_id, bookmaker_key,
-      market_key, outcome_name). Historical snapshots are preserved so
-      downstream models can analyze line movement and cross-bookmaker
-      comparisons over time. Within a single load_id, duplicates are
-      removed when the same bookmaker appears in both the us and us2
-      region responses.
+      Unified odds outcomes from all ingestion sources. One row per
+      (ingestion_ts, event_id, bookmaker_key, market_key, outcome_name).
+      Historical rows (2021–2025) come from The Odds API; live rows (2026+)
+      come from both Odds API and Parlay API during the parallel overlap
+      period (through 2026-05-23), then Parlay API only after the 2026-06-01
+      cutover. source_system discriminates the row origin. Odds API rows are
+      deduplicated within a load_id to prevent duplicate rows from us/us2
+      region overlap; Parlay API rows have no regional duplication.
       Grain: one row per (ingestion_ts, event_id, bookmaker_key, market_key,
       outcome_name).
-      Join key: event_id → mart_odds_events.
+      Discriminator: source_system ('odds_api' | 'parlay_api').
 
     columns:
 
@@ -356,30 +377,46 @@ models:
           - not_null
 
       - name: x_requests_used
-        description: Value of the x-requests-used API response header at ingestion time.
+        description: >
+          Value of the x-requests-used API response header at ingestion time.
+          Always null for Parlay API rows (header not exposed by that API).
 
       - name: x_requests_remaining
-        description: Value of the x-requests-remaining API response header at ingestion time.
+        description: >
+          Value of the x-requests-remaining API response header at ingestion time.
+          Always null for Parlay API rows (header not exposed by that API).
 
       - name: market_requested
         description: >
-          The markets query parameter sent to The Odds API for this row's
+          The markets query parameter sent to the upstream API for this row's
           ingestion run (e.g. h2h,totals).
 
       - name: region_requested
         description: >
-          The regions query parameter sent to The Odds API for this row's
-          ingestion run (e.g. us,us2).
+          The regions query parameter sent to The Odds API (e.g. us,us2).
+          Always null for Parlay API rows (no region parameter in that API).
+
+      - name: source_system
+        description: >
+          Discriminator identifying which upstream API produced this row.
+          'odds_api' for The Odds API (historical 2021–2025 and overlap period).
+          'parlay_api' for the Parlay API (2026+ live and post-cutover).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['odds_api', 'parlay_api']
 
       - name: event_id
         description: >
-          Unique event identifier assigned by The Odds API. Foreign key to
-          mart_odds_events.event_id.
+          Unique event identifier assigned by the upstream API. For Odds API
+          rows, this is the Odds API event ID (FK to mart_odds_events). For
+          Parlay API rows, this is the Parlay API event ID.
         tests:
           - not_null
 
       - name: sport_key
-        description: Sport key from The Odds API (e.g. baseball_mlb).
+        description: Sport key from the upstream API (e.g. baseball_mlb).
         tests:
           - not_null
 
@@ -389,12 +426,19 @@ models:
           - not_null
 
       - name: commence_time
-        description: Scheduled game start time in UTC (TIMESTAMP_NTZ).
+        description: >
+          Scheduled game start time in UTC (TIMESTAMP_NTZ).
+          For Parlay API rows, this is a 19:00:00Z slate placeholder for all
+          games — not the actual start time. Use bookmaker_last_update for
+          pre-game leakage guards when working with Parlay API rows.
         tests:
           - not_null
 
       - name: commence_date
-        description: Scheduled game start date in UTC, derived from commence_time.
+        description: >
+          Game date in US/Pacific timezone, derived from commence_time via
+          convert_timezone. For Parlay API rows, derived from the 19:00:00Z
+          placeholder; reliable as a date but not a time.
         tests:
           - not_null
 
@@ -408,8 +452,21 @@ models:
         tests:
           - not_null
 
+      - name: doubleheader_ambiguous
+        description: >
+          True when StatsAPI records a traditional (Y) or split (S) doubleheader
+          for this (date, home_team, away_team) combination. The Parlay API
+          collapses both DH games into a single event_id, so rows with this flag
+          set represent ambiguous data. Always false for Odds API rows.
+        tests:
+          - not_null
+
       - name: bookmaker_key
-        description: Machine-readable bookmaker identifier (e.g. draftkings, fanduel).
+        description: >
+          Machine-readable bookmaker identifier (e.g. draftkings, fanduel).
+          For historical Parlay API rows, bookmaker keys carry an _an suffix
+          (e.g. draftkings_an, fanduel_an). Live Parlay API rows (2026+) use
+          non-suffixed keys identical to Odds API keys.
         tests:
           - not_null
 
@@ -419,7 +476,10 @@ models:
           - not_null
 
       - name: bookmaker_last_update
-        description: Timestamp when the bookmaker last updated their odds for this event.
+        description: >
+          Timestamp when the bookmaker last updated their odds for this event.
+          For historical Parlay API rows (from the /historical endpoint), this
+          is a placeholder timestamp rather than the true update time.
 
       - name: market_key
         description: >
@@ -429,7 +489,9 @@ models:
           - not_null
 
       - name: market_last_update
-        description: Timestamp when this market's odds were last updated.
+        description: >
+          Timestamp when this market's odds were last updated.
+          Null for historical Parlay API rows (field absent from /historical endpoint).
 
       - name: outcome_name
         description: >
@@ -442,6 +504,8 @@ models:
         description: >
           American-format odds for this outcome (e.g. -110, +150). Negative
           values indicate a favorite; positive values indicate an underdog.
+          Rows where the upstream API sent explicit JSON null for price are
+          excluded at the staging layer.
         tests:
           - not_null
 
@@ -449,11 +513,12 @@ models:
         description: >
           Decimal-format odds derived from outcome_price_american.
           Positive American (≥100): (american / 100.0) + 1. Negative American (<0): (100.0 / ABS(american)) + 1.
-          E.g. +150 → 2.50, -110 → ~1.909, -200 → 1.50. Passed through from stg_oddsapi_odds.
+          E.g. +150 → 2.50, -110 → ~1.909, -200 → 1.50.
+          Null when outcome_price_american is zero (guard against division by zero).
         tests:
           - not_null:
               config:
-                where: "outcome_price_american is not null"
+                where: "outcome_price_american is not null and outcome_price_american != 0"
 
       - name: outcome_point
         description: >
