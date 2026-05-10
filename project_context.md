@@ -4295,6 +4295,41 @@ Single batch retrain checkpoint for the home_win, total_runs, and run_differenti
 
 ---
 
+### Post-Phase-8 Hotfixes (2026-05-10)
+
+#### Hotfix — `predict_today.py` distribution mismatch + feature-set mismatch
+
+**Problem:** Two silent bugs caused every `p_over_ngboost` prediction for `total_runs` to read 81–99% (market lines 7.5–9.8) and `pred_total_runs` to be inflated to 13–17 instead of ~8–9.
+
+**Bug 1 — Distribution mismatch (primary P(Over) bug):**
+`_load_ngb_cfg()` read `best_dist` from `betting_ml/evaluation/tuning_results_ngboost_total_runs.json` and returned `"LogNormal"` — a stale artifact from the Card 4.12d hyperparameter search. The production v2 model (Card 8.N) was trained with `dist: Normal` as recorded in `model_registry.yaml`. `p_over_line("LogNormal", {"loc": ~8.5, "scale": ~2.5}, line=8.5)` computed `lognorm.sf(8.5, s=2.5, scale=exp(8.5))` where `exp(8.5)≈4915`, yielding P(Over) ≈ 100% for every game.
+
+**Bug 2 — Feature-set / column-order mismatch (inflated point predictions):**
+`predict_today.py` built `X_vals` from 342 features returned by `load_retained_features()` in that list's ordering, then passed this directly to all NGBoost models. The v2 total_runs model expects exactly 311 features in the order stored in `betting_ml/models/total_runs/feature_columns_v2.json`; the v1 run_differential model expects 294 features from `betting_ml/models/feature_columns.json`. Wrong column ordering silently misassigns feature values, causing inflated predictions.
+
+**Fix:** Removed `_load_ngb_cfg()` for dist/feature resolution. The script now loads `model_registry.yaml` once at startup and reads `dist` and `feature_columns_path` per target directly from the registry. A union of all three models' feature column lists (plus `load_retained_features()`) is built for imputation; after imputation, each model receives `X_today_imp.reindex(columns=<model_feat_cols>, fill_value=0.0).values` so column order always matches training exactly.
+
+**Files changed:** `scripts/predict_today.py` — added `import yaml`; replaced feature-loading and NGBoost prediction block (~lines 612–692).
+
+---
+
+#### Hotfix — CI dbt Compilation Check (`ci.yml`)
+
+**Problem 1:** The `dbt-compile` CI job created an empty stub PEM file (`touch /tmp/snowflake_rsa_key.pem`) for the private key. dbt-fusion 2.0.0-preview.175 validates the key file's ASN.1 structure eagerly at startup (before any connection), so an empty file caused `asn1: syntax error: sequence truncated` on all 10 mart models.
+
+**Attempted fix:** Replaced `touch` with `openssl genrsa -out /tmp/snowflake_rsa_key.pem 2048` to produce a syntactically valid (but throwaway) RSA key. This resolved the ASN.1 parse error but exposed a second problem.
+
+**Problem 2:** Several mart models require a live Snowflake connection during compilation:
+- `mart_team_season_record.sql` uses `dbt_utils.date_spine()`, which calls `run_query()` internally.
+- Multiple mart models use `is_incremental()` with `{{ this }}`, which triggers adapter introspection to check whether the target relation exists.
+dbt-fusion connected using the throwaway key and got `JWT token is invalid` for all 10 models.
+
+**Fix:** The `dbt-compile` job now uses the same credential setup as `dbt_daily_build.yml`: all six `SNOWFLAKE_*` env vars (`ACCOUNT`, `USER`, `PRIVATE_KEY_PATH`, `ROLE`, `WAREHOUSE`, `DATABASE`) set from repository secrets, and the real private key written via `echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem`.
+
+**File changed:** `.github/workflows/ci.yml` — `dbt-compile` job env block and key-setup step.
+
+---
+
 ### Phase 9 — Advanced Model Architecture (Active as of 2026-05-09)
 
 Research-grade projects deferred from Phase 8, plus the Dynamic Bayesian Inference Engine cards (formerly 8.F1–8.F5, renumbered 9.F1–9.F5). Phase 9 starts with the ~2026-05-22 market-blind retrains as the minimum required to evaluate whether the single-model-per-target ceiling has been reached. The 9.F Bayesian engine cards follow once the retrained models have been evaluated for positive edge.
