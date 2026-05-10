@@ -83,7 +83,7 @@ jobs:
         id: cache-dbtf
         uses: actions/cache@v4
         with:
-          path: ~/.local/bin/dbtf
+          path: ~/.local/bin/dbt
           key: dbtf-${{ runner.os }}-${{ env.DBT_FUSION_VERSION }}
 
       - name: Install dbt-fusion
@@ -91,7 +91,9 @@ jobs:
         run: |
           mkdir -p ~/.local/bin
           curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
-          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+
+      - name: Create dbtf symlink
+        run: ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
 
       - name: Add ~/.local/bin to PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -124,7 +126,7 @@ jobs:
         id: cache-dbtf
         uses: actions/cache@v4
         with:
-          path: ~/.local/bin/dbtf
+          path: ~/.local/bin/dbt
           key: dbtf-${{ runner.os }}-${{ env.DBT_FUSION_VERSION }}
 
       - name: Install dbt-fusion
@@ -132,7 +134,9 @@ jobs:
         run: |
           mkdir -p ~/.local/bin
           curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
-          ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
+
+      - name: Create dbtf symlink
+        run: ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
 
       - name: Add ~/.local/bin to PATH
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
