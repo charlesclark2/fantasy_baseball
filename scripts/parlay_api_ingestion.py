@@ -677,6 +677,7 @@ def run_events(
     target: SnowflakeTarget,
     commence_time_from: str,
     commence_time_to: str,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch MLB events within the given UTC time window and store the complete
@@ -706,6 +707,13 @@ def run_events(
 
     event_count = len(result.payload) if isinstance(result.payload, list) else 0
     log.info("  %d event(s) in response", event_count)
+
+    if dry_run:
+        log.info(
+            "[DRY RUN] Would insert 1 row to %s (%d event(s) in payload)",
+            target.qualified_name, event_count,
+        )
+        return
 
     try:
         insert_event_row(
@@ -742,6 +750,7 @@ def run_odds(
     regions: list[str],
     odds_format: str,
     date_format: str,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch MLB odds for each (market, region) combination and insert each
@@ -790,6 +799,14 @@ def run_odds(
 
             events: list[dict] = result.payload if isinstance(result.payload, list) else []
             log.info("  %d event(s) with odds returned", len(events))
+
+            if dry_run:
+                log.info(
+                    "  [DRY RUN] Would insert %d row(s) to %s",
+                    len(events), target.qualified_name,
+                )
+                time.sleep(REQUEST_DELAY)
+                continue
 
             inserted = 0
             for event in events:
@@ -883,6 +900,7 @@ def run_historical_odds(
     start_date: date,
     end_date: date,
     force: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch historical odds for every calendar day in [start_date, end_date].
@@ -891,9 +909,12 @@ def run_historical_odds(
     so one call is made per (date, market). Each event in the response is
     stored as its own row. Idempotent by (game_date, market).
     """
-    if force:
-        log.info("--force: skipping already-loaded check")
+    if dry_run:
+        log.info("[DRY RUN] Skipping idempotency check.")
         already_loaded: set[tuple[date, str]] = set()
+    elif force:
+        log.info("--force: skipping already-loaded check")
+        already_loaded = set()
     else:
         log.info("Checking for already-loaded (game_date, market) pairs ...")
         already_loaded = fetch_already_loaded_odds_combos(conn, target, start_date, end_date)
@@ -916,6 +937,7 @@ def run_historical_odds(
 
     for game_date in calendar_days:
         ingestion_ts = datetime.now(tz=timezone.utc)
+        date_inserted = 0
 
         for market in DEFAULT_MARKETS:
             call_sequence += 1
@@ -927,7 +949,7 @@ def run_historical_odds(
                 )
                 continue
 
-            if force:
+            if force and not dry_run:
                 with conn.cursor() as cur:
                     cur.execute(
                         f"""
@@ -988,7 +1010,16 @@ def run_historical_odds(
 
             log.info("  %d event(s) in response", len(events))
 
-            date_inserted = 0
+            if dry_run:
+                log.info(
+                    "  [DRY RUN] Would insert %d row(s) to %s",
+                    len(events), target.qualified_name,
+                )
+                date_inserted += len(events)
+                rows_inserted += len(events)
+                time.sleep(REQUEST_DELAY)
+                continue
+
             for event in events:
                 bookmakers = event.get("bookmakers")
                 try:
@@ -1062,6 +1093,7 @@ def run_historical_matches(
     start_date: date,
     end_date: date,
     force: bool = False,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch historical match results (scores, ML odds, has_odds flag) for each
@@ -1074,9 +1106,12 @@ def run_historical_matches(
     a single-day call returns ~91 records (15 games × ~6 bookmakers) so the
     default 1000 limit is always sufficient.
     """
-    if force:
-        log.info("--force: skipping already-loaded check")
+    if dry_run:
+        log.info("[DRY RUN] Skipping idempotency check.")
         already_loaded: set[date] = set()
+    elif force:
+        log.info("--force: skipping already-loaded check")
+        already_loaded = set()
     else:
         log.info("Checking for already-loaded game_dates ...")
         already_loaded = fetch_already_loaded_match_dates(conn, target, start_date, end_date)
@@ -1104,7 +1139,7 @@ def run_historical_matches(
             )
             continue
 
-        if force:
+        if force and not dry_run:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
@@ -1146,6 +1181,15 @@ def run_historical_matches(
             continue
 
         log.info("  %d record(s) in response", record_count)
+
+        if dry_run:
+            log.info(
+                "  [DRY RUN] Would insert 1 row to %s (%d record(s) in payload)",
+                target.qualified_name, record_count,
+            )
+            rows_inserted += 1
+            time.sleep(REQUEST_DELAY)
+            continue
 
         first     = payload[0]
         sport_key = first.get("sport_key", "baseball_mlb")
@@ -1217,6 +1261,7 @@ def run_line_movement(
     events_target: SnowflakeTarget,
     target: SnowflakeTarget,
     event_ids: list[str] | None,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch line-movement history for each event_id and insert the full
@@ -1281,6 +1326,14 @@ def run_line_movement(
             time.sleep(REQUEST_DELAY)
             continue
 
+        if dry_run:
+            log.info(
+                "  [DRY RUN] Would insert 1 row to %s (%d record(s) in payload)",
+                target.qualified_name, record_count,
+            )
+            time.sleep(REQUEST_DELAY)
+            continue
+
         try:
             insert_line_movement_row(
                 conn,
@@ -1316,6 +1369,7 @@ def run_line_movement(
 def run_canonical_events(
     conn: snowflake.connector.SnowflakeConnection,
     target: SnowflakeTarget,
+    dry_run: bool = False,
 ) -> None:
     """
     Fetch canonical events (real per-game start times) for the MLB and store
@@ -1346,6 +1400,13 @@ def run_canonical_events(
     payload     = result.payload
     event_count = len(payload) if isinstance(payload, list) else 0
     log.info("  %d canonical event(s) in response", event_count)
+
+    if dry_run:
+        log.info(
+            "[DRY RUN] Would insert 1 row to %s (%d event(s) in payload)",
+            target.qualified_name, event_count,
+        )
+        return
 
     first_event = payload[0] if isinstance(payload, list) and payload else {}
     sport_key   = first_event.get("sport_key")
@@ -1378,6 +1439,26 @@ def run_canonical_events(
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Ingest MLB data from the Parlay API into Snowflake.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Make API calls but skip all Snowflake writes. "
+            "Logs the endpoint, row count, and target that would be written. "
+            "Must be placed before the subcommand name."
+        ),
+    )
+    parser.add_argument(
+        "--target",
+        choices=["prod", "dev"],
+        default="prod",
+        help=(
+            "Write target: 'prod' uses parlayapi schema (default); "
+            "'dev' redirects all writes to parlayapi_dev. "
+            "Must be placed before the subcommand name."
+        ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -1521,7 +1602,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    args    = build_parser().parse_args()
+    args = build_parser().parse_args()
+
+    if args.target == "dev":
+        os.environ["PARLAY_TARGET_SCHEMA"] = "parlayapi_dev"
+
+    dry_run = args.dry_run
+    if dry_run:
+        log.info("[DRY RUN] No Snowflake writes will be performed.")
+
     targets = resolve_targets()
 
     log.info(
@@ -1538,6 +1627,7 @@ def main() -> None:
                 targets.events,
                 commence_time_from = args.commence_time_from or window_from,
                 commence_time_to   = args.commence_time_to   or window_to,
+                dry_run            = dry_run,
             )
 
         elif args.command == "odds":
@@ -1548,19 +1638,20 @@ def main() -> None:
                 regions     = args.regions,
                 odds_format = args.odds_format,
                 date_format = args.date_format,
+                dry_run     = dry_run,
             )
 
         elif args.command == "historical-odds":
             start = date.fromisoformat(args.start_date) if args.start_date else _hist_default_start()
             end   = date.fromisoformat(args.end_date)   if args.end_date   else _hist_default_end()
             log.info("Historical odds range: %s → %s", start, end)
-            run_historical_odds(conn, targets.odds, start, end, force=args.force)
+            run_historical_odds(conn, targets.odds, start, end, force=args.force, dry_run=dry_run)
 
         elif args.command == "historical-matches":
             start = date.fromisoformat(args.start_date) if args.start_date else _hist_default_start()
             end   = date.fromisoformat(args.end_date)   if args.end_date   else _hist_default_end()
             log.info("Historical matches range: %s → %s", start, end)
-            run_historical_matches(conn, targets.matches, start, end, force=args.force)
+            run_historical_matches(conn, targets.matches, start, end, force=args.force, dry_run=dry_run)
 
         elif args.command == "line-movement":
             run_line_movement(
@@ -1568,10 +1659,11 @@ def main() -> None:
                 targets.events,
                 targets.line_movement,
                 event_ids = args.event_ids,
+                dry_run   = dry_run,
             )
 
         elif args.command == "events-canonical":
-            run_canonical_events(conn, targets.canonical_events)
+            run_canonical_events(conn, targets.canonical_events, dry_run=dry_run)
 
     finally:
         conn.close()

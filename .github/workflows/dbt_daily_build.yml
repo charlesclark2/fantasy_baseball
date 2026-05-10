@@ -62,3 +62,12 @@ jobs:
       - name: dbt build --full-refresh (Sunday)
         if: steps.mode.outputs.mode == 'full_refresh'
         run: dbtf build --full-refresh --project-dir dbt --profiles-dir dbt
+
+      - name: Upload dbt manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-manifest
+          path: dbt/target/manifest.json
+          retention-days: 7
+          overwrite: true
