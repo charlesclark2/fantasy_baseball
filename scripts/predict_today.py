@@ -20,6 +20,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -608,17 +609,39 @@ def main() -> None:
                 f"Available columns: {sorted(df_today.columns.tolist())}"
             )
 
+    # Load model registry once to get per-model dist and feature column paths.
+    _registry_path = PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
+    with open(_registry_path) as _rf:
+        _registry = yaml.safe_load(_rf)
+
+    def _registry_feat_cols(target: str) -> list[str]:
+        path = PROJECT_ROOT / _registry[target]["feature_columns_path"]
+        with open(path) as _f:
+            return json.load(_f)
+
+    ngb_tot_dist  = _registry["total_runs"]["dist"]
+    ngb_diff_dist = _registry["run_differential"]["dist"]
+    tot_feat_cols  = _registry_feat_cols("total_runs")
+    diff_feat_cols = _registry_feat_cols("run_differential")
+    print(f"  total_runs dist={ngb_tot_dist}, features={len(tot_feat_cols)}")
+    print(f"  run_differential dist={ngb_diff_dist}, features={len(diff_feat_cols)}")
+
     print("Loading historical features for imputation pipeline fitting...")
     df_hist = load_features(min_games_played=15)
     print(f"  Loaded {len(df_hist):,} historical rows")
 
-    feature_cols = load_retained_features()
-    feature_cols_hist = [c for c in feature_cols if c in df_hist.columns]
-    feature_cols_today = [c for c in feature_cols if c in df_today.columns]
-    missing = set(feature_cols) - set(feature_cols_today)
+    # Build a superset of all features needed by any NGBoost model so the imputer
+    # sees every column. The retained list from feature_selection.md covers the
+    # base set; per-model lists add any model-specific extras.
+    retained_cols = load_retained_features()
+    all_feat_cols = list(dict.fromkeys(retained_cols + tot_feat_cols + diff_feat_cols))
+
+    feature_cols_hist  = [c for c in all_feat_cols if c in df_hist.columns]
+    feature_cols_today = [c for c in all_feat_cols if c in df_today.columns]
+    missing = set(all_feat_cols) - set(feature_cols_today)
     if missing:
         warnings.warn(
-            f"{len(missing)} retained features missing from today's data (will fill NaN): "
+            f"{len(missing)} features missing from today's data (will fill NaN): "
             f"{sorted(missing)[:5]}{'...' if len(missing) > 5 else ''}"
         )
 
@@ -641,19 +664,14 @@ def main() -> None:
     print(f"  run_differential: {type(ngb_diff).__name__}")
     print(f"  home_win: {type(clf_hw).__name__}")
 
-    _, ngb_tot_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_total_runs.json", "total_runs"
-    )
-    _, ngb_diff_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_run_diff.json", "run_differential"
-    )
-
     best_alpha = _load_best_alpha()
     print(f"  best_alpha={best_alpha}")
 
-    X_vals = X_today_imp.values
+    # Slice to each model's exact expected feature set and order.
+    X_tot  = X_today_imp.reindex(columns=tot_feat_cols,  fill_value=0.0).values
+    X_diff = X_today_imp.reindex(columns=diff_feat_cols, fill_value=0.0).values
 
-    pred_dist_tot = ngb_total.pred_dist(X_vals)
+    pred_dist_tot = ngb_total.pred_dist(X_tot)
     loc_tot   = pred_dist_tot.params["loc"]
     scale_tot = pred_dist_tot.params["scale"]
 
@@ -666,7 +684,7 @@ def main() -> None:
         ngb_tot_dist, {"loc": loc_tot, "scale": scale_tot}, total_line=total_line_vals
     )
 
-    pred_dist_diff = ngb_diff.pred_dist(X_vals)
+    pred_dist_diff = ngb_diff.pred_dist(X_diff)
     loc_diff   = pred_dist_diff.params["loc"]
     scale_diff = pred_dist_diff.params["scale"]
     p_home_win_ngb = p_over_line(
