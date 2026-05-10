@@ -28,6 +28,9 @@ jobs:
       # 8:30 AM ET and Statcast ingestion takes 30-90 min. Running odds last
       # caused the step to land at 8:58-9:55 AM ET, outside the window used
       # by mart_bookmaker_disagreement (Card 8.T).
+      #
+      # ODDS API — disable these two steps after 2026-05-23 (credits expire).
+      # Do not delete: retain for potential reactivation if credits are extended.
       - name: Ingest Odds API events
         working-directory: scripts
         env:
@@ -49,6 +52,30 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
         run: uv run odds_api_ingestion.py odds
+
+      # PARLAY API — replacement for Odds API; runs in parallel during overlap
+      # period (now → 2026-05-23) for cutover validation, then sole source after.
+      - name: Ingest Parlay API events
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+        run: uv run parlay_api_ingestion.py events
+
+      - name: Ingest Parlay API odds
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+        run: uv run parlay_api_ingestion.py odds
 
       - name: Ingest Action Network public betting percentages
         working-directory: scripts
