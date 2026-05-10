@@ -91,7 +91,7 @@ jobs:
         run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Create stub private key for compile check
-        run: touch /tmp/snowflake_rsa_key.pem
+        run: openssl genrsa -out /tmp/snowflake_rsa_key.pem 2048
 
       - name: Compile dbt project (static analysis — no Snowflake required)
         env:
