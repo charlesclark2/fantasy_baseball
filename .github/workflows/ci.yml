@@ -110,6 +110,9 @@ jobs:
     name: dbt Build (CI — state:modified+)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
     env:
       DBT_FUSION_VERSION: latest
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -154,7 +157,7 @@ jobs:
           run_id=$(gh api \
             "repos/${{ github.repository }}/actions/artifacts?name=dbt-manifest&per_page=5" \
             --jq '[.artifacts[] | select(.expired == false)] | .[0].workflow_run.id' \
-            2>/dev/null || true)
+            2>/dev/null) || run_id=""
           if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
             gh run download "$run_id" \
               --repo ${{ github.repository }} \
