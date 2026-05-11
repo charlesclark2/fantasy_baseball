@@ -110,6 +110,9 @@ jobs:
     name: dbt Build (CI — state:modified+)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
     env:
       DBT_FUSION_VERSION: latest
       SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -151,13 +154,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dbt/state
-          gh run download \
-            --repo ${{ github.repository }} \
-            --workflow dbt_daily_build.yml \
-            --name dbt-manifest \
-            --dir dbt/state \
-            --status success \
-          || echo "No manifest artifact available — will fall back to full build"
+          run_id=$(gh api \
+            "repos/${{ github.repository }}/actions/artifacts?name=dbt-manifest&per_page=5" \
+            --jq '[.artifacts[] | select(.expired == false)] | .[0].workflow_run.id' \
+            2>/dev/null) || run_id=""
+          if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+            gh run download "$run_id" \
+              --repo ${{ github.repository }} \
+              --name dbt-manifest \
+              --dir dbt/state \
+            && echo "Manifest downloaded from run $run_id" \
+            || echo "Manifest download failed — will fall back to full build"
+          else
+            echo "No dbt-manifest artifact found — will fall back to full build"
+          fi
 
       - name: Build modified models in CI schemas
         run: |

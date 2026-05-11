@@ -570,7 +570,6 @@ Write targets by environment:
 - [x] Both scripts verified clean via `uv run python -m py_compile` and live-tested with `--target dev`
 
 **Acceptance criteria:**
-
 - `uv run parlay_api_ingestion.py --dry-run events` makes the API call, logs the payload summary and row count, and exits without inserting any rows into Snowflake ✅
 - Dry-run mode is verified by confirming the ingestion timestamp does not appear in `mlb_events_raw` after the run ✅
 - `--dry-run` works for all subcommands: `events`, `odds`, `events-canonical`, `line-movement`, `historical-odds`, `historical-matches` ✅
