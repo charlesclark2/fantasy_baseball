@@ -21,9 +21,12 @@ betting_ml/models/**/*.pkl
 # Production artifacts listed in model_registry.yaml are tracked directly in git.
 # Add an exception here whenever a new production artifact is deployed (8.H2 protocol).
 !betting_ml/models/home_win/elasticnet_2026.pkl
+!betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
 !betting_ml/models/total_runs/ngboost_tuned_v2.pkl
 !betting_ml/models/total_runs/ngboost_decay_weighted.pkl
+!betting_ml/models/total_runs/ngboost_market_blind_2026.pkl
 !betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+!betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
 
 # Model evaluation artifacts (large binary fold data — regenerated each retrain, not tracked in git)
 betting_ml/evaluation/model_evaluation/*.parquet

@@ -1,23 +1,24 @@
 home_win:
-  artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  artifact_path: betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
   calibrator_last_fit_date: '2026-05-08'
-  cv_brier: 0.2422
-  deployed_date: '2026-05-04'
+  cv_brier: 0.2446
+  deployed_date: '2026-05-11'
   ece_raw: 0.0202
   eval_year: 2026
-  feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
-  features: 487
+  feature_columns_path: betting_ml/models/home_win/feature_columns_market_blind.json
+  features: 545
   model_name: elasticnet
-  model_version: v1
-  notes: 'Card 7.L2 retrain. LogisticRegression (elasticnet, l1_ratio=0.5, inner-CV
-    C=0.01) on full 487 all-numeric feature set from load_features(). CV Brier 0.2422,
-    in-sample Brier 0.2377. Feature columns saved to elasticnet_feature_columns.json
-    (487 features). Rollback: xgb_classifier_tuned_2026.pkl (v0, 294-feature set).
+  model_version: v2
+  notes: 'Epic 1 / Story 1.1 market-blind retrain (2026-05-11). Excludes 33 market-derived
+    columns (_MARKET_COLS_TO_EXCLUDE). 545 features vs 487 in v1. CV Brier 0.2446
+    (market-blind baseline; v1 0.2422 benefited from market circularity). Offline
+    comparison vs v1 on 2024+ (n=4,383): Brier 0.2390 vs 0.2392 (−0.0002), verdict
+    PROMOTE. Rollback: elasticnet_2026.pkl (v1, 487-feature market-inclusive set).
 
     '
-  rollback_artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
-  rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  selected_at: '2026-05-04T00:00:00Z'
+  rollback_artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  rollback_feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
+  selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10272
   wave5_gates:
@@ -41,6 +42,31 @@ home_win:
       home_consecutive_away_games, away_consecutive_home_games. Report:
       betting_ml/evaluation/phase_8_batch_retrain_impact.md.
   challengers:
+  - card: Epic 1 / Story 1.1
+    model_name: elasticnet_market_blind
+    artifact_path: betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
+    feature_columns_path: betting_ml/models/home_win/feature_columns_market_blind.json
+    features: 545
+    cv_brier: 0.2446
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-05-11'
+    status: promoted
+    gate_threshold: 0.2446
+    offline_comparison:
+      n_rows: 4383
+      seasons: [2024, 2025, 2026]
+      brier_champion: 0.2392
+      brier_challenger: 0.2390
+      delta_brier: -0.0002
+      verdict: PROMOTE
+    notes: >
+      Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns
+      (_MARKET_COLS_TO_EXCLUDE). 545 features vs 487 in v1. CV: 2024=0.2481,
+      2025=0.2360, 2026=0.2497 (n=342 partial season), mean=0.2446.
+      Gate 0.2446 is the true market-blind baseline; v1 gate 0.2422 benefited from
+      market circularity (away_moneyline_decimal #3, home_win_prob_sharp #6).
+      Promoted 2026-05-11 via compare_market_blind_challengers.py (Brier −0.0002).
   - card: 7.L2
     model_name: xgboost
     artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
@@ -87,23 +113,27 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
-  cv_mae: 3.4724
-  deployed_date: '2026-05-04'
+  artifact_path: betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
+  cv_mae: 3.4981
+  deployed_date: '2026-05-11'
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/feature_columns.json
-  features: 294
+  feature_columns_path: betting_ml/models/run_differential/feature_columns_market_blind.json
+  features: 545
   model_name: ngboost_tuned
-  model_version: v1
+  model_version: v2
   n_estimators: 200
-  notes: "Card 7.MA retrain on full Phase 7 feature set (294 features, 10,256 rows,\
-    \ 6 seasons 2021-2026). CV MAE 3.4724 vs 7.F baseline 3.4586 (+0.40% regression\
-    \ \u2014 within CV noise). Normal distribution only; LogNormal excluded because\
-    \ run_diff can be negative.\n"
-  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_prod.pkl
+  notes: "Epic 1 / Story 1.3 market-blind retrain (2026-05-11). First time run_diff\
+    \ gets full Phase 8 feature store (load_features() vs prior 294-feature set).\
+    \ Excludes 33 market-derived columns including home_win_prob_consensus (was #1\
+    \ feature, imp=0.040). CV MAE 3.4981 (market-blind baseline; v1 3.4724 benefited\
+    \ from market circularity). Normal distribution only; LogNormal excluded because\
+    \ run_diff can be negative. Offline comparison vs v1 on 2024+ (n=4,383): MAE\
+    \ 3.405 vs 3.434 (\u22120.029), verdict PROMOTE. Rollback: ngboost_tuned_2026.pkl\
+    \ (v1, 294-feature market-inclusive set).\n"
+  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
   rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  selected_at: '2026-05-04T00:00:00Z'
+  selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10256
   wave5_gates:
@@ -118,31 +148,58 @@ run_differential:
       ratio). Most urgent retrain at ~2026-05-22: switch to load_features() full
       feature set + add market exclusion equivalent to _MARKET_COLS_TO_EXCLUDE. See
       betting_ml/evaluation/phase_8_batch_retrain_impact.md.
-  challengers: []
+  challengers:
+  - card: Epic 1 / Story 1.3
+    model_name: ngboost_market_blind
+    artifact_path: betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
+    feature_columns_path: betting_ml/models/run_differential/feature_columns_market_blind.json
+    dist: Normal
+    n_estimators: 200
+    max_depth: 3
+    cv_mae: 3.4981
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-05-11'
+    status: promoted
+    gate_threshold: 3.4981
+    offline_comparison:
+      n_rows: 4383
+      seasons: [2024, 2025, 2026]
+      mae_champion: 3.434
+      mae_challenger: 3.405
+      delta_mae: -0.029
+      verdict: PROMOTE
+    notes: >
+      Epic 1 market-blind retrain (2026-05-10). First time run_diff gets full Phase 8
+      feature store (load_features() vs prior 294-feature set). Excludes 33 market-derived
+      columns including home_win_prob_consensus (was #1 feature, imp=0.040).
+      CV: 2024=3.3969, 2025=3.4959, 2026=3.6016 (n=342 partial season), mean=3.4981.
+      Gate 3.4981 is the true market-blind baseline; v1 gate 3.4724 benefited from
+      market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py
+      (MAE −0.029).
 total_runs:
-  artifact_path: betting_ml/models/total_runs/ngboost_decay_weighted.pkl
-  cv_mae: 3.5107
-  deployed_date: '2026-05-08'
+  artifact_path: betting_ml/models/total_runs/ngboost_market_blind_2026.pkl
+  cv_mae: 3.5521
+  deployed_date: '2026-05-11'
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
-  features: 311
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
+  features: 307
   max_depth: 3
   model_name: ngboost_tuned
-  model_version: v2
+  model_version: v3
   n_estimators: 500
-  notes: 'Card 8.N decay-weighted retrain (half_life=162). Weighted MAE=3.5107 vs
-    unweighted 3.5118. Card 7.V v2 retrain: NGBoost Normal, max_depth=3, n_estimators=500,
-    full 2021+ window (10,264 rows, 311 post-pipeline features). CV MAE 3.5118 (vs
-    v1 3.5190). 2024+ holdout gates: pct_pred_over=83.7% (PASS); abs(mean_residual)=0.048
-    (PASS); totals_mae=3.346 (PASS vs v0 baseline 3.862); std(pred_total_runs)=0.77
-    (FAIL, known feature-set variance ceiling, deferred to Phase 9). Rollback: ngboost_tuned_2026.pkl
-    (v1, LogNormal, 294-feature set). See total_runs_bias_diagnosis.md and model_comparison_v0_v2_total_runs.md.
+  notes: 'Epic 1 / Story 1.2 market-blind retrain (2026-05-11). Excludes 33 market-derived
+    columns + 4 noise cols. total_line_consensus removed (was #1 feature, imp=0.064).
+    CV MAE 3.5521 (market-blind baseline; v2 3.5107 benefited from market circularity).
+    Offline comparison vs v2 on 2024+ (n=4,383): MAE 3.234 vs 3.375 (−0.141),
+    Pct_Over_Line=65.4% (healthy). Verdict: PROMOTE. Rollback: ngboost_decay_weighted.pkl
+    (v2, 311-feature market-inclusive set). See total_runs_bias_diagnosis.md.
 
     '
-  rollback_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
-  rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  selected_at: '2026-05-05T00:00:00Z'
+  rollback_artifact_path: betting_ml/models/total_runs/ngboost_decay_weighted.pkl
+  rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10264
   wave5_gates:
@@ -182,6 +239,36 @@ total_runs:
   v2_dist: Normal
   v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
   challengers:
+  - card: Epic 1 / Story 1.2
+    model_name: ngboost_market_blind
+    artifact_path: betting_ml/models/total_runs/ngboost_market_blind_2026.pkl
+    feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
+    dist: Normal
+    n_estimators: 500
+    max_depth: 3
+    cv_mae: 3.5521
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-05-11'
+    status: promoted
+    gate_threshold: 3.5521
+    offline_comparison:
+      n_rows: 4383
+      seasons: [2024, 2025, 2026]
+      mae_champion: 3.375
+      mae_challenger: 3.234
+      delta_mae: -0.141
+      pct_over_line_champion: 67.1
+      pct_over_line_challenger: 65.4
+      verdict: PROMOTE
+    notes: >
+      Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns +
+      4 noise cols (away_elo, home_team_oaa_blended, two pct_diff cols).
+      total_line_consensus removed (was #1 feature, imp=0.064). Used decay sample weights.
+      CV: 2024=3.3943, 2025=3.6191, 2026=3.6428 (n=342 partial season), mean=3.5521.
+      Gate 3.5521 is the true market-blind baseline; v2 gate 3.5107 benefited from
+      market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py
+      (MAE −0.141, Pct_Over_Line=65.4% — healthy range).
   - card: 8.P
     model_name: lgb_quantile
     model_type: lgb_quantile

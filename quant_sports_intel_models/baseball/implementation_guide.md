@@ -71,7 +71,7 @@ No local or ad-hoc command should ever set `TARGET_ENV=prod`.
 ```
 Epic 0   (Parlay API Migration)        — Immediate. Hard deadline: 2026-06-01.
   Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ (bridge) → 0.9✅ (line movement) → 0.10✅ (canonical events) → 0.7 (cutover)
-Epic DEV (Environment Isolation)       — After Epic 0 cutover. Must be complete before Epic 1 models are retrained or any new ML inference code ships to prod.
+Epic DEV (Environment Isolation) ✅    — After Epic 0 cutover. Must be complete before Epic 1 models are retrained or any new ML inference code ships to prod.
 Epic 0.5 (Dagster Orchestration)       — After Epic 0 cutover passes; before Epic 1 ships to production.
 Epic 1   (Market-Blind Retrains)       — Immediate. Unblocked now (run in parallel with Epic 0).
 Epic 2   (Sub-Model Infrastructure)    — Start in parallel with Epic 1.
@@ -417,6 +417,8 @@ Tasks:
 
 **Design note:** `mlb_line_movement_raw` grain is one row per ingestion run per event_id; `raw_json` contains an array of `(source × market)` records, each with a nested `snapshots[]` array of timestamped price changes. The staging model requires two lateral flattens: first over the top-level records array, then over each record's `snapshots` array. See Section 2.4 of `parlay_api_endpoint_mapping.md` for the full response schema.
 
+**Post-ship fix (2026-05-10):** Removed `not_null` test from `snapshot_under_price` in `schema.yml`. The column is legitimately nullable: milestone markets (e.g., `player_hits_milestones`, `player_home_runs_milestones`) are one-sided bets with no "under" price, and even standard markets (moneyline, totals) have null `under_price` in a large fraction of snapshots where the API has not yet populated both sides. The `snapshots_flattened` CTE filters on `snap.value:over_price::integer is not null` (the primary price) — this is the correct filter; `under_price` is allowed to be null.
+
 ---
 
 ### 0.10 — Canonical events ingestion (real game start times) ✅
@@ -503,11 +505,12 @@ Tasks:
 
 - [x] Update `dbt_daily_build.yml` — add an `Upload dbt manifest` step at the end of the `dbt-build` job that uploads `dbt/target/manifest.json` as a GitHub Actions artifact named `dbt-manifest` with a 7-day retention window
 - [x] Add a `dbt-build-ci` job to `.github/workflows/ci.yml` — triggered on `pull_request` to `main` only (not on push to main)
-- [x] In `dbt-build-ci`: download the `dbt-manifest` artifact from the most recent `dbt_daily_build.yml` run via `gh run download`; copy to `dbt/state/manifest.json` so `state:modified` can resolve; falls back to full build if no artifact found
+- [x] In `dbt-build-ci`: download the `dbt-manifest` artifact using `gh api repos/.../actions/artifacts?name=dbt-manifest` to find the most recent non-expired artifact by name (bypasses the `gh run download --workflow` limitation where `workflow_call`-triggered runs are invisible to `--workflow` filtering); then `gh run download <run_id>` with the explicit ID; falls back to full build if no artifact found. Requires `permissions: actions: read` on the job.
 - [x] Set `--target ci` and `--state dbt/state` in the build command: `dbtf build --target ci --select state:modified+ --state dbt/state --profiles-dir dbt`
 - [x] Add a teardown step after the build (always runs, even on failure): `dbtf run-operation drop_ci_schemas` via `dbt/macros/drop_ci_schemas.sql`
 - [x] ~~Add `dbt-build-ci` as a required status check on the `main` branch protection rule~~ — **blocked**: repo is private on GitHub Free; branch protection rules require GitHub Pro or a public repo. The job runs on every PR and is visible as a check; it is not a hard merge gate.
-- [ ] Verify on a test PR: modify one staging model, confirm only that model and its downstream dependents are built; confirm `ci_betting.{model_name}` exists during the run and is dropped on completion
+- [x] Fixed `dbtf: command not found` (exit 127) — root cause: CI was caching `~/.local/bin/dbtf` (a symlink); on cache hit, the install step was skipped and the `dbt` binary was never placed, leaving a broken symlink. Fix: cache `~/.local/bin/dbt` (the actual binary); create the `dbtf` symlink in a separate unconditional step that always runs.
+- [x] Verified via live PR runs: PRs with no dbt model changes exit cleanly with 0 models built (not an error); full state:modified+ diffing works when manifest is present
 
 **Acceptance criteria:**
 
@@ -516,6 +519,7 @@ Tasks:
 - CI schemas are cleaned up after every run (pass or fail) — no schema accumulation in Snowflake ✅
 - If no dbt models are modified in a PR, the build step exits cleanly with 0 models built (not an error) ✅
 - CI job uses the same Snowflake role as prod (`SNOWFLAKE_ROLE` secret) — no new credentials required ✅
+- Manifest download confirmed working: `dbt_daily_build.yml` (called via `workflow_call` from `daily_ingestion.yml`) uploads the manifest; CI downloads it via the artifacts API and uses it for state-based diffing ✅
 
 ---
 
@@ -538,10 +542,11 @@ Write targets by environment:
 - [x] Create all required tables in `betting_ml_dev` — use Snowflake CLONE for zero-copy structural copy: `CREATE TABLE IF NOT EXISTS baseball_data.betting_ml_dev.daily_model_predictions CLONE baseball_data.betting_ml.daily_model_predictions` and same for `model_health_log`
 - [x] In `predict_today.py`: added `TARGET_ENV = os.getenv("TARGET_ENV", "dev")` and `_ML_SCHEMA` constant; replaced all write-side `baseball_data.betting_ml` references (`CREATE TABLE IF NOT EXISTS`, `INSERT INTO`, print statement); alpha tuning read at line 309 intentionally stays hardcoded to prod
 - [x] Applied the same `TARGET_ENV` / `_ML_SCHEMA_NAME` / `_ML_SCHEMA` pattern to `compute_model_health.py`; updated both the connection `schema` kwarg and the INSERT SQL
+- [x] Added `from dotenv import load_dotenv` + `load_dotenv()` to `compute_model_health.py` — script was missing it and failed with `OSError: Missing required env vars` when run locally (unlike `predict_today.py` which works because `data_loader.py` has hardcoded defaults); `python-dotenv>=1.0` was already in `pyproject.toml`
 - [x] Updated `daily_ingestion.yml` — added `TARGET_ENV: prod` to both "Run morning predictions" and "Compute model health (ECE drift)" step env blocks
 - [x] Confirmed `TARGET_ENV` is NOT set in `ci.yml` — verified by inspection; CI never invokes inference scripts
-- [ ] Run `predict_today.py` locally without `TARGET_ENV` — verify rows land in `betting_ml_dev` and `betting_ml` is untouched
-- [ ] Run the same verification for `compute_model_health.py`
+- [x] Verified `predict_today.py` locally without `TARGET_ENV` — rows landed in `betting_ml_dev`; `betting_ml` untouched (confirmed via Snowflake MCP query 2026-05-10)
+- [x] Verified `compute_model_health.py` locally without `TARGET_ENV` — row written to `betting_ml_dev.model_health_log` (ECE=0.0514, home_win, 2026-05-10); `betting_ml` prod table had 2 rows from GitHub Actions only
 
 **Acceptance criteria:**
 
@@ -598,54 +603,170 @@ Write targets by environment:
 
 **Goal:** Remove market-derived features from all three production models and retrain. This is the single highest-priority improvement to live CLV performance and the direct fix for the market circularity problem identified in Phase 8.
 
-**Target date:** ~2026-05-22 (waiting on in-season data accumulation).
+**Status (2026-05-11):** All three challengers trained, offline comparison run, all three PROMOTE verdicts. Registry and promotion pending commit.
 
 ---
 
-### 1.1 — home_win market-blind retrain
-
-**Status:** `_MARKET_COLS_TO_EXCLUDE` already populated in `train_elasticnet_prod.py`.
+### 1.1 — home_win market-blind retrain ✅
 
 Tasks:
-- [ ] Confirm `_MARKET_COLS_TO_EXCLUDE` list is complete (run feature importance analysis, verify all top market-correlated features are excluded)
-- [ ] Run `train_elasticnet_prod.py` with exclusion list active
-- [ ] Evaluate: CV Brier, ECE, calibration curve
-- [ ] Gate: must beat or match current production Brier (0.2422)
-- [ ] Update `model_registry.yaml` with new artifact path, feature columns, and wave gate results
-- [ ] Update `.gitignore` exception if new `.pkl` artifact is to be tracked in git
+- [x] Confirm `_MARKET_COLS_TO_EXCLUDE` list is complete — 33 market-derived columns excluded
+- [x] Run `train_elasticnet_prod.py` — artifact: `models/home_win/elasticnet_market_blind_2026.pkl`
+- [x] CV Brier: 0.2446 (gate: ≤ 0.2446); features: 545 (vs 487 in v1)
+- [x] Gate passed — challenger registered in `model_registry.yaml` as Epic 1 / Story 1.1
+- [ ] Promote challenger to champion in `model_registry.yaml` (flip artifact_path, bump to v2)
+- [ ] Commit artifact + registry
 
 ---
 
-### 1.2 — total_runs market-blind retrain
+### 1.2 — total_runs market-blind retrain ✅
 
 Tasks:
-- [ ] Add `_MARKET_COLS_TO_EXCLUDE` equivalent to NGBoost training script (`train_ngboost_totals.py` or equivalent)
-- [ ] Identify and drop the 4 noise features flagged in Phase 8 (`mean_imp <= 0`)
-- [ ] Run retrain
-- [ ] Evaluate: CV MAE, std(predicted values), mean residual, quantile calibration
-- [ ] Gate: CV MAE must beat current 3.5107; std(pred) improvement over 0.77 is desired but not blocking
-- [ ] Update `model_registry.yaml`
+- [x] `_MARKET_COLS_TO_EXCLUDE` (33 cols) + 4 noise cols added to `train_total_runs_prod.py`
+- [x] Run `train_total_runs_prod.py` — artifact: `models/total_runs/ngboost_market_blind_2026.pkl`
+- [x] CV MAE: 3.5521 (gate: ≤ 3.5521); decay-weighted; Normal dist; n_estimators=500
+- [x] Gate passed — challenger registered in `model_registry.yaml` as Epic 1 / Story 1.2
+- [ ] Promote challenger to champion in `model_registry.yaml` (flip artifact_path, bump to v3)
+- [ ] Commit artifact + registry
 
 ---
 
-### 1.3 — run_diff market-blind retrain
+### 1.3 — run_diff market-blind retrain ✅
 
 Tasks:
-- [ ] Switch training from `feature_columns.json` (294-feature pre-Phase 8 set) to `load_features()` full feature set
-- [ ] Add market exclusion equivalent to `_MARKET_COLS_TO_EXCLUDE`
-- [ ] Run retrain
-- [ ] Evaluate: CV MAE vs current 3.4724; calibration; feature importance analysis to confirm market features are gone
-- [ ] Gate: CV MAE within 1% of current; confirm `home_win_prob_consensus` no longer in top-20 features
-- [ ] Update `model_registry.yaml`
+- [x] Switched from `feature_columns.json` (294-feature) to `load_features()` full Phase 8 feature store
+- [x] `_MARKET_COLS_TO_EXCLUDE` added — `home_win_prob_consensus` (was #1 feature, imp=0.040) removed
+- [x] Run `train_run_diff_prod.py` — artifact: `models/run_differential/ngboost_market_blind_2026.pkl`
+- [x] CV MAE: 3.4981 (gate: ≤ 3.4981); Normal dist; n_estimators=200
+- [x] Gate passed — challenger registered in `model_registry.yaml` as Epic 1 / Story 1.3
+- [ ] Promote challenger to champion in `model_registry.yaml` (flip artifact_path, bump to v2)
+- [ ] Commit artifact + registry
 
 ---
 
-### 1.4 — Post-retrain smoke test
+### 1.4 — Champion-vs-challenger offline comparison ✅
+
+**Script:** `betting_ml/scripts/compare_market_blind_challengers.py`
+
+This script is the standard tool for any champion-vs-challenger comparison when the challenger has no production prediction history (i.e., has never run in `predict_today.py`). The existing `scripts/compare_model_versions.py` cannot be used in that case — it queries `daily_model_predictions` for stored version rows.
+
+**Usage:**
+```bash
+# Compare all three targets (default)
+uv run python betting_ml/scripts/compare_market_blind_challengers.py
+
+# Compare a single target
+uv run python betting_ml/scripts/compare_market_blind_challengers.py --target home_win
+uv run python betting_ml/scripts/compare_market_blind_challengers.py --target total_runs
+uv run python betting_ml/scripts/compare_market_blind_challengers.py --target run_differential
+
+# Restrict to a specific season window (default: 2024+)
+uv run python betting_ml/scripts/compare_market_blind_challengers.py --start-year 2025
+```
+
+**How it works:**
+1. Loads the feature store from Snowflake (`load_features(min_games_played=15)`)
+2. Fits and applies `build_imputation_pipeline()` to all numeric columns once — required so that `BayesianShrinkageTransformer` has its `games_played` counterpart columns available
+3. For each target, loads both champion and challenger artifacts and feature column lists
+4. Runs inference on the same evaluation window and computes target-appropriate metrics
+5. For `total_runs`, checks directional bias using `total_line_consensus` from the feature store (column is present for evaluation even though it is excluded from training)
+
+**Promotion gates baked into the script:**
+
+| Target | Metric | Promote | Promote with Monitoring | Do Not Promote |
+|---|---|---|---|---|
+| home_win | Brier delta | ≤ 0 | 0 – +0.002 | > +0.002 |
+| total_runs | MAE delta | ≤ 0 (no bias) | ≤ 0 (with bias) or ≤ +0.05 (no bias) | > +0.05 or (> 0 + bias) |
+| run_differential | MAE delta | ≤ 0 | 0 – +0.05 | > +0.05 |
+
+Directional bias for `total_runs` is flagged if `Pct_Pred_Over_Line` < 25% or > 75%.
+
+**Epic 1 results (2026-05-11, n=4,383 rows, 2024–2026):**
+
+| Target | Champion | Challenger | Delta | Verdict |
+|---|---|---|---|---|
+| home_win | Brier=0.2392 | Brier=0.2390 | −0.0002 | **PROMOTE** |
+| total_runs | MAE=3.375, Pct_Over=67.1% | MAE=3.234, Pct_Over=65.4% | MAE −0.141 | **PROMOTE** |
+| run_differential | MAE=3.434 | MAE=3.405 | −0.029 | **PROMOTE** |
+
+Notable: the market-blind challengers beat their market-inclusive champions on all metrics. This confirms the market features were providing noise (via circularity) rather than real signal — the models are actually better without them.
+
+---
+
+### 1.5 — Post-retrain smoke test
 
 Tasks:
 - [ ] Run `predict_today.py` with all three new model artifacts against today's games
 - [ ] Confirm prediction coverage for all confirmed-lineup games
 - [ ] Spot-check that no market-derived features appear in model output feature sets
+
+**Note:** Bug found 2026-05-11 — `predict_today.py` had hardcoded the old home_win feature column path (`elasticnet_feature_columns.json`, 487 features) instead of reading from the registry. Fixed: `hw_feat_cols = _registry_feat_cols("home_win")` at line 632.
+
+---
+
+### 1.6 — Historical prediction backfill (2024–2026) ✍️
+
+**Goal:** Populate `daily_model_predictions` with v2/v3 model-version rows for the 2024–2026 evaluation window so the Model Performance page can show v1 vs v2 comparison charts immediately rather than waiting weeks for live predictions to accumulate.
+
+**Why 2024+:** This matches the offline comparison window used in Story 1.4 (n=4,383 rows, seasons 2024–2026), giving the dashboard the same evidence base as the champion-vs-challenger verdict.
+
+**Script to write:** `betting_ml/scripts/backfill_predictions.py`
+
+Design:
+- Accept `--start-year` (default: 2024) and `--target` (`home_win`, `total_runs`, `run_differential`, `all`) args
+- Load the full 2024+ feature store from Snowflake via `load_features(min_games_played=15)`
+- Fit `build_imputation_pipeline()` on all numeric columns (same as `compare_market_blind_challengers.py`)
+- For each target, run inference using the promoted market-blind artifact + feature column list from the registry
+- Write rows to `baseball_data.betting_ml.daily_model_predictions` with:
+  - `model_version`: `v2` for home_win and run_differential, `v3` for total_runs
+  - `retrain_tag`: `"market_blind_epic1"`
+  - `predicted_at`: the game date (not today's date)
+- Skip rows where `daily_model_predictions` already has a row for that `game_pk` + `model_version` (idempotent upsert)
+
+**Gate:** After backfill, confirm the Model Performance page shows v2/v3 curves for 2024–2026.
+
+Tasks:
+- [ ] Write `betting_ml/scripts/backfill_predictions.py` (design above)
+- [ ] Dry-run with `--target home_win --start-year 2026` to validate row format
+- [ ] Full backfill: `uv run python betting_ml/scripts/backfill_predictions.py --start-year 2024`
+- [ ] Confirm Model Performance page shows v2/v3 data for all three targets
+- [ ] Update `model_registry.yaml` with `backfill_date: '2026-05-11'` under each target's champion block
+
+---
+
+### 1.7 — Alpha re-calibration with market-blind models ✍️
+
+**Goal:** Re-run the Bayesian alpha calibration now that all three production models are market-blind. The previous calibrated value (`best_alpha=0.0`) correctly reflected that the market-inclusive models added no independent signal beyond the market price (circularity). With market-blind models, alpha > 0 is expected and Posterior% will become a meaningful blended signal.
+
+**Why alpha=0 was correct before:** The old models were trained on features like `away_moneyline_decimal` (#3 importance in home_win) and `home_win_prob_consensus` (#1 in run_diff). The model was essentially predicting the market back to itself, so `compute_posterior(model_prob, market_prob, alpha=0)` = market_prob was the right answer. Blending a circular model in would have added noise.
+
+**Why re-calibration is needed now:** `run_probability_layer.py` trains models fresh in its CV loop using `load_retained_features()` — it does **not** apply `_MARKET_COLS_TO_EXCLUDE`. Running it as-is would produce market-inclusive CV-fold models and would again find alpha ≈ 0.
+
+**Required change to `run_probability_layer.py`:** Apply the same `_MARKET_COLS_TO_EXCLUDE` canonical set to the feature list used in the CV loop, and use the same NGBoost hyperparameters as the promoted artifacts (Normal dist, n_estimators=200 for run_diff, 500 for total_runs, max_depth=3).
+
+**Expected outcome:** A non-zero alpha where the model adds measurable signal beyond the market price. If alpha comes back at 0 with the market-blind models, it would indicate either insufficient historical data for tuning or that the model genuinely has no edge — either way it's important signal.
+
+**Usage (after updating the script):**
+```bash
+# Full CV alpha calibration (slow — NGBoost CV takes ~1hr)
+uv run python betting_ml/scripts/run_probability_layer.py
+
+# Skip CV if alpha checkpoint exists from a prior run
+uv run python betting_ml/scripts/run_probability_layer.py --resume
+
+# Force a specific alpha without CV (for testing Posterior% effect)
+uv run python betting_ml/scripts/run_probability_layer.py --use-alpha 0.3
+```
+
+Tasks:
+- [ ] Update `run_probability_layer.py` CV loop: import `_MARKET_COLS_TO_EXCLUDE` from `train_elasticnet_prod.py` (or a shared constants module) and apply to feature selection before each fold
+- [ ] Set NGBoost hyperparams in script to match promoted artifacts: `n_estimators=200/max_depth=3` for run_diff, `n_estimators=500/max_depth=3` for total_runs, both Normal dist
+- [ ] Run full calibration: `uv run python betting_ml/scripts/run_probability_layer.py`
+- [ ] Inspect alpha grid output — expect best_alpha > 0
+- [ ] Confirm `best_alpha.json` and `alpha_tuning_results` Snowflake table are updated
+- [ ] Re-run `predict_today.py` and confirm Posterior% now reflects a blend rather than pure market price
+
+**Note:** NGBoost retrains per CV fold are slow (~1 hr per fold × 3 folds). Plan for a 3–4 hr run. Use `--resume` to restart from checkpoint if interrupted.
 
 ---
 

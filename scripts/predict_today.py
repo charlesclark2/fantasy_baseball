@@ -620,6 +620,10 @@ def main() -> None:
     with open(_registry_path) as _rf:
         _registry = yaml.safe_load(_rf)
 
+    # Derive MODEL_VERSION from the registry so promotions are reflected automatically.
+    global MODEL_VERSION
+    MODEL_VERSION = _registry["home_win"]["model_version"]
+
     def _registry_feat_cols(target: str) -> list[str]:
         path = PROJECT_ROOT / _registry[target]["feature_columns_path"]
         with open(path) as _f:
@@ -629,8 +633,10 @@ def main() -> None:
     ngb_diff_dist = _registry["run_differential"]["dist"]
     tot_feat_cols  = _registry_feat_cols("total_runs")
     diff_feat_cols = _registry_feat_cols("run_differential")
+    hw_feat_cols   = _registry_feat_cols("home_win")
     print(f"  total_runs dist={ngb_tot_dist}, features={len(tot_feat_cols)}")
     print(f"  run_differential dist={ngb_diff_dist}, features={len(diff_feat_cols)}")
+    print(f"  home_win features={len(hw_feat_cols)}")
 
     print("Loading historical features for imputation pipeline fitting...")
     df_hist = load_features(min_games_played=15)
@@ -697,12 +703,9 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    _clf_feature_path = PROJECT_ROOT / "betting_ml/models/home_win/elasticnet_feature_columns.json"
-    with open(_clf_feature_path) as _f:
-        _elasticnet_cols = json.load(_f)
     X_clf = (
         df_today
-        .reindex(columns=_elasticnet_cols, fill_value=np.nan)
+        .reindex(columns=hw_feat_cols, fill_value=np.nan)
         .values.astype(np.float32)
     )
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
