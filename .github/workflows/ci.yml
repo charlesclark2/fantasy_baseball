@@ -151,13 +151,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p dbt/state
-          gh run download \
+          run_id=$(gh run list \
             --repo ${{ github.repository }} \
             --workflow dbt_daily_build.yml \
-            --name dbt-manifest \
-            --dir dbt/state \
             --status success \
-          || echo "No manifest artifact available — will fall back to full build"
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId' 2>/dev/null || true)
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" \
+              --repo ${{ github.repository }} \
+              --name dbt-manifest \
+              --dir dbt/state \
+            || echo "Manifest download failed — will fall back to full build"
+          else
+            echo "No successful daily build run found — will fall back to full build"
+          fi
 
       - name: Build modified models in CI schemas
         run: |
