@@ -60,6 +60,14 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "ts_col": "loaded_at",
         "max_stale_hours": 48,
         "game_day_only": True,
+        # Non-blocking: the daily ingestion workflow's late-retry step (in the
+        # predict job) is what actually loads today's HP umpires (~11 ET, after
+        # MLB Stats API posts assignments). If we fail the ingest job on stale
+        # umpire data, the predict job — which contains the late retry — never
+        # runs, creating a death spiral across multiple days. Logged as WARN
+        # but does not block downstream jobs. Predict-side imputation handles
+        # the case where umpire features are still null at scoring time.
+        "non_blocking": True,
     },
     "baseball_data.statsapi.player_transactions": {
         "ts_col": "effective_date",  # DATE; no ingestion_ts column exists
@@ -211,6 +219,7 @@ def run(check_date: date, dry_run: bool = False) -> None:
             game_day_only: bool = cfg["game_day_only"]
             ts_col: str = cfg["ts_col"]
             eod_offset_hours: int = cfg.get("eod_offset_hours", 0)
+            non_blocking: bool = cfg.get("non_blocking", False)
 
             if game_day_only and not game_day:
                 log.info("  %-55s SKIP (off day)", table)
@@ -221,17 +230,21 @@ def run(check_date: date, dry_run: bool = False) -> None:
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})
-                breaches.append(table)
+                if not non_blocking:
+                    breaches.append(table)
                 continue
 
             hours_stale = (now_utc - max_ts).total_seconds() / 3600
             threshold_exceeded = hours_stale > max_stale_hours
-            status = f"STALE ({hours_stale:.1f}h > {max_stale_hours}h)" if threshold_exceeded else f"OK ({hours_stale:.1f}h)"
+            stale_label = f"STALE ({hours_stale:.1f}h > {max_stale_hours}h)"
+            if threshold_exceeded and non_blocking:
+                stale_label += " [non-blocking — handled downstream]"
+            status = stale_label if threshold_exceeded else f"OK ({hours_stale:.1f}h)"
 
             log.info("  %-55s %s", table, status)
             results.append({"table": table, "status": status, "hours_stale": hours_stale})
 
-            if threshold_exceeded:
+            if threshold_exceeded and not non_blocking:
                 breaches.append(table)
     finally:
         con.close()

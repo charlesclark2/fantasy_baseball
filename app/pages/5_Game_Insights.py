@@ -136,11 +136,11 @@ st.divider()
 
 _PRED_SQL = """
 SELECT
-    pred_total_runs           AS predicted_total_runs,
-    calibrated_win_prob       AS home_win_prob,
-    consensus_win_prob,
-    calibrated_win_prob - consensus_win_prob AS edge,
-    h2h_kelly_fraction        AS kelly_fraction
+    pred_total_runs                                                          AS predicted_total_runs,
+    calibrated_win_prob                                                      AS home_win_prob,
+    h2h_market_implied_prob                                                  AS market_win_prob,
+    calibrated_win_prob - h2h_market_implied_prob                            AS edge,
+    h2h_kelly_fraction                                                       AS kelly_fraction
 FROM baseball_data.betting_ml.daily_model_predictions
 WHERE game_pk = {game_pk}
 ORDER BY inserted_at DESC
@@ -166,13 +166,13 @@ else:
     c1, c2, c3, c4, c5 = st.columns(5)
     total_runs = _safe_float(r.get("predicted_total_runs"))
     home_win_prob = _safe_float(r.get("home_win_prob"))
-    consensus = _safe_float(r.get("consensus_win_prob"))
+    market_win_prob = _safe_float(r.get("market_win_prob"))
     edge = _safe_float(r.get("edge"))
     kelly = _safe_float(r.get("kelly_fraction"))
 
     c1.metric("Predicted Total Runs", f"{total_runs:.2f}" if total_runs is not None else "N/A")
     c2.metric("Home Win Prob", _fmt_pct(home_win_prob))
-    c3.metric("Market Win Prob", _fmt_pct(consensus))
+    c3.metric("Market Win Prob", _fmt_pct(market_win_prob))
     edge_label = (f"{'+' if edge >= 0 else ''}{edge * 100:.1f}%") if edge is not None else "N/A"
     c4.metric("Edge", edge_label,
               delta=f"{edge * 100:.1f}" if edge is not None else None,

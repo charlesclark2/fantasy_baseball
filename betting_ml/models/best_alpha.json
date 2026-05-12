@@ -1,6 +1,6 @@
 {
   "best_alpha": 0.0,
-  "log_loss": 0.6832632713006547,
-  "run_ts": "2026-05-02T04:35:47.540751Z",
+  "log_loss": 0.6843094746049003,
+  "run_ts": "2026-05-12T07:57:17.979544Z",
   "source": "run_probability_layer.py"
 }

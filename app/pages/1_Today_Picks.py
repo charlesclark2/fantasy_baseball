@@ -120,7 +120,10 @@ def load_picks(date_str: str) -> pd.DataFrame:
     df["totals_kelly_exceeded_cap"] = df["totals_kelly_fraction"] > 0.10
 
     market = df["h2h_market_implied_prob"].replace(0, np.nan)
-    model = df["consensus_win_prob"]
+    # calibrated_win_prob = production model prob (Platt-recalibrated). The
+    # pre-calibration audit column consensus_win_prob must NOT be used for
+    # edge/EV/Kelly math (that's how predict_today.py computes live edge too).
+    model = df["calibrated_win_prob"]
     decimal_odds = 1.0 / market
     df["ev"] = (model * (decimal_odds - 1)) - (1 - model)
 
@@ -530,7 +533,7 @@ for _, r in df.iterrows():
         "Game Time": _fmt_game_time(r.get("game_datetime") or r.get("stg_game_date"), selected_tz),
         "Lineups": "✓" if both else "⏳",
         "P(Over)": _fmt_pct(p_over) if has_odds and p_over is not None else "—",
-        "Model Win%": _fmt_pct(_safe_float(r.get("consensus_win_prob"))),
+        "Model Win%": _fmt_pct(_safe_float(r.get("calibrated_win_prob"))),
         "Market Win%": _fmt_pct(_safe_float(r.get("h2h_market_implied_prob"))) if has_odds else "—",
         "Posterior%": _fmt_pct(_safe_float(r.get("h2h_posterior_prob"))) if has_odds else "—",
         "Edge": _fmt_signed(h2h_edge) if has_odds else "—",
@@ -597,7 +600,7 @@ for _, r in df.iterrows():
             away_mkt = _safe_float(r.get("h2h_market_implied_prob"))
             if away_mkt is not None and 0 < away_mkt < 1.0:
                 away_mkt_prob = 1.0 - away_mkt
-                away_model_prob = 1.0 - float(r.get("consensus_win_prob", 0.5))
+                away_model_prob = 1.0 - float(r.get("calibrated_win_prob", 0.5))
                 away_dec_odds = 1.0 / away_mkt_prob
                 raw_k = (away_model_prob * (away_dec_odds - 1) - (1 - away_model_prob)) / (away_dec_odds - 1)
                 kelly_val = min(raw_k, 0.10)
@@ -794,7 +797,7 @@ if not is_today:
             score_str = f"{r['away_team']} {away_score} – {home_score} {r['home_team']}"
 
             # Moneyline correctness
-            model_prob = _safe_float(r.get("consensus_win_prob"))
+            model_prob = _safe_float(r.get("calibrated_win_prob"))
             mkt_prob = _safe_float(r.get("h2h_market_implied_prob"))
             model_pick_home = model_prob is not None and model_prob > 0.5
             mkt_pick_home = mkt_prob is not None and mkt_prob > 0.5

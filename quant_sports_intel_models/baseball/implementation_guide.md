@@ -66,27 +66,66 @@ No local or ad-hoc command should ever set `TARGET_ENV=prod`.
 
 ---
 
-# Sequencing Summary
+# Current Roadmap & Parallel Execution
+
+The work ahead splits into three execution tracks that run in parallel after Epic 0 cutover completes. The intent is **not** to finish all infrastructure work before starting models — sub-model development and SCD-2 work happen concurrently because they touch disjoint files and serve complementary purposes (sub-models = predictive signal; SCD-2 = temporal reproducibility).
 
 ```
-Epic 0   (Parlay API Migration)        — Immediate. Hard deadline: 2026-06-01.
-  Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ (bridge) → 0.9✅ (line movement) → 0.10✅ (canonical events) → 0.7 (cutover)
-Epic DEV (Environment Isolation) ✅    — After Epic 0 cutover. Must be complete before Epic 1 models are retrained or any new ML inference code ships to prod.
-Epic 0.5 (Dagster Orchestration)       — After Epic 0 cutover passes; before Epic 1 ships to production.
-Epic 1   (Market-Blind Retrains)       — Immediate. Unblocked now (run in parallel with Epic 0).
-Epic 2   (Sub-Model Infrastructure)    — Start in parallel with Epic 1.
-Epic 3   (Run Environment Model)       — Can start after Epic 2.
-Epic 4   (Offensive Quality Model)     — Can start after Epic 2.
-Epic 5   (Starter Suppression Model)   — Can start after Epic 2.
-Epic 6   (Bullpen State Model)         — Can start after Epic 2.
-Epic 7   (Archetype Clustering)        — Prerequisite for Epic 8.
-Epic 8   (Matchup Model)               — Requires Epic 7.
-Epic 9   (Signal Integration & Ablation) — Requires Epics 3–6 to have at least one signal.
-Epic 10  (Totals Distribution Model)   — Requires Epics 3–6 signals; builds on Epic 9.
-Epic 11  (H2H Model Retrain w/ Signals) — Requires Epic 1 complete; builds on Epic 9.
-Epic 12  (CLV Meta-Model)              — Gated on 500+ live CLV games.
-Epic 13  (Temporal Data Platform)      — Long-horizon infrastructure; begin Phase 10.
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Track A — Foundational / Data Integrity (highest priority on the urgent bit)│
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Epic 0    (Parlay API Migration)       — Immediate. Hard deadline: 2026-06-01.
+│   Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ → 0.9✅ → 0.10✅ → 0.7 (cutover)
+│ Epic DEV  (Environment Isolation) ✅   — Complete.
+│ Epic T    (Temporal Capture Foundations) — URGENT. Convert MERGE-pattern raw
+│                                          ingestion to append-only. Every day's
+│                                          delay permanently forfeits intra-day
+│                                          state (lineup, weather, public betting).
+│ Epic 0.5  (Dagster Orchestration)       — Deferred until after Epic 3 ships.
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Track B — Sub-Model Development (parallel with Track A & C)                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Epic 1    (Market-Blind Retrains)       — In progress. All challengers ready.
+│ Epic 2    (Sub-Model Infra & Feature Readiness) — Start in parallel with Epic 1.
+│ Epic 3    (Run Environment Model)       — Start after Epic 2 ships 2.1–2.5.
+│ Epic 4    (Offensive Quality Model)     — Start after Epic 2 ships 2.1–2.4, 2.6.
+│ Epic 5    (Starter Suppression Model)   — Start after Epic 2 ships 2.1–2.4, 2.7.
+│ Epic 6    (Bullpen State Model)         — Start after Epic 2 ships 2.1–2.4. v1.0 needs no new target mart.
+│ Epic 7    (Archetype Clustering)        — Prerequisite for Epic 8.
+│ Epic 8    (Matchup Model)               — Requires Epic 7 + Story 2.9.
+│ Epic 9    (Signal Integration & Ablation) — Requires Epics 3–6 to have at least one signal.
+│ Epic 10   (Totals Distribution Model)   — Requires Epics 3–6 signals; builds on Epic 9.
+│ Epic 11   (H2H Model Retrain w/ Signals) — Requires Epic 1 complete; builds on Epic 9.
+│ Epic 12   (CLV Meta-Model)              — Gated on 500+ live CLV games.
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Track C — Temporal & Data Expansion (parallel with Track B)                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Epic 13   (Temporal Data Platform)      — Long-horizon vision doc; Phase 10.
+│ Epic 14   (MiLB Cold-Start Coverage)    — Run in parallel with Track B sub-models.
+│ Epic 15   (SCD-2 Migration of Existing Marts) — Run in parallel with Track B.
+│                                          Unblocked once Epic T ships (all raw
+│                                          is append-only → historical state
+│                                          reconstructable via load_id replay).
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Why parallel tracks instead of serial:**
+
+- Track A's urgent piece (Epic T) is small (~3–5 days) but every day's delay loses state permanently
+- Track B (sub-models) trains on aggregate historical data and does **not** require SCD-2 to be in place
+- Track C (Epic 15 SCD-2 migration) is forward-looking forensics infrastructure — its consumers (CLV reconstruction, walk-forward replay) don't exist yet, so timing is flexible. Doing it in parallel with sub-models maximizes utilization.
+- Epic 14 (MiLB) is a Layer 1 data expansion independent of both — its outputs slot into the existing feature mart contract after sub-models v1 ship
+
+**Dependency rules that must be respected:**
+
+1. **Epic T should ship before or alongside Epic 15.** Epic 15's load-id replay strategy assumes raw is append-only. If we start SCD-2 reconstruction on a mart whose raw still uses MERGE, the replay is incomplete.
+2. **Epic 2 stories 2.1–2.4 must ship before any sub-model Epic 3–8 starts.** The storage table, registry, eval harness, and SCD-2 convention are shared infrastructure.
+3. **Epic 7 must ship before Epic 8.** Archetype clustering is a hard dependency for the matchup model.
+4. **Epic 1 must complete promotion before Epic 11.** H2H retrain with sub-model signals layers on top of the market-blind v2.
 
 ---
 
@@ -599,6 +638,226 @@ Write targets by environment:
 
 ---
 
+# Epic T — Temporal Capture Foundations
+
+**Goal:** Stop ongoing permanent loss of intra-day state. Convert every MERGE-pattern raw ingestion script to append-only so that raw tables preserve all historical state, enabling Epic 15's load-id replay strategy and protecting any future temporal work from data gaps.
+
+**Why this is its own epic and why it's urgent:** Eight ingestion scripts currently use `MERGE INTO ... WHEN MATCHED THEN UPDATE` patterns that overwrite raw-table state on every run. The most damaging is `ingest_statsapi.py` for `monthly_schedule` — which is the source of **lineup state, probable pitchers, and game scores**, and merges on `month_start_date`. Every re-ingestion of the current month overwrites the full nested JSON payload with the latest version, silently destroying intra-day lineup updates that we will never recover.
+
+The data mart inventory incorrectly describes `monthly_schedule` as "append-only" — that claim must be corrected as part of this epic.
+
+**Engineering pattern (applied uniformly):** Replace MERGE with simple `INSERT INTO ... VALUES (...)` and add `ingestion_ts` / `load_id` if not already present. Downstream staging models already use `qualify row_number() over (partition by <natural_key> order by ingestion_ts desc) = 1` to dedupe to latest — verify each affected staging model handles the new multiple-rows-per-key shape correctly.
+
+---
+
+### Audit findings (2026-05-12)
+
+MERGE-pattern raw ingestion scripts and the state they currently destroy:
+
+| Script | Raw table | Merge key | State volatility | Urgency |
+|---|---|---|---|---|
+| `ingest_statsapi.py` | `statsapi.monthly_schedule` | `month_start_date` | **HIGH** — intra-day lineup, probable-pitcher, score updates | **CRITICAL** |
+| `ingest_weather.py` | `statsapi.weather_raw` | `(game_pk, venue_id)` | High — forecast updates pre-game | **HIGH** |
+| `ingest_actionnetwork_betting.py` | `actionnetwork.public_betting_raw` | `(game_date, an_game_id)` | Medium — % movement intra-day | **MEDIUM** |
+| `ingest_umpires.py` | `statsapi.umpire_game_log` | `game_pk` | Low — rare reassignment | Low |
+| `ingest_umpires_historical.py` | `statsapi.umpire_game_log` | `game_pk` | Backfill only | Low |
+| `ingest_catcher_framing.py` | `savant.catcher_framing_raw` | `(player_id, season, snapshot_date)` | Low — weekly snapshots | Low |
+| `ingest_oaa.py` | `external.oaa_team_season_raw` | `(team_abbrev, game_year)` | Low — season-level | Low |
+| `ingest_statsapi.py` | `statsapi.venues_raw` | `venue_id` | Low — venues are stable | Low |
+
+Append-only (no action required — already correct): all FanGraphs scripts, Odds API, Parlay API, Savant, transactions, `lineup_monitor.py` config writes.
+
+---
+
+### T.1 — Convert `monthly_schedule` ingestion to append-only (CRITICAL)
+
+**Why critical:** This is the highest-volatility, highest-value state source in our entire pipeline. Lineup state, probable pitchers, and game scores are all extracted from this table downstream. Every day this remains MERGE-based, we lose another day of intra-day lineup transition data permanently.
+
+**Realistic scope of what's recoverable from the API** (validated by Story T.1.A below):
+- **Final game state for completed games** (final lineups, scores, probable pitchers as confirmed) — likely recoverable via re-query
+- **Pre-game intra-day projected-lineup transitions** — almost certainly NOT recoverable. The MLB Stats API is a "current state" query surface with no `?asOfTimestamp` parameter. Historical snapshots of projected (vs. confirmed) lineups appear not to be preserved server-side.
+
+Tasks:
+- [ ] **T.1.A — Recovery investigation (1–2 hours, do before T.1 code refactor):**
+  - Pick a sample of 5 historical games across 2024–2026 (mix of completed, recently-played, today)
+  - Query `/api/v1/schedule?startDate=X&endDate=X&hydrate=lineups,probablePitcher` for the containing month — log the response JSON
+  - Compare against what we have stored in `monthly_schedule.raw_json` for the same month
+  - Document findings in a short note: which fields match (final-state coverage), which differ (the "still recoverable from API" set), which are gone (the genuinely-lost set)
+  - **Decision output:** if final-state recovery is meaningful, write a one-shot backfill script (`scripts/backfill_monthly_schedule.py`) that re-ingests all months back to 2021 with `ingestion_ts = current_timestamp()` and a `recovery_backfill = true` indicator column, before T.1 code refactor lands
+- [ ] Refactor `ingest_statsapi.py` schedule-ingestion path: drop the MERGE; INSERT INTO `monthly_schedule` with `ingestion_ts` and `load_id` columns (add columns if not present)
+- [ ] Update `stg_statsapi_games`, `stg_statsapi_lineups`, `stg_statsapi_lineups_wide`, `stg_statsapi_probable_pitchers` to dedupe to latest snapshot via `qualify row_number() over (partition by ... order by ingestion_ts desc) = 1` (verify existing logic handles multiple rows per `(season, month)`)
+- [ ] Add a coverage check: confirm staging output row counts are unchanged after the conversion
+- [ ] Update `baseball_data_mart_inventory.md` to correct the false "Append-only" claim for `monthly_schedule`
+
+Acceptance Criteria:
+- [ ] T.1.A investigation note exists; recovery scope documented (final-state vs. intra-day lost)
+- [ ] If final-state recovery is meaningful: one-shot backfill script run; coverage delta documented (rows added, fields enriched)
+- [ ] Two consecutive ingestions of the same month produce **two rows** in `monthly_schedule` (not one updated row)
+- [ ] Staging models still produce the latest-state lineup/score data correctly (row count and value spot-check)
+- [ ] Inventory file corrected
+- [ ] Dev run validates the conversion before merging
+
+---
+
+### T.2 — Append-only weather + game-time observed weather capture (HIGH)
+
+**Two-part story:** (a) the append-only conversion, and (b) extend ingestion to also capture observed weather at first pitch, not just the pre-game forecast. Forecasted weather drifts from observed weather, and observed conditions at first pitch are what actually drive scoring. Since we're already touching `ingest_weather.py` and `weather_raw`, fold both changes into one story.
+
+**Schema extension — discriminator column:**
+
+Add `weather_observation_type` (TEXT) to `weather_raw`, with these values:
+
+| Value | Source | Captured when |
+|---|---|---|
+| `forecast_pregame` | Open-Meteo / OpenWeatherMap forecast | Hours-to-days before first pitch (current ingestion behavior) |
+| `forecast_intraday` | Same forecast endpoints | Run in the final hour before first pitch (closer-to-truth forecast) |
+| `observed_at_first_pitch` | Open-Meteo historical/observed endpoint | T+0 to T+1 hour after first pitch — captures actual conditions at game start |
+| `observed_postgame` | Open-Meteo historical/observed endpoint | Day-after batch — captures actual conditions through the full game |
+
+Existing rows backfill to `forecast_pregame` (matches current semantics). Open-Meteo's free historical endpoint exposes observed weather at hourly granularity, so no vendor change required.
+
+Tasks:
+- [ ] **T.2.A — Append-only conversion:**
+  - Refactor `ingest_weather.py` to INSERT only; preserve `ingestion_ts` / `loaded_at`
+  - Add `weather_observation_type` column to `weather_raw` (TEXT, NOT NULL, default `'forecast_pregame'` for existing rows)
+  - Update `stg_weather_raw` to dedupe via `qualify row_number()` ordered by `loaded_at desc`, partitioned by `(game_pk, venue_id, weather_observation_type)` so each observation type produces its own latest row
+- [ ] **T.2.B — Observed-at-first-pitch capture:**
+  - Add a new ingestion path or CLI flag to `ingest_weather.py`: `--observation-type observed_at_first_pitch` calls Open-Meteo's observed-weather endpoint for each `game_pk` whose first pitch was in the last N hours
+  - Schedule decision: either (a) a new task firing hourly that catches games whose first pitch has passed in the last hour, or (b) a once-daily batch the next morning that captures all of yesterday's first-pitch observations. **Recommendation: option (b)** for simplicity — first-pitch weather doesn't need to be live for training/CLV reconstruction; we just need it captured before SCD-2 backfills run
+  - Backfill observed-at-first-pitch weather for all completed games 2021–2026 via a one-shot script (Open-Meteo historical endpoint goes back further than that)
+- [ ] **T.2.C — Downstream feature decision:**
+  - Decide whether `feature_pregame_weather_features` consumes `forecast_pregame`, `forecast_intraday`, or both. **Recommendation: keep `forecast_pregame` as the canonical pre-game feature** (matches current semantics; sub-models train against this), and add `observed_at_first_pitch` and `forecast_intraday_t_minus_1h` (closest pre-game forecast) as separate column blocks for the run environment sub-model to use as auxiliary features / forecast-vs-actual diagnostics
+  - Validate no regression in `feature_pregame_weather_features` row count or values on a sample game set after the conversion
+
+- [ ] **T.2.D — Intraday forecast capture (closer-to-truth, market-edge-oriented):**
+  - **Cadence:** capture forecast weather at T-24h, T-6h, T-3h, and T-1h before each scheduled first pitch (4 forecast snapshots per outdoor game) — tagged `weather_observation_type = 'forecast_intraday'` with a derived `hours_to_first_pitch` column (24, 6, 3, 1)
+  - **Why these horizons:** T-24h is the next-day baseline lines form on; T-6h is the mid-day forecast refresh after morning model runs; T-3h is the pre-lineup-release window where sharps act; T-1h is the closing-line equivalent for weather. The T-24h → T-6h delta is the largest information-incorporation window — if our model captures forecast convergence faster than the line adjusts, that's the edge surface
+  - **API budget:** ~12 outdoor games × 5 captures (4 forecast + 1 observed via T.2.B) = ~60 calls/day. < 1% of Open-Meteo's 10k/day free tier
+  - **Implementation:** one scheduled task running hourly 06:00–22:00 ET. For each scheduled MLB game whose first pitch is within ±20 min of any of the four checkpoints, capture forecast and INSERT row. Idempotent — re-running a checkpoint capture inserts a new row, no harm. Staging dedup partitions on `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)` so each checkpoint preserves its own row
+  - **Expose to feature store:** add columns to `feature_pregame_weather_features` for the T-1h snapshot (most predictive pre-game value) and the T-24h → T-1h forecast delta (forecast-convergence signal)
+
+Acceptance Criteria:
+- [ ] Two consecutive forecast-ingestion runs produce two rows per `(game_pk, venue_id, weather_observation_type='forecast_pregame')`
+- [ ] `observed_at_first_pitch` rows exist for ≥ 95% of completed outdoor games in 2024–2026 after the one-shot backfill
+- [ ] Staging dedupe partitions on observation type + hours_to_first_pitch — `stg_weather_raw` returns one current row per `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)`
+- [ ] Existing downstream features (`feature_pregame_weather_features`) unchanged on a recent-game sample set for the `forecast_pregame` columns
+- [ ] T.2.D intraday captures land within ±20 min of each checkpoint for ≥ 95% of scheduled outdoor games over a 7-day verification window
+- [ ] Open-Meteo endpoint usage is rate-limited and respects their free-tier limits
+
+---
+
+### T.3 — Convert `public_betting_raw` ingestion to append-only (MEDIUM)
+
+**Recovery expectation:** Action Network does not appear to expose a public historical-snapshot endpoint for betting percentages — historical pre-game movement is likely permanently lost. Confirm via the T.3.A investigation; if no recovery path exists, accept forward-only semantics from the conversion date.
+
+Tasks:
+- [ ] **T.3.A — Recovery investigation (30 min):**
+  - Check Action Network's public API surface for any historical betting-percentage endpoint (with date or timestamp parameter)
+  - Check whether AN's paid/Pro tier exposes historical snapshots and whether the cost is justified for partial historical reconstruction
+  - Document findings in a short note; **decision output:** forward-only confirmed, or backfill script scoped
+- [ ] Refactor `ingest_actionnetwork_betting.py` to INSERT only
+- [ ] Update `stg_actionnetwork_public_betting` dedupe logic
+- [ ] Validate downstream feature stability
+
+**Intraday capture extension (optional, parallel to T.2.D):** if we want to capture public-betting % movement intraday (similar value proposition to weather forecast convergence), schedule the AN ingestion at the same T-24h / T-6h / T-3h / T-1h checkpoints. Decision deferred — public betting % is a less reliable signal than weather, so lower priority. Capture this as a follow-on if T.3.A confirms no historical recovery and we want forward-only capture of intraday movement.
+
+Acceptance Criteria:
+- [ ] T.3.A investigation note exists; recovery decision documented
+- [ ] Same pattern as T.2: two runs produce two rows; staging dedupes; downstream features unchanged
+
+---
+
+### T.4 — Convert remaining MERGE patterns to append-only + per-source recovery (LOW urgency, batched)
+
+Scope: `ingest_umpires.py`, `ingest_umpires_historical.py`, `ingest_catcher_framing.py`, `ingest_oaa.py`, and the `venues_raw` MERGE in `ingest_statsapi.py`.
+
+These are low-volatility sources so the daily forfeit cost is small. Batch them after T.1–T.3. Recovery feasibility varies per source — see sub-stories.
+
+---
+
+**T.4.A — Umpires (HIGH recovery value):**
+
+The MLB Stats API serves historical umpire assignments cleanly via `/api/v1.1/game/{gamePk}/feed/live` → `gameData.officials`. For all completed games, the final umpire assignment is fully recoverable. Pre-game reassignment history is rare and not needed.
+
+Tasks:
+- [ ] Refactor `ingest_umpires.py` and `ingest_umpires_historical.py` to INSERT only; preserve `loaded_at` as the temporal column
+- [ ] Update `stg_statsapi_umpire_game_log` dedupe via `qualify row_number() over (partition by game_pk order by loaded_at desc) = 1`
+- [ ] **Backfill recovery script:** `scripts/backfill_umpire_assignments.py` — iterate over all completed games 2021–2026 via `mart_game_results.game_pk`, query the live feed for each, INSERT the umpire assignment with a `recovery_backfill = true` indicator. Estimated ~3,000–4,000 API calls per season × 6 seasons ≈ 20k calls total, well within Stats API rate limits with normal throttling
+- [ ] Validate downstream `feature_pregame_umpire_features` unchanged on a recent-game sample after recovery backfill
+
+Acceptance Criteria:
+- [ ] Two consecutive runs produce two rows per `game_pk`
+- [ ] Recovery backfill covers ≥ 99% of completed games 2021–2026
+- [ ] Downstream umpire features stable
+
+---
+
+**T.4.B — Catcher framing (NO backfill needed):**
+
+The MERGE key already includes `snapshot_date`, so weekly snapshot history was preserved by accident — only intra-day same-snapshot re-ingestions overwrite. Just convert to append-only.
+
+Tasks:
+- [ ] Refactor `ingest_catcher_framing.py` to INSERT only
+- [ ] Update staging dedupe to partition on `(player_id, season, snapshot_date)` ordered by `ingestion_timestamp desc`
+- [ ] Verify the weekly snapshot series is unchanged before and after the conversion
+
+Acceptance Criteria:
+- [ ] Two consecutive same-day runs produce two rows; cross-snapshot history preserved
+- [ ] Weekly snapshot series row count unchanged after conversion
+
+---
+
+**T.4.C — OAA (forward-only, lightweight check first):**
+
+The MERGE on `(team_abbrev, game_year)` has been overwriting weekly with the latest season-to-date OAA. Intra-season progression has been lost. FanGraphs leaderboard URLs may support a date-parameterized historical query — worth a 30-min check.
+
+Tasks:
+- [ ] **T.4.C.1 — Recovery investigation (30 min):** check whether the FanGraphs leaderboard URL underlying `ingest_oaa.py` supports an `&endDate=` or `&date=` parameter to pull historical season-to-date OAA at a specific date. If yes, scope a one-shot backfill at weekly granularity for 2021–2026
+- [ ] Refactor `ingest_oaa.py` to INSERT only
+- [ ] Update staging dedupe via `qualify row_number()` ordered by latest `loaded_at`
+
+Acceptance Criteria:
+- [ ] T.4.C.1 investigation note exists; recovery decision documented
+- [ ] If backfill is feasible: weekly OAA snapshots backfilled for 2021–2026
+- [ ] Two consecutive runs produce two rows per `(team_abbrev, game_year)`
+
+---
+
+**T.4.D — Venues (trivial):**
+
+Venues are stable; SCD value is minimal. Convert to append-only for convention consistency only.
+
+Tasks:
+- [ ] Refactor the `venues_raw` MERGE in `ingest_statsapi.py` to INSERT only
+- [ ] Update staging dedupe
+
+Acceptance Criteria:
+- [ ] Two consecutive runs produce two rows per `venue_id`
+- [ ] No downstream change
+
+---
+
+**T.4 epic-level Acceptance Criteria:**
+- [ ] All four sub-stories complete
+- [ ] No remaining `MERGE INTO ... WHEN MATCHED THEN UPDATE` patterns in any `ingest_*.py` script (grep guard: `grep -nE "MERGE\s+INTO|WHEN MATCHED" scripts/ingest_*.py` returns empty)
+- [ ] Inventory file (`baseball_data_mart_inventory.md`) updated for all four sources
+
+---
+
+### T.5 — Inventory & convention documentation
+
+Tasks:
+- [ ] Update `baseball_data_mart_inventory.md` with corrected ingestion-pattern notes for every table touched by Epic T
+- [ ] Add a short convention doc — "All raw ingestion scripts MUST be append-only. Use `qualify row_number()` in staging to dedupe to latest." — to the project README or CLAUDE.md
+- [ ] Add a CI lint or pre-commit hook that fails if any `scripts/ingest_*.py` introduces a `MERGE INTO ... WHEN MATCHED` pattern (optional but recommended)
+
+Acceptance Criteria:
+- [ ] Inventory matches reality
+- [ ] Append-only convention documented in a discoverable location
+- [ ] CI guard exists or has a documented decision to skip
+
+---
+
 # Epic 1 — Market-Blind Retrains
 
 **Goal:** Remove market-derived features from all three production models and retrain. This is the single highest-priority improvement to live CLV performance and the direct fix for the market circularity problem identified in Phase 8.
@@ -704,7 +963,7 @@ Tasks:
 
 ---
 
-### 1.6 — Historical prediction backfill (2024–2026) ✍️
+### 1.6 — Historical prediction backfill (2024–2026) ✅
 
 **Goal:** Populate `daily_model_predictions` with v2/v3 model-version rows for the 2024–2026 evaluation window so the Model Performance page can show v1 vs v2 comparison charts immediately rather than waiting weeks for live predictions to accumulate.
 
@@ -726,15 +985,25 @@ Design:
 **Gate:** After backfill, confirm the Model Performance page shows v2/v3 curves for 2024–2026.
 
 Tasks:
-- [ ] Write `betting_ml/scripts/backfill_predictions.py` (design above)
-- [ ] Dry-run with `--target home_win --start-year 2026` to validate row format
-- [ ] Full backfill: `uv run python betting_ml/scripts/backfill_predictions.py --start-year 2024`
-- [ ] Confirm Model Performance page shows v2/v3 data for all three targets
-- [ ] Update `model_registry.yaml` with `backfill_date: '2026-05-11'` under each target's champion block
+- [x] Write `betting_ml/scripts/backfill_predictions.py` (design above)
+- [x] Dry-run with `--start-year 2026` to validate row format (357 rows, 2026-04-12 → 2026-05-10)
+- [x] Full backfill: `uv run python betting_ml/scripts/backfill_predictions.py --start-year 2024`
+  - 2024: 2024-04-12 → 2024-09-30, 2,000 games (1,485 with odds)
+  - 2025: 2025-04-12 → 2025-09-28, 2,026 games (1,547 with odds)
+  - 2026: 2026-04-12 → 2026-05-10, 357 games
+  - Total: 4,383 rows, model_version=v2, retrain_tag=market_blind_epic1
+- [x] Confirm Model Performance page shows v2/v3 data for all three targets — required surfacing the backfill end-to-end:
+  - `dbt/models/mart/mart_prediction_clv.sql`: changed dedup partition from `(game_pk, score_date)` to `(game_pk, score_date, model_version, COALESCE(retrain_tag, ''))` so model variants no longer collide; added `retrain_tag` and `over_prob_consensus` columns to the SELECT list.
+  - `dbt/models/mart/mart_closing_line_value.sql`: added vig-free `open_vf_over`, `close_vf_over`, `clv_over_prob` for both historical (2021–2025, derived from `over_price`/`under_price` American → decimal conversion) and live (2026+, pivoted from `mart_odds_outcomes` over/under decimals). 97.6% coverage of backfilled rows now have both model_prob and closing market prob for totals.
+  - `app/pages/4_Model_Performance.py`: full rewrite of source query — switched from `config.prediction_log` (which never received the backfill) to `mart_prediction_clv` + `mart_game_results`, long-format unpivot of h2h/totals from the wide model output. Added `retrain_tag` sidebar filter and combined `version_label = "model_version / retrain_tag"` used as the series key in Brier, CLV, and P&L charts.
+  - Summary section: when >1 variant is selected, renders one row per variant (Predictions / Win Rate / Mean CLV / P&L Kelly / P&L Flat) with a caption explaining values are not additive across variants (same game scored once per variant).
+  - P&L chart: splits by variant × strategy (Kelly/Flat) when multi-variant, mirroring the Brier chart's per-variant lines.
+  - Active Models panel: new expandable section at top of page sourced from `model_registry.yaml`, showing the deployed `(target, version, model_name, artifact, deployed_date, features, backfill_date)` per target.
+- [x] Update `model_registry.yaml` with `backfill_date: '2026-05-12'` under each target's champion block
 
 ---
 
-### 1.7 — Alpha re-calibration with market-blind models ✍️
+### 1.7 — Alpha re-calibration with market-blind models ✅
 
 **Goal:** Re-run the Bayesian alpha calibration now that all three production models are market-blind. The previous calibrated value (`best_alpha=0.0`) correctly reflected that the market-inclusive models added no independent signal beyond the market price (circularity). With market-blind models, alpha > 0 is expected and Posterior% will become a meaningful blended signal.
 
@@ -759,59 +1028,430 @@ uv run python betting_ml/scripts/run_probability_layer.py --use-alpha 0.3
 ```
 
 Tasks:
-- [ ] Update `run_probability_layer.py` CV loop: import `_MARKET_COLS_TO_EXCLUDE` from `train_elasticnet_prod.py` (or a shared constants module) and apply to feature selection before each fold
-- [ ] Set NGBoost hyperparams in script to match promoted artifacts: `n_estimators=200/max_depth=3` for run_diff, `n_estimators=500/max_depth=3` for total_runs, both Normal dist
-- [ ] Run full calibration: `uv run python betting_ml/scripts/run_probability_layer.py`
-- [ ] Inspect alpha grid output — expect best_alpha > 0
-- [ ] Confirm `best_alpha.json` and `alpha_tuning_results` Snowflake table are updated
-- [ ] Re-run `predict_today.py` and confirm Posterior% now reflects a blend rather than pure market price
+- [x] Update `run_probability_layer.py` CV loop: import `_MARKET_COLS_TO_EXCLUDE` from `train_elasticnet_prod.py` and apply to feature selection
+  - Dropped 7 of 342 cols (335 remain) — `load_retained_features()` was already returning a curated subset that excluded most market features, so the circularity risk was lower than feared.
+- [x] Hardcoded Epic 1 hyperparams (override stale tuning JSONs): `n_estimators=200, Normal` for run_diff; `n_estimators=500, Normal` for total_runs. `max_depth=3` is NGBoost's default base-learner depth, no override needed.
+- [x] Ran full calibration: `uv run python betting_ml/scripts/run_probability_layer.py` (3 folds, 6,172 has_odds eval records)
+- [x] Inspected alpha grid — **best_alpha = 0.0** (log-loss=0.684309, monotonic increase with α)
+- [x] `best_alpha.json` and `alpha_tuning_results` Snowflake table updated
+- [ ] Re-run `predict_today.py` — N/A: posterior is `compute_posterior(model_prob, market_prob, alpha=0)` = `market_prob`, same as before; production behavior unchanged.
+
+**Outcome — α=0 (unchanged from prior calibration):**
+
+| α   | Log-Loss | Δ vs best |
+|-----|----------|-----------|
+| 0.0 | 0.684309 | 0.000000 ← best |
+| 0.1 | 0.684523 | +0.000213 |
+| 0.5 | 0.703776 | +0.019467 |
+| 1.0 | 0.757785 | +0.073475 |
+
+Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimized at α=0. The per-market breakdown explains why:
+
+| Market | Mean Edge | % Pos Edge | Mean Kelly |
+|--------|-----------|------------|------------|
+| h2h    | **−0.0368** | 27.8% | **−0.0189** |
+| totals | **+0.1350** | 85.2% | +0.0676    |
+
+- **h2h has *negative* edge.** The CV loop uses NGBoost run_diff → `P(home_diff > 0)` for h2h, not the production elasticnet. With market features removed, this NGBoost-derived h2h prob is less aligned with home win outcomes than the market consensus is.
+- **Totals has +85.2% positive edge** — the documented Card 7.V variance-shrinkage outcome (`pct_pred_over=83.7%` at promotion was already gated and PASSED). The mean is right (`mean_residual=0.048`) but `std(pred)=0.77` vs actual `std=4.46`. Combined with a typical line at ~8.38 vs predicted mean ~8.85, `P(pred > line)` lands at ~85% consistently. **Already deferred to Phase 9** — no NGBoost hyperparameter remediation cleared the `std(pred) ≥ 2.0` gate in 7.V Task-2 prototypes.
+
+**Interpretation:** the h2h negative-edge and totals over-confidence pull α-tuning in opposite directions; combined log-loss is minimized at α=0. With current Epic 1 market-blind models, Posterior% stays at pure market price — the model adds no measurable signal beyond what the consensus market already encodes (for combined h2h+totals).
+
+**Architecture mismatch flagged for follow-up:** the CV loop uses NGBoost run_diff for h2h scoring, but production `predict_today.py` uses the elasticnet classifier for h2h. A separate calibration using the actual production elasticnet might find α_h2h > 0 even when this combined α stays at 0. Logged as a Phase 9 candidate alongside the totals variance-ceiling work.
 
 **Note:** NGBoost retrains per CV fold are slow (~1 hr per fold × 3 folds). Plan for a 3–4 hr run. Use `--resume` to restart from checkpoint if interrupted.
 
 ---
 
-# Epic 2 — Sub-Model Infrastructure
+# Epic 2 — Sub-Model Infrastructure & Feature Readiness
 
-**Goal:** Establish the storage interface, versioning pattern, and shared tooling that all sub-models will use. Do this before building any sub-model to avoid rework.
+**Goal:** Establish (a) the storage interface, versioning pattern, evaluation harness, and temporal/SCD foundations that all sub-models will use, and (b) the per-sub-model feature mart readiness work that must complete before any sub-model in Epics 3–8 can train. Do this before building any sub-model to avoid rework.
 
----
+**Scoping principle:** Sub-models are *standalone* targeted models whose outputs are eventually consumed as features by new aggregation models (Layer 3). They do **not** integrate with the existing monolithic production models (home_win, total_runs, run_differential). All infrastructure in Epic 2 is decoupled from `train_elasticnet_prod.py` / `train_total_runs_prod.py` / `train_run_diff_prod.py`.
 
-### 2.1 — Define sub-model output storage schema
-
-Tasks:
-- [ ] Decide on storage pattern (new `feature_pregame_sub_model_signals` mart vs. a `mart_sub_model_signals` wide table)
-- [ ] Design schema: `game_pk`, `side`, `signal_name`, `signal_value`, `uncertainty`, `sub_model_version`, `computed_at`
-- [ ] Write DDL and create table in Snowflake
-- [ ] Create corresponding dbt model for the mart
+**Data findings that shaped this scope (queried 2026-05-12):**
+- `MART_STARTING_PITCHER_GAME_LOG` already has `XWOBA_AGAINST` for 50,292 / 50,293 rows back to 2015-04-05 → starter-target mart work is essentially zero.
+- `STG_FANGRAPHS__ZIPS_HITTING` is fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable → ZiPS hitting is a pure dbt-wiring task, not an ingestion fix.
+- `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
+- No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
 
 ---
 
-### 2.2 — Sub-model versioning convention
+### 2.1 — Sub-model output storage (long + wide pattern)
+
+**Decision:** Use **both** a long-format storage mart and a wide-format consumption view. New signals INSERT rows into the long mart and propagate to the wide view via PIVOT/aggregation in dbt — no schema migration cost per new signal, and downstream feature consumption is a simple `(game_pk, side)` join.
+
+**Long-format storage table (`mart_sub_model_signals`):**
+
+```
+game_pk             NUMBER       -- game identifier
+side                TEXT         -- 'home' / 'away' / 'game' (game-grain signals)
+signal_name         TEXT         -- e.g. 'run_env_signal', 'lineup_run_creation_signal'
+signal_value        FLOAT        -- central estimate
+uncertainty         FLOAT        -- optional, NULL if not produced
+sub_model_name      TEXT         -- e.g. 'run_env', 'offense'
+sub_model_version   TEXT         -- e.g. 'v1', 'v1.0', 'v1.1'
+signal_available    BOOLEAN      -- false for games outside the sub-model's effective window
+input_feature_hash  TEXT         -- hash of upstream feature row(s) used to compute this signal
+computed_at         TIMESTAMP_NTZ
+valid_from          TIMESTAMP_NTZ -- SCD-2 (see Story 2.4)
+valid_to            TIMESTAMP_NTZ -- SCD-2; NULL when current
+is_current          BOOLEAN
+```
+
+**Wide-format consumption view (`feature_pregame_sub_model_signals`):**
+
+One row per `(game_pk, side)` with one column per `(signal_name, sub_model_version)`. Built from the long mart via PIVOT. Joins cleanly into `feature_pregame_game_features` on `(game_pk, side)`.
 
 Tasks:
-- [ ] Define naming convention for sub-model version tags (e.g., `offensive_v1`, `run_env_v1`)
-- [ ] Document convention in a `sub_model_registry.yaml` (mirrors structure of `model_registry.yaml`)
-- [ ] Add `sub_model_version` tracking to `DAILY_MODEL_PREDICTIONS` or a dedicated audit table
+- [ ] Write DDL for `baseball_data.betting.mart_sub_model_signals` with full schema above; SCD-2 columns are populated per Story 2.4
+- [ ] Define out-of-window policy: insert NULL rows with `signal_available = false` for all games in the historical window, so downstream models can detect missing-vs-present without ambiguous NULL semantics
+- [ ] Define `input_feature_hash`: MD5 over the concatenated string-cast values of the upstream feature columns used. Helps detect upstream drift forcing a signal recompute
+- [ ] Write dbt model `feature_pregame_sub_model_signals` that pivots the long mart to wide format. Use `current_flag = true` rows only for the default view; provide an `_asof` parametric variant for historical replay (Story 2.4)
+- [ ] Insert a synthetic test signal (`test_signal_v1`) end-to-end and confirm it propagates to the wide view without code changes
+
+Acceptance Criteria:
+- [ ] `mart_sub_model_signals` table exists with all columns
+- [ ] `feature_pregame_sub_model_signals` builds and contains the synthetic test signal as a column
+- [ ] Adding a new signal name to the long mart requires zero schema changes — confirmed by inserting `test_signal_v2_marker` and rebuilding the wide view
+- [ ] `input_feature_hash` is recomputed deterministically given identical upstream input (verified by hash equality on two consecutive runs)
 
 ---
 
-### 2.3 — Sub-model evaluation harness
+### 2.2 — Sub-model registry
+
+**Decision:** New `sub_model_registry.yaml` mirrors `model_registry.yaml` in spirit but adds sub-model-specific fields (target definition, parent features, downstream consumers, promotion gate). Naming convention: `<domain>_v<N>` lowercase (e.g. `run_env_v1`, `offense_v1`).
+
+**Registry schema (per sub-model entry):**
+
+```yaml
+run_env_v1:
+  artifact_path: models/sub_models/run_env_v1.pkl
+  feature_columns_path: models/sub_models/run_env_v1_features.json
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    column: total_runs
+    grain: game_pk                # one of: game_pk | game_pk_side | pitcher_id_game_pk
+  training_window: { start: '2018-01-01', end: '2025-12-31' }
+  cv_strategy: walk_forward
+  cv_metric: mae
+  cv_score: 2.85
+  promotion_gate:
+    metric: mae
+    threshold: 2.95
+    direction: lower_is_better
+  parent_features:                # feature marts this sub-model depends on
+    - feature_pregame_park_features
+    - feature_pregame_weather_features
+    - feature_pregame_umpire_features
+  output_signals:                 # signal_name values written to mart_sub_model_signals
+    - run_env_signal
+    - environment_volatility
+  downstream_consumers: []        # future Layer 3 aggregation models that ingest these signals
+  promotion_status: challenger    # one of: challenger | champion | deprecated
+  promoted_at: null
+  notes: |
+    Free-form notes about training decisions, known caveats, etc.
+```
 
 Tasks:
-- [ ] Create `evaluate_sub_model.py` script that accepts a signal name and runs:
-  - Temporal CV (rolling forward windows)
-  - Correlation with outcome residuals
-  - Incremental Brier/MAE contribution when added to base model
-  - Feature importance rank in augmented model
-- [ ] Integrate output into a `sub_model_ablation_report.md` template
+- [ ] Create `betting_ml/sub_model_registry.yaml` with documented schema (comment block at top of file)
+- [ ] Write `betting_ml/scripts/sub_model_registry.py` with helpers: `load_registry()`, `get_entry(name, version)`, `register(name, version, fields)`, `promote(name, version)`
+- [ ] Add `sub_model_versions_used` JSON column to `baseball_data.betting_ml.daily_model_predictions` — an array of `{name, version}` pairs recording which sub-model versions produced features for each prediction (audit linkage for historical reproducibility)
+- [ ] Document the promotion-status state machine: challenger → champion → deprecated. Only one champion per `(name, version_major)` at a time
+- [ ] Populate placeholder entries for all five Phase 9 sub-models (`run_env_v1`, `offense_v1`, `starter_v1`, `bullpen_v1`, `matchup_v1`) with `promotion_status: pending` and empty fields — they get filled in as each Epic ships
+
+Acceptance Criteria:
+- [ ] Registry YAML file exists with documented schema and five placeholder entries
+- [ ] Registry helper module has unit-test coverage for load/get/register/promote
+- [ ] `daily_model_predictions` schema includes `sub_model_versions_used` (VARIANT or TEXT JSON); migration applied in dev
+- [ ] Promotion-state-machine doc is in the same file as the YAML schema comments
 
 ---
 
-### 2.4 — Add `computed_at` timestamps to all new feature marts
+### 2.3 — Sub-model evaluation harness (standalone)
+
+**Scope:** Each sub-model is evaluated on its **own** predictive target. The harness measures how well a sub-model's signal predicts the target it was trained to predict. It does **not** retrain or compare against the existing monolithic production models — those remain a separate concern, and the rolled-up Layer 3 aggregation models that consume sub-model signals are out of scope for this story.
+
+**Evaluation modes the harness must support:**
+
+1. **Standalone target-prediction quality**: temporal walk-forward CV. For regression targets (run_env predicting total_runs, offense predicting team runs scored, starter predicting xwOBA-against): MAE, RMSE, Pearson r, Spearman r. For binary targets (none in Phase 9 sub-models initially): AUC, Brier, log-loss.
+2. **Calibration**: reliability diagram for regression by predicted-value decile (actual mean vs. predicted mean per bucket).
+3. **Stability**: season-by-season metric breakdown to detect coverage-driven or regime-driven regressions.
+4. **Version comparison**: champion-vs-challenger within the sub-model space (e.g., `run_env_v1` vs `run_env_v2`).
+5. **Partial-coverage handling**: two modes for signals only available in part of the training window (bat tracking 2023-07+ being the canonical case):
+   - `drop` — training rows without signal are excluded entirely
+   - `impute_with_indicator` — NULL imputed to mean + boolean `signal_available` column added
+
+**What the harness explicitly does NOT do:**
+
+- Does not import or call `train_elasticnet_prod.py`, `train_total_runs_prod.py`, or `train_run_diff_prod.py`
+- Does not modify `feature_pregame_game_features` or any monolithic-model feature pipeline
+- Does not compute "incremental contribution to the production home_win model" — that comparison is handled in a different layer when Layer 3 aggregation models exist
 
 Tasks:
-- [ ] Add `computed_at` (materialization timestamp) as a standard column to all new dbt feature marts going forward
-- [ ] Document this as a dbt convention in the project README or CLAUDE.md
+- [ ] Write `betting_ml/scripts/evaluate_sub_model.py` with CLI: `--name <sub_model_name> --version <vN> [--compare <vN>] [--coverage-mode drop|impute_with_indicator] [--target-window 2024-2026]`
+- [ ] Implement walk-forward CV: train on rolling windows, predict on the next window, compute target-prediction metrics
+- [ ] Implement calibration computation (reliability diagram values, ECE-style scalar)
+- [ ] Implement season-by-season metric breakdown
+- [ ] Implement version-comparison mode that runs both versions against the same eval window and reports deltas
+- [ ] Output: structured JSON metrics file + human-readable `sub_model_evaluation_report.md` (rename from "ablation" — the harness does not ablate against monolithic models)
+- [ ] Register the harness output location convention: `models/sub_models/<name>_v<N>/evaluation_<timestamp>.json` + `.md`
+
+Acceptance Criteria:
+- [ ] `evaluate_sub_model.py --name run_env_v1` runs end-to-end given a populated registry entry, an artifact, and a signal row set in `mart_sub_model_signals`
+- [ ] Output report contains: target description, walk-forward CV metric table, season-stability table, calibration table
+- [ ] `import ast; ast.walk` confirms the script does NOT import `train_elasticnet_prod`, `train_total_runs_prod`, or `train_run_diff_prod` (forbidden-import AC)
+- [ ] Version comparison mode produces a side-by-side metric table with delta column
+- [ ] Both coverage modes are exercised and produce sensible (non-erroring) reports against a bat-tracking-style test signal
+
+---
+
+### 2.4 — Type-2 SCD foundation for feature & sub-model output layers
+
+**Strategic intent:** Long-term, we want point-in-time reproducibility of every model prediction. Today's feature marts overwrite state (latest-only) — making it impossible to answer "what did the system see at prediction time T?" Type-2 SCDs at the feature and sub-model output layers solve this by preserving every state change with `valid_from` / `valid_to` / `is_current` columns, enabling AS-OF queries for historical re-runs, re-training, and CLV backtesting.
+
+**Phase 9 scope (this story):**
+
+- Define the SCD-2 column convention and pattern
+- Apply SCD-2 to the **new** sub-model output mart (`mart_sub_model_signals`) from day one — zero migration cost
+- Add `computed_at` to all new feature marts created in Stories 2.5–2.9 (born SCD-2-ready even if `valid_to`/`is_current` aren't actively maintained yet)
+- Decision: dbt snapshots vs custom incremental SCD-2 macros — pick one and document
+- Write the point-in-time / AS-OF join pattern documentation with a worked example
+- Identify priority list for migrating **existing** feature marts (lineup, weather, injury status, market state, projected starter) and capture as a separate future epic
+
+**Phase 9 scope explicitly excludes:**
+
+- Migrating existing `feature_pregame_*` marts to SCD-2 (deferred to a future SCD migration epic — large scope, multi-mart)
+- Migrating existing rolling-stat marts in `mart_*` to SCD-2 (deferred)
+- Building historical CLV reconstruction infrastructure (deferred, depends on completed SCD migration)
+
+**SCD-2 column convention:**
+
+```
+valid_from      TIMESTAMP_NTZ NOT NULL  -- when this row's state became active
+valid_to        TIMESTAMP_NTZ NULL      -- when superseded by a newer state; NULL when current
+is_current      BOOLEAN NOT NULL        -- duplicates (valid_to IS NULL) for query convenience
+record_hash     TEXT NOT NULL           -- MD5 of the natural-key columns + payload; used to detect state changes
+computed_at     TIMESTAMP_NTZ NOT NULL  -- when the dbt run materialized this row
+```
+
+**Point-in-time query pattern (canonical worked example):**
+
+```sql
+-- "What was the run_env_signal for game X as known at prediction time T?"
+select signal_value
+from baseball_data.betting.mart_sub_model_signals
+where game_pk = :game_pk
+  and signal_name = 'run_env_signal'
+  and sub_model_version = 'v1'
+  and valid_from <= :prediction_ts
+  and (valid_to > :prediction_ts or valid_to is null)
+qualify row_number() over (
+    partition by game_pk, signal_name, sub_model_version
+    order by valid_from desc
+) = 1;
+```
+
+Tasks:
+- [ ] Write a short design doc `quant_sports_intel_models/baseball/scd2_convention.md` covering: column definitions, change-detection rule (`record_hash` diff triggers a new row + close-out the prior), out-of-order arrival policy, deletion semantics (soft via `valid_to`, never DELETE)
+- [ ] Decide dbt snapshots vs custom SCD-2 macros. **Recommendation: custom macros.** dbt snapshots are simpler but inflexible (single hash strategy, no compound natural keys per row, awkward for incremental marts at our scale). Custom macros let us define a reusable `scd2_merge(natural_key_cols, payload_cols)` pattern. Document the decision either way.
+- [ ] Implement the chosen SCD-2 mechanism for `mart_sub_model_signals` (Story 2.1)
+- [ ] Add SCD-2 columns to the new feature marts created in Stories 2.6 and 2.9 (no historical migration — just born with the columns)
+- [ ] Add the AS-OF query pattern to the same design doc with the worked example above
+- [ ] Capture future SCD migration scope as Epic 15 placeholder: "Migrate existing feature marts to SCD-2 (lineup state, weather, injury, market state, projected starter)" — priority order based on volatility (lineup highest, park factors lowest)
+
+Acceptance Criteria:
+- [ ] `mart_sub_model_signals` populates `valid_from`, `valid_to`, `is_current`, `record_hash` correctly: inserting a new signal value for an existing `(game_pk, signal_name, sub_model_version)` closes the prior row (`valid_to = current_timestamp`, `is_current = false`) and inserts a new current row
+- [ ] AS-OF query pattern returns the historically-correct value when run against a row set that has been updated multiple times
+- [ ] `scd2_convention.md` design doc exists in the repo
+- [ ] Decision (snapshots vs custom macros) is documented with reasoning
+- [ ] Epic 10 placeholder added to this implementation guide with the existing-mart migration priority list
+- [ ] All new marts created in Stories 2.6 and 2.9 include the five SCD-2 columns from the outset
+
+---
+
+### 2.5 — Run environment feature readiness
+
+**What exists:** Park features, weather features, umpire features, team/starter opponent-control features all in `feature_pregame_game_features`. `total_runs` training label in `mart_game_results`.
+
+**What's missing:** Confirmation of pre-2022 weather backfill coverage. The data mart inventory marks this as "Unknown."
+
+Tasks:
+- [ ] Query `baseball_data.statsapi.weather_raw`: count non-null rows by season. Output a coverage table
+- [ ] Decide training window:
+  - If pre-2022 coverage ≥ 80% of outdoor games: use 2016+ window with normal NULL handling (domes always NULL — handled correctly already)
+  - If pre-2022 coverage is 30–80%: use 2018+ or 2020+ window, document the truncation
+  - If pre-2022 coverage < 30%: restrict to live-ingestion era only (~2023+) and document the tradeoff
+- [ ] Document the chosen training window in `sub_model_registry.yaml` under `run_env_v1.training_window`
+- [ ] Validate the training-dataset query returns clean rows for the chosen window and joins correctly to opponent-quality control features
+
+Acceptance Criteria:
+- [ ] Weather coverage table by season is in the registry notes or a coverage report
+- [ ] Training window decision is explicit and documented (not implicit)
+- [ ] Sample training-dataset query returns the expected row count for the chosen window with no schema errors
+- [ ] No new feature mart created — all inputs flow from existing master feature table
+
+**Training target:** `total_runs` from `mart_game_results`. Version 1 — direct prediction with team-offense, starter-quality, and bullpen-quality features as opponent controls. No market features.
+
+---
+
+### 2.6 — Offensive quality feature mart gaps
+
+**What exists:** `feature_pregame_lineup_features` (~40 cols per side). `stg_fangraphs__zips_hitting` fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable. `stg_statsapi_player_injury_status` exists. `INJURY_ADJ_AVG_WOBA_30D` and `INJURY_ADJ_AVG_XWOBA_30D` are present in the lineup feature mart.
+
+**What's missing (confirmed via Snowflake column inventory):**
+- ZiPS projected wRC+, OBP, SLG, K%, BB%, ISO at lineup level — not joined into the lineup feature mart
+- Lineup depth score (bottom 3 batters' projected wOBA, weighted by expected PA) — not present
+- Lineup entropy / concentration metric — not present
+- Lineup IL filtering — partially handled via the two injury-adjusted columns; needs spot-check
+
+Tasks:
+- [ ] Extend `feature_pregame_lineup_features` to join `stg_fangraphs__zips_hitting` via `dim_fangraphs_player_xref` on MLBAM ID. Add: `{side}_zips_lineup_avg_wrc_plus`, `{side}_zips_lineup_avg_woba_proxy` (from `0.7 * PROJ_OBP + 0.3 * PROJ_SLG` or similar), `{side}_zips_lineup_avg_k_pct`, `{side}_zips_lineup_avg_iso`
+- [ ] Use current-season projection with prior-season fallback for player-seasons missing a current ZiPS row
+- [ ] Add `{side}_lineup_depth_score` = average projected wOBA of slots 7–9, weighted by expected PA
+- [ ] Add `{side}_lineup_entropy` = Shannon entropy of slot-wise projected wOBA distribution (captures lineup concentration)
+- [ ] Spot-check IL filtering: pick 5 historical games with known IL-active batters and confirm they do not inflate lineup quality scores
+- [ ] **Rookie cold-start handling (defensive — pending Epic 14 MiLB data):**
+  - Add `{side}_lineup_rookie_count`: number of lineup slots with < 200 MLB career PAs
+  - Add `{side}_lineup_rookie_pa_share`: expected PA-weighted share of the lineup that is rookie-status (signals lineup-quality uncertainty)
+  - For rookie batters, regress 30-day rolling MLB stats toward archetype-mean (if cluster assignment exists) or league-mean (if not). Use a Bayesian shrinkage prior: posterior = (PA / (PA + k)) × observed + (k / (PA + k)) × prior_mean with k = 200
+  - Confirm ZiPS hitting projections cover ≥ 80% of debut-season rookies — if so, projection-side features fill the gap for most call-ups even without MLB rolling history
+  - Document the regression-to-mean policy in the registry notes for `offense_v1`
+- [ ] Add SCD-2 columns (per Story 2.4 convention) — born SCD-2-ready
+- [ ] Validate `dbtf build --target dev --select feature_pregame_lineup_features` completes
+
+Acceptance Criteria:
+- [ ] New columns present and non-null for ≥ 90% of games in the 2021–2026 training window
+- [ ] Prior-season fallback verified: a player with no current-season ZiPS row but a prior-season row gets the prior-season value
+- [ ] IL spot-check confirms no positive inflation from inactive players
+- [ ] `dbtf build` clean
+- [ ] Mart includes the five SCD-2 columns from Story 2.4
+
+**Training target:** Team runs scored per game (one observation per `(game_pk, side)`) from `mart_game_results`. Version 1 — with opponent starter/bullpen quality controls. No market features.
+
+---
+
+### 2.7 — Starter suppression target registration (no mart work)
+
+**Decision based on data findings:** `MART_STARTING_PITCHER_GAME_LOG` already contains every column needed as a starter-model training target. No new mart is required.
+
+Available columns (confirmed in Snowflake on 2026-05-12):
+- `XWOBA_AGAINST` (primary target — 50,292 / 50,293 non-null, 2015–2026)
+- `STRIKEOUTS`, `WALKS`, `BATTERS_FACED` → K%/BB% computable inline
+- `OUTS_RECORDED`, `INNINGS_PITCHED` → depth target
+- `AVG_FASTBALL_VELO` — bonus signal for matchup model cross-features
+- `RUNS_ALLOWED`, `HITS_ALLOWED` — available but noisier than xwOBA
+
+**ZiPS pitching xFIP decision:** `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons. Drop `STARTER_PROJ_XFIP` from training feature lists (not impute). Use `PROJ_FIP`, `PROJ_ERA`, `PROJ_K_PCT`, `PROJ_BB_PCT` instead — all are fully populated. Do not block this Epic on a FanGraphs ingestion fix; capture as a future low-priority story.
+
+Tasks:
+- [ ] Register the starter target in `sub_model_registry.yaml` under `starter_v1.target`:
+  ```yaml
+  target:
+    source_table: baseball_data.betting.mart_starting_pitcher_game_log
+    primary_column: xwoba_against
+    auxiliary_columns: [k_per_bf, bb_per_bf, ip]
+    grain: pitcher_id_game_pk
+  ```
+- [ ] Add a future-work note: "Fix `stg_fangraphs__zips_pitching.proj_xfip` ingestion (low priority)" — document in `idea_notes.md` or equivalent
+- [ ] Confirm leakage guard: training queries against `mart_starting_pitcher_game_log` must use `game_date < model_run_date` strictly
+
+Acceptance Criteria:
+- [ ] Registry entry for `starter_v1` has full target definition
+- [ ] xFIP exclusion documented; substitute features explicitly listed
+- [ ] Leakage guard documented in the registry notes field
+
+**Training targets:** Primary — `xwoba_against`. Auxiliary — `strikeouts / batters_faced`, `walks / batters_faced`, `outs_recorded / 3` (IP). No market features.
+
+---
+
+### 2.8 — Bullpen game outcomes mart (deferred — not on Epic 2 critical path)
+
+**Status:** Conditionally needed. Bullpen v1.0 is a rules-based composite that uses **only** existing pre-game features (`mart_bullpen_leverage`, `mart_bullpen_workload`, `mart_bullpen_effectiveness`) — no new training target mart required. This story only becomes blocking if/when bullpen v1.1 (supervised calibration) is pursued.
+
+**Sequencing decision:** Defer this story until after Epic 6 v1.0 ships. The v1.0 rules-based signal will be evaluated via Story 2.3 against downstream proxies. If v1.0 evaluation suggests learned weights would materially improve the signal, return to this story to build the supervised target.
+
+**When pursued, the mart specification:**
+
+- Name: `mart_bullpen_game_outcomes`
+- Grain: one row per `(game_pk, team)`
+- Columns: `bullpen_xwoba_allowed`, `bullpen_xwoba_allowed_next_7d` (forward rolling — used as the supervised v1.1 target to average over single-game leverage variance), `bullpen_era_game`, `bullpen_k_pct`, `bullpen_bb_pct`, `bullpen_ip`, `high_leverage_ip`, `blown_save_flag`
+- Materialization: incremental MERGE on `game_date`
+- Source: `stg_batter_pitches` joined to identify all non-starter pitching appearances per game; aggregate
+- Leakage guard: never joined to any `feature_pregame_*` mart — usage-restricted to training-label queries only
+
+Tasks (pending — do not start until Epic 6 v1.0 ships):
+- [ ] Build `mart_bullpen_game_outcomes` per spec above
+- [ ] Materialize 2016–2026
+- [ ] Document the "supervised v1.1 calibration target = `bullpen_xwoba_allowed_next_7d`" decision in the registry
+
+Acceptance Criteria (when pursued):
+- [ ] Mart exists with grain `(game_pk, team)` and all listed columns
+- [ ] Complete-game starts show 0 IP bullpen contribution
+- [ ] No `feature_pregame_*` mart references this table (leakage guard)
+- [ ] SCD-2 columns included per Story 2.4
+
+**Training target (v1.1 only, not v1.0):** `bullpen_xwoba_allowed_next_7d`. No market features.
+
+---
+
+### 2.9 — Matchup cross-feature mart + archetype documentation
+
+**What exists:** `statsapi.batter_clusters`, `statsapi.pitcher_clusters`, `mart_batter_archetype_vs_pitcher_cluster`, `mart_batter_bat_tracking_profile` (2023-07-14+), `mart_pitcher_rolling_stats` (includes fastball velocity), `mart_pitcher_arsenal_summary`.
+
+**What's missing:**
+- Cross-feature mart that aggregates lineup bat speed and computes the lineup-vs-starter velocity differential
+- Formal archetype cluster definition documentation in the repo (cluster_id / cluster_label / example-player references)
+
+Tasks:
+- [ ] Build `feature_pregame_matchup_bat_tracking` with grain `(game_pk, side)`:
+  - `{side}_avg_bat_speed` (lineup average from `stg_statsapi_lineups_wide` × `mart_batter_bat_tracking_profile`)
+  - `{side}_lineup_bat_speed_std` (uncertainty over the 9 slots)
+  - `{side}_bat_speed_vs_opp_starter_fastball_velo` = `{side}_avg_bat_speed - opp_starter_fastball_velo`
+- [ ] Born SCD-2-ready (Story 2.4 columns)
+- [ ] Add to `feature_pregame_game_features` joins (optional feature block — NULL pre-2023-07-14 is expected and acceptable)
+- [ ] Validate joins do not unexpectedly drop pre-2023-07 games
+- [ ] Write `quant_sports_intel_models/baseball/archetype_definitions.md`:
+  - Batter clusters: query distinct `(cluster_id, cluster_label)` from `statsapi.batter_clusters`, document each with feature-driver explanation and 3 example players
+  - Pitcher clusters: same treatment from `statsapi.pitcher_clusters`
+  - Document cluster stability: row counts per cluster by season; flag any cluster with < 50 members/season
+- [ ] Confirm `mart_batter_archetype_vs_pitcher_cluster` is the canonical training target source for `matchup_v1` (already exists)
+- [ ] **Rookie cold-start handling (defensive — pending Epic 14 MiLB data):**
+  - Add `{side}_starter_rookie_flag`: true if opposing starter has < 50 MLB career IP
+  - Add `{side}_lineup_rookie_in_top_5_flag`: rookie batting in slots 1–5 (high-leverage rookie indicator)
+  - For rookie starters, fall back from rolling Statcast/Stuff+ to ZiPS pitching projections (PROJ_FIP, PROJ_K_PCT, PROJ_BB_PCT) — already in scope via Story 2.7 feature list
+  - For rookie batters in the lineup, bat-tracking columns will be NULL (not in `mart_batter_bat_tracking_profile`). Treat as `signal_available = false` per Story 2.1 convention rather than imputing — protects matchup model from confident-but-wrong rookie matchup signals
+  - Document the rookie fallback policy in the registry notes for `matchup_v1`
+
+Acceptance Criteria:
+- [ ] `feature_pregame_matchup_bat_tracking` builds and has non-null bat-speed columns for ≥ 90% of games from 2023-07-15 onward
+- [ ] NULL handling for pre-2023-07 games confirmed (no row drops in master feature join)
+- [ ] `archetype_definitions.md` exists with cluster definitions, drivers, examples, and stability counts
+- [ ] Matchup target source registered in `sub_model_registry.yaml` under `matchup_v1.target`
+- [ ] SCD-2 columns included
+
+**Training targets:** wOBA / xwOBA / K% / BB% / hard-hit% by `(batter_archetype, pitcher_archetype)` pair from `mart_batter_archetype_vs_pitcher_cluster`. Population-level — individual batter-vs-starter samples are too sparse. No market features.
+
+---
+
+### Epic 2 dependency sequencing
+
+```
+2.1 (storage) ──┐
+                ├──► All Epics 3–8 can start once 2.1, 2.2, 2.3, 2.4 ship
+2.2 (registry) ─┤
+2.3 (eval) ─────┤
+2.4 (SCD-2) ────┘
+
+2.5 (run env readiness)        → gate for Epic 3
+2.6 (offense / ZiPS wiring)    → gate for Epic 4
+2.7 (starter target reg)       → gate for Epic 5  (very light — registry entry only)
+2.8 (bullpen mart)             → DEFERRED; not blocking Epic 6 v1.0
+2.9 (matchup mart + docs)      → gate for Epic 8 (also needs Epic 7 — archetype revalidation)
+```
+
+Stories 2.5–2.9 can run in parallel with 2.1–2.4 since they touch disjoint files.
 
 ---
 
@@ -1406,6 +2046,7 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 
 | Epic | Gate / Exit Criterion |
 |---|---|
+| T — Temporal capture foundations | All `scripts/ingest_*.py` are append-only; staging dedupes correctly; inventory corrected |
 | 1 — Market-blind retrains | All three models pass their metric gates; no market features in top-20 importance |
 | 2 — Sub-model infrastructure | Output table created; versioning convention documented; evaluation harness working |
 | 3 — Run environment | Ablation shows incremental improvement in totals CV MAE |
@@ -1419,3 +2060,181 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 | 11 — H2H with signals | CV Brier beats market-blind baseline; mean CLV positive over 30+ live games |
 | 12 — Meta-model | 1000+ CLV games; AUC > 0.55; positive mean CLV in holdout |
 | 13 — Temporal platform | Point-in-time joins validated; historical reconstruction matches original predictions |
+| 14 — MiLB cold-start coverage | AAA Statcast + FanGraphs MiLB ingestion live; rookie call-ups have non-NULL feature coverage within 7 days of debut; prospect rank signal evaluated |
+| 15 — SCD-2 migration of existing marts | Lineup state, weather, injury, market state, projected starter migrated to SCD-2; AS-OF query validation on at least one historical game |
+
+---
+
+# Epic 14 — MiLB Cold-Start Coverage
+
+**Goal:** Eliminate the cold-start gap where minor-league call-ups appear as NULL slots in lineup, starter, and matchup features. Bring Baseball Savant AAA Statcast + FanGraphs MiLB leaderboards + prospect rankings into the feature store so that a player called up to the majors has non-NULL feature coverage from day one.
+
+**Why this is its own epic and not part of Epic 2:** This is a Layer 1 data expansion (new sources, new ingestion, ID crossref, multi-year backfill), not sub-model feature readiness. It benefits every downstream consumer — sub-models, future Layer 3 aggregation models, and even the existing monolithic models. Epic 2 ships defensively (rookie indicators, regression-to-mean, ZiPS-only fallback) so sub-models don't wait on this epic.
+
+**Sources confirmed available (per user, 2026-05-12):**
+- Baseball Savant — AAA Statcast (Hawkeye in many AAA parks since 2023)
+- FanGraphs — minor league leaderboards (rolling rate stats, league-adjusted)
+- Prospect rankings — third potential signal source (specific publisher TBD: FG / BA / MLB Pipeline)
+
+---
+
+### 14.1 — Data availability audit
+
+Tasks:
+- [ ] Inventory Baseball Savant AAA Statcast: which AAA parks have Hawkeye, what date range, what columns available (pitch type, velocity, xwOBA equivalents, bat tracking?)
+- [ ] Inventory FanGraphs MiLB leaderboards: levels covered (AAA, AA, A+, A), seasons available, columns (wRC+, K%, BB%, FIP, etc.), refresh cadence
+- [ ] Inventory prospect rankings sources: FanGraphs prospect lists, Baseball America, MLB Pipeline — which is most accessible programmatically, refresh cadence, ranking-numeric vs grade-letter format
+- [ ] Produce a coverage report: for each MLB call-up in 2024–2026, how much MiLB pitch-level / rate-stat / ranking data exists in the 12 months prior to debut?
+
+Acceptance Criteria:
+- [ ] Coverage report documents what's available per source and what fraction of recent rookies it would cover
+- [ ] Go/no-go decision per source documented (AAA Statcast yes/no, FanGraphs MiLB yes/no, prospect rankings — which publisher)
+
+---
+
+### 14.2 — Player ID crossref (MiLB ↔ MLB)
+
+Tasks:
+- [ ] Build `mart_player_id_crossref`: maps MLBAM ID ↔ FanGraphs MiLB player ID ↔ Baseball Savant ID ↔ prospect-ranking publisher ID
+- [ ] Validate on known recent call-ups: confirm a player like (recent rookie) is correctly linked across all four sources
+- [ ] Handle name-collision edge cases (multiple prospects with the same name in the system)
+- [ ] Document fallback strategy when a player exists in only some sources
+
+Acceptance Criteria:
+- [ ] Crossref mart exists with ≥ 95% link coverage for all MLB players active 2023–2026
+- [ ] Spot-check on 10 recent call-ups passes
+
+---
+
+### 14.3 — Baseball Savant AAA Statcast ingestion
+
+Tasks:
+- [ ] Write ingestion script `scripts/ingest_savant_aaa.py` mirroring the MLB Savant ingestion pattern
+- [ ] Create `baseball_data.savant.aaa_batter_pitches` raw table (parallel structure to MLB `batter_pitches`)
+- [ ] Backfill 2023–2026
+- [ ] Build dbt staging `stg_savant_aaa_batter_pitches` with the same MD5 surrogate key strategy
+- [ ] Add coverage flag: `aaa_data_quality_score` per (player, season) — confirms Hawkeye parks vs non-Hawkeye parks
+
+Acceptance Criteria:
+- [ ] AAA pitch-level data ingested for 2023–2026
+- [ ] Staging model dedupes correctly
+- [ ] Coverage flag identifies high-vs-low-quality player-seasons
+
+---
+
+### 14.4 — FanGraphs MiLB leaderboard ingestion
+
+Tasks:
+- [ ] Write ingestion script `scripts/ingest_fangraphs_milb.py` mirroring existing FG ingestion pattern
+- [ ] Create `baseball_data.fangraphs.milb_hitting_leaderboard_raw` and `milb_pitching_leaderboard_raw` (mirrors MLB versions, with `level` column: AAA / AA / A+ / A)
+- [ ] Backfill: full seasons 2021–2026 (or as far back as FG MiLB coverage is reliable)
+- [ ] Build dbt staging `stg_fangraphs__milb_hitting_leaderboard` and `_pitching_leaderboard`
+
+Acceptance Criteria:
+- [ ] MiLB leaderboards ingested with `level` discriminator
+- [ ] Staging models dedupe per `(fg_player_id, season, level, window_type)`
+
+---
+
+### 14.5 — Prospect rankings ingestion
+
+Tasks:
+- [ ] Decision: which publisher (per Story 14.1 audit). Likely FanGraphs prospect lists for consistency with existing FG ingestion.
+- [ ] Ingestion script + raw table
+- [ ] Schema: `player_id`, `season`, `publisher`, `ranking_overall`, `ranking_position`, `eta_year`, `tool_grades` (hit, power, run, arm, field)
+- [ ] Backfill 2020–2026 if available
+- [ ] Build staging model
+
+Acceptance Criteria:
+- [ ] Prospect rankings table ingested
+- [ ] Joinable via player ID crossref from Story 14.2
+
+---
+
+### 14.6 — Career-splicing feature marts
+
+Tasks:
+- [ ] Define the blending rule: when a player has both MiLB and MLB history, which level's stats fill which feature?
+  - Recommendation: MLB stats take precedence when MLB PA / IP ≥ threshold (200 PA / 50 IP); MiLB stats fill the rolling-window gap when below threshold
+  - Add explicit `data_source` indicator columns: `{side}_lineup_avg_woba_data_source` ∈ {`mlb_rolling`, `milb_rolling`, `zips_projection`, `null`}
+- [ ] Extend `feature_pregame_lineup_features` to include MiLB-derived columns alongside MLB rolling stats (`{side}_lineup_avg_milb_wrc_plus`, `{side}_lineup_avg_milb_aaa_xwoba`, `{side}_lineup_avg_prospect_ranking`)
+- [ ] Extend `feature_pregame_starter_features` similarly for rookie starters
+- [ ] Update rookie-handling tasks in Stories 2.6 and 2.9 to consume the new columns instead of pure regression-to-mean (the defensive Epic 2 fallback becomes a backup, not the primary)
+
+Acceptance Criteria:
+- [ ] Lineup and starter feature marts have non-NULL coverage for ≥ 90% of rookie debuts within 7 days of debut date
+- [ ] `data_source` indicator columns let downstream models / dashboards explain which feature path produced a given prediction
+- [ ] Regression-to-mean from Epic 2 still applies as the final fallback when all data sources are NULL
+
+---
+
+### 14.7 — Validate downstream model impact
+
+Tasks:
+- [ ] Run the sub-model evaluation harness (Story 2.3) against `offense_v1` and `starter_v1` with MiLB-augmented features
+- [ ] Compare metric deltas on a subset of games featuring rookie-heavy lineups (e.g., games where `lineup_rookie_count ≥ 2`)
+- [ ] Promote MiLB-augmented sub-model versions if evaluation shows meaningful improvement on the rookie subset
+
+Acceptance Criteria:
+- [ ] Evaluation report comparing sub-models with vs. without MiLB features on the rookie-heavy game subset
+- [ ] If improvement is meaningful, MiLB-augmented sub-model versions are promoted
+
+---
+
+# Epic 15 — SCD-2 Migration of Existing Feature Marts
+
+**Goal:** Extend the SCD-2 convention from Story 2.4 to existing feature marts so the entire feature store supports point-in-time reproducibility. Unlocks historical CLV reconstruction and rigorous walk-forward replay.
+
+**Hard prerequisite:** Epic T must complete first. Epic 15's backfill strategy is `load_id` replay over append-only raw tables — if any source raw table still uses MERGE patterns, its historical state has been overwritten and cannot be reconstructed.
+
+**Parallelization:** Epic 15 runs in parallel with Track B sub-model development (Epics 3–8). It does **not** block sub-model work — sub-models train on aggregate historical outcomes, not intra-day state transitions.
+
+---
+
+### Backfill feasibility per mart (post-Epic T)
+
+Once Epic T converts all raw ingestion to append-only, every mart on the priority list can be backfilled via load-id replay **except where the underlying raw was MERGE-pattern before Epic T converted it**. For pre-Epic-T history, those marts get "current-state-from-Epic-T-conversion-date forward" semantics.
+
+| Mart | Raw source | Pre-Epic-T pattern | Backfill strategy |
+|---|---|---|---|
+| Lineup state | `monthly_schedule` | MERGE — **pre-T history NOT recoverable** | Full reconstruction from T.1 conversion date forward; aggregate snapshot for prior data |
+| Market state / odds | `oddsapi.*`, `parlayapi.*`, `odds_snapshots_historical` | Append-only ✓ | **Full historical replay possible** — backfill 2021+ |
+| Weather forecasts | `weather_raw` | MERGE — **pre-T history NOT recoverable** | Reconstruction from T.2 forward; current-snapshot-only prior |
+| Injury status | `player_transactions` | Append-only ✓ (per transaction_id) | **Full historical replay possible** — backfill from raw inception |
+| Projected starter | `monthly_schedule` | MERGE — same constraint as lineup | Same as lineup state |
+| Park factors | External / computed | Stable / low volatility | Trivial — annual refresh only; minimal SCD value |
+| Public betting | `public_betting_raw` | MERGE — **pre-T history NOT recoverable** | Reconstruction from T.3 forward |
+| Umpire assignments | `umpire_game_log` | MERGE — but low volatility | Reconstruction from T.4 forward; minimal pre-T loss |
+
+Key insight: **odds and injury** can be reconstructed historically in full because their raw layers were already append-only. **Lineup, weather, projected starter, public betting** have partial history — pre-Epic-T data is lost, but Epic T stops the bleeding and future capture is full.
+
+---
+
+### Priority order (highest volatility × highest downstream value)
+
+1. **Market state / odds snapshots** — fully replayable from raw. Highest leverage for CLV reconstruction.
+2. **Lineup state** — partial history (Epic T date forward), but highest single-day predictive value.
+3. **Injury status** — fully replayable from `player_transactions`. Modest standalone value, high combinatorial value with lineup state.
+4. **Projected starter** — same constraint as lineup state.
+5. **Weather forecasts** — partial history. Useful for run-environment sub-model temporal validation.
+6. **Public betting / umpire / park** — low priority; batch at the end.
+
+---
+
+### Tasks (per-mart substories created when each kicks off)
+
+For each mart in priority order:
+- [ ] Define natural key, payload columns, change-detection hash
+- [ ] Choose backfill strategy: full historical replay (if raw is append-only end-to-end) vs. forward-only (if pre-Epic-T raw was MERGE-pattern)
+- [ ] Implement SCD-2 merge using the macro from Story 2.4
+- [ ] Validate AS-OF queries against historical samples
+- [ ] Document the historical-coverage cutoff date in the mart's dbt model comments
+
+Final-epic deliverable:
+- [ ] Build historical CLV reconstruction script that reruns a sample of historical predictions using only feature state available at the original `prediction_ts` — confirm the original prediction is reproduced for fully-replayable marts and document the caveat for partial-coverage marts
+
+Acceptance Criteria:
+- [ ] All 8 marts in the table above migrated to SCD-2
+- [ ] AS-OF query validation passes for at least one historical game per mart
+- [ ] Historical CLV reconstruction script reproduces 3 sample historical predictions exactly using fully-replayable marts (odds + injury)
+- [ ] Per-mart historical-coverage cutoff documented in model comments and `baseball_data_mart_inventory.md`

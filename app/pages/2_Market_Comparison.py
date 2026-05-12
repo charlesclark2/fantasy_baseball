@@ -111,6 +111,7 @@ def _games_sql(date_str: str) -> str:
         g.game_number,
         e.event_id,
         p.consensus_win_prob,
+        p.calibrated_win_prob,
         p.h2h_market_implied_prob,
         p.pred_total_runs,
         p.p_over_ngboost,
@@ -487,7 +488,9 @@ if selected_book:
         bk_home_imp = _safe_float(bk.get("home_imp_prob"))
         bk_home_price = _safe_float(bk.get("home_price_american"))
         bk_away_price = _safe_float(bk.get("away_price_american"))
-        model_prob = _safe_float(selected_row.get("consensus_win_prob"))
+        # calibrated_win_prob = production model prob (Platt-recalibrated).
+        # consensus_win_prob is the pre-calibration audit column — do not use here.
+        model_prob = _safe_float(selected_row.get("calibrated_win_prob"))
         consensus_mkt = _safe_float(selected_row.get("h2h_market_implied_prob"))
 
         st.subheader(f"📊 {selected_book} vs. Model — Moneyline")
@@ -637,7 +640,7 @@ if selected_book:
 
 st.header("Moneyline")
 
-model_prob = _safe_float(selected_row.get("consensus_win_prob"))
+model_prob = _safe_float(selected_row.get("calibrated_win_prob"))
 market_prob = _safe_float(selected_row.get("h2h_market_implied_prob"))
 
 col_model, col_market = st.columns(2)
@@ -646,7 +649,8 @@ with col_model:
     st.metric(
         "Model Win% (Home)",
         f"{model_prob:.1%}" if model_prob is not None else "—",
-        help="50% NGBoost run-differential + 50% XGBoost classifier.",
+        help="Platt-recalibrated home win probability (calibrated_win_prob). "
+             "This is the value used for live edge/EV/Kelly calculations.",
     )
 
 with col_market:
@@ -702,7 +706,10 @@ else:
     y_min = max(0.0, all_vals.min() - 0.05) if not all_vals.empty else 0.3
     y_max = min(1.0, all_vals.max() + 0.05) if not all_vals.empty else 0.7
 
-    consensus_val = _safe_float(selected_row.get("consensus_win_prob"))
+    # Reference line on the movement chart shows where the model lands on the
+    # vig-free probability axis. calibrated_win_prob is the production model
+    # prob (post-Platt); consensus_win_prob is the pre-calibration audit column.
+    consensus_val = _safe_float(selected_row.get("calibrated_win_prob"))
     post_game_present = _commence_ts is not None and not df_pivot.empty and (
         df_pivot.index.max() > _commence_ts
     )

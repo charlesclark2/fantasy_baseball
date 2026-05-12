@@ -35,6 +35,17 @@ from betting_ml.utils.probability_layer import (
     tune_alpha,
 )
 from betting_ml.models.total_runs_trainer import train_ngboost, p_over_line
+# Epic 1 / Story 1.7 — apply the same market-feature exclusion as the promoted
+# market-blind training scripts, so the CV-fold NGBoost models are not market-
+# circular. Without this the CV models learn the market price and α tunes to 0.
+from betting_ml.scripts.train_elasticnet_prod import _MARKET_COLS_TO_EXCLUDE
+
+
+# Epic 1 promoted hyperparameters (model_registry.yaml). These override the stale
+# `tuning_results_ngboost_*.json` configs, which still recommend LogNormal for
+# total_runs — incorrect for the market-blind retrains, which use Normal for both.
+_EPIC1_NGB_TOTAL_RUNS = {"n_estimators": 500, "dist": "Normal"}
+_EPIC1_NGB_RUN_DIFF   = {"n_estimators": 200, "dist": "Normal"}
 
 
 # ---------------------------------------------------------------------------
@@ -209,21 +220,23 @@ def main() -> None:
         print(f"  Warning: {len(missing_features)} retained features not in df, will be ignored: {missing_features[:5]}")
         feature_cols = [c for c in feature_cols if c in df.columns]
 
+    # Epic 1 / Story 1.7 — drop market-derived columns so CV-fold NGBoost models
+    # don't learn the market price (circularity). Mirrors the promoted Epic 1
+    # market-blind training pipelines.
+    pre_blind_n = len(feature_cols)
+    feature_cols = [c for c in feature_cols if c not in _MARKET_COLS_TO_EXCLUDE]
+    dropped = pre_blind_n - len(feature_cols)
+    print(f"  Market-blind exclusion: dropped {dropped} of {pre_blind_n} columns ({len(feature_cols)} remain)")
+
     X = df[feature_cols]
     y_runs = df["total_runs"]
     y_diff = df["run_differential"]
 
-    # --- Load NGBoost hyperparameters ---
-    ngb_tot_n_est, ngb_tot_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_total_runs.json",
-        "total_runs",
-    )
-    ngb_diff_n_est, ngb_diff_dist = _load_ngb_cfg(
-        "betting_ml/evaluation/tuning_results_ngboost_run_diff.json",
-        "run_differential",
-    )
-    print(f"  NGBoost total_runs: n_estimators={ngb_tot_n_est}, dist={ngb_tot_dist}")
-    print(f"  NGBoost run_diff:   n_estimators={ngb_diff_n_est}, dist={ngb_diff_dist}")
+    # --- NGBoost hyperparameters (Epic 1 promoted artifacts) ---
+    ngb_tot_n_est, ngb_tot_dist   = _EPIC1_NGB_TOTAL_RUNS["n_estimators"], _EPIC1_NGB_TOTAL_RUNS["dist"]
+    ngb_diff_n_est, ngb_diff_dist = _EPIC1_NGB_RUN_DIFF["n_estimators"],   _EPIC1_NGB_RUN_DIFF["dist"]
+    print(f"  NGBoost total_runs: n_estimators={ngb_tot_n_est}, dist={ngb_tot_dist}  (Epic 1)")
+    print(f"  NGBoost run_diff:   n_estimators={ngb_diff_n_est}, dist={ngb_diff_dist}  (Epic 1)")
 
     if skip_cv:
         assert cached_alpha_data is not None
