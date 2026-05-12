@@ -1,7 +1,9 @@
 -- =============================================================================
 -- mart_prediction_clv.sql
--- Grain: one row per (prediction_date, game_pk, model_version)
---        — mirrors daily_model_predictions grain.
+-- Grain: one row per (game_pk, score_date, model_version, retrain_tag).
+--        Multiple model variants for the same game (e.g. promoted v2 and a
+--        market-blind retrain_tag='market_blind_epic1' challenger) coexist as
+--        separate rows so the Model Performance page can compare them.
 -- Purpose: Joins daily_model_predictions to mart_closing_line_value to
 --          surface CLV metrics alongside model predictions.
 --
@@ -25,9 +27,9 @@ predictions_ranked as (
     select
         *,
         row_number() over (
-            partition by game_pk, score_date
+            partition by game_pk, score_date, model_version, coalesce(retrain_tag, '')
             order by
-                -- prefer post_lineup (has confirmed lineup features); fall back to morning
+                -- prefer post_lineup (has confirmed lineup features); fall back to morning/backfill
                 case when prediction_type = 'post_lineup' then 1 else 2 end,
                 inserted_at desc
         ) as _rn
@@ -48,6 +50,9 @@ clv as (
         open_total_line,
         close_total_line,
         clv_total,
+        open_vf_over,
+        close_vf_over,
+        clv_over_prob,
         n_books_with_clv,
         data_source                                                     as clv_data_source,
         close_snapshot_ts
@@ -60,6 +65,7 @@ select
     p.game_pk,
     p.game_date,
     p.model_version,
+    p.retrain_tag,
     p.prediction_type,
     p.inserted_at                                                       as prediction_inserted_at,
     p.data_source                                                       as prediction_data_source,
@@ -81,6 +87,7 @@ select
     p.h2h_edge,
     p.h2h_kelly_fraction,
     p.total_line_consensus,
+    p.over_prob_consensus,
     p.totals_model_prob,
     p.totals_edge,
     p.totals_kelly_fraction,
@@ -92,6 +99,9 @@ select
     c.open_total_line,
     c.close_total_line,
     c.clv_total,
+    c.open_vf_over,
+    c.close_vf_over,
+    c.clv_over_prob,
     c.n_books_with_clv,
     c.clv_data_source,
     c.close_snapshot_ts,

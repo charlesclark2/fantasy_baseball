@@ -1,5 +1,6 @@
 home_win:
   artifact_path: betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
+  backfill_date: '2026-05-12'
   calibrator_last_fit_date: '2026-05-08'
   cv_brier: 0.2446
   deployed_date: '2026-05-11'
@@ -114,6 +115,7 @@ home_win:
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
   artifact_path: betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
+  backfill_date: '2026-05-12'
   cv_mae: 3.4981
   deployed_date: '2026-05-11'
   dist: Normal
@@ -179,6 +181,7 @@ run_differential:
       (MAE −0.029).
 total_runs:
   artifact_path: betting_ml/models/total_runs/ngboost_market_blind_2026.pkl
+  backfill_date: '2026-05-12'
   cv_mae: 3.5521
   deployed_date: '2026-05-11'
   dist: Normal

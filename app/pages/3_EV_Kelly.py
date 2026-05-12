@@ -60,15 +60,19 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
         matchup = f"{away} @ {home}"
         both_confirmed = bool(r.get("both_confirmed", False))
 
-        consensus_win_prob = _safe_float(r.get("consensus_win_prob"))
+        # calibrated_win_prob is the production "model prob" for h2h — Platt-
+        # recalibrated value used by predict_today.py for live edge computation.
+        # consensus_win_prob is the pre-calibration audit column
+        # (0.5 * ngboost + 0.5 * classifier) — do not use for EV/Kelly/edge math.
+        calibrated_win_prob = _safe_float(r.get("calibrated_win_prob"))
         home_mkt_prob = _safe_float(r.get("h2h_market_implied_prob"))
         over_mkt_prob = _safe_float(r.get("over_prob_consensus"))
         p_over = _safe_float(r.get("p_over_ngboost"))
 
         market_defs = [
-            ("h2h home", consensus_win_prob, home_mkt_prob),
+            ("h2h home", calibrated_win_prob, home_mkt_prob),
             ("h2h away",
-             (1.0 - consensus_win_prob) if consensus_win_prob is not None else None,
+             (1.0 - calibrated_win_prob) if calibrated_win_prob is not None else None,
              (1.0 - home_mkt_prob) if home_mkt_prob is not None else None),
             ("over", p_over, over_mkt_prob),
             ("under",

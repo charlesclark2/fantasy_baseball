@@ -8,6 +8,7 @@ from pathlib import Path
 import altair as alt
 import pandas as pd
 import streamlit as st
+import yaml
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
@@ -15,6 +16,33 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 import datetime
 
 from app.utils.db import get_snowflake_session, run_query
+
+_MODEL_REGISTRY_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
+
+
+@st.cache_data(ttl=3600)
+def load_active_models() -> list[dict]:
+    """Read model_registry.yaml and return the active model per target."""
+    try:
+        with open(_MODEL_REGISTRY_PATH) as f:
+            registry = yaml.safe_load(f) or {}
+    except Exception:
+        return []
+    rows = []
+    for target, cfg in registry.items():
+        if not isinstance(cfg, dict):
+            continue
+        artifact = cfg.get("artifact_path", "")
+        rows.append({
+            "Target": target,
+            "Version": cfg.get("model_version", "—"),
+            "Model": cfg.get("model_name", "—"),
+            "Artifact": Path(artifact).name if artifact else "—",
+            "Deployed": cfg.get("deployed_date", "—"),
+            "Features": cfg.get("features", "—"),
+            "Backfilled": cfg.get("backfill_date", "—"),
+        })
+    return rows
 
 # ---------------------------------------------------------------------------
 # Queries
@@ -40,36 +68,83 @@ ORDER BY b.score_date ASC, b.placed_at ASC
 """
 
 _PREDICTION_LOG_SQL = """
-WITH game_versions AS (
-    SELECT game_pk, MIN(model_version) AS model_version
-    FROM baseball_data.betting_ml.daily_model_predictions
-    GROUP BY game_pk
+WITH preds AS (
+    SELECT
+        score_date                        AS prediction_date,
+        game_pk,
+        game_date,
+        model_version,
+        COALESCE(retrain_tag, '_baseline') AS retrain_tag,
+        calibrated_win_prob               AS h2h_model_prob,
+        h2h_market_implied_prob           AS h2h_market_prob,
+        close_vf_home                     AS h2h_closing_market_prob,
+        h2h_kelly_fraction,
+        totals_model_prob,
+        over_prob_consensus               AS totals_market_prob,
+        close_vf_over                     AS totals_closing_market_prob,
+        totals_kelly_fraction,
+        total_line_consensus
+    FROM baseball_data.betting.mart_prediction_clv
+),
+outcomes AS (
+    SELECT
+        game_pk,
+        CASE WHEN home_team_won THEN 1.0 ELSE 0.0 END AS h2h_outcome,
+        (home_final_score + away_final_score)        AS total_runs
+    FROM baseball_data.betting.mart_game_results
 )
 SELECT
     p.prediction_date,
     p.game_pk,
-    p.market,
-    COALESCE(gv.model_version, 'v0') AS model_version,
-    p.model_prob,
-    p.market_prob_at_prediction,
-    p.closing_market_prob,
-    p.actual_outcome,
-    p.decimal_odds,
-    p.ev,
-    p.kelly_fraction
-FROM baseball_data.config.prediction_log p
-LEFT JOIN game_versions gv ON p.game_pk = gv.game_pk
-ORDER BY p.prediction_date ASC
+    'h2h'                                            AS market,
+    p.model_version,
+    p.retrain_tag,
+    p.h2h_model_prob                                 AS model_prob,
+    p.h2h_market_prob                                AS market_prob_at_prediction,
+    p.h2h_closing_market_prob                        AS closing_market_prob,
+    o.h2h_outcome                                    AS actual_outcome,
+    CASE WHEN p.h2h_market_prob > 0
+         THEN 1.0 / p.h2h_market_prob END            AS decimal_odds,
+    CASE WHEN p.h2h_market_prob > 0 AND p.h2h_model_prob IS NOT NULL
+         THEN p.h2h_model_prob * (1.0/p.h2h_market_prob - 1.0) - (1.0 - p.h2h_model_prob)
+         END                                         AS ev,
+    p.h2h_kelly_fraction                             AS kelly_fraction
+FROM preds p
+LEFT JOIN outcomes o ON p.game_pk = o.game_pk
+WHERE p.h2h_model_prob IS NOT NULL
+UNION ALL
+SELECT
+    p.prediction_date,
+    p.game_pk,
+    'totals'                                         AS market,
+    p.model_version,
+    p.retrain_tag,
+    p.totals_model_prob                              AS model_prob,
+    p.totals_market_prob                             AS market_prob_at_prediction,
+    p.totals_closing_market_prob                     AS closing_market_prob,
+    CASE WHEN o.total_runs > p.total_line_consensus THEN 1.0
+         WHEN o.total_runs < p.total_line_consensus THEN 0.0
+         END                                         AS actual_outcome,
+    CASE WHEN p.totals_market_prob > 0
+         THEN 1.0 / p.totals_market_prob END         AS decimal_odds,
+    CASE WHEN p.totals_market_prob > 0 AND p.totals_model_prob IS NOT NULL
+         THEN p.totals_model_prob * (1.0/p.totals_market_prob - 1.0) - (1.0 - p.totals_model_prob)
+         END                                         AS ev,
+    p.totals_kelly_fraction                          AS kelly_fraction
+FROM preds p
+LEFT JOIN outcomes o ON p.game_pk = o.game_pk
+WHERE p.totals_model_prob IS NOT NULL
+ORDER BY prediction_date ASC
 """
 
 _PREDICTION_LOG_STATS_SQL = """
 SELECT
-    COUNT(*) AS total_rows,
-    COUNT(actual_outcome) AS rows_with_outcome,
-    COUNT(closing_market_prob) AS rows_with_clv,
-    MIN(prediction_date) AS earliest_date,
-    MAX(prediction_date) AS latest_date
-FROM baseball_data.config.prediction_log
+    COUNT(*)                          AS total_rows,
+    COUNT(*)                          AS rows_with_outcome,
+    COUNT(close_vf_home)              AS rows_with_clv,
+    MIN(score_date)                   AS earliest_date,
+    MAX(score_date)                   AS latest_date
+FROM baseball_data.betting.mart_prediction_clv
 """
 
 _MART_CLV_SQL = """
@@ -77,6 +152,7 @@ SELECT
     game_date,
     score_date,
     model_version,
+    COALESCE(retrain_tag, '_baseline') AS retrain_tag,
     clv_home_ml,
     clv_total,
     has_clv,
@@ -167,6 +243,8 @@ def load_prediction_log() -> pd.DataFrame:
         df["actual_outcome"] = pd.to_numeric(df["actual_outcome"], errors="coerce")
     if "prediction_date" in df.columns:
         df["prediction_date"] = pd.to_datetime(df["prediction_date"])
+    if "model_version" in df.columns and "retrain_tag" in df.columns:
+        df["version_label"] = df["model_version"].astype(str) + " / " + df["retrain_tag"].astype(str)
     return df
 
 
@@ -231,7 +309,23 @@ if st.button("Refresh Data", help="Clear cached results and reload from Snowflak
     load_prediction_log.clear()
     load_prediction_log_stats.clear()
     load_mart_clv_data.clear()
+    load_active_models.clear()
     st.rerun()
+
+# ---------------------------------------------------------------------------
+# Active Models (from model_registry.yaml)
+# ---------------------------------------------------------------------------
+
+_active_models = load_active_models()
+if _active_models:
+    with st.expander("Active Models (currently deployed)", expanded=True):
+        st.caption(
+            "Models served by `predict_today.py`. Source: "
+            "[`betting_ml/models/model_registry.yaml`](betting_ml/models/model_registry.yaml). "
+            "These versions correspond to the `_baseline` retrain_tag in the charts below; "
+            "challenger retrains (e.g. `market_blind_epic1`) appear as separate variants."
+        )
+        st.dataframe(pd.DataFrame(_active_models), hide_index=True, width='stretch')
 
 # ---------------------------------------------------------------------------
 # Sidebar context
@@ -349,11 +443,16 @@ if not df.empty and "prediction_date" in df.columns:
 else:
     df_view = df
 
-# Model version sidebar filter (rendered here so we have data to inspect)
+# Model version + retrain_tag sidebar filters (rendered here so we have data to inspect)
 if "model_version" in df_view.columns:
     _all_versions = sorted(df_view["model_version"].dropna().unique().tolist())
 else:
     _all_versions = []
+
+if "retrain_tag" in df_view.columns:
+    _all_retrain_tags = sorted(df_view["retrain_tag"].dropna().unique().tolist())
+else:
+    _all_retrain_tags = []
 
 with st.sidebar:
     if _all_versions:
@@ -366,7 +465,26 @@ with st.sidebar:
         if _selected_versions and set(_selected_versions) != set(_all_versions):
             df_view = df_view[df_view["model_version"].isin(_selected_versions)]
     else:
+        _selected_versions = []
         st.caption("Version data not available.")
+
+    if _all_retrain_tags:
+        st.subheader("Retrain Tag")
+        _selected_retrain_tags = st.multiselect(
+            "Show retrain tags",
+            options=_all_retrain_tags,
+            default=_all_retrain_tags,
+            key="retrain_tag_filter",
+            help=(
+                "Retrain tags distinguish parallel training runs of the same model_version "
+                "(e.g. `market_blind_epic1` is a market-feature-blind challenger to the "
+                "promoted v2 baseline). `_baseline` = rows with no explicit retrain_tag."
+            ),
+        )
+        if _selected_retrain_tags and set(_selected_retrain_tags) != set(_all_retrain_tags):
+            df_view = df_view[df_view["retrain_tag"].isin(_selected_retrain_tags)]
+    else:
+        _selected_retrain_tags = []
 
 # ---------------------------------------------------------------------------
 # Compute P&L for actionable rows (ev > 0)
@@ -394,67 +512,72 @@ if not actionable.empty:
 # Summary metrics
 # ---------------------------------------------------------------------------
 
-def _render_summary(df_all: pd.DataFrame, act: pd.DataFrame) -> None:
-    n_rows_total = len(df_all)
-
+def _compute_summary_row(df_all: pd.DataFrame, act: pd.DataFrame) -> dict:
+    """Compute one row of summary metrics for the given (filtered) df + actionable subset."""
+    row: dict = {"Predictions": len(df_all)}
     if not act.empty:
-        win_rate_str = f"{(act['actual_outcome'] == 1).mean():.1%}"
+        row["Win Rate"] = f"{(act['actual_outcome'] == 1).mean():.1%}"
     else:
-        win_rate_str = "—"
+        row["Win Rate"] = "—"
 
     clv_src = df_all[df_all["closing_market_prob"].notna()] if "closing_market_prob" in df_all.columns else pd.DataFrame()
     if not clv_src.empty:
-        mean_clv_str = f"{(clv_src['model_prob'] - clv_src['closing_market_prob']).mean():+.4f}"
+        row["Mean CLV"] = f"{(clv_src['model_prob'] - clv_src['closing_market_prob']).mean():+.4f}"
     else:
-        mean_clv_str = "—"
+        row["Mean CLV"] = "—"
 
     if not act.empty:
-        act = act.sort_values("prediction_date").copy()
-        act["_kelly_pnl"] = act["kelly_fraction"] * (
-            act["actual_outcome"] * (act["decimal_odds"] - 1) - (1 - act["actual_outcome"])
+        a = act.sort_values("prediction_date").copy()
+        a["_kelly_pnl"] = a["kelly_fraction"] * (
+            a["actual_outcome"] * (a["decimal_odds"] - 1) - (1 - a["actual_outcome"])
         )
-        act["_flat_pnl"] = 1.0 * (
-            act["actual_outcome"] * (act["decimal_odds"] - 1) - (1 - act["actual_outcome"])
+        a["_flat_pnl"] = 1.0 * (
+            a["actual_outcome"] * (a["decimal_odds"] - 1) - (1 - a["actual_outcome"])
         )
-        kelly_pnl_str = f"{act['_kelly_pnl'].sum():+.2f} units"
-        flat_pnl_str = f"{act['_flat_pnl'].sum():+.2f} units"
+        row["P&L (Kelly)"] = f"{a['_kelly_pnl'].sum():+.2f}"
+        row["P&L (Flat)"] = f"{a['_flat_pnl'].sum():+.2f}"
     else:
-        kelly_pnl_str = flat_pnl_str = "—"
+        row["P&L (Kelly)"] = row["P&L (Flat)"] = "—"
+    return row
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Predictions Logged", n_rows_total)
-    col2.metric(
-        "Win Rate (Actionable)", win_rate_str,
-        help=(
-            "Percentage of bets won among actionable predictions (EV > 0). "
-            "An EV > 0 bet means the model estimated a higher win probability than "
-            "the market implied — above 50% is expected but does not guarantee profit."
-        ),
-    )
-    col3.metric(
-        "Mean CLV", mean_clv_str,
-        help=(
-            "Closing Line Value: the average difference between the model's predicted "
-            "probability and the market's closing (pre-game) probability. "
-            "Positive CLV means predictions consistently found better prices than where "
-            "the market settled — the strongest long-run indicator of a real edge."
-        ),
-    )
-    col4.metric(
-        "Cumulative P&L (Kelly)", kelly_pnl_str,
-        help=(
-            "Simulated profit/loss using Kelly-fractional bet sizing. "
-            "The kelly_fraction logged at prediction time determines stake size as a "
-            "fraction of bankroll. 1 unit = your chosen base bet size."
-        ),
-    )
-    col5.metric(
-        "Cumulative P&L (Flat)", flat_pnl_str,
-        help=(
-            "Simulated profit/loss using a flat 1-unit stake on every actionable bet "
-            "(EV > 0). Higher variance than Kelly staking but easier to benchmark "
-            "against a simple buy-and-hold baseline."
-        ),
+
+def _render_summary(df_all: pd.DataFrame, act: pd.DataFrame) -> None:
+    has_versions = "version_label" in df_all.columns and df_all["version_label"].nunique() > 1
+
+    if not has_versions:
+        # Single variant — render the classic 5-metric row.
+        r = _compute_summary_row(df_all, act)
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Predictions Logged", r["Predictions"])
+        col2.metric(
+            "Win Rate (Actionable)", r["Win Rate"],
+            help=("Percentage of bets won among actionable predictions (EV > 0)."),
+        )
+        col3.metric(
+            "Mean CLV", r["Mean CLV"],
+            help=("Average (model_prob − closing_market_prob). Positive = model found "
+                  "better prices than where the market settled."),
+        )
+        col4.metric(
+            "Cumulative P&L (Kelly)", f"{r['P&L (Kelly)']} units",
+            help="Simulated P&L using Kelly-fractional bet sizing.",
+        )
+        col5.metric(
+            "Cumulative P&L (Flat)", f"{r['P&L (Flat)']} units",
+            help="Simulated P&L using a flat 1-unit stake on every actionable bet (EV > 0).",
+        )
+        return
+
+    # Multi-variant — render one row per version_label as a table.
+    rows = []
+    for vl in sorted(df_all["version_label"].unique()):
+        df_v = df_all[df_all["version_label"] == vl]
+        act_v = act[act["version_label"] == vl] if "version_label" in act.columns else pd.DataFrame()
+        rows.append({"Variant": vl, **_compute_summary_row(df_v, act_v)})
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
+    st.caption(
+        "Each row is an independent model variant. Predictions / P&L are NOT additive — "
+        "the same game is scored once per variant. Compare rows side-by-side rather than summing."
     )
 
 
@@ -480,12 +603,13 @@ with _s_tab_totals:
 # ---------------------------------------------------------------------------
 
 def _render_brier(df_src: pd.DataFrame) -> None:
-    has_version = "model_version" in df_src.columns
-    multi_version = has_version and df_src["model_version"].nunique() > 1
+    # Use version_label so v2/_baseline and v2/market_blind_epic1 render as separate series.
+    has_version = "version_label" in df_src.columns
+    multi_version = has_version and df_src["version_label"].nunique() > 1
 
     cols_needed = ["prediction_date", "model_prob", "market_prob_at_prediction", "actual_outcome"]
     if has_version:
-        cols_needed.append("model_version")
+        cols_needed.append("version_label")
 
     brier_src = df_src[cols_needed].dropna(subset=["model_prob", "actual_outcome"])
     if brier_src.empty:
@@ -496,7 +620,7 @@ def _render_brier(df_src: pd.DataFrame) -> None:
     brier_src["brier_model"] = (brier_src["model_prob"] - brier_src["actual_outcome"]) ** 2
     brier_src["brier_market"] = (brier_src["market_prob_at_prediction"] - brier_src["actual_outcome"]) ** 2
 
-    group_cols = ["prediction_date"] + (["model_version"] if multi_version else [])
+    group_cols = ["prediction_date"] + (["version_label"] if multi_version else [])
     grouped = (
         brier_src.groupby(group_cols)
         .agg(brier_model=("brier_model", "mean"), brier_market=("brier_market", "mean"))
@@ -507,18 +631,18 @@ def _render_brier(df_src: pd.DataFrame) -> None:
     few_days = grouped["prediction_date"].nunique() < 14
 
     if multi_version:
-        for mv in grouped["model_version"].unique():
-            mask = grouped["model_version"] == mv
+        for mv in grouped["version_label"].unique():
+            mask = grouped["version_label"] == mv
             grouped.loc[mask, "brier_model_14d"] = grouped.loc[mask, "brier_model"].rolling(14, min_periods=1).mean()
             grouped.loc[mask, "brier_market_14d"] = grouped.loc[mask, "brier_market"].rolling(14, min_periods=1).mean()
-        long = grouped[["prediction_date", "model_version", "brier_model_14d", "brier_market_14d"]].melt(
-            id_vars=["prediction_date", "model_version"],
+        long = grouped[["prediction_date", "version_label", "brier_model_14d", "brier_market_14d"]].melt(
+            id_vars=["prediction_date", "version_label"],
             value_vars=["brier_model_14d", "brier_market_14d"],
             var_name="source",
             value_name="brier",
         )
         long["source"] = long["source"].map({"brier_model_14d": "Model", "brier_market_14d": "Market"})
-        long["series"] = long["model_version"] + " — " + long["source"]
+        long["series"] = long["version_label"] + " — " + long["source"]
     else:
         grouped["brier_model_14d"] = grouped["brier_model"].rolling(14, min_periods=1).mean()
         grouped["brier_market_14d"] = grouped["brier_market"].rolling(14, min_periods=1).mean()
@@ -551,7 +675,7 @@ def _render_brier(df_src: pd.DataFrame) -> None:
         alt.Tooltip("brier:Q", title="Brier Score", format=".4f"),
     ]
     if multi_version:
-        tooltip.insert(1, alt.Tooltip("model_version:N", title="Version"))
+        tooltip.insert(1, alt.Tooltip("version_label:N", title="Version / Tag"))
 
     chart = (
         alt.Chart(long)
@@ -632,6 +756,12 @@ else:
     # Apply model_version filter
     if "_selected_versions" in dir() and _selected_versions and "model_version" in _mclv.columns:
         _mclv = _mclv[_mclv["model_version"].isin(_selected_versions)]
+    # Apply retrain_tag filter
+    if "_selected_retrain_tags" in dir() and _selected_retrain_tags and "retrain_tag" in _mclv.columns:
+        _mclv = _mclv[_mclv["retrain_tag"].isin(_selected_retrain_tags)]
+    # Build a combined version label so v2/baseline vs v2/market_blind_epic1 render as distinct series
+    if "model_version" in _mclv.columns and "retrain_tag" in _mclv.columns:
+        _mclv["version_label"] = _mclv["model_version"].astype(str) + " / " + _mclv["retrain_tag"].astype(str)
 
     _mclv_has_clv = _mclv[_mclv["has_clv"] == True].copy() if not _mclv.empty else pd.DataFrame()
 
@@ -669,22 +799,22 @@ else:
 
     # ── Rolling 14-day mean CLV chart ─────────────────────────────────────────
     if not _mclv_has_clv.empty and "game_date" in _mclv_has_clv.columns:
-        _has_versions_clv = "model_version" in _mclv_has_clv.columns and _mclv_has_clv["model_version"].nunique() > 1
+        _has_versions_clv = "version_label" in _mclv_has_clv.columns and _mclv_has_clv["version_label"].nunique() > 1
 
         if _has_versions_clv:
             _daily_clv = (
-                _mclv_has_clv.groupby(["game_date", "model_version"])
+                _mclv_has_clv.groupby(["game_date", "version_label"])
                 .agg(mean_clv_ml=("clv_home_ml", "mean"))
                 .reset_index()
-                .sort_values(["model_version", "game_date"])
+                .sort_values(["version_label", "game_date"])
             )
-            for _mv in _daily_clv["model_version"].unique():
-                _mask = _daily_clv["model_version"] == _mv
+            for _mv in _daily_clv["version_label"].unique():
+                _mask = _daily_clv["version_label"] == _mv
                 _daily_clv.loc[_mask, "clv_14d"] = (
                     _daily_clv.loc[_mask, "mean_clv_ml"].rolling(14, min_periods=1).mean()
                 )
-            _clv_long = _daily_clv[["game_date", "model_version", "clv_14d"]].dropna()
-            _clv_color = alt.Color("model_version:N", legend=alt.Legend(title="Version"))
+            _clv_long = _daily_clv[["game_date", "version_label", "clv_14d"]].dropna()
+            _clv_color = alt.Color("version_label:N", legend=alt.Legend(title="Version / Tag"))
         else:
             _daily_clv = (
                 _mclv_has_clv.groupby("game_date")
@@ -693,8 +823,8 @@ else:
                 .sort_values("game_date")
             )
             _daily_clv["clv_14d"] = _daily_clv["mean_clv_ml"].rolling(14, min_periods=1).mean()
-            _daily_clv["model_version"] = "All"
-            _clv_long = _daily_clv[["game_date", "model_version", "clv_14d"]].dropna()
+            _daily_clv["version_label"] = "All"
+            _clv_long = _daily_clv[["game_date", "version_label", "clv_14d"]].dropna()
             _clv_color = alt.value("#1f77b4")
 
         if not _clv_long.empty:
@@ -713,7 +843,7 @@ else:
                     color=_clv_color,
                     tooltip=[
                         alt.Tooltip("game_date:T", title="Date", format="%b %d"),
-                        alt.Tooltip("model_version:N", title="Version"),
+                        alt.Tooltip("version_label:N", title="Version / Tag"),
                         alt.Tooltip("clv_14d:Q", title="14d Mean CLV", format="+.4f"),
                     ],
                 )
@@ -728,7 +858,7 @@ else:
 
     # ── CLV distribution histogram ────────────────────────────────────────────
     if not _mclv_has_clv.empty:
-        _has_multi_mv = "model_version" in _mclv_has_clv.columns and _mclv_has_clv["model_version"].nunique() > 1
+        _has_multi_mv = "version_label" in _mclv_has_clv.columns and _mclv_has_clv["version_label"].nunique() > 1
         _95th = float(_mclv_has_clv["clv_home_ml"].quantile(0.95))
 
         _hist_base = alt.Chart(_mclv_has_clv)
@@ -741,7 +871,7 @@ else:
             ],
         )
         if _has_multi_mv:
-            _hist_encode["color"] = alt.Color("model_version:N", legend=alt.Legend(title="Version"))
+            _hist_encode["color"] = alt.Color("version_label:N", legend=alt.Legend(title="Version / Tag"))
 
         _hist_chart = _hist_base.mark_bar(opacity=0.7).encode(**_hist_encode).properties(
             height=220, title="CLV Distribution (Moneyline)"
@@ -852,36 +982,23 @@ st.caption(
 if actionable.empty:
     st.info("No actionable predictions (ev > 0) found in the log yet.")
 else:
-    def _build_pnl_charts(df_subset: pd.DataFrame) -> tuple[alt.Chart | None, alt.Chart | None]:
-        """Compute cumulative P&L for a subset of actionable rows.
-
-        Returns (units_chart, roi_chart):
-            - units_chart: cumulative dollar/unit P&L (per-strategy)
-            - roi_chart:   cumulative ROI% (= cumulative_pnl / cumulative_stake)
-        ROI% normalises away the stake-size difference between Kelly (tiny per-bet
-        fractions of bankroll) and Flat (1 unit per bet), making the two strategies
-        comparable on a common scale.
-        """
-        if df_subset.empty:
-            return None, None
-        df_subset = df_subset.sort_values("prediction_date").copy()
-        df_subset["kelly_stake"] = df_subset["kelly_fraction"]
-        df_subset["flat_stake"]  = 1.0
-        df_subset["kelly_pnl"] = df_subset["kelly_stake"] * (
-            df_subset["actual_outcome"] * (df_subset["decimal_odds"] - 1)
-            - (1 - df_subset["actual_outcome"])
+    def _pnl_daily(df_subset: pd.DataFrame) -> pd.DataFrame:
+        """Per-day cumulative P&L + stake for a single variant subset."""
+        d = df_subset.sort_values("prediction_date").copy()
+        d["kelly_stake"] = d["kelly_fraction"]
+        d["flat_stake"]  = 1.0
+        d["kelly_pnl"] = d["kelly_stake"] * (
+            d["actual_outcome"] * (d["decimal_odds"] - 1) - (1 - d["actual_outcome"])
         )
-        df_subset["flat_pnl"] = df_subset["flat_stake"] * (
-            df_subset["actual_outcome"] * (df_subset["decimal_odds"] - 1)
-            - (1 - df_subset["actual_outcome"])
+        d["flat_pnl"] = d["flat_stake"] * (
+            d["actual_outcome"] * (d["decimal_odds"] - 1) - (1 - d["actual_outcome"])
         )
-        df_subset["kelly_cumulative"]       = df_subset["kelly_pnl"].cumsum()
-        df_subset["flat_cumulative"]        = df_subset["flat_pnl"].cumsum()
-        df_subset["kelly_cumulative_stake"] = df_subset["kelly_stake"].cumsum()
-        df_subset["flat_cumulative_stake"]  = df_subset["flat_stake"].cumsum()
-
+        d["kelly_cumulative"]       = d["kelly_pnl"].cumsum()
+        d["flat_cumulative"]        = d["flat_pnl"].cumsum()
+        d["kelly_cumulative_stake"] = d["kelly_stake"].cumsum()
+        d["flat_cumulative_stake"]  = d["flat_stake"].cumsum()
         daily = (
-            df_subset.groupby(df_subset["prediction_date"].dt.date)
+            d.groupby(d["prediction_date"].dt.date)
             .agg(
                 kelly_cumulative=("kelly_cumulative", "last"),
                 flat_cumulative=("flat_cumulative", "last"),
@@ -892,24 +1009,40 @@ else:
             .rename(columns={"prediction_date": "date"})
         )
         daily["date"] = pd.to_datetime(daily["date"])
-
-        # ROI% = cumulative_pnl / cumulative_stake (avoid div-by-zero).
-        # Suppress the warmup period — with only 1–2 bets settled, ROI% swings
-        # between ±100% per outcome, which dominates the y-axis and hides the
-        # actual long-run trend. Only render ROI once enough stake has accrued.
-        _FLAT_STAKE_WARMUP = 10  # ~10 flat-unit bets before ROI% becomes informative
-        daily["kelly_roi_pct"] = (
-            daily["kelly_cumulative"] / daily["kelly_cumulative_stake"].replace(0, pd.NA) * 100.0
-        )
-        daily["flat_roi_pct"] = (
-            daily["flat_cumulative"] / daily["flat_cumulative_stake"].replace(0, pd.NA) * 100.0
-        )
-        warmup_mask = daily["flat_cumulative_stake"] < _FLAT_STAKE_WARMUP
+        _WARMUP = 10
+        daily["kelly_roi_pct"] = daily["kelly_cumulative"] / daily["kelly_cumulative_stake"].replace(0, pd.NA) * 100.0
+        daily["flat_roi_pct"]  = daily["flat_cumulative"]  / daily["flat_cumulative_stake"].replace(0, pd.NA) * 100.0
+        warmup_mask = daily["flat_cumulative_stake"] < _WARMUP
         daily.loc[warmup_mask, ["kelly_roi_pct", "flat_roi_pct"]] = pd.NA
+        return daily
+
+    def _build_pnl_charts(df_subset: pd.DataFrame) -> tuple[alt.Chart | None, alt.Chart | None]:
+        """Cumulative P&L charts. Splits by version_label when >1 variant is present.
+
+        Multi-variant: one line per (version_label, strategy). Variants are independent
+        strategies — DO NOT sum them. Compare lines side-by-side.
+        """
+        if df_subset.empty:
+            return None, None
+
+        has_versions = "version_label" in df_subset.columns and df_subset["version_label"].nunique() > 1
+
+        if not has_versions:
+            daily = _pnl_daily(df_subset)
+            daily["version_label"] = (
+                df_subset["version_label"].iloc[0] if "version_label" in df_subset.columns else "All"
+            )
+        else:
+            parts = []
+            for vl, g in df_subset.groupby("version_label"):
+                gd = _pnl_daily(g)
+                gd["version_label"] = vl
+                parts.append(gd)
+            daily = pd.concat(parts, ignore_index=True)
 
         # ----- Cumulative units chart -----
         long_units = daily.melt(
-            id_vars="date",
+            id_vars=["date", "version_label"],
             value_vars=["kelly_cumulative", "flat_cumulative"],
             var_name="strategy",
             value_name="cumulative_units",
@@ -917,20 +1050,26 @@ else:
         long_units["strategy"] = long_units["strategy"].map(
             {"kelly_cumulative": "Kelly", "flat_cumulative": "Flat (1 unit)"}
         )
+        if has_versions:
+            long_units["series"] = long_units["version_label"] + " — " + long_units["strategy"]
+            color_field = "series:N"
+            color_title = "Variant / Strategy"
+        else:
+            long_units["series"] = long_units["strategy"]
+            color_field = "series:N"
+            color_title = "Strategy"
 
         units_chart = (
             alt.Chart(long_units)
             .mark_line(point=True)
             .encode(
-                x=alt.X(
-                    "date:T",
-                    title="Date",
-                    axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day"),
-                ),
+                x=alt.X("date:T", title="Date",
+                        axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
                 y=alt.Y("cumulative_units:Q", title="Cumulative Units"),
-                color=alt.Color("strategy:N", legend=alt.Legend(title="Strategy")),
+                color=alt.Color(color_field, legend=alt.Legend(title=color_title)),
                 tooltip=[
                     alt.Tooltip("date:T", title="Date", format="%b %d"),
+                    alt.Tooltip("version_label:N", title="Variant"),
                     alt.Tooltip("strategy:N", title="Strategy"),
                     alt.Tooltip("cumulative_units:Q", title="Cumulative Units", format="+.2f"),
                 ],
@@ -940,7 +1079,7 @@ else:
 
         # ----- Cumulative ROI% chart -----
         long_roi = daily.melt(
-            id_vars="date",
+            id_vars=["date", "version_label"],
             value_vars=["kelly_roi_pct", "flat_roi_pct"],
             var_name="strategy",
             value_name="roi_pct",
@@ -949,20 +1088,22 @@ else:
             {"kelly_roi_pct": "Kelly", "flat_roi_pct": "Flat (1 unit)"}
         )
         long_roi = long_roi.dropna(subset=["roi_pct"])
+        if has_versions:
+            long_roi["series"] = long_roi["version_label"] + " — " + long_roi["strategy"]
+        else:
+            long_roi["series"] = long_roi["strategy"]
 
         roi_chart = (
             alt.Chart(long_roi)
             .mark_line(point=True)
             .encode(
-                x=alt.X(
-                    "date:T",
-                    title="Date",
-                    axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day"),
-                ),
+                x=alt.X("date:T", title="Date",
+                        axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
                 y=alt.Y("roi_pct:Q", title="Cumulative ROI %"),
-                color=alt.Color("strategy:N", legend=alt.Legend(title="Strategy")),
+                color=alt.Color("series:N", legend=alt.Legend(title=color_title)),
                 tooltip=[
                     alt.Tooltip("date:T", title="Date", format="%b %d"),
+                    alt.Tooltip("version_label:N", title="Variant"),
                     alt.Tooltip("strategy:N", title="Strategy"),
                     alt.Tooltip("roi_pct:Q", title="ROI %", format="+.2f"),
                 ],
@@ -977,6 +1118,11 @@ else:
         if units_chart is None:
             st.info(empty_msg)
             return
+        if "version_label" in df_subset.columns and df_subset["version_label"].nunique() > 1:
+            st.caption(
+                "Each variant is an independent simulated strategy. Lines are NOT additive — "
+                "the same game appears once per variant. Compare slopes, not absolute heights."
+            )
         st.altair_chart(units_chart, width='stretch')
         st.caption(
             "**ROI %** divides cumulative P&L by cumulative stake, so Kelly and Flat "
