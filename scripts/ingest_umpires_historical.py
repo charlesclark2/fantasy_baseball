@@ -67,48 +67,28 @@ DEFAULT_CSV_PATH = Path(__file__).parent / "raw_files" / "umpscorecards" / "umps
 
 TABLE_FQN = "baseball_data.statsapi.umpire_game_log"
 
-MERGE_SQL = f"""
-MERGE INTO {TABLE_FQN} AS tgt
-USING (
-    SELECT
-        %(game_pk)s::INTEGER              AS game_pk,
-        %(game_date)s::DATE               AS game_date,
-        %(season)s::INTEGER               AS season,
-        %(umpire_name)s::VARCHAR           AS umpire_name,
-        NULL::VARCHAR                     AS umpire_id,
-        NULL::FLOAT                       AS k_pct,
-        NULL::FLOAT                       AS bb_pct,
-        %(total_runs)s::INTEGER           AS total_runs,
-        %(called_strikes_above_avg)s::FLOAT AS called_strikes_above_avg,
-        %(run_expectancy_delta)s::FLOAT   AS run_expectancy_delta,
-        %(total_run_impact)s::FLOAT       AS total_run_impact,
-        %(accuracy_above_expected)s::FLOAT AS accuracy_above_expected,
-        'umpscorecards'::VARCHAR          AS data_source,
-        CURRENT_TIMESTAMP()               AS loaded_at
-) AS src
-ON tgt.game_pk = src.game_pk
-WHEN MATCHED THEN UPDATE SET
-    game_date                = src.game_date,
-    season                   = src.season,
-    umpire_name              = src.umpire_name,
-    total_runs               = src.total_runs,
-    called_strikes_above_avg = src.called_strikes_above_avg,
-    run_expectancy_delta     = src.run_expectancy_delta,
-    total_run_impact         = src.total_run_impact,
-    accuracy_above_expected  = src.accuracy_above_expected,
-    data_source              = src.data_source,
-    loaded_at                = src.loaded_at
-WHEN NOT MATCHED THEN INSERT (
+INSERT_SQL = f"""
+INSERT INTO {TABLE_FQN} (
     game_pk, game_date, season, umpire_name, umpire_id,
     k_pct, bb_pct, total_runs, called_strikes_above_avg,
     run_expectancy_delta, total_run_impact, accuracy_above_expected,
     data_source, loaded_at
-) VALUES (
-    src.game_pk, src.game_date, src.season, src.umpire_name, src.umpire_id,
-    src.k_pct, src.bb_pct, src.total_runs, src.called_strikes_above_avg,
-    src.run_expectancy_delta, src.total_run_impact, src.accuracy_above_expected,
-    src.data_source, src.loaded_at
 )
+SELECT
+    %(game_pk)s::INTEGER,
+    %(game_date)s::DATE,
+    %(season)s::INTEGER,
+    %(umpire_name)s::VARCHAR,
+    NULL::VARCHAR,
+    NULL::FLOAT,
+    NULL::FLOAT,
+    %(total_runs)s::INTEGER,
+    %(called_strikes_above_avg)s::FLOAT,
+    %(run_expectancy_delta)s::FLOAT,
+    %(total_run_impact)s::FLOAT,
+    %(accuracy_above_expected)s::FLOAT,
+    'umpscorecards'::VARCHAR,
+    CURRENT_TIMESTAMP()
 """
 
 
@@ -170,15 +150,14 @@ def load_csv(csv_path: Path, season: int | None) -> pd.DataFrame:
 
 
 def bulk_load(conn, df: pd.DataFrame) -> int:
-    """Fast bulk load via write_pandas (PUT + COPY INTO).
+    """Fast bulk append via write_pandas (PUT + COPY INTO).
 
-    For initial/full backfill: truncates the table, then bulk-inserts all rows.
-    Much faster than row-by-row MERGE for large datasets.
-    For incremental season updates use --merge flag (row-by-row MERGE, idempotent).
+    Appends rows without truncating — safe to re-run; staging model deduplicates.
+    Much faster than row-by-row INSERT for large datasets.
+    For small incremental season updates use --row-by-row flag.
     """
     from snowflake.connector.pandas_tools import write_pandas
 
-    # Prepare the DataFrame with proper column names and types for Snowflake
     load_df = df.copy()
     load_df["game_date"] = load_df["game_date"].astype(str)
     load_df["k_pct"] = None
@@ -186,7 +165,6 @@ def bulk_load(conn, df: pd.DataFrame) -> int:
     load_df["umpire_id"] = None
     load_df["data_source"] = "umpscorecards"
 
-    # Rename to exact Snowflake column names (uppercase for write_pandas)
     col_map = {
         "game_pk": "GAME_PK",
         "game_date": "GAME_DATE",
@@ -204,10 +182,6 @@ def bulk_load(conn, df: pd.DataFrame) -> int:
     }
     load_df = load_df[list(col_map.keys())].rename(columns=col_map)
 
-    with conn.cursor() as cur:
-        cur.execute("TRUNCATE TABLE baseball_data.statsapi.umpire_game_log")
-        log.info("Truncated umpire_game_log for full reload.")
-
     success, nchunks, nrows, _ = write_pandas(
         conn,
         load_df,
@@ -219,16 +193,16 @@ def bulk_load(conn, df: pd.DataFrame) -> int:
     )
     if not success:
         raise RuntimeError("write_pandas reported failure")
-    log.info("Bulk loaded %d rows in %d chunk(s).", nrows, nchunks)
+    log.info("Bulk inserted %d rows in %d chunk(s).", nrows, nchunks)
     return nrows
 
 
-def merge_rows(conn, rows: list[dict]) -> int:
-    """Idempotent row-by-row MERGE for incremental season updates."""
+def insert_rows(conn, rows: list[dict]) -> int:
+    """Row-by-row INSERT for incremental season updates (append-only)."""
     loaded = 0
     with conn.cursor() as cur:
         for row in rows:
-            cur.execute(MERGE_SQL, row)
+            cur.execute(INSERT_SQL, row)
             loaded += 1
     return loaded
 
@@ -241,8 +215,8 @@ def main():
                         help="Filter to a specific season year (e.g. 2024)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print record count and sample row; no Snowflake write")
-    parser.add_argument("--merge", action="store_true",
-                        help="Use row-by-row MERGE instead of bulk truncate+load (use for incremental season refresh)")
+    parser.add_argument("--row-by-row", action="store_true",
+                        help="Use row-by-row INSERT instead of bulk write_pandas (use for small incremental season refresh)")
     args = parser.parse_args()
 
     csv_path = args.file
@@ -272,14 +246,14 @@ def main():
     log.info("Connecting to Snowflake...")
     conn = get_snowflake_conn()
     try:
-        if args.merge:
+        if args.row_by_row:
             rows = df.to_dict(orient="records")
             for r in rows:
                 r["game_date"] = str(r["game_date"])
-            log.info("Merging %d rows (incremental)...", len(rows))
-            loaded = merge_rows(conn, rows)
+            log.info("Inserting %d rows (row-by-row)...", len(rows))
+            loaded = insert_rows(conn, rows)
         else:
-            log.info("Bulk loading %d rows (truncate + write_pandas)...", len(df))
+            log.info("Bulk inserting %d rows (write_pandas)...", len(df))
             loaded = bulk_load(conn, df)
         log.info("Loaded %d UmpScorecards rows (%s)", loaded, season_range)
     finally:

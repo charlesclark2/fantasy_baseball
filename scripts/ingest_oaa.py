@@ -80,30 +80,21 @@ CREATE TABLE IF NOT EXISTS {TABLE_FQN} (
     drs             FLOAT,
     n_opportunities INTEGER,
     defense         FLOAT,
-    PRIMARY KEY (team_abbrev, game_year)
+    loaded_at       TIMESTAMP_NTZ
 )
 """
 
-_MERGE_SQL = f"""
-MERGE INTO {TABLE_FQN} AS tgt
-USING (
-    SELECT
-        v.team_abbrev   AS team_abbrev,
-        v.game_year     AS game_year,
-        v.oaa           AS oaa,
-        v.drs           AS drs,
-        v.n_opps        AS n_opportunities,
-        v.defense       AS defense
-    FROM (VALUES {{placeholders}}) AS v(team_abbrev, game_year, oaa, drs, n_opps, defense)
-) AS src
-ON tgt.team_abbrev = src.team_abbrev AND tgt.game_year = src.game_year
-WHEN MATCHED THEN UPDATE SET
-    oaa             = src.oaa,
-    drs             = src.drs,
-    n_opportunities = src.n_opportunities,
-    defense         = src.defense
-WHEN NOT MATCHED THEN INSERT (team_abbrev, game_year, oaa, drs, n_opportunities, defense)
-VALUES (src.team_abbrev, src.game_year, src.oaa, src.drs, src.n_opportunities, src.defense)
+_INSERT_SQL = f"""
+INSERT INTO {TABLE_FQN}
+    (team_abbrev, game_year, oaa, drs, n_opportunities, defense, loaded_at)
+SELECT
+    %(team_abbrev)s::VARCHAR,
+    %(game_year)s::INTEGER,
+    %(oaa)s::FLOAT,
+    %(drs)s::FLOAT,
+    %(n_opportunities)s::INTEGER,
+    %(defense)s::FLOAT,
+    CURRENT_TIMESTAMP
 """
 
 
@@ -132,12 +123,6 @@ def _fg_abbrev_to_project(fg_abbrev: str, game_year: int) -> str:
     if fg_abbrev == "OAK" and game_year >= 2025:
         return "ATH"
     return _FG_TO_PROJECT.get(fg_abbrev, fg_abbrev)
-
-
-def _nullable(val: Any) -> str:
-    if val is None:
-        return "NULL"
-    return str(val)
 
 
 def fetch_season(season: int) -> list[dict[str, Any]]:
@@ -187,16 +172,7 @@ def write_to_snowflake(
     cur = conn.cursor()
     cur.execute("CREATE SCHEMA IF NOT EXISTS baseball_data.external")
     cur.execute(_DDL)
-
-    def _fmt(r: dict) -> str:
-        oaa = _nullable(r["oaa"])
-        drs = _nullable(r["drs"])
-        n   = _nullable(r["n_opportunities"])
-        def_ = _nullable(r["defense"])
-        return f"('{r['team_abbrev']}', {r['game_year']}, {oaa}, {drs}, {n}, {def_})"
-
-    placeholders = ", ".join(_fmt(r) for r in records)
-    cur.execute(_MERGE_SQL.format(placeholders=placeholders))
+    cur.executemany(_INSERT_SQL, records)
     cur.close()
     return len(records)
 

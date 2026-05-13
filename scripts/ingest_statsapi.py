@@ -180,6 +180,7 @@ def insert_month(
     month_end: date,
     games_cnt: int,
     payload: dict,
+    capture_reason: str = "daily_full_month",
 ) -> None:
     """Append one month's schedule snapshot to the target table (append-only)."""
     json_str = json.dumps(payload)
@@ -187,49 +188,44 @@ def insert_month(
 
     sql = f"""
         INSERT INTO {TARGET_DATABASE}.{TARGET_SCHEMA}.{SCHEDULE_TABLE}
-            (month_start_date, month_end_date, games_cnt, json_field, ingestion_ts, load_id)
+            (month_start_date, month_end_date, games_cnt, json_field, ingestion_ts, load_id, capture_reason)
         SELECT
             %(month_start)s::date,
             %(month_end)s::date,
             %(games_cnt)s::int,
             PARSE_JSON(%(json_str)s),
             CURRENT_TIMESTAMP,
-            %(load_id)s::varchar
+            %(load_id)s::varchar,
+            %(capture_reason)s::varchar
     """
 
     with conn.cursor() as cur:
         cur.execute(sql, {
-            "month_start": month_start.isoformat(),
-            "month_end":   month_end.isoformat(),
-            "games_cnt":   games_cnt,
-            "json_str":    json_str,
-            "load_id":     load_id,
+            "month_start":    month_start.isoformat(),
+            "month_end":      month_end.isoformat(),
+            "games_cnt":      games_cnt,
+            "json_str":       json_str,
+            "load_id":        load_id,
+            "capture_reason": capture_reason,
         })
 
 
-def upsert_venue(
+def insert_venue(
     conn: snowflake.connector.SnowflakeConnection,
     venue_id: int,
     payload: dict,
     ingest_date: date,
 ) -> None:
-    """Merge one venue's API response into venues_raw, keyed on venue_id."""
+    """Append one venue's API response to venues_raw (append-only)."""
     json_str = json.dumps(payload)
 
     sql = f"""
-        MERGE INTO {TARGET_DATABASE}.{TARGET_SCHEMA}.{VENUES_TABLE} AS tgt
-        USING (
-            SELECT
-                %(venue_id)s::number     AS venue_id,
-                PARSE_JSON(%(json_str)s) AS json_field,
-                %(ingest_date)s::date    AS ingest_date
-        ) AS src
-        ON tgt.venue_id = src.venue_id
-        WHEN MATCHED THEN UPDATE SET
-            json_field  = src.json_field,
-            ingest_date = src.ingest_date
-        WHEN NOT MATCHED THEN INSERT (venue_id, json_field, ingest_date)
-            VALUES (src.venue_id, src.json_field, src.ingest_date)
+        INSERT INTO {TARGET_DATABASE}.{TARGET_SCHEMA}.{VENUES_TABLE}
+            (venue_id, json_field, ingest_date)
+        SELECT
+            %(venue_id)s::number,
+            PARSE_JSON(%(json_str)s),
+            %(ingest_date)s::date
     """
 
     with conn.cursor() as cur:
@@ -318,13 +314,14 @@ def run_schedule(
     conn: snowflake.connector.SnowflakeConnection,
     start: date,
     end: date,
+    capture_reason: str = "daily_full_month",
 ) -> None:
     months = list(iter_months(start, end))
     total  = len(months)
 
     log.info(
-        "Schedule ingest: %d month(s) from %s to %s",
-        total, start.strftime("%Y-%m"), end.strftime("%Y-%m"),
+        "Schedule ingest: %d month(s) from %s to %s (capture_reason=%s)",
+        total, start.strftime("%Y-%m"), end.strftime("%Y-%m"), capture_reason,
     )
 
     for idx, (month_start, month_end) in enumerate(months, start=1):
@@ -346,7 +343,7 @@ def run_schedule(
         log.info("  %d game(s) found", games_cnt)
 
         try:
-            insert_month(conn, month_start, month_end, games_cnt, payload)
+            insert_month(conn, month_start, month_end, games_cnt, payload, capture_reason)
             log.info("  Inserted to Snowflake")
         except Exception as exc:
             log.error("  Snowflake write failed for %s: %s — skipping", label, exc)
@@ -377,8 +374,8 @@ def run_venues(conn: snowflake.connector.SnowflakeConnection, venue_ids: list[in
             continue
 
         try:
-            upsert_venue(conn, venue_id, payload, today)
-            log.info("  Upserted venue %d to Snowflake", venue_id)
+            insert_venue(conn, venue_id, payload, today)
+            log.info("  Inserted venue %d to Snowflake", venue_id)
         except Exception as exc:
             log.error("  Snowflake write failed for venue %d: %s — skipping", venue_id, exc)
 
@@ -415,6 +412,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Last date to ingest, inclusive. Defaults to the last day of the "
             "current calendar month."
+        ),
+    )
+    schedule_parser.add_argument(
+        "--capture-reason",
+        default="daily_full_month",
+        choices=["daily_full_month", "intraday_gameday"],
+        help=(
+            "Tag written to capture_reason column. Use 'daily_full_month' for "
+            "the once-daily full-month pull; 'intraday_gameday' for 30-min "
+            "game-day captures (default: daily_full_month)."
         ),
     )
 
@@ -457,7 +464,7 @@ def main() -> None:
             else:
                 last_day = calendar.monthrange(today.year, today.month)[1]
                 schedule_end = today.replace(day=last_day)
-            run_schedule(conn, schedule_start, schedule_end)
+            run_schedule(conn, schedule_start, schedule_end, args.capture_reason)
 
         elif args.command == "venues":
             if args.venue_ids_file:

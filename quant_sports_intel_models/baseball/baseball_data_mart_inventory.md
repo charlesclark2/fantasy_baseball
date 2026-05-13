@@ -43,11 +43,11 @@ All raw tables follow an append-only design with `load_id` and `ingestion_ts` me
 
 | Table | Schema | Grain | Key Columns | Notes |
 |---|---|---|---|---|
-| `monthly_schedule` | `baseball_data.statsapi` | one row per (season, month) | `season`, `month`, `raw_json` | Nested dates[] → games[] JSON. Lineups, probable pitchers, scores all extracted from here. |
-| `venues_raw` | `baseball_data.statsapi` | one row per venue_id | `venue_id`, `venue_name`, `roof_type`, `latitude`, `longitude` | Hydrated fieldInfo (turf, roof), location, timezone. |
+| `monthly_schedule` | `baseball_data.statsapi` | one row per ingestion snapshot | `ingestion_ts`, `load_id`, `capture_reason`, `json_field` | **Append-only** (Epic T). Nested dates[] → games[] JSON. `capture_reason`: `'daily_full_month'` (once-daily) or `'intraday_gameday'` (30-min game-day cron). Dedup in staging via `qualify row_number() over (partition by game_pk order by ingestion_ts desc nulls last)`. |
+| `venues_raw` | `baseball_data.statsapi` | one row per ingestion snapshot | `venue_id`, `json_field`, `ingest_date` | **Append-only** (Epic T). Hydrated fieldInfo (turf, roof), location, timezone. Dedup in staging by latest ingest_date per venue_id. |
 | `player_transactions` | `baseball_data.statsapi` | one row per (transaction_id) | `transaction_id`, `player_id`, `team_id`, `transaction_date`, `type_code` | IL placements, activations, reinstatements. Daily 7-day lookback. |
-| `umpire_game_log` | `baseball_data.statsapi` | one row per (game_pk, umpire_name) | `game_pk`, `umpire_name`, `umpire_id`, `k_pct`, `bb_pct`, `run_impact` | Source A: UmpScorecards historical bulk (2015+, tendency metrics). Source B: MLB Stats API daily (name/id only). |
-| `weather_raw` | `baseball_data.statsapi` | one row per (game_pk, venue_id) | `game_pk`, `temp_f`, `wind_speed_mph`, `wind_direction_deg`, `humidity_pct` | Outdoor parks only. Upsert via MERGE. Open-Meteo or OpenWeatherMap. |
+| `umpire_game_log` | `baseball_data.statsapi` | one row per ingestion snapshot | `game_pk`, `umpire_name`, `umpire_id`, `k_pct`, `bb_pct`, `data_source`, `loaded_at` | **Append-only** (Epic T). UNIQUE constraint dropped. `data_source`: `'umpscorecards'` (historical, tendency metrics), `'statsapi'` (daily HP assignment), `'statsapi_backfill'` (recovery via backfill_umpire_assignments.py). Dedup in staging by `data_source` priority + `loaded_at desc`. |
+| `weather_raw` | `baseball_data.statsapi` | one row per ingestion snapshot | `game_pk`, `venue_id`, `weather_observation_type`, `hours_to_first_pitch`, `temp_f`, `wind_speed_mph`, `loaded_at` | **Append-only** (Epic T). Outdoor parks only. `weather_observation_type`: `'forecast_pregame'` (daily), `'observed_at_first_pitch'` (archive after game), `'forecast_intraday'` (T-24h/T-6h/T-3h/T-1h). Dedup in staging partitioned by `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)`. |
 | `pitcher_clusters` | `baseball_data.statsapi` | one row per (pitcher_id, season) | `pitcher_id`, `cluster_id`, `cluster_label` | K-means cluster assignments computed by betting_ml/scripts. |
 | `batter_clusters` | `baseball_data.statsapi` | one row per (batter_id, season) | `batter_id`, `cluster_id`, `cluster_label` | K-means cluster assignments. |
 
@@ -56,7 +56,7 @@ All raw tables follow an append-only design with `load_id` and `ingestion_ts` me
 | Table | Schema | Grain | Key Columns | Notes |
 |---|---|---|---|---|
 | `batter_pitches` | `baseball_data.savant` | one row per pitch | `pitch_sk` (MD5), `game_pk`, `batter_id`, `pitcher_id`, `pitch_type`, `launch_speed`, `estimated_woba` | ~140 columns. Includes bat tracking (2023-07-14+), xBA, xwOBA, game context, fielder assignments. |
-| `catcher_framing_raw` | `baseball_data.savant` | one row per (player_id, season, snapshot_date) | `player_id`, `season`, `framing_runs`, `defensive_runs` | FanGraphs catcher framing. Weekly snapshots. |
+| `catcher_framing_raw` | `baseball_data.savant` | one row per ingestion snapshot | `player_id`, `season`, `snapshot_date`, `framing_runs`, `defensive_runs`, `ingestion_timestamp` | **Append-only** (Epic T). FanGraphs catcher framing. Weekly snapshots. Dedup in staging partitioned by `(player_id, season, snapshot_date)`. |
 | `ref_players` | `baseball_data.savant` | one row per player | `mlb_bam_id`, `player_name` | Player reference. MLBAM ID to name mapping. |
 
 ## 1.4 FanGraphs
@@ -72,13 +72,13 @@ All raw tables follow an append-only design with `load_id` and `ingestion_ts` me
 
 | Table | Schema | Grain | Key Columns | Notes |
 |---|---|---|---|---|
-| `public_betting_raw` | `baseball_data.actionnetwork` | one row per (game_date, an_game_id) | `game_date`, `home_ml_money_pct`, `away_ml_money_pct`, `over_money_pct`, `under_money_pct` | Public betting percentages (moneyline & totals). |
+| `public_betting_raw` | `baseball_data.actionnetwork` | one row per ingestion snapshot | `game_date`, `an_game_id`, `home_ml_money_pct`, `away_ml_money_pct`, `over_money_pct`, `under_money_pct`, `ingestion_timestamp` | **Append-only** (Epic T). Public betting percentages (moneyline & totals). Data available from 2024-02-22 onward only; pre-2024 is permanently unrecoverable. Dedup in staging partitioned by `(game_date, an_game_id)`. |
 
 ## 1.6 External / Computed
 
 | Table | Schema | Grain | Key Columns | Notes |
 |---|---|---|---|---|
-| `oaa_team_season_raw` | `baseball_data.external` | one row per (team, season) | `team`, `season`, `oaa`, `drs` | Team OAA/DRS from FanGraphs fielding leaderboard. 2016+. |
+| `oaa_team_season_raw` | `baseball_data.external` | one row per ingestion snapshot | `team_abbrev`, `game_year`, `oaa`, `drs`, `n_opportunities`, `defense`, `loaded_at` | **Append-only** (Epic T). Team OAA/DRS from FanGraphs fielding leaderboard. 2016+. Backfill via weekly snapshots is not feasible (FanGraphs API ignores startdate/enddate for OAA — forward-only from T.4.C conversion date). Dedup in mart via `qualify row_number() over (partition by team_abbrev, game_year order by loaded_at desc nulls last)`. |
 | `team_elo_history` | `baseball_data.betting` | one row per (game_pk, team_abbrev) | `game_pk`, `team_abbrev`, `elo_pre`, `elo_post` | Pre/post-game Elo ratings. Computed by compute_elo.py (K=4, HOME_ADV=24, season regression to 1500). |
 
 ## 1.7 Monitoring & Config

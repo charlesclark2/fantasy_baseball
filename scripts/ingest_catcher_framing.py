@@ -101,37 +101,21 @@ CREATE TEMPORARY TABLE IF NOT EXISTS tmp_catcher_framing_stage (
 )
 """
 
-_MERGE_SQL = f"""
-MERGE INTO {TABLE_FQN} AS tgt
-USING (
-    SELECT
-        player_id,
-        season,
-        snapshot_date::DATE         AS snapshot_date,
-        framing_runs,
-        defensive_runs,
-        stolen_base_runs,
-        innings_caught,
-        PARSE_JSON(raw_json_str)    AS raw_json
-    FROM tmp_catcher_framing_stage
-) AS src
-ON  tgt.player_id     = src.player_id
-AND tgt.season        = src.season
-AND tgt.snapshot_date = src.snapshot_date
-WHEN MATCHED THEN UPDATE SET
-    framing_runs        = src.framing_runs,
-    defensive_runs      = src.defensive_runs,
-    stolen_base_runs    = src.stolen_base_runs,
-    innings_caught      = src.innings_caught,
-    raw_json            = src.raw_json,
-    ingestion_timestamp = CURRENT_TIMESTAMP
-WHEN NOT MATCHED THEN INSERT
+_INSERT_SQL = f"""
+INSERT INTO {TABLE_FQN}
     (player_id, season, snapshot_date, framing_runs, defensive_runs,
      stolen_base_runs, innings_caught, raw_json, ingestion_timestamp)
-VALUES
-    (src.player_id, src.season, src.snapshot_date, src.framing_runs,
-     src.defensive_runs, src.stolen_base_runs, src.innings_caught,
-     src.raw_json, CURRENT_TIMESTAMP)
+SELECT
+    player_id,
+    season,
+    snapshot_date::DATE,
+    framing_runs,
+    defensive_runs,
+    stolen_base_runs,
+    innings_caught,
+    PARSE_JSON(raw_json_str),
+    CURRENT_TIMESTAMP
+FROM tmp_catcher_framing_stage
 """
 
 
@@ -262,7 +246,7 @@ def write_to_snowflake(
         "INSERT INTO tmp_catcher_framing_stage VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
         rows,
     )
-    cur.execute(_MERGE_SQL)
+    cur.execute(_INSERT_SQL)
     cur.close()
     return len(records)
 
