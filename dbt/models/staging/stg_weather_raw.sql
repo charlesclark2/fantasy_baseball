@@ -18,3 +18,10 @@ select
     loaded_at::timestamp_ntz    as loaded_at
 
 from {{ source('statsapi', 'weather_raw') }}
+
+-- Dedup to latest row per game × venue. Once T.2 adds weather_observation_type
+-- and hours_to_first_pitch, expand the partition to include those columns.
+qualify row_number() over (
+    partition by game_pk, venue_id
+    order by loaded_at desc
+) = 1

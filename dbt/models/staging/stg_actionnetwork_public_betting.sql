@@ -58,3 +58,7 @@ normalized as (
 )
 
 select * from normalized
+qualify row_number() over (
+    partition by game_date, an_game_id
+    order by ingestion_timestamp desc
+) = 1

@@ -285,58 +285,34 @@ def parse_game(game: dict) -> dict | None:
 
 # ── Snowflake write ───────────────────────────────────────────────────────────
 
-MERGE_SQL = f"""
-MERGE INTO {TARGET_FQN} t
-USING (
-    SELECT
-        %(game_date)s::date           AS game_date,
-        %(an_game_id)s::varchar       AS an_game_id,
-        %(home_team_abbr)s::varchar   AS home_team_abbr,
-        %(away_team_abbr)s::varchar   AS away_team_abbr,
-        %(home_ml_money_pct)s::float  AS home_ml_money_pct,
-        %(away_ml_money_pct)s::float  AS away_ml_money_pct,
-        %(home_ml_ticket_pct)s::float AS home_ml_ticket_pct,
-        %(away_ml_ticket_pct)s::float AS away_ml_ticket_pct,
-        %(over_money_pct)s::float     AS over_money_pct,
-        %(under_money_pct)s::float    AS under_money_pct,
-        %(over_ticket_pct)s::float    AS over_ticket_pct,
-        %(under_ticket_pct)s::float   AS under_ticket_pct,
-        %(book_ids_used)s::varchar    AS book_ids_used
-) s
-ON  t.game_date = s.game_date
-AND t.an_game_id = s.an_game_id
-WHEN MATCHED THEN UPDATE SET
-    home_team_abbr      = s.home_team_abbr,
-    away_team_abbr      = s.away_team_abbr,
-    home_ml_money_pct   = s.home_ml_money_pct,
-    away_ml_money_pct   = s.away_ml_money_pct,
-    home_ml_ticket_pct  = s.home_ml_ticket_pct,
-    away_ml_ticket_pct  = s.away_ml_ticket_pct,
-    over_money_pct      = s.over_money_pct,
-    under_money_pct     = s.under_money_pct,
-    over_ticket_pct     = s.over_ticket_pct,
-    under_ticket_pct    = s.under_ticket_pct,
-    book_ids_used       = s.book_ids_used,
-    ingestion_timestamp = CURRENT_TIMESTAMP
-WHEN NOT MATCHED THEN INSERT (
+INSERT_SQL = f"""
+INSERT INTO {TARGET_FQN} (
     game_date, an_game_id, home_team_abbr, away_team_abbr,
     home_ml_money_pct, away_ml_money_pct,
     home_ml_ticket_pct, away_ml_ticket_pct,
     over_money_pct, under_money_pct,
     over_ticket_pct, under_ticket_pct,
     book_ids_used, ingestion_timestamp
-) VALUES (
-    s.game_date, s.an_game_id, s.home_team_abbr, s.away_team_abbr,
-    s.home_ml_money_pct, s.away_ml_money_pct,
-    s.home_ml_ticket_pct, s.away_ml_ticket_pct,
-    s.over_money_pct, s.under_money_pct,
-    s.over_ticket_pct, s.under_ticket_pct,
-    s.book_ids_used, CURRENT_TIMESTAMP
 )
+SELECT
+    %(game_date)s::date,
+    %(an_game_id)s::varchar,
+    %(home_team_abbr)s::varchar,
+    %(away_team_abbr)s::varchar,
+    %(home_ml_money_pct)s::float,
+    %(away_ml_money_pct)s::float,
+    %(home_ml_ticket_pct)s::float,
+    %(away_ml_ticket_pct)s::float,
+    %(over_money_pct)s::float,
+    %(under_money_pct)s::float,
+    %(over_ticket_pct)s::float,
+    %(under_ticket_pct)s::float,
+    %(book_ids_used)s::varchar,
+    CURRENT_TIMESTAMP
 """
 
 
-def upsert_rows(
+def insert_rows(
     conn: snowflake.connector.SnowflakeConnection,
     game_date: date,
     rows: list[dict],
@@ -345,7 +321,7 @@ def upsert_rows(
         return 0
     payload = [{"game_date": game_date.isoformat(), **r} for r in rows]
     with conn.cursor() as cur:
-        cur.executemany(MERGE_SQL, payload)
+        cur.executemany(INSERT_SQL, payload)
     return len(payload)
 
 
@@ -398,8 +374,8 @@ def ingest_date(
         return len(rows)
 
     assert conn is not None
-    n = upsert_rows(conn, game_date, rows)
-    log.info("  Upserted %d row(s) into %s", n, TARGET_FQN)
+    n = insert_rows(conn, game_date, rows)
+    log.info("  Inserted %d row(s) into %s", n, TARGET_FQN)
     return n
 
 

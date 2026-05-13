@@ -36,7 +36,9 @@ DDL for target tables:
         month_start_date date,
         month_end_date   date,
         games_cnt        int,
-        json_field       variant
+        json_field       variant,
+        ingestion_ts     timestamp_ntz default current_timestamp,
+        load_id          varchar       default uuid_string()
     );
 
     create or replace table baseball_data.statsapi.venues_raw (
@@ -67,6 +69,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from datetime import date, timedelta
 
 import requests
@@ -171,32 +174,27 @@ def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
 
 # ── Snowflake writes ──────────────────────────────────────────────────────────
 
-def upsert_month(
+def insert_month(
     conn: snowflake.connector.SnowflakeConnection,
     month_start: date,
     month_end: date,
     games_cnt: int,
     payload: dict,
 ) -> None:
-    """Merge one month's schedule data into the target table."""
+    """Append one month's schedule snapshot to the target table (append-only)."""
     json_str = json.dumps(payload)
+    load_id  = str(uuid.uuid4())
 
     sql = f"""
-        MERGE INTO {TARGET_DATABASE}.{TARGET_SCHEMA}.{SCHEDULE_TABLE} AS tgt
-        USING (
-            SELECT
-                %(month_start)s::date    AS month_start_date,
-                %(month_end)s::date      AS month_end_date,
-                %(games_cnt)s::int       AS games_cnt,
-                PARSE_JSON(%(json_str)s) AS json_field
-        ) AS src
-        ON tgt.month_start_date = src.month_start_date
-        WHEN MATCHED THEN UPDATE SET
-            month_end_date = src.month_end_date,
-            games_cnt      = src.games_cnt,
-            json_field     = src.json_field
-        WHEN NOT MATCHED THEN INSERT (month_start_date, month_end_date, games_cnt, json_field)
-            VALUES (src.month_start_date, src.month_end_date, src.games_cnt, src.json_field)
+        INSERT INTO {TARGET_DATABASE}.{TARGET_SCHEMA}.{SCHEDULE_TABLE}
+            (month_start_date, month_end_date, games_cnt, json_field, ingestion_ts, load_id)
+        SELECT
+            %(month_start)s::date,
+            %(month_end)s::date,
+            %(games_cnt)s::int,
+            PARSE_JSON(%(json_str)s),
+            CURRENT_TIMESTAMP,
+            %(load_id)s::varchar
     """
 
     with conn.cursor() as cur:
@@ -205,6 +203,7 @@ def upsert_month(
             "month_end":   month_end.isoformat(),
             "games_cnt":   games_cnt,
             "json_str":    json_str,
+            "load_id":     load_id,
         })
 
 
@@ -347,8 +346,8 @@ def run_schedule(
         log.info("  %d game(s) found", games_cnt)
 
         try:
-            upsert_month(conn, month_start, month_end, games_cnt, payload)
-            log.info("  Upserted to Snowflake")
+            insert_month(conn, month_start, month_end, games_cnt, payload)
+            log.info("  Inserted to Snowflake")
         except Exception as exc:
             log.error("  Snowflake write failed for %s: %s — skipping", label, exc)
 

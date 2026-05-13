@@ -21,6 +21,37 @@ version: 2
 
 models:
 
+  - name: feature_pregame_sub_model_signals
+    description: >
+      Wide-format sub-model signal view. One row per (game_pk, side) with one
+      column per (signal_name, sub_model_version) pair. Built by pivoting
+      mart_sub_model_signals using MAX(CASE WHEN) aggregation; only is_current=true
+      rows are included. Joins to feature_pregame_game_features on (game_pk, side).
+      NULL values in any signal column mean signal_available=false for that game
+      (out-of-window or sub-model not yet trained). Add new signal columns here
+      as each sub-model Epic ships.
+    columns:
+      - name: game_pk
+        description: Game identifier (primary join key).
+        tests: [not_null]
+      - name: side
+        description: "'home' | 'away' | 'game'"
+        tests: [not_null]
+      - name: run_env_signal_v1
+        description: Run environment signal from run_env_v1 (Epic 3). Predicts total-runs modifier vs. league-average park/weather/umpire baseline. NULL until Epic 3 ships.
+      - name: environment_volatility_v1
+        description: Uncertainty estimate from run_env_v1. High values indicate high-variance environments (gusty outdoor parks, extreme temps).
+      - name: lineup_run_creation_signal_v1
+        description: Pre-game offensive quality signal from offense_v1 (Epic 4). Team runs-scored predictor, market-blind. NULL until Epic 4 ships.
+      - name: starter_suppression_signal_v1
+        description: Starter suppression signal from starter_v1 (Epic 5). Predicted xwOBA-against for the projected starter. NULL until Epic 5 ships.
+      - name: bullpen_state_signal_v1
+        description: Bullpen readiness / fatigue signal from bullpen_v1 (Epic 6). Rules-based composite of leverage, workload, effectiveness. NULL until Epic 6 ships.
+      - name: matchup_advantage_signal_v1
+        description: Batter-archetype vs. pitcher-archetype advantage signal from matchup_v1 (Epic 8). NULL until Epic 8 ships.
+      - name: test_signal_v1
+        description: Synthetic validation signal inserted during Story 2.1 smoke test. Remove column after validation is confirmed.
+
   - name: feature_pregame_lineup_features
     description: >
       Pre-game batting lineup features for ML. One row per game_pk × side (home/away).

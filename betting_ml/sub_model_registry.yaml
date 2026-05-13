@@ -1,0 +1,209 @@
+# =============================================================================
+# Sub-Model Registry
+# =============================================================================
+# Each entry represents one (sub_model_name, version) combination.
+# Naming convention: <domain>_v<N>  (e.g. run_env_v1, offense_v1)
+#
+# Schema reference:
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ Field                  │ Type   │ Description                            │
+# ├──────────────────────────────────────────────────────────────────────────┤
+# │ artifact_path          │ str    │ Path to serialized model (.pkl)         │
+# │ feature_columns_path   │ str    │ Path to JSON list of input features     │
+# │ target.source_table    │ str    │ Fully-qualified Snowflake table         │
+# │ target.primary_column  │ str    │ Target column name                      │
+# │ target.auxiliary_cols  │ list   │ Additional target columns (optional)    │
+# │ target.grain           │ str    │ game_pk | game_pk_side | pitcher_id_pk  │
+# │ training_window.start  │ date   │ Inclusive training start date           │
+# │ training_window.end    │ date   │ Inclusive training end date             │
+# │ cv_strategy            │ str    │ walk_forward | time_series_split        │
+# │ cv_metric              │ str    │ mae | rmse | brier | log_loss           │
+# │ cv_score               │ float  │ Best CV score achieved                  │
+# │ promotion_gate         │ dict   │ metric, threshold, direction            │
+# │ parent_features        │ list   │ Feature mart dbt model names consumed   │
+# │ output_signals         │ list   │ signal_name values → mart_sub_model_signals │
+# │ downstream_consumers   │ list   │ Layer 3 models that ingest these signals│
+# │ promotion_status       │ str    │ pending | challenger | champion | deprecated │
+# │ promoted_at            │ date   │ Date promoted to champion (null if not) │
+# │ notes                  │ str    │ Training decisions, caveats, known gaps │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# Promotion-status state machine:
+#   pending → challenger  (artifact trained, not yet evaluated)
+#   challenger → champion (promotion gate passed; only one champion per domain)
+#   champion → deprecated (superseded by a newer version; never deleted)
+#   pending → deprecated  (decided not to build; document reason in notes)
+#
+# Only one entry per domain may be champion at a time. When a new champion
+# is promoted, the prior champion is marked deprecated immediately.
+# =============================================================================
+
+run_env_v1:
+  artifact_path: models/sub_models/run_env_v1.pkl
+  feature_columns_path: models/sub_models/run_env_v1_features.json
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    primary_column: total_runs
+    auxiliary_columns: []
+    grain: game_pk
+  training_window:
+    start: null    # set during Story 2.5 weather coverage audit
+    end: null
+  cv_strategy: walk_forward
+  cv_metric: mae
+  cv_score: null
+  promotion_gate:
+    metric: mae
+    threshold: null    # set after baseline established in Story 3.2
+    direction: lower_is_better
+  parent_features:
+    - feature_pregame_park_features
+    - feature_pregame_weather_features
+    - feature_pregame_umpire_features
+  output_signals:
+    - run_env_signal
+    - environment_volatility
+  downstream_consumers: []
+  promotion_status: pending
+  promoted_at: null
+  notes: |
+    Training window TBD pending Story 2.5 weather coverage audit.
+    No market features. Opponent offensive/starter quality used as controls only.
+    See implementation_guide.md Story 2.5 for training-window decision criteria.
+
+offense_v1:
+  artifact_path: models/sub_models/offense_v1.pkl
+  feature_columns_path: models/sub_models/offense_v1_features.json
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    primary_column: home_score    # one model per side; away uses away_score
+    auxiliary_columns: []
+    grain: game_pk_side
+  training_window:
+    start: '2016-01-01'
+    end: null
+  cv_strategy: walk_forward
+  cv_metric: mae
+  cv_score: null
+  promotion_gate:
+    metric: mae
+    threshold: null
+    direction: lower_is_better
+  parent_features:
+    - feature_pregame_lineup_features
+  output_signals:
+    - lineup_run_creation_signal
+  downstream_consumers: []
+  promotion_status: pending
+  promoted_at: null
+  notes: |
+    ZiPS hitting projections (stg_fangraphs__zips_hitting) wired in via Story 2.6.
+    proj_xfip excluded — 100% NULL across all seasons (confirmed 2026-05-12).
+    Use proj_fip, proj_era, proj_k_pct, proj_bb_pct for pitcher opponent controls.
+    Rookie batters (<200 career PA): regress to league-mean via Bayesian shrinkage
+    (k=200). ZiPS projections fill most call-up gaps even without MLB rolling history.
+    See implementation_guide.md Story 2.6 for rookie cold-start policy.
+
+starter_v1:
+  artifact_path: models/sub_models/starter_v1.pkl
+  feature_columns_path: models/sub_models/starter_v1_features.json
+  target:
+    source_table: baseball_data.betting.mart_starting_pitcher_game_log
+    primary_column: xwoba_against
+    auxiliary_columns:
+      - k_per_bf     # strikeouts / batters_faced (compute inline)
+      - bb_per_bf    # walks / batters_faced (compute inline)
+      - ip           # outs_recorded / 3 (compute inline)
+    grain: pitcher_id_game_pk
+  training_window:
+    start: '2016-01-01'
+    end: null
+  cv_strategy: walk_forward
+  cv_metric: mae
+  cv_score: null
+  promotion_gate:
+    metric: mae
+    threshold: null
+    direction: lower_is_better
+  parent_features:
+    - feature_pregame_starter_features
+  output_signals:
+    - starter_suppression_signal
+  downstream_consumers: []
+  promotion_status: pending
+  promoted_at: null
+  notes: |
+    Target mart already complete: mart_starting_pitcher_game_log has xwoba_against
+    for 50,292/50,293 rows back to 2015-04-05 (confirmed 2026-05-12). No new mart needed.
+    LEAKAGE GUARD: training queries must use game_date < model_run_date strictly.
+    proj_xfip EXCLUDED (100% NULL). Use proj_fip, proj_era, proj_k_pct, proj_bb_pct.
+    Rookie starters (<50 MLB career IP): fall back to ZiPS projections; no rolling Statcast.
+
+bullpen_v1:
+  artifact_path: models/sub_models/bullpen_v1.pkl    # rules-based; no pkl until v1.1
+  feature_columns_path: models/sub_models/bullpen_v1_features.json
+  target:
+    source_table: null    # v1.0 is rules-based; no supervised target
+    primary_column: null
+    auxiliary_columns: []
+    grain: game_pk_side
+  training_window:
+    start: null
+    end: null
+  cv_strategy: null    # rules-based; no CV
+  cv_metric: null
+  cv_score: null
+  promotion_gate:
+    metric: null
+    threshold: null
+    direction: null
+  parent_features:
+    - feature_pregame_bullpen_state_features
+  output_signals:
+    - bullpen_state_signal
+  downstream_consumers: []
+  promotion_status: pending
+  promoted_at: null
+  notes: |
+    v1.0 is a rules-based composite (no ML training). Inputs: mart_bullpen_leverage,
+    mart_bullpen_workload, mart_bullpen_effectiveness. No artifact or CV.
+    v1.1 (supervised) requires mart_bullpen_game_outcomes (Story 2.8) — deferred
+    until after Epic 6 v1.0 ships and signal value is evaluated.
+    See implementation_guide.md Story 2.8 for supervised target specification.
+
+matchup_v1:
+  artifact_path: models/sub_models/matchup_v1.pkl
+  feature_columns_path: models/sub_models/matchup_v1_features.json
+  target:
+    source_table: baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster
+    primary_column: avg_woba    # population-level; individual batter-vs-starter too sparse
+    auxiliary_columns:
+      - avg_xwoba
+      - avg_k_pct
+      - avg_bb_pct
+      - avg_hard_hit_pct
+    grain: game_pk    # aggregated to game level via archetype composition
+  training_window:
+    start: '2018-01-01'
+    end: null
+  cv_strategy: walk_forward
+  cv_metric: mae
+  cv_score: null
+  promotion_gate:
+    metric: mae
+    threshold: null
+    direction: lower_is_better
+  parent_features:
+    - feature_pregame_matchup_bat_tracking    # Story 2.9; NULL pre-2023-07-14
+  output_signals:
+    - matchup_advantage_signal
+  downstream_consumers: []
+  promotion_status: pending
+  promoted_at: null
+  notes: |
+    Requires Epic 7 (archetype clustering revalidation) before training.
+    Bat-tracking features (feature_pregame_matchup_bat_tracking) available 2023-07-14+;
+    NULL for prior games — treated as signal_available=false, not imputed.
+    Rookie batters in top-5 slots: bat-tracking NULL by definition; use archetype mean.
+    Rookie starters (<50 IP): fall back to ZiPS projections for pitch-mix opponent model.
+    mart_batter_archetype_vs_pitcher_cluster confirmed as canonical training source (2026-05-12).
