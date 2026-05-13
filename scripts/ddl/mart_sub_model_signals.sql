@@ -50,9 +50,9 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting.mart_sub_model_signals (
 
 );
 
--- Index to support fast point-in-time and current-state lookups
+-- Primary key constraint (Snowflake does not support IF NOT EXISTS on ADD CONSTRAINT)
 ALTER TABLE baseball_data.betting.mart_sub_model_signals
-    ADD CONSTRAINT IF NOT EXISTS pk_sub_model_signals
+    ADD CONSTRAINT pk_sub_model_signals
     PRIMARY KEY (game_pk, side, signal_name, sub_model_version, valid_from);
 
 COMMENT ON TABLE baseball_data.betting.mart_sub_model_signals IS
