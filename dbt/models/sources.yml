@@ -852,6 +852,14 @@ sources:
           Grain: game_pk × team_abbrev.
           Only elo_before_game is used as a pre-game feature.
 
+      - name: mart_sub_model_signals
+        description: >
+          Long-format SCD-2 store for sub-model output signals (run_env, offense,
+          starter, bullpen, matchup). One row per (game_pk, side, signal_name,
+          sub_model_version, valid_from). Populated by sub-model inference scripts
+          in Epics 3–8. Pivoted to wide format by feature_pregame_sub_model_signals.
+          DDL: scripts/ddl/mart_sub_model_signals.sql.
+
   - name: betting_ml
     database: baseball_data
     schema: betting_ml

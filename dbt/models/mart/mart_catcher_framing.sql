@@ -31,7 +31,7 @@ latest as (
         innings_caught,
         row_number() over (
             partition by player_id, season
-            order by snapshot_date desc
+            order by snapshot_date desc, ingestion_timestamp desc
         )   as rn
     from {{ source('savant', 'catcher_framing_raw') }}
     where framing_runs is not null

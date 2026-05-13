@@ -5,20 +5,22 @@
 }}
 
 with source as (
-    select json_field
+    select json_field, ingestion_ts
     from {{ source('statsapi', 'monthly_schedule') }}
 ),
 
 dates_flattened as (
     select
-        d.value as date_obj
+        d.value as date_obj,
+        ingestion_ts
     from source,
     lateral flatten(input => json_field:dates) d
 ),
 
 games_flattened as (
     select
-        g.value as game
+        g.value as game,
+        ingestion_ts
     from dates_flattened,
     lateral flatten(input => date_obj:games) g
 )
@@ -65,12 +67,12 @@ select
 
     -- Venue
     game:venue:id::integer                                  as venue_id,
-    game:venue:name::varchar                                as venue_name
+    game:venue:name::varchar                                as venue_name,
+
+    ingestion_ts
 
 from games_flattened
 qualify row_number() over (
     partition by game_pk
-    order by
-        (home_score is not null)::integer desc,
-        case detailed_state when 'Cancelled' then 0 else 1 end asc
+    order by ingestion_ts desc nulls last
 ) = 1

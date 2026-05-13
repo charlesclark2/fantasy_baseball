@@ -16,14 +16,14 @@
 
 with source as (
 
-    select json_field
+    select json_field, ingestion_ts
     from {{ source('statsapi', 'monthly_schedule') }}
 
 ),
 
 dates_flattened as (
 
-    select d.value as date_obj
+    select d.value as date_obj, ingestion_ts
     from source,
     lateral flatten(input => json_field:dates) d
 
@@ -31,7 +31,7 @@ dates_flattened as (
 
 games_flattened as (
 
-    select g.value as game
+    select g.value as game, ingestion_ts
     from dates_flattened,
     lateral flatten(input => date_obj:games) g
 
@@ -44,7 +44,8 @@ home_side as (
         game:officialDate::date                                     as game_date,
         'home'                                                      as side,
         game:teams:home:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:home:probablePitcher:fullName::varchar           as probable_pitcher_name
+        game:teams:home:probablePitcher:fullName::varchar           as probable_pitcher_name,
+        ingestion_ts
     from games_flattened
 
 ),
@@ -56,7 +57,8 @@ away_side as (
         game:officialDate::date                                     as game_date,
         'away'                                                      as side,
         game:teams:away:probablePitcher:id::integer                 as probable_pitcher_id,
-        game:teams:away:probablePitcher:fullName::varchar           as probable_pitcher_name
+        game:teams:away:probablePitcher:fullName::varchar           as probable_pitcher_name,
+        ingestion_ts
     from games_flattened
 
 ),
@@ -73,5 +75,5 @@ select *
 from all_sides
 qualify row_number() over (
     partition by game_pk, side
-    order by game_date desc
+    order by ingestion_ts desc nulls last
 ) = 1

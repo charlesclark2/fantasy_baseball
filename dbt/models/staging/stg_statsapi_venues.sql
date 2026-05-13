@@ -85,3 +85,7 @@ select
 from source s
 left join xrefs_pivoted x
     on s.venue_id = x.venue_id
+qualify row_number() over (
+    partition by s.venue_id
+    order by s.ingest_date desc
+) = 1
