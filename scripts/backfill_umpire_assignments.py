@@ -63,10 +63,10 @@ MAX_RETRIES      = 3
 RETRY_BACKOFF    = 10
 
 _PENDING_GAMES_SQL = """
-    SELECT DISTINCT game_pk, game_date, season
+    SELECT DISTINCT game_pk, game_date, game_year
     FROM baseball_data.betting.mart_game_results
     WHERE game_type = 'R'
-      AND season BETWEEN %(start_year)s AND %(end_year)s
+      AND game_year BETWEEN %(start_year)s AND %(end_year)s
       AND game_pk NOT IN (
           SELECT DISTINCT game_pk
           FROM baseball_data.statsapi.umpire_game_log
@@ -190,7 +190,7 @@ def main() -> None:
             })
             rows = cur.fetchall()
 
-        games = [{"game_pk": r[0], "game_date": r[1], "season": r[2]} for r in rows]
+        games = [{"game_pk": r[0], "game_date": r[1], "season": r[2]} for r in rows]  # r[2] = game_year
         log.info("Found %d game_pks needing umpire backfill (%d–%d)",
                  len(games), args.start_year, args.end_year)
 

@@ -321,7 +321,8 @@ def insert_rows(
         return 0
     payload = [{"game_date": game_date.isoformat(), **r} for r in rows]
     with conn.cursor() as cur:
-        cur.executemany(INSERT_SQL, payload)
+        for row in payload:
+            cur.execute(INSERT_SQL, row)
     return len(payload)
 
 

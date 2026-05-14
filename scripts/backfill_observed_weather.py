@@ -70,7 +70,7 @@ _PENDING_GAMES_SQL = """
     SELECT
         g.game_pk,
         g.game_date::DATE        AS game_date,
-        g.season,
+        g.game_year,
         g.venue_id,
         v.latitude,
         v.longitude
@@ -82,7 +82,7 @@ _PENDING_GAMES_SQL = """
     ) v ON g.venue_id = v.venue_id
     JOIN baseball_data.betting.ref_venues rv ON g.venue_id = rv.venue_id
     WHERE g.game_type = 'R'
-      AND g.season BETWEEN %(start_year)s AND %(end_year)s
+      AND g.game_year BETWEEN %(start_year)s AND %(end_year)s
       AND rv.roof_type IN ('open', 'convertible')
       AND g.game_pk NOT IN (
           SELECT DISTINCT game_pk
