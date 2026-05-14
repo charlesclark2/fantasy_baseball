@@ -172,7 +172,8 @@ def write_to_snowflake(
     cur = conn.cursor()
     cur.execute("CREATE SCHEMA IF NOT EXISTS baseball_data.external")
     cur.execute(_DDL)
-    cur.executemany(_INSERT_SQL, records)
+    for record in records:
+        cur.execute(_INSERT_SQL, record)
     cur.close()
     return len(records)
 
