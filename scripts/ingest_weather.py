@@ -1,24 +1,33 @@
 """
 ingest_weather.py
 -----------------
-Fetches game-day weather for outdoor MLB parks and upserts rows into
-baseball_data.statsapi.weather_raw.
+Fetches game-day weather for outdoor MLB parks and inserts rows into
+baseball_data.statsapi.weather_raw (append-only, no MERGE).
 
 Primary source: Open-Meteo (https://open-meteo.com) — no API key required.
 Fallback source: OpenWeatherMap — requires OPENWEATHERMAP_API_KEY env var.
 
+Observation types (--observation-type):
+  forecast_pregame        Pre-game forecast fetched hours before first pitch.
+                          Default daily ingestion behavior.
+  observed_at_first_pitch Actual observed conditions fetched from archive
+                          endpoint after the game starts. For yesterday's
+                          completed games (or use --date for specific date).
+  forecast_intraday       Rolling forecast snapshots at fixed checkpoints before
+                          first pitch. Requires --hours-to-first-pitch {24,6,3,1}.
+
 Usage:
-    uv run python scripts/ingest_weather.py [--date YYYY-MM-DD] [--dry-run] [--source open-meteo|openweathermap]
+    # Daily pre-game forecast (default)
+    uv run python scripts/ingest_weather.py --date YYYY-MM-DD
 
-    --date    DATE  Game date to fetch (default: today).
-    --dry-run FLAG  Print planned operations without writing to Snowflake or calling APIs.
-    --source  TEXT  Weather API source (default: open-meteo).
+    # Observed conditions for yesterday's completed games (morning batch)
+    uv run python scripts/ingest_weather.py --observation-type observed_at_first_pitch
 
-Historical backfill:
-    The script automatically detects past dates and uses the appropriate
-    historical endpoint. For open-meteo, dates older than 5 days use
-    archive-api.open-meteo.com. For openweathermap, the timemachine endpoint
-    is used for any past date.
+    # Intraday forecast at T-6h checkpoint (called by hourly cron)
+    uv run python scripts/ingest_weather.py --observation-type forecast_intraday --hours-to-first-pitch 6
+
+    --dry-run   Print planned operations without writing to Snowflake or calling APIs.
+    --source    Weather API source (default: open-meteo).
 
 Snowflake authentication (same pattern as other ingest scripts):
     Private key (preferred): SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER,
@@ -31,7 +40,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 import snowflake.connector
@@ -57,20 +66,21 @@ log = logging.getLogger(__name__)
 
 WEATHER_RAW_TABLE = "baseball_data.statsapi.weather_raw"
 
-# Open-Meteo endpoints (no API key required)
 OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_ARCHIVE_URL  = "https://archive-api.open-meteo.com/v1/archive"
-# Open-Meteo archive typically has data up to ~5 days before today
 OPEN_METEO_ARCHIVE_LAG_DAYS = 5
 
-# OpenWeatherMap endpoints (requires OPENWEATHERMAP_API_KEY)
 OPENWEATHERMAP_TIMEMACHINE_URL = "https://api.openweathermap.org/data/3.0/onecall/timemachine"
 OPENWEATHERMAP_FORECAST_URL    = "https://api.openweathermap.org/data/3.0/onecall"
 
-# Open-Meteo can be slow under load; retry transient timeouts with backoff.
 _HTTP_TIMEOUT_SEC = 30
 _HTTP_MAX_ATTEMPTS = 3
 _HTTP_BACKOFF_BASE_SEC = 2.0
+
+# Checkpoints for forecast_intraday (hours before first pitch)
+INTRADAY_CHECKPOINTS = [24, 6, 3, 1]
+# A capture fires if the current time is within this many hours of a checkpoint
+INTRADAY_WINDOW_HOURS = 0.33  # ±20 minutes
 
 
 def _get_with_retry(url: str, params: dict) -> dict | None:
@@ -123,7 +133,7 @@ def get_snowflake_conn():
         kwargs["password"] = os.environ["SNOWFLAKE_PASSWORD"]
     return snowflake.connector.connect(**kwargs)
 
-# ── Schedule query ─────────────────────────────────────────────────────────────
+# ── Schedule queries ───────────────────────────────────────────────────────────
 
 _SCHEDULE_SQL = """
     SELECT
@@ -145,11 +155,34 @@ _SCHEDULE_SQL = """
     ORDER BY g.game_date
 """
 
+# Fetch completed outdoor games for observed_at_first_pitch ingestion
+_COMPLETED_GAMES_SQL = """
+    SELECT
+        g.game_pk,
+        g.venue_id,
+        g.game_date                     AS game_datetime_utc,
+        v.latitude,
+        v.longitude,
+        rv.roof_type
+    FROM baseball_data.betting.stg_statsapi_games g
+    JOIN (
+        SELECT venue_id, latitude, longitude
+        FROM baseball_data.betting.stg_statsapi_venues
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY venue_id ORDER BY ingest_date DESC) = 1
+    ) v ON g.venue_id = v.venue_id
+    JOIN baseball_data.betting.ref_venues rv ON g.venue_id = rv.venue_id
+    WHERE g.official_date = %(game_date)s
+      AND g.abstract_game_state = 'Final'
+      AND rv.roof_type IN ('open', 'convertible')
+    ORDER BY g.game_date
+"""
+
 _ALREADY_FETCHED_SQL = f"""
     SELECT game_pk
     FROM {WEATHER_RAW_TABLE}
     WHERE DATE(game_datetime_utc) = %(game_date)s
-      AND fetch_offset_hours < -1
+      AND weather_observation_type = %(observation_type)s
+      AND (%(hours_to_first_pitch)s IS NULL OR hours_to_first_pitch = %(hours_to_first_pitch)s)
 """
 
 # ── Open-Meteo fetching ────────────────────────────────────────────────────────
@@ -183,7 +216,6 @@ def _fetch_open_meteo(lat: float, lon: float, game_dt: datetime) -> dict | None:
         log.warning("Open-Meteo returned no hourly data for (%.4f, %.4f)", lat, lon)
         return None
 
-    # Normalize game_dt to a naive UTC datetime for comparison
     if game_dt.tzinfo is not None:
         naive_dt = game_dt.astimezone(timezone.utc).replace(tzinfo=None)
     else:
@@ -245,11 +277,9 @@ def _fetch_openweathermap(lat: float, lon: float, game_dt: datetime) -> dict | N
 
     best = min(hourly_list, key=lambda h: abs(h.get("dt", 0) - game_ts))
 
-    # Kelvin → Fahrenheit: F = (K − 273.15) × 9/5 + 32
     temp_k = best.get("temp")
     temp_f = round((temp_k - 273.15) * 9 / 5 + 32, 1) if temp_k is not None else None
 
-    # m/s → mph: 1 m/s = 2.237 mph
     wind_mps = best.get("wind_speed")
     wind_mph = round(wind_mps * 2.237, 1) if wind_mps is not None else None
 
@@ -273,54 +303,40 @@ def fetch_weather(source: str, lat: float, lon: float, game_dt: datetime) -> dic
     else:
         raise ValueError(f"Unknown weather source: {source!r}")
 
-# ── Snowflake upsert ───────────────────────────────────────────────────────────
+# ── Snowflake INSERT (append-only) ────────────────────────────────────────────
 
-_MERGE_SQL = f"""
-MERGE INTO {WEATHER_RAW_TABLE} AS tgt
-USING (
-    SELECT
-        %(game_pk)s::INTEGER                   AS game_pk,
-        %(venue_id)s::INTEGER                  AS venue_id,
-        %(game_datetime_utc)s::TIMESTAMP_NTZ   AS game_datetime_utc,
-        %(fetch_offset_hours)s                 AS fetch_offset_hours,
-        %(temp_f)s                             AS temp_f,
-        %(wind_speed_mph)s                     AS wind_speed_mph,
-        %(wind_direction_deg)s                 AS wind_direction_deg,
-        %(humidity_pct)s                       AS humidity_pct,
-        %(condition_text)s                     AS condition_text,
-        %(api_source)s                         AS api_source,
-        CURRENT_TIMESTAMP()                    AS loaded_at
-) AS src
-ON tgt.game_pk = src.game_pk AND tgt.venue_id = src.venue_id
-WHEN MATCHED THEN UPDATE SET
-    game_datetime_utc   = src.game_datetime_utc,
-    fetch_offset_hours  = src.fetch_offset_hours,
-    temp_f              = src.temp_f,
-    wind_speed_mph      = src.wind_speed_mph,
-    wind_direction_deg  = src.wind_direction_deg,
-    humidity_pct        = src.humidity_pct,
-    condition_text      = src.condition_text,
-    api_source          = src.api_source,
-    loaded_at           = src.loaded_at
-WHEN NOT MATCHED THEN INSERT (
+_INSERT_SQL = f"""
+INSERT INTO {WEATHER_RAW_TABLE} (
     game_pk, venue_id, game_datetime_utc, fetch_offset_hours,
     temp_f, wind_speed_mph, wind_direction_deg, humidity_pct,
-    condition_text, api_source, loaded_at
-) VALUES (
-    src.game_pk, src.venue_id, src.game_datetime_utc, src.fetch_offset_hours,
-    src.temp_f, src.wind_speed_mph, src.wind_direction_deg, src.humidity_pct,
-    src.condition_text, src.api_source, src.loaded_at
+    condition_text, api_source, weather_observation_type, hours_to_first_pitch, loaded_at
 )
+SELECT
+    %(game_pk)s::INTEGER,
+    %(venue_id)s::INTEGER,
+    %(game_datetime_utc)s::TIMESTAMP_NTZ,
+    %(fetch_offset_hours)s::FLOAT,
+    %(temp_f)s::FLOAT,
+    %(wind_speed_mph)s::FLOAT,
+    %(wind_direction_deg)s::INTEGER,
+    %(humidity_pct)s::INTEGER,
+    %(condition_text)s::VARCHAR,
+    %(api_source)s::VARCHAR,
+    %(weather_observation_type)s::VARCHAR,
+    %(hours_to_first_pitch)s::INTEGER,
+    CURRENT_TIMESTAMP
 """
 
 
-def _upsert_weather_row(
+def _insert_weather_row(
     conn,
     game_pk: int,
     venue_id: int,
     game_dt: datetime,
     weather: dict,
     source: str,
+    observation_type: str,
+    hours_to_first_pitch: int | None = None,
 ) -> None:
     now = datetime.now(timezone.utc)
     if game_dt.tzinfo is not None:
@@ -331,18 +347,213 @@ def _upsert_weather_row(
     fetch_offset_hours = round((now - game_dt_utc).total_seconds() / 3600, 1)
 
     with conn.cursor() as cur:
-        cur.execute(_MERGE_SQL, {
-            "game_pk":            game_pk,
-            "venue_id":           venue_id,
-            "game_datetime_utc":  game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
-            "fetch_offset_hours": fetch_offset_hours,
-            "temp_f":             weather["temp_f"],
-            "wind_speed_mph":     weather["wind_speed_mph"],
-            "wind_direction_deg": weather["wind_direction_deg"],
-            "humidity_pct":       weather["humidity_pct"],
-            "condition_text":     weather["condition_text"],
-            "api_source":         source,
+        cur.execute(_INSERT_SQL, {
+            "game_pk":              game_pk,
+            "venue_id":             venue_id,
+            "game_datetime_utc":    game_dt_utc.strftime("%Y-%m-%d %H:%M:%S"),
+            "fetch_offset_hours":   fetch_offset_hours,
+            "temp_f":               weather["temp_f"],
+            "wind_speed_mph":       weather["wind_speed_mph"],
+            "wind_direction_deg":   weather["wind_direction_deg"],
+            "humidity_pct":         weather["humidity_pct"],
+            "condition_text":       weather["condition_text"],
+            "api_source":           source,
+            "weather_observation_type": observation_type,
+            "hours_to_first_pitch": hours_to_first_pitch,
         })
+
+# ── Checkpoint detection (forecast_intraday) ───────────────────────────────────
+
+def _nearest_checkpoint(hours_until: float) -> int | None:
+    """Return the checkpoint value if hours_until is within INTRADAY_WINDOW_HOURS of one."""
+    for cp in INTRADAY_CHECKPOINTS:
+        if abs(hours_until - cp) <= INTRADAY_WINDOW_HOURS:
+            return cp
+    return None
+
+# ── Main ingestion logic ───────────────────────────────────────────────────────
+
+def _run_forecast_pregame(conn, game_date: str, source: str) -> None:
+    """Original daily pre-game forecast ingestion path."""
+    with conn.cursor() as cur:
+        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
+        rows = cur.fetchall()
+        col_names = [d[0].lower() for d in cur.description]
+        games = [dict(zip(col_names, row)) for row in rows]
+
+    if not games:
+        log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(_ALREADY_FETCHED_SQL, {
+            "game_date":          game_date,
+            "observation_type":   "forecast_pregame",
+            "hours_to_first_pitch": None,
+        })
+        already_done = {row[0] for row in cur.fetchall()}
+
+    pending = [g for g in games if g["game_pk"] not in already_done]
+    log.info(
+        "Found %d outdoor-park games (%d already have forecast_pregame, skipping).",
+        len(pending), len(already_done),
+    )
+
+    success = 0
+    for g in pending:
+        game_pk  = g["game_pk"]
+        venue_id = g["venue_id"]
+        lat      = g["latitude"]
+        lon      = g["longitude"]
+        game_dt  = g["game_datetime_utc"]
+
+        if isinstance(game_dt, str):
+            game_dt = datetime.fromisoformat(game_dt)
+        if lat is None or lon is None:
+            log.warning("Skipping venue_id=%d — missing GPS coordinates.", venue_id)
+            continue
+
+        log.info("Fetching  game_pk=%-8d venue_id=%-5d  lat=%.4f  lon=%.4f",
+                 game_pk, venue_id, lat, lon)
+        weather = fetch_weather(source, lat, lon, game_dt)
+        if weather is None:
+            log.warning("No weather data returned for game_pk=%d — skipping.", game_pk)
+            continue
+
+        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, source,
+                            "forecast_pregame", None)
+        log.info("  Saved: temp=%.1f°F  wind=%.1f mph (dir=%s°)  humidity=%s%%",
+                 weather["temp_f"] or 0, weather["wind_speed_mph"] or 0,
+                 weather["wind_direction_deg"], weather["humidity_pct"])
+        success += 1
+
+    total = len(pending)
+    log.info("forecast_pregame complete — %d/%d outdoor parks fetched.", success, total)
+    if total > 0 and success == 0:
+        log.error("All weather fetches failed.")
+        sys.exit(1)
+
+
+def _run_observed_at_first_pitch(conn, game_date: str, source: str) -> None:
+    """Fetch observed weather from archive endpoint for completed games on game_date."""
+    with conn.cursor() as cur:
+        cur.execute(_COMPLETED_GAMES_SQL, {"game_date": game_date})
+        rows = cur.fetchall()
+        col_names = [d[0].lower() for d in cur.description]
+        games = [dict(zip(col_names, row)) for row in rows]
+
+    if not games:
+        log.info("No completed outdoor-park games found for %s — nothing to fetch.", game_date)
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(_ALREADY_FETCHED_SQL, {
+            "game_date":            game_date,
+            "observation_type":     "observed_at_first_pitch",
+            "hours_to_first_pitch": None,
+        })
+        already_done = {row[0] for row in cur.fetchall()}
+
+    pending = [g for g in games if g["game_pk"] not in already_done]
+    log.info(
+        "Found %d completed outdoor games (%d already have observed row, skipping).",
+        len(pending), len(already_done),
+    )
+
+    success = 0
+    for g in pending:
+        game_pk  = g["game_pk"]
+        venue_id = g["venue_id"]
+        lat      = g["latitude"]
+        lon      = g["longitude"]
+        game_dt  = g["game_datetime_utc"]
+
+        if isinstance(game_dt, str):
+            game_dt = datetime.fromisoformat(game_dt)
+        if lat is None or lon is None:
+            log.warning("Skipping venue_id=%d — missing GPS coordinates.", venue_id)
+            continue
+
+        log.info("Fetching observed  game_pk=%-8d venue_id=%-5d", game_pk, venue_id)
+        weather = _fetch_open_meteo(lat, lon, game_dt)
+        if weather is None:
+            log.warning("No observed weather returned for game_pk=%d — skipping.", game_pk)
+            continue
+
+        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, "open-meteo",
+                            "observed_at_first_pitch", None)
+        log.info("  Saved observed: temp=%.1f°F  wind=%.1f mph",
+                 weather["temp_f"] or 0, weather["wind_speed_mph"] or 0)
+        success += 1
+
+    log.info("observed_at_first_pitch complete — %d/%d games fetched.", success, len(pending))
+
+
+def _run_forecast_intraday(conn, game_date: str, source: str, hours_to_first_pitch: int) -> None:
+    """Fetch intraday forecast snapshot for today's games at a specific checkpoint."""
+    with conn.cursor() as cur:
+        cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
+        rows = cur.fetchall()
+        col_names = [d[0].lower() for d in cur.description]
+        games = [dict(zip(col_names, row)) for row in rows]
+
+    if not games:
+        log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(_ALREADY_FETCHED_SQL, {
+            "game_date":            game_date,
+            "observation_type":     "forecast_intraday",
+            "hours_to_first_pitch": hours_to_first_pitch,
+        })
+        already_done = {row[0] for row in cur.fetchall()}
+
+    now_utc = datetime.now(timezone.utc)
+    eligible = []
+    for g in games:
+        if g["game_pk"] in already_done:
+            continue
+        game_dt = g["game_datetime_utc"]
+        if isinstance(game_dt, str):
+            game_dt = datetime.fromisoformat(game_dt)
+        if game_dt.tzinfo is None:
+            game_dt = game_dt.replace(tzinfo=timezone.utc)
+        hours_until = (game_dt - now_utc).total_seconds() / 3600
+        cp = _nearest_checkpoint(hours_until)
+        if cp == hours_to_first_pitch:
+            eligible.append((g, game_dt))
+
+    log.info(
+        "forecast_intraday T-%dh: %d games within ±20min window (%d already captured).",
+        hours_to_first_pitch, len(eligible), len(already_done),
+    )
+
+    success = 0
+    for g, game_dt in eligible:
+        game_pk  = g["game_pk"]
+        venue_id = g["venue_id"]
+        lat      = g["latitude"]
+        lon      = g["longitude"]
+
+        if lat is None or lon is None:
+            log.warning("Skipping venue_id=%d — missing GPS coordinates.", venue_id)
+            continue
+
+        log.info("Fetching T-%dh forecast  game_pk=%-8d venue_id=%-5d",
+                 hours_to_first_pitch, game_pk, venue_id)
+        weather = fetch_weather(source, lat, lon, game_dt)
+        if weather is None:
+            log.warning("No forecast returned for game_pk=%d — skipping.", game_pk)
+            continue
+
+        _insert_weather_row(conn, game_pk, venue_id, game_dt, weather, source,
+                            "forecast_intraday", hours_to_first_pitch)
+        log.info("  Saved T-%dh: temp=%.1f°F  wind=%.1f mph",
+                 hours_to_first_pitch, weather["temp_f"] or 0, weather["wind_speed_mph"] or 0)
+        success += 1
+
+    log.info("forecast_intraday T-%dh complete — %d/%d fetched.", hours_to_first_pitch, success, len(eligible))
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
@@ -352,9 +563,30 @@ def main() -> None:
     )
     parser.add_argument(
         "--date",
-        default=date.today().isoformat(),
+        default=None,
         metavar="YYYY-MM-DD",
-        help="Game date to fetch weather for (default: today).",
+        help=(
+            "Game date to fetch weather for. "
+            "Defaults to today for forecast_pregame/forecast_intraday; "
+            "yesterday for observed_at_first_pitch."
+        ),
+    )
+    parser.add_argument(
+        "--observation-type",
+        choices=["forecast_pregame", "observed_at_first_pitch", "forecast_intraday"],
+        default="forecast_pregame",
+        help="Type of weather observation to capture (default: forecast_pregame).",
+    )
+    parser.add_argument(
+        "--hours-to-first-pitch",
+        type=int,
+        choices=INTRADAY_CHECKPOINTS,
+        default=None,
+        help=(
+            "Required for forecast_intraday. "
+            "Literal checkpoint value written to hours_to_first_pitch column: {24, 6, 3, 1}. "
+            "Only games within ±20min of this checkpoint are captured."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -369,82 +601,35 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    game_date = args.date
+    if args.observation_type == "forecast_intraday" and args.hours_to_first_pitch is None:
+        parser.error("--hours-to-first-pitch is required when --observation-type=forecast_intraday")
+
+    if args.date:
+        game_date = args.date
+    elif args.observation_type == "observed_at_first_pitch":
+        game_date = (date.today() - timedelta(days=1)).isoformat()
+    else:
+        game_date = date.today().isoformat()
+
     log.info(
-        "Fetching weather — date=%s  source=%s  dry_run=%s",
-        game_date, args.source, args.dry_run,
+        "Weather ingest — date=%s  observation_type=%s  hours_to_first_pitch=%s  dry_run=%s",
+        game_date, args.observation_type, args.hours_to_first_pitch, args.dry_run,
     )
 
     if args.dry_run:
         log.info("DRY RUN: no Snowflake writes or API calls.")
-        log.info("  Would query stg_statsapi_games for outdoor-park games on %s", game_date)
-        log.info("  Would fetch weather via %s for each outdoor park", args.source)
-        log.info("  Would upsert weather rows into %s", WEATHER_RAW_TABLE)
-        log.info("  roof_type filter: open, convertible  (fixed/dome parks are skipped)")
+        log.info("  Would fetch %s weather via %s for outdoor parks on %s",
+                 args.observation_type, args.source, game_date)
         return
 
     conn = get_snowflake_conn()
     try:
-        with conn.cursor() as cur:
-            cur.execute(_SCHEDULE_SQL, {"game_date": game_date})
-            rows = cur.fetchall()
-            col_names = [d[0].lower() for d in cur.description]
-            games = [dict(zip(col_names, row)) for row in rows]
-
-        if not games:
-            log.info("No outdoor-park games found for %s — nothing to fetch.", game_date)
-            return
-
-        with conn.cursor() as cur:
-            cur.execute(_ALREADY_FETCHED_SQL, {"game_date": game_date})
-            already_done = {row[0] for row in cur.fetchall()}
-
-        pending = [g for g in games if g["game_pk"] not in already_done]
-        log.info(
-            "Found %d outdoor-park games (%d already fetched near first pitch, skipping).",
-            len(pending), len(already_done),
-        )
-
-        success = 0
-        for g in pending:
-            game_pk  = g["game_pk"]
-            venue_id = g["venue_id"]
-            lat      = g["latitude"]
-            lon      = g["longitude"]
-            game_dt  = g["game_datetime_utc"]
-
-            if isinstance(game_dt, str):
-                game_dt = datetime.fromisoformat(game_dt)
-
-            if lat is None or lon is None:
-                log.warning("Skipping venue_id=%d — missing GPS coordinates.", venue_id)
-                continue
-
-            log.info(
-                "Fetching  game_pk=%-8d venue_id=%-5d  lat=%.4f  lon=%.4f",
-                game_pk, venue_id, lat, lon,
-            )
-            weather = fetch_weather(args.source, lat, lon, game_dt)
-            if weather is None:
-                log.warning("No weather data returned for game_pk=%d — skipping.", game_pk)
-                continue
-
-            _upsert_weather_row(conn, game_pk, venue_id, game_dt, weather, args.source)
-            log.info(
-                "  Saved: temp=%.1f°F  wind=%.1f mph (dir=%s°)  humidity=%s%%",
-                weather["temp_f"] or 0,
-                weather["wind_speed_mph"] or 0,
-                weather["wind_direction_deg"],
-                weather["humidity_pct"],
-            )
-            success += 1
-
-        total = len(pending)
-        log.info("Weather ingestion complete — %d/%d outdoor parks fetched.", success, total)
-        if total > 0 and success == 0:
-            log.error("All weather fetches failed.")
-            sys.exit(1)
-
+        if args.observation_type == "forecast_pregame":
+            _run_forecast_pregame(conn, game_date, args.source)
+        elif args.observation_type == "observed_at_first_pitch":
+            _run_observed_at_first_pitch(conn, game_date, args.source)
+        elif args.observation_type == "forecast_intraday":
+            _run_forecast_intraday(conn, game_date, args.source, args.hours_to_first_pitch)
     finally:
         conn.close()
 

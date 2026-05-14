@@ -1,0 +1,52 @@
+name: Intraday Schedule Capture
+
+# Fires every 30 minutes during the game-day window (10:00–23:59 ET).
+# ET = UTC-4 in summer (April–October). Two cron entries cover the window:
+#   14:00–23:30 UTC  →  10:00 AM – 7:30 PM ET
+#   00:00–03:30 UTC  →  8:00 PM – 11:30 PM ET (next calendar day in UTC)
+#
+# The ingest script handles "no games today" gracefully (logs and exits cleanly).
+# capture_reason=intraday_gameday tags these rows separately from the daily pull.
+
+on:
+  schedule:
+    - cron: '*/30 14-23 * * *'
+    - cron: '0,30 0-3 * * *'
+  workflow_dispatch:
+    inputs:
+      game_date:
+        description: 'Game date to capture (YYYY-MM-DD, default: today)'
+        required: false
+        default: ''
+
+jobs:
+  intraday-schedule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Write Snowflake private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+          chmod 600 /tmp/snowflake_rsa_key.pem
+
+      - name: Ingest intraday schedule snapshot
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          TARGET_DATE="${{ github.event.inputs.game_date }}"
+          if [ -z "$TARGET_DATE" ]; then
+            TARGET_DATE=$(date +%Y-%m-%d)
+          fi
+          uv run ingest_statsapi.py schedule \
+            --start-date "$TARGET_DATE" \
+            --end-date   "$TARGET_DATE" \
+            --capture-reason intraday_gameday

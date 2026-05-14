@@ -33,6 +33,15 @@ jobs:
       - name: predict_today.py syntax check
         run: uv run python -m py_compile scripts/predict_today.py
 
+      - name: Block MERGE patterns in ingest scripts
+        run: |
+          if grep -rE "MERGE[[:space:]]+INTO|WHEN[[:space:]]+MATCHED" scripts/ingest_*.py; then
+            echo "ERROR: MERGE/WHEN MATCHED pattern found in scripts/ingest_*.py"
+            echo "All ingestion must be append-only INSERT. See Epic T conventions."
+            exit 1
+          fi
+          echo "OK — no MERGE patterns found in ingest scripts"
+
   model-smoke-test:
     name: Model Artifact Smoke Test
     runs-on: ubuntu-latest

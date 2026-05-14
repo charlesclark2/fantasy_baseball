@@ -1,0 +1,113 @@
+name: Intraday Weather Capture
+
+# Fires hourly 06:00–22:00 ET (10:00–02:00 UTC) during the season.
+# For each run, the ingest script checks which of the 4 checkpoints
+# (T-24h, T-6h, T-3h, T-1h) any scheduled game falls within ±20 min of,
+# and captures a forecast_intraday row for those games only.
+# All four checkpoints are attempted each hour; the script skips games
+# already captured at a given checkpoint (idempotent).
+
+on:
+  schedule:
+    - cron: '0 10-23 * * *'   # 06:00–19:00 ET (10:00–23:00 UTC)
+    - cron: '0 0-2 * * *'     # 20:00–22:00 ET (00:00–02:00 UTC)
+  workflow_dispatch:
+    inputs:
+      game_date:
+        description: 'Game date (YYYY-MM-DD, default: today)'
+        required: false
+        default: ''
+
+jobs:
+  intraday-weather:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Write Snowflake private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+          chmod 600 /tmp/snowflake_rsa_key.pem
+
+      - name: Capture T-24h forecast
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          TARGET_DATE="${{ github.event.inputs.game_date }}"
+          if [ -z "$TARGET_DATE" ]; then TARGET_DATE=$(date +%Y-%m-%d); fi
+          uv run ingest_weather.py \
+            --date "$TARGET_DATE" \
+            --observation-type forecast_intraday \
+            --hours-to-first-pitch 24
+
+      - name: Capture T-6h forecast
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          TARGET_DATE="${{ github.event.inputs.game_date }}"
+          if [ -z "$TARGET_DATE" ]; then TARGET_DATE=$(date +%Y-%m-%d); fi
+          uv run ingest_weather.py \
+            --date "$TARGET_DATE" \
+            --observation-type forecast_intraday \
+            --hours-to-first-pitch 6
+
+      - name: Capture T-3h forecast
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          TARGET_DATE="${{ github.event.inputs.game_date }}"
+          if [ -z "$TARGET_DATE" ]; then TARGET_DATE=$(date +%Y-%m-%d); fi
+          uv run ingest_weather.py \
+            --date "$TARGET_DATE" \
+            --observation-type forecast_intraday \
+            --hours-to-first-pitch 3
+
+      - name: Capture T-1h forecast
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          TARGET_DATE="${{ github.event.inputs.game_date }}"
+          if [ -z "$TARGET_DATE" ]; then TARGET_DATE=$(date +%Y-%m-%d); fi
+          uv run ingest_weather.py \
+            --date "$TARGET_DATE" \
+            --observation-type forecast_intraday \
+            --hours-to-first-pitch 1
+
+      - name: Capture observed weather for yesterday's completed games
+        continue-on-error: true
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        run: |
+          uv run ingest_weather.py --observation-type observed_at_first_pitch

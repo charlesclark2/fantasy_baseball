@@ -53,41 +53,28 @@ log = logging.getLogger(__name__)
 STATSAPI_SCHEDULE_URL = "https://statsapi.mlb.com/api/v1/schedule"
 TABLE_FQN = "baseball_data.statsapi.umpire_game_log"
 
-MERGE_SQL = f"""
-MERGE INTO {TABLE_FQN} AS tgt
-USING (
-    SELECT
-        %(game_pk)s::INTEGER     AS game_pk,
-        %(game_date)s::DATE      AS game_date,
-        %(season)s::INTEGER      AS season,
-        %(umpire_name)s::VARCHAR  AS umpire_name,
-        %(umpire_id)s::VARCHAR    AS umpire_id,
-        NULL::FLOAT              AS k_pct,
-        NULL::FLOAT              AS bb_pct,
-        NULL::INTEGER            AS total_runs,
-        NULL::FLOAT              AS called_strikes_above_avg,
-        NULL::FLOAT              AS run_expectancy_delta,
-        NULL::FLOAT              AS total_run_impact,
-        NULL::FLOAT              AS accuracy_above_expected,
-        'statsapi'::VARCHAR      AS data_source,
-        CURRENT_TIMESTAMP()      AS loaded_at
-) AS src
-ON tgt.game_pk = src.game_pk
-WHEN MATCHED AND tgt.data_source = 'statsapi' THEN UPDATE SET
-    umpire_name = src.umpire_name,
-    umpire_id   = src.umpire_id,
-    loaded_at   = src.loaded_at
-WHEN NOT MATCHED THEN INSERT (
+INSERT_SQL = f"""
+INSERT INTO {TABLE_FQN} (
     game_pk, game_date, season, umpire_name, umpire_id,
     k_pct, bb_pct, total_runs, called_strikes_above_avg,
     run_expectancy_delta, total_run_impact, accuracy_above_expected,
     data_source, loaded_at
-) VALUES (
-    src.game_pk, src.game_date, src.season, src.umpire_name, src.umpire_id,
-    src.k_pct, src.bb_pct, src.total_runs, src.called_strikes_above_avg,
-    src.run_expectancy_delta, src.total_run_impact, src.accuracy_above_expected,
-    src.data_source, src.loaded_at
 )
+SELECT
+    %(game_pk)s::INTEGER,
+    %(game_date)s::DATE,
+    %(season)s::INTEGER,
+    %(umpire_name)s::VARCHAR,
+    %(umpire_id)s::VARCHAR,
+    NULL::FLOAT,
+    NULL::FLOAT,
+    NULL::INTEGER,
+    NULL::FLOAT,
+    NULL::FLOAT,
+    NULL::FLOAT,
+    NULL::FLOAT,
+    'statsapi'::VARCHAR,
+    CURRENT_TIMESTAMP()
 """
 
 
@@ -173,10 +160,10 @@ def fetch_hp_umpires(game_date: str) -> list[dict]:
     return results
 
 
-def upsert_rows(conn, rows: list[dict]) -> int:
+def insert_rows(conn, rows: list[dict]) -> int:
     with conn.cursor() as cur:
         for row in rows:
-            cur.execute(MERGE_SQL, row)
+            cur.execute(INSERT_SQL, row)
     return len(rows)
 
 
@@ -204,8 +191,8 @@ def main():
     log.info("Connecting to Snowflake...")
     conn = get_snowflake_conn()
     try:
-        loaded = upsert_rows(conn, assignments)
-        log.info("Upserted %d HP umpire assignments for %s", loaded, args.date)
+        loaded = insert_rows(conn, assignments)
+        log.info("Inserted %d HP umpire assignments for %s", loaded, args.date)
     except Exception as exc:
         log.error("Snowflake write failed: %s", exc)
         conn.close()

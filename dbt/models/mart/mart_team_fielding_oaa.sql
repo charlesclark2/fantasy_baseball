@@ -27,6 +27,10 @@ with oaa_raw as (
         drs,
         n_opportunities
     from {{ source('external', 'oaa_team_season_raw') }}
+    qualify row_number() over (
+        partition by team_abbrev, game_year
+        order by loaded_at desc nulls last
+    ) = 1
 ),
 
 games as (
