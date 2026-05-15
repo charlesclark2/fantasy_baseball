@@ -211,6 +211,20 @@ TARGET_ENV=prod uv run scripts/predict_today.py
 uv run scripts/parlay_api_ingestion.py events --dry-run
 ```
 
+### Data Ingestion Convention — Append-Only Raw Tables
+
+All raw ingestion scripts (`ingest_*.py`) write **append-only**: every run produces a new row tagged with `ingestion_ts` and `load_id`. Raw tables are never overwritten or merged.
+
+**Why:** Overwriting destroys intra-day state (lineup transitions, pitcher scratches, odds movement) that cannot be recovered from vendor APIs. Append-only raw tables enable temporal replay and let staging models always serve the latest state via:
+
+```sql
+QUALIFY ROW_NUMBER() OVER (PARTITION BY <natural_key> ORDER BY ingestion_ts DESC) = 1
+```
+
+**Enforced by CI:** `.github/workflows/ci.yml` blocks any `MERGE INTO` or `WHEN MATCHED` pattern in `scripts/ingest_*.py`. The guard runs in the `unit-tests` job and fails the build if triggered.
+
+Never add a MERGE pattern to an ingestion script. If you need to replace a record, insert a new row with a later `ingestion_ts` — the staging dedup handles it.
+
 ---
 
 ## Diamond Edge App
