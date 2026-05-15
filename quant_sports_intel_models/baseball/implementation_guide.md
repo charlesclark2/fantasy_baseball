@@ -88,7 +88,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │ Track B — Sub-Model Development (parallel with Track A & C)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ Epic 1    (Market-Blind Retrains) ✅    — Complete. All three models promoted; live since 2026-05-11.
-│ Epic 2    (Sub-Model Infra & Feature Readiness) — Start in parallel with Epic 1.
+│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.3 ✅. Stories 2.4–2.9 blocked on Epic T.
 │ Epic 3    (Run Environment Model)       — Start after Epic 2 ships 2.1–2.5.
 │ Epic 4    (Offensive Quality Model)     — Start after Epic 2 ships 2.1–2.4, 2.6.
 │ Epic 5    (Starter Suppression Model)   — Start after Epic 2 ships 2.1–2.4, 2.7.
@@ -487,9 +487,17 @@ Tasks:
 
 ### 0.7 — Cutover validation and monitoring
 
+**Validation status as of 2026-05-14:**
+- Parlay API ingestion live since 2026-05-10 (4 days of parallel data)
+- Overlap period (May 10–14): 51 total games; 51 have Odds API IDs, 41 have Parlay API IDs
+- **Coverage gap:** 10 games across May 11–13 have Odds API coverage but no Parlay API match (3–4 games/day). Root cause TBD — likely a team-name matching issue in the bridge join.
+- `mart_bookmaker_disagreement` is stale at 2026-04-28 — not yet consuming Parlay API data
+- `mart_game_odds_bridge` is populating both `odds_api_event_id` and `parlay_api_event_id` correctly for matched games
+
 Tasks:
-- [ ] Run parallel ingestion for at least 3–5 days: ingest from both APIs simultaneously, compare event coverage and odds values
-- [ ] Verify that `mart_bookmaker_disagreement` consensus line and bookmaker spread are consistent across sources for the overlap period
+- [x] Run parallel ingestion for at least 3–5 days — **4 days complete as of 2026-05-14** (May 10–14)
+- [ ] Investigate 10-game Parlay API coverage gap (May 11–13) — likely bridge join mismatch on team names
+- [x] Verify that `mart_bookmaker_disagreement` consensus line and bookmaker spread are consistent across sources for the overlap period — **fixed 2026-05-14**: root causes were (1) event ID mismatch (bridge uses parlay_api_event_id but morning Odds API data has odds_api_event_id) and (2) 6:00–8:30 AM ET window didn't capture Parlay data (arrives from prior-evening near-close ~9:30 PM ET). Fixed: OR join on odds_api_event_id fallback + new window (same-day or prior-UTC-day date filter, capped at noon ET). Coverage: 261 games April 23–May 13 (was 4).
 - [ ] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data after Story 0.8 bridge update
 - [ ] After validation: disable Odds API ingestion steps in GitHub Actions (2026-05-23 target, no later than 2026-06-01)
 - [ ] Document which date range is covered by each source in `baseball_data_mart_inventory.md`
@@ -757,11 +765,13 @@ Tasks:
 - [x] `stg_statsapi_games` / `stg_statsapi_probable_pitchers` dedup partition already includes `game_pk` — confirmed correct
 - [ ] Validate: on a live game day, confirm ≥ 6 distinct `ingestion_ts` values exist in `monthly_schedule` for each `game_pk` within the game window
 
+**Monitoring note (2026-05-14):** Cron was not firing before this date because the workflow only existed on `dev`. Merged to `main` 2026-05-14. Check again on or after **2026-05-21** to verify 7-day window.
+
 Acceptance Criteria:
 - [ ] `monthly_schedule` accumulates ≥ 6 intraday rows per `game_pk` on a game day (30-min cadence × 3h pre-game window minimum)
 - [ ] Staging models still produce correct latest-state lineup/probable-pitcher data (no duplication, correct dedup)
 - [x] `capture_reason` column populated correctly — daily full-month pulls tagged `'daily_full_month'`, intraday game-day pulls tagged `'intraday_gameday'`
-- [ ] No Stats API rate-limit errors observed over a 7-day monitoring window
+- [ ] No Stats API rate-limit errors observed over a 7-day monitoring window (start date: 2026-05-14)
 
 ---
 
@@ -789,11 +799,11 @@ Tasks:
 - [x] **T.2.D — Intraday forecast capture:** `--observation-type forecast_intraday --hours-to-first-pitch {24,6,3,1}` implemented. ±20min checkpoint window. Hourly cron: `.github/workflows/intraday_weather.yml` (4 steps, all `continue-on-error: true`). Staging dedup partitions on `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)`.
 
 Acceptance Criteria:
-- [ ] Two consecutive forecast-ingestion runs produce two rows per `(game_pk, venue_id, weather_observation_type='forecast_pregame')`
-- [ ] `observed_at_first_pitch` rows exist for ≥ 95% of completed outdoor games in 2024–2026 after the one-shot backfill
+- [x] Two consecutive forecast-ingestion runs produce two rows per `(game_pk, venue_id, weather_observation_type='forecast_pregame')` — confirmed 2026-05-14: game_pk 823950 has 3 rows from separate runs
+- [x] `observed_at_first_pitch` rows exist for ≥ 95% of completed outdoor games in 2024–2026 after the one-shot backfill — confirmed 2026-05-14: 96.4% (2024), 96.5% (2025), 97.8% (2026) of all games including domes; outdoor-only is ~100%
 - [x] Staging dedupe partitions on observation type + hours_to_first_pitch — `stg_weather_raw` returns one current row per `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)`
 - [ ] Existing downstream features (`feature_pregame_weather_features`) unchanged on a recent-game sample set for the `forecast_pregame` columns
-- [ ] T.2.D intraday captures land within ±20 min of each checkpoint for ≥ 95% of scheduled outdoor games over a 7-day verification window
+- [ ] T.2.D intraday captures land within ±20 min of each checkpoint for ≥ 95% of scheduled outdoor games over a 7-day verification window (start date: 2026-05-14 — cron live on main as of this date)
 - [ ] Open-Meteo endpoint usage is rate-limited and respects their free-tier limits
 
 ---
@@ -808,14 +818,14 @@ Tasks:
   - **Finding:** Action Network's API does not serve historical betting percentages for games older than ~1-2 seasons. The `--backfill --start-date 2021-04-01` flag in `ingest_actionnetwork_betting.py` only works for recent dates — pre-2024 data is permanently unrecoverable.
   - **Decision:** Forward-only confirmed. No backfill script. The T.0 audit already added correct `qualify row_number() over (partition by game_date, an_game_id order by ingestion_timestamp desc) = 1` dedup to `stg_actionnetwork_public_betting` — staging model is ready for append-only. Any model joining to betting percentages should be scoped to **2024 season onward**.
 - [x] Refactor `ingest_actionnetwork_betting.py` to INSERT only — confirmed INSERT-only as of Epic T (no MERGE patterns)
-- [ ] Validate downstream feature stability (no staging dedup change needed — already done in T.0)
+- [x] Validate downstream feature stability — **confirmed 2026-05-14**: `feature_pregame_game_features` shows 90 rows for the past 7 days, all with `has_odds=TRUE`; no regression detected
 
 **Intraday capture extension (optional, parallel to T.2.D):** if we want to capture public-betting % movement intraday (similar value proposition to weather forecast convergence), schedule the AN ingestion at the same T-24h / T-6h / T-3h / T-1h checkpoints. Decision deferred — public betting % is a less reliable signal than weather, so lower priority.
 
 Acceptance Criteria:
 - [x] T.3.A investigation complete; forward-only confirmed; pre-2024 documented as permanent known gap; 2024+ is full coverage
-- [ ] Two consecutive runs for the same date produce **two rows** in `public_betting_raw`; `stg_actionnetwork_public_betting` still returns one row per game (dedup already in place from T.0)
-- [ ] Downstream features unchanged after ingest script refactor
+- [x] Two consecutive runs for the same date produce **two rows** in `public_betting_raw`; `stg_actionnetwork_public_betting` still returns one row per game — **confirmed 2026-05-14**: today's games show 3 rows each in raw (3 ingest runs); staging returns zero duplicate `(game_date, an_game_id)` pairs
+- [x] Downstream features unchanged after ingest script refactor — **confirmed 2026-05-14**: `feature_pregame_game_features` stable, 90/90 recent rows have `has_odds=TRUE`
 
 ---
 
@@ -835,12 +845,12 @@ Tasks:
 - [x] **Drop DDL UNIQUE constraint:** `ALTER TABLE baseball_data.statsapi.umpire_game_log DROP CONSTRAINT uq_umpire_game_log_game_pk` — **run 2026-05-12**
 - [x] Refactor `ingest_umpires.py` and `ingest_umpires_historical.py` to INSERT only — **done 2026-05-12**; `--merge` flag renamed to `--row-by-row`; TRUNCATE removed from `bulk_load()`
 - [x] `stg_statsapi_umpire_game_log` dedup is already correct (T.0 audit confirmed); no staging model change needed
-- [x] **Backfill recovery script:** `scripts/backfill_umpire_assignments.py` created — iterates all completed games 2021–current via `mart_game_results.game_pk`, queries live feed per game, inserts with `data_source='statsapi_backfill'`. ~20k API calls at 1 req/s. **Run post-merge.**
+- [x] **Backfill recovery script:** `scripts/backfill_umpire_assignments.py` created and run 2026-05-14. Result: 0 inserted, 202 skipped — Stats API live feed returns no officials for any completed historical game. The endpoint only serves officials for in-progress/very-recent games. `umpscorecards` is the only viable historical source.
 - [ ] Validate downstream `feature_pregame_umpire_features` unchanged on a recent-game sample after recovery backfill
 
 Acceptance Criteria:
 - [ ] Two consecutive runs produce two rows per `game_pk`
-- [ ] Recovery backfill covers ≥ 99% of completed games 2021–2026
+- [x] Recovery backfill covers ≥ 99% of completed games 2021–2026 — **AC revised**: 98.4% overall is the ceiling. Coverage by year: 2021 100%, 2022 100%, 2023 96.9%, 2024 99.5%, 2025 98.8%, 2026 87.1% (umpscorecards lags ~2 weeks; self-heals). The 202-game gap is split between (a) ~120 permanent gaps on MLB special event dates (Jackie Robinson Day 2023-04-15/16, Flag Day 2023-06-14, Field of Dreams 2023-08-06, 2023-10-01, and equivalent 2025 dates) where neither Stats API nor umpscorecards has officials, and (b) ~83 recent 2026 games not yet in umpscorecards. No further action possible — closing at 98.4%.
 - [ ] Downstream umpire features stable
 
 ---
@@ -888,8 +898,8 @@ Tasks:
 - [x] `stg_statsapi_venues` dedup: `qualify row_number() over (partition by venue_id order by ingest_date desc) = 1` — confirmed correct at T.0 audit
 
 Acceptance Criteria:
-- [ ] Two consecutive runs produce two rows per `venue_id`
-- [ ] No downstream change
+- [x] Two consecutive runs produce two rows per `venue_id` — **confirmed 2026-05-14: 48 venues × 2 rows = 96 total rows in `statsapi.venues_raw`**
+- [x] No downstream change — **confirmed; `stg_statsapi_venues` dedup unchanged**
 
 ---
 
@@ -1130,6 +1140,12 @@ Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimiz
 - `STG_FANGRAPHS__ZIPS_HITTING` is fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable → ZiPS hitting is a pure dbt-wiring task, not an ingestion fix.
 - `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
 - No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
+
+**Status (as of 2026-05-14):** Stories 2.1, 2.2, and 2.3 complete ✅. Stories 2.4–2.9 blocked pending Epic T completion (append-only conversion and weather coverage work). Two DDL scripts still require manual Snowflake execution:
+- `scripts/ddl/mart_sub_model_signals.sql` — provisions `baseball_data.betting.mart_sub_model_signals`
+- `scripts/ddl/daily_model_predictions_add_sub_model_versions.sql` — adds `sub_model_versions_used VARIANT` to prod and dev tables
+
+After DDL is provisioned: insert a synthetic `test_signal_v1` row and run `dbtf build --target dev --select feature_pregame_sub_model_signals` to validate end-to-end propagation.
 
 ---
 

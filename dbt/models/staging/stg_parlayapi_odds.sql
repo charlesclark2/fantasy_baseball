@@ -113,6 +113,20 @@ outcomes_flattened as (
 
 ),
 
+-- Canonical events carry the real scheduled start time (not the 19:00:00Z placeholder
+-- used by the /odds endpoint). Join on canonical_event_id to get the ET-corrected
+-- game_date for West Coast games that cross midnight UTC (Parlay API uses UTC dates,
+-- Stats API uses local-time dates; they diverge by 1 day for late West Coast starts).
+canonical_game_dates as (
+
+    select distinct
+        canonical_event_id,
+        game_date as canonical_game_date
+    from {{ ref('stg_parlayapi_canonical_events') }}
+    where canonical_event_id is not null
+
+),
+
 doubleheader_dates as (
 
     -- Matchups where StatsAPI records a traditional (Y) or split (S) doubleheader.
@@ -144,7 +158,12 @@ select
     o.sport_key,
     o.sport_title,
     o.commence_time,
-    o.commence_time::date                                as game_date,
+    -- Use ET-corrected game_date from canonical events when available.
+    -- The /odds endpoint uses 19:00:00Z as a placeholder, so its UTC date
+    -- is correct for most games but wrong for West Coast games that cross
+    -- midnight UTC. The canonical endpoint has the real start time; we
+    -- converted it to ET in stg_parlayapi_canonical_events.
+    coalesce(ce.canonical_game_date, o.commence_time::date) as game_date,
     o.home_team,
     o.away_team,
 
@@ -179,7 +198,9 @@ select
     o.outcome_point
 
 from outcomes_flattened o
+left join canonical_game_dates ce
+    on  o.canonical_event_id  = ce.canonical_event_id
 left join doubleheader_dates dh
-    on  o.commence_time::date = dh.game_date
+    on  coalesce(ce.canonical_game_date, o.commence_time::date) = dh.game_date
     and o.home_team           = dh.home_team_name
     and o.away_team           = dh.away_team_name
