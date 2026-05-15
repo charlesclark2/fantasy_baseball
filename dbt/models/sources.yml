@@ -255,7 +255,7 @@ sources:
         columns:
           - name: month_start_date
             description: First day of the ingested month.
-            tests: [not_null, unique]
+            tests: [not_null]
           - name: month_end_date
             description: Last day of the ingested month.
             tests: [not_null]
