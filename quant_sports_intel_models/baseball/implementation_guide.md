@@ -88,7 +88,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │ Track B — Sub-Model Development (parallel with Track A & C)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ Epic 1    (Market-Blind Retrains) ✅    — Complete. All three models promoted; live since 2026-05-11.
-│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.3 ✅. Stories 2.4–2.9 blocked on Epic T.
+│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.4 ✅ (partial). Stories 2.5–2.9 blocked on Epic T.
 │ Epic 3    (Run Environment Model)       — Start after Epic 2 ships 2.1–2.5.
 │ Epic 4    (Offensive Quality Model)     — Start after Epic 2 ships 2.1–2.4, 2.6.
 │ Epic 5    (Starter Suppression Model)   — Start after Epic 2 ships 2.1–2.4, 2.7.
@@ -1141,11 +1141,11 @@ Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimiz
 - `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
 - No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
 
-**Status (as of 2026-05-14):** Stories 2.1, 2.2, and 2.3 complete ✅. Stories 2.4–2.9 blocked pending Epic T completion (append-only conversion and weather coverage work). Two DDL scripts still require manual Snowflake execution:
-- `scripts/ddl/mart_sub_model_signals.sql` — provisions `baseball_data.betting.mart_sub_model_signals`
-- `scripts/ddl/daily_model_predictions_add_sub_model_versions.sql` — adds `sub_model_versions_used VARIANT` to prod and dev tables
+**Status (as of 2026-05-15):** Stories 2.1–2.3 fully complete ✅. Story 2.4 substantially complete — convention doc, Python writer (`scd2_writer.py`), dbt macro (`scd2_merge.sql`), and 13/13 unit tests all done; two 2.4 tasks (SCD-2 columns on 2.6/2.9 marts, live end-to-end verification) are blocked on Epic T. Stories 2.5–2.9 blocked pending Epic T completion.
 
-After DDL is provisioned: insert a synthetic `test_signal_v1` row and run `dbtf build --target dev --select feature_pregame_sub_model_signals` to validate end-to-end propagation.
+Validation completed 2026-05-14:
+- `baseball_data.betting.mart_sub_model_signals` provisioned; synthetic `test_signal_v1` row inserted; `dbtf build --target dev --select feature_pregame_sub_model_signals` green (1 model, 2 tests passed); `test_signal_v1 = 1.23` confirmed in `dev_betting_features`
+- `sub_model_versions_used VARIANT` and `data_source VARCHAR(50)` columns added to `betting_ml.daily_model_predictions` and `betting_ml_dev.daily_model_predictions`
 
 ---
 
@@ -1280,7 +1280,7 @@ Acceptance Criteria:
 
 ---
 
-### 2.4 — Type-2 SCD foundation for feature & sub-model output layers
+### 2.4 — Type-2 SCD foundation for feature & sub-model output layers ✅ (partial — 2.6/2.9 tasks pending Epic T)
 
 **Strategic intent:** Long-term, we want point-in-time reproducibility of every model prediction. Today's feature marts overwrite state (latest-only) — making it impossible to answer "what did the system see at prediction time T?" Type-2 SCDs at the feature and sub-model output layers solve this by preserving every state change with `valid_from` / `valid_to` / `is_current` columns, enabling AS-OF queries for historical re-runs, re-training, and CLV backtesting.
 
@@ -1327,20 +1327,21 @@ qualify row_number() over (
 ```
 
 Tasks:
-- [ ] Write a short design doc `quant_sports_intel_models/baseball/scd2_convention.md` covering: column definitions, change-detection rule (`record_hash` diff triggers a new row + close-out the prior), out-of-order arrival policy, deletion semantics (soft via `valid_to`, never DELETE)
-- [ ] Decide dbt snapshots vs custom SCD-2 macros. **Recommendation: custom macros.** dbt snapshots are simpler but inflexible (single hash strategy, no compound natural keys per row, awkward for incremental marts at our scale). Custom macros let us define a reusable `scd2_merge(natural_key_cols, payload_cols)` pattern. Document the decision either way.
-- [ ] Implement the chosen SCD-2 mechanism for `mart_sub_model_signals` (Story 2.1)
-- [ ] Add SCD-2 columns to the new feature marts created in Stories 2.6 and 2.9 (no historical migration — just born with the columns)
-- [ ] Add the AS-OF query pattern to the same design doc with the worked example above
-- [ ] Capture future SCD migration scope as Epic 15 placeholder: "Migrate existing feature marts to SCD-2 (lineup state, weather, injury, market state, projected starter)" — priority order based on volatility (lineup highest, park factors lowest)
+- [x] Write a short design doc `quant_sports_intel_models/baseball/scd2_convention.md` covering: column definitions, change-detection rule (`record_hash` diff triggers a new row + close-out the prior), out-of-order arrival policy, deletion semantics (soft via `valid_to`, never DELETE)
+- [x] Decide dbt snapshots vs custom SCD-2 macros. **Decision: custom macros.** Documented in `scd2_convention.md` with reasoning (snapshots rejected: opaque merge logic, single-hash strategy, not applicable to Python-written tables). Implemented: `betting_ml/scripts/scd2_writer.py` (Python) + `dbt/macros/scd2_merge.sql` (dbt).
+- [x] Implement the chosen SCD-2 mechanism for `mart_sub_model_signals` — `betting_ml/scripts/scd2_writer.py`; `scd2_upsert()` executes two-step merge (UPDATE close-out → INSERT new); 13/13 unit tests passing (`betting_ml/tests/test_scd2_writer.py`)
+- [ ] Add SCD-2 columns to the new feature marts created in Stories 2.6 and 2.9 (no historical migration — just born with the columns) — **blocked on Epic T**
+- [x] Add the AS-OF query pattern to the same design doc with the worked example above — in `scd2_convention.md`
+- [x] Capture future SCD migration scope as Epic 15 placeholder — Epic 15 section already exists in this guide with full backfill feasibility table and priority order
 
 Acceptance Criteria:
-- [ ] `mart_sub_model_signals` populates `valid_from`, `valid_to`, `is_current`, `record_hash` correctly: inserting a new signal value for an existing `(game_pk, signal_name, sub_model_version)` closes the prior row (`valid_to = current_timestamp`, `is_current = false`) and inserts a new current row
-- [ ] AS-OF query pattern returns the historically-correct value when run against a row set that has been updated multiple times
-- [ ] `scd2_convention.md` design doc exists in the repo
-- [ ] Decision (snapshots vs custom macros) is documented with reasoning
-- [ ] Epic 10 placeholder added to this implementation guide with the existing-mart migration priority list
-- [ ] All new marts created in Stories 2.6 and 2.9 include the five SCD-2 columns from the outset
+- [x] `mart_sub_model_signals` SCD-2 write mechanism implemented — `scd2_upsert()` closes prior rows on hash change and inserts new current rows; two-step UPDATE + INSERT pattern
+- [ ] End-to-end AC (insert same natural key twice with different payload, confirm prior row closed) — **run manually once live signals exist; requires active Snowflake data**
+- [ ] AS-OF query verified against multi-version row set — **verify manually once live signals exist**
+- [x] `scd2_convention.md` design doc exists in the repo
+- [x] Decision (snapshots vs custom macros) documented with reasoning
+- [x] Epic 15 section exists in this guide with existing-mart migration priority list
+- [ ] All new marts created in Stories 2.6 and 2.9 include the five SCD-2 columns — **blocked on Epic T**
 
 ---
 

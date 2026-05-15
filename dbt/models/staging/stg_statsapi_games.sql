@@ -74,5 +74,12 @@ select
 from games_flattened
 qualify row_number() over (
     partition by game_pk
-    order by ingestion_ts desc nulls last
+    order by
+        ingestion_ts desc nulls last,
+        -- Tiebreaker for makeup DH games: a postponed game appears in the same
+        -- monthly JSON under both its original date (doubleHeader='N', gameNumber=1)
+        -- and its rescheduled DH date (doubleHeader='Y'/'S', gameNumber=2). Prefer
+        -- the DH record — it has the authoritative played date and game_number.
+        case when double_header in ('Y', 'S') then 0 else 1 end asc,
+        game_number desc nulls last
 ) = 1

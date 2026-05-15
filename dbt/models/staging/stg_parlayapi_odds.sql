@@ -11,7 +11,8 @@
 --   • doubleheader_ambiguous flag (true when StatsAPI records a DH for this matchup/date)
 --
 -- Schema differences vs Odds API (documented for downstream model awareness):
---   • commence_time is a slate placeholder (19:00:00Z) for all games — not actual start time
+--   • commence_time: historical rows use 19:00:00Z as a slate placeholder; live 2026 rows
+--     return real UTC start times (confirmed empirically — header comment was incorrect)
 --   • market_last_update is null for historical odds rows (field absent from historical endpoint)
 --   • bookmaker_last_update is the placeholder timestamp in historical rows
 --   • region_requested is always null — Parlay API has no region parameter
@@ -163,14 +164,19 @@ select
     -- is correct for most games but wrong for West Coast games that cross
     -- midnight UTC. The canonical endpoint has the real start time; we
     -- converted it to ET in stg_parlayapi_canonical_events.
-    coalesce(ce.canonical_game_date, o.commence_time::date) as game_date,
+    -- ET-corrected game_date. Canonical events provide the authoritative date when available.
+    -- Fallback converts the real UTC commence_time to America/New_York to avoid assigning
+    -- West Coast late games (midnight UTC crossover) to the next calendar day.
+    coalesce(
+        ce.canonical_game_date,
+        date(convert_timezone('UTC', 'America/New_York', o.commence_time::timestamp_ntz))
+    )                                                        as game_date,
     o.home_team,
     o.away_team,
 
     -- True when StatsAPI shows a doubleheader for this (date, home, away) combination.
-    -- The Parlay API collapses both DH games into a single event; this flag surfaces
-    -- that ambiguity so downstream models can exclude or caveat affected rows until
-    -- the API issue is resolved (support ticket open as of 2026-05-10).
+    -- Parlay API fixed the DH collapse bug 2026-05-11: both games now return distinct
+    -- events with real commence_times. Flag retained for historical rows and auditing.
     case
         when dh.home_team_name is not null then true
         else false
