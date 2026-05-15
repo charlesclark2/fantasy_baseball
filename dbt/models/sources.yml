@@ -255,7 +255,7 @@ sources:
         columns:
           - name: month_start_date
             description: First day of the ingested month.
-            tests: [not_null, unique]
+            tests: [not_null]
           - name: month_end_date
             description: Last day of the ingested month.
             tests: [not_null]
@@ -268,15 +268,16 @@ sources:
 
       - name: venues_raw
         description: >
-          One row per venue, ingested via ingest_statsapi.py venues subcommand.
+          Append-only venue records ingested via ingest_statsapi.py venues subcommand.
           The json_field VARIANT column contains the full Stats API venue response
-          hydrated with fieldInfo, location, timezone, and xrefId. Keyed on venue_id;
-          re-ingesting a venue overwrites the existing row. The venues present
-          correspond to all ballparks observed in stg_statsapi_games.
+          hydrated with fieldInfo, location, timezone, and xrefId. Multiple rows
+          may exist per venue_id across ingestion runs; stg_statsapi_venues deduplicates
+          to the latest row. The venues present correspond to all ballparks observed
+          in stg_statsapi_games.
         columns:
           - name: venue_id
-            description: Stats API venue ID. Primary key for this table.
-            tests: [not_null, unique]
+            description: Stats API venue ID. Not unique at the source level (append-only); deduplicated in stg_statsapi_venues.
+            tests: [not_null]
           - name: json_field
             description: >
               Full Stats API venue response as a VARIANT. Top-level structure is

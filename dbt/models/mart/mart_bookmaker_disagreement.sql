@@ -39,9 +39,12 @@
 
 with
 
--- Bridge provides game_pk and game_date for each odds event_id
+-- Bridge provides game_pk, game_date, and both source event IDs.
+-- odds_api_event_id fallback is needed because the bridge prefers Parlay API IDs
+-- (event_id = COALESCE(parlay_api_event_id, odds_api_event_id)), so April 2026 games
+-- where only Odds API morning data exists can only be joined via odds_api_event_id.
 bridge as (
-    select event_id, game_pk, game_date
+    select event_id, odds_api_event_id, game_pk, game_date
     from {{ ref('mart_game_odds_bridge') }}
     where event_id is not null
 ),
@@ -109,7 +112,17 @@ hist_totals_raw as (
     ) = 1
 ),
 
--- ─── Live path (2026+): morning-window snapshots from mart_odds_outcomes ───
+-- ─── Live path (2026+): pre-game snapshots from mart_odds_outcomes ────────
+-- Original 6:00-8:30 AM ET morning window replaced for two reasons:
+--   1. Parlay API books post morning odds ~10 AM ET (not 8 AM); earliest available
+--      prices come from prior-evening near-close snapshots that include next-day games.
+--   2. For April 2026 games the bridge uses Parlay event_ids (historical bulk ingest),
+--      but Odds API morning data has Odds API event_ids — join via odds_api_event_id
+--      fallback is required to match those rows.
+-- New window: same-day UTC date or prior UTC-calendar-day ingestions, capped at
+-- noon ET on game_date. This captures the overnight opening line (earliest price)
+-- through mid-morning, while excluding intraday afternoon prices.
+-- QUALIFY order by ingestion_ts asc retains the earliest (opening-line) snapshot.
 
 live_h2h_raw as (
     select
@@ -120,13 +133,16 @@ live_h2h_raw as (
         max(case when o.is_home_outcome then o.outcome_price_american end) as home_price,
         max(case when o.is_away_outcome then o.outcome_price_american end) as away_price
     from {{ ref('mart_odds_outcomes') }} o
-    inner join bridge b on b.event_id = o.event_id
+    inner join bridge b
+        on  b.event_id = o.event_id
+        or (b.odds_api_event_id is not null and b.odds_api_event_id = o.event_id)
     where o.market_key = 'h2h'
       and year(b.game_date) >= 2026
-      -- Morning window: 6:00 AM–8:30 AM ET on game_date
+      -- Same-day or prior-UTC-day ingestion (excludes historical bulk ingests with wrong ts)
+      and date(o.ingestion_ts) in (b.game_date, dateadd('day', -1, b.game_date))
+      -- Before noon ET on game_date (NTZ wall-clock comparison after convert_timezone)
       and convert_timezone('UTC', 'America/New_York', o.ingestion_ts)
-          between dateadd('minute', 360, b.game_date::timestamp)
-              and dateadd('minute', 510, b.game_date::timestamp)
+          <= dateadd('minute', 720, b.game_date::timestamp)
     group by b.game_pk, b.game_date, o.bookmaker_key, o.ingestion_ts
     qualify row_number() over (
         partition by game_pk, bookmaker_key
@@ -141,13 +157,15 @@ live_totals_raw as (
         o.ingestion_ts,
         max(o.outcome_point) as total_line
     from {{ ref('mart_odds_outcomes') }} o
-    inner join bridge b on b.event_id = o.event_id
+    inner join bridge b
+        on  b.event_id = o.event_id
+        or (b.odds_api_event_id is not null and b.odds_api_event_id = o.event_id)
     where o.market_key = 'totals'
       and o.outcome_point is not null
       and year(b.game_date) >= 2026
+      and date(o.ingestion_ts) in (b.game_date, dateadd('day', -1, b.game_date))
       and convert_timezone('UTC', 'America/New_York', o.ingestion_ts)
-          between dateadd('minute', 360, b.game_date::timestamp)
-              and dateadd('minute', 510, b.game_date::timestamp)
+          <= dateadd('minute', 720, b.game_date::timestamp)
     group by b.game_pk, o.bookmaker_key, o.ingestion_ts
     qualify row_number() over (
         partition by game_pk, bookmaker_key

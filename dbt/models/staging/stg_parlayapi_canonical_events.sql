@@ -47,8 +47,19 @@ events_flattened as (
         evt.value:away_team::varchar                        as away_team,
         -- Real scheduled start time. Empty string → null via NULLIF.
         nullif(evt.value:commence_time::varchar, '')::timestamp_ntz  as commence_time,
-        -- game_date from the response (reliable even when commence_time is null)
-        try_to_date(evt.value:game_date::varchar)           as game_date,
+        -- game_date: use ET local date from commence_time when available.
+        -- The API's game_date field uses UTC dates; West Coast games starting
+        -- after 8pm PT (midnight UTC) get assigned the next UTC day, which
+        -- mismatches Stats API's local-time game_date. Converting the real
+        -- commence_time to America/New_York gives the correct local game date.
+        -- Fall back to the API's game_date field when commence_time is absent
+        -- (scheduling placeholders, games without confirmed start times).
+        case
+            when nullif(evt.value:commence_time::varchar, '') is not null
+            then date(convert_timezone('UTC', 'America/New_York',
+                      nullif(evt.value:commence_time::varchar, '')::timestamp_ntz))
+            else try_to_date(evt.value:game_date::varchar)
+        end                                                 as game_date,
         -- Number of bookmaker sources tracking this event
         evt.value:source_count::integer                     as source_count
     from source src,
