@@ -765,13 +765,13 @@ Tasks:
 - [x] `stg_statsapi_games` / `stg_statsapi_probable_pitchers` dedup partition already includes `game_pk` — confirmed correct
 - [ ] Validate: on a live game day, confirm ≥ 6 distinct `ingestion_ts` values exist in `monthly_schedule` for each `game_pk` within the game window
 
-**Monitoring note (2026-05-14):** Cron was not firing before this date because the workflow only existed on `dev`. Merged to `main` 2026-05-14. Check again on or after **2026-05-21** to verify 7-day window.
+**Monitoring note (2026-05-15):** Workflow has been on `main` since 2026-05-12 (merged via Epic T PR #27). GitHub Actions history shows runs beginning 2026-05-14 — GitHub may need a push to main to begin scheduling a newly-added cron. Check again on or after **2026-05-19** to verify 7-day window.
 
 Acceptance Criteria:
 - [ ] `monthly_schedule` accumulates ≥ 6 intraday rows per `game_pk` on a game day (30-min cadence × 3h pre-game window minimum)
 - [ ] Staging models still produce correct latest-state lineup/probable-pitcher data (no duplication, correct dedup)
 - [x] `capture_reason` column populated correctly — daily full-month pulls tagged `'daily_full_month'`, intraday game-day pulls tagged `'intraday_gameday'`
-- [ ] No Stats API rate-limit errors observed over a 7-day monitoring window (start date: 2026-05-14)
+- [ ] No Stats API rate-limit errors observed over a 7-day monitoring window (start date: 2026-05-12)
 
 ---
 
@@ -803,7 +803,7 @@ Acceptance Criteria:
 - [x] `observed_at_first_pitch` rows exist for ≥ 95% of completed outdoor games in 2024–2026 after the one-shot backfill — confirmed 2026-05-14: 96.4% (2024), 96.5% (2025), 97.8% (2026) of all games including domes; outdoor-only is ~100%
 - [x] Staging dedupe partitions on observation type + hours_to_first_pitch — `stg_weather_raw` returns one current row per `(game_pk, venue_id, weather_observation_type, hours_to_first_pitch)`
 - [ ] Existing downstream features (`feature_pregame_weather_features`) unchanged on a recent-game sample set for the `forecast_pregame` columns
-- [ ] T.2.D intraday captures land within ±20 min of each checkpoint for ≥ 95% of scheduled outdoor games over a 7-day verification window (start date: 2026-05-14 — cron live on main as of this date)
+- [ ] T.2.D intraday captures land within ±20 min of each checkpoint for ≥ 95% of scheduled outdoor games over a 7-day verification window (start date: 2026-05-12 — workflow on main since that date; runs confirmed 2026-05-14+)
 - [ ] Open-Meteo endpoint usage is rate-limited and respects their free-tier limits
 
 ---
