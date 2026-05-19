@@ -3,7 +3,9 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Install dbt-fusion binary
-RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin
+# SHELL must be set — the install script references $SHELL to update shell config files
+# and will abort with "SHELL: parameter not set" if it's unset (as in Docker containers)
+RUN SHELL=/bin/bash curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin
 
 WORKDIR /app
 

@@ -1,5 +1,5 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-05-10
+## Current State Reference — As of 2026-05-19
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -13,7 +13,7 @@ This document inventories every Snowflake table created via DDL scripts and ever
 | dbt sources | 35+ raw tables across 9 schemas | `dbt/models/sources.yml` |
 | dbt staging models | 21 models | `dbt/models/staging/` |
 | dbt mart models | 57 models | `dbt/models/mart/` |
-| dbt feature models | 12 models (~400 columns) | `dbt/models/feature/` |
+| dbt feature models | 13 models (~400+ columns) | `dbt/models/feature/` |
 
 **Data flow:**
 ```
@@ -198,6 +198,8 @@ All mart models output to `baseball_data.betting`. Most materialize as `table`; 
 | `mart_team_fielding_oaa` | (team, season) | table | Team OAA and DRS from FanGraphs fielding leaderboard. Current-season refresh. |
 | `mart_team_base_state_splits` | (team, game_date) | table | Rolling run-scoring efficiency in runners-on, RISP, and late-inning situations. **New in Phase 8.** |
 | `mart_home_away_splits` | (team, season) | table | Season home/away offensive and pitching splits (wOBA, ERA, runs). |
+| `mart_team_vs_pitcher_hand` | (team, game_date, pitcher_hand) | table | Rolling team offensive splits vs LHP and RHP. Handedness-adjusted run-scoring rates. |
+| `mart_head_to_head_team_history` | (home_team, away_team, season) | table | Season head-to-head team records, runs scored/allowed, and recent form. |
 
 ## 3.3 Player Rolling Stats
 
@@ -288,7 +290,7 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 
 | Model | Grain | Upstream | ~Columns | Description |
 |---|---|---|---|---|
-| `feature_pregame_lineup_features` | (game_pk, side) | mart_batter_rolling_stats, mart_batter_vs_handedness_splits, mart_batter_profile_summary | ~40 | Aggregates 30-day rolling and season-to-date batter stats across all 9 lineup slots. LHB/RHB counts. Handedness-specific wOBA (vs LHP/RHP). |
+| `feature_pregame_lineup_features` | (game_pk, side) | mart_batter_rolling_stats, mart_batter_vs_handedness_splits, mart_batter_profile_summary, stg_fangraphs__zips_hitting, mart_batter_bat_tracking_profile | ~55 | Aggregates 30-day rolling and season-to-date batter stats across all 9 lineup slots. LHB/RHB counts. Handedness-specific wOBA (vs LHP/RHP). ZiPS hitting projections per slot with Bayesian rookie shrinkage (k=200 PA, Story 2.6). Bat-tracking columns (lineup_avg_bat_speed, lineup_bat_speed_std, lineup_avg_swing_length, lineup_avg_attack_angle, lineup_bat_speed_vs_starter_velo) — NULL pre-2023-07-14 (Story 2.9). SCD-2 columns present (valid_from, valid_to, is_current, computed_at, record_hash). |
 | `feature_pregame_starter_features` | (game_pk, side) | mart_starter_rolling_stats, mart_pitcher_vs_handedness_splits, mart_starter_csw_rolling, mart_starter_pitch_mix_rolling | ~30 | 30-day rolling starter stats + career platoon splits. CSW% last 3 starts. Pitch-mix drift score. NULL when pitcher has <30 IP career history. |
 | `feature_pregame_bullpen_state_features` | (game_pk, side) | mart_bullpen_effectiveness, mart_bullpen_workload, mart_bullpen_leverage | ~25 | Bullpen effectiveness, leverage workload, handedness mix. High-leverage IP prior 1/3 days. Closer availability proxy. |
 | `feature_pregame_team_features` | (game_pk, side) | mart_team_rolling_offense, mart_team_rolling_pitching, mart_team_schedule_context, mart_team_pythagorean_rolling, mart_team_base_state_splits | ~20 | 30-day rolling team offensive/pitching metrics. Schedule context (days rest, home/away, back-to-back). Pythagorean residual. Base-state efficiency. |
@@ -296,7 +298,8 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 | `feature_pregame_park_features` | game_pk | mart_park_run_factors | ~5 | Prior-season park run factors. NULL for season-opening games (no prior-season data). |
 | `feature_pregame_weather_features` | game_pk | statsapi.weather_raw | ~5 | Wind speed, wind direction, temperature, humidity. NULL for dome stadiums. |
 | `feature_pregame_umpire_features` | game_pk | stg_statsapi_umpire_game_log | ~8 | HP umpire assignment + trailing z-scores of tendency metrics (called strikes above avg, run expectancy delta, run impact, accuracy). |
-| `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~250+ | Master pre-game feature table. Joins all 8 component feature tables. `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. |
+| `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~260+ | Master pre-game feature table. Joins all 9 component feature tables including feature_pregame_sub_model_signals. `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. Home/away bat-tracking std columns added Story 2.9. |
+| `feature_pregame_sub_model_signals` | (game_pk, side) | mart_sub_model_signals (betting_ml DDL table) | dynamic | Wide-format pivot over mart_sub_model_signals. Each registered (signal_name, sub_model_version) pair becomes a column. Currently wired for run_env_v1 signals (run_env_signal_v1, environment_volatility_v1). Add column blocks as Epics 3–8 ship. SCD-2 filtered to is_current = true. **Added Epic 2, Story 2.1.** |
 | `feature_pitcher_batter_h2h_matchups` | (game_pk, batter_id) | mart_pitcher_batter_history, mart_pitcher_pitch_archetype, mart_batter_vs_pitch_archetype | ~20 | Career h2h history for each batter vs today's opposing starter. PA, K%, wOBA, xwOBA with Bayesian shrinkage for low-sample pairs. |
 | `feature_pitcher_cluster_matchups` | (game_pk, batter_id) | statsapi.pitcher_clusters, statsapi.batter_clusters, mart_batter_archetype_vs_pitcher_cluster | ~10 | Batter archetype vs pitcher cluster matchup stats. Generalization when direct h2h history is sparse. 6-cluster batter taxonomy. |
 | `feature_batter_archetype_matchups` | (game_pk, batter_id) | statsapi.batter_clusters, mart_batter_archetype_vs_pitcher_cluster | ~5 | Batter cluster assignment + cluster quality (silhouette score). |
@@ -323,14 +326,14 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 
 This section identifies what is missing or incomplete relative to the architecture defined in `refined_architecture_proposal.md`.
 
-## 6.1 Sub-Model Infrastructure (Epic 2)
+## 6.1 Sub-Model Infrastructure (Epic 2) — ✅ Complete
 
 | Gap | Status | Notes |
 |---|---|---|
-| Sub-model output table (`mart_sub_model_signals` or `feature_pregame_sub_model_signals`) | **Missing** | No table exists yet. Needs DDL + dbt model. |
-| `sub_model_registry.yaml` | **Missing** | No versioning registry for sub-model artifacts. |
-| Sub-model evaluation harness (`evaluate_sub_model.py`) | **Missing** | No ablation/temporal-CV script exists for sub-model signals. |
-| `computed_at` timestamps on feature marts | **Partial** | Some tables have `ingestion_ts`; no standard `computed_at` column on feature-layer marts. |
+| Sub-model output table (`mart_sub_model_signals` + `feature_pregame_sub_model_signals`) | ✅ **Done** | DDL table `mart_sub_model_signals` in `baseball_data.betting_ml`. dbt wide-pivot view `feature_pregame_sub_model_signals` added. Story 2.1. |
+| `sub_model_registry.yaml` | ✅ **Done** | `betting_ml/sub_model_registry.yaml` — full schema + 5 entries (run_env_v1, offense_v1, starter_v1, bullpen_v1, matchup_v1). Story 2.2. |
+| Sub-model evaluation harness (`evaluate_sub_model.py`) | ✅ **Done** | `betting_ml/scripts/evaluate_sub_model.py` — walk-forward temporal CV, ablation comparison, promotion gate evaluation. Story 2.3. |
+| `computed_at` timestamps on feature marts | ✅ **Done** | SCD-2 columns (valid_from, valid_to, is_current, computed_at, record_hash) added to feature_pregame_lineup_features (Story 2.6) and all new feature marts (Story 2.4). |
 
 ## 6.2 Run Environment Model (Epic 3)
 
@@ -372,8 +375,8 @@ This section identifies what is missing or incomplete relative to the architectu
 |---|---|---|
 | Batter archetype clusters | **Present** | `statsapi.batter_clusters` and `mart_batter_archetype_vs_pitcher_cluster` exist. 6-cluster taxonomy. |
 | Pitcher archetype clusters | **Present** | `statsapi.pitcher_clusters` and `mart_pitcher_pitch_archetype` exist. |
-| Archetype definition documentation | **Partial** | Cluster labels exist but formal documentation of the 6 batter / N pitcher archetypes is not in the repo. |
-| Bat tracking matchup feature (bat speed vs. fastball velocity) | **Partial** | `mart_batter_bat_tracking_profile` exists (2023-07-14+) but the cross-matchup feature (lineup bat speed vs starter fastball velocity) is not confirmed in the feature store. |
+| Archetype definition documentation | ✅ **Done** | `quant_sports_intel_models/baseball/archetype_definitions.md` — 5 batter archetypes, 6 pitcher archetypes, per-season member counts, stability flags, matchup signals, Epic 7 requirements. Story 2.9. |
+| Bat tracking matchup feature (bat speed vs. fastball velocity) | ✅ **Done** | `lineup_avg_bat_speed`, `lineup_bat_speed_std`, `lineup_avg_swing_length`, `lineup_avg_attack_angle`, `lineup_bat_speed_vs_starter_velo` live in `feature_pregame_lineup_features`. NULL pre-2023-07-14. Story 2.9. |
 | Matchup signal mart | **Missing** | `matchup_advantage_signal`, `matchup_volatility_signal` not materialized as sub-model outputs. |
 
 ## 6.7 CLV Meta-Model (Epic 12)
@@ -413,8 +416,8 @@ This section identifies what is missing or incomplete relative to the architectu
 | Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | Small — sub-model output marts not yet created. |
 | Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. | Medium — ZiPS features partially unused; sub-model signals not yet flowing. |
 | Market-blind model retrains | Ready but not yet run. | Small — scripts need updates; target date ~2026-05-22. |
-| Sub-model infrastructure | Not started. | Medium — needs output table, registry, evaluation harness. |
-| Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. |
-| Archetype clustering | Exists in Snowflake. Documentation incomplete. | Small — formalize cluster definitions. |
+| Sub-model infrastructure | ✅ Complete (Epic 2). Output table, registry, eval harness, SCD-2 columns all shipped. | None — infrastructure ready for Epics 3–8. |
+| Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
+| Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |
 | CLV meta-model | Correctly gated. 41 CLV games. | Large time horizon — not a data gap, a data-accumulation gap. |
 | Temporal/SCD infrastructure | Not started. | Large scope — multi-phase, Phase 10 target. |
