@@ -47,7 +47,7 @@ RUN pip install --no-cache-dir \
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`
 # binary at /usr/local/bin/dbt; installing fusion last ensures fusion wins.
-RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin && \
+RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin --update && \
     ln -sf /usr/local/bin/dbt /usr/local/bin/dbtf
 
 # Copy the full project
