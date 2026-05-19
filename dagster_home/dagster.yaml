@@ -5,3 +5,7 @@ instance_class:
 dagster_cloud_api:
   agent_token:
     env: DAGSTER_CLOUD_AGENT_TOKEN
+
+user_code_launcher:
+  module: dagster_cloud.workspace.user_code_launcher.process
+  class: ProcessUserCodeLauncher
