@@ -11,6 +11,8 @@ _key_path = Path("/tmp/snowflake_rsa_key.pem")
 if _pem and not _key_path.exists():
     _key_path.write_text(_pem)
     _key_path.chmod(0o600)
+# Expose the key path to dbt via env var (profiles.yml reads SNOWFLAKE_PRIVATE_KEY_PATH)
+os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"] = str(_key_path)
 
 snowflake_resource = SnowflakeResource(
     account=os.environ["SNOWFLAKE_ACCOUNT"],
@@ -20,6 +22,8 @@ snowflake_resource = SnowflakeResource(
     private_key_path=str(_key_path),
 )
 
+_dbt_dir = str(Path(__file__).parents[2] / "dbt")
 dbt_resource = DbtCliResource(
-    project_dir=str(Path(__file__).parents[2] / "dbt"),
+    project_dir=_dbt_dir,
+    profiles_dir=_dbt_dir,
 )

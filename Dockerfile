@@ -49,5 +49,11 @@ RUN pip install --no-cache-dir \
 # Copy the full project
 COPY . .
 
+# Generate dbt manifest so @dbt_assets can load it at import time.
+# parse reads profile metadata but does not connect to Snowflake.
+RUN touch /tmp/snowflake_rsa_key.pem && \
+    SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem \
+    dbt parse --project-dir dbt --profiles-dir dbt
+
 # Dagster hybrid agent entry point
 CMD ["dagster-cloud", "agent", "run"]
