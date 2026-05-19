@@ -2,6 +2,6 @@ deployment: prod
 
 locations:
   - location_name: baseball_betting
-    python_file: dagster/__init__.py
+    python_file: pipeline/__init__.py
     working_directory: .
     attribute: defs
