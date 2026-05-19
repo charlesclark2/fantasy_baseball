@@ -6,8 +6,9 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # In Docker there is no $SHELL by default; setting it here prevents a non-zero exit.
 ENV SHELL=/bin/bash
 
-# Install dbt-fusion binary
-RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin
+# Install dbt-fusion binary (installed as `dbt`; symlink `dbtf` for consistency)
+RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin && \
+    ln -sf /usr/local/bin/dbt /usr/local/bin/dbtf
 
 ENV DAGSTER_HOME=/app/dagster_home
 
@@ -53,7 +54,7 @@ COPY . .
 # parse reads profile metadata but does not connect to Snowflake.
 RUN touch /tmp/snowflake_rsa_key.pem && \
     SNOWFLAKE_PRIVATE_KEY_PATH=/tmp/snowflake_rsa_key.pem \
-    dbt parse --project-dir dbt --profiles-dir dbt
+    dbtf parse --project-dir dbt --profiles-dir dbt
 
 # Dagster hybrid agent entry point
 CMD ["dagster-cloud", "agent", "run"]
