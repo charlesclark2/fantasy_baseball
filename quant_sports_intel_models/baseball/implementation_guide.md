@@ -1844,12 +1844,29 @@ Stories 2.5–2.9 can run in parallel with 2.1–2.4 since they touch disjoint f
 
 ---
 
-### 3.1 — Define training dataset
+### 3.1 — Define training dataset ✅
+
+**Status: Complete (2026-05-19)**
+
+Script: `betting_ml/scripts/train_run_env.py --audit`
+
+Feature set (17 columns):
+- **Park:** `park_run_factor_3yr`, `elevation_ft`, `center_ft`, `is_dome`
+- **Weather (dome-coalesced):** `temp_f`, `wind_component_mph`, `humidity_pct`
+- **Umpire:** `ump_runs_per_game_zscore`, `ump_run_impact_zscore`, `ump_k_pct_zscore`, `ump_bb_pct_zscore`
+- **Controls:** `home/away_off_woba_30d`, `home/away_starter_proj_fip`, `home/away_starter_xwoba_30d`
 
 Tasks:
-- [ ] Query: park factor features, weather features, umpire tendency features, opponent quality controls, total runs scored
-- [ ] Training window: 2016+ where weather backfill is available; 2021+ otherwise
-- [ ] Validate: no future leakage, no market features
+- [x] Query: park factor features, weather features, umpire tendency features, opponent quality controls, total runs scored
+- [x] Training window: **2021-01-01** (resolved by Story 2.5 — 0% weather coverage pre-2021, no backfill feasible; "2016+" note in original task is stale)
+- [x] Validate: no future leakage, no market features — `validate_no_leakage()` passes clean
+
+Key findings (audit 2026-05-19):
+- **12,846 rows** across 6 seasons; target mean 8.90 runs, std 4.48
+- **`is_dome` bug fixed:** dome games have no weather row so `w.is_dome` is NULL; fixed to `iff(p.roof_type = 'Dome', 1, 0)` from park features. 349 dome games (2.7%) — avg 8.23 vs outdoor 8.92.
+- **Park factor nulls (2.0%):** non-standard venues — A's at Sutter Health Park / Steinbrenner Field (2025), Tokyo Dome, special event parks. Impute with league-mean `park_run_factor_3yr` at training time; do not drop rows.
+- **Umpire nulls (1.6%):** known permanent gap — Jackie Robinson Day, Flag Day, Field of Dreams games. Impute with 0 (neutral z-score) at training time.
+- **Starter FIP nulls (1.7–1.9%):** rookies and international signings without ZiPS projections. Impute with league-mean FIP at training time.
 
 ---
 
