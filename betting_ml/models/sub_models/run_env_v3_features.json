@@ -1,0 +1,21 @@
+[
+  "park_run_factor_3yr",
+  "elevation_ft",
+  "center_ft",
+  "is_dome",
+  "temp_f",
+  "wind_component_mph",
+  "humidity_pct",
+  "ump_runs_per_game_zscore",
+  "ump_run_impact_zscore",
+  "is_universal_dh",
+  "is_pitch_clock_era",
+  "is_shift_ban_era",
+  "prior_season_lg_runs_per_game",
+  "home_off_woba_30d",
+  "away_off_woba_30d",
+  "home_starter_proj_fip",
+  "away_starter_proj_fip",
+  "home_starter_xwoba_30d",
+  "away_starter_xwoba_30d"
+]
