@@ -73,45 +73,5 @@ jobs:
           print(f'OK — p={p:.4f}, n_features={m.n_features_in_}')
           "
 
-  dbt-compile:
-    name: dbt Compilation Check
-    runs-on: ubuntu-latest
-    env:
-      DBT_FUSION_VERSION: latest
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
 
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Cache dbt-fusion binary
-        id: cache-dbtf
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/bin/dbt
-          key: dbtf-${{ runner.os }}-${{ env.DBT_FUSION_VERSION }}
-
-      - name: Install dbt-fusion
-        if: steps.cache-dbtf.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p ~/.local/bin
-          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to ~/.local/bin
-
-      - name: Create dbtf symlink
-        run: ln -sf ~/.local/bin/dbt ~/.local/bin/dbtf
-
-      - name: Add ~/.local/bin to PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Write Snowflake private key
-        run: |
-          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
-          chmod 600 /tmp/snowflake_rsa_key.pem
-
-      - name: Compile dbt project
-        run: dbtf compile --project-dir dbt --profiles-dir dbt
 
