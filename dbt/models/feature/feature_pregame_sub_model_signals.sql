@@ -13,8 +13,8 @@
 -- `dbtf build --select feature_pregame_sub_model_signals`.
 --
 -- Currently registered signals (add as Epics 3–8 ship):
---   run_env_v1.run_env_signal          → run_env_signal_v1
---   run_env_v1.environment_volatility  → environment_volatility_v1
+--   run_env_v3.run_env_signal          → run_env_signal_v3  (champion; v1 deprecated)
+--   run_env_v3.environment_volatility  → environment_volatility_v3
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used here (latest state).
@@ -47,11 +47,11 @@ pivoted as (
         -- ------------------------------------------------------------------
         -- Run environment sub-model (Epic 3)
         -- ------------------------------------------------------------------
-        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v1' then signal_value end)     as run_env_signal_v1,
-        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v1' then uncertainty end)      as run_env_signal_v1_uncertainty,
-        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v1' then signal_available end) as run_env_signal_v1_available,
-        max(case when signal_name = 'environment_volatility' and sub_model_version = 'v1' then signal_value end)     as environment_volatility_v1,
-        max(case when signal_name = 'environment_volatility' and sub_model_version = 'v1' then signal_available end) as environment_volatility_v1_available,
+        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v3' then signal_value end)     as run_env_signal_v3,
+        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v3' then uncertainty end)      as run_env_signal_v3_uncertainty,
+        max(case when signal_name = 'run_env_signal'         and sub_model_version = 'v3' then signal_available end) as run_env_signal_v3_available,
+        max(case when signal_name = 'environment_volatility' and sub_model_version = 'v3' then signal_value end)     as environment_volatility_v3,
+        max(case when signal_name = 'environment_volatility' and sub_model_version = 'v3' then signal_available end) as environment_volatility_v3_available,
 
         -- ------------------------------------------------------------------
         -- Offensive quality sub-model (Epic 4)

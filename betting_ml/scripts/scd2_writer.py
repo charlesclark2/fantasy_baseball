@@ -27,7 +27,14 @@ from typing import Any
 
 import snowflake.connector
 
-_DEFAULT_TABLE = "baseball_data.betting.mart_sub_model_signals"
+_SCHEMA_PROD = "baseball_data.betting"
+_SCHEMA_DEV  = "baseball_data.dev_betting"
+
+_DEFAULT_TABLE      = f"{_SCHEMA_PROD}.mart_sub_model_signals"
+_DEFAULT_TEMP_TABLE = f"{_SCHEMA_PROD}.tmp_scd2_incoming"
+
+# Legacy alias kept for backward-compat imports
+_TEMP_TABLE = _DEFAULT_TEMP_TABLE
 
 _NATURAL_KEY_COLS = ("game_pk", "side", "signal_name", "sub_model_version")
 _PAYLOAD_COLS = ("signal_value", "uncertainty", "signal_available")
@@ -42,6 +49,7 @@ def scd2_upsert(
     rows: list[dict[str, Any]],
     *,
     target_table: str = _DEFAULT_TABLE,
+    temp_table: str = _DEFAULT_TEMP_TABLE,
     computed_at: datetime | None = None,
 ) -> dict[str, int]:
     """
@@ -54,7 +62,8 @@ def scd2_upsert(
                       game_pk, side, signal_name, sub_model_name,
                       sub_model_version, signal_value, uncertainty,
                       signal_available, input_feature_hash
-    target_table  : Fully-qualified Snowflake table name.
+    target_table  : Fully-qualified target table (prod or dev).
+    temp_table    : Fully-qualified staging temp table (must be same schema as target).
     computed_at   : Timestamp to stamp on all rows; defaults to utcnow.
 
     Returns
@@ -73,11 +82,11 @@ def scd2_upsert(
 
     cur = conn.cursor()
     try:
-        _create_temp_table(cur)
-        _load_temp_table(cur, annotated)
-        closed = _close_changed_rows(cur, target_table, now)
-        inserted = _insert_new_rows(cur, target_table, now)
-        cur.execute("DROP TABLE IF EXISTS tmp_scd2_incoming")
+        _create_temp_table(cur, temp_table)
+        _load_temp_table(cur, annotated, temp_table)
+        closed = _close_changed_rows(cur, target_table, temp_table, now)
+        inserted = _insert_new_rows(cur, target_table, temp_table, now)
+        cur.execute(f"DROP TABLE IF EXISTS {temp_table}")
     finally:
         cur.close()
 
@@ -107,9 +116,9 @@ def _annotate(row: dict[str, Any]) -> dict[str, Any]:
     return r
 
 
-def _create_temp_table(cur: Any) -> None:
-    cur.execute("""
-        CREATE OR REPLACE TEMPORARY TABLE tmp_scd2_incoming (
+def _create_temp_table(cur: Any, temp_table: str) -> None:
+    cur.execute(f"""
+        CREATE OR REPLACE TEMPORARY TABLE {temp_table} (
             game_pk             NUMBER        NOT NULL,
             side                VARCHAR(10)   NOT NULL,
             signal_name         VARCHAR(100)  NOT NULL,
@@ -124,10 +133,10 @@ def _create_temp_table(cur: Any) -> None:
     """)
 
 
-def _load_temp_table(cur: Any, rows: list[dict[str, Any]]) -> None:
+def _load_temp_table(cur: Any, rows: list[dict[str, Any]], temp_table: str) -> None:
     cur.executemany(
-        """
-        INSERT INTO tmp_scd2_incoming VALUES (
+        f"""
+        INSERT INTO {temp_table} VALUES (
             %(game_pk)s, %(side)s, %(signal_name)s, %(sub_model_name)s,
             %(sub_model_version)s, %(signal_value)s, %(uncertainty)s,
             %(signal_available)s, %(input_feature_hash)s, %(record_hash)s
@@ -137,14 +146,14 @@ def _load_temp_table(cur: Any, rows: list[dict[str, Any]]) -> None:
     )
 
 
-def _close_changed_rows(cur: Any, target_table: str, now: datetime) -> int:
+def _close_changed_rows(cur: Any, target_table: str, temp_table: str, now: datetime) -> int:
     cur.execute(
         f"""
         UPDATE {target_table} t
         SET
             valid_to   = %(now)s::TIMESTAMP_NTZ,
             is_current = FALSE
-        FROM tmp_scd2_incoming s
+        FROM {temp_table} s
         WHERE t.game_pk           = s.game_pk
           AND t.side              = s.side
           AND t.signal_name       = s.signal_name
@@ -157,7 +166,7 @@ def _close_changed_rows(cur: Any, target_table: str, now: datetime) -> int:
     return cur.rowcount
 
 
-def _insert_new_rows(cur: Any, target_table: str, now: datetime) -> int:
+def _insert_new_rows(cur: Any, target_table: str, temp_table: str, now: datetime) -> int:
     cur.execute(
         f"""
         INSERT INTO {target_table} (
@@ -171,7 +180,7 @@ def _insert_new_rows(cur: Any, target_table: str, now: datetime) -> int:
             s.signal_value, s.uncertainty, s.signal_available,
             s.input_feature_hash, %(now)s::TIMESTAMP_NTZ,
             %(now)s::TIMESTAMP_NTZ, NULL, TRUE, s.record_hash
-        FROM tmp_scd2_incoming s
+        FROM {temp_table} s
         LEFT JOIN {target_table} t
             ON  t.game_pk           = s.game_pk
             AND t.side              = s.side
