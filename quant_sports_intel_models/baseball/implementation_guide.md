@@ -723,10 +723,9 @@ Write targets by environment:
 - [ ] Enable auto-restart on failure and deploy-on-push from `main`
 - [ ] Confirm the agent appears as "Active" in the Dagster Cloud agents UI after first deploy
 
-**Dagster Cloud CI/CD:**
-- [ ] Add `.github/workflows/dagster_cloud_ci.yml` — triggers on PR (branch deployment) and merge to `main` (prod deployment); uses `dagster-cloud-ci` action; must not interfere with existing `ci.yml`
-- [ ] Confirm branch deployment: open a test PR, verify Dagster Cloud creates a branch deployment and the asset graph loads without errors
-- [ ] Confirm prod deployment: merge to `main`, verify prod code location updates
+**Dagster Cloud code updates (hybrid — no CI action needed):**
+- No `dagster-cloud-ci` GitHub Action required. In hybrid mode, Railway rebuilds the container and restarts the agent on every push to `main`; Dagster Cloud sees the updated code when the agent reconnects. The `dagster-cloud-action` GitHub Action is only needed for serverless deployments where Dagster must build and push a Docker image.
+- [ ] Confirm prod deploy: push to `main`, verify Railway rebuilds, agent reconnects, and Dagster Cloud UI shows updated code location
 
 **Shared resource:**
 - [ ] Define a `SnowflakeResource` using `dagster-snowflake` or a custom resource wrapping the existing connector — shared across all assets so connection config is not duplicated per asset
@@ -736,8 +735,7 @@ Write targets by environment:
 - `dagster dev` runs locally without errors (trivial asset visible in local UI)
 - Railway agent container builds, starts, and shows "Active" in Dagster Cloud UI
 - `dbt --version` confirms dbt-fusion is installed inside the agent container
-- PR to `main` triggers a Dagster Cloud branch deployment automatically
-- Merge to `main` triggers a prod code location update automatically
+- Push to `main` triggers Railway rebuild; Dagster Cloud UI shows updated code location after agent reconnects
 - Existing `ci.yml` (dbt parse, dbt-build-ci) continues to pass unchanged
 
 ---
