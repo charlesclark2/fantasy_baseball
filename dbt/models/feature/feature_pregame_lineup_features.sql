@@ -335,10 +335,109 @@ bat_tracking_agg as (
         game_pk,
         home_away,
         round(avg(bat_speed_30d),    2)             as lineup_avg_bat_speed,
+        round(stddev(bat_speed_30d), 2)             as lineup_bat_speed_std,
         round(avg(swing_length_30d), 2)             as lineup_avg_swing_length,
         round(avg(attack_angle_30d), 2)             as lineup_avg_attack_angle
     from slot_bat_tracking
     group by game_pk, home_away
+),
+
+-- -------------------------------------------------------------------------
+-- ZiPS pre-season projections (Story 2.6)
+-- -------------------------------------------------------------------------
+
+-- Per-slot ZiPS: current-season with prior-season fallback.
+-- Joins on MLBAM ID; validated 99.7% coverage for 2024 active batters.
+-- wOBA proxy = 0.7 * OBP + 0.3 * SLG (no wOBA column in ZiPS source).
+slot_zips as (
+    select
+        ls.game_pk,
+        ls.official_date,
+        ls.home_away,
+        ls.slot,
+        ls.batter_id,
+        coalesce(zc.proj_wrc_plus,  zp.proj_wrc_plus)              as proj_wrc_plus,
+        coalesce(
+            0.7 * zc.proj_obp + 0.3 * zc.proj_slg,
+            0.7 * zp.proj_obp + 0.3 * zp.proj_slg
+        )                                                           as zips_woba_proxy,
+        coalesce(zc.proj_k_pct,     zp.proj_k_pct)                 as proj_k_pct,
+        coalesce(zc.proj_iso,       zp.proj_iso)                    as proj_iso,
+        coalesce(zc.proj_pa,        zp.proj_pa)                     as proj_pa,
+        (zc.fg_batter_id is null and zp.fg_batter_id is null)       as no_zips_data
+    from lineup_slots ls
+    left join {{ ref('stg_fangraphs__zips_hitting') }} zc
+        on  zc.mlbam_batter_id = ls.batter_id::varchar
+        and zc.season          = year(ls.official_date)
+    left join {{ ref('stg_fangraphs__zips_hitting') }} zp
+        on  zp.mlbam_batter_id = ls.batter_id::varchar
+        and zp.season          = year(ls.official_date) - 1
+    where ls.batter_id is not null
+),
+
+-- Lineup-level ZiPS aggregates and rookie-proxy coverage count
+zips_agg as (
+    select
+        game_pk,
+        home_away,
+        round(avg(proj_wrc_plus),   1)                              as avg_zips_wrc_plus,
+        round(avg(zips_woba_proxy), 3)                              as avg_zips_woba_proxy,
+        round(avg(proj_k_pct),      3)                              as avg_zips_k_pct,
+        round(avg(proj_iso),        3)                              as avg_zips_iso,
+        round(
+            sum(case when not no_zips_data then 1 else 0 end)::float / 9.0
+        , 3)                                                        as zips_coverage_pct,
+        -- Proxy for rookies / unknowns: slots with no ZiPS in current or prior season
+        sum(case when no_zips_data then 1 else 0 end)               as lineup_rookie_count
+    from slot_zips
+    group by game_pk, home_away
+),
+
+-- PA-weighted average ZiPS wOBA proxy for batting slots 7–9 (lineup depth)
+lineup_depth as (
+    select
+        game_pk,
+        home_away,
+        round(
+            sum(zips_woba_proxy * coalesce(proj_pa, 1.0))
+            / nullif(sum(case when zips_woba_proxy is not null
+                              then coalesce(proj_pa, 1.0) end), 0)
+        , 3)                                                        as lineup_depth_score
+    from slot_zips
+    where slot >= 7
+    group by game_pk, home_away
+),
+
+-- Shannon entropy of slot-wise ZiPS wOBA proxy distribution.
+-- High entropy → balanced; low entropy → production concentrated in a few bats.
+lineup_entropy_base as (
+    select
+        game_pk,
+        home_away,
+        sum(zips_woba_proxy) as total_woba_proxy
+    from slot_zips
+    where zips_woba_proxy is not null and zips_woba_proxy > 0
+    group by game_pk, home_away
+),
+
+lineup_entropy as (
+    select
+        sz.game_pk,
+        sz.home_away,
+        round(
+            -sum(
+                (sz.zips_woba_proxy / eb.total_woba_proxy)
+                * ln(sz.zips_woba_proxy / eb.total_woba_proxy)
+            )
+        , 4)                                                        as lineup_entropy
+    from slot_zips sz
+    join lineup_entropy_base eb
+        on  eb.game_pk   = sz.game_pk
+        and eb.home_away = sz.home_away
+    where sz.zips_woba_proxy is not null
+      and sz.zips_woba_proxy > 0
+      and eb.total_woba_proxy > 0
+    group by sz.game_pk, sz.home_away
 ),
 
 final as (
@@ -403,14 +502,48 @@ final as (
         cf.catcher_framing_runs,
         cf.catcher_defensive_runs,
 
-        -- Bat tracking matchup features (Card 8.E)
+        -- Bat tracking matchup features (Card 8.E / Story 2.9)
         -- NULL for all pre-2023-07-14 games; ~50% null in 2021+ training set
         bta.lineup_avg_bat_speed,
+        bta.lineup_bat_speed_std,
         bta.lineup_avg_swing_length,
         bta.lineup_avg_attack_angle,
         round(
             bta.lineup_avg_bat_speed / nullif(opp_sa.avg_fastball_velo_7d, 0)
-        , 4)                                        as lineup_bat_speed_vs_starter_velo
+        , 4)                                        as lineup_bat_speed_vs_starter_velo,
+
+        -- ZiPS pre-season projections (Story 2.6)
+        -- Current-season with prior-season fallback; NULL when no ZiPS data
+        za.avg_zips_wrc_plus,
+        za.avg_zips_woba_proxy,
+        za.avg_zips_k_pct,
+        za.avg_zips_iso,
+        za.zips_coverage_pct,
+
+        -- Lineup depth: PA-weighted ZiPS wOBA proxy for slots 7–9 (Story 2.6)
+        ld.lineup_depth_score,
+
+        -- Lineup entropy: Shannon entropy of slot-wise ZiPS wOBA proxy (Story 2.6)
+        le.lineup_entropy,
+
+        -- Rookie / unknown proxy: slots with no ZiPS in current or prior season (Story 2.6)
+        coalesce(za.lineup_rookie_count, 9)                         as lineup_rookie_count,
+        round(coalesce(za.lineup_rookie_count, 9) / 9.0, 3)        as lineup_rookie_pa_share,
+
+        -- SCD-2 sentinel columns (Story 2.4 convention — born SCD-2-ready)
+        current_timestamp()::timestamp_ntz                          as valid_from,
+        null::timestamp_ntz                                         as valid_to,
+        true                                                        as is_current,
+        current_timestamp()::timestamp_ntz                          as computed_at,
+        md5(concat_ws('|',
+            coalesce(la.avg_woba_30d::varchar,              ''),
+            coalesce(la.avg_xwoba_30d::varchar,             ''),
+            coalesce(ia.injury_adj_avg_xwoba_30d::varchar,  ''),
+            coalesce(za.avg_zips_wrc_plus::varchar,         ''),
+            coalesce(za.avg_zips_woba_proxy::varchar,       ''),
+            coalesce(ld.lineup_depth_score::varchar,        ''),
+            coalesce(le.lineup_entropy::varchar,            '')
+        ))                                                          as record_hash
 
     from lineups l
     left join lineup_agg la
@@ -438,6 +571,15 @@ final as (
     left join bat_tracking_agg bta
         on  bta.game_pk   = l.game_pk
         and bta.home_away = l.home_away
+    left join zips_agg za
+        on  za.game_pk   = l.game_pk
+        and za.home_away = l.home_away
+    left join lineup_depth ld
+        on  ld.game_pk   = l.game_pk
+        and ld.home_away = l.home_away
+    left join lineup_entropy le
+        on  le.game_pk   = l.game_pk
+        and le.home_away = l.home_away
 )
 
 select * from final

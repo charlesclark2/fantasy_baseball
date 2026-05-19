@@ -43,11 +43,11 @@ run_env_v1:
   feature_columns_path: models/sub_models/run_env_v1_features.json
   target:
     source_table: baseball_data.betting.mart_game_results
-    primary_column: total_runs
+    primary_column: home_final_score + away_final_score    # no total_runs col; computed inline
     auxiliary_columns: []
     grain: game_pk
   training_window:
-    start: null    # set during Story 2.5 weather coverage audit
+    start: '2021-01-01'    # earliest year with full weather coverage (100% from 2021; 0% pre-2021)
     end: null
   cv_strategy: walk_forward
   cv_metric: mae
@@ -67,9 +67,20 @@ run_env_v1:
   promotion_status: pending
   promoted_at: null
   notes: |
-    Training window TBD pending Story 2.5 weather coverage audit.
+    Training window: 2021-01-01 onward (Story 2.5 weather coverage audit, 2026-05-18).
+    Weather coverage by season (forecast_pregame, regular season games):
+      2021: 94.8% | 2022: 96.6% | 2023: 96.5% | 2024: 96.4% | 2025: 96.5%
+    Miss (~3-5%) is dome games (roof_type=Dome, correctly NULL) + retractable-roof-closed
+    games. Outdoor coverage is effectively 100%. Pre-2021 weather: 0 rows — no backfill
+    feasible. 2020 (COVID shortened season, 898 games) naturally excluded.
+    Weather feature uses forecast_pregame observation type (canonical pre-game feature).
+    forecast_intraday and observed_at_first_pitch available in weather_raw but deferred
+    to a future feature enhancement — not included in v1 training features.
+    Umpire join: 100% for 2021-2022; 96-100% for 2023-2025 (known permanent gap on
+    special event dates — Jackie Robinson Day, Flag Day, Field of Dreams games).
     No market features. Opponent offensive/starter quality used as controls only.
-    See implementation_guide.md Story 2.5 for training-window decision criteria.
+    total_runs column does not exist in mart_game_results; compute inline as
+    home_final_score + away_final_score. Filter game_type = 'R' (regular season only).
 
 offense_v1:
   artifact_path: models/sub_models/offense_v1.pkl
@@ -184,7 +195,7 @@ matchup_v1:
       - avg_hard_hit_pct
     grain: game_pk    # aggregated to game level via archetype composition
   training_window:
-    start: '2018-01-01'
+    start: '2020-01-01'    # batter_clusters and pitcher_clusters data begins 2020; no matchup signal pre-2020
     end: null
   cv_strategy: walk_forward
   cv_metric: mae
@@ -194,7 +205,8 @@ matchup_v1:
     threshold: null
     direction: lower_is_better
   parent_features:
-    - feature_pregame_matchup_bat_tracking    # Story 2.9; NULL pre-2023-07-14
+    - feature_pregame_lineup_features    # bat-tracking cols (lineup_avg_bat_speed, lineup_bat_speed_std,
+                                         # lineup_bat_speed_vs_starter_velo) added Story 2.9; NULL pre-2023-07-14
   output_signals:
     - matchup_advantage_signal
   downstream_consumers: []
@@ -202,8 +214,17 @@ matchup_v1:
   promoted_at: null
   notes: |
     Requires Epic 7 (archetype clustering revalidation) before training.
-    Bat-tracking features (feature_pregame_matchup_bat_tracking) available 2023-07-14+;
-    NULL for prior games — treated as signal_available=false, not imputed.
-    Rookie batters in top-5 slots: bat-tracking NULL by definition; use archetype mean.
-    Rookie starters (<50 IP): fall back to ZiPS projections for pitch-mix opponent model.
+    See quant_sports_intel_models/baseball/archetype_definitions.md for cluster definitions,
+    feature drivers, example players, and stability analysis (Story 2.9, 2026-05-19).
+    Training filter: exclude (cluster_label, season) pairs where member_count < 50
+    (see stability tables in archetype_definitions.md). Problem seasons: contact_spray
+    absent 4/6 seasons; elite_breaking_ball 2021-2022 < 50; contact_sinker_ball 2024 = 6;
+    multi_pitch_mix absent 2021/2023/2025; soft_command absent 2023/2025.
+    Effective usable range: 2021-2025 with per-archetype season filters applied.
+    Bat-tracking features (lineup_avg_bat_speed, lineup_bat_speed_std,
+    lineup_bat_speed_vs_starter_velo) live in feature_pregame_lineup_features — not a
+    separate model. Available 2023-07-14+; NULL for prior games — treated as
+    signal_available=false, not imputed. Rookie batters in top-5 slots: bat-tracking NULL;
+    use archetype mean. Rookie starters (<50 IP): fall back to ZiPS projections for
+    pitch-mix opponent model.
     mart_batter_archetype_vs_pitcher_cluster confirmed as canonical training source (2026-05-12).

@@ -1,0 +1,73 @@
+name: Parlay Historical Matches Catch-Up
+
+# The Parlay API /historical/matches endpoint publishes settled match data with
+# roughly a 1-week lag. This job runs weekly to backfill the prior 14 days so
+# any games that have since cleared the API's lag window are captured.
+#
+# The underlying script (parlay_api_ingestion.py historical-matches) is fully
+# idempotent — dates already present in mlb_matches_raw are skipped automatically.
+#
+# Downstream dbt models (stg_parlayapi_matches, mart_closing_line_value, etc.)
+# are rebuilt by dbt_daily_build.yml each morning and will pick up newly inserted
+# rows on the next run.
+
+on:
+  schedule:
+    - cron: '0 10 * * 1'   # 06:00 EDT every Monday
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: 'Start date (YYYY-MM-DD). Defaults to 14 days ago.'
+        required: false
+        default: ''
+      end_date:
+        description: 'End date (YYYY-MM-DD). Defaults to yesterday.'
+        required: false
+        default: ''
+
+jobs:
+  catchup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Write Snowflake private key
+        run: |
+          echo "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > /tmp/snowflake_rsa_key.pem
+          chmod 600 /tmp/snowflake_rsa_key.pem
+
+      - name: Compute date range
+        id: dates
+        run: |
+          if [ -n "${{ inputs.start_date }}" ]; then
+            START="${{ inputs.start_date }}"
+          else
+            START=$(date -d '14 days ago' '+%Y-%m-%d')
+          fi
+
+          if [ -n "${{ inputs.end_date }}" ]; then
+            END="${{ inputs.end_date }}"
+          else
+            END=$(date -d '1 day ago' '+%Y-%m-%d')
+          fi
+
+          echo "start_date=$START" >> "$GITHUB_OUTPUT"
+          echo "end_date=$END"     >> "$GITHUB_OUTPUT"
+          echo "Backfill window: $START → $END"
+
+      - name: Backfill historical matches
+        working-directory: scripts
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
+        run: |
+          uv run parlay_api_ingestion.py historical-matches \
+            --start-date ${{ steps.dates.outputs.start_date }} \
+            --end-date   ${{ steps.dates.outputs.end_date }}
