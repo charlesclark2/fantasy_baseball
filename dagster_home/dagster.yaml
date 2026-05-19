@@ -1,3 +1,7 @@
 instance_class:
   module: dagster_cloud.instance
   class: DagsterCloudAgentInstance
+
+dagster_cloud_api:
+  agent_token:
+    env: DAGSTER_CLOUD_AGENT_TOKEN
