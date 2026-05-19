@@ -8,7 +8,7 @@ from dagster_dbt import DbtCliResource
 # Write it to a temp file on import so downstream connectors can reference the path.
 _pem = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "")
 _key_path = Path("/tmp/snowflake_rsa_key.pem")
-if _pem and not _key_path.exists():
+if _pem:
     _key_path.write_text(_pem)
     _key_path.chmod(0o600)
 # Expose the key path to dbt via env var (profiles.yml reads SNOWFLAKE_PRIVATE_KEY_PATH)
