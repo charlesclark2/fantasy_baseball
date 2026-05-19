@@ -9,6 +9,8 @@ ENV SHELL=/bin/bash
 # Install dbt-fusion binary
 RUN curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin
 
+ENV DAGSTER_HOME=/app/dagster_home
+
 WORKDIR /app
 
 # Copy dependency manifests first for layer caching
