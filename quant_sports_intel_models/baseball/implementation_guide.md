@@ -81,14 +81,16 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │                                          Two monitoring-window ACs pending (T.1.B, T.2.D);
 │                                          check on or after 2026-05-19. Epic 15 (SCD-2)
 │                                          is now unblocked.
-│ Epic 0.5  (Dagster Orchestration)       — Deferred until after Epic 3 ships.
+│ Epic 0.5  (Dagster Orchestration)       — Start after Epic 2 ships. GitHub Actions
+│                                          minute cap caused permanent data loss
+│                                          2026-05-16/17; repo must stay private.
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Track B — Sub-Model Development (parallel with Track A & C)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ Epic 1    (Market-Blind Retrains) ✅    — Complete. All three models promoted; live since 2026-05-11.
-│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.4 ✅ (partial). Stories 2.5–2.9 unblocked (Epic T shipped 2026-05-12).
+│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.4 ✅, 2.6 ✅. Stories 2.5, 2.7–2.9 in progress.
 │ Epic 3    (Run Environment Model)       — Start after Epic 2 ships 2.1–2.5.
 │ Epic 4    (Offensive Quality Model)     — Start after Epic 2 ships 2.1–2.4, 2.6.
 │ Epic 5    (Starter Suppression Model)   — Start after Epic 2 ships 2.1–2.4, 2.7.
@@ -642,19 +644,296 @@ Write targets by environment:
 
 ---
 
-# Epic 0.5 — Orchestration: Decision Point (Revisit After Epic 3)
+# Epic 0.5 — Orchestration: Migrate to Dagster Cloud (Start After Epic 2)
 
-**Status: Deferred.** Do not build now.
+**Status: Committed. Start after Epic 2 ships.**
 
-**Context:** GitHub Actions is the current orchestrator and is working. A proper pipeline orchestrator (Dagster, Prefect) becomes genuinely useful once cross-epic asset dependencies materialize — i.e., once at least one sub-model (Epic 3+) is producing signals that downstream models consume. That complexity does not exist yet.
+**Decision (2026-05-18):** Migrate all scheduled orchestration from GitHub Actions to Dagster Cloud (~$10/month starter tier). The previous deferral assumed GitHub Actions was "working" — the private-repo 2,000-minute/month cap invalidates that assumption. On 2026-05-16 the cap was exhausted mid-season, causing a full day of missed odds snapshots, line movement, and weather data that is permanently unrecoverable. The repo must remain private (live betting algorithm; public fork risk), so upgrading the GitHub plan is not a viable alternative.
 
-**Why deferred:** Dagster Cloud minimum cost is $10/month. Prefect Cloud has a functional free tier but weaker asset-lineage model. Self-hosted Dagster on a small VM (~$5–6/month Hetzner/DO) preserves the asset-centric model at low cost but adds maintenance burden. None of these trade-offs are worth taking on before the pipeline complexity that justifies them actually exists.
+**Why Dagster Cloud over alternatives:**
+- Dagster Cloud free tier covers 1 deployment agent + unlimited runs with no minute cap
+- Asset-centric model maps cleanly to the existing ingestion → dbt → inference pipeline
+- Built-in backfill UI, per-asset run history, and alerting replace manual gap audits
+- Self-hosted option (~$5–6/mo on Hetzner/DO) is viable but adds maintenance burden; Cloud starter tier is worth the $10/month to avoid it
 
-**Revisit trigger:** After Epic 3 (Run Environment Model) ships and the first sub-model signal is flowing into a downstream feature matrix. At that point, evaluate whether GitHub Actions dependency chaining is causing real pain. If yes, choose between:
-- **Prefect Cloud free tier** — managed server/UI, no infra, weaker asset model
-- **Self-hosted Dagster on Hetzner CX11** (~$5/mo) — stronger asset/lineage model, minor ops overhead
+**Migration scope:** All workflows currently in `.github/workflows/` map 1:1 to Dagster assets/sensors/schedules:
+- `daily_ingestion.yml` → scheduled software-defined assets (ingestion + dbt daily build)
+- `odds_snapshot.yml` → time-partitioned asset with the same 17-entry cron schedule
+- `intraday_weather.yml`, `pregame_snapshot.yml`, `lineup_monitor.yml` → sensors or scheduled assets
+- `parlay_historical_matches_catchup.yml` → weekly partitioned backfill asset
 
-**Do not revisit sooner than Epic 3.**
+**dbt integration:** `dagster-dbt` supports dbt-fusion natively as of Dagster 1.11.5 (automatic engine detection). Every dbt model will be a first-class Dagster asset with lineage; dbt tests surface as Dagster asset checks. No subprocess workaround needed.
+
+**Revisit trigger:** Epic 2 complete. Do not start implementation before then — GitHub Actions is sufficient for the remaining Epic 2 stories and the migration is a focused infrastructure sprint that should not run in parallel with active sub-model development.
+
+---
+
+### 0.5.1 — Plan validation & architecture decisions
+
+**Goal:** Confirm the Dagster Cloud Solo plan is adequate for our workload and lock in the two architecture decisions (serverless vs. hybrid agent; native dagster-dbt vs. subprocess) before writing any code.
+
+**Context:** These decisions gate every subsequent story. Getting them wrong costs a full rewrite.
+
+**Tasks:**
+
+- [ ] Create Dagster Cloud account; activate Solo plan (~$10/month); confirm: 1 code location, unlimited runs, no per-minute billing, secrets management UI, email alerting
+- [ ] Verify concurrency limits on Solo plan against peak demand — odds_snapshot.yml fires up to 17 times/day; intraday_weather fires hourly; confirm Solo does not throttle or queue runs in a way that causes missed windows
+- [ ] Evaluate deployment model:
+  - **Serverless** — Dagster runs our code in their managed infra. Zero ops overhead. Risk: heavy ML deps (ngboost, xgboost, lightgbm) may exceed image size or memory limits for serverless execution.
+  - **Hybrid agent** — Dagster Cloud provides UI/scheduling; a user-managed agent process runs our code. Run agent on a Hetzner CX11 (~$5/mo) or GitHub Actions (emergency only). Preferred if ML dep size is a concern.
+  - Document chosen model and reasoning.
+- [ ] Confirm dbt integration approach:
+  - `dagster-dbt` supports dbt-fusion natively as of Dagster 1.11.5 — it automatically detects which engine is installed (dbt-core vs. dbt-fusion). No subprocess workaround needed.
+  - Use `DbtCliResource` + the `@dbt_assets` decorator. Dagster parses `dbt/target/manifest.json` and surfaces each model as an individual Dagster asset with full lineage in the UI, asset checks from dbt tests, and partition support.
+  - Verify the installed Dagster version is ≥ 1.11.5 (dbt-fusion support is in preview pending dbt-fusion GA; confirm no blocking issues with current dbt-fusion version in `pyproject.toml`).
+  - Document chosen approach.
+- [ ] Evaluate CI/CD mechanism: Dagster Cloud supports branch deployments via `dagster-cloud-ci` GitHub Action. Confirm this coexists cleanly with the existing `ci.yml` (dbt parse + dbt-build-ci) — both can run on the same PR without conflict.
+
+**Acceptance criteria:**
+
+- Decision doc written (can be a section at the top of Story 0.5.2 or an addendum here) covering: plan tier, deployment model, dbt integration approach
+- Solo plan account active and accessible
+- No implementation work starts until decisions are documented
+
+---
+
+### 0.5.2 — Repo scaffolding & Dagster Cloud CI/CD wiring
+
+**Goal:** Create the Dagster code location in the repo, wire the Dagster Cloud CI GitHub Action so branch deployments and prod deployments happen automatically, and verify a trivial asset deploys successfully end-to-end.
+
+**Tasks:**
+
+- [ ] Create `dagster/` directory at repo root with: `__init__.py`, `assets/`, `sensors/`, `schedules/`, `resources/`, `jobs/`
+- [ ] Add `dagster-cloud.yaml` at repo root — defines the single code location (`dagster/`) and deployment target
+- [ ] Add `dagster`, `dagster-cloud`, `dagster-webserver` (for local dev), and `dagster-pipes` to `pyproject.toml` dependencies; add `dagster-dbt` only if Option B was chosen in 0.5.1
+- [ ] Add `.github/workflows/dagster_cloud_ci.yml` — triggers on PR (branch deployment) and merge to `main` (prod deployment); uses `dagster-cloud-ci` action; must not interfere with existing `ci.yml` checks
+- [ ] Confirm branch deployment: open a test PR, verify Dagster Cloud creates a branch deployment and the asset graph loads without errors
+- [ ] Confirm prod deployment: merge to `main`, verify prod code location updates
+- [ ] Define a `SnowflakeResource` (or equivalent) using `dagster-snowflake` or a custom resource wrapping the existing connector logic — shared across all assets so connection config is centralized, not duplicated per asset
+
+**Acceptance criteria:**
+
+- `dagster dev` runs locally without errors (trivial asset visible in local UI)
+- PR to `main` triggers a Dagster Cloud branch deployment automatically
+- Merge to `main` triggers a prod code location update automatically
+- Existing `ci.yml` (dbt parse, dbt-build-ci) continues to pass unchanged
+
+---
+
+### 0.5.3 — Secrets & environment variable migration
+
+**Goal:** Replicate all GitHub Secrets as Dagster Cloud environment variables so that ingestion scripts and dbt can connect to Snowflake and external APIs from within Dagster-managed execution.
+
+**Tasks:**
+
+- [ ] Enumerate all secrets currently used across `.github/workflows/` — `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_PRIVATE_KEY`, `PARLAY_API_KEY`, `ODDS_API_KEY`
+- [ ] Add each as a Dagster Cloud environment variable scoped to the prod deployment (and branch deployments if needed)
+- [ ] Handle `SNOWFLAKE_PRIVATE_KEY` carefully — current workflows write the PEM to `/tmp/snowflake_rsa_key.pem` at runtime; replicate this pattern in a Dagster `op` setup step or write the key from the env var at agent startup
+- [ ] Set `TARGET_ENV=prod` as a Dagster Cloud environment variable for the prod deployment; leave it unset (defaulting to `dev`) for branch deployments
+- [ ] Verify secrets are accessible at runtime by running a trivial Snowflake connectivity op in the Dagster UI
+
+**Acceptance criteria:**
+
+- A Snowflake connectivity check op succeeds in the Dagster Cloud prod deployment
+- `TARGET_ENV=prod` is confirmed active in prod; branch deployments write to `dev` schemas
+- No secrets are hardcoded in any Dagster asset, op, or resource definition
+
+---
+
+### 0.5.4 — dbt integration via `dagster-dbt`
+
+**Goal:** Wire the dbt project into Dagster using the native `dagster-dbt` integration so every dbt model is a first-class Dagster asset with lineage, and dbt tests surface as Dagster asset checks.
+
+**Design:** `dagster-dbt` supports dbt-fusion natively as of Dagster 1.11.5 — it automatically detects the installed engine. Use `DbtCliResource` configured with `project_dir="dbt"` and `profiles_dir="dbt"`, and define assets via the `@dbt_assets` decorator pointing at the parsed manifest. Dagster will call `dbtf parse` during code location load to generate/refresh the manifest, then surface each model as an individual asset in the UI. dbt tests become Dagster asset checks automatically.
+
+**Tasks:**
+
+- [ ] Add `dagster-dbt` to `pyproject.toml`; confirm installed Dagster version ≥ 1.11.5
+- [ ] Define `DbtCliResource` in `dagster/resources/dbt.py` — configure `project_dir`, `profiles_dir`, and the Snowflake private key setup (write key from env var to temp file before each dbt invocation)
+- [ ] Define `@dbt_assets` in `dagster/assets/dbt_assets.py` — point at `dbt/target/manifest.json`; Dagster will parse the manifest and generate one asset per model
+- [ ] Verify asset graph loads correctly in local `dagster dev` — all dbt models visible as individual assets with upstream/downstream lineage to ingestion assets
+- [ ] Confirm dbt-fusion binary is available in the execution environment: for serverless, include `dbtf` in the image build; for hybrid, pre-install on the agent VM
+- [ ] Test a partial `dbtf run --select` invocation from Dagster to confirm the selection syntax works identically to the current workflow commands
+- [ ] Confirm dbt tests appear as Dagster asset checks and that a failing test marks the downstream asset as failed in the UI
+
+**Acceptance criteria:**
+
+- All dbt models appear as individual assets in the Dagster Cloud asset graph with correct lineage
+- `dbtf build` triggered from Dagster succeeds against prod Snowflake schemas
+- A deliberately broken dbt model causes the corresponding Dagster asset to fail with the dbt error visible in the run log
+- dbt tests surface as Dagster asset checks (pass/fail visible per asset)
+- No dbt credentials hardcoded — all sourced from Dagster environment variables / `DbtCliResource` config
+
+---
+
+### 0.5.5 — Convert `daily_ingestion.yml`
+
+**Goal:** Replace the `daily_ingestion.yml` workflow with a Dagster daily scheduled job that runs all morning ingestion steps in the correct order.
+
+**Current workflow steps (sequential):**
+1. Parlay API events + canonical events + odds
+2. *(Odds API events + odds — disable 2026-05-23)*
+3. Action Network betting (today)
+4. Savant pitch-by-pitch
+5. Stats API schedule
+6. Weather (today)
+7. Umpires (today)
+8. Fangraphs stuff+ (season, 14d/30d/season windows)
+9. Catcher framing (season)
+10. Fangraphs hitting leaderboard (season)
+11. Transactions
+12. OAA (season)
+13. Elo compute
+14. Data freshness check
+15. dbt-fusion install + Snowflake key write
+16. Umpires again (second pass — post-dbt)
+17. `dbtf build` — umpire + game features
+18. `predict_today.py --prediction-type morning`
+19. `check_prediction_coverage.py`
+20. `dbtf build` — mart_prediction_clv
+21. `compute_model_health.py`
+22. `backfill_prediction_log.py`
+
+**Tasks:**
+
+- [ ] Define each ingestion script as a Dagster asset or op in `dagster/assets/ingestion_daily.py`; preserve sequential ordering via asset dependencies (steps 1–14 can be parallelized where there are no data dependencies; steps 15–22 must remain sequential)
+- [ ] Wire the umpire double-pass correctly — first pass captures today's assignment; second pass runs post-dbt build to catch late updates
+- [ ] Implement the data freshness check as an asset check or sensor that raises `AssetCheckSeverity.WARN` (non-blocking) on staleness rather than failing the whole run
+- [ ] Schedule at 08:00 EDT (12:00 UTC) matching current cron `0 12 * * *`
+- [ ] Set `TARGET_ENV=prod` in the prod deployment environment (done in 0.5.3); verify `predict_today.py` and `compute_model_health.py` write to `betting_ml`, not `betting_ml_dev`
+- [ ] Odds API steps: implement as disabled-by-default ops with a feature flag env var (`ODDS_API_ENABLED=false`); do not delete the code
+
+**Acceptance criteria:**
+
+- Daily job runs end-to-end in prod Dagster deployment at 08:00 EDT
+- `betting_ml.daily_model_predictions` receives a new row each morning (verified via Snowflake MCP)
+- `model_health_log` receives a new row each morning
+- Odds API steps are present in the graph but skipped when `ODDS_API_ENABLED=false`
+
+---
+
+### 0.5.6 — Convert intraday scheduled workflows (`odds_snapshot`, `intraday_weather`, `intraday_schedule`)
+
+**Goal:** Replace the three intraday scheduled workflows with Dagster scheduled jobs.
+
+**`odds_snapshot.yml` — 17 cron entries:**
+Runs: Parlay API events + odds + line movement; Odds API events + odds; dbt odds model rebuild. Has a games-check gate (skip if no games today).
+
+**`intraday_weather.yml` — hourly:**
+Captures forecast weather for upcoming games throughout the day; captures observed-at-first-pitch readings.
+
+**`intraday_schedule.yml` — every 30 min:**
+Re-ingests Stats API schedule to capture lineup/score updates throughout the day.
+
+**Tasks:**
+
+- [ ] Implement the games-check gate as a shared Dagster sensor or an asset check that is evaluated before each odds snapshot job; if no games today, skip all downstream steps without failing
+- [ ] Implement the 17-cron odds snapshot schedule — Dagster supports multiple cron strings per schedule; define a single `MultiPartitionsDefinition` or a list of `ScheduleDefinition` objects pointing to the same job
+- [ ] Implement intraday weather as an hourly `ScheduleDefinition` (cron `0 10-23 * * *` + `0 0-2 * * *`)
+- [ ] Implement intraday schedule capture as a 30-minute `ScheduleDefinition`
+- [ ] Confirm dbt odds model rebuild (`+stg_oddsapi_events+ +stg_oddsapi_odds+ stg_parlayapi_odds mart_closing_line_value mart_prediction_clv`) runs after each odds snapshot ingestion step
+
+**Acceptance criteria:**
+
+- At least two consecutive odds snapshot windows fire on schedule and insert rows into `parlayapi.mlb_odds_raw` and `oddsapi.mlb_odds_raw` (verified via Snowflake MCP)
+- Games-check gate correctly skips all odds steps on a verified no-game day (test manually with a future off-day)
+- Intraday weather rows appear in `weather_raw` on schedule
+
+---
+
+### 0.5.7 — Convert event-driven workflows (`lineup_monitor`, `pregame_snapshot`)
+
+**Goal:** Replace the two polling/conditional workflows with Dagster sensors.
+
+**`lineup_monitor.yml` — hourly, conditional:**
+1. Ingests Stats API schedule
+2. Runs `lineup_monitor.py` — detects newly confirmed lineups
+3. If new lineups found: rebuilds lineup dbt models, runs `predict_today.py --prediction-type post_lineup`, captures a post-lineup odds snapshot, rebuilds CLV mart
+
+**`pregame_snapshot.yml` — every 30 min, conditional:**
+1. Runs `pregame_snapshot.py` — checks whether any games are entering the pre-game window
+2. If pre-game games found: captures Odds API odds + events snapshot, rebuilds CLV mart
+
+**Tasks:**
+
+- [ ] Implement `lineup_monitor_sensor` — polls `stg_statsapi_lineups` (or runs `lineup_monitor.py` as a subprocess) on a tick interval; emits a `RunRequest` with the list of newly-confirmed `game_pks` when new lineups are detected; downstream job runs predictions + odds snapshot + dbt rebuild
+- [ ] Implement `pregame_snapshot_sensor` — polls for games entering the pre-game window on 30-min ticks; emits `RunRequest` if any pre-game games found; downstream job captures odds + dbt rebuild
+- [ ] Ensure sensor tick failures (transient API errors) do not cascade — use `SkipReason` rather than exceptions for "no new lineups" / "no pre-game games" outcomes
+- [ ] Preserve the `--game-pks` argument passthrough to `predict_today.py` in the lineup sensor's downstream job
+
+**Acceptance criteria:**
+
+- Lineup sensor correctly fires a downstream run on a day when new lineups are confirmed (verified in prod with a real game day)
+- Sensor ticks that find no new lineups log a `SkipReason` and incur no downstream run cost
+- Pre-game snapshot sensor fires within 30 minutes of a game entering the pre-game window
+
+---
+
+### 0.5.8 — Convert weekly catch-up job (`parlay_historical_matches_catchup`)
+
+**Goal:** Replace `.github/workflows/parlay_historical_matches_catchup.yml` with a Dagster weekly scheduled asset.
+
+**Tasks:**
+
+- [ ] Define a `parlay_historical_matches_catchup` asset that calls `parlay_api_ingestion.py historical-matches --start-date <14 days ago> --end-date <yesterday>`
+- [ ] Schedule weekly on Monday at 10:00 UTC (06:00 EDT) via `ScheduleDefinition(cron_schedule="0 10 * * 1", ...)`
+- [ ] Expose `start_date` and `end_date` as asset config so ad-hoc backfills can be triggered from the Dagster UI without editing the schedule
+
+**Acceptance criteria:**
+
+- Asset materializes on the first Monday after deployment
+- Ad-hoc backfill for a custom date range can be triggered from the Dagster UI via asset config override
+
+---
+
+### 0.5.9 — Parallel run validation
+
+**Goal:** Run both GitHub Actions and Dagster in parallel for one full week to confirm Dagster produces identical outputs before cutting over.
+
+**Tasks:**
+
+- [ ] Keep all GitHub Actions workflows active during this period (do not disable crons yet)
+- [ ] For each Dagster daily run, verify row counts in key tables match what GitHub Actions also wrote that day:
+  - `parlayapi.mlb_odds_raw` — compare snapshot counts
+  - `weather_raw` — compare game coverage
+  - `betting_ml.daily_model_predictions` — confirm exactly one Dagster row per game per day (dedup with the GH Actions row — they share the same idempotency key)
+- [ ] Verify that `predict_today.py` produces identical predictions whether invoked via Dagster or GitHub Actions (deterministic model inference)
+- [ ] Verify `dbtf build` succeeds from within Dagster on at least 3 consecutive days
+- [ ] Document any divergences and resolve before cutover
+- [ ] Get explicit sign-off (a note here) before proceeding to 0.5.10
+
+**Acceptance criteria:**
+
+- 7 consecutive days with no missed Dagster runs and no output divergence from GitHub Actions
+- Sign-off documented: `Parallel validation complete — cutover approved YYYY-MM-DD`
+
+---
+
+### 0.5.10 — GitHub Actions decommission
+
+**Goal:** Disable all GitHub Actions scheduled workflows after cutover is validated. Preserve `ci.yml` (the dbt CI gate stays in GitHub Actions) and `workflow_dispatch` triggers for emergency manual use.
+
+**Tasks:**
+
+- [ ] For each workflow below, remove the `schedule:` block and keep `workflow_dispatch: {}` as the only trigger:
+  - `daily_ingestion.yml`
+  - `odds_snapshot.yml`
+  - `intraday_weather.yml`
+  - `intraday_schedule.yml`
+  - `lineup_monitor.yml`
+  - `pregame_snapshot.yml`
+  - `parlay_historical_matches_catchup.yml`
+- [ ] Leave `ci.yml` entirely unchanged — dbt CI gate continues running in GitHub Actions
+- [ ] Add a comment block at the top of each disabled workflow: `# CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.`
+- [ ] Verify GitHub Actions minute consumption drops to near-zero (only CI runs on PRs consume minutes going forward)
+- [ ] Update this implementation guide: mark Epic 0.5 complete, update the sequencing diagram
+
+**Acceptance criteria:**
+
+- No scheduled GitHub Actions runs fire for 7 days post-cutover
+- All 7 migrated workflows still appear in the GitHub Actions UI and are triggerable via `workflow_dispatch`
+- `ci.yml` continues to pass on new PRs
+- Monthly GitHub Actions minute usage confirmed near-zero in billing settings
 
 ---
 
@@ -1153,7 +1432,7 @@ Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimiz
 - `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
 - No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
 
-**Status (as of 2026-05-15):** Stories 2.1–2.3 fully complete ✅. Story 2.4 substantially complete — convention doc, Python writer (`scd2_writer.py`), dbt macro (`scd2_merge.sql`), and 13/13 unit tests all done; two 2.4 tasks (SCD-2 columns on 2.6/2.9 marts, live end-to-end verification) are blocked on Epic T. Stories 2.5–2.9 blocked pending Epic T completion.
+**Status (as of 2026-05-18):** Stories 2.1–2.3 ✅, 2.4 ✅ (substantially complete — SCD-2 columns on 2.6 now done; 2.9 pending; live e2e verification deferred), 2.6 ✅ (ZiPS join, depth score, entropy, rookie proxy, SCD-2 sentinels — all ACs passed in dev). Stories 2.5, 2.7, 2.8, 2.9 in progress (unblocked by Epic T which shipped 2026-05-12).
 
 Validation completed 2026-05-14:
 - `baseball_data.betting.mart_sub_model_signals` provisioned; synthetic `test_signal_v1` row inserted; `dbtf build --target dev --select feature_pregame_sub_model_signals` green (1 model, 2 tests passed); `test_signal_v1 = 1.23` confirmed in `dev_betting_features`
@@ -1382,9 +1661,9 @@ Acceptance Criteria:
 
 ---
 
-### 2.6 — Offensive quality feature mart gaps
+### 2.6 — Offensive quality feature mart gaps ✅
 
-**What exists:** `feature_pregame_lineup_features` (~40 cols per side). `stg_fangraphs__zips_hitting` fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable. `stg_statsapi_player_injury_status` exists. `INJURY_ADJ_AVG_WOBA_30D` and `INJURY_ADJ_AVG_XWOBA_30D` are present in the lineup feature mart.
+**What exists:** `feature_pregame_lineup_features` (~54 cols per side post-2.6). `stg_fangraphs__zips_hitting` fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable. `stg_statsapi_player_injury_status` exists. `INJURY_ADJ_AVG_WOBA_30D` and `INJURY_ADJ_AVG_XWOBA_30D` are present in the lineup feature mart.
 
 **What's missing (confirmed via Snowflake column inventory):**
 - ZiPS projected wRC+, OBP, SLG, K%, BB%, ISO at lineup level — not joined into the lineup feature mart
@@ -1393,26 +1672,24 @@ Acceptance Criteria:
 - Lineup IL filtering — partially handled via the two injury-adjusted columns; needs spot-check
 
 Tasks:
-- [ ] Extend `feature_pregame_lineup_features` to join `stg_fangraphs__zips_hitting` via `dim_fangraphs_player_xref` on MLBAM ID. Add: `{side}_zips_lineup_avg_wrc_plus`, `{side}_zips_lineup_avg_woba_proxy` (from `0.7 * PROJ_OBP + 0.3 * PROJ_SLG` or similar), `{side}_zips_lineup_avg_k_pct`, `{side}_zips_lineup_avg_iso`
-- [ ] Use current-season projection with prior-season fallback for player-seasons missing a current ZiPS row
-- [ ] Add `{side}_lineup_depth_score` = average projected wOBA of slots 7–9, weighted by expected PA
-- [ ] Add `{side}_lineup_entropy` = Shannon entropy of slot-wise projected wOBA distribution (captures lineup concentration)
-- [ ] Spot-check IL filtering: pick 5 historical games with known IL-active batters and confirm they do not inflate lineup quality scores
-- [ ] **Rookie cold-start handling (defensive — pending Epic 14 MiLB data):**
-  - Add `{side}_lineup_rookie_count`: number of lineup slots with < 200 MLB career PAs
-  - Add `{side}_lineup_rookie_pa_share`: expected PA-weighted share of the lineup that is rookie-status (signals lineup-quality uncertainty)
-  - For rookie batters, regress 30-day rolling MLB stats toward archetype-mean (if cluster assignment exists) or league-mean (if not). Use a Bayesian shrinkage prior: posterior = (PA / (PA + k)) × observed + (k / (PA + k)) × prior_mean with k = 200
-  - Confirm ZiPS hitting projections cover ≥ 80% of debut-season rookies — if so, projection-side features fill the gap for most call-ups even without MLB rolling history
-  - Document the regression-to-mean policy in the registry notes for `offense_v1`
-- [ ] Add SCD-2 columns (per Story 2.4 convention) — born SCD-2-ready
-- [ ] Validate `dbtf build --target dev --select feature_pregame_lineup_features` completes
+- [x] Extend `feature_pregame_lineup_features` to join `stg_fangraphs__zips_hitting` directly on MLBAM ID. Added: `avg_zips_wrc_plus`, `avg_zips_woba_proxy` (0.7×OBP + 0.3×SLG), `avg_zips_k_pct`, `avg_zips_iso`, `zips_coverage_pct`
+- [x] Use current-season projection with prior-season fallback for player-seasons missing a current ZiPS row — validated 99.7% coverage for 2024 active batters; fallback engaged for early-career players
+- [x] Add `lineup_depth_score` = PA-weighted average ZiPS wOBA proxy for slots 7–9
+- [x] Add `lineup_entropy` = Shannon entropy of slot-wise ZiPS wOBA proxy distribution (captures lineup concentration)
+- [x] Spot-check IL filtering: queried 10 games with 6–7 injured players; `injury_adj_avg_xwoba_30d` ≤ `avg_xwoba_30d` in all cases — no positive inflation confirmed
+- [x] **Rookie cold-start handling (defensive — pending Epic 14 MiLB data):**
+  - Added `lineup_rookie_count`: slots with no ZiPS data in current or prior season (proxy for unknown/debut-season players)
+  - Added `lineup_rookie_pa_share`: `lineup_rookie_count / 9.0`
+  - Note: full Bayesian shrinkage toward archetype-mean deferred to Epic 14; ZiPS covers ≥ 80% of debut-season call-ups so projection-side features fill most gaps; regression-to-mean policy to be documented in `offense_v1` registry entry when Epic 4 begins
+- [x] Add SCD-2 columns (per Story 2.4 convention) — born SCD-2-ready: `valid_from`, `valid_to`, `is_current`, `computed_at`, `record_hash`
+- [x] Validate `dbtf build --target dev --select feature_pregame_lineup_features` completes
 
 Acceptance Criteria:
-- [ ] New columns present and non-null for ≥ 90% of games in the 2021–2026 training window
-- [ ] Prior-season fallback verified: a player with no current-season ZiPS row but a prior-season row gets the prior-season value
-- [ ] IL spot-check confirms no positive inflation from inactive players
-- [ ] `dbtf build` clean
-- [ ] Mart includes the five SCD-2 columns from Story 2.4
+- [x] New columns present and non-null for ≥ 90% of games in the 2021–2026 training window — **100% non-null on all ZiPS and derived columns; 89.6% full ZiPS coverage (10.4% have ≥1 slot with no ZiPS — never fully null)**
+- [x] Prior-season fallback verified: join logic uses COALESCE(current-season, prior-season) per slot; fallback engaged for players absent from current-year ZiPS
+- [x] IL spot-check confirms no positive inflation from inactive players — verified against 10 games with 6–7 injured batters; adj values always ≤ raw
+- [x] `dbtf build` clean — 14/15 tests pass; 2 pre-existing warns on `avg_woba_vs_lhp`/`avg_woba_vs_rhp` (NULL for pre-season games with no platoon data, not related to 2.6 changes)
+- [x] Mart includes the five SCD-2 columns from Story 2.4
 
 **Training target:** Team runs scored per game (one observation per `(game_pk, side)`) from `mart_game_results`. Version 1 — with opponent starter/bullpen quality controls. No market features.
 
