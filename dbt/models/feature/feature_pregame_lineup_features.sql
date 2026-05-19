@@ -335,6 +335,7 @@ bat_tracking_agg as (
         game_pk,
         home_away,
         round(avg(bat_speed_30d),    2)             as lineup_avg_bat_speed,
+        round(stddev(bat_speed_30d), 2)             as lineup_bat_speed_std,
         round(avg(swing_length_30d), 2)             as lineup_avg_swing_length,
         round(avg(attack_angle_30d), 2)             as lineup_avg_attack_angle
     from slot_bat_tracking
@@ -501,9 +502,10 @@ final as (
         cf.catcher_framing_runs,
         cf.catcher_defensive_runs,
 
-        -- Bat tracking matchup features (Card 8.E)
+        -- Bat tracking matchup features (Card 8.E / Story 2.9)
         -- NULL for all pre-2023-07-14 games; ~50% null in 2021+ training set
         bta.lineup_avg_bat_speed,
+        bta.lineup_bat_speed_std,
         bta.lineup_avg_swing_length,
         bta.lineup_avg_attack_angle,
         round(

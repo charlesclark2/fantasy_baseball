@@ -1,0 +1,33 @@
+name: Dagster Cloud CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: dagster-cloud-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dagster-cloud-deploy:
+    name: Deploy to Dagster Cloud
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to Dagster Cloud
+        uses: dagster-io/dagster-cloud-action@v0.1
+        with:
+          dagster_cloud_url: "https://penumbra-partners.dagster.cloud"
+          dagster_cloud_api_token: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          deployment: prod
+          location: |
+            - location_name: baseball_betting
+              python_file: dagster/__init__.py
+              working_directory: .
+              attribute: defs

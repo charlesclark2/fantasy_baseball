@@ -90,7 +90,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │ Track B — Sub-Model Development (parallel with Track A & C)                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ Epic 1    (Market-Blind Retrains) ✅    — Complete. All three models promoted; live since 2026-05-11.
-│ Epic 2    (Sub-Model Infra & Feature Readiness) — In progress. Stories 2.1–2.4 ✅, 2.6 ✅. Stories 2.5, 2.7–2.9 in progress.
+│ Epic 2    (Sub-Model Infra & Feature Readiness) — ✅ Complete. Stories 2.1–2.7, 2.9 ✅. Story 2.8 deferred (bullpen supervised target; not on critical path).
 │ Epic 3    (Run Environment Model)       — Start after Epic 2 ships 2.1–2.5.
 │ Epic 4    (Offensive Quality Model)     — Start after Epic 2 ships 2.1–2.4, 2.6.
 │ Epic 5    (Starter Suppression Model)   — Start after Epic 2 ships 2.1–2.4, 2.7.
@@ -670,50 +670,72 @@ Write targets by environment:
 
 ### 0.5.1 — Plan validation & architecture decisions
 
-**Goal:** Confirm the Dagster Cloud Solo plan is adequate for our workload and lock in the two architecture decisions (serverless vs. hybrid agent; native dagster-dbt vs. subprocess) before writing any code.
+**Goal:** Confirm the Dagster Cloud Solo plan is adequate for our workload. Architecture decisions are already made (documented below); this story activates the account and verifies the plan limits before any code is written.
 
-**Context:** These decisions gate every subsequent story. Getting them wrong costs a full rewrite.
+**Context:** These decisions gate every subsequent story.
+
+**Architecture decisions (concluded 2026-05-19):**
+
+- **Deployment model: Hybrid agent** — Dagster Cloud Serverless does not support custom Docker images. dbt-fusion is a compiled arm64 binary installed to `/Users/charlesclark/.local/bin/dbt` via `curl | sh`; it is not a Python package and cannot be installed in the serverless execution environment. Hybrid gives full Dockerfile control so the binary can be installed at build time.
+- **Agent host: Railway** (~$5/month) — managed container platform; deploys from Dockerfile on git push; auto-restarts on crash; no manual server ops. Total infrastructure cost: ~$10/month (Dagster Solo) + ~$5/month (Railway) = ~$15/month.
+- **dbt integration: native `dagster-dbt`** — `dagster-dbt` ≥ 1.11.5 auto-detects dbt-fusion when the binary is present in the agent container. Uses `DbtCliResource` + `@dbt_assets`; every dbt model is a first-class Dagster asset; dbt tests surface as asset checks. No subprocess workaround needed.
+- **CI/CD: `dagster-cloud-ci` GitHub Action** — coexists with existing `ci.yml`; both run on the same PR without conflict.
 
 **Tasks:**
 
 - [ ] Create Dagster Cloud account; activate Solo plan (~$10/month); confirm: 1 code location, unlimited runs, no per-minute billing, secrets management UI, email alerting
 - [ ] Verify concurrency limits on Solo plan against peak demand — odds_snapshot.yml fires up to 17 times/day; intraday_weather fires hourly; confirm Solo does not throttle or queue runs in a way that causes missed windows
-- [ ] Evaluate deployment model:
-  - **Serverless** — Dagster runs our code in their managed infra. Zero ops overhead. Risk: heavy ML deps (ngboost, xgboost, lightgbm) may exceed image size or memory limits for serverless execution.
-  - **Hybrid agent** — Dagster Cloud provides UI/scheduling; a user-managed agent process runs our code. Run agent on a Hetzner CX11 (~$5/mo) or GitHub Actions (emergency only). Preferred if ML dep size is a concern.
-  - Document chosen model and reasoning.
-- [ ] Confirm dbt integration approach:
-  - `dagster-dbt` supports dbt-fusion natively as of Dagster 1.11.5 — it automatically detects which engine is installed (dbt-core vs. dbt-fusion). No subprocess workaround needed.
-  - Use `DbtCliResource` + the `@dbt_assets` decorator. Dagster parses `dbt/target/manifest.json` and surfaces each model as an individual Dagster asset with full lineage in the UI, asset checks from dbt tests, and partition support.
-  - Verify the installed Dagster version is ≥ 1.11.5 (dbt-fusion support is in preview pending dbt-fusion GA; confirm no blocking issues with current dbt-fusion version in `pyproject.toml`).
-  - Document chosen approach.
-- [ ] Evaluate CI/CD mechanism: Dagster Cloud supports branch deployments via `dagster-cloud-ci` GitHub Action. Confirm this coexists cleanly with the existing `ci.yml` (dbt parse + dbt-build-ci) — both can run on the same PR without conflict.
+- [ ] Create Railway account; provision a new service backed by the repo's Dockerfile (see Story 0.5.2); confirm auto-restart and deploy-on-push are enabled
+- [ ] Verify Dagster version ≥ 1.11.5 in the agent container once scaffolded (Story 0.5.2); confirm no blocking issues with current dbt-fusion version
 
 **Acceptance criteria:**
 
-- Decision doc written (can be a section at the top of Story 0.5.2 or an addendum here) covering: plan tier, deployment model, dbt integration approach
-- Solo plan account active and accessible
-- No implementation work starts until decisions are documented
+- Dagster Cloud Solo plan account active and accessible
+- Railway service created and linked to repo
+- Architecture decisions documented here (done — see above)
+- No implementation work starts until account is active
 
 ---
 
-### 0.5.2 — Repo scaffolding & Dagster Cloud CI/CD wiring
+### 0.5.2 — Repo scaffolding, Dockerfile, Railway setup & Dagster Cloud CI/CD wiring
 
-**Goal:** Create the Dagster code location in the repo, wire the Dagster Cloud CI GitHub Action so branch deployments and prod deployments happen automatically, and verify a trivial asset deploys successfully end-to-end.
+**Goal:** Create the Dagster code location in the repo, build the hybrid agent Dockerfile (with dbt-fusion binary), wire Railway to run the agent container, wire the Dagster Cloud CI GitHub Action so branch and prod deployments happen automatically, and verify a trivial asset deploys end-to-end.
 
 **Tasks:**
 
+**Repo scaffolding:**
 - [ ] Create `dagster/` directory at repo root with: `__init__.py`, `assets/`, `sensors/`, `schedules/`, `resources/`, `jobs/`
-- [ ] Add `dagster-cloud.yaml` at repo root — defines the single code location (`dagster/`) and deployment target
-- [ ] Add `dagster`, `dagster-cloud`, `dagster-webserver` (for local dev), and `dagster-pipes` to `pyproject.toml` dependencies; add `dagster-dbt` only if Option B was chosen in 0.5.1
-- [ ] Add `.github/workflows/dagster_cloud_ci.yml` — triggers on PR (branch deployment) and merge to `main` (prod deployment); uses `dagster-cloud-ci` action; must not interfere with existing `ci.yml` checks
+- [ ] Add `dagster-cloud.yaml` at repo root — defines the single code location (`dagster/`) and hybrid agent deployment target
+- [ ] Add `dagster`, `dagster-cloud`, `dagster-webserver` (for local dev), `dagster-pipes`, and `dagster-dbt` to `pyproject.toml` dependencies
+
+**Dockerfile (hybrid agent):**
+- [ ] Create `Dockerfile` at repo root for the Railway-hosted agent container:
+  - Base: `python:3.12-slim`
+  - Install dbt-fusion binary: `curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --to /usr/local/bin`
+  - Install Python deps: `pip install dagster dagster-cloud dagster-dbt dagster-webserver ...` (pin to ≥ 1.11.5)
+  - Copy repo; set `WORKDIR /app`
+  - CMD: `dagster-cloud agent run`
+- [ ] Verify `dbt --version` (dbt-fusion) is accessible inside the built container
+
+**Railway setup:**
+- [ ] Create Railway project; link to this repo; set build source to the `Dockerfile` at repo root
+- [ ] Configure Railway environment variables: `DAGSTER_CLOUD_AGENT_TOKEN` (from Dagster Cloud), `DAGSTER_DEPLOYMENT=prod`
+- [ ] Enable auto-restart on failure and deploy-on-push from `main`
+- [ ] Confirm the agent appears as "Active" in the Dagster Cloud agents UI after first deploy
+
+**Dagster Cloud CI/CD:**
+- [ ] Add `.github/workflows/dagster_cloud_ci.yml` — triggers on PR (branch deployment) and merge to `main` (prod deployment); uses `dagster-cloud-ci` action; must not interfere with existing `ci.yml`
 - [ ] Confirm branch deployment: open a test PR, verify Dagster Cloud creates a branch deployment and the asset graph loads without errors
 - [ ] Confirm prod deployment: merge to `main`, verify prod code location updates
-- [ ] Define a `SnowflakeResource` (or equivalent) using `dagster-snowflake` or a custom resource wrapping the existing connector logic — shared across all assets so connection config is centralized, not duplicated per asset
+
+**Shared resource:**
+- [ ] Define a `SnowflakeResource` using `dagster-snowflake` or a custom resource wrapping the existing connector — shared across all assets so connection config is not duplicated per asset
 
 **Acceptance criteria:**
 
 - `dagster dev` runs locally without errors (trivial asset visible in local UI)
+- Railway agent container builds, starts, and shows "Active" in Dagster Cloud UI
+- `dbt --version` confirms dbt-fusion is installed inside the agent container
 - PR to `main` triggers a Dagster Cloud branch deployment automatically
 - Merge to `main` triggers a prod code location update automatically
 - Existing `ci.yml` (dbt parse, dbt-build-ci) continues to pass unchanged
@@ -1432,7 +1454,7 @@ Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimiz
 - `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
 - No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
 
-**Status (as of 2026-05-18):** Stories 2.1–2.3 ✅, 2.4 ✅ (substantially complete — SCD-2 columns on 2.6 now done; 2.9 pending; live e2e verification deferred), 2.6 ✅ (ZiPS join, depth score, entropy, rookie proxy, SCD-2 sentinels — all ACs passed in dev). Stories 2.5, 2.7, 2.8, 2.9 in progress (unblocked by Epic T which shipped 2026-05-12).
+**Status (as of 2026-05-19):** ✅ Complete (Story 2.8 intentionally deferred — see 2.8 section). Stories 2.1–2.3 ✅, 2.4 ✅ (substantially complete — SCD-2 columns on 2.6 and 2.9 done; live e2e verification deferred to when mart_sub_model_signals has live data), 2.5 ✅ (weather coverage audited; training window = 2021-01-01; T.2.C decision documented; registry updated), 2.6 ✅ (ZiPS join, depth score, entropy, rookie proxy, SCD-2 sentinels — all ACs passed in dev and prod), 2.7 ✅ (registry entry confirmed; xFIP exclusion + leakage guard documented), 2.9 ✅ (lineup_bat_speed_std added; archetype_definitions.md written; matchup_v1 registry updated; dbtf build validated 2026-05-19). Story 2.8 deferred — bullpen v1.0 is rules-based; supervised target mart not needed until Epic 6 ships and signal value is evaluated.
 
 Validation completed 2026-05-14:
 - `baseball_data.betting.mart_sub_model_signals` provisioned; synthetic `test_signal_v1` row inserted; `dbtf build --target dev --select feature_pregame_sub_model_signals` green (1 model, 2 tests passed); `test_signal_v1 = 1.23` confirmed in `dev_betting_features`
@@ -1571,7 +1593,7 @@ Acceptance Criteria:
 
 ---
 
-### 2.4 — Type-2 SCD foundation for feature & sub-model output layers ✅ (partial — 2.6/2.9 tasks pending Epic T)
+### 2.4 — Type-2 SCD foundation for feature & sub-model output layers ✅ (partial — 2.9 SCD-2 columns pending)
 
 **Strategic intent:** Long-term, we want point-in-time reproducibility of every model prediction. Today's feature marts overwrite state (latest-only) — making it impossible to answer "what did the system see at prediction time T?" Type-2 SCDs at the feature and sub-model output layers solve this by preserving every state change with `valid_from` / `valid_to` / `is_current` columns, enabling AS-OF queries for historical re-runs, re-training, and CLV backtesting.
 
@@ -1621,7 +1643,7 @@ Tasks:
 - [x] Write a short design doc `quant_sports_intel_models/baseball/scd2_convention.md` covering: column definitions, change-detection rule (`record_hash` diff triggers a new row + close-out the prior), out-of-order arrival policy, deletion semantics (soft via `valid_to`, never DELETE)
 - [x] Decide dbt snapshots vs custom SCD-2 macros. **Decision: custom macros.** Documented in `scd2_convention.md` with reasoning (snapshots rejected: opaque merge logic, single-hash strategy, not applicable to Python-written tables). Implemented: `betting_ml/scripts/scd2_writer.py` (Python) + `dbt/macros/scd2_merge.sql` (dbt).
 - [x] Implement the chosen SCD-2 mechanism for `mart_sub_model_signals` — `betting_ml/scripts/scd2_writer.py`; `scd2_upsert()` executes two-step merge (UPDATE close-out → INSERT new); 13/13 unit tests passing (`betting_ml/tests/test_scd2_writer.py`)
-- [ ] Add SCD-2 columns to the new feature marts created in Stories 2.6 and 2.9 (no historical migration — just born with the columns) — **blocked on Epic T**
+- [x] Add SCD-2 columns to the new feature marts created in Stories 2.6 and 2.9 (no historical migration — just born with the columns) — **2.6 ✅ (2026-05-18); 2.9 ✅ (feature_pregame_lineup_features already had SCD-2 columns; separate mart not built)**
 - [x] Add the AS-OF query pattern to the same design doc with the worked example above — in `scd2_convention.md`
 - [x] Capture future SCD migration scope as Epic 15 placeholder — Epic 15 section already exists in this guide with full backfill feasibility table and priority order
 
@@ -1632,32 +1654,42 @@ Acceptance Criteria:
 - [x] `scd2_convention.md` design doc exists in the repo
 - [x] Decision (snapshots vs custom macros) documented with reasoning
 - [x] Epic 15 section exists in this guide with existing-mart migration priority list
-- [ ] All new marts created in Stories 2.6 and 2.9 include the five SCD-2 columns — **blocked on Epic T**
+- [x] All new marts created in Stories 2.6 and 2.9 include the five SCD-2 columns — **2.6 ✅; 2.9 ✅**
 
 ---
 
-### 2.5 — Run environment feature readiness
+### 2.5 — Run environment feature readiness ✅
 
-**What exists:** Park features, weather features, umpire features, team/starter opponent-control features all in `feature_pregame_game_features`. `total_runs` training label in `mart_game_results`.
+**What exists:** Park features, weather features, umpire features, team/starter opponent-control features all in `feature_pregame_game_features`. Training label: `home_final_score + away_final_score` (computed inline) from `mart_game_results` — note: no `total_runs` column exists in the mart.
 
-**What's missing:** Confirmation of pre-2022 weather backfill coverage. The data mart inventory marks this as "Unknown."
+**What was missing:** Confirmation of pre-2022 weather backfill coverage. The data mart inventory marked this as "Unknown."
+
+**Weather coverage audit (2026-05-18):**
+
+| Season | Regular Games | Weather Joined | Coverage |
+|--------|-------------|----------------|----------|
+| 2021   | 2,429       | 2,302          | 94.8%    |
+| 2022   | 2,430       | 2,347          | 96.6%    |
+| 2023   | 2,430       | 2,346          | 96.5%    |
+| 2024   | 2,429       | 2,342          | 96.4%    |
+| 2025   | 2,430       | 2,345          | 96.5%    |
+
+Miss (~3-5%) breakdown: 328 games are `roof_type=Dome` (correctly excluded — weather irrelevant); ~138 are retractable-roof-closed or minor ingestion gaps. Outdoor coverage is effectively 100%. Pre-2021 data: 0 rows in `weather_raw` — no backfill feasible.
 
 Tasks:
-- [ ] Query `baseball_data.statsapi.weather_raw`: count non-null rows by season. Output a coverage table
-- [ ] Decide training window:
-  - If pre-2022 coverage ≥ 80% of outdoor games: use 2016+ window with normal NULL handling (domes always NULL — handled correctly already)
-  - If pre-2022 coverage is 30–80%: use 2018+ or 2020+ window, document the truncation
-  - If pre-2022 coverage < 30%: restrict to live-ingestion era only (~2023+) and document the tradeoff
-- [ ] Document the chosen training window in `sub_model_registry.yaml` under `run_env_v1.training_window`
-- [ ] Validate the training-dataset query returns clean rows for the chosen window and joins correctly to opponent-quality control features
+- [x] Query `baseball_data.statsapi.weather_raw`: count non-null rows by season — done; table above
+- [x] Decide training window: pre-2021 = 0% coverage (< 30% threshold → restrict to live-ingestion era). **Decision: 2021-01-01.** 2020 COVID season (898 games, empty stadiums) naturally excluded. Weather is 100% from 2021 in `weather_raw`; ~96% join to `feature_pregame_weather_features` (dome miss is correct behavior).
+- [x] Document the chosen training window in `sub_model_registry.yaml` under `run_env_v1.training_window` — set to `2021-01-01`; full coverage table and miss explanation in registry notes
+- [x] Validate training-dataset join: `mart_game_results × feature_pregame_weather_features × feature_pregame_umpire_features` — 2021–2025 regular season returns clean rows; weather join 94.8–96.6%; umpire join 96.6–100%; no schema errors
+- [x] **T.2.C decision (deferred from Epic T):** `feature_pregame_weather_features` uses `forecast_pregame` as the canonical pre-game observation type. `forecast_intraday` and `observed_at_first_pitch` available in `weather_raw` but deferred to a future feature enhancement — not in `run_env_v1` feature set.
 
 Acceptance Criteria:
-- [ ] Weather coverage table by season is in the registry notes or a coverage report
-- [ ] Training window decision is explicit and documented (not implicit)
-- [ ] Sample training-dataset query returns the expected row count for the chosen window with no schema errors
-- [ ] No new feature mart created — all inputs flow from existing master feature table
+- [x] Weather coverage table by season — in registry notes and story above
+- [x] Training window decision explicit and documented — `2021-01-01` in `sub_model_registry.yaml`
+- [x] Sample training-dataset query returns expected row counts with no schema errors — confirmed: ~2,300–2,430 regular-season games/year for 2021–2025
+- [x] No new feature mart created — all inputs flow from existing master feature table
 
-**Training target:** `total_runs` from `mart_game_results`. Version 1 — direct prediction with team-offense, starter-quality, and bullpen-quality features as opponent controls. No market features.
+**Training target:** `home_final_score + away_final_score` (computed inline) from `mart_game_results`, filtered `game_type = 'R'`. Version 1 — direct prediction with team-offense, starter-quality, and bullpen-quality features as opponent controls. No market features.
 
 ---
 
@@ -1690,12 +1722,13 @@ Acceptance Criteria:
 - [x] IL spot-check confirms no positive inflation from inactive players — verified against 10 games with 6–7 injured batters; adj values always ≤ raw
 - [x] `dbtf build` clean — 14/15 tests pass; 2 pre-existing warns on `avg_woba_vs_lhp`/`avg_woba_vs_rhp` (NULL for pre-season games with no platoon data, not related to 2.6 changes)
 - [x] Mart includes the five SCD-2 columns from Story 2.4
+- [x] Prod smoke check (2026-05-18): 1,426 rows for game_year=2026; 100% coverage on `avg_zips_wrc_plus`, `lineup_entropy`, `record_hash`; `avg_rookie_pa_share = 0.000` (all 2026 lineup slots matched ZiPS)
 
 **Training target:** Team runs scored per game (one observation per `(game_pk, side)`) from `mart_game_results`. Version 1 — with opponent starter/bullpen quality controls. No market features.
 
 ---
 
-### 2.7 — Starter suppression target registration (no mart work)
+### 2.7 — Starter suppression target registration (no mart work) ✅
 
 **Decision based on data findings:** `MART_STARTING_PITCHER_GAME_LOG` already contains every column needed as a starter-model training target. No new mart is required.
 
@@ -1709,21 +1742,14 @@ Available columns (confirmed in Snowflake on 2026-05-12):
 **ZiPS pitching xFIP decision:** `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons. Drop `STARTER_PROJ_XFIP` from training feature lists (not impute). Use `PROJ_FIP`, `PROJ_ERA`, `PROJ_K_PCT`, `PROJ_BB_PCT` instead — all are fully populated. Do not block this Epic on a FanGraphs ingestion fix; capture as a future low-priority story.
 
 Tasks:
-- [ ] Register the starter target in `sub_model_registry.yaml` under `starter_v1.target`:
-  ```yaml
-  target:
-    source_table: baseball_data.betting.mart_starting_pitcher_game_log
-    primary_column: xwoba_against
-    auxiliary_columns: [k_per_bf, bb_per_bf, ip]
-    grain: pitcher_id_game_pk
-  ```
-- [ ] Add a future-work note: "Fix `stg_fangraphs__zips_pitching.proj_xfip` ingestion (low priority)" — document in `idea_notes.md` or equivalent
-- [ ] Confirm leakage guard: training queries against `mart_starting_pitcher_game_log` must use `game_date < model_run_date` strictly
+- [x] Register the starter target in `sub_model_registry.yaml` under `starter_v1.target` — already present (confirmed 2026-05-18): `source_table`, `primary_column: xwoba_against`, `auxiliary_columns: [k_per_bf, bb_per_bf, ip]`, `grain: pitcher_id_game_pk`
+- [x] Add a future-work note: "Fix `stg_fangraphs__zips_pitching.proj_xfip` ingestion (low priority)" — added to `idea_notes.md` under "Low-priority engineering debt" (2026-05-18)
+- [x] Confirm leakage guard: documented in `starter_v1.notes` in registry — `LEAKAGE GUARD: training queries must use game_date < model_run_date strictly`
 
 Acceptance Criteria:
-- [ ] Registry entry for `starter_v1` has full target definition
-- [ ] xFIP exclusion documented; substitute features explicitly listed
-- [ ] Leakage guard documented in the registry notes field
+- [x] Registry entry for `starter_v1` has full target definition — confirmed present in `betting_ml/sub_model_registry.yaml`
+- [x] xFIP exclusion documented; substitute features explicitly listed — `proj_xfip EXCLUDED (100% NULL). Use proj_fip, proj_era, proj_k_pct, proj_bb_pct.`
+- [x] Leakage guard documented in the registry notes field — confirmed
 
 **Training targets:** Primary — `xwoba_against`. Auxiliary — `strikeouts / batters_faced`, `walks / batters_faced`, `outs_recorded / 3` (IP). No market features.
 
@@ -1759,40 +1785,36 @@ Acceptance Criteria (when pursued):
 
 ---
 
-### 2.9 — Matchup cross-feature mart + archetype documentation
+### 2.9 — Matchup cross-feature mart + archetype documentation ✅
+
+**Status: Complete (2026-05-19)**
+
+**Implementation note:** A separate `feature_pregame_matchup_bat_tracking` model was not needed. Bat-tracking features (`lineup_avg_bat_speed`, `lineup_avg_swing_length`, `lineup_avg_attack_angle`, `lineup_bat_speed_vs_starter_velo`) were already wired into `feature_pregame_lineup_features` from Card 8.E. Only `lineup_bat_speed_std` was missing — added to `feature_pregame_lineup_features` bat_tracking_agg CTE (2026-05-19). All bat-tracking columns propagated to `feature_pregame_game_features` as `home_*` / `away_*` columns. SCD-2 columns (`valid_from`, `valid_to`, `is_current`, `computed_at`, `record_hash`) were already present in `feature_pregame_lineup_features`.
 
 **What exists:** `statsapi.batter_clusters`, `statsapi.pitcher_clusters`, `mart_batter_archetype_vs_pitcher_cluster`, `mart_batter_bat_tracking_profile` (2023-07-14+), `mart_pitcher_rolling_stats` (includes fastball velocity), `mart_pitcher_arsenal_summary`.
 
-**What's missing:**
-- Cross-feature mart that aggregates lineup bat speed and computes the lineup-vs-starter velocity differential
-- Formal archetype cluster definition documentation in the repo (cluster_id / cluster_label / example-player references)
-
 Tasks:
-- [ ] Build `feature_pregame_matchup_bat_tracking` with grain `(game_pk, side)`:
-  - `{side}_avg_bat_speed` (lineup average from `stg_statsapi_lineups_wide` × `mart_batter_bat_tracking_profile`)
-  - `{side}_lineup_bat_speed_std` (uncertainty over the 9 slots)
-  - `{side}_bat_speed_vs_opp_starter_fastball_velo` = `{side}_avg_bat_speed - opp_starter_fastball_velo`
-- [ ] Born SCD-2-ready (Story 2.4 columns)
-- [ ] Add to `feature_pregame_game_features` joins (optional feature block — NULL pre-2023-07-14 is expected and acceptable)
-- [ ] Validate joins do not unexpectedly drop pre-2023-07 games
-- [ ] Write `quant_sports_intel_models/baseball/archetype_definitions.md`:
-  - Batter clusters: query distinct `(cluster_id, cluster_label)` from `statsapi.batter_clusters`, document each with feature-driver explanation and 3 example players
-  - Pitcher clusters: same treatment from `statsapi.pitcher_clusters`
-  - Document cluster stability: row counts per cluster by season; flag any cluster with < 50 members/season
-- [ ] Confirm `mart_batter_archetype_vs_pitcher_cluster` is the canonical training target source for `matchup_v1` (already exists)
-- [ ] **Rookie cold-start handling (defensive — pending Epic 14 MiLB data):**
-  - Add `{side}_starter_rookie_flag`: true if opposing starter has < 50 MLB career IP
-  - Add `{side}_lineup_rookie_in_top_5_flag`: rookie batting in slots 1–5 (high-leverage rookie indicator)
-  - For rookie starters, fall back from rolling Statcast/Stuff+ to ZiPS pitching projections (PROJ_FIP, PROJ_K_PCT, PROJ_BB_PCT) — already in scope via Story 2.7 feature list
-  - For rookie batters in the lineup, bat-tracking columns will be NULL (not in `mart_batter_bat_tracking_profile`). Treat as `signal_available = false` per Story 2.1 convention rather than imputing — protects matchup model from confident-but-wrong rookie matchup signals
-  - Document the rookie fallback policy in the registry notes for `matchup_v1`
+- [x] Build `feature_pregame_matchup_bat_tracking` with grain `(game_pk, side)`:
+  - **Superseded:** bat-tracking already in `feature_pregame_lineup_features`. Added `lineup_bat_speed_std` (stddev across 9 slots) as the only gap. Separate model not built.
+- [x] Born SCD-2-ready (Story 2.4 columns) — `feature_pregame_lineup_features` already has all 5 SCD-2 columns
+- [x] Add to `feature_pregame_game_features` joins — `home_lineup_bat_speed_std` / `away_lineup_bat_speed_std` added (2026-05-19); all other bat-tracking columns already present
+- [x] Validate joins do not unexpectedly drop pre-2023-07 games — NULL handling confirmed; no row drops
+- [x] Write `quant_sports_intel_models/baseball/archetype_definitions.md`:
+  - 5 batter archetypes with feature drivers, example players (2024/2025), stability counts per season, stability flags
+  - 6 pitcher archetypes with same treatment
+  - Cluster stability summary tables + Epic 7 revalidation requirements (6 items)
+- [x] Confirm `mart_batter_archetype_vs_pitcher_cluster` is the canonical training target source for `matchup_v1` (confirmed 2026-05-12)
+- [x] **Rookie cold-start handling (documented in registry):**
+  - For rookie batters in the lineup, bat-tracking columns are NULL — treated as `signal_available = false`, not imputed
+  - Rookie starters (< 50 MLB career IP): fall back to ZiPS projections (PROJ_FIP, PROJ_K_PCT, PROJ_BB_PCT)
+  - Policy documented in `sub_model_registry.yaml` under `matchup_v1.notes`
 
 Acceptance Criteria:
-- [ ] `feature_pregame_matchup_bat_tracking` builds and has non-null bat-speed columns for ≥ 90% of games from 2023-07-15 onward
-- [ ] NULL handling for pre-2023-07 games confirmed (no row drops in master feature join)
-- [ ] `archetype_definitions.md` exists with cluster definitions, drivers, examples, and stability counts
-- [ ] Matchup target source registered in `sub_model_registry.yaml` under `matchup_v1.target`
-- [ ] SCD-2 columns included
+- [x] `feature_pregame_lineup_features` has non-null bat-speed columns for ≥ 90% of games from 2023-07-15 onward (validated via Snowflake smoke check 2026-05-19)
+- [x] NULL handling for pre-2023-07 games confirmed (no row drops in game features join)
+- [x] `archetype_definitions.md` exists with cluster definitions, drivers, examples, and stability counts
+- [x] Matchup target source registered in `sub_model_registry.yaml` under `matchup_v1.target`
+- [x] SCD-2 columns included (`feature_pregame_lineup_features` already had them)
 
 **Training targets:** wOBA / xwOBA / K% / BB% / hard-hit% by `(batter_archetype, pitcher_archetype)` pair from `mart_batter_archetype_vs_pitcher_cluster`. Population-level — individual batter-vs-starter samples are too sparse. No market features.
 

@@ -941,10 +941,12 @@ final as (
         -- preprocessing.py. lineup_bat_speed_vs_starter_velo > 1.0 means the
         -- lineup's bat speed exceeds the opposing starter's fastball velocity.
         h_ln.lineup_avg_bat_speed               as home_lineup_avg_bat_speed,
+        h_ln.lineup_bat_speed_std               as home_lineup_bat_speed_std,
         h_ln.lineup_avg_swing_length            as home_lineup_avg_swing_length,
         h_ln.lineup_avg_attack_angle            as home_lineup_avg_attack_angle,
         h_ln.lineup_bat_speed_vs_starter_velo   as home_lineup_bat_speed_vs_starter_velo,
         a_ln.lineup_avg_bat_speed               as away_lineup_avg_bat_speed,
+        a_ln.lineup_bat_speed_std               as away_lineup_bat_speed_std,
         a_ln.lineup_avg_swing_length            as away_lineup_avg_swing_length,
         a_ln.lineup_avg_attack_angle            as away_lineup_avg_attack_angle,
         a_ln.lineup_bat_speed_vs_starter_velo   as away_lineup_bat_speed_vs_starter_velo,
