@@ -230,3 +230,4 @@ The system is successful when the Bayesian alpha calibration returns a meaningfu
 The current state — alpha=0, no detectable edge — reflects an honest starting point. The models are accurate but not yet better than the market at the combined-prediction level. The sub-model architecture is the path toward generating independent domain knowledge that the market consistently underweights.
 
 Every piece of infrastructure built since Phase 8 — environment isolation, market-blind retrains, temporal data foundations, sub-model storage, feature audits — was built with this destination in mind.
+
