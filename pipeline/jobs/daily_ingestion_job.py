@@ -1,4 +1,4 @@
-from dagster import job
+from dagster import in_process_executor, job
 
 from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
@@ -29,7 +29,7 @@ from pipeline.ops.daily_ingestion_ops import (
 )
 
 
-@job
+@job(executor_def=in_process_executor)
 def daily_ingestion_job():
     s1 = ingest_odds_api_events()
     s2 = ingest_odds_api_odds(start=s1)
