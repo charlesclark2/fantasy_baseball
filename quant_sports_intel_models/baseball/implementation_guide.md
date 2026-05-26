@@ -881,10 +881,10 @@ Re-ingests Stats API schedule to capture lineup/score updates throughout the day
 
 **Tasks:**
 
-- [ ] Implement `lineup_monitor_sensor` — polls `stg_statsapi_lineups` (or runs `lineup_monitor.py` as a subprocess) on a tick interval; emits a `RunRequest` with the list of newly-confirmed `game_pks` when new lineups are detected; downstream job runs predictions + odds snapshot + dbt rebuild
-- [ ] Implement `pregame_snapshot_sensor` — polls for games entering the pre-game window on 30-min ticks; emits `RunRequest` if any pre-game games found; downstream job captures odds + dbt rebuild
-- [ ] Ensure sensor tick failures (transient API errors) do not cascade — use `SkipReason` rather than exceptions for "no new lineups" / "no pre-game games" outcomes
-- [ ] Preserve the `--game-pks` argument passthrough to `predict_today.py` in the lineup sensor's downstream job
+- [x] Implement `lineup_monitor_sensor` — runs `lineup_monitor.py` as a subprocess on 3600s ticks; emits `RunRequest` with `game_pks` in `lineup_predict` op config when new lineups detected (`pipeline/sensors/lineup_monitor_sensor.py`)
+- [x] Implement `pregame_snapshot_sensor` — runs `pregame_snapshot.py` as a subprocess on 1800s ticks; emits `RunRequest` if pre-game games found (`pipeline/sensors/pregame_snapshot_sensor.py`)
+- [x] Ensure sensor tick failures (transient API errors) do not cascade — subprocess errors yield `SkipReason` rather than raising exceptions
+- [x] Preserve the `--game-pks` argument passthrough to `predict_today.py` in the lineup sensor's downstream job (`lineup_predict` op reads from `context.op_config["game_pks"]`)
 
 **Acceptance criteria:**
 

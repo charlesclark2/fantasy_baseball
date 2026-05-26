@@ -1,1 +1,4 @@
-all_sensors = []
+from pipeline.sensors.lineup_monitor_sensor import lineup_monitor_sensor
+from pipeline.sensors.pregame_snapshot_sensor import pregame_snapshot_sensor
+
+all_sensors = [lineup_monitor_sensor, pregame_snapshot_sensor]
