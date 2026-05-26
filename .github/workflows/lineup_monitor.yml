@@ -100,10 +100,11 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PARLAY_API_KEY: ${{ secrets.PARLAY_API_KEY }}
         run: |
-          uv run odds_api_ingestion.py events
-          uv run odds_api_ingestion.py odds
+          uv run parlay_api_ingestion.py events
+          uv run parlay_api_ingestion.py odds
+          uv run parlay_api_ingestion.py line-movement
 
       # Rebuild CLV mart to incorporate the new post-lineup odds snapshot
       - name: Rebuild CLV mart after post-lineup odds capture

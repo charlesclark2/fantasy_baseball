@@ -1,7 +1,7 @@
 # MLB Quantitative Intelligence — Implementation Guide
 
 Version: Draft 0.5
-Status: In Progress — Epic 0 complete pending cutover (0.7); Epic DEV added (environment isolation)
+Status: In Progress — Epic 0 complete ✅ (cutover 2026-05-26); Epic DEV added (environment isolation)
 Companion to: `refined_architecture_proposal.md`
 
 ---
@@ -75,7 +75,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │ Track A — Foundational / Data Integrity (highest priority on the urgent bit)│
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ Epic 0    (Parlay API Migration)       — Immediate. Hard deadline: 2026-06-01.
-│   Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ → 0.9✅ → 0.10✅ → 0.7 (cutover)
+│   Story order: 0.1✅ → 0.2✅ → 0.3✅ → 0.4✅ → 0.5✅ → 0.6✅ → 0.8✅ → 0.9✅ → 0.10✅ → 0.7✅ (cutover complete 2026-05-26)
 │ Epic DEV  (Environment Isolation) ✅   — Complete.
 │ Epic T    (Temporal Capture Foundations) ✅ — Complete. All stories shipped 2026-05-12.
 │                                          Two monitoring-window ACs pending (T.1.B, T.2.D);
@@ -499,22 +499,27 @@ Tasks:
 
 ---
 
-### 0.7 — Cutover validation and monitoring
+### 0.7 — Cutover validation and monitoring ✅
 
-**Validation status as of 2026-05-14:**
-- Parlay API ingestion live since 2026-05-10 (4 days of parallel data)
-- Overlap period (May 10–14): 51 total games; 51 have Odds API IDs, 41 have Parlay API IDs
-- **Coverage gap:** 10 games across May 11–13 have Odds API coverage but no Parlay API match (3–4 games/day). Root cause TBD — likely a team-name matching issue in the bridge join.
-- `mart_bookmaker_disagreement` is stale at 2026-04-28 — not yet consuming Parlay API data
-- `mart_game_odds_bridge` is populating both `odds_api_event_id` and `parlay_api_event_id` correctly for matched games
+**Validation status as of 2026-05-26 — COMPLETE:**
+- Parlay API ingestion live since 2026-05-10 (16 days of parallel data)
+- Overlap period (May 10–25): 214 total games; 201 have `has_odds = true` (94%); 165 have Parlay API IDs (77%)
+- Coverage gaps explained: May 12–13 early deployment instability (not recoverable); May 17 complete pipeline outage during Dagster migration (both APIs missed); May 18/20 timing artifacts from ingestion running after some games started. Not systematic Parlay API failures.
+- Since May 21 (Dagster pipeline stable): 100% Parlay API coverage for 5 consecutive days
+- `has_odds` flag confirmed working correctly — gaps trace to pipeline outage days only
+- Odds API steps disabled in `daily_ingestion.yml` on 2026-05-26 (`if: false`; code retained for reactivation)
+
+**Source date ranges:**
+- Odds API (`baseball_data.oddsapi`): 2021 season – 2026-05-25 (last ingestion; retained, no deletions)
+- Parlay API (`baseball_data.parlayapi`): 2026-05-10 – present (live source)
 
 Tasks:
-- [x] Run parallel ingestion for at least 3–5 days — **4 days complete as of 2026-05-14** (May 10–14)
-- [ ] Investigate 10-game Parlay API coverage gap (May 11–13) — likely bridge join mismatch on team names
+- [x] Run parallel ingestion for at least 3–5 days — **16 days complete** (May 10–25)
+- [x] Investigate 10-game Parlay API coverage gap (May 11–13) — root cause: early deployment instability during initial script deployment; not recoverable; not a systematic issue
 - [x] Verify that `mart_bookmaker_disagreement` consensus line and bookmaker spread are consistent across sources for the overlap period — **fixed 2026-05-14**: root causes were (1) event ID mismatch (bridge uses parlay_api_event_id but morning Odds API data has odds_api_event_id) and (2) 6:00–8:30 AM ET window didn't capture Parlay data (arrives from prior-evening near-close ~9:30 PM ET). Fixed: OR join on odds_api_event_id fallback + new window (same-day or prior-UTC-day date filter, capped at noon ET). Coverage: 261 games April 23–May 13 (was 4).
-- [ ] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data after Story 0.8 bridge update
-- [ ] After validation: disable Odds API ingestion steps in GitHub Actions (2026-05-23 target, no later than 2026-06-01)
-- [ ] Document which date range is covered by each source in `baseball_data_mart_inventory.md`
+- [x] Confirm `feature_pregame_game_features.has_odds` flag fires correctly from Parlay API data — confirmed 2026-05-26; 201/214 games have `has_odds = true` since May 10; gaps explained by pipeline outage days
+- [x] After validation: disable Odds API ingestion steps in GitHub Actions — **done 2026-05-26**; `if: false` added to both steps in `daily_ingestion.yml`; merged to `main`
+- [x] Document which date range is covered by each source — see Source date ranges above
 
 ---
 
@@ -847,11 +852,11 @@ Re-ingests Stats API schedule to capture lineup/score updates throughout the day
 
 **Tasks:**
 
-- [ ] Implement the games-check gate as a shared Dagster sensor or an asset check that is evaluated before each odds snapshot job; if no games today, skip all downstream steps without failing
-- [ ] Implement the 17-cron odds snapshot schedule — Dagster supports multiple cron strings per schedule; define a single `MultiPartitionsDefinition` or a list of `ScheduleDefinition` objects pointing to the same job
-- [ ] Implement intraday weather as an hourly `ScheduleDefinition` (cron `0 10-23 * * *` + `0 0-2 * * *`)
-- [ ] Implement intraday schedule capture as a 30-minute `ScheduleDefinition`
-- [ ] Confirm dbt odds model rebuild (`+stg_oddsapi_events+ +stg_oddsapi_odds+ stg_parlayapi_odds mart_closing_line_value mart_prediction_clv`) runs after each odds snapshot ingestion step
+- [x] Implement the games-check gate as a shared Dagster sensor or an asset check that is evaluated before each odds snapshot job; if no games today, skip all downstream steps without failing
+- [x] Implement the 17-cron odds snapshot schedule — 17 `ScheduleDefinition` objects pointing at `odds_snapshot_job` (`pipeline/schedules/intraday_schedules.py`)
+- [x] Implement intraday weather as an hourly `ScheduleDefinition` (cron `0 10-23 * * *` + `0 0-2 * * *`)
+- [x] Implement intraday schedule capture as a 30-minute `ScheduleDefinition`
+- [x] Confirm dbt odds model rebuild (`+stg_oddsapi_events+ +stg_oddsapi_odds+ stg_parlayapi_odds mart_closing_line_value mart_prediction_clv`) runs after each odds snapshot ingestion step
 
 **Acceptance criteria:**
 
@@ -2033,6 +2038,42 @@ Script: `betting_ml/scripts/ablation_run_env_signals.py`
 
 ---
 
+# Epic 3A — Empirical Bayes Park Factor Smoothing
+
+**Prerequisite:** Epic 3 complete (run environment model v3 champion).
+
+**Goal:** Replace hard league-mean imputation for low-sample venues with EB-smoothed park run factors. Affects the ~2% of games at non-standard venues (Oakland at Sutter Health, Tokyo Dome, neutral-site games).
+
+**Why league-mean Normal prior is sufficient here:** Unlike players, park factors don't have an "age" or "role." The cross-park distribution of run factors is well-characterized, and the goal is simply to shrink low-sample venues toward the league mean proportionally to sample size. No stratification needed.
+
+---
+
+### 3A.1 — Fit cross-park Normal prior and compute EB-smoothed park factors
+
+**Script:** `betting_ml/scripts/eb_priors/fit_park_priors.py`
+
+**Prior structure:** Normal(μ, σ²) fit to the cross-park distribution of 3-year rolling run factors. One prior per season (re-fit annually).
+
+Tasks:
+- [ ] Compute venue-level 3-year rolling run factor for all venues with ≥ 100 games in the window from `mart_game_results` grouped by `venue_id`; this is the "observed" park factor
+- [ ] Fit Normal(μ, σ²) to the cross-park distribution of these observed factors — this is the prior
+- [ ] For each venue × season, compute EB posterior: μ_post = (μ₀/σ₀² + n×x̄/σ²) / (1/σ₀² + n/σ²) where n = games at that venue in the 3-year window and x̄ = observed run factor
+- [ ] For venues with n < 30 games (non-standard venues), posterior shrinks heavily toward μ₀ — desired behavior
+- [ ] For Coors Field (known extreme outlier with large n), posterior should be close to observed — prior has minimal influence
+- [ ] Store output as `mart_eb_park_factors` with columns: `venue_id`, `season`, `eb_park_run_factor`, `eb_park_run_factor_uncertainty`, `n_games`, `raw_park_run_factor`, `shrinkage_factor` (how much the raw was pulled toward the mean)
+- [ ] Build dbt model `mart_eb_park_factors` sourced from the Python output
+- [ ] Replace the `park_run_factor_3yr` null imputation in `train_run_env_v3.py` with `eb_park_run_factor` — the EB value is always non-null, eliminating the imputation step entirely
+- [ ] Update `generate_run_env_signals.py` to use `eb_park_run_factor` instead of raw park factor when available
+
+Acceptance criteria:
+- [ ] `eb_park_run_factor` is non-null for 100% of games (including Sutter Health, Tokyo Dome, neutral sites)
+- [ ] Shrinkage factor for Coors Field (large n) is < 0.05 (prior has minimal influence)
+- [ ] Shrinkage factor for Sutter Health Park (small n) is > 0.50 (prior dominates)
+- [ ] `mart_eb_park_factors` passes not_null and unique-per-(venue, season) dbt tests
+- [ ] Re-run `train_run_env_v3.py` with EB park factors: CV MAE does not degrade vs. league-mean imputation baseline; document delta in registry notes
+
+---
+
 # Epic 4 — Offensive Quality Model
 
 **Goal:** Build a pre-game lineup quality signal that is independent of market data.
@@ -2073,6 +2114,102 @@ Tasks:
 - [ ] Add offensive signals to H2H and totals feature matrices
 - [ ] Temporal CV comparison
 - [ ] Gate before production integration
+
+---
+
+# Epic 4A — Empirical Bayes Lineup Rate Stabilization
+
+**Prerequisite:** Epic 2 complete (sub-model storage and registry). Epic 4 Story 4.1 (training dataset defined).
+
+**Goal:** Replace raw rolling wOBA/K%/BB% estimates in `feature_pregame_lineup_features` with empirical Bayes shrinkage estimates stratified by batting order role, handedness, and season. Eliminates small-sample noise from early-season and limited-PA batter slots without discarding the data entirely.
+
+**Why this prior structure:** A single league-average prior treats a 3-hole cleanup hitter and a 9-hole placeholder as drawn from the same talent distribution — they are not. Role × handedness stratification captures the structural differences in who occupies each part of a lineup. Season-level re-fitting captures league-wide offensive environment shifts (pitch clock era, shift ban) automatically.
+
+---
+
+### 4A.1 — Fit role × handedness priors per season
+
+**Script:** `betting_ml/scripts/eb_priors/fit_lineup_priors.py`
+
+**Prior structure:**
+- Role groups: top (slots 1–3), middle (slots 4–6), bottom (slots 7–9)
+- Handedness: L, R, S (switch — treated as R-dominant for distribution fitting)
+- Seasons: 2021–current (matching the offensive model training window from Story 2.5)
+- Metric: fit separate Beta(α, β) distributions for wOBA, K%, BB%, ISO per role × handedness × season cell using method of moments on all qualified batters (≥ 100 PA in that season)
+
+Tasks:
+- [ ] Query `mart_batter_season_stats` (or equivalent rolling source) for all batters 2021–current with PA ≥ 100, grouped by season, handedness, and typical batting order position (mode slot from game logs)
+- [ ] Assign role group from mode batting order slot: slots 1–3 → top, 4–6 → middle, 7–9 → bottom
+- [ ] For each (metric, role, handedness, season) cell, fit Beta(α, β) via method of moments: α = μ(μ(1−μ)/σ² − 1), β = (1−μ)(μ(1−μ)/σ² − 1). For ISO (can exceed 1.0), fit a scaled Beta or use Normal-Normal instead — document the decision
+- [ ] Store fitted priors in `betting_ml/models/eb_priors/lineup_priors_{season}.json` with schema: `{metric: {role: {handedness: {alpha, beta, mu, sigma, n_batters}}}}`
+- [ ] Add a prior-quality check: flag any cell where n_batters < 20 and fall back to the role-level prior ignoring handedness; document with `fallback: true` flag in JSON
+- [ ] Add `fit_lineup_priors.py` to `daily_ingestion.yml` as a seasonal step (re-run once per season — gate on game_date within 7 days of Opening Day or triggered manually)
+
+Acceptance criteria:
+- [ ] Priors exist for all (metric × role × handedness × season) cells with ≥ 20 qualifying batters
+- [ ] Cells with < 20 batters fall back to role-only prior (handedness collapsed); documented in JSON with `fallback: true`
+- [ ] Prior mu values are directionally sensible: top role wOBA prior > bottom role wOBA prior for every season
+- [ ] ISO handling decision documented: Beta (scaled) or Normal-Normal, with reasoning in a comment block at top of script
+
+---
+
+### 4A.2 — Compute posterior estimates per batter-slot
+
+**Script:** `betting_ml/scripts/eb_priors/compute_lineup_posteriors.py`
+
+**Posterior update rule (Beta-Binomial for rate stats):** For each batter in each lineup slot on a given game date, look up the prior Beta(α, β) for their (metric, role, handedness, season) cell, observe their current-season PA and metric rate, and compute posterior mean = (α + successes) / (α + β + PA). Store posterior variance as `eb_woba_uncertainty`.
+
+Tasks:
+- [ ] For each batter in `stg_statsapi_lineups` for game date T, compute current-season PA and rate stats from `mart_batter_season_stats` filtered to dates strictly < T (leakage guard)
+- [ ] Load appropriate season prior from `lineup_priors_{season}.json` matching the batter's role group and handedness
+- [ ] Compute posterior mean and posterior variance for each metric (wOBA, K%, BB%, ISO)
+- [ ] Handle zero-PA case (true rookie debut): posterior = prior mean (α / (α+β)) with `pa_weight = 0` flag — replaces `lineup_rookie_count` null with a principled prior-mean estimate
+- [ ] Handle ZiPS interaction: when current-season PA < 50, blend the EB posterior with ZiPS projection using PA-weighted harmonic: `eb_weight = min(PA / 150, 1.0)`, `final_estimate = eb_weight × eb_posterior + (1 − eb_weight) × zips_projection`. At 0 PA the estimate is pure ZiPS; at 150+ PA pure EB posterior. Document the 150 PA stabilization threshold.
+- [ ] Output: one row per (game_pk, batting_slot, batter_id) with columns: `eb_woba`, `eb_k_pct`, `eb_bb_pct`, `eb_iso`, `eb_woba_uncertainty`, `pa_weight`, `eb_data_source ∈ {full_eb, zips_blend, prior_only}`
+
+Acceptance criteria:
+- [ ] A batter with 0 PA receives `eb_data_source = prior_only`; value equals the prior mean for their role × handedness cell; `lineup_rookie_count` still populated correctly (no regression)
+- [ ] A batter with 200 PA receives `eb_data_source = full_eb`; value is close to observed rate but shrunk toward the role prior proportional to PA vs. prior strength (α+β)
+- [ ] Leakage guard verified: no batter's game-date stats include events from game date T or later
+- [ ] ZiPS blend transitions smoothly: at PA=75, `eb_weight = 0.5` and estimate is halfway between ZiPS and raw EB posterior
+
+---
+
+### 4A.3 — Extend feature_pregame_lineup_features with EB columns
+
+**dbt model:** `dbt/models/feature/feature_pregame_lineup_features.sql`
+
+Tasks:
+- [ ] Add a new source entry in `sources.yml` for the EB posterior output table (write target of Story 4A.2's Python script)
+- [ ] Join EB posterior outputs to `feature_pregame_lineup_features` on (game_pk, batting_slot, batter_id)
+- [ ] Aggregate slot-level EB estimates to lineup-level: `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso` (PA-weighted average across 9 slots), `avg_eb_woba_uncertainty` (mean posterior variance), `eb_coverage_pct` (fraction of slots with pa_weight > 0)
+- [ ] Retain existing raw rolling columns (`avg_woba_30d`, `injury_adj_avg_woba_30d`) — do NOT replace; add EB estimates as additional columns for ablation testing
+- [ ] Update `schema.yml` with descriptions and not_null tests on all new EB columns; `eb_coverage_pct` should always be non-null (0.0 when no PA data exists for any slot)
+
+Acceptance criteria:
+- [ ] `dbtf build --target dev --select feature_pregame_lineup_features` green
+- [ ] `avg_eb_woba` is non-null for 100% of games in the 2021–2026 window (prior-only fills all gaps)
+- [ ] `avg_eb_woba` correlates with `avg_woba_30d` at r > 0.80 for games with PA > 100 across the lineup
+- [ ] For April games (low PA), `avg_eb_woba` shows less variance than `avg_woba_30d` — shrinkage is working
+- [ ] `eb_coverage_pct` distinguishes true cold-start lineups from established ones
+
+---
+
+### 4A.4 — Ablation test: EB vs. raw rates in offense sub-model
+
+**Script:** `betting_ml/scripts/ablation_eb_lineup_features.py`
+
+Tasks:
+- [ ] Train offense_v1 twice: once with raw rolling rate columns, once with EB posterior columns, on identical walk-forward CV folds (2021→2022, …, 2024→2025)
+- [ ] Compare: CV MAE on team runs scored, April-only MAE (where small-sample noise is highest), RMSE, Pearson r
+- [ ] Secondary comparison: evaluate on games where `eb_coverage_pct < 0.5` (lineups with many low-PA batters) — where EB should show the largest improvement
+- [ ] Report `eb_woba_uncertainty` correlation with model residuals — if EB uncertainty is a useful signal, it should correlate with prediction error magnitude
+
+Acceptance criteria:
+- [ ] April-only MAE with EB columns ≤ April-only MAE with raw columns (EB should win on small samples)
+- [ ] Full-season CV MAE delta documented; promote EB columns to primary if delta > 0 in EB's favor, retain raw as secondary if delta within noise
+- [ ] `eb_woba_uncertainty` vs. residual correlation documented — if |r| > 0.10, add `avg_eb_woba_uncertainty` as a standalone feature in offense_v1
+- [ ] Results written to `models/sub_models/offense_v1/ablation_eb_lineup_{ts}.json`
 
 ---
 
@@ -2117,6 +2254,89 @@ Tasks:
 - [ ] Add signals to H2H and totals feature matrices
 - [ ] Temporal CV comparison
 - [ ] Gate before production integration
+
+---
+
+# Epic 5A — Empirical Bayes Starter Quality Stabilization
+
+**Prerequisite:** Story 2.7 complete. Epic 5 Story 5.1 (training dataset defined).
+
+**Goal:** Replace raw in-season xwOBA-against estimates for starters in `mart_starting_pitcher_game_log` with Normal-Normal empirical Bayes shrinkage estimates stratified by age band and season. Improves early-season and IL-return starter quality estimation.
+
+**Why this prior structure:** Pitcher aging curves are well-documented and age meaningfully stratifies the true talent distribution for xwOBA-against. A 22-year-old's first 3 starts should shrink toward a different population mean than a 35-year-old's first 3 starts after IL return. Season-level fitting captures era shifts.
+
+---
+
+### 5A.1 — Fit age-band × season Normal priors for starter xwOBA
+
+**Script:** `betting_ml/scripts/eb_priors/fit_starter_priors.py`
+
+**Prior structure:**
+- Age bands: <25, 25–29, 30–32, 33+ (aligned with known pitcher aging curve inflection points)
+- Seasons: 2016–current (starter data available back to 2016 in `mart_starting_pitcher_game_log`)
+- Qualified sample: starters with ≥ 10 starts or ≥ 150 BF in the season
+- Metric: xwOBA-against (primary), K% per BF, BB% per BF
+- Method: fit Normal(μ, σ²) per (metric, age band, season) cell using MLE (sample mean and variance)
+
+Tasks:
+- [ ] Query `mart_starting_pitcher_game_log` with pitcher age at game date (from `stg_statsapi_players.birth_date`) for all qualified starters 2016–current
+- [ ] Assign age band at season start (use age on April 1 of each season for consistency)
+- [ ] For each (metric, age band, season) cell, compute μ = sample mean, σ² = sample variance among qualified starters; store `n_starters` for quality check
+- [ ] Flag cells with n_starters < 15 and fall back to the age-band-only prior (season collapsed) — the 33+ band will frequently be thin
+- [ ] Store priors in `betting_ml/models/eb_priors/starter_priors_{season}.json` with schema: `{metric: {age_band: {mu, sigma, n_starters, fallback}}}`
+- [ ] Add a prior sanity check: mu for <25 age band should be higher (worse) than 25–29 for xwOBA-against — young starters allow more contact quality; log a warning if this monotonicity is violated in any season
+
+Acceptance criteria:
+- [ ] Priors exist for all (metric × age band × season) cells 2016–current
+- [ ] Monotonicity check passes: `mu_xwoba[<25] > mu_xwoba[25-29]` for all seasons in fitted output
+- [ ] 33+ band fallback documented; cells using fallback flagged in JSON
+
+---
+
+### 5A.2 — Compute posterior estimates per starter-game
+
+**Script:** `betting_ml/scripts/eb_priors/compute_starter_posteriors.py`
+
+**Posterior update rule (Normal-Normal conjugate):** For each starter on game date T, posterior mean = (μ₀/σ₀² + n×x̄/σ²) / (1/σ₀² + n/σ²); posterior variance = 1 / (1/σ₀² + n/σ²). At BF = 0 (debut), posterior = prior. As BF → ∞, posterior collapses to observed rate.
+
+Tasks:
+- [ ] For each starter in a game scheduled for date T, compute current-season BF and xwOBA-against from `mart_starting_pitcher_game_log` filtered strictly to dates < T (leakage guard)
+- [ ] Load age-band prior for the pitcher's age on April 1 of the current season
+- [ ] Compute posterior mean and variance for xwOBA-against, K% per BF, BB% per BF
+- [ ] IL-return handling: if a pitcher has ≥ 10 starts from the prior season but 0–2 starts in the current season (current_season_starts < 3 AND prior_season_starts ≥ 10), blend: 50% current-season posterior + 50% prior-season observed rate as adjusted prior before age-band shrinkage. Document as IL-return adjustment.
+- [ ] Debut handling (0 BF in career): posterior = prior mean; `eb_data_source = prior_only`
+- [ ] Output: one row per (game_pk, pitcher_id) with columns: `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty`, `current_season_bf`, `eb_data_source ∈ {full_eb, il_return_blend, prior_only}`
+
+Acceptance criteria:
+- [ ] A pitcher debuting (0 BF) receives `prior_only` with value = age-band prior mean; value directionally sensible (young pitcher prior ≈ 0.320–0.340 xwOBA-against)
+- [ ] A pitcher with 500 BF in-season receives `full_eb` with value very close to their observed rate (prior has minimal influence)
+- [ ] IL-return blend fires correctly: pitcher with `current_season_starts = 1`, `prior_season_starts = 28` gets `il_return_blend`; estimate blends current sparse data with prior-season history
+- [ ] Leakage guard verified: no game-date's posterior includes that game's stats
+
+---
+
+### 5A.3 — Propagate EB starter estimates into the starter feature mart
+
+**dbt model:** update `feature_pregame_starter_features` (or equivalent model feeding `feature_pregame_game_features`)
+
+Tasks:
+- [ ] Add source entry for EB starter posterior output table
+- [ ] Join on (game_pk, starter_pitcher_id) for both home and away starters
+- [ ] Add columns: `home_eb_starter_xwoba_against`, `home_eb_starter_k_pct`, `home_eb_starter_bb_pct`, `home_eb_starter_xwoba_uncertainty`, `home_eb_starter_data_source` (and equivalent `away_*` columns)
+- [ ] Retain existing raw columns (`home_starter_xwoba_30d`, ZiPS projections) — add EB as additional columns, do not replace
+- [ ] Update `schema.yml` with descriptions, not_null tests on EB columns (always non-null — prior-only fills gaps)
+
+Acceptance criteria:
+- [ ] `dbtf build --target dev --select feature_pregame_starter_features` green
+- [ ] `home_eb_starter_xwoba_against` is non-null for 100% of games (prior fills gaps)
+- [ ] Correlation between `eb_xwoba_against` and `xwoba_30d` is r > 0.75 for games with BF > 200
+- [ ] April game variance for `eb_xwoba_against` is lower than `xwoba_30d` — confirming shrinkage
+
+---
+
+### 5A.4 — Ablation test: EB vs. raw starter features in suppression model
+
+Same structure as Story 4A.4 applied to starter_v1. Compare CV xwOBA prediction error with raw vs. EB starter features. Specific focus: performance on games where `current_season_bf < 100` (early season and IL returns).
 
 ---
 
@@ -2173,6 +2393,93 @@ Tasks:
 
 ---
 
+# Epic 6A — Empirical Bayes Bullpen Quality Stabilization
+
+**Prerequisite:** Epic 6 Story 6.1 (bullpen training dataset defined).
+
+**Goal:** Produce stabilized reliever-level xwOBA-against estimates using Normal-Normal shrinkage stratified by leverage role and age band, then aggregate to team-level bullpen quality signals. Replaces noisy raw reliever rates as inputs to the bullpen state index.
+
+**Why this prior structure:** Reliever leverage role is the dominant structural stratification — closer-tier arms have meaningfully different true talent than mop-up arms. Age band captures the fast decline curves typical of high-velocity relievers. Season-level fitting captures era shifts.
+
+---
+
+### 6A.1 — Fit leverage role × age-band × season Normal priors for relievers
+
+**Script:** `betting_ml/scripts/eb_priors/fit_bullpen_priors.py`
+
+**Prior structure:**
+- Leverage role (assigned from prior-season average Leverage Index from `mart_bullpen_leverage`):
+  - `closer_tier`: aLI ≥ 1.5
+  - `high_leverage`: 1.0 ≤ aLI < 1.5
+  - `low_leverage`: aLI < 1.0
+  - `no_prior_season`: relievers with no prior-season MLB appearances — use age-band-only prior
+- Age bands: <26, 26–30, 31–34, 35+ (reliever aging curves are steeper and faster than starters)
+- Minimum sample: ≥ 20 appearances or ≥ 25 IP in the prior season to qualify for role assignment
+- Metric: xwOBA-against, K% per BF, BB% per BF
+
+Tasks:
+- [ ] Query `mart_bullpen_effectiveness` or `mart_bullpen_leverage` joined to reliever game logs; compute prior-season aLI and xwOBA-against per reliever
+- [ ] Assign leverage role from prior-season aLI; for relievers with no qualifying prior season, assign `no_prior_season`
+- [ ] Fit Normal(μ, σ²) per (metric, leverage role, age band, season) cell using qualified relievers
+- [ ] Flag cells with n_relievers < 10 and fall back to the leverage-role-only prior (age band collapsed); flag in JSON
+- [ ] Store priors in `betting_ml/models/eb_priors/bullpen_priors_{season}.json`
+- [ ] Sanity check: `mu_xwoba[closer_tier] < mu_xwoba[high_leverage] < mu_xwoba[low_leverage]` for every season — better arms should have lower xwOBA; log warning if violated
+
+Acceptance criteria:
+- [ ] Priors exist for all (metric × leverage role × age band × season) cells
+- [ ] Role-quality monotonicity check passes for all seasons
+- [ ] `no_prior_season` role uses age-band-only prior; fallback documented
+
+---
+
+### 6A.2 — Compute posterior estimates per reliever-game
+
+**Script:** `betting_ml/scripts/eb_priors/compute_bullpen_posteriors.py`
+
+Same Normal-Normal conjugate update as Story 5A.2, applied at the reliever level.
+
+Additional considerations:
+- **Role evolution:** a reliever whose current-season aLI diverges from their prior-season role by more than one tier gets a `role_changed` flag for downstream use
+- **Transaction recency:** for mid-season acquisitions, use receiving team's bullpen prior as soft adjustment — documented as known limitation (v1 does not implement; v2 candidate)
+- **Aggregation to team level:** after computing per-reliever posteriors, aggregate to (game_pk, team) grain: `team_eb_bullpen_xwoba` = IP-weighted average of active roster relievers' `eb_xwoba_against`; `team_eb_bullpen_uncertainty` = IP-weighted mean posterior variance
+
+Output: one row per (game_pk, reliever_id) at individual level; one row per (game_pk, team) at aggregated level for downstream feature mart consumption.
+
+Tasks:
+- [ ] Implement Normal-Normal posterior for each reliever on game date T filtered strictly < T (leakage guard)
+- [ ] Load prior from `bullpen_priors_{season}.json` using prior-season leverage role assignment
+- [ ] Compute `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty` per reliever-game
+- [ ] Set `role_changed` flag when current-season aLI diverges from prior-season role by more than one tier
+- [ ] Aggregate to team level: IP-weighted `team_eb_bullpen_xwoba` and `team_eb_bullpen_uncertainty`
+- [ ] Output individual and team-level tables
+
+Acceptance criteria:
+- [ ] A rookie reliever (0 MLB appearances) receives `prior_only` with age-band prior mean
+- [ ] A 3-year veteran closer with 200 current-season BF receives `full_eb` close to their observed rate
+- [ ] `role_changed` flag fires correctly on known mid-season role changes (spot-check 3 known cases from 2024–2025)
+- [ ] `team_eb_bullpen_xwoba` is non-null for all games; `team_eb_bullpen_uncertainty` reflects lineup depth (team with 4 `prior_only` relievers has higher uncertainty than one with all veterans)
+
+---
+
+### 6A.3 — Propagate EB bullpen estimates into bullpen feature mart
+
+**dbt model:** extend `mart_bullpen_effectiveness` or equivalent
+
+Tasks:
+- [ ] Add source entry for EB bullpen posterior output (aggregated team-level table)
+- [ ] Join on (game_pk, team) for home and away sides
+- [ ] Add columns: `home_eb_bullpen_xwoba`, `home_eb_bullpen_uncertainty`, `home_eb_bullpen_coverage_pct` (fraction of projected bullpen arms with `full_eb` vs. `prior_only`), `away_*` equivalents
+- [ ] Retain raw columns for ablation
+- [ ] Update `schema.yml`
+
+---
+
+### 6A.4 — Ablation test: EB vs. raw bullpen features in Epic 6 model
+
+Same structure as 4A.4 and 5A.4. Specific focus: performance on games early in the season (April, where prior-season role assignments are newest) and on games following heavy bullpen usage (where uncertainty is highest and the EB uncertainty column should be informative).
+
+---
+
 # Epic 7 — Archetype Clustering (Prerequisite for Epic 8)
 
 **Goal:** Define batter archetypes and pitcher archetypes as cluster labels that can be used in the matchup model.
@@ -2209,6 +2516,77 @@ Tasks:
 Tasks:
 - [ ] Assign archetype labels to all historical batter-pitcher appearances in training window
 - [ ] Validate temporal stability: do cluster assignments shift significantly year-to-year? (Expected: yes for developing players — handle appropriately)
+
+---
+
+# Epic 7A — Dirichlet Prior Soft Cluster Assignment for Archetype Cold-Start
+
+**Prerequisite:** Epic 7 Stories 7.1 and 7.2 (batter and pitcher archetypes defined and labeled). Story 2.9 complete.
+
+**Goal:** Replace hard archetype assignment for low-PA batters and rookie starters with Dirichlet posterior soft cluster membership probabilities. Enables the matchup model (Epic 8) to propagate uncertainty over archetype assignment into the matchup signal rather than assuming a deterministic cluster label.
+
+**Why Dirichlet:** Archetype membership is a categorical variable with K classes (K ≈ 5–6 per population). The Dirichlet distribution is the conjugate prior over categorical distributions, making it the natural generalization of the Beta distribution for multi-class membership uncertainty. Unlike Beta-Binomial (binary) or Normal-Normal (continuous), Dirichlet handles the multi-class soft assignment problem cleanly.
+
+---
+
+### 7A.1 — Fit Dirichlet prior over archetype membership
+
+**Script:** `betting_ml/scripts/eb_priors/fit_archetype_priors.py`
+
+**Prior structure:**
+- One symmetric Dirichlet(α) per population (batters, pitchers) and age band, where α = (α₁, ..., αK) proportional to the fraction of qualified players in that cluster
+- Age band concentration parameters (higher total α = stronger prior, less uniform):
+  - <24: total α = 5 (high uncertainty — widest Dirichlet)
+  - 24–27: total α = 15 (moderate)
+  - 28+: total α = 30 (strong prior toward prior-season cluster if available)
+- For players with confirmed prior-season cluster label (≥ 100 PA in prior season): peaked Dirichlet with that cluster's αk = 0.8 × total_α, remaining 0.2 × total_α distributed uniformly
+
+Tasks:
+- [ ] From completed Epic 7 cluster assignments, compute empirical distribution over archetypes per age band: π_k = P(cluster = k | age_band) — this is the Dirichlet concentration vector
+- [ ] Scale concentration parameters by age band per structure above
+- [ ] For players with prior-season cluster label, build peaked Dirichlet per the 80/20 rule above
+- [ ] Store concentration vectors in `betting_ml/models/eb_priors/archetype_priors.json`
+- [ ] Validate concentration vectors sum correctly per age band
+- [ ] Verify peaked Dirichlet fires correctly for a known veteran (should heavily concentrate on their confirmed cluster)
+
+---
+
+### 7A.2 — Compute posterior soft cluster membership per batter/pitcher game
+
+**Script:** `betting_ml/scripts/eb_priors/compute_archetype_posteriors.py`
+
+**Posterior update:** Given a player's observed feature vector, compute the likelihood of each cluster using Gaussian likelihood centered on cluster centroids from Epic 7: L(cluster_k | features) ∝ exp(−distance(features, centroid_k)²). Posterior P(cluster_k | features, prior) ∝ L(cluster_k | features) × Dirichlet_prior_k. Normalize to sum to 1.
+
+Tasks:
+- [ ] For each player on game date T, retrieve current-season feature vector from `mart_batter_season_stats` filtered < T
+- [ ] Compute likelihood of each archetype cluster using cluster centroids from Epic 7 output
+- [ ] Handle missing features (not all batters have Statcast bat-tracking): zero out likelihood contribution for missing feature dimensions; document imputation approach
+- [ ] Compute posterior probability vector [p_cluster_1, ..., p_cluster_K]; normalize to sum to 1
+- [ ] At 0 PA: posterior = prior (pure Dirichlet). At high PA: posterior dominated by likelihood term
+- [ ] Compute `cluster_entropy` = Shannon entropy of probability vector (high entropy = uncertain assignment)
+- [ ] Output columns: `p_cluster_1, ..., p_cluster_K`, `map_cluster` (argmax for backward compatibility), `cluster_entropy`, `assignment_confidence` = max(p_cluster_k), `eb_data_source ∈ {prior_only, partial_update, full_eb}`
+- [ ] Write output to `mart_player_archetype_posteriors` (one row per player-game)
+
+Acceptance criteria:
+- [ ] A debut player (0 PA) receives `prior_only`; probability vector matches age-band Dirichlet prior; `cluster_entropy` is near-maximum
+- [ ] A 5-year veteran returns their known archetype with `assignment_confidence > 0.80`; `cluster_entropy` is low
+- [ ] `map_cluster` matches Epic 7 hard assignment for ≥ 90% of qualified players (≥ 200 PA)
+- [ ] `cluster_entropy` is higher in April than September across the population (seasonal uncertainty decreasing as PA accumulates)
+
+---
+
+### 7A.3 — Propagate soft assignments and uncertainty into matchup model (Epic 8 gate)
+
+Tasks:
+- [ ] Update `mart_batter_archetype_vs_pitcher_cluster` to use soft-weighted matchup outcomes: weight each historical PA by the batter's `p_cluster_k` at the time of the PA rather than hard cluster assignment
+- [ ] Update Epic 8 Story 8.1 training dataset to use `cluster_entropy` as a feature representing matchup uncertainty
+- [ ] Add `matchup_uncertainty_score` to output signals in Story 8.3: computed as `batter_cluster_entropy + pitcher_cluster_entropy`
+- [ ] Update `archetype_definitions.md` with a section documenting the soft-assignment methodology, Dirichlet prior structure, and how `cluster_entropy` should be interpreted
+
+Acceptance criteria:
+- [ ] `matchup_uncertainty_score` is non-null for all games (even if both players are `prior_only`)
+- [ ] Games with rookie batters facing rookie starters have higher `matchup_uncertainty_score` than games with established veterans — directionally sensible
+- [ ] `archetype_definitions.md` updated with Dirichlet methodology section
 
 ---
 

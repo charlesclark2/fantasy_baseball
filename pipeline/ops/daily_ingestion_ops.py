@@ -58,24 +58,6 @@ def _dbt_daily_build_args() -> list[str]:
         return ["run"] + target
 
 
-# ── Odds API (disabled by default; retain for reactivation) ─────────────────
-
-@op(out=Out(Nothing))
-def ingest_odds_api_events(context):
-    if os.getenv("ODDS_API_ENABLED", "false").lower() != "true":
-        context.log.info("ODDS_API_ENABLED != true — skipping Odds API events")
-        return
-    _run_script(context, "odds_api_ingestion.py", ["events"])
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def ingest_odds_api_odds(context):
-    if os.getenv("ODDS_API_ENABLED", "false").lower() != "true":
-        context.log.info("ODDS_API_ENABLED != true — skipping Odds API odds")
-        return
-    _run_script(context, "odds_api_ingestion.py", ["odds"])
-
-
 # ── Parlay API ───────────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

@@ -1,3 +1,4 @@
 from pipeline.schedules.daily_ingestion_schedule import daily_ingestion_schedule
+from pipeline.schedules.intraday_schedules import all_intraday_schedules
 
-all_schedules = [daily_ingestion_schedule]
+all_schedules = [daily_ingestion_schedule] + all_intraday_schedules
