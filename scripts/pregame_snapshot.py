@@ -121,8 +121,8 @@ def main() -> None:
                     CASE WHEN CONVERT_TIMEZONE('UTC', 'America/New_York', o.ingestion_ts::timestamp_ntz)::date = %s
                     THEN 1 ELSE 0 END
                 ) AS has_opening_snapshot
-            FROM baseball_data.betting.stg_oddsapi_events e
-            LEFT JOIN baseball_data.betting.stg_oddsapi_odds o ON o.event_id = e.event_id
+            FROM baseball_data.betting.stg_parlayapi_canonical_events e
+            LEFT JOIN baseball_data.betting.stg_parlayapi_odds o ON o.canonical_event_id = e.canonical_event_id
             WHERE CONVERT_TIMEZONE('UTC', 'America/New_York', e.commence_time::timestamp_ntz)::date = %s
                 AND e.sport_key = 'baseball_mlb'
             GROUP BY e.home_team, e.away_team, e.commence_time
@@ -151,7 +151,7 @@ def main() -> None:
         cur.execute(
             """
             SELECT
-                e.event_id,
+                e.canonical_event_id,
                 e.home_team,
                 e.away_team,
                 e.commence_time,
@@ -162,11 +162,11 @@ def main() -> None:
                         DATEADD('minute', -%s, e.commence_time)
                     THEN 1 ELSE 0 END
                 ) AS has_pregame_snapshot
-            FROM baseball_data.betting.stg_oddsapi_events e
-            LEFT JOIN baseball_data.betting.stg_oddsapi_odds o ON o.event_id = e.event_id
+            FROM baseball_data.betting.stg_parlayapi_canonical_events e
+            LEFT JOIN baseball_data.betting.stg_parlayapi_odds o ON o.canonical_event_id = e.canonical_event_id
             WHERE e.commence_time BETWEEN %s AND %s
                 AND e.sport_key = 'baseball_mlb'
-            GROUP BY e.event_id, e.home_team, e.away_team, e.commence_time
+            GROUP BY e.canonical_event_id, e.home_team, e.away_team, e.commence_time
             HAVING has_pregame_snapshot = 0
             """,
             [PREGAME_MAX_MINUTES, PREGAME_MIN_MINUTES, window_start, window_end],
