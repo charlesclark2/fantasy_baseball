@@ -1,0 +1,138 @@
+import os
+import subprocess
+import sys
+from datetime import date
+
+from dagster import In, Nothing, OpExecutionContext, Out, SkipReason, op
+
+SCRIPTS_DIR = "/app/scripts"
+APP_DIR = "/app"
+DBT_DIR = "/app/dbt"
+
+
+def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None) -> None:
+    path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
+    cmd = [sys.executable, path] + (args or [])
+    context.log.info(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    if result.stdout:
+        context.log.info(result.stdout)
+    if result.stderr:
+        context.log.warning(result.stderr)
+    if result.returncode != 0:
+        raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
+
+
+def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
+    cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
+    context.log.info(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    if result.stdout:
+        context.log.info(result.stdout)
+    if result.stderr:
+        context.log.warning(result.stderr)
+    if result.returncode != 0:
+        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{result.stderr}")
+
+
+def _today() -> str:
+    return date.today().strftime("%Y-%m-%d")
+
+
+# ── Odds Snapshot ────────────────────────────────────────────────────────────
+
+@op(out={"has_games": Out(bool)})
+def check_games_today(context: OpExecutionContext) -> bool:
+    """Query Snowflake to check if there are regular-season games today."""
+    import snowflake.connector
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives.serialization import (
+        Encoding, NoEncryption, PrivateFormat, load_pem_private_key,
+    )
+
+    key_path = os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]
+    with open(key_path, "rb") as f:
+        pem = f.read()
+    key = load_pem_private_key(pem, password=None, backend=default_backend())
+    private_key_bytes = key.private_bytes(Encoding.DER, PrivateFormat.PKCS8, NoEncryption())
+
+    conn = snowflake.connector.connect(
+        account=os.environ["SNOWFLAKE_ACCOUNT"],
+        user=os.environ["SNOWFLAKE_USER"],
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        role=os.environ.get("SNOWFLAKE_ROLE", ""),
+        database="baseball_data",
+        private_key=private_key_bytes,
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM baseball_data.betting.stg_statsapi_games "
+            "WHERE official_date = %s AND game_type = 'R'",
+            [date.today().isoformat()],
+        )
+        count = cur.fetchone()[0]
+        cur.close()
+    finally:
+        conn.close()
+
+    has_games = count > 0
+    if has_games:
+        context.log.info(f"Found {count} regular-season game(s) today — proceeding with odds snapshot.")
+    else:
+        context.log.info("No regular-season games today — odds snapshot will be skipped.")
+    return has_games
+
+
+@op(ins={"has_games": In(bool)}, out=Out(Nothing))
+def odds_snapshot_ingest(context: OpExecutionContext, has_games: bool) -> None:
+    if not has_games:
+        context.log.info("No games today — skipping odds snapshot ingestion.")
+        return
+    _run_script(context, "parlay_api_ingestion.py", ["events"])
+    _run_script(context, "parlay_api_ingestion.py", ["odds"])
+    _run_script(context, "parlay_api_ingestion.py", ["line-movement"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def odds_snapshot_dbt_rebuild(context: OpExecutionContext) -> None:
+    _run_dbt(context, [
+        "run",
+        "--select",
+        "stg_parlayapi_odds",
+        "mart_closing_line_value",
+        "mart_prediction_clv",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
+# ── Intraday Weather ─────────────────────────────────────────────────────────
+
+@op(out=Out(Nothing))
+def intraday_weather_capture(context: OpExecutionContext) -> None:
+    today = _today()
+    for hours in [24, 6, 3, 1]:
+        try:
+            _run_script(context, "ingest_weather.py", [
+                "--date", today,
+                "--observation-type", "forecast_intraday",
+                "--hours-to-first-pitch", str(hours),
+            ])
+        except Exception as e:
+            context.log.warning(f"T-{hours}h weather capture failed (non-fatal): {e}")
+    try:
+        _run_script(context, "ingest_weather.py", ["--observation-type", "observed_at_first_pitch"])
+    except Exception as e:
+        context.log.warning(f"Observed-at-first-pitch capture failed (non-fatal): {e}")
+
+
+# ── Intraday Schedule ────────────────────────────────────────────────────────
+
+@op(out=Out(Nothing))
+def intraday_schedule_capture(context: OpExecutionContext) -> None:
+    _run_script(context, "ingest_statsapi.py", [
+        "schedule",
+        "--start-date", _today(),
+        "--end-date", _today(),
+        "--capture-reason", "intraday_gameday",
+    ])
