@@ -708,6 +708,35 @@ sources:
           - name: ingestion_timestamp
             description: Timestamp when this row was last written/updated.
 
+      # ── Sprint speed leaderboard (Epic 4A) ───────────────────────────────────
+      - name: sprint_speed_raw
+        description: >
+          Baseball Savant sprint speed leaderboard. Sprint speed is measured in
+          ft/s (Statcast sprint speed) and is distinct from the FanGraphs Spd
+          speed score. Grain: player_mlbam_id × season × snapshot_date (weekly
+          Sunday snapshots). Ingested by scripts/ingest_sprint_speed.py.
+
+        columns:
+          - name: player_mlbam_id
+            description: MLBAM player ID.
+            tests: [not_null]
+          - name: season
+            description: Season year.
+            tests: [not_null]
+          - name: snapshot_date
+            description: Date this row was captured (weekly Sunday run).
+            tests: [not_null]
+          - name: sprint_speed_fts
+            description: Statcast sprint speed in ft/s.
+          - name: competitive_runs
+            description: Number of HP-to-2B sprint attempts used to compute the metric.
+          - name: hp_to_1b
+            description: Average time (seconds) from home plate to first base on right-handed contact.
+          - name: hp_to_2b
+            description: Average time (seconds) from home plate to second base.
+          - name: ingestion_timestamp
+            description: Timestamp when this row was written.
+
       # ── Reference: players ────────────────────────────────────────────────────
       - name: ref_players
         description: >
@@ -860,6 +889,16 @@ sources:
           sub_model_version, valid_from). Populated by sub-model inference scripts
           in Epics 3–8. Pivoted to wide format by feature_pregame_sub_model_signals.
           DDL: scripts/ddl/mart_sub_model_signals.sql.
+
+      - name: eb_park_factors_raw
+        description: >
+          Empirical Bayes smoothed park run factors. One row per (venue_id, season).
+          Written by betting_ml/scripts/eb_priors/fit_park_priors.py via MERGE upsert.
+          Normal-Normal conjugate posterior: prior fit from established venues
+          (≥ 40 games/season); shrinkage toward prior is inversely proportional to
+          sample size. Sourced by dbt model mart_eb_park_factors.
+          DDL: scripts/ddl/eb_park_factors_raw.sql.
+          Grain: venue_id × season.
 
   - name: betting_ml
     database: baseball_data

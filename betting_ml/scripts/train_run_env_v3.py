@@ -67,7 +67,7 @@ _FEATURE_COLS_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "r
 # ---------------------------------------------------------------------------
 
 _PARK_FEATURES = [
-    "park_run_factor_3yr",
+    "eb_park_run_factor",
     "elevation_ft",
     "center_ft",
     "is_dome",
@@ -117,7 +117,7 @@ _XGB_PARAM_GRID = {
 }
 
 _IMPUTE_COLS = {
-    "park":  ["park_run_factor_3yr"],
+    # eb_park_run_factor is always non-null (EB prior covers all venues); no park imputation.
     "fip":   ["home_starter_proj_fip", "away_starter_proj_fip"],
     "woba":  ["home_off_woba_30d", "away_off_woba_30d"],
     "xwoba": ["home_starter_xwoba_30d", "away_starter_xwoba_30d"],
@@ -168,8 +168,7 @@ def _compute_impute_values_v3(train_df: pd.DataFrame) -> dict:
             col_mean = train_df[col].mean()
             vals[f"_col_{col}"] = float(col_mean) if not np.isnan(col_mean) else 0.0
 
-    for col in _IMPUTE_COLS["park"]:
-        vals[col] = vals.get(f"_col_{col}", 1.0)
+    # No park imputation: eb_park_run_factor is always non-null (prior covers all venues).
 
     fip_vals = []
     for col in _IMPUTE_COLS["fip"]:
@@ -195,9 +194,7 @@ def _compute_impute_values_v3(train_df: pd.DataFrame) -> dict:
 def _apply_imputation_v3(df: pd.DataFrame, impute_vals: dict) -> pd.DataFrame:
     df = df.copy()
 
-    for col in _IMPUTE_COLS["park"]:
-        if col in df.columns:
-            df[col] = df[col].fillna(impute_vals.get(col, 1.0))
+    # No park imputation: eb_park_run_factor is always non-null.
     for col in _UMPIRE_FEATURES:
         if col in df.columns:
             df[col] = df[col].fillna(0.0)

@@ -134,6 +134,14 @@ def ingest_fangraphs_hitting_leaderboard(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def ingest_sprint_speed(context):
+    if not _is_sunday():
+        context.log.info("Not Sunday — skipping sprint speed")
+        return
+    _run_script(context, "ingest_sprint_speed.py", ["--season", str(date.today().year)])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_transactions(context):
     _run_script(context, "ingest_transactions.py", [
         "--start-date", _seven_days_ago(),

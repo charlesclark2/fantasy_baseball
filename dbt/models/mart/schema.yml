@@ -2500,6 +2500,90 @@ models:
 
 
   # ============================================================================
+  # mart_eb_park_factors
+  # ============================================================================
+  - name: mart_eb_park_factors
+    description: >
+      Empirical Bayes smoothed park run factors. One row per (venue_id, season).
+      Normal-Normal conjugate posterior using a cross-park prior fit from
+      established venues (≥ 40 games/season). Shrinkage is inversely proportional
+      to sample size: high-n venues (e.g. Coors Field n≥200) have shrinkage ~0.11;
+      low-n venues (n≤25) have shrinkage >0.50. Replaces league-mean imputation
+      for non-standard venues in feature_pregame_park_features.
+      Source: betting_ml/scripts/eb_priors/fit_park_priors.py → eb_park_factors_raw.
+      Grain: one row per venue_id per season.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [venue_id, season]
+
+    columns:
+
+      - name: venue_id
+        description: MLB Stats API venue identifier.
+        tests:
+          - not_null
+
+      - name: season
+        description: Season year this EB estimate applies to (feature joins on game_year - 1).
+        tests:
+          - not_null
+
+      - name: eb_park_run_factor
+        description: >
+          EB posterior mean run factor for this venue and season. Always non-null:
+          venues with no observations receive the prior mean.
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "between 5 and 20"
+
+      - name: eb_park_run_factor_uncertainty
+        description: Posterior standard deviation — smaller for high-sample venues.
+        tests:
+          - not_null
+
+      - name: n_games
+        description: Total games in the 3yr window used to compute the posterior.
+        tests:
+          - not_null
+
+      - name: raw_park_run_factor
+        description: Unadjusted 3yr rolling average (park_run_factor_3yr from mart_park_run_factors).
+        tests:
+          - not_null
+
+      - name: shrinkage_factor
+        description: >
+          Fraction of the posterior attributable to the prior (0 = data only, 1 = prior only).
+          shrinkage = (σ²_game/n) / (σ₀² + σ²_game/n).
+        tests:
+          - not_null
+
+      - name: prior_mean
+        description: Cross-park prior mean μ₀ used in this batch run.
+        tests:
+          - not_null
+
+      - name: prior_variance
+        description: Cross-park prior variance σ₀² used in this batch run.
+        tests:
+          - not_null
+
+      - name: fit_date
+        description: Date this row was computed.
+        tests:
+          - not_null
+
+      - name: run_id
+        description: UUID identifying the fit_park_priors.py batch run that wrote this row.
+        tests:
+          - not_null
+
+
+  # ============================================================================
   # mart_team_season_record
   # ============================================================================
   - name: mart_team_season_record

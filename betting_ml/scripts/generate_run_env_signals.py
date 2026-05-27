@@ -73,7 +73,7 @@ select
     p.venue_name,
     g.home_final_score + g.away_final_score      as total_runs,
 
-    p.park_run_factor_3yr,
+    p.eb_park_run_factor,
     p.elevation_ft,
     p.center_ft,
     iff(p.roof_type = 'Dome', 1, 0)              as is_dome,
