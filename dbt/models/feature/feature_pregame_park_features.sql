@@ -3,8 +3,8 @@
 -- Grain: one row per game_pk (regular season games only)
 -- Purpose: Pre-game park context features for ML. Joins physical park
 --          characteristics (dimensions, elevation, surface, roof) from
---          stg_statsapi_venues and empirical run factors from
---          mart_park_run_factors.
+--          stg_statsapi_venues, empirical run factors from mart_park_run_factors,
+--          and EB-smoothed run factors from mart_eb_park_factors.
 --
 -- LEAKAGE GUARD: park run factors join on game_year - 1 (prior season only)
 -- so no current-season game results appear in the feature. Physical dimensions
@@ -12,6 +12,7 @@
 --
 -- Nulls: park_run_factor_3yr is null for 2015 games (no 2014 data) and for
 -- venues with fewer than 10 games in the prior season (filtered in the mart).
+-- eb_park_run_factor is non-null for all venues covered by fit_park_priors.py.
 -- venue_id is null for a small number of games with missing venue data.
 -- =============================================================================
 
@@ -66,6 +67,18 @@ park_factors as (
         and prf.game_year       = g.game_year - 1
 ),
 
+-- EB-smoothed run factors (game_year - 1) — same leakage guard as raw factors
+eb_factors as (
+    select
+        g.game_pk,
+        eb.eb_park_run_factor,
+        eb.shrinkage_factor
+    from games g
+    left join {{ ref('mart_eb_park_factors') }} eb
+        on  eb.venue_id = g.venue_id
+        and eb.season   = g.game_year - 1
+),
+
 final as (
     select
         g.game_pk,
@@ -87,13 +100,19 @@ final as (
 
         -- ── Prior-season empirical run environment ────────────────────────────
         pf.runs_per_game_at_park,
-        pf.park_run_factor_3yr
+        pf.park_run_factor_3yr,
+
+        -- ── EB-smoothed run environment (replaces null imputation) ────────────
+        eb.eb_park_run_factor,
+        eb.shrinkage_factor
 
     from games g
     left join venues v
         on  v.venue_id = g.venue_id
     left join park_factors pf
         on  pf.game_pk = g.game_pk
+    left join eb_factors eb
+        on  eb.game_pk = g.game_pk
 )
 
 select * from final
