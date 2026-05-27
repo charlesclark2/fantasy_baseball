@@ -26,7 +26,6 @@ import warnings
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 import yaml
@@ -37,6 +36,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.utils.data_loader import load_features, load_todays_features, get_snowflake_connection
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.model_io import load_model
+from betting_ml.utils.artifact_store import load_artifact
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401
 from betting_ml.utils.probability_layer import (
     compute_posterior,
@@ -102,12 +102,7 @@ def _load_model_for_tag(target: str, model_tag: str) -> object:
     registry = _load_registry()
     entry = registry[target]
     artifact_path = _registry_artifact_path(entry, model_tag)
-    p = Path(artifact_path)
-    if not p.is_absolute():
-        p = PROJECT_ROOT / p
-    if not p.exists():
-        raise FileNotFoundError(f"Artifact not found: {p}")
-    return joblib.load(p)
+    return load_artifact(artifact_path)
 
 
 def _model_version_label(model_tag: str) -> str:

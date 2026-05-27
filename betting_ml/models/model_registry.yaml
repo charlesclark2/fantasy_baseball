@@ -1,5 +1,5 @@
 home_win:
-  artifact_path: betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl
   backfill_date: '2026-05-12'
   calibrator_last_fit_date: '2026-05-08'
   cv_brier: 0.2446
@@ -17,7 +17,7 @@ home_win:
     PROMOTE. Rollback: elasticnet_2026.pkl (v1, 487-feature market-inclusive set).
 
     '
-  rollback_artifact_path: betting_ml/models/home_win/elasticnet_2026.pkl
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_2026.pkl
   rollback_feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
   selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
@@ -114,7 +114,7 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_market_blind_2026.pkl
   backfill_date: '2026-05-12'
   cv_mae: 3.4981
   deployed_date: '2026-05-11'
@@ -133,7 +133,7 @@ run_differential:
     \ run_diff can be negative. Offline comparison vs v1 on 2024+ (n=4,383): MAE\
     \ 3.405 vs 3.434 (\u22120.029), verdict PROMOTE. Rollback: ngboost_tuned_2026.pkl\
     \ (v1, 294-feature market-inclusive set).\n"
-  rollback_artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_tuned_2026.pkl
   rollback_feature_columns_path: betting_ml/models/feature_columns.json
   selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
@@ -180,7 +180,7 @@ run_differential:
       market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py
       (MAE −0.029).
 total_runs:
-  artifact_path: betting_ml/models/total_runs/ngboost_market_blind_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
   backfill_date: '2026-05-12'
   cv_mae: 3.5521
   deployed_date: '2026-05-11'
@@ -200,7 +200,7 @@ total_runs:
     (v2, 311-feature market-inclusive set). See total_runs_bias_diagnosis.md.
 
     '
-  rollback_artifact_path: betting_ml/models/total_runs/ngboost_decay_weighted.pkl
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_decay_weighted.pkl
   rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
   selected_at: '2026-05-11T00:00:00Z'
   training_cutoff: 2021+
@@ -232,13 +232,13 @@ total_runs:
       noise candidates (mean_imp <= 0). Next retrain (~2026-05-22): add market exclusion
       analogous to home_win _MARKET_COLS_TO_EXCLUDE to NGBoost training script; drop
       4 noise features. See betting_ml/evaluation/phase_8_batch_retrain_impact.md.
-  v0_artifact_path: betting_ml/models/total_runs/ngboost_tuned_prod.pkl
+  v0_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_prod.pkl
   v0_dist: LogNormal
   v0_feature_columns_path: betting_ml/models/feature_columns.json
-  v1_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  v1_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_2026.pkl
   v1_dist: LogNormal
   v1_feature_columns_path: betting_ml/models/feature_columns.json
-  v2_artifact_path: betting_ml/models/total_runs/ngboost_tuned_v2.pkl
+  v2_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_v2.pkl
   v2_dist: Normal
   v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
   challengers:

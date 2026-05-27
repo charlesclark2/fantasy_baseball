@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import pickle
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -42,6 +41,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.artifact_store import load_artifact
 from betting_ml.scripts.scd2_writer import scd2_upsert, _SCHEMA_PROD, _SCHEMA_DEV
 from betting_ml.scripts.train_run_env import _TRAINING_START
 from betting_ml.scripts.train_run_env_v3 import (
@@ -287,8 +287,7 @@ def main() -> None:
     print(f"{env_label} target={target_table}")
 
     print(f"\nLoading artifact from {_ARTIFACT_PATH}...")
-    with open(_ARTIFACT_PATH, "rb") as fh:
-        artifact = pickle.load(fh)
+    artifact = load_artifact(_ARTIFACT_PATH)
     print(f"  model_type={artifact['model_type']}, CV MAE={artifact['cv_mae']}")
 
     print(f"\nLoading games {start_date} → {end_date}...")

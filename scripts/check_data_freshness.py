@@ -46,11 +46,6 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 48,
         "game_day_only": False,
     },
-    "baseball_data.oddsapi.mlb_odds_raw": {
-        "ts_col": "ingestion_ts",
-        "max_stale_hours": 6,
-        "game_day_only": True,
-    },
     "baseball_data.fangraphs.fg_stuff_plus_raw": {
         "ts_col": "ingestion_ts",
         "max_stale_hours": 192,  # 8 days — weekly Sunday ingest

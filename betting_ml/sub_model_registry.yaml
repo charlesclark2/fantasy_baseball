@@ -39,7 +39,7 @@
 # =============================================================================
 
 run_env_v1:
-  artifact_path: models/sub_models/run_env_v1.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v1.pkl
   feature_columns_path: models/sub_models/run_env_v1_features.json
   target:
     source_table: baseball_data.betting.mart_game_results
@@ -230,7 +230,7 @@ matchup_v1:
     mart_batter_archetype_vs_pitcher_cluster confirmed as canonical training source (2026-05-12).
 
 run_env_v2:
-  artifact_path: models/sub_models/run_env_v2.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v2.pkl
   feature_columns_path: models/sub_models/run_env_v2_features.json
   target:
     source_table: baseball_data.betting.mart_game_results
@@ -265,7 +265,7 @@ run_env_v2:
     Gate FAILED — v1 remains champion (Ridge CV MAE=3.5104).
 
 run_env_v3:
-  artifact_path: models/sub_models/run_env_v3.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl
   feature_columns_path: models/sub_models/run_env_v3_features.json
   target:
     source_table: baseball_data.betting.mart_game_results

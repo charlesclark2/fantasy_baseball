@@ -48,9 +48,8 @@ uv run scripts/parlay_api_ingestion.py events --dry-run
 ## Cost discipline — avoiding unbounded Snowflake rebuilds
 
 **NEVER run `dbtf build` without a `--select` scope during local development.**
-An unscoped build triggers full rebuilds of every mart model including `mart_batter_rolling_stats`
-and `mart_pitcher_rolling_stats`, which cost ~50s each and run in both the target schema
-and the CI schema. 10 unscoped builds in a day = ~17 minutes of warehouse compute wasted.
+An unscoped build triggers full rebuilds of every mart model. 10 unscoped builds in a day
+can waste 17+ minutes of warehouse compute.
 
 ```bash
 # ✅ Correct — scope to only what changed
@@ -60,6 +59,67 @@ dbtf build --target dev --select mart_batter_rolling_stats
 # ❌ Never do this locally
 dbtf build --target dev   # rebuilds everything
 ```
+
+### Incremental models (do NOT `--full-refresh` unless intentional)
+
+The following six mart models are `materialized = 'incremental'` — daily runs only process
+new game dates instead of rebuilding from scratch. A `--full-refresh` costs 30–60s of
+compute per model and should only be used when a schema change requires a backfill.
+
+| Model | Unique key | Incremental source filter |
+|---|---|---|
+| `mart_batter_rolling_stats` | `game_pk, batter_id` | current season (for STD window) |
+| `mart_pitcher_rolling_stats` | `game_pk, pitcher_id` | current season (for STD window) |
+| `mart_team_rolling_pitching` | `game_pk, team` | current season (for STD window) |
+| `mart_team_rolling_offense` | `game_pk, team` | current season (for STD window) |
+| `mart_bullpen_effectiveness` | `game_pk, team_abbrev` | 30-day lookback |
+| `mart_team_pythagorean_rolling` | `game_pk, team_abbrev` | 30-day lookback |
+
+If you add a new column to any of these models, run `--full-refresh` once to backfill it:
+
+```bash
+dbtf build --select mart_team_rolling_pitching --full-refresh
+```
+
+CI schemas (`ci_betting`) do not need a separate `--full-refresh` after an incremental
+conversion — dbt detects the table exists and appends incrementally on the next CI run.
+
+### Resource monitor
+
+A Snowflake resource monitor (`BASEBALL_MONTHLY_CAP`) is active on `COMPUTE_WH` (X-Small,
+60s auto-suspend) with a 120-credit/month cap (~$240 at on-demand pricing). Alerts fire
+at 75% and 90%; the warehouse suspends at 100% and force-suspends at 110%.
+
+`COMPUTE_MEDIUM_WH` and `COMPUTE_SMALL_WH` should also have the monitor applied. If not
+yet done, run in Snowflake UI as ACCOUNTADMIN:
+
+```sql
+ALTER WAREHOUSE COMPUTE_MEDIUM_WH SET RESOURCE_MONITOR = baseball_monthly_cap;
+ALTER WAREHOUSE COMPUTE_SMALL_WH SET RESOURCE_MONITOR = baseball_monthly_cap;
+ALTER WAREHOUSE SNOWFLAKE_LEARNING_WH SET AUTO_SUSPEND = 60;
+```
+
+### Cost review — 2026-06-10
+
+A follow-on spending review is scheduled for **2026-06-10** (two weeks after the incremental
+model conversions merged 2026-05-27). Run this query to compare weekly credit burn before
+and after the change:
+
+```sql
+SELECT
+    date_trunc('week', usage_date)  as week,
+    warehouse_name,
+    sum(credits_used)               as total_credits
+FROM snowflake.account_usage.warehouse_metering_history
+WHERE usage_date >= '2026-05-01'
+GROUP BY 1, 2
+ORDER BY 1, 3 desc;
+```
+
+Expected: the six converted models stop triggering full rebuilds; weekly COMPUTE_WH credit
+burn should drop materially vs. May 2026 (~109 credits for the month). If spend has not
+decreased, audit which models are still being rebuilt with `QUERY_HISTORY` filtered to
+`query_text ILIKE '%CREATE OR REPLACE TABLE%'`.
 
 **For training scripts**, use the `--refresh-cache` flag only when you need fresh data.
 Within a single day of dev work, omit it — the Parquet cache is reused at zero Snowflake cost:
@@ -2120,42 +2180,176 @@ Acceptance criteria:
 
 **Goal:** Build a pre-game lineup quality signal that is independent of market data.
 
+**Prerequisite:** Epic 4A complete (EB posteriors backfilled, `feature_pregame_lineup_features` has EB columns). Ablation result on record.
+
+**Ablation decision (from 4A.4, 2026-05-27):** EB and raw rate columns are statistically tied (+0.0001 MAE delta) in Ridge because Ridge's own L2 shrinkage duplicates EB's regularization. Both feature groups are included in offense_v1 — LightGBM feature importance will arbitrate. Raw rate columns remain as Group B (secondary); EB columns are Group A (primary).
+
 ---
 
 ### 4.1 — Define training dataset
 
+**Script:** `betting_ml/scripts/offense_v1/build_training_dataset.py`
+
+**Target:** Per-side runs scored (`runs_scored`). One row per game-side (two rows per game). Source: `feature_pregame_lineup_features` joined to `mart_game_results` on `game_pk`. Filter: `game_type = 'R'` and `home_final_score IS NOT NULL`.
+
+**Training window:** 2015+ (requires extending `feature_pregame_lineup_features` back from 2021).
+
 Tasks:
-- [ ] Identify lineup feature columns already in the feature store (wRC+, OBP, SLG, wOBA, batting order position, handedness)
-- [ ] Target: team runs scored, with opponent quality controls (Version 1 approach per architecture doc)
-- [ ] Training window: 2016+
+- [ ] Remove `WHERE lf.game_year >= 2021` filter from `dbt/models/feature/feature_pregame_lineup_features.sql`; run `dbtf build --select feature_pregame_lineup_features` and verify row count increases (~10k additional rows for 2015–2020)
+- [ ] Spot-check 2016–2019 rows: EB columns (`avg_eb_woba` etc.) should be NULL (no FanGraphs priors pre-2020); raw rate columns should be populated
+- [ ] Verify `mart_game_results` join: no game-side rows missing `runs_scored` for regular-season games; document any gaps
+
+**Feature groups** (document in `betting_ml/models/sub_models/offense_v1/feature_columns.json`):
+
+| Group | Columns | Notes |
+|---|---|---|
+| A — EB rates | `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso`, `avg_eb_woba_uncertainty` | NULL for 2015–2019; imputed to training-window mean |
+| B — Raw rates | `avg_woba_30d`, `avg_k_pct_30d`, `avg_bb_pct_30d`, `avg_woba_std`, `avg_k_pct_std`, `avg_bb_pct_std` | Populated from 2015; primary signal for pre-2020 rows |
+| C — Statcast | `avg_xwoba_30d`, `avg_hard_hit_pct_30d`, `avg_barrel_pct_30d`, `avg_whiff_rate_30d`, `avg_chase_rate_30d`, `avg_xwoba_std`, `avg_hard_hit_pct_std`, `avg_barrel_pct_std` | |
+| D — ZiPS | `avg_zips_wrc_plus`, `avg_zips_woba_proxy`, `avg_zips_k_pct`, `avg_zips_iso`, `zips_coverage_pct` | |
+| E — Structural | `lhb_count`, `rhb_count`, `lineup_depth_score`, `lineup_entropy`, `lineup_rookie_count`, `injured_player_count`, `injury_adj_avg_woba_30d`, `eb_coverage_pct` | `eb_coverage_pct` encodes lineup data availability |
+
+**Excluded:** `game_pk`, `game_date`, `game_year`, `side`, `home_away`, `runs_scored`, `valid_from`, `valid_to`, `is_current`, `computed_at`, `record_hash`, `ingestion_ts`.
+
+**Missing data:** All NULLs imputed with training-window mean (per fold, not global). LightGBM handles NULLs natively; apply imputation anyway for Ridge and for column auditing consistency.
+
+**Walk-forward CV splits** (`all_season_splits(df, min_train_seasons=3)` on 2015+ data):
+
+| Fold | Train | Eval |
+|---|---|---|
+| 1 | 2015–2017 | 2018 |
+| 2 | 2015–2018 | 2019 |
+| 3 | 2015–2019 | 2020 |
+| 4 | 2015–2020 | 2021 |
+| 5 | 2015–2021 | 2022 |
+| 6 | 2015–2022 | 2023 |
+| 7 | 2015–2023 | 2024 |
+| 8 | 2015–2024 | 2025 |
+
+Acceptance criteria:
+- [ ] `feature_pregame_lineup_features` returns rows for 2015–2026; EB columns NULL for 2015–2019, populated for 2020–2026
+- [ ] Feature column inventory written to `betting_ml/models/sub_models/offense_v1/feature_columns.json` with Group A–E labels
+- [ ] Expected training rows at final fold (2015–2024 train): ~22,000–26,000 game-side rows
+- [ ] Walk-forward fold inventory matches table above when run with `min_train_seasons=3` on 2015+ data
 
 ---
 
 ### 4.2 — Train offensive quality model (v1)
 
+**Script:** `betting_ml/scripts/offense_v1/train_offense_v1.py`
+
+**Models to compare:**
+
+| Model | Tuning | Notes |
+|---|---|---|
+| Ridge | `RidgeCV(alphas=np.logspace(-1, 5, 30))` — no Optuna needed | Baseline; fast, explainable |
+| LightGBM | Optuna TPE, 50 trials, objective = mean CV MAE | Primary candidate |
+
+**Optuna search space for LightGBM:**
+- `num_leaves`: 15–127
+- `learning_rate`: 0.01–0.3 (log scale)
+- `n_estimators`: 50–500
+- `min_child_samples`: 10–50
+- `subsample`: 0.6–1.0
+- `colsample_bytree`: 0.5–1.0
+- Early stopping per fold (patience=20) on the fold's hold-out set
+
+**Champion selection gate:** LightGBM is promoted if mean CV MAE < Ridge mean CV MAE. If within 0.05 runs (noise), prefer Ridge for interpretability. Report April-only MAE separately for both models (games in April of each eval year) — EB features should show the clearest advantage here where raw rates have fewest PA behind them.
+
+**Output signals** (computed at inference time in 4.3):
+- `pred_runs_raw` — raw model output (predicted runs scored, one side)
+- `runs_index` — `100.0 × pred_runs_raw / league_avg_pred_runs_that_season` (normalized; 100 = league average offense for that season)
+
+Both signals derived from one model — no separate training needed.
+
 Tasks:
-- [ ] Build feature matrix (projected lineup quality, lineup depth, platoon composition, park-adjusted batting metrics)
-- [ ] Train: Ridge regression or gradient boosted trees
-- [ ] Evaluate: residual correlation with actual runs scored, season stability of signal
-- [ ] Document in `sub_model_registry.yaml`
+- [ ] Train Ridge and LightGBM on feature Groups A–E using 8-fold walk-forward CV
+- [ ] Run Optuna for LightGBM (50 trials); persist best params to `betting_ml/models/sub_models/offense_v1/lgbm_best_params.json`
+- [ ] Report per-fold and mean CV MAE for both models; report April-only MAE per fold
+- [ ] Check `avg_eb_woba_uncertainty` feature importance in LightGBM — if rank ≤ 20, flag as standalone feature candidate
+- [ ] Select champion; persist artifact as `betting_ml/models/sub_models/offense_v1/{model_name}_offense_v1.pkl`
+- [ ] Document in `model_registry.yaml` under `offense_v1` key (same schema as existing entries: artifact_path, feature_columns_path, cv_mae, training_rows, training_cutoff, challengers list)
+
+Acceptance criteria:
+- [ ] Both models trained and evaluated on all 8 walk-forward folds
+- [ ] Champion artifact saved; `model_registry.yaml` updated with full metadata
+- [ ] April-only MAE comparison documented — expected direction: EB group narrows gap vs. raw in April folds
+- [ ] LightGBM feature importance logged; `avg_eb_woba_uncertainty` rank noted
 
 ---
 
 ### 4.3 — Generate and store offensive quality signals
 
+**Script:** `betting_ml/scripts/offense_v1/generate_offense_signals.py`
+
+**DDL:** Create `baseball_data.betting_features.offense_v1_signals`:
+
+```sql
+CREATE TABLE IF NOT EXISTS baseball_data.betting_features.offense_v1_signals (
+    game_pk          VARCHAR(20)  NOT NULL,
+    side             VARCHAR(4)   NOT NULL,   -- 'home' or 'away'
+    game_date        DATE         NOT NULL,
+    game_year        INTEGER      NOT NULL,
+    pred_runs_raw    FLOAT        NOT NULL,
+    runs_index       FLOAT        NOT NULL,   -- 100 = league avg for that season
+    model_version    VARCHAR(20)  NOT NULL,   -- e.g. 'offense_v1'
+    ingestion_ts     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (game_pk, side, model_version)
+);
+```
+
+**Signals to generate:**
+
+| Signal | Definition | Source |
+|---|---|---|
+| `pred_runs_raw` | Champion model predicted runs for this game-side | Model inference |
+| `runs_index` | `100 × pred_runs_raw / season_league_avg_pred` | Post-processing |
+| `lineup_depth_score` | Already in `feature_pregame_lineup_features` | Pass-through |
+| `lineup_uncertainty_score` | `avg_eb_woba_uncertainty` (if ranked ≤ 20 in importance) or `eb_coverage_pct` | From feature mart |
+
+**dbt model:** Add `feature_pregame_sub_model_signals` left join to `offense_v1_signals` on `(game_pk, side)` so downstream game-level features have `home_pred_runs`, `away_pred_runs`, `home_runs_index`, `away_runs_index`.
+
 Tasks:
-- [ ] Generate: `lineup_run_creation_signal`, `lineup_depth_score`, `top_3_lineup_strength`, `bottom_3_lineup_strength`, `lineup_uncertainty_score`
-- [ ] Store in sub-model output mart
-- [ ] Backfill for 2021–2026
+- [ ] Create DDL for `offense_v1_signals` (no USE statements; fully qualified names)
+- [ ] Register source in `dbt/models/sources.yml`
+- [ ] Write `generate_offense_signals.py`: load champion model, score all games in `feature_pregame_lineup_features`, write via VARCHAR temp table + MERGE pattern
+- [ ] Backfill 2015–2026
+- [ ] Run `dbtf build --select feature_pregame_sub_model_signals` and verify `home_pred_runs` / `away_runs_index` columns appear
+
+Acceptance criteria:
+- [ ] `offense_v1_signals` populated for all regular-season game-sides 2015–2026
+- [ ] `pred_runs_raw` range check: 95th pct ≤ 10.0 runs, 5th pct ≥ 1.5 runs (sanity bounds)
+- [ ] `runs_index` mean ≈ 100 per season (by construction); std ≈ 8–15 (reasonable spread)
+- [ ] `dbtf build` green on `feature_pregame_sub_model_signals`
 
 ---
 
 ### 4.4 — Ablation test
 
+**Script:** `betting_ml/scripts/ablation_offense_v1_signals.py`
+
+**Context note (from Epic 3 / Story 3.Z):** The run_env sub-model ablation showed near-zero MAE delta when signals were added *alongside* raw features to the main model (signal is a linear compression of features already in the matrix). offense_v1 signals will exhibit the same property at this stage — the true integration point is the Layer 3 stacked model (Epic 9) where sub-model outputs *replace* raw features. This ablation is run to document the baseline delta and confirm no regression, not to gate production deployment.
+
+**Walk-forward CV folds:** Same 8-fold structure as 4.2, using `all_season_splits(..., min_train_seasons=3)` on 2015+ game-level data.
+
+**Comparison:**
+- Baseline: current `feature_pregame_game_features` without offense signals
+- With signals: add `home_pred_runs`, `away_pred_runs`, `home_runs_index`, `away_runs_index` to feature matrix
+
 Tasks:
-- [ ] Add offensive signals to H2H and totals feature matrices
-- [ ] Temporal CV comparison
-- [ ] Gate before production integration
+- [ ] Load `feature_pregame_game_features` joined to `offense_v1_signals`; add signal columns
+- [ ] Run Ridge ablation on total_runs and run_differential targets (fast; mirrors 3.Z approach)
+- [ ] Compute per-fold and mean CV MAE for baseline vs. with-signals; report delta
+- [ ] Secondary: April-only MAE delta (where offense signal should carry most new information)
+- [ ] Write results to `betting_ml/models/sub_models/offense_v1/ablation_game_signals_{ts}.json`
+
+Gate: **Document and proceed regardless of MAE delta.** A near-zero delta is expected and is not a failure — it confirms the signal carries equivalent information to the raw features it was derived from. A meaningful regression (delta > +0.05 runs MAE) would indicate a data integrity problem and should block integration.
+
+Acceptance criteria:
+- [ ] Ablation results JSON written with per-fold MAE for both targets
+- [ ] Delta documented; regression gate (> +0.05) confirmed not triggered
+- [ ] April-only MAE delta noted — expected direction: with-signals wins or ties in April
+- [ ] `offense_v1` entry in `model_registry.yaml` updated with ablation result reference
 
 ---
 
@@ -3065,18 +3259,31 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 
 ## I2 — Model Artifact Storage
 
-**Problem:** Production `.pkl` files are tracked in git. This works for a small number of artifacts but does not scale as versioned sub-models are added across Epics 3–8 — git is not designed for binary artifact versioning.
+**Current state (2026-05-27): COMPLETE.** All artifact paths migrated to S3. Bucket: `baseball-betting-ml-artifacts`.
 
-**Current state (2026-05-19):** Sub-model pkl files (run_env_v3 and future) are committed to git alongside their training scripts. Trigger has effectively been reached — Epic 3 alone adds one pkl; Epics 4–8 will add five more, each with multiple versions. Total artifact storage in git will exceed ~50MB once all sub-models are trained.
+**What was done:**
+- `betting_ml/utils/artifact_store.py` — new utility with `load_artifact(path)` (handles both `s3://` URIs and local paths transparently) and `upload_artifact(local_path, s3_uri)` (called by training scripts after local save; skips gracefully if AWS credentials absent)
+- `boto3>=1.34` added to `pyproject.toml`
+- All `artifact_path` fields in `model_registry.yaml` and `sub_model_registry.yaml` updated to `s3://baseball-betting-ml-artifacts/...` URIs
+- `betting_ml/utils/model_io.py` — `load_model()` now calls `artifact_store.load_artifact()` (Streamlit app path)
+- `betting_ml/scripts/predict_today.py` — `_load_model_for_tag()` uses `artifact_store.load_artifact()` (Dagster daily scoring path)
+- `betting_ml/scripts/generate_run_env_signals.py` and `evaluate_sub_model.py` — use `artifact_store.load_artifact()`
+- Training scripts (`train_elasticnet_prod.py`, `train_total_runs_prod.py`, `train_run_diff_prod.py`, `train_run_env_v3.py`) — call `upload_artifact()` after local save
+- `.gitignore` — removed all `!` exceptions; all `.pkl` files excluded going forward
+- `scripts/migrate_artifacts_to_s3.py` — one-time upload script for existing pkls
 
-**Action required before Epic 5 training:** Migrate artifact storage to S3. `artifact_path` in `sub_model_registry.yaml` becomes an S3 URI; training scripts write to S3; inference scripts read from S3 (or cache locally). Remove committed pkls from git history via `git filter-repo` or accept the history bloat and simply stop committing new ones.
+**One-time setup steps (required before next deploy):**
+1. Create S3 bucket `baseball-betting-ml-artifacts` in AWS console (us-east-1 recommended)
+2. Create IAM user with `s3:GetObject` + `s3:PutObject` on the bucket; generate access key
+3. Run `uv run python scripts/migrate_artifacts_to_s3.py` locally to upload all 41MB of existing pkls
+4. Verify: `python -c "from betting_ml.utils.artifact_store import load_artifact; print(type(load_artifact('s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl')))"`
+5. Untrack existing committed pkls: `git rm --cached betting_ml/models/**/*.pkl`
+6. Add credentials everywhere the code runs:
+   - **Dagster Cloud** — Deployment → Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
+   - **Streamlit** — add same vars to hosting environment (Railway env vars or Streamlit Cloud secrets)
+   - **Local** — add to `.env` file
 
-**Options:**
-- **S3 / GCS** — cheap object storage (~$0.023/GB/month S3). Store artifacts keyed by `{sub_model_name}/{version}.pkl`. `sub_model_registry.yaml` holds the S3 URI instead of a local path.
-- **Git LFS** — easier migration from current state, GitHub charges for storage beyond 1GB.
-- **MLflow Tracking Server** — more overhead; not worth it without a full experiment tracking UI requirement.
-
-**Recommendation:** S3 with URI stored in `sub_model_registry.yaml`. Minimal code change — update artifact load/save paths in training and inference scripts; add `boto3` as a dependency.
+**S3 key convention:** `{model_family}/{filename}.pkl` (e.g. `home_win/elasticnet_market_blind_2026.pkl`, `sub_models/run_env_v3.pkl`). Mirrors the local `betting_ml/models/` directory structure.
 
 ---
 
@@ -3084,16 +3291,14 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 
 **Problem:** If daily ingestion fails (Parlay API error, Snowflake timeout, dbt model failure), there is currently no proactive alert. You find out when you notice predictions are stale.
 
-**Current state:** GitHub Actions sends email on workflow failure, but only if you notice the email.
+**Current state (2026-05-27): COMPLETE.** Dagster Cloud Alert Policy configured — `daily_ingestion_job` failure sends email to `ctcb57@gmail.com`. No code changes required; fully managed by Dagster Cloud.
 
-**Trigger:** Now. This is a gap that costs nothing to fix and has direct betting impact — a silent ingestion failure means you're betting on stale data.
+**What was done:**
+- Dagster Cloud UI → Deployment → Alerts → New Alert Policy
+- Trigger: Job Run Failure; Target: `daily_ingestion_job`; Channel: Email (`ctcb57@gmail.com`)
+- `check_data_freshness` op remains non-blocking (try/except in `pipeline/ops/daily_ingestion_ops.py`): freshness breaches log a warning to Dagster run logs but do not fail the run. View breach details in the Dagster Cloud run history.
 
-**Options:**
-- **GitHub Actions → Slack webhook** — add a single `actions/slack-notify` step to `daily_ingestion.yml` on failure. Free.
-- **`check_data_freshness.py` → alert** — wire the existing freshness check script to send a Slack message or email if any source is stale beyond threshold. Already partially built.
-- **Snowflake query alert** — Snowflake has native alerting on query results; can trigger if `DAILY_MODEL_PREDICTIONS` hasn't been written today.
-
-**Recommendation:** Add a Slack webhook failure notification to `daily_ingestion.yml` first (30-minute task). Then wire `check_data_freshness.py` to send a proactive alert if freshness check fails, regardless of whether the pipeline appeared to succeed.
+**To verify alerting works:** Trigger a manual `daily_ingestion_job` run in the Dagster Cloud UI and cancel it mid-run — a canceled run counts as a failure and should trigger the email. Check spam on first receipt.
 
 ---
 
