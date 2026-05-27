@@ -166,7 +166,7 @@ bullpen_v1:
   cv_score: null
   promotion_gate:
     metric: null
-    threshold: null
+    threshold: 3.4604
     direction: null
   parent_features:
     - feature_pregame_bullpen_state_features

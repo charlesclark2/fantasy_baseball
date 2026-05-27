@@ -1,0 +1,230 @@
+{
+  "season": 2021,
+  "fit_date": "2026-05-27",
+  "priors": {
+    "woba": {
+      "top": {
+        "R": {
+          "alpha": 60.9531,
+          "beta": 116.4093,
+          "n_batters": 74
+        },
+        "L": {
+          "alpha": 55.0717,
+          "beta": 111.5085,
+          "n_batters": 69
+        },
+        "S": {
+          "alpha": 56.563,
+          "beta": 111.1,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 61.98,
+          "beta": 131.1414,
+          "n_batters": 83
+        },
+        "L": {
+          "alpha": 49.7237,
+          "beta": 107.6855,
+          "n_batters": 65
+        },
+        "S": {
+          "alpha": 56.106,
+          "beta": 119.9293,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 49.0204,
+          "beta": 121.8215,
+          "n_batters": 102
+        },
+        "L": {
+          "alpha": 41.4024,
+          "beta": 107.6462,
+          "n_batters": 70
+        },
+        "S": {
+          "alpha": 45.2331,
+          "beta": 114.4838,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "k_pct": {
+      "top": {
+        "R": {
+          "alpha": 14.0917,
+          "beta": 51.0741,
+          "n_batters": 74
+        },
+        "L": {
+          "alpha": 9.8322,
+          "beta": 38.3562,
+          "n_batters": 69
+        },
+        "S": {
+          "alpha": 11.6929,
+          "beta": 43.8941,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 9.0293,
+          "beta": 29.0911,
+          "n_batters": 83
+        },
+        "L": {
+          "alpha": 16.9381,
+          "beta": 54.9467,
+          "n_batters": 65
+        },
+        "S": {
+          "alpha": 11.4366,
+          "beta": 36.958,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 6.9765,
+          "beta": 21.6637,
+          "n_batters": 102
+        },
+        "L": {
+          "alpha": 11.6143,
+          "beta": 32.3621,
+          "n_batters": 70
+        },
+        "S": {
+          "alpha": 8.3538,
+          "beta": 24.8043,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "bb_pct": {
+      "top": {
+        "R": {
+          "alpha": 7.5546,
+          "beta": 76.8295,
+          "n_batters": 74
+        },
+        "L": {
+          "alpha": 8.5655,
+          "beta": 78.0105,
+          "n_batters": 69
+        },
+        "S": {
+          "alpha": 7.9181,
+          "beta": 76.2577,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 11.0507,
+          "beta": 120.4639,
+          "n_batters": 83
+        },
+        "L": {
+          "alpha": 6.4213,
+          "beta": 62.111,
+          "n_batters": 65
+        },
+        "S": {
+          "alpha": 7.9951,
+          "beta": 82.5765,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 5.9795,
+          "beta": 77.4507,
+          "n_batters": 102
+        },
+        "L": {
+          "alpha": 7.1404,
+          "beta": 72.9132,
+          "n_batters": 70
+        },
+        "S": {
+          "alpha": 5.9783,
+          "beta": 69.8854,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "iso": {
+      "top": {
+        "R": {
+          "mu": 0.1955,
+          "sigma": 0.0604,
+          "n_batters": 74
+        },
+        "L": {
+          "mu": 0.1765,
+          "sigma": 0.0524,
+          "n_batters": 69
+        },
+        "S": {
+          "mu": 0.1864,
+          "sigma": 0.0573,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "mu": 0.1759,
+          "sigma": 0.0548,
+          "n_batters": 83
+        },
+        "L": {
+          "mu": 0.1781,
+          "sigma": 0.055,
+          "n_batters": 65
+        },
+        "S": {
+          "mu": 0.1769,
+          "sigma": 0.0547,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "mu": 0.1412,
+          "sigma": 0.0534,
+          "n_batters": 102
+        },
+        "L": {
+          "mu": 0.124,
+          "sigma": 0.0481,
+          "n_batters": 70
+        },
+        "S": {
+          "mu": 0.1342,
+          "sigma": 0.0519,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    }
+  }
+}

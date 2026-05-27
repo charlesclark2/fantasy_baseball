@@ -1,0 +1,103 @@
+{
+  "run_ts": "20260527T064719",
+  "gate_pass": false,
+  "raw_mean_mae": 2.4979,
+  "eb_mean_mae": 2.4981,
+  "delta_mae": 0.0001,
+  "folds_improved": 0,
+  "total_folds": 5,
+  "raw_folds": [
+    {
+      "tag": "raw",
+      "eval_year": 2022,
+      "n_eval": 4860,
+      "mae": 2.4679,
+      "bias": 0.2959,
+      "eb_coverage_pct": 0.0,
+      "n_features": 26
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2023,
+      "n_eval": 4860,
+      "mae": 2.5144,
+      "bias": 0.0043,
+      "eb_coverage_pct": 0.0,
+      "n_features": 26
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2024,
+      "n_eval": 4858,
+      "mae": 2.4252,
+      "bias": -0.0394,
+      "eb_coverage_pct": 0.0,
+      "n_features": 26
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2025,
+      "n_eval": 4860,
+      "mae": 2.5446,
+      "bias": 0.1009,
+      "eb_coverage_pct": 0.01,
+      "n_features": 26
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2026,
+      "n_eval": 1610,
+      "mae": 2.5376,
+      "bias": 0.1216,
+      "eb_coverage_pct": 0.0,
+      "n_features": 26
+    }
+  ],
+  "eb_folds": [
+    {
+      "tag": "eb",
+      "eval_year": 2022,
+      "n_eval": 4860,
+      "mae": 2.4679,
+      "bias": 0.2957,
+      "eb_coverage_pct": 0.0,
+      "n_features": 25
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2023,
+      "n_eval": 4860,
+      "mae": 2.5145,
+      "bias": 0.0042,
+      "eb_coverage_pct": 0.0,
+      "n_features": 25
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2024,
+      "n_eval": 4858,
+      "mae": 2.4254,
+      "bias": -0.0394,
+      "eb_coverage_pct": 0.0,
+      "n_features": 25
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2025,
+      "n_eval": 4860,
+      "mae": 2.5448,
+      "bias": 0.1011,
+      "eb_coverage_pct": 0.01,
+      "n_features": 25
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2026,
+      "n_eval": 1610,
+      "mae": 2.5378,
+      "bias": 0.1215,
+      "eb_coverage_pct": 0.0,
+      "n_features": 25
+    }
+  ]
+}

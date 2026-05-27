@@ -146,7 +146,7 @@ def _write_to_snowflake(conn, rows: list[dict], fit_date: date, run_id: str) -> 
 
     cur.execute(
         """
-        CREATE TEMPORARY TABLE tmp_eb_park_factors (
+        CREATE TEMPORARY TABLE baseball_data.betting.tmp_eb_park_factors (
             venue_id                          VARCHAR,
             season                            VARCHAR,
             eb_park_run_factor                VARCHAR,
@@ -179,7 +179,7 @@ def _write_to_snowflake(conn, rows: list[dict], fit_date: date, run_id: str) -> 
         for r in rows
     ]
     cur.executemany(
-        "INSERT INTO tmp_eb_park_factors VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO baseball_data.betting.tmp_eb_park_factors VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         data,
     )
 
@@ -199,7 +199,7 @@ def _write_to_snowflake(conn, rows: list[dict], fit_date: date, run_id: str) -> 
                 prior_variance::FLOAT                 AS prior_variance,
                 fit_date::DATE                        AS fit_date,
                 run_id::VARCHAR                       AS run_id
-            FROM tmp_eb_park_factors
+            FROM baseball_data.betting.tmp_eb_park_factors
         ) src ON tgt.venue_id = src.venue_id AND tgt.season = src.season
         WHEN MATCHED THEN UPDATE SET
             eb_park_run_factor            = src.eb_park_run_factor,

@@ -53,6 +53,7 @@ from betting_ml.scripts.train_run_env import (
     _VENUE_ELEVATION_FT,
     _TRAINING_START,
 )
+from betting_ml.utils.training_cache import get_cached_df
 
 _V1_CV_MAE        = 3.5104
 _PROMOTION_GATE   = 0.05
@@ -710,10 +711,20 @@ def main() -> None:
             "Implies gate_passed=True and triggers registry promotion."
         ),
     )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Bypass local Parquet cache and re-pull training data from Snowflake.",
+    )
     args = parser.parse_args()
 
-    print(f"Loading training data from Snowflake ({_TRAINING_START} → latest)...")
-    df = load_training_data()
+    print(f"Loading training data ({_TRAINING_START} → latest)...")
+    df = get_cached_df(
+        cache_key="run_env_training",
+        pull_fn=load_training_data,
+        max_age_hours=24,
+        refresh=args.refresh_cache,
+    )
     print(f"Loaded {len(df):,} rows across {df['game_year'].nunique()} seasons.")
 
     validate_no_leakage(df)

@@ -14,16 +14,38 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        unique_key = ['game_pk', 'pitcher_id'],
+        on_schema_change = 'sync_all_columns'
     )
 }}
 
 with
 
+{% if is_incremental() %}
+
+new_game_pitchers as (
+    select distinct pitcher_id
+    from {{ ref('stg_batter_pitches') }}
+    where game_type = 'R'
+      and game_date > (select max(game_date) from {{ this }})
+),
+
+{% endif %}
+
 pitches as (
 
-    select * from {{ ref('stg_batter_pitches') }}
-    where game_type = 'R'
+    select p.*
+    from {{ ref('stg_batter_pitches') }} p
+    {% if is_incremental() %}
+    join new_game_pitchers ngp on p.pitcher_id = ngp.pitcher_id
+    where p.game_type = 'R'
+      and p.game_date >= (
+          select date_trunc('year', max(game_date)) from {{ this }}
+      )
+    {% else %}
+    where p.game_type = 'R'
+    {% endif %}
 
 ),
 
@@ -512,4 +534,7 @@ rolling as (
 )
 
 select * from rolling
+{% if is_incremental() %}
+where game_date > (select max(game_date) from {{ this }})
+{% endif %}
 order by pitcher_id, game_date

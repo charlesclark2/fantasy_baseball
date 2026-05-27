@@ -440,6 +440,50 @@ lineup_entropy as (
     group by sz.game_pk, sz.home_away
 ),
 
+-- -------------------------------------------------------------------------
+-- EB lineup posteriors (Epic 4A.3)
+-- -------------------------------------------------------------------------
+
+-- Per-slot EB posterior: join posteriors written by compute_lineup_posteriors.py.
+-- No LEAKAGE GUARD needed — posteriors are pre-computed per game_pk/date by the
+-- script and stored keyed on game_pk, so they cannot contain future data.
+-- NULLs are left as-is (no coalesce to rolling stats) to keep ablation clean.
+slot_eb as (
+    select
+        ls.game_pk,
+        ls.home_away,
+        ls.slot,
+        ls.batter_id,
+        eb.eb_woba,
+        eb.eb_k_pct,
+        eb.eb_bb_pct,
+        eb.eb_iso,
+        eb.eb_woba_uncertainty
+    from lineup_slots ls
+    left join {{ source('betting', 'eb_batter_posteriors_raw') }} eb
+        on  eb.game_pk      = ls.game_pk::varchar
+        and eb.batting_slot = ls.slot
+        and eb.batter_id    = ls.batter_id::varchar
+    where ls.batter_id is not null
+),
+
+-- Lineup-level EB posterior aggregates
+eb_agg as (
+    select
+        game_pk,
+        home_away,
+        round(avg(eb_woba),              3) as avg_eb_woba,
+        round(avg(eb_k_pct),             3) as avg_eb_k_pct,
+        round(avg(eb_bb_pct),            3) as avg_eb_bb_pct,
+        round(avg(eb_iso),               3) as avg_eb_iso,
+        round(avg(eb_woba_uncertainty),  4) as avg_eb_woba_uncertainty,
+        round(
+            count(case when eb_woba is not null then 1 end)::float / 9.0
+        , 3)                               as eb_coverage_pct
+    from slot_eb
+    group by game_pk, home_away
+),
+
 final as (
     select
         l.game_pk,
@@ -530,6 +574,17 @@ final as (
         coalesce(za.lineup_rookie_count, 9)                         as lineup_rookie_count,
         round(coalesce(za.lineup_rookie_count, 9) / 9.0, 3)        as lineup_rookie_pa_share,
 
+        -- EB lineup posteriors (Epic 4A.3)
+        -- Shrinkage-regularised estimates blending prior, ZiPS, and current-season data.
+        -- NULL when posteriors not yet computed for this game_pk (run compute_lineup_posteriors.py).
+        -- Do NOT coalesce to rolling stats — ablation requires true NULLs for coverage tracking.
+        ea.avg_eb_woba,
+        ea.avg_eb_k_pct,
+        ea.avg_eb_bb_pct,
+        ea.avg_eb_iso,
+        ea.avg_eb_woba_uncertainty,
+        coalesce(ea.eb_coverage_pct, 0.0)                           as eb_coverage_pct,
+
         -- SCD-2 sentinel columns (Story 2.4 convention — born SCD-2-ready)
         current_timestamp()::timestamp_ntz                          as valid_from,
         null::timestamp_ntz                                         as valid_to,
@@ -580,6 +635,9 @@ final as (
     left join lineup_entropy le
         on  le.game_pk   = l.game_pk
         and le.home_away = l.home_away
+    left join eb_agg ea
+        on  ea.game_pk   = l.game_pk
+        and ea.home_away = l.home_away
 )
 
 select * from final

@@ -21,7 +21,9 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        unique_key = ['game_pk', 'team_abbrev'],
+        on_schema_change = 'sync_all_columns'
     )
 }}
 
@@ -46,6 +48,9 @@ with pitches as (
         woba_denom
     from {{ ref('stg_batter_pitches') }}
     where game_type = 'R'
+    {% if is_incremental() %}
+      and game_date >= (select max(game_date) - interval '30 days' from {{ this }})
+    {% endif %}
 
 ),
 
@@ -374,3 +379,6 @@ from team_game tg
 left join rolling r
     on  tg.game_date     = r.game_date
     and tg.pitching_team = r.pitching_team
+{% if is_incremental() %}
+where tg.game_date > (select max(game_date) from {{ this }})
+{% endif %}

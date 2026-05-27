@@ -10,7 +10,9 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        unique_key = ['game_pk', 'team'],
+        on_schema_change = 'sync_all_columns'
     )
 }}
 
@@ -18,15 +20,27 @@ with
 
 pitches as (
 
-    select * from {{ ref('stg_batter_pitches') }}
-    where game_type = 'R'
+    select p.*
+    from {{ ref('stg_batter_pitches') }} p
+    {% if is_incremental() %}
+    where p.game_type = 'R'
+      and p.game_date >= (select date_trunc('year', max(game_date)) from {{ this }})
+    {% else %}
+    where p.game_type = 'R'
+    {% endif %}
 
 ),
 
 game_results as (
 
-    select * from {{ ref('mart_game_results') }}
-    where game_type = 'R'
+    select gr.*
+    from {{ ref('mart_game_results') }} gr
+    {% if is_incremental() %}
+    where gr.game_type = 'R'
+      and gr.game_date >= (select date_trunc('year', max(game_date)) from {{ this }})
+    {% else %}
+    where gr.game_type = 'R'
+    {% endif %}
 
 ),
 
@@ -328,4 +342,7 @@ rolling as (
 )
 
 select * from rolling
+{% if is_incremental() %}
+where game_date > (select max(game_date) from {{ this }})
+{% endif %}
 order by team, game_date

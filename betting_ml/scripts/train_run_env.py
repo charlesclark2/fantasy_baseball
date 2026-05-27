@@ -49,6 +49,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.training_cache import get_cached_df
 
 _REGISTRY_NAME = "run_env_v1"
 _ARTIFACT_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v1.pkl"
@@ -705,10 +706,20 @@ def main() -> None:
         action="store_true",
         help="Skip writing CV results back to Snowflake (local dev).",
     )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Bypass local Parquet cache and re-pull training data from Snowflake.",
+    )
     args = parser.parse_args()
 
-    print(f"Loading training data from Snowflake ({_TRAINING_START} → latest)...")
-    df = load_training_data()
+    print(f"Loading training data ({_TRAINING_START} → latest)...")
+    df = get_cached_df(
+        cache_key="run_env_training",
+        pull_fn=load_training_data,
+        max_age_hours=24,
+        refresh=args.refresh_cache,
+    )
     print(f"Loaded {len(df):,} rows across {df['game_year'].nunique()} seasons.")
 
     validate_no_leakage(df)

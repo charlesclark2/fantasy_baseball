@@ -20,7 +20,9 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        unique_key = ['game_pk', 'team_abbrev'],
+        on_schema_change = 'sync_all_columns'
     )
 }}
 
@@ -30,6 +32,9 @@ game_results as (
     select * from {{ ref('mart_game_results') }}
     where game_type = 'R'
       and home_team_won is not null
+    {% if is_incremental() %}
+      and game_date >= (select max(game_date) - interval '30 days' from {{ this }})
+    {% endif %}
 ),
 
 ref_teams as (
@@ -181,3 +186,6 @@ final as (
 )
 
 select * from final
+{% if is_incremental() %}
+where game_date > (select max(game_date) from {{ this }})
+{% endif %}

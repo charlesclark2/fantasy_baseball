@@ -17,6 +17,7 @@ dependencies = [
     "shap>=0.44",
     "optuna>=4.8.0",
     "pyarrow>=24.0.0",
+    "duckdb>=1.1.0",
     "mlb-statsapi>=0.0.44",
     "streamlit>=1.56.0",
     "python-dotenv>=1.0",
