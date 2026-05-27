@@ -2088,13 +2088,9 @@ Results (2026-05-19):
 - **Promotion decision**: v3 Ridge promoted on bias-correction grounds. The purpose of the gate was to ensure improvement — the systematic bias was the identified root cause, and it was fixed. Gate criteria amended to include systematic bias alongside MAE for run_env models.
 - Artifact saved via `--force-winner ridge` (overrides MAE-only selection). Registry updated: run_env_v3 champion, run_env_v1 deprecated.
 - `generate_run_env_signals.py` updated to load `run_env_v3.pkl` and compute era features from `game_date` + `prior_season_runs` dict from artifact.
+- **S3 artifact storage (I2, 2026-05-27):** `run_env_v3.pkl` is stored at `s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl`. `generate_run_env_signals.py` loads from S3 when `AWS_ACCESS_KEY_ID` is set (Dagster / CI), falls back to local path in environments without AWS credentials. `sub_model_registry.yaml` `artifact_path` field already reflects the S3 URI.
 
-**Next (REQUIRED ORDER):**
-1. Re-run training to save Ridge artifact: `uv run python betting_ml/scripts/train_run_env_v3.py --force-winner ridge`
-2. Test in dev: `uv run python betting_ml/scripts/generate_run_env_signals.py --backfill --env dev`
-3. Verify row counts, then prod: `uv run python betting_ml/scripts/generate_run_env_signals.py --backfill --env prod`
-4. `dbtf build --select feature_pregame_sub_model_signals`
-5. Proceed to Story 3.Z ablation.
+All training and backfill steps complete (2026-05-19). Story 3.Z ablation complete. No further action required for Epic 3.
 
 ---
 
@@ -2267,12 +2263,12 @@ Tasks:
 - [ ] Run Optuna for LightGBM (50 trials); persist best params to `betting_ml/models/sub_models/offense_v1/lgbm_best_params.json`
 - [ ] Report per-fold and mean CV MAE for both models; report April-only MAE per fold
 - [ ] Check `avg_eb_woba_uncertainty` feature importance in LightGBM — if rank ≤ 20, flag as standalone feature candidate
-- [ ] Select champion; persist artifact as `betting_ml/models/sub_models/offense_v1/{model_name}_offense_v1.pkl`
-- [ ] Document in `model_registry.yaml` under `offense_v1` key (same schema as existing entries: artifact_path, feature_columns_path, cv_mae, training_rows, training_cutoff, challengers list)
+- [ ] Select champion; persist artifact locally as `betting_ml/models/sub_models/offense_v1/{model_name}_offense_v1.pkl`, then call `upload_artifact(local_path, "s3://baseball-betting-ml-artifacts/sub_models/offense_v1.pkl")` (see I2 guide section)
+- [ ] Document in `sub_model_registry.yaml` under `offense_v1` key; set `artifact_path` to the S3 URI
 
 Acceptance criteria:
 - [ ] Both models trained and evaluated on all 8 walk-forward folds
-- [ ] Champion artifact saved; `model_registry.yaml` updated with full metadata
+- [ ] Champion artifact saved locally and uploaded to S3; `sub_model_registry.yaml` updated with S3 `artifact_path` and full metadata
 - [ ] April-only MAE comparison documented — expected direction: EB group narrows gap vs. raw in April folds
 - [ ] LightGBM feature importance logged; `avg_eb_woba_uncertainty` rank noted
 
@@ -3259,31 +3255,29 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 
 ## I2 — Model Artifact Storage
 
-**Current state (2026-05-27): COMPLETE.** All artifact paths migrated to S3. Bucket: `baseball-betting-ml-artifacts`.
+**Current state (2026-05-27): COMPLETE.** All 83 pkl artifacts migrated to S3. Bucket: `baseball-betting-ml-artifacts`. All load paths verified working in Streamlit and Dagster.
 
 **What was done:**
-- `betting_ml/utils/artifact_store.py` — new utility with `load_artifact(path)` (handles both `s3://` URIs and local paths transparently) and `upload_artifact(local_path, s3_uri)` (called by training scripts after local save; skips gracefully if AWS credentials absent)
+- `betting_ml/utils/artifact_store.py` — new utility with `load_artifact(path)` (handles both `s3://` URIs and local paths transparently; tries `joblib.load()` first, falls back to `pickle.load()` for backward compatibility) and `upload_artifact(local_path, s3_uri)` (called by training scripts after local save; skips gracefully if AWS credentials absent)
 - `boto3>=1.34` added to `pyproject.toml`
 - All `artifact_path` fields in `model_registry.yaml` and `sub_model_registry.yaml` updated to `s3://baseball-betting-ml-artifacts/...` URIs
 - `betting_ml/utils/model_io.py` — `load_model()` now calls `artifact_store.load_artifact()` (Streamlit app path)
-- `betting_ml/scripts/predict_today.py` — `_load_model_for_tag()` uses `artifact_store.load_artifact()` (Dagster daily scoring path)
+- `betting_ml/scripts/predict_today.py` — `_load_model_for_tag()` uses `artifact_store.load_artifact()`; `_load_calibrator()` fixed to use `load_artifact()` instead of bare `joblib.load()` (which caused `NameError` after `import joblib` was removed)
 - `betting_ml/scripts/generate_run_env_signals.py` and `evaluate_sub_model.py` — use `artifact_store.load_artifact()`
-- Training scripts (`train_elasticnet_prod.py`, `train_total_runs_prod.py`, `train_run_diff_prod.py`, `train_run_env_v3.py`) — call `upload_artifact()` after local save
+- Training scripts (`train_elasticnet_prod.py`, `train_total_runs_prod.py`, `train_run_diff_prod.py`, `train_run_env_v3.py`) — call `upload_artifact()` after local save; `train_run_env_v3.py` migrated from `pickle.dump()` to `joblib.dump()` for consistency
 - `.gitignore` — removed all `!` exceptions; all `.pkl` files excluded going forward
-- `scripts/migrate_artifacts_to_s3.py` — one-time upload script for existing pkls
+- `scripts/migrate_artifacts_to_s3.py` — one-time migration script; adds `load_dotenv()` so AWS credentials are read from `.env` automatically when run locally
+- `app/streamlit_app.py` — added `load_dotenv()` at entry point so local Streamlit runs pick up AWS credentials from `.env`
+- `.github/workflows/daily_ingestion.yml`, `lineup_monitor.yml`, `ci.yml` — added `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` env vars to all steps that invoke `predict_today.py` or load model artifacts
 
-**One-time setup steps (required before next deploy):**
-1. Create S3 bucket `baseball-betting-ml-artifacts` in AWS console (us-east-1 recommended)
-2. Create IAM user with `s3:GetObject` + `s3:PutObject` on the bucket; generate access key
-3. Run `uv run python scripts/migrate_artifacts_to_s3.py` locally to upload all 41MB of existing pkls
-4. Verify: `python -c "from betting_ml.utils.artifact_store import load_artifact; print(type(load_artifact('s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl')))"`
-5. Untrack existing committed pkls: `git rm --cached betting_ml/models/**/*.pkl`
-6. Add credentials everywhere the code runs:
-   - **Dagster Cloud** — Deployment → Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`
-   - **Streamlit** — add same vars to hosting environment (Railway env vars or Streamlit Cloud secrets)
-   - **Local** — add to `.env` file
+**Credentials by environment:**
+- **Local** — `.env` file (loaded automatically via `load_dotenv()` in Streamlit entry point and migration script)
+- **Dagster Cloud** — Deployment → Environment Variables (injected into process; inherited by `subprocess.run` in `_run_script`)
+- **GitHub Actions** — Repository Secrets → passed as `env:` in each workflow step that needs S3
 
 **S3 key convention:** `{model_family}/{filename}.pkl` (e.g. `home_win/elasticnet_market_blind_2026.pkl`, `sub_models/run_env_v3.pkl`). Mirrors the local `betting_ml/models/` directory structure.
+
+**Adding a new artifact:** Train locally → `joblib.dump(artifact, local_path)` → `upload_artifact(local_path, s3_uri)` → update registry yaml with S3 URI. The `upload_artifact()` call in the training script handles promotion automatically.
 
 ---
 
@@ -3297,6 +3291,7 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 - Dagster Cloud UI → Deployment → Alerts → New Alert Policy
 - Trigger: Job Run Failure; Target: `daily_ingestion_job`; Channel: Email (`ctcb57@gmail.com`)
 - `check_data_freshness` op remains non-blocking (try/except in `pipeline/ops/daily_ingestion_ops.py`): freshness breaches log a warning to Dagster run logs but do not fail the run. View breach details in the Dagster Cloud run history.
+- `scripts/check_data_freshness.py` — removed `baseball_data.oddsapi.mlb_odds_raw` entry (Odds API fully deprecated 2026-05-27; Parlay API is now the sole odds source). Add the Parlay API odds table here once ingestion is confirmed stable.
 
 **To verify alerting works:** Trigger a manual `daily_ingestion_job` run in the Dagster Cloud UI and cancel it mid-run — a canceled run counts as a failure and should trigger the email. Check spam on first receipt.
 

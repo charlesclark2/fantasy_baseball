@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -50,7 +51,8 @@ from betting_ml.scripts.train_run_env_v3 import (
     _apply_imputation_v3,
 )
 
-_ARTIFACT_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
+_ARTIFACT_S3_URI  = "s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl"
+_ARTIFACT_LOCAL   = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
 _SUB_MODEL_NAME = "run_env_v3"
 _SUB_MODEL_VERSION = "v3"
 _SIDES = ("home", "away")
@@ -286,8 +288,9 @@ def main() -> None:
     env_label = f"[{args.env.upper()}]"
     print(f"{env_label} target={target_table}")
 
-    print(f"\nLoading artifact from {_ARTIFACT_PATH}...")
-    artifact = load_artifact(_ARTIFACT_PATH)
+    artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL
+    print(f"\nLoading artifact from {artifact_path}...")
+    artifact = load_artifact(artifact_path)
     print(f"  model_type={artifact['model_type']}, CV MAE={artifact['cv_mae']}")
 
     print(f"\nLoading games {start_date} → {end_date}...")
