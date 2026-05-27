@@ -24,6 +24,7 @@ extracted as (
         raw_json:HR::float                                              as proj_hr,
         raw_json:WAR::float                                             as proj_war,
         raw_json:ISO::float                                             as proj_iso,
+        raw_json:wOBA::float                                            as proj_woba,
         raw_json:MLBAMID::varchar                                       as mlbam_batter_id,
         ingestion_ts,
         load_id,
@@ -49,6 +50,7 @@ select
     proj_hr,
     proj_war,
     proj_iso,
+    proj_woba,
     mlbam_batter_id,
     ingestion_ts,
     load_id

@@ -11,16 +11,40 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        unique_key = ['game_pk', 'batter_id'],
+        on_schema_change = 'sync_all_columns'
     )
 }}
 
 with
 
+{% if is_incremental() %}
+
+-- Batters who have new games not yet in this table
+new_game_batters as (
+    select distinct batter_id
+    from {{ ref('stg_batter_pitches') }}
+    where game_type = 'R'
+      and game_date > (select max(game_date) from {{ this }})
+),
+
+{% endif %}
+
 pitches as (
 
-    select * from {{ ref('stg_batter_pitches') }}
-    where game_type = 'R'
+    select p.*
+    from {{ ref('stg_batter_pitches') }} p
+    {% if is_incremental() %}
+    -- Only process affected batters; pull from season start so STD windows are correct
+    join new_game_batters ngb on p.batter_id = ngb.batter_id
+    where p.game_type = 'R'
+      and p.game_date >= (
+          select date_trunc('year', max(game_date)) from {{ this }}
+      )
+    {% else %}
+    where p.game_type = 'R'
+    {% endif %}
 
 ),
 
@@ -620,6 +644,11 @@ rolling as (
             / nullif(sum(pa_count) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row), 0)
         , 3) as bb_pct_std,
         round(
+            (sum(total_bases) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row)
+             - sum(hits) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row))
+            / nullif(sum(at_bats) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row), 0)
+        , 3) as iso_std,
+        round(
             sum(hard_hit_balls) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row)
             / nullif(sum(batted_balls) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row), 0)
         , 3) as hard_hit_pct_std,
@@ -649,4 +678,8 @@ rolling as (
 )
 
 select * from rolling
+{% if is_incremental() %}
+-- Only insert rows for game dates not yet in the table
+where game_date > (select max(game_date) from {{ this }})
+{% endif %}
 order by batter_id, game_date

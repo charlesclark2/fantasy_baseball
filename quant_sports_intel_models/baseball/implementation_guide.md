@@ -45,6 +45,44 @@ uv run scripts/predict_today.py
 uv run scripts/parlay_api_ingestion.py events --dry-run
 ```
 
+## Cost discipline — avoiding unbounded Snowflake rebuilds
+
+**NEVER run `dbtf build` without a `--select` scope during local development.**
+An unscoped build triggers full rebuilds of every mart model including `mart_batter_rolling_stats`
+and `mart_pitcher_rolling_stats`, which cost ~50s each and run in both the target schema
+and the CI schema. 10 unscoped builds in a day = ~17 minutes of warehouse compute wasted.
+
+```bash
+# ✅ Correct — scope to only what changed
+dbtf build --target dev --select state:modified+ --state dbt/state
+dbtf build --target dev --select mart_batter_rolling_stats
+
+# ❌ Never do this locally
+dbtf build --target dev   # rebuilds everything
+```
+
+**For training scripts**, use the `--refresh-cache` flag only when you need fresh data.
+Within a single day of dev work, omit it — the Parquet cache is reused at zero Snowflake cost:
+
+```bash
+# ✅ First run of the day — pulls from Snowflake, saves cache
+uv run python betting_ml/scripts/train_run_env_v3.py --refresh-cache
+
+# ✅ Subsequent runs same day — reads from local Parquet, no Snowflake hit
+uv run python betting_ml/scripts/train_run_env_v3.py
+
+# Inspect cached datasets
+uv run python betting_ml/utils/training_cache.py
+```
+
+**For exploratory SQL on cached data**, use DuckDB instead of hitting Snowflake:
+
+```python
+from betting_ml.utils.training_cache import duckdb_on_cache
+con = duckdb_on_cache("run_env_training")
+con.execute("SELECT game_year, AVG(total_runs) FROM df GROUP BY 1 ORDER BY 1").df()
+```
+
 ## CI (automated, PR → main)
 
 Every PR to `main` triggers `dbt-build-ci` in GitHub Actions:
@@ -2059,22 +2097,22 @@ Script: `betting_ml/scripts/ablation_run_env_signals.py`
 **Prior structure:** Normal(μ, σ²) fit to the cross-park distribution of 3-year rolling run factors. One prior per season (re-fit annually).
 
 Tasks:
-- [ ] Compute venue-level 3-year rolling run factor for all venues with ≥ 100 games in the window from `mart_game_results` grouped by `venue_id`; this is the "observed" park factor
-- [ ] Fit Normal(μ, σ²) to the cross-park distribution of these observed factors — this is the prior
-- [ ] For each venue × season, compute EB posterior: μ_post = (μ₀/σ₀² + n×x̄/σ²) / (1/σ₀² + n/σ²) where n = games at that venue in the 3-year window and x̄ = observed run factor
-- [ ] For venues with n < 30 games (non-standard venues), posterior shrinks heavily toward μ₀ — desired behavior
-- [ ] For Coors Field (known extreme outlier with large n), posterior should be close to observed — prior has minimal influence
-- [ ] Store output as `mart_eb_park_factors` with columns: `venue_id`, `season`, `eb_park_run_factor`, `eb_park_run_factor_uncertainty`, `n_games`, `raw_park_run_factor`, `shrinkage_factor` (how much the raw was pulled toward the mean)
-- [ ] Build dbt model `mart_eb_park_factors` sourced from the Python output
-- [ ] Replace the `park_run_factor_3yr` null imputation in `train_run_env_v3.py` with `eb_park_run_factor` — the EB value is always non-null, eliminating the imputation step entirely
-- [ ] Update `generate_run_env_signals.py` to use `eb_park_run_factor` instead of raw park factor when available
+- [x] Compute venue-level 3-year rolling run factor for all venues with ≥ 100 games in the window from `mart_game_results` grouped by `venue_id`; this is the "observed" park factor
+- [x] Fit Normal(μ, σ²) to the cross-park distribution of these observed factors — this is the prior
+- [x] For each venue × season, compute EB posterior: μ_post = (μ₀/σ₀² + n×x̄/σ²) / (1/σ₀² + n/σ²) where n = games at that venue in the 3-year window and x̄ = observed run factor
+- [x] For venues with n < 30 games (non-standard venues), posterior shrinks heavily toward μ₀ — desired behavior
+- [x] For Coors Field (known extreme outlier with large n), posterior should be close to observed — prior has minimal influence
+- [x] Store output as `mart_eb_park_factors` with columns: `venue_id`, `season`, `eb_park_run_factor`, `eb_park_run_factor_uncertainty`, `n_games`, `raw_park_run_factor`, `shrinkage_factor` (how much the raw was pulled toward the mean)
+- [x] Build dbt model `mart_eb_park_factors` sourced from the Python output
+- [x] Replace the `park_run_factor_3yr` null imputation in `train_run_env_v3.py` with `eb_park_run_factor` — the EB value is always non-null, eliminating the imputation step entirely
+- [x] Update `generate_run_env_signals.py` to use `eb_park_run_factor` instead of raw park factor when available
 
 Acceptance criteria:
-- [ ] `eb_park_run_factor` is non-null for 100% of games (including Sutter Health, Tokyo Dome, neutral sites)
-- [ ] Shrinkage factor for Coors Field (n ≥ 200 in 3yr window, e.g. 2025: n=241) is < 0.15 (prior has minimal influence; actual σ₀²=0.693, σ²_game=20.45 → shrinkage ≈ 0.109)
-- [ ] Shrinkage factor for a low-sample venue (n ≤ 25 games, e.g. TD Ballpark 2021: n=21) is > 0.50 (prior dominates; actual ≈ 0.584). Sutter Health 2025 (n=81, first full season) achieves meaningful shrinkage ~0.27 — not prior-dominated but visibly pulled toward mean.
-- [ ] `mart_eb_park_factors` passes not_null and unique-per-(venue, season) dbt tests
-- [ ] Re-run `train_run_env_v3.py` with EB park factors: CV MAE does not degrade vs. league-mean imputation baseline; document delta in registry notes
+- [x] `eb_park_run_factor` is non-null for 100% of games (including Sutter Health, Tokyo Dome, neutral sites)
+- [x] Shrinkage factor for Coors Field (n ≥ 200 in 3yr window, e.g. 2025: n=241) is < 0.15 (prior has minimal influence; actual σ₀²=0.693, σ²_game=20.45 → shrinkage ≈ 0.109)
+- [x] Shrinkage factor for a low-sample venue (n ≤ 25 games, e.g. TD Ballpark 2021: n=21) is > 0.50 (prior dominates; actual ≈ 0.584). Sutter Health 2025 (n=81, first full season) achieves meaningful shrinkage ~0.27 — not prior-dominated but visibly pulled toward mean.
+- [x] `mart_eb_park_factors` passes not_null and unique-per-(venue, season) dbt tests
+- [x] Re-run `train_run_env_v3.py` with EB park factors: CV MAE does not degrade vs. league-mean imputation baseline; document delta in registry notes
 
 ---
 

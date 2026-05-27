@@ -900,6 +900,18 @@ sources:
           DDL: scripts/ddl/eb_park_factors_raw.sql.
           Grain: venue_id × season.
 
+      - name: eb_batter_posteriors_raw
+        description: >
+          Per-batter-slot Empirical Bayes posteriors for wOBA, K%, BB%, and ISO.
+          Written by betting_ml/scripts/eb_priors/compute_lineup_posteriors.py via
+          MERGE upsert. Conjugate priors are stratified by role (top/middle/bottom
+          batting slot) × handedness × season, fit by fit_lineup_priors.py (4A.1).
+          ZiPS DC projections are blended at low sample sizes (PA < 150).
+          eb_data_source: 'prior_only' (PA=0, no ZiPS), 'zips_blend' (PA < 150),
+          'full_eb' (PA ≥ 150).
+          DDL: scripts/ddl/create_eb_batter_posteriors_raw.sql.
+          Grain: game_pk × batting_slot × batter_id.
+
   - name: betting_ml
     database: baseball_data
     schema: betting_ml

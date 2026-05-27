@@ -155,6 +155,41 @@ models:
         tests:
           - not_null
 
+      - name: avg_eb_woba
+        description: >
+          Average EB posterior wOBA across all 9 lineup slots. Null when
+          compute_lineup_posteriors.py has not yet been run for this game_pk.
+          Blends prior × ZiPS × current-season data (Epic 4A).
+
+      - name: avg_eb_k_pct
+        description: >
+          Average EB posterior K% across all 9 lineup slots. Same null pattern
+          as avg_eb_woba. Blends prior × ZiPS × current-season data.
+
+      - name: avg_eb_bb_pct
+        description: >
+          Average EB posterior BB% across all 9 lineup slots. Same null pattern
+          as avg_eb_woba.
+
+      - name: avg_eb_iso
+        description: >
+          Average EB posterior ISO (Normal-Normal conjugate) across all 9 lineup
+          slots. Same null pattern as avg_eb_woba.
+
+      - name: avg_eb_woba_uncertainty
+        description: >
+          Average posterior standard deviation of the EB wOBA estimate across
+          lineup slots. Higher values indicate lower data confidence (early season,
+          new players). Same null pattern as avg_eb_woba.
+
+      - name: eb_coverage_pct
+        description: >
+          Fraction of the 9 lineup slots with a non-null EB wOBA posterior.
+          0.0 when compute_lineup_posteriors.py has not been run for this game_pk.
+          COALESCE(ea.eb_coverage_pct, 0.0) in the final CTE makes this not-null.
+        tests:
+          - not_null
+
   - name: feature_pregame_starter_features
     description: >
       Pre-game starting pitcher features for ML. One row per game_pk × pitcher_id.

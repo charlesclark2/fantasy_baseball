@@ -32,6 +32,9 @@ betting_ml/models/**/*.pkl
 betting_ml/evaluation/model_evaluation/*.parquet
 betting_ml/evaluation/model_evaluation/**/*.parquet
 
+# Training data cache (Parquet snapshots pulled from Snowflake — regenerated on demand)
+betting_ml/data/cache/
+
 # Daily prediction outputs (written by predict_today.py — tracked in Snowflake, not git)
 betting_ml/outputs/predictions*.csv
 betting_ml/outputs/probability_outputs*.parquet
