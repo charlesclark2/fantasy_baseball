@@ -63,6 +63,10 @@ jobs:
         run: uv sync --no-dev-packages || uv sync
 
       - name: Smoke test home_win model
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: |
           uv run python -c "
           import numpy as np

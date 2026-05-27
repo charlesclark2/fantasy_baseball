@@ -190,10 +190,10 @@ _STATIC_CAL_PATH  = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "calib
 def _load_calibrator():
     if _ROLLING_CAL_PATH.exists():
         print(f"Loaded rolling calibrator from {_ROLLING_CAL_PATH}")
-        return joblib.load(_ROLLING_CAL_PATH)
+        return load_artifact(_ROLLING_CAL_PATH)
     if _STATIC_CAL_PATH.exists():
         print(f"Loaded static calibrator from {_STATIC_CAL_PATH}")
-        return joblib.load(_STATIC_CAL_PATH)
+        return load_artifact(_STATIC_CAL_PATH)
     return None
 
 
