@@ -6,6 +6,7 @@ from pipeline.jobs.intraday_jobs import (
     odds_snapshot_job,
 )
 from pipeline.jobs.sensor_jobs import lineup_monitor_job, pregame_snapshot_job
+from pipeline.schedules.historical_matches_schedule import historical_matches_catchup_job
 
 all_jobs = [
     snowflake_check_job,
@@ -15,4 +16,5 @@ all_jobs = [
     intraday_schedule_job,
     lineup_monitor_job,
     pregame_snapshot_job,
+    historical_matches_catchup_job,
 ]
