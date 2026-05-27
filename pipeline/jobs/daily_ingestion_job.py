@@ -14,6 +14,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_fangraphs_hitting_leaderboard,
     ingest_fangraphs_stuff_plus,
     ingest_oaa,
+    ingest_sprint_speed,
     ingest_parlay_canonical_events,
     ingest_parlay_events,
     ingest_parlay_odds,
@@ -40,7 +41,8 @@ def daily_ingestion_job():
     s9 = ingest_fangraphs_stuff_plus(start=s8)
     s10 = ingest_fangraphs_catcher_framing(start=s9)
     s11 = ingest_fangraphs_hitting_leaderboard(start=s10)
-    s12 = ingest_transactions(start=s11)
+    s11b = ingest_sprint_speed(start=s11)
+    s12 = ingest_transactions(start=s11b)
     s13 = ingest_oaa(start=s12)
     s14 = compute_elo(start=s13)
     s15 = check_data_freshness(start=s14)

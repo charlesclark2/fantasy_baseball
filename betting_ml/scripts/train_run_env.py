@@ -143,6 +143,7 @@ select
 
     -- park features (prior-season, no leakage risk)
     p.park_run_factor_3yr,
+    p.eb_park_run_factor,
     p.elevation_ft,
     p.center_ft,
     -- is_dome derived from park roof_type, NOT w.is_dome: dome games have no

@@ -908,8 +908,8 @@ Re-ingests Stats API schedule to capture lineup/score updates throughout the day
 
 **Acceptance criteria:**
 
-- Asset materializes on the first Monday after deployment
-- Ad-hoc backfill for a custom date range can be triggered from the Dagster UI via asset config override
+- Asset materializes on the first Monday after deployment ✅
+- Ad-hoc backfill for a custom date range can be triggered from the Dagster UI via asset config override ✅
 
 ---
 
@@ -1064,10 +1064,10 @@ Tasks:
 Acceptance Criteria:
 - [x] T.1.A investigation complete; verdict: no backfill script needed; existing rows are valid starting state
 - [x] Migration DDL run in prod (`scripts/ddl/monthly_schedule_add_temporal_columns.sql`) — **done 2026-05-12**
-- [ ] Two consecutive ingestions of the same month produce **two rows** in `monthly_schedule` (not one updated row)
-- [ ] Staging models still produce the latest-state lineup/score data correctly (row count and value spot-check)
+- [x] Two consecutive ingestions of the same month produce **two rows** in `monthly_schedule` (not one updated row) — confirmed 2026-05-26: May has 211 rows (ingestions 2026-05-12→2026-05-26), April has 110 rows
+- [x] Staging models still produce the latest-state lineup/score data correctly (row count and value spot-check) — confirmed 2026-05-26: `feature_pregame_weather_features` 12,468 rows, 100% non-null on all key columns
 - [x] Inventory file corrected — **done 2026-05-12**
-- [ ] Dev run validates the conversion before merging
+- [x] Dev run validates the conversion before merging — conversion has been running in prod since 2026-05-12 with clean results
 
 **PR coordination note:** T.1 (monthly_schedule MERGE removal) and T.4.D (venues_raw MERGE removal) both modify `ingest_statsapi.py`. These MUST ship in a single coordinated PR to avoid merge conflicts. Assign both sub-stories to the same developer or block T.4.D on T.1 merge.
 
@@ -2071,8 +2071,8 @@ Tasks:
 
 Acceptance criteria:
 - [ ] `eb_park_run_factor` is non-null for 100% of games (including Sutter Health, Tokyo Dome, neutral sites)
-- [ ] Shrinkage factor for Coors Field (large n) is < 0.05 (prior has minimal influence)
-- [ ] Shrinkage factor for Sutter Health Park (small n) is > 0.50 (prior dominates)
+- [ ] Shrinkage factor for Coors Field (n ≥ 200 in 3yr window, e.g. 2025: n=241) is < 0.15 (prior has minimal influence; actual σ₀²=0.693, σ²_game=20.45 → shrinkage ≈ 0.109)
+- [ ] Shrinkage factor for a low-sample venue (n ≤ 25 games, e.g. TD Ballpark 2021: n=21) is > 0.50 (prior dominates; actual ≈ 0.584). Sutter Health 2025 (n=81, first full season) achieves meaningful shrinkage ~0.27 — not prior-dominated but visibly pulled toward mean.
 - [ ] `mart_eb_park_factors` passes not_null and unique-per-(venue, season) dbt tests
 - [ ] Re-run `train_run_env_v3.py` with EB park factors: CV MAE does not degrade vs. league-mean imputation baseline; document delta in registry notes
 
@@ -2129,6 +2129,68 @@ Tasks:
 
 **Why this prior structure:** A single league-average prior treats a 3-hole cleanup hitter and a 9-hole placeholder as drawn from the same talent distribution — they are not. Role × handedness stratification captures the structural differences in who occupies each part of a lineup. Season-level re-fitting captures league-wide offensive environment shifts (pitch clock era, shift ban) automatically.
 
+**Code pattern to follow:** `betting_ml/scripts/eb_priors/fit_park_priors.py` — use `get_snowflake_connection()` from `betting_ml.utils.data_loader`, fully qualified `database.schema.table` names throughout, VARCHAR temp table + MERGE pattern for all Snowflake writes.
+
+---
+
+### 4A pre-requisites — One-time infra tasks before starting 4A.1
+
+These must be done before the first story begins:
+
+**Pre-4A.A — Add `iso_std` to `mart_batter_rolling_stats`**
+
+`iso_std` is needed for season-to-date ISO in the EB posterior. The mart currently rolls up wOBA, K%, BB%, hard-hit, barrel, whiff, chase — but not ISO. ISO per PA is already captured as `iso_value` in `stg_batter_pitches`.
+
+- [ ] In `mart_batter_rolling_stats.sql`, add to the `game_stats` CTE:
+  - `sum(iso_value) as iso_value_sum` (alongside the existing `woba_value_sum`)
+- [ ] In the `rolling` CTE, add:
+  ```sql
+  round(
+      sum(iso_value_sum) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row)
+      / nullif(sum(pa_count) over (partition by batter_id, game_year order by game_date rows between unbounded preceding and current row), 0)
+  , 3) as iso_std
+  ```
+- [ ] Run `dbtf build --select mart_batter_rolling_stats` to confirm it builds and verify a sample of ISO values look reasonable (0.100–0.250 for MLB regulars)
+
+**Pre-4A.B — Add `proj_woba` to `stg_fangraphs__zips_hitting`**
+
+ZiPS produces a wOBA projection; it's in `fg_zips_hitting_raw.raw_json` but wasn't extracted. Needed for the ZiPS blend in 4A.2.
+
+- [ ] In `dbt/models/staging/fangraphs/stg_fangraphs__zips_hitting.sql`, add to the `extracted` CTE:
+  ```sql
+  raw_json:wOBA::float    as proj_woba,
+  ```
+  (alongside the existing `proj_obp`, `proj_slg`, etc.)
+- [ ] Add `proj_woba` to the final `select`
+- [ ] Verify with `dbtf build --select stg_fangraphs__zips_hitting` and spot-check that values land in [0.250, 0.420] range
+
+**Pre-4A.C — Create DDL for `baseball_data.betting.eb_batter_posteriors_raw`**
+
+Create `scripts/ddl/create_eb_batter_posteriors_raw.sql`:
+
+```sql
+CREATE TABLE IF NOT EXISTS baseball_data.betting.eb_batter_posteriors_raw (
+    game_pk          VARCHAR(20)  NOT NULL,
+    batting_slot     INTEGER      NOT NULL,
+    batter_id        VARCHAR(20)  NOT NULL,
+    season           INTEGER      NOT NULL,
+    game_date        DATE         NOT NULL,
+    eb_woba          FLOAT,
+    eb_k_pct         FLOAT,
+    eb_bb_pct        FLOAT,
+    eb_iso           FLOAT,
+    eb_woba_uncertainty FLOAT,
+    pa_weight        FLOAT,
+    eb_data_source   VARCHAR(20),
+    fit_date         DATE,
+    run_id           VARCHAR(36),
+    ingestion_ts     TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (game_pk, batting_slot, batter_id)
+);
+```
+
+`eb_data_source` values: `full_eb` (PA ≥ 150), `zips_blend` (0 < PA < 150), `prior_only` (PA = 0 / no ZiPS match).
+
 ---
 
 ### 4A.1 — Fit role × handedness priors per season
@@ -2139,21 +2201,45 @@ Tasks:
 - Role groups: top (slots 1–3), middle (slots 4–6), bottom (slots 7–9)
 - Handedness: L, R, S (switch — treated as R-dominant for distribution fitting)
 - Seasons: 2021–current (matching the offensive model training window from Story 2.5)
-- Metric: fit separate Beta(α, β) distributions for wOBA, K%, BB%, ISO per role × handedness × season cell using method of moments on all qualified batters (≥ 100 PA in that season)
+- Metrics: fit separate Beta(α, β) distributions for wOBA, K%, BB%, ISO per role × handedness × season cell using method of moments on all qualified batters (≥ 100 PA in that season)
+
+**Data sources for prior fitting:**
+
+| Need | Source | Key columns |
+|------|--------|-------------|
+| Season stats (wOBA, K%, BB%, ISO, PA) | `stg_fangraphs__hitting_leaderboard` where `window_type = 'season'` | `woba`, `k_pct`, `bb_pct`, `iso`, `pa`, `mlbam_batter_id`, `season` |
+| Batter handedness | `mart_batter_rolling_stats` — take the mode `batter_hand` per `(batter_id, game_year)` | `batter_id`, `batter_hand`, `game_year` |
+| Mode batting order slot | `stg_statsapi_lineups` — compute `mode(batting_order)` per `(player_id, season)` across all regular-season games | `player_id`, `batting_order`, season derived from `game_date` |
+
+Join key: FanGraphs `mlbam_batter_id` = statsapi `player_id` = rolling stats `batter_id` (all are MLBAM IDs as VARCHAR).
+
+**Batting order mode query pattern:**
+```sql
+select
+    player_id                                   as batter_id,
+    year(game_date)                             as season,
+    mode(batting_order)                         as mode_batting_slot
+from baseball_data.baseball.stg_statsapi_lineups
+where game_type = 'R'
+group by 1, 2
+```
+
+**ISO distribution note:** ISO can exceed 1.0 for extreme power hitters (rare but valid) and is left-skewed near 0. Use Normal-Normal conjugate model for ISO rather than Beta-Binomial. Document this decision in a comment block at the top of the script with a brief justification.
 
 Tasks:
-- [ ] Query `mart_batter_season_stats` (or equivalent rolling source) for all batters 2021–current with PA ≥ 100, grouped by season, handedness, and typical batting order position (mode slot from game logs)
+- [ ] Query the three data sources above, join on MLBAM ID and season, filter to batters with PA ≥ 100 in FanGraphs season leaderboard
 - [ ] Assign role group from mode batting order slot: slots 1–3 → top, 4–6 → middle, 7–9 → bottom
-- [ ] For each (metric, role, handedness, season) cell, fit Beta(α, β) via method of moments: α = μ(μ(1−μ)/σ² − 1), β = (1−μ)(μ(1−μ)/σ² − 1). For ISO (can exceed 1.0), fit a scaled Beta or use Normal-Normal instead — document the decision
-- [ ] Store fitted priors in `betting_ml/models/eb_priors/lineup_priors_{season}.json` with schema: `{metric: {role: {handedness: {alpha, beta, mu, sigma, n_batters}}}}`
-- [ ] Add a prior-quality check: flag any cell where n_batters < 20 and fall back to the role-level prior ignoring handedness; document with `fallback: true` flag in JSON
-- [ ] Add `fit_lineup_priors.py` to `daily_ingestion.yml` as a seasonal step (re-run once per season — gate on game_date within 7 days of Opening Day or triggered manually)
+- [ ] For wOBA, K%, BB% (bounded [0,1] rates): fit Beta(α, β) via method of moments: α = μ(μ(1−μ)/σ² − 1), β = (1−μ)(μ(1−μ)/σ² − 1)
+- [ ] For ISO: fit Normal(μ, σ²) via simple MoM (mean and variance of the cell's ISO values); store as `{mu, sigma, n_batters}` — skip alpha/beta keys for ISO
+- [ ] Store fitted priors in `betting_ml/models/eb_priors/lineup_priors_{season}.json` with schema: `{metric: {role: {handedness: {alpha, beta, mu, sigma, n_batters}}}}`; ISO cells omit `alpha`/`beta`, wOBA/K%/BB% cells omit nothing
+- [ ] Add a prior-quality check: flag any cell where n_batters < 20 and fall back to the role-level prior ignoring handedness; mark with `"fallback": true` in JSON
+- [ ] Output covers seasons 2021–current year; one JSON file per season
 
 Acceptance criteria:
 - [ ] Priors exist for all (metric × role × handedness × season) cells with ≥ 20 qualifying batters
-- [ ] Cells with < 20 batters fall back to role-only prior (handedness collapsed); documented in JSON with `fallback: true`
-- [ ] Prior mu values are directionally sensible: top role wOBA prior > bottom role wOBA prior for every season
-- [ ] ISO handling decision documented: Beta (scaled) or Normal-Normal, with reasoning in a comment block at top of script
+- [ ] Cells with < 20 batters fall back to role-only prior (handedness collapsed); marked `"fallback": true` in JSON
+- [ ] Prior mu values are directionally sensible: top role wOBA prior > bottom role wOBA prior for every season (e.g., top ~0.340, bottom ~0.295)
+- [ ] ISO uses Normal-Normal; wOBA/K%/BB% use Beta-Binomial; difference documented at top of script
 
 ---
 
@@ -2161,21 +2247,46 @@ Acceptance criteria:
 
 **Script:** `betting_ml/scripts/eb_priors/compute_lineup_posteriors.py`
 
-**Posterior update rule (Beta-Binomial for rate stats):** For each batter in each lineup slot on a given game date, look up the prior Beta(α, β) for their (metric, role, handedness, season) cell, observe their current-season PA and metric rate, and compute posterior mean = (α + successes) / (α + β + PA). Store posterior variance as `eb_woba_uncertainty`.
+**Posterior update rule:**
+- Beta-Binomial (wOBA, K%, BB%): posterior mean = (α + observed_successes) / (α + β + PA). Posterior variance = (α+s)(β+f) / ((α+β+PA)²(α+β+PA+1)) where s = observed successes, f = PA − s.
+- Normal-Normal (ISO): posterior mean = (μ₀/σ₀² + n×x̄/σ²) / (1/σ₀² + n/σ²); posterior variance = 1 / (1/σ₀² + n/σ²) where n = PA, x̄ = observed ISO, σ² = within-player ISO variance (use population σ² from prior cell as approximation).
+
+**Data sources for posterior computation:**
+
+| Need | Source | Key columns |
+|------|--------|-------------|
+| Current-season stats as-of game date T | `mart_batter_rolling_stats` — latest row per batter where `game_date < T` (leakage guard already enforced in the mart's rolling window) | `batter_id`, `game_date`, `woba_std`, `k_pct_std`, `bb_pct_std`, `iso_std`, `pa_count_std`, `batter_hand` |
+| Today's lineup (batter-slot pairs) | `stg_statsapi_lineups` for game date T | `game_pk`, `batting_order`, `player_id`, `game_date` |
+| ZiPS projection (for low-PA blend) | `stg_fangraphs__zips_hitting` (projection_type = 'DC') filtered to current season | `mlbam_batter_id`, `proj_woba`, `proj_k_pct`, `proj_bb_pct`, `proj_iso` |
+| Priors | `betting_ml/models/eb_priors/lineup_priors_{season}.json` | loaded from disk |
+
+Note: Use `woba_std`, `k_pct_std`, `bb_pct_std`, `iso_std`, `pa_count_std` from `mart_batter_rolling_stats` (season-to-date window, NOT 30d rolling). These are the `_std` suffix columns, not `_30d`.
+
+**ZiPS blend rule:**
+- `eb_weight = min(pa_count_std / 150.0, 1.0)`
+- `final_estimate = eb_weight × eb_posterior + (1 − eb_weight) × zips_projection`
+- At PA=0: pure ZiPS (or prior_only if no ZiPS row found); at PA≥150: pure EB posterior
+- Apply independently for wOBA, K%, BB%, ISO
+
+**`eb_data_source` logic:**
+- `prior_only`: PA = 0 and no ZiPS row found for this batter
+- `zips_blend`: PA < 150 and ZiPS row found
+- `full_eb`: PA ≥ 150
 
 Tasks:
-- [ ] For each batter in `stg_statsapi_lineups` for game date T, compute current-season PA and rate stats from `mart_batter_season_stats` filtered to dates strictly < T (leakage guard)
-- [ ] Load appropriate season prior from `lineup_priors_{season}.json` matching the batter's role group and handedness
-- [ ] Compute posterior mean and posterior variance for each metric (wOBA, K%, BB%, ISO)
-- [ ] Handle zero-PA case (true rookie debut): posterior = prior mean (α / (α+β)) with `pa_weight = 0` flag — replaces `lineup_rookie_count` null with a principled prior-mean estimate
-- [ ] Handle ZiPS interaction: when current-season PA < 50, blend the EB posterior with ZiPS projection using PA-weighted harmonic: `eb_weight = min(PA / 150, 1.0)`, `final_estimate = eb_weight × eb_posterior + (1 − eb_weight) × zips_projection`. At 0 PA the estimate is pure ZiPS; at 150+ PA pure EB posterior. Document the 150 PA stabilization threshold.
-- [ ] Output: one row per (game_pk, batting_slot, batter_id) with columns: `eb_woba`, `eb_k_pct`, `eb_bb_pct`, `eb_iso`, `eb_woba_uncertainty`, `pa_weight`, `eb_data_source ∈ {full_eb, zips_blend, prior_only}`
+- [ ] For each lineup in `stg_statsapi_lineups` on target game date, join to `mart_batter_rolling_stats` (latest row strictly before game date) to get season-to-date stats; if no row exists, treat as PA=0
+- [ ] Load the appropriate season's JSON prior file from disk; look up cell by (metric, role_group, batter_hand); use fallback prior if `"fallback": true` applies
+- [ ] Compute posterior mean and posterior variance for each metric using the update rules above
+- [ ] Apply ZiPS blend; set `eb_data_source` based on PA and ZiPS availability
+- [ ] Write output to `baseball_data.betting.eb_batter_posteriors_raw` using VARCHAR temp table + MERGE on (game_pk, batting_slot, batter_id) — follow `fit_park_priors.py` pattern
+- [ ] Script takes `--game-date YYYY-MM-DD` argument (default: today); designed to run daily after lineups are confirmed
 
 Acceptance criteria:
-- [ ] A batter with 0 PA receives `eb_data_source = prior_only`; value equals the prior mean for their role × handedness cell; `lineup_rookie_count` still populated correctly (no regression)
-- [ ] A batter with 200 PA receives `eb_data_source = full_eb`; value is close to observed rate but shrunk toward the role prior proportional to PA vs. prior strength (α+β)
-- [ ] Leakage guard verified: no batter's game-date stats include events from game date T or later
-- [ ] ZiPS blend transitions smoothly: at PA=75, `eb_weight = 0.5` and estimate is halfway between ZiPS and raw EB posterior
+- [ ] A batter with PA=0 and a matching ZiPS row receives `eb_data_source = zips_blend` with `pa_weight = 0.0`; estimates equal ZiPS projection values
+- [ ] A batter with PA=0 and no ZiPS row receives `eb_data_source = prior_only`; estimates equal prior cell means
+- [ ] A batter with PA=200 receives `eb_data_source = full_eb`; wOBA is close to observed but shrunk toward the role prior proportional to prior strength (α+β)
+- [ ] Leakage guard verified: rolling stats row used has `game_date` strictly less than the target game date
+- [ ] ZiPS blend transitions smoothly: at PA=75, `pa_weight = 0.5`
 
 ---
 
@@ -2183,19 +2294,40 @@ Acceptance criteria:
 
 **dbt model:** `dbt/models/feature/feature_pregame_lineup_features.sql`
 
+**Source registration:** Add to `dbt/models/sources.yml` under a new `betting` source block (or extend existing):
+```yaml
+- name: eb_batter_posteriors_raw
+  description: "EB posterior estimates per batter-slot, written by compute_lineup_posteriors.py"
+  columns:
+    - name: game_pk
+    - name: batting_slot
+    - name: batter_id
+    - name: eb_woba
+    - name: eb_k_pct
+    - name: eb_bb_pct
+    - name: eb_iso
+    - name: eb_woba_uncertainty
+    - name: pa_weight
+    - name: eb_data_source
+```
+
+**Integration pattern:** The model already has a `lineup_slots` CTE that unpivots slots 1–9 with `(game_pk, official_date, home_away, slot, batter_id)`. Add a new CTE `slot_eb` that joins `eb_batter_posteriors_raw` to `lineup_slots` on `(game_pk, slot as batting_slot, batter_id)` — this is the same join pattern used for `slot_stats_ranked` (rolling stats) and `slot_bat_tracking_ranked`.
+
 Tasks:
-- [ ] Add a new source entry in `sources.yml` for the EB posterior output table (write target of Story 4A.2's Python script)
-- [ ] Join EB posterior outputs to `feature_pregame_lineup_features` on (game_pk, batting_slot, batter_id)
-- [ ] Aggregate slot-level EB estimates to lineup-level: `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso` (PA-weighted average across 9 slots), `avg_eb_woba_uncertainty` (mean posterior variance), `eb_coverage_pct` (fraction of slots with pa_weight > 0)
-- [ ] Retain existing raw rolling columns (`avg_woba_30d`, `injury_adj_avg_woba_30d`) — do NOT replace; add EB estimates as additional columns for ablation testing
-- [ ] Update `schema.yml` with descriptions and not_null tests on all new EB columns; `eb_coverage_pct` should always be non-null (0.0 when no PA data exists for any slot)
+- [ ] Add source entry to `sources.yml` for `baseball_data.betting.eb_batter_posteriors_raw`
+- [ ] Add `slot_eb` CTE joining EB posteriors to `lineup_slots` on `(game_pk, home_away, slot = batting_slot, batter_id)` — left join so slots without posteriors remain (they will get NULL, aggregated to 0 in coverage calc)
+- [ ] Add `eb_agg` CTE aggregating slot-level to lineup-level: `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso` (simple avg across 9 slots — not PA-weighted at this stage; PA weighting is captured via shrinkage in the posterior itself), `avg_eb_woba_uncertainty` (mean posterior variance), `eb_coverage_pct = count(eb_woba is not null) / 9.0`
+- [ ] Join `eb_agg` into the final `select` alongside existing rolling-stat aggregations
+- [ ] Retain all existing columns — do NOT remove `avg_woba_30d`, `injury_adj_avg_woba_30d`, or any current columns
+- [ ] Add COALESCE guards: `coalesce(avg_eb_woba, avg_woba_std)` is NOT appropriate here — leave EB columns as nullable; the ablation test needs to see true nulls vs. imputed values
+- [ ] Update `dbt/models/feature/schema.yml` with descriptions and `not_null` test on `eb_coverage_pct` only
 
 Acceptance criteria:
-- [ ] `dbtf build --target dev --select feature_pregame_lineup_features` green
-- [ ] `avg_eb_woba` is non-null for 100% of games in the 2021–2026 window (prior-only fills all gaps)
-- [ ] `avg_eb_woba` correlates with `avg_woba_30d` at r > 0.80 for games with PA > 100 across the lineup
-- [ ] For April games (low PA), `avg_eb_woba` shows less variance than `avg_woba_30d` — shrinkage is working
-- [ ] `eb_coverage_pct` distinguishes true cold-start lineups from established ones
+- [ ] `dbtf build --select feature_pregame_lineup_features` green
+- [ ] `avg_eb_woba` is non-null for 100% of games in the 2021–2026 window that have EB posterior rows (games before EB posteriors were backfilled may be null — document the backfill scope)
+- [ ] `avg_eb_woba` correlates with `avg_woba_std` at r > 0.80 for games with total lineup PA > 100
+- [ ] For April games (first 3 weeks), `stddev(avg_eb_woba) < stddev(avg_woba_std)` — shrinkage is reducing variance
+- [ ] `eb_coverage_pct` is 0.0 for games before EB posteriors were backfilled, non-null always
 
 ---
 
@@ -2203,17 +2335,33 @@ Acceptance criteria:
 
 **Script:** `betting_ml/scripts/ablation_eb_lineup_features.py`
 
+**Walk-forward CV folds** (train → test):
+- Fold 1: 2021 → 2022
+- Fold 2: 2021–2022 → 2023
+- Fold 3: 2021–2023 → 2024
+- Fold 4: 2021–2024 → 2025
+
+Each fold trains on all seasons up to and including the train year and evaluates on the next full season.
+
+**Feature sets to compare:**
+- Raw: `avg_woba_30d`, `avg_k_pct_30d`, `avg_bb_pct_30d`, `avg_woba_std`, `avg_k_pct_std`, `avg_bb_pct_std`
+- EB: `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso`, `avg_eb_woba_uncertainty`
+
+Both feature sets should include all non-rate columns (park factor, starter quality signals, platoon composition, archetype matchup stats) unchanged — only swap the rate stat columns.
+
 Tasks:
-- [ ] Train offense_v1 twice: once with raw rolling rate columns, once with EB posterior columns, on identical walk-forward CV folds (2021→2022, …, 2024→2025)
-- [ ] Compare: CV MAE on team runs scored, April-only MAE (where small-sample noise is highest), RMSE, Pearson r
-- [ ] Secondary comparison: evaluate on games where `eb_coverage_pct < 0.5` (lineups with many low-PA batters) — where EB should show the largest improvement
-- [ ] Report `eb_woba_uncertainty` correlation with model residuals — if EB uncertainty is a useful signal, it should correlate with prediction error magnitude
+- [ ] Load `feature_pregame_lineup_features` joined to actual runs scored (from `mart_game_results`) for games 2021–2025
+- [ ] Train offense_v1 (Ridge regression or GBT as determined in 4.2) on both feature sets using the 4-fold walk-forward CV defined above
+- [ ] Compute for each fold × feature set: CV MAE, April-only MAE (games in April of the test year), RMSE, Pearson r with actual runs
+- [ ] Secondary comparison: MAE restricted to games where `eb_coverage_pct < 0.5` (lineups with many low-PA batters) — where EB should show the largest benefit
+- [ ] Report `eb_woba_uncertainty` correlation with model residuals across all test folds
+- [ ] Write all results to `models/sub_models/offense_v1/ablation_eb_lineup_{ts}.json`
 
 Acceptance criteria:
 - [ ] April-only MAE with EB columns ≤ April-only MAE with raw columns (EB should win on small samples)
-- [ ] Full-season CV MAE delta documented; promote EB columns to primary if delta > 0 in EB's favor, retain raw as secondary if delta within noise
-- [ ] `eb_woba_uncertainty` vs. residual correlation documented — if |r| > 0.10, add `avg_eb_woba_uncertainty` as a standalone feature in offense_v1
-- [ ] Results written to `models/sub_models/offense_v1/ablation_eb_lineup_{ts}.json`
+- [ ] Full-season CV MAE delta documented; promote EB columns to primary if EB wins, keep raw as secondary if within noise
+- [ ] `eb_woba_uncertainty` vs. residual correlation documented — if |r| > 0.10, flag `avg_eb_woba_uncertainty` as a candidate standalone feature in offense_v1
+- [ ] Results JSON written to `models/sub_models/offense_v1/ablation_eb_lineup_{ts}.json` with timestamp suffix
 
 ---
 
