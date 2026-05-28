@@ -73,11 +73,8 @@ def _get_entry(name: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 def _load_artifact(entry: dict[str, Any]):
-    import joblib
-    path = _PROJECT_ROOT / entry["artifact_path"]
-    if not path.exists():
-        raise FileNotFoundError(f"Artifact not found: {path}")
-    return joblib.load(path)
+    from betting_ml.utils.artifact_store import load_artifact
+    return load_artifact(entry["artifact_path"])
 
 
 def _load_feature_columns(entry: dict[str, Any]) -> list[str]:

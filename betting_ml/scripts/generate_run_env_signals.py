@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import pickle
+import os
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -42,6 +42,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.artifact_store import load_artifact
 from betting_ml.scripts.scd2_writer import scd2_upsert, _SCHEMA_PROD, _SCHEMA_DEV
 from betting_ml.scripts.train_run_env import _TRAINING_START
 from betting_ml.scripts.train_run_env_v3 import (
@@ -50,7 +51,8 @@ from betting_ml.scripts.train_run_env_v3 import (
     _apply_imputation_v3,
 )
 
-_ARTIFACT_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
+_ARTIFACT_S3_URI  = "s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl"
+_ARTIFACT_LOCAL   = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
 _SUB_MODEL_NAME = "run_env_v3"
 _SUB_MODEL_VERSION = "v3"
 _SIDES = ("home", "away")
@@ -286,9 +288,9 @@ def main() -> None:
     env_label = f"[{args.env.upper()}]"
     print(f"{env_label} target={target_table}")
 
-    print(f"\nLoading artifact from {_ARTIFACT_PATH}...")
-    with open(_ARTIFACT_PATH, "rb") as fh:
-        artifact = pickle.load(fh)
+    artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL
+    print(f"\nLoading artifact from {artifact_path}...")
+    artifact = load_artifact(artifact_path)
     print(f"  model_type={artifact['model_type']}, CV MAE={artifact['cv_mae']}")
 
     print(f"\nLoading games {start_date} → {end_date}...")

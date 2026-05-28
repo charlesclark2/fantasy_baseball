@@ -56,6 +56,7 @@ from betting_ml.scripts.model_evaluation.cv_harness import _NON_FEATURE_COLS
 _CHALLENGER_PATH = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "elasticnet_market_blind_2026.pkl"
 _CHAMPION_PATH   = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "elasticnet_2026.pkl"
 _FEATURE_COLS_PATH = PROJECT_ROOT / "betting_ml" / "models" / "home_win" / "feature_columns_market_blind.json"
+_CHALLENGER_S3_URI = "s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl"
 
 # Market-blind baseline gate. v1 production was 0.2422 but included market features
 # (away_moneyline_decimal #3, home_win_prob_sharp #6) which gave "free" Brier improvement.
@@ -310,6 +311,9 @@ def main() -> None:
     print(f"\nChallenger: {_CHALLENGER_PATH}")
     print(f"Champion:   {_CHAMPION_PATH}  (untouched)")
     print(f"Features:   {_FEATURE_COLS_PATH}  ({len(feature_cols)} cols)")
+
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(_CHALLENGER_PATH, _CHALLENGER_S3_URI)
 
     if not args.no_snowflake:
         _write_snowflake(fold_rows, mean_brier, len(feature_cols))

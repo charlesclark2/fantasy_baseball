@@ -14,12 +14,12 @@ Public API:
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-import joblib
 import yaml
+
+from betting_ml.utils.artifact_store import load_artifact
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _MODELS_ROOT = _PROJECT_ROOT / "betting_ml" / "models"
@@ -77,17 +77,7 @@ def load_model(target: str, variant: str = "prod") -> Any:
                 f"Available keys: {sorted(entry.keys())}"
             )
 
-    path = Path(artifact_path)
-    if not path.is_absolute():
-        path = _PROJECT_ROOT / path
-
-    if not path.exists():
-        raise ValueError(
-            f"Artifact file does not exist on disk: {path} "
-            f"(target='{target}', variant='{variant}')"
-        )
-
-    return joblib.load(path)
+    return load_artifact(artifact_path)
 
 
 # ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
-import pickle
+import joblib
 import re
 import sys
 from pathlib import Path
@@ -62,6 +62,7 @@ _PROMOTE_THRESHOLD = 3.4604
 _REGISTRY_PATH    = _PROJECT_ROOT / "betting_ml" / "sub_model_registry.yaml"
 _ARTIFACT_PATH    = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
 _FEATURE_COLS_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3_features.json"
+_ARTIFACT_S3_URI  = "s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl"
 
 # ---------------------------------------------------------------------------
 # Feature specification (v3)
@@ -646,9 +647,11 @@ def train(df: pd.DataFrame, *, no_promote: bool = False, force_winner: str | Non
         "cv_fold_records":    ridge_folds if winner_type == "ridge" else xgb_folds,
     }
     _ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_ARTIFACT_PATH, "wb") as fh:
-        pickle.dump(artifact, fh)
+    joblib.dump(artifact, _ARTIFACT_PATH)
     print(f"\nArtifact saved → {_ARTIFACT_PATH}")
+
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(_ARTIFACT_PATH, _ARTIFACT_S3_URI)
 
     with open(_FEATURE_COLS_PATH, "w") as fh:
         json.dump(FEATURE_COLS_V3, fh, indent=2)

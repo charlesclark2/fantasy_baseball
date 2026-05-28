@@ -55,6 +55,7 @@ _ARTIFACT_PATH = (
 _FEATURE_COLS_PATH = (
     PROJECT_ROOT / "betting_ml" / "models" / "run_differential" / "feature_columns_market_blind.json"
 )
+_ARTIFACT_S3_URI = "s3://baseball-betting-ml-artifacts/run_differential/ngboost_market_blind_2026.pkl"
 
 # Market-blind baseline gate. v1 production was 3.4724 but included market features
 # (home_win_prob_consensus #1, imp=0.040) which gave "free" MAE improvement.
@@ -261,6 +262,9 @@ def main() -> None:
     _FEATURE_COLS_PATH.write_text(json.dumps(final_feature_cols, indent=2))
     print(f"\nArtifact: {_ARTIFACT_PATH}")
     print(f"Features: {_FEATURE_COLS_PATH}  ({len(final_feature_cols)} cols)")
+
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(_ARTIFACT_PATH, _ARTIFACT_S3_URI)
 
     if not args.no_snowflake:
         _write_snowflake(fold_rows, mean_mae, len(final_feature_cols))
