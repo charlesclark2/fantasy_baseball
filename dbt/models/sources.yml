@@ -943,3 +943,23 @@ sources:
             description: Platt-scaled home win probability (Card 7.C).
           - name: data_source
             description: "'feature_store' or 'intraday_fallback' (Card 7.O)."
+
+  - name: betting_features
+    database: baseball_data
+    schema: betting_features
+    description: >
+      Python-script-written feature tables in the baseball_data.betting_features schema.
+      These are produced by inference/signal scripts and are not managed by dbt.
+      Sourced by dbt feature models that need to reference them alongside dbt-managed
+      feature mart tables.
+
+    tables:
+      - name: offense_v1_signals
+        description: >
+          Per game-side offensive quality signals from the offense_v1 LightGBM model.
+          Written by betting_ml/scripts/offense_v1/generate_offense_signals.py via
+          VARCHAR temp table + MERGE (idempotent). Grain: game_pk × side × model_version.
+          pred_runs_raw is the bias-corrected LightGBM prediction (CV mean bias −0.523
+          subtracted). runs_index = 100 × pred_runs_raw / season_league_avg_pred;
+          100 = league average for that season. Backfilled 2015–2026.
+          DDL: scripts/ddl/offense_v1_signals.sql.
