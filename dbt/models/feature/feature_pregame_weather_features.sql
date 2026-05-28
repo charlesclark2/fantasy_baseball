@@ -9,10 +9,11 @@
 -- wind_component_mph. Imputation (league-average fill for dome parks) is
 -- handled in the Python preprocessing layer, not here.
 --
--- LEAKAGE NOTE: weather is fetched before first pitch and stored in
--- weather_raw. The fetch_offset_hours column captures how far before first
--- pitch the data was collected. QUALIFY keeps the fetch closest to first
--- pitch to maximize accuracy without using post-game data.
+-- OBSERVATION TYPE: Only forecast_pregame rows are used. forecast_intraday
+-- and observed_at_first_pitch are stored in weather_raw for future use but
+-- must NOT enter this feature because all run_env models were trained on
+-- forecast_pregame data exclusively. Mixing types creates train/inference
+-- distribution mismatch.
 -- =============================================================================
 
 {{ config(materialized='table') }}
@@ -21,6 +22,7 @@ with weather as (
     select
         w.game_pk,
         w.venue_id,
+        w.weather_observation_type,
         w.temp_f,
         w.wind_speed_mph,
         w.wind_direction_deg,
@@ -44,10 +46,11 @@ with weather as (
 
     from {{ ref('stg_weather_raw') }} w
     left join {{ ref('ref_venues') }} rv using (venue_id)
+    where w.weather_observation_type = 'forecast_pregame'
 
     qualify row_number() over (
         partition by w.game_pk
-        order by abs(w.fetch_offset_hours) asc  -- prefer fetch closest to first pitch
+        order by abs(w.fetch_offset_hours) asc
     ) = 1
 )
 
