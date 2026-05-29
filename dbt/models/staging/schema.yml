@@ -1556,6 +1556,30 @@ models:
       - name: ingestion_timestamp
         description: Wall-clock UTC timestamp when this row was written.
 
+  # ── Action Network public betting snapshots (Story 15.6) ─────────────────────
+
+  - name: stg_actionnetwork_public_betting_snapshots
+    description: >
+      All ingestion snapshots from public_betting_raw, normalized and joined to
+      mart_game_results for game_pk resolution. Grain: one row per (game_pk, loaded_at).
+      Team abbreviations are normalized (ARI → AZ). Record hash covers the 4
+      independent pct columns (home_ml_money_pct, home_ml_ticket_pct, over_money_pct,
+      over_ticket_pct). Same-day games that have not yet completed are excluded and
+      resolve on the next dbt run. Coverage: 2026-05-07 onward (Epic T.3).
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: an_game_id
+        description: Action Network game identifier.
+      - name: loaded_at
+        description: Ingestion timestamp from public_betting_raw; used as valid_from in SCD-2.
+        tests: [not_null]
+      - name: record_hash
+        description: MD5 of (home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct).
+        tests: [not_null]
+
   # ── Savant sprint speed ───────────────────────────────────────────────────────
 
   - name: stg_batter_sprint_speed

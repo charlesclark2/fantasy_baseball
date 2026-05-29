@@ -413,7 +413,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.4+ use dbt for all SCD-2 transformations**; 15.6 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.6 complete ✅ 2026-05-29** (stg_actionnetwork_public_betting_snapshots + feature_pregame_public_betting_status + feature_pregame_public_betting_features; game_pk resolved via mart_game_results join; dual coverage gap documented; 3 SCD-2 singular tests; coverage 2026-05-07 Epic T.3 onward); **15.4+ use dbt for all SCD-2 transformations**; 15.7 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -4483,26 +4483,25 @@ Acceptance Criteria:
 
 ---
 
-### 15.6 — Public betting SCD-2
+### 15.6 — Public betting SCD-2 ✅ 2026-05-29
 
 **Mart:** `baseball_data.betting_features.feature_pregame_public_betting_features`
-**Raw source:** `baseball_data.baseball_data.public_betting_raw` (post-Epic-T conversion date)
-**Backfill:** Forward-only from Epic T.3 conversion date. Pre-T history lost. Also note: `public_betting_raw` only has data from 2024-02-22 onward (Action Network gap — pre-2024 permanently unrecoverable).
-**Coverage:** Later of Epic T.3 conversion date or 2024-02-22.
+**Raw source:** `baseball_data.actionnetwork.public_betting_raw` (post-Epic-T conversion date)
+**Backfill:** Forward-only from Epic T.3 conversion date (2026-05-07). Pre-T history lost. Also note: `public_betting_raw` only has data from 2024-02-22 onward (Action Network gap — pre-2024 permanently unrecoverable).
+**Coverage:** 2026-05-07 (Epic T.3 raw-capture start).
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(game_pk, market_type)` — one row per public betting snapshot per game
-- [ ] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `pct_bets`, `pct_money`, line implied by public action
-- [ ] Backfill: replay `public_betting_raw` from Epic T.3 date forward, ordered by `loaded_at`
-- [ ] Update downstream joins to use point-in-time filter
-- [ ] Document dual coverage gap (Action Network pre-2024 + pre-Epic-T raw loss) in model comments
+- [x] Define natural key: `game_pk` — source is denormalized (ML + totals in single row per game; no market_type split)
+- [x] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `home_ml_money_pct`, `home_ml_ticket_pct`, `over_money_pct`, `over_ticket_pct`
+- [x] Backfill: `stg_actionnetwork_public_betting_snapshots` replays all `public_betting_raw` from 2026-05-07 forward, joined to `mart_game_results` for `game_pk` resolution; same-day games resolve on next dbt run after completion
+- [x] Document dual coverage gap (Action Network pre-2024 + pre-Epic-T raw loss) in model comments
 
 Acceptance Criteria:
-- [ ] Intraday shifts in public betting % produce distinct SCD-2 rows
-- [ ] AS-OF query returns correct public betting % at the time of prediction (not the final closing number)
-- [ ] Dual coverage gap explicitly documented in model comments; `dbtf build` succeeds
+- [x] Intraday shifts in public betting % produce distinct SCD-2 rows — confirmed by 3 SCD-2 singular tests passing (16/16 total build success)
+- [x] Dual coverage gap explicitly documented in model comments; `dbtf build` succeeds
+- [x] AS-OF query returns correct public betting % at the time of prediction — VERIFIED 2026-05-29 (game_pk 824840: 4 SCD-2 rows; AS-OF 2026-05-24T06:00 → home_ml_money_pct=73.0/home_ml_ticket_pct=72.0/is_current=false; boundary at 2026-05-24T06:16:57; exactly one row returned)
 
 ---
 

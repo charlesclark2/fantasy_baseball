@@ -1642,3 +1642,50 @@ models:
             bp_xwoba_vs_rhb * (opposing rhb_count / total_batters)
             + bp_xwoba_vs_lhb * (opposing lhb_count / total_batters)
           Null when handedness splits or lineup composition data are unavailable.
+
+  # ── Public betting SCD-2 (Story 15.6) ────────────────────────────────────────
+
+  - name: feature_pregame_public_betting_status
+    description: >
+      SCD-2 table for Action Network public betting percentages. Grain: one row
+      per (game_pk, valid_from). Natural key: game_pk (single denormalized row
+      per game; ML and totals co-located). New row only when record_hash changes
+      (LAG-based change detection). Coverage: 2026-05-07 onward (Epic T.3).
+      Dual coverage gap: (1) Action Network pre-2024-02-22 permanently unrecoverable;
+      (2) pre-Epic-T snapshots not captured.
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: valid_from
+        description: Timestamp when this state was first observed (loaded_at from source).
+        tests: [not_null]
+      - name: valid_to
+        description: Timestamp when this state was superseded; null for the current row.
+      - name: is_current
+        description: True for the most-recent row per game_pk (valid_to is null).
+        tests: [not_null]
+      - name: record_hash
+        description: MD5 of (home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct).
+        tests: [not_null]
+      - name: computed_at
+        description: Wall-clock timestamp when this SCD-2 row was materialized.
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, valid_from]
+
+  - name: feature_pregame_public_betting_features
+    description: >
+      Current-state view over feature_pregame_public_betting_status (is_current = true).
+      Grain: one row per game_pk. Upstream: feature_pregame_public_betting_status
+      (SCD-2, story 15.6). For point-in-time queries use the status table directly.
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: public_betting_snapshot_ts
+        description: Timestamp of the most-recent snapshot (valid_from from SCD-2).
