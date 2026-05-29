@@ -407,7 +407,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28** (Dagster wired; AS-OF validated; valid_from=bookmaker_last_update); **15.2 complete ✅ 2026-05-28** (DDL, backfill, dbt model, Dagster wired, AS-OF validated, dbtf build green; 1,544 rows, 10 scratches detected); 15.3 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28** (Dagster wired; AS-OF validated; valid_from=bookmaker_last_update); **15.2 complete ✅ 2026-05-28** (DDL, backfill, dbt model, Dagster wired, AS-OF validated, dbtf build green; 1,544 rows, 10 scratches detected); **15.3 implementation complete 2026-05-28** (pure dbt, no Python script; SCD-2 model + 3 singular tests + lineup_features updated; pending: dbtf build + AS-OF validation); **15.4+ use dbt for all SCD-2 transformations** (no Python MERGE scripts unless source requires it); 15.4 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -4391,33 +4391,48 @@ Acceptance Criteria:
 
 ### 15.3 — Injury status SCD-2
 
-**Mart:** `baseball_data.betting_features.feature_pregame_injury_status` (create if not exists)
-**Raw source:** `baseball_data.baseball_data.player_transactions` (append-only from raw inception)
-**Backfill:** Full historical replay possible — `player_transactions` has been append-only.
-**Coverage:** Full backfill from raw inception.
+**Table:** `baseball_data.betting_features.feature_pregame_injury_status` (dbt-managed, `table` materialization)
+**Raw source:** `baseball_data.statsapi.player_transactions` → `stg_statsapi_transactions` → `stg_statsapi_player_injury_status`
+**Backfill:** Full historical replay — `player_transactions` is append-only from 2021-03-01.
+**Coverage:** 2021-03-01 onward (full history).
+
+> **Implementation approach:** Pure dbt (no Python MERGE script). `stg_statsapi_player_injury_status`
+> already derives temporal intervals via LEAD(). This story promotes that to the feature layer with
+> standard SCD-2 columns and wires in three singular data tests. Source data is date-grain;
+> `valid_from`/`valid_to` are midnight TIMESTAMP_NTZ casts of the date columns.
+> Natural key: `(player_id, valid_from)`.
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(player_id, transaction_date, transaction_type)` — each transaction is a point-in-time event
-- [ ] Build `feature_pregame_injury_status` mart if it does not exist: `player_id`, `injury_status` (active / IL-10 / IL-60 / suspended / etc.), `valid_from`, `valid_to`, `is_current`
-- [ ] Backfill: replay all `player_transactions` rows ordered by `transaction_date` to reconstruct every player's injury status timeline
-- [ ] Wire into prediction pipeline: query injury status AS-OF prediction timestamp to flag players with active IL designation in lineup feature
-- [ ] Document coverage start date in model comments
+- [x] Define natural key: `(player_id, valid_from)` — one row per distinct status period per player — DONE 2026-05-28
+- [x] `feature_pregame_injury_status.sql`: dbt `table` model reading from `stg_statsapi_player_injury_status`; adds `valid_from`, `valid_to`, `is_current`, `record_hash`, `computed_at` — DONE 2026-05-28
+- [x] `dbt/models/feature/schema.yml`: model registered with column tests + `dbt_utils.unique_combination_of_columns` on `(player_id, valid_from)` — DONE 2026-05-28
+- [x] SCD-2 singular tests (3): invariant `is_current ↔ valid_to IS NULL`; no overlapping intervals; one current row per player — DONE 2026-05-28
+- [x] `feature_pregame_lineup_features.sql` updated: `slot_injury` CTE now refs `feature_pregame_injury_status` with `valid_from`/`valid_to` instead of `stg_statsapi_player_injury_status` with `status_start_date`/`status_end_date` — DONE 2026-05-28
+- [x] Dagster `dbt_lineup_feature_rebuild` op updated: select changed from `feature_pregame_lineup_features+` to `feature_pregame_injury_status+` (automatically rebuilds lineup_features as downstream) — DONE 2026-05-28
+- [ ] Run `dbtf build --select feature_pregame_injury_status+` and confirm tests pass
+- [ ] AS-OF validation: verify a player on IL on a known date returns `is_injured = true` via the point-in-time join
 
 Acceptance Criteria:
-- [ ] A player placed on the 10-day IL and then activated shows three SCD-2 rows: active → IL-10 → active, with correct `valid_from`/`valid_to` boundaries
-- [ ] AS-OF query on a game date where a key player was on IL returns `injury_status = 'IL-10'`
-- [ ] Full historical backfill complete; `dbtf build` succeeds
+- [ ] Three SCD-2 singular tests all return 0 rows
+- [ ] `current_rows` (is_current = true) matches expected player count; all have `valid_to IS NULL`
+- [ ] AS-OF join in `feature_pregame_lineup_features` returns correct `is_injured` values; `dbtf build` succeeds
 
 ---
 
 ### 15.4 — Projected starter SCD-2
 
 **Mart:** `baseball_data.betting_features.feature_pregame_starter_features`
-**Raw source:** `baseball_data.baseball_data.monthly_schedule` (post-Epic-T conversion date)
+**Raw source:** `baseball_data.statsapi.monthly_schedule` (post-Epic-T conversion date)
 **Backfill:** Forward-only from Epic T conversion date. Pre-T history lost (same MERGE constraint as lineup).
 **Coverage:** Epic T conversion date onward.
+
+> **Implementation approach (15.4+):** Use dbt incremental models for all SCD-2 transformations
+> where possible. Python MERGE scripts (as used in 15.1/15.2) are only warranted when the source
+> requires Python processing that Snowflake SQL cannot handle. For VARIANT/JSON sources, use
+> `LATERAL FLATTEN` in dbt. For SCD-2 MERGE (close old row + insert new), use dbt incremental
+> with `is_incremental()` two-pass pattern or a `delete+insert` strategy.
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
