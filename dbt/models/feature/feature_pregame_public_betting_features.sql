@@ -9,6 +9,8 @@
 --
 -- For point-in-time historical queries use feature_pregame_public_betting_status
 -- directly with valid_from / valid_to / is_current filters.
+-- Pre-cutoff approximation: games before 2026-05-07 produce NULL for all columns;
+-- two permanent gaps: Action Network API (pre-2024-02-22) + pre-Epic-T snapshots.
 -- =============================================================================
 
 select
