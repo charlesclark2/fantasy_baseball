@@ -52,6 +52,57 @@ models:
       - name: test_signal_v1
         description: Synthetic validation signal inserted during Story 2.1 smoke test. Remove column after validation is confirmed.
 
+  - name: feature_pregame_injury_status
+    description: >
+      SCD-2 store for player injury/IL status. One row per distinct status period per
+      player_id. Promoted from stg_statsapi_player_injury_status with standard SCD-2
+      columns (valid_from, valid_to, is_current, record_hash, computed_at).
+      Coverage: player_transactions inception (2021-03-01+). Full history available.
+      DDL: managed by dbt (table materialization; full rebuild from stg on each run).
+      Point-in-time join: valid_from <= :ts AND (valid_to > :ts OR valid_to IS NULL).
+      Natural key: (player_id, valid_from).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [player_id, valid_from]
+
+    columns:
+      - name: player_id
+        description: MLBAM player ID.
+        tests: [not_null]
+
+      - name: valid_from
+        description: >
+          Start of the status interval (status_start_date cast to TIMESTAMP_NTZ midnight).
+          Equals the effective_date (or transaction_date if effective_date is null)
+          of the IL placement or activation event.
+        tests: [not_null]
+
+      - name: valid_to
+        description: >
+          End of the status interval (status_end_date cast to TIMESTAMP_NTZ midnight).
+          NULL for the current/open-ended status row.
+
+      - name: is_current
+        description: TRUE for the most recent (open-ended) status row per player.
+        tests: [not_null]
+
+      - name: is_injured
+        description: >
+          TRUE = player is on IL / paternity / bereavement list.
+          FALSE = player returned or was activated.
+          No row = treat as available (COALESCE to false in consumer).
+        tests: [not_null]
+
+      - name: record_hash
+        description: MD5 of is_injured; present for audit/diff consistency with other SCD-2 tables.
+        tests: [not_null]
+
+      - name: computed_at
+        description: Timestamp when this row was written (sysdate() at dbt run time).
+        tests: [not_null]
+
   - name: feature_pregame_lineup_features
     description: >
       Pre-game batting lineup features for ML. One row per game_pk × side (home/away).

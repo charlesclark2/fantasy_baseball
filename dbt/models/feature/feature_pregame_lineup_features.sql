@@ -148,7 +148,7 @@ slot_pre_game as (
 ),
 
 -- Point-in-time IL status per lineup slot as of official_date
--- LEAKAGE GUARD: status_start_date <= official_date ensures only pre-game transactions used
+-- LEAKAGE GUARD: valid_from <= official_date ensures only pre-game transactions used
 slot_injury as (
     select
         sp.game_pk,
@@ -158,12 +158,12 @@ slot_injury as (
         sp.batter_id,
         coalesce(inj.is_injured, false)  as is_injured
     from slot_pre_game sp
-    left join {{ ref('stg_statsapi_player_injury_status') }} inj
-        on  inj.player_id         = sp.batter_id
-        and inj.status_start_date <= sp.official_date   -- LEAKAGE GUARD
+    left join {{ ref('feature_pregame_injury_status') }} inj
+        on  inj.player_id  = sp.batter_id
+        and inj.valid_from <= sp.official_date   -- LEAKAGE GUARD
         and (
-                inj.status_end_date  > sp.official_date
-                or inj.status_end_date is null
+                inj.valid_to  > sp.official_date
+                or inj.valid_to is null
             )
 ),
 

@@ -249,11 +249,13 @@ def update_lineup_state_scd2(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_lineup_feature_rebuild(context):
-    # Rebuild feature_pregame_lineup_features (and its dependents) now that the
-    # SCD-2 lineup state table has been updated with today's confirmed lineups.
+    # Rebuild feature_pregame_injury_status (SCD-2 promotion from stg) and all
+    # downstream nodes, which includes feature_pregame_lineup_features.
+    # Selecting from the upstream injury model ensures both are rebuilt in
+    # dependency order in a single dbt invocation.
     _run_dbt(context, [
         "build",
-        "--select", "feature_pregame_lineup_features+",
+        "--select", "feature_pregame_injury_status+",
         "--target", "baseball_betting_and_fantasy",
     ])
 
