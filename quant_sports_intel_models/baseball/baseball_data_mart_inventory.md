@@ -1,5 +1,5 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-05-29 (15.7 complete)
+## Current State Reference — As of 2026-05-29 (15.8 complete)
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -304,7 +304,8 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 | `feature_pregame_bullpen_state_features` | (game_pk, side) | mart_bullpen_effectiveness, mart_bullpen_workload, mart_bullpen_leverage | ~25 | Bullpen effectiveness, leverage workload, handedness mix. High-leverage IP prior 1/3 days. Closer availability proxy. |
 | `feature_pregame_team_features` | (game_pk, side) | mart_team_rolling_offense, mart_team_rolling_pitching, mart_team_schedule_context, mart_team_pythagorean_rolling, mart_team_base_state_splits | ~20 | 30-day rolling team offensive/pitching metrics. Schedule context (days rest, home/away, back-to-back). Pythagorean residual. Base-state efficiency. |
 | `feature_pregame_odds_features` | game_pk | mart_odds_outcomes, mart_odds_line_movement, mart_bookmaker_disagreement, stg_actionnetwork_public_betting | ~15 | Market-implied probabilities, bookmaker disagreement spread (7 features), public betting percentages. Market columns — subject to exclusion in market-blind retrains. |
-| `feature_pregame_park_features` | game_pk | mart_park_run_factors | ~5 | Prior-season park run factors. NULL for season-opening games (no prior-season data). |
+| `feature_pregame_park_status` | (venue_id, season) | mart_eb_park_factors, stg_statsapi_venues (SCD-2) | ~7 | SCD-2 table for park factors. Natural key: (venue_id, season). valid_from = first game at venue for season; valid_to = first game of next season (NULL for current active venues). Retired venues closed with season_close + 1 day. 362 rows, 36 venues, 30 active (2026). No snapshot staging — source is annual grain. **Added Epic 15 Story 15.8.** |
+| `feature_pregame_park_features` | game_pk | mart_park_run_factors | ~5 | Prior-season park run factors. NULL for season-opening games (no prior-season data). NOT re-pointed to SCD-2 — game_year-1 join is already correct; use feature_pregame_park_status for AS-OF queries. |
 | `feature_pregame_weather_features` | game_pk | **feature_pregame_weather_status** (SCD-2) | ~5 | Wind speed, wind direction, temperature, humidity. NULL for dome stadiums. Re-pointed to SCD-2 source in Epic 15 Story 15.5; reads `is_current = true` rows. |
 | `feature_pregame_umpire_status` | (game_pk, valid_from) | stg_statsapi_umpire_snapshots (SCD-2) | ~10 | SCD-2 table for HP umpire assignments. Natural key: game_pk (one HP ump per game; no ump_position column in source). New row when umpire_name or tendency stats change. Coverage: ~2026-05-02 (Epic T.4). **Added Epic 15 Story 15.7.** |
 | `feature_pregame_umpire_features` | game_pk | stg_statsapi_umpire_game_log | ~8 | HP umpire assignment + trailing z-scores of tendency metrics (called strikes above avg, run expectancy delta, run impact, accuracy). Reads stg_statsapi_umpire_game_log directly (not re-pointed to SCD-2) — forward-only SCD-2 coverage would break historical trailing z-score computation. feature_pregame_umpire_status available for AS-OF point-in-time queries. |
@@ -408,7 +409,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | SCD Type-2 — weather forecasts | ✅ **Done (15.5)** | `feature_pregame_weather_status` (dbt-managed). `stg_weather_raw_snapshots` feeds all history. Coverage: Epic T.2 (2026-05-01) onward; forecast_pregame only. 3 SCD-2 singular tests passing. `feature_pregame_weather_features` re-pointed. 2026-05-29. |
 | SCD Type-2 — public betting | ✅ **Done (15.6)** | `feature_pregame_public_betting_status` (dbt-managed). `stg_actionnetwork_public_betting_snapshots` feeds all history. Coverage: 2026-05-07 (Epic T.3) onward. Dual gap documented. 3 SCD-2 singular tests passing. `feature_pregame_public_betting_features` is current-state view. 2026-05-29. |
 | SCD Type-2 — umpire assignments | **Done (15.7)** | `feature_pregame_umpire_status`. 25,731 games (all single-row; no intraday substitution data yet). Coverage ~2026-05-02 (Epic T.4). |
-| SCD Type-2 — park factors | **Missing** | `feature_pregame_park_features`. Epic 15 Story 15.8. |
+| SCD Type-2 — park factors | **Done (15.8)** | `feature_pregame_park_status`. 362 rows (2015–2026), 36 venues, 30 active in 2026. Retired venues closed at season_close + 1 day. |
 | Point-in-time feature joins (AS OF semantics) | **Partial** | Implemented for: odds (15.1), lineup (15.2), injury (15.3), starter (15.4), weather (15.5), public betting (15.6). Remaining: umpire, park. |
 | `feature_ts` / `computed_at` on feature marts | **Partial** | `computed_at` on all SCD-2 feature models (15.1–15.5). Legacy mart models still lack it. |
 | Historical CLV reconstruction infrastructure | **Missing** | No `feature_snapshot_id`, `prediction_ts`, `lineup_state_version` tracking at prediction time. Epic 15.9. |
@@ -437,4 +438,4 @@ This section identifies what is missing or incomplete relative to the architectu
 | Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
 | Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |
 | CLV meta-model | Correctly gated. 41 CLV games. | Large time horizon — not a data gap, a data-accumulation gap. |
-| Temporal/SCD infrastructure | **Partial** — 7 of 8 Epic 15 marts complete (odds, lineup, injury, starter, weather, public betting, umpire). Park remains. | Story 15.8 next; CLV reconstruction (15.9) after all 8 marts done. |
+| Temporal/SCD infrastructure | **Complete** — 8 of 8 Epic 15 marts done (odds, lineup, injury, starter, weather, public betting, umpire, park). | CLV reconstruction (15.9) next. |

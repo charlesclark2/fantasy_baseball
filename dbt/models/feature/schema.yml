@@ -652,6 +652,44 @@ models:
                 warn_if: ">= 100"
                 error_if: ">= 10000"
 
+  - name: feature_pregame_park_status
+    description: >
+      SCD-2 table for park factors. Grain: one row per (venue_id, season).
+      Natural key: (venue_id, season) — park factors update once per season.
+      valid_from = first regular-season game at this venue for the season.
+      valid_to   = first game of next season at this venue; null for venues active
+      in the current season (is_current = true). Retired venues get valid_to =
+      season_close + 1 day so they are never mis-flagged as is_current.
+      Hash: MD5(eb_park_run_factor, elevation_ft, center_ft, roof_type).
+      No snapshot staging — source mart_eb_park_factors is already at annual grain.
+      feature_pregame_park_features NOT re-pointed (game_year-1 join is correct).
+
+    columns:
+      - name: venue_id
+        description: MLB Stats API venue identifier.
+        tests: [not_null]
+      - name: season
+        description: Season year (integer).
+        tests: [not_null]
+      - name: valid_from
+        description: First regular-season game date at this venue for the season.
+        tests: [not_null]
+      - name: valid_to
+        description: First game of next season at this venue; null for the current active season.
+      - name: is_current
+        description: True for venues active in the current season (valid_to is null).
+        tests: [not_null]
+      - name: record_hash
+        description: MD5 of (eb_park_run_factor, elevation_ft, center_ft, roof_type).
+        tests: [not_null]
+      - name: computed_at
+        description: Wall-clock timestamp when this SCD-2 row was materialized.
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [venue_id, season]
+
   - name: feature_pregame_game_features
     description: >
       Master pre-game ML feature assembly. One row per game_pk (regular season only).
