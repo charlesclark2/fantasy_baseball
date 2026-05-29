@@ -59,8 +59,20 @@ _OUTPUT_DIR = _PROJECT_ROOT / "betting_ml" / "models" / "eb_priors"
 
 # ── Data loading ─────────────────────────────────────────────────────────────
 
-def _load_batter_data(conn, season: int) -> list[dict]:
-    """Pull season stats + mode batting slot + mode handedness for one season."""
+def _leaderboard_seasons(conn) -> set[int]:
+    """Return set of seasons present in stg_fangraphs__hitting_leaderboard."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT DISTINCT season FROM baseball_data.betting.stg_fangraphs__hitting_leaderboard "
+        "WHERE window_type = 'season' AND mlbam_batter_id IS NOT NULL"
+    )
+    seasons = {int(r[0]) for r in cur.fetchall()}
+    cur.close()
+    return seasons
+
+
+def _load_batter_data_leaderboard(conn, season: int) -> list[dict]:
+    """Pull season stats from FanGraphs leaderboard (primary source, 2020+)."""
     cur = conn.cursor()
     cur.execute(
         """
@@ -120,6 +132,81 @@ def _load_batter_data(conn, season: int) -> list[dict]:
     rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     cur.close()
     return rows
+
+
+def _load_batter_data_rolling(conn, season: int) -> list[dict]:
+    """
+    Fallback for seasons without FanGraphs leaderboard data (pre-2020).
+    Uses end-of-season row from mart_batter_rolling_stats as a leaderboard
+    equivalent — same metrics (woba_std, k_pct_std, bb_pct_std, iso_std,
+    pa_count_std) accumulated to season-to-date at the last game of the season.
+    """
+    cur = conn.cursor()
+    cur.execute(
+        """
+        WITH end_of_season AS (
+            SELECT
+                batter_id       AS mlbam_batter_id,
+                pa_count_std    AS pa,
+                woba_std        AS woba,
+                k_pct_std       AS k_pct,
+                bb_pct_std      AS bb_pct,
+                iso_std         AS iso,
+                batter_hand
+            FROM baseball_data.betting.mart_batter_rolling_stats
+            WHERE game_year = %(season)s
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY batter_id ORDER BY game_date DESC) = 1
+        ),
+        season_stats AS (
+            SELECT mlbam_batter_id, pa, woba, k_pct, bb_pct, iso, batter_hand
+            FROM end_of_season
+            WHERE pa    >= %(pa_min)s
+              AND woba   IS NOT NULL
+              AND k_pct  IS NOT NULL
+              AND bb_pct IS NOT NULL
+              AND iso    IS NOT NULL
+        ),
+        batting_slots AS (
+            SELECT
+                player_id               AS batter_id,
+                mode(batting_order)     AS mode_batting_slot
+            FROM baseball_data.betting.stg_statsapi_lineups
+            WHERE year(official_date) = %(season)s
+            GROUP BY player_id
+        )
+        SELECT
+            ss.mlbam_batter_id,
+            ss.pa,
+            ss.woba,
+            ss.k_pct,
+            ss.bb_pct,
+            ss.iso,
+            bs.mode_batting_slot,
+            ss.batter_hand              AS mode_batter_hand
+        FROM season_stats ss
+        JOIN batting_slots bs ON ss.mlbam_batter_id = bs.batter_id
+        WHERE bs.mode_batting_slot IS NOT NULL
+          AND ss.batter_hand       IS NOT NULL
+          AND ss.batter_hand       IN ('R', 'L', 'S')
+        """,
+        {"season": season, "pa_min": _PA_MIN},
+    )
+    cols = [d[0].lower() for d in cur.description]
+    rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    cur.close()
+    return rows
+
+
+def _load_batter_data(conn, season: int, available_leaderboard_seasons: set[int]) -> list[dict]:
+    """
+    Pull season stats + mode batting slot + mode handedness for one season.
+    Uses FanGraphs leaderboard when available; falls back to mart_batter_rolling_stats
+    end-of-season values for seasons where leaderboard data is absent (pre-2020).
+    """
+    if season in available_leaderboard_seasons:
+        return _load_batter_data_leaderboard(conn, season)
+    print(f"  NOTE: No leaderboard data for {season} — using mart_batter_rolling_stats fallback")
+    return _load_batter_data_rolling(conn, season)
 
 
 # ── Prior fitting ─────────────────────────────────────────────────────────────
@@ -233,9 +320,10 @@ def _write_json(priors: dict, season: int, fit_date: date) -> Path:
 def main(seasons: list[int]) -> None:
     conn = get_snowflake_connection()
     try:
+        available_lb_seasons = _leaderboard_seasons(conn)
         for season in seasons:
             print(f"\n── Season {season} ──────────────────────────────────")
-            rows = _load_batter_data(conn, season)
+            rows = _load_batter_data(conn, season, available_lb_seasons)
             print(f"  {len(rows)} qualified batters loaded")
             if not rows:
                 print("  WARNING: no data — skipping season")

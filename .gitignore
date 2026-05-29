@@ -49,3 +49,6 @@ logs/
 
 # Duplicate model artifacts directory (canonical copy is betting_ml/models/)
 model_artifacts/
+
+# MLflow local tracking store (artifact history stored in S3 under mlflow/ prefix)
+mlruns/

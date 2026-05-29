@@ -1,0 +1,11 @@
+{
+  "best_params": {
+    "num_leaves": 32,
+    "learning_rate": 0.012184186502221764,
+    "min_child_samples": 45,
+    "subsample": 0.8404460046972835,
+    "colsample_bytree": 0.8540362888980227
+  },
+  "mean_best_iteration": 54,
+  "optuna_cv_mae": 2.4504
+}

@@ -43,6 +43,10 @@ def _seven_days_ago() -> str:
     return (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
+def _two_days_ago() -> str:
+    return (date.today() - timedelta(days=2)).strftime("%Y-%m-%d")
+
+
 def _is_sunday() -> bool:
     return date.today().weekday() == 6
 
@@ -214,6 +218,26 @@ def dbt_mart_prediction_clv(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def compute_model_health(context):
     _run_script(context, "compute_model_health.py")
+
+
+# ── SCD-2 incremental updates ────────────────────────────────────────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_market_features_scd2(context):
+    # Runs after dbt_daily_build so mart_odds_outcomes contains today's fresh odds.
+    # 2-day lookback is a safe buffer against ingestion delays or partial runs.
+    _run_script(context, "backfill_market_features_scd2.py", ["--since", _two_days_ago()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def dbt_pregame_odds_rebuild(context):
+    # Rebuild feature_pregame_odds_features (and its dependents) now that the
+    # SCD-2 table has been updated with today's line state.
+    _run_dbt(context, [
+        "build",
+        "--select", "feature_pregame_odds_features+",
+        "--target", "baseball_betting_and_fantasy",
+    ])
 
 
 # ── Backfill phase ───────────────────────────────────────────────────────────

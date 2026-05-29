@@ -90,3 +90,6 @@ def upload_artifact(local_path: str | Path, s3_uri: str) -> None:
         print(f"  Uploaded → {s3_uri}")
     except botocore.exceptions.NoCredentialsError:
         print(f"  [WARN] AWS credentials not configured — skipping S3 upload of {local.name}")
+    except botocore.exceptions.ClientError as exc:
+        print(f"  [WARN] S3 upload failed ({exc.response['Error']['Code']}) — "
+              f"artifact saved locally at {local}. Re-run after refreshing AWS credentials.")

@@ -1,0 +1,230 @@
+{
+  "season": 2020,
+  "fit_date": "2026-05-28",
+  "priors": {
+    "woba": {
+      "top": {
+        "R": {
+          "alpha": 41.141,
+          "beta": 77.5835,
+          "n_batters": 62
+        },
+        "L": {
+          "alpha": 30.775,
+          "beta": 59.467,
+          "n_batters": 54
+        },
+        "S": {
+          "alpha": 35.8249,
+          "beta": 68.3277,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 55.2383,
+          "beta": 108.2492,
+          "n_batters": 48
+        },
+        "L": {
+          "alpha": 39.3004,
+          "beta": 84.6634,
+          "n_batters": 52
+        },
+        "S": {
+          "alpha": 43.3519,
+          "beta": 89.2081,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 35.2176,
+          "beta": 81.078,
+          "n_batters": 56
+        },
+        "L": {
+          "alpha": 54.4175,
+          "beta": 133.4605,
+          "n_batters": 38
+        },
+        "S": {
+          "alpha": 40.0711,
+          "beta": 94.6227,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "k_pct": {
+      "top": {
+        "R": {
+          "alpha": 9.35,
+          "beta": 33.8169,
+          "n_batters": 62
+        },
+        "L": {
+          "alpha": 7.7698,
+          "beta": 29.607,
+          "n_batters": 54
+        },
+        "S": {
+          "alpha": 8.6046,
+          "beta": 31.8798,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 8.3587,
+          "beta": 27.8983,
+          "n_batters": 48
+        },
+        "L": {
+          "alpha": 9.2883,
+          "beta": 29.4665,
+          "n_batters": 52
+        },
+        "S": {
+          "alpha": 8.8831,
+          "beta": 28.8712,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 9.5179,
+          "beta": 28.5167,
+          "n_batters": 56
+        },
+        "L": {
+          "alpha": 12.9437,
+          "beta": 40.9633,
+          "n_batters": 38
+        },
+        "S": {
+          "alpha": 10.6557,
+          "beta": 32.6343,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "bb_pct": {
+      "top": {
+        "R": {
+          "alpha": 4.4694,
+          "beta": 45.2925,
+          "n_batters": 62
+        },
+        "L": {
+          "alpha": 5.0295,
+          "beta": 43.5682,
+          "n_batters": 54
+        },
+        "S": {
+          "alpha": 4.6456,
+          "beta": 43.6541,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "alpha": 7.1432,
+          "beta": 74.2744,
+          "n_batters": 48
+        },
+        "L": {
+          "alpha": 6.9484,
+          "beta": 59.8972,
+          "n_batters": 52
+        },
+        "S": {
+          "alpha": 6.6744,
+          "beta": 62.7308,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "alpha": 4.5597,
+          "beta": 53.0109,
+          "n_batters": 56
+        },
+        "L": {
+          "alpha": 6.6969,
+          "beta": 69.4941,
+          "n_batters": 38
+        },
+        "S": {
+          "alpha": 5.2907,
+          "beta": 58.6713,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    },
+    "iso": {
+      "top": {
+        "R": {
+          "mu": 0.1943,
+          "sigma": 0.0708,
+          "n_batters": 62
+        },
+        "L": {
+          "mu": 0.1863,
+          "sigma": 0.0767,
+          "n_batters": 54
+        },
+        "S": {
+          "mu": 0.1906,
+          "sigma": 0.0734,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "middle": {
+        "R": {
+          "mu": 0.1959,
+          "sigma": 0.055,
+          "n_batters": 48
+        },
+        "L": {
+          "mu": 0.1829,
+          "sigma": 0.0582,
+          "n_batters": 52
+        },
+        "S": {
+          "mu": 0.1891,
+          "sigma": 0.0567,
+          "n_batters": 0,
+          "fallback": true
+        }
+      },
+      "bottom": {
+        "R": {
+          "mu": 0.1508,
+          "sigma": 0.0703,
+          "n_batters": 56
+        },
+        "L": {
+          "mu": 0.1344,
+          "sigma": 0.0572,
+          "n_batters": 38
+        },
+        "S": {
+          "mu": 0.1442,
+          "sigma": 0.0655,
+          "n_batters": 0,
+          "fallback": true
+        }
+      }
+    }
+  }
+}

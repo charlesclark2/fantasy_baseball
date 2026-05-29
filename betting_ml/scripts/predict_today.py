@@ -120,8 +120,8 @@ def _build_feature_matrix(
     target: str,
     model_tag: str,
     model_obj: object,
-) -> np.ndarray:
-    """Return the imputed feature matrix X for df_raw.
+) -> tuple:
+    """Return (imputed feature matrix X, feature column name list) for df_raw.
 
     Dispatches on target + model metadata to select the correct feature columns.
     For NGBoost models: uses the feature_columns.json from the registry.
@@ -176,7 +176,7 @@ def _build_feature_matrix(
             f"but got {X_today_imp.shape[1]}. Retrain the model or fix feature_columns_path."
         )
 
-    return X_today_imp.values if isinstance(X_today_imp, pd.DataFrame) else X_today_imp
+    return (X_today_imp.values if isinstance(X_today_imp, pd.DataFrame) else X_today_imp, feature_cols)
 
 
 # ---------------------------------------------------------------------------
@@ -562,6 +562,168 @@ def _write_prediction_log(output_rows: list[dict], prediction_date: str, dry_run
         conn.close()
 
 
+_CREATE_PREDICTION_SNAPSHOTS_TABLE = """
+CREATE TABLE IF NOT EXISTS baseball_data.betting.prediction_snapshots (
+    game_pk                     INTEGER         NOT NULL,
+    target                      VARCHAR(30)     NOT NULL,
+    model_version               VARCHAR(20)     NOT NULL,
+    predicted_at                TIMESTAMP_NTZ   NOT NULL,
+    predicted_at_confidence     VARCHAR(10),
+    prediction                  FLOAT,
+    feature_snapshot            VARIANT,
+    model_artifact_s3_uri       VARCHAR(500),
+    reconstruction_type         VARCHAR(20)     NOT NULL,
+    inserted_at                 TIMESTAMP_NTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP()
+)
+"""
+
+_CREATE_SNAPSHOTS_TEMP = """
+CREATE TEMPORARY TABLE baseball_data.betting.tmp_prediction_snapshots (
+    game_pk                     INTEGER,
+    target                      VARCHAR(30),
+    model_version               VARCHAR(20),
+    predicted_at                TIMESTAMP_NTZ,
+    predicted_at_confidence     VARCHAR(10),
+    prediction                  FLOAT,
+    feature_snapshot_str        VARCHAR,
+    model_artifact_s3_uri       VARCHAR(500),
+    reconstruction_type         VARCHAR(20)
+)
+"""
+
+_INSERT_SNAPSHOTS_TEMP = """
+INSERT INTO baseball_data.betting.tmp_prediction_snapshots
+    (game_pk, target, model_version, predicted_at, predicted_at_confidence,
+     prediction, feature_snapshot_str, model_artifact_s3_uri, reconstruction_type)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+
+_ALTER_SNAPSHOTS_ADD_CONFIDENCE = """
+ALTER TABLE baseball_data.betting.prediction_snapshots
+    ADD COLUMN IF NOT EXISTS predicted_at_confidence VARCHAR(10)
+"""
+
+_MERGE_SNAPSHOTS = """
+MERGE INTO baseball_data.betting.prediction_snapshots t
+USING (
+    SELECT
+        game_pk,
+        target,
+        model_version,
+        predicted_at,
+        predicted_at_confidence,
+        prediction,
+        PARSE_JSON(feature_snapshot_str) AS feature_snapshot,
+        model_artifact_s3_uri,
+        reconstruction_type
+    FROM baseball_data.betting.tmp_prediction_snapshots
+) s
+ON t.game_pk = s.game_pk
+   AND t.target = s.target
+   AND t.reconstruction_type = 'live'
+WHEN NOT MATCHED THEN INSERT (
+    game_pk, target, model_version, predicted_at, predicted_at_confidence,
+    prediction, feature_snapshot, model_artifact_s3_uri, reconstruction_type
+) VALUES (
+    s.game_pk, s.target, s.model_version, s.predicted_at, s.predicted_at_confidence,
+    s.prediction, s.feature_snapshot, s.model_artifact_s3_uri, s.reconstruction_type
+)
+"""
+
+_REGISTRY_KEY_MAP = {
+    "home_win":   "home_win",
+    "total_runs": "total_runs",
+    "run_diff":   "run_differential",
+}
+
+
+def _write_prediction_snapshots(
+    df_today: pd.DataFrame,
+    predicted_at: datetime,
+    target_data: list[dict],
+    model_version: str,
+    dry_run: bool = False,
+) -> None:
+    """Write one live snapshot row per game per target to prediction_snapshots.
+
+    target_data items: {"target": str, "tag": str, "feat_cols": list[str], "predictions": np.ndarray}
+    Idempotent: MERGE skips rows where (game_pk, target, reconstruction_type='live') already exists.
+    """
+    rows = []
+    for tgt in target_data:
+        target_name = tgt["target"]
+        tag         = tgt["tag"]
+        feat_cols   = tgt["feat_cols"]
+        predictions = tgt["predictions"]
+
+        registry_key = _REGISTRY_KEY_MAP[target_name]
+        entry = _load_registry()[registry_key]
+        artifact_s3_uri = _registry_artifact_path(entry, tag)
+
+        raw_df = df_today.reindex(columns=feat_cols)
+
+        for i in range(len(df_today)):
+            game_pk_val = df_today.iloc[i]["game_pk"] if "game_pk" in df_today.columns else None
+            if game_pk_val is None or (isinstance(game_pk_val, float) and np.isnan(game_pk_val)):
+                continue
+
+            snap = {}
+            for col in feat_cols:
+                v = raw_df.iloc[i][col] if col in raw_df.columns else None
+                if v is None or (isinstance(v, float) and np.isnan(v)):
+                    snap[col] = None
+                elif isinstance(v, (np.floating, np.integer)):
+                    snap[col] = float(v)
+                else:
+                    snap[col] = v
+
+            pred_val = predictions[i]
+            if pred_val is None or (isinstance(pred_val, float) and np.isnan(pred_val)):
+                pred_val = None
+            else:
+                pred_val = float(pred_val)
+
+            rows.append((
+                int(game_pk_val),
+                target_name,
+                model_version,
+                predicted_at,
+                "exact",
+                pred_val,
+                json.dumps(snap),
+                artifact_s3_uri,
+                "live",
+            ))
+
+    if dry_run:
+        print(f"\n[dry-run] Would insert {len(rows)} snapshot row(s) to prediction_snapshots")
+        return
+
+    if not rows:
+        return
+
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_CREATE_PREDICTION_SNAPSHOTS_TABLE)
+            cur.execute(_ALTER_SNAPSHOTS_ADD_CONFIDENCE)
+            cur.execute(_CREATE_SNAPSHOTS_TEMP)
+            cur.executemany(_INSERT_SNAPSHOTS_TEMP, rows)
+            cur.execute(_MERGE_SNAPSHOTS)
+            inserted = cur.rowcount or 0
+            conn.commit()
+            print(
+                f"\nWrote {inserted} snapshot row(s) to "
+                f"baseball_data.betting.prediction_snapshots "
+                f"(model_version={model_version}, reconstruction_type=live)"
+            )
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f"\nWarning: Could not write prediction snapshots to Snowflake ({exc}).")
+
+
 _BACKFILL_OUTCOME_H2H_SQL = """
 UPDATE baseball_data.config.prediction_log pl
 SET actual_outcome = CASE WHEN mgr.home_team_won THEN 1.0 ELSE 0.0 END
@@ -854,9 +1016,9 @@ def _score_date(
             raise ValueError(f"Required column '{col}' missing from today's features.")
 
     # ------ NGBoost feature matrices ------
-    X_ngb = _build_feature_matrix(df_today, df_hist, "total_runs", total_runs_tag, ngb_total)
-    X_diff = _build_feature_matrix(df_today, df_hist, "run_differential", run_diff_tag, ngb_diff)
-    X_clf  = _build_feature_matrix(df_today, df_hist, "home_win", home_win_tag, clf_hw)
+    X_ngb,  ngb_feat_cols  = _build_feature_matrix(df_today, df_hist, "total_runs",      total_runs_tag, ngb_total)
+    X_diff, diff_feat_cols = _build_feature_matrix(df_today, df_hist, "run_differential", run_diff_tag,   ngb_diff)
+    X_clf,  clf_feat_cols  = _build_feature_matrix(df_today, df_hist, "home_win",         home_win_tag,   clf_hw)
 
     # ------ Score NGBoost total runs ------
     # Per-tag dist dispatch: v0/v1 = LogNormal (legacy), v2+ = Normal.
@@ -995,6 +1157,22 @@ def _score_date(
         model_version=model_version,
         feature_version=feature_version,
         data_source=data_source,
+        dry_run=dry_run,
+    )
+
+    cal_win_arr = np.array([
+        _apply_calibrator(float(p_home_win_ngb[i]) * 0.5 + float(p_home_win_clf[i]) * 0.5)
+        for i in range(len(df_today))
+    ])
+    _write_prediction_snapshots(
+        df_today=df_today,
+        predicted_at=run_ts,
+        target_data=[
+            {"target": "home_win",   "tag": home_win_tag,   "feat_cols": clf_feat_cols,  "predictions": cal_win_arr},
+            {"target": "total_runs", "tag": total_runs_tag, "feat_cols": ngb_feat_cols,  "predictions": pred_total_mean},
+            {"target": "run_diff",   "tag": run_diff_tag,   "feat_cols": diff_feat_cols, "predictions": loc_diff},
+        ],
+        model_version=model_version,
         dry_run=dry_run,
     )
 

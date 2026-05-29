@@ -954,6 +954,18 @@ sources:
       feature mart tables.
 
     tables:
+      - name: feature_pregame_market_features
+        description: >
+          SCD-2 store for pre-game market state (moneyline and totals). One row per
+          distinct line state per (game_pk, market_type, bookmaker_key). Populated by
+          scripts/backfill_market_features_scd2.py via MERGE. Enables point-in-time
+          odds replay for CLV reconstruction and walk-forward backtesting (Story 15.1).
+          Natural key: (game_pk, market_type, bookmaker_key, valid_from).
+          Change-detection: record_hash over price columns (home_moneyline_american,
+          away_moneyline_american, total_line, over_american, under_american).
+          Coverage: Odds API 2021-01-01+; Parlay API 2026-05-26+.
+          DDL: scripts/ddl/feature_pregame_market_features.sql.
+
       - name: offense_v1_signals
         description: >
           Per game-side offensive quality signals from the offense_v1 LightGBM model.
