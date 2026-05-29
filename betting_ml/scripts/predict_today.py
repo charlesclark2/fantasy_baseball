@@ -176,7 +176,8 @@ def _build_feature_matrix(
             f"but got {X_today_imp.shape[1]}. Retrain the model or fix feature_columns_path."
         )
 
-    return (X_today_imp.values if isinstance(X_today_imp, pd.DataFrame) else X_today_imp, feature_cols)
+    imputed_df = X_today_imp if isinstance(X_today_imp, pd.DataFrame) else pd.DataFrame(X_today_imp, columns=feature_cols)
+    return (imputed_df.values, feature_cols, imputed_df)
 
 
 # ---------------------------------------------------------------------------
@@ -646,7 +647,9 @@ def _write_prediction_snapshots(
 ) -> None:
     """Write one live snapshot row per game per target to prediction_snapshots.
 
-    target_data items: {"target": str, "tag": str, "feat_cols": list[str], "predictions": np.ndarray}
+    target_data items: {"target": str, "tag": str, "feat_cols": list[str],
+                        "imputed_df": pd.DataFrame, "predictions": np.ndarray}
+    imputed_df is the post-build_imputation_pipeline() DataFrame (what the model actually saw).
     Idempotent: MERGE skips rows where (game_pk, target, reconstruction_type='live') already exists.
     """
     rows = []
@@ -655,12 +658,15 @@ def _write_prediction_snapshots(
         tag         = tgt["tag"]
         feat_cols   = tgt["feat_cols"]
         predictions = tgt["predictions"]
+        imputed_df  = tgt.get("imputed_df")
 
         registry_key = _REGISTRY_KEY_MAP[target_name]
         entry = _load_registry()[registry_key]
         artifact_s3_uri = _registry_artifact_path(entry, tag)
 
-        raw_df = df_today.reindex(columns=feat_cols)
+        # Use post-imputation values if available; fall back to raw features.
+        snap_df   = imputed_df if imputed_df is not None else df_today.reindex(columns=feat_cols)
+        snap_cols = list(snap_df.columns)
 
         for i in range(len(df_today)):
             game_pk_val = df_today.iloc[i]["game_pk"] if "game_pk" in df_today.columns else None
@@ -668,8 +674,8 @@ def _write_prediction_snapshots(
                 continue
 
             snap = {}
-            for col in feat_cols:
-                v = raw_df.iloc[i][col] if col in raw_df.columns else None
+            for col in snap_cols:
+                v = snap_df.iloc[i][col] if col in snap_df.columns else None
                 if v is None or (isinstance(v, float) and np.isnan(v)):
                     snap[col] = None
                 elif isinstance(v, (np.floating, np.integer)):
@@ -881,29 +887,29 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-tag",
-        default="v1",
+        default="v3",
         help="Default tag used for any per-target tag not explicitly set, "
              "and the model_version label written to Snowflake. "
-             "For pure single-version backfills use 'v0' or 'v1'. "
+             "For pure single-version backfills use 'v0', 'v1', 'v2', or 'v3'. "
              "For mixed-version production scoring, use a distinct label like 'prod' "
              "and set --home-win-tag, --total-runs-tag, --run-diff-tag explicitly. "
-             "Default: v1",
+             "Default: v3 (Epic 1 market-blind models for all targets)",
     )
     parser.add_argument(
         "--home-win-tag",
-        choices=["v0", "v1", "v2"],
+        choices=["v0", "v1", "v2", "v3"],
         default=None,
         help="Artifact tag to load for the home_win model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--total-runs-tag",
-        choices=["v0", "v1", "v2"],
+        choices=["v0", "v1", "v2", "v3"],
         default=None,
         help="Artifact tag to load for the total_runs model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--run-diff-tag",
-        choices=["v0", "v1", "v2"],
+        choices=["v0", "v1", "v2", "v3"],
         default=None,
         help="Artifact tag to load for the run_differential model. Defaults to --model-tag.",
     )
@@ -938,10 +944,10 @@ def _parse_args() -> argparse.Namespace:
     for attr in ("home_win_tag", "total_runs_tag", "run_diff_tag"):
         if getattr(args, attr) is None:
             fallback = args.model_tag
-            if fallback not in ("v0", "v1", "v2"):
+            if fallback not in ("v0", "v1", "v2", "v3"):
                 parser.error(
                     f"--{attr.replace('_','-')} not set and --model-tag={fallback!r} is not "
-                    "an artifact tag (v0/v1/v2). Provide an explicit per-target tag."
+                    "an artifact tag (v0/v1/v2/v3). Provide an explicit per-target tag."
                 )
             setattr(args, attr, fallback)
 
@@ -1016,9 +1022,9 @@ def _score_date(
             raise ValueError(f"Required column '{col}' missing from today's features.")
 
     # ------ NGBoost feature matrices ------
-    X_ngb,  ngb_feat_cols  = _build_feature_matrix(df_today, df_hist, "total_runs",      total_runs_tag, ngb_total)
-    X_diff, diff_feat_cols = _build_feature_matrix(df_today, df_hist, "run_differential", run_diff_tag,   ngb_diff)
-    X_clf,  clf_feat_cols  = _build_feature_matrix(df_today, df_hist, "home_win",         home_win_tag,   clf_hw)
+    X_ngb,  ngb_feat_cols,  ngb_imputed_df  = _build_feature_matrix(df_today, df_hist, "total_runs",      total_runs_tag, ngb_total)
+    X_diff, diff_feat_cols, diff_imputed_df = _build_feature_matrix(df_today, df_hist, "run_differential", run_diff_tag,   ngb_diff)
+    X_clf,  clf_feat_cols,  clf_imputed_df  = _build_feature_matrix(df_today, df_hist, "home_win",         home_win_tag,   clf_hw)
 
     # ------ Score NGBoost total runs ------
     # Per-tag dist dispatch: v0/v1 = LogNormal (legacy), v2+ = Normal.
@@ -1168,9 +1174,9 @@ def _score_date(
         df_today=df_today,
         predicted_at=run_ts,
         target_data=[
-            {"target": "home_win",   "tag": home_win_tag,   "feat_cols": clf_feat_cols,  "predictions": cal_win_arr},
-            {"target": "total_runs", "tag": total_runs_tag, "feat_cols": ngb_feat_cols,  "predictions": pred_total_mean},
-            {"target": "run_diff",   "tag": run_diff_tag,   "feat_cols": diff_feat_cols, "predictions": loc_diff},
+            {"target": "home_win",   "tag": home_win_tag,   "feat_cols": clf_feat_cols,  "imputed_df": clf_imputed_df,  "predictions": cal_win_arr},
+            {"target": "total_runs", "tag": total_runs_tag, "feat_cols": ngb_feat_cols,  "imputed_df": ngb_imputed_df,  "predictions": pred_total_mean},
+            {"target": "run_diff",   "tag": run_diff_tag,   "feat_cols": diff_feat_cols, "imputed_df": diff_imputed_df, "predictions": loc_diff},
         ],
         model_version=model_version,
         dry_run=dry_run,

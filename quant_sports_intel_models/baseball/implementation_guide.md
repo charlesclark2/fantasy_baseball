@@ -354,16 +354,15 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 │ Epic 2    (Sub-Model Infra & Feature Readiness) — ✅ Complete. Stories 2.1–2.7, 2.9 ✅. Story 2.8 deferred (bullpen supervised target; not on critical path).
 │ Epic 3    (Run Environment Model) ✅    — Complete (run_env_v3 champion, 2026-05-19).
 │ Epic 3A   (EB Park Factor Smoothing) ✅ — Complete.
-│ Epic 3D   (Distributional Run Env)     — After Epic 3A. Retrofits run_env_v3 to NegBin
-│                                          distributional output (run_env_v4). Two-model
-│                                          minimum comparison required.
+│ Epic 3D   (Distributional Run Env) ✅   — Complete (run_env_v4 champion, Ridge+NegBin, 2026-05-28).
 │ Epic 4    (Offensive Quality Model) ✅  — Complete (offense_v1 champion, 2026-05-28).
 │ Epic 4A   (EB Lineup Stabilization) ✅  — Complete (2026-05-28).
-│ Epic 4D   (Distributional Offense)     — After Epic 4A. Retrofits offense_v1 to NegBin
-│                                          distributional output (offense_v2). Two-model
-│                                          minimum comparison required.
-│ Epic 5    (Starter Suppression Model)  — After Epic 2 ships 2.1–2.4, 2.7. Distributional
-│                                          (Normal) from the start; two-model minimum.
+│ Epic 4D   (Distributional Offense) ✅   — Complete (offense_v2 champion, LightGBM+NegBin, 2026-05-29).
+│ Epic 5A   (EB Starter Stabilization)   — Before Epic 5.2. Fit age-band × season Normal
+│                                          priors; compute posteriors; propagate into
+│                                          feature_pregame_starter_features.
+│ Epic 5    (Starter Suppression Model)  — After 5A.1–5A.3 ship. Distributional (Normal)
+│                                          from the start; two-model minimum.
 │ Epic 6    (Bullpen State Model)        — After Epic 2 ships 2.1–2.4. Distributional
 │                                          (Normal) from the start; two-model minimum.
 │ Epic 7    (Archetype Clustering)       — Prerequisite for Epic 8.
@@ -413,7 +412,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.6 complete ✅ 2026-05-29** (stg_actionnetwork_public_betting_snapshots + feature_pregame_public_betting_status + feature_pregame_public_betting_features; game_pk resolved via mart_game_results join; dual coverage gap documented; 3 SCD-2 singular tests; coverage 2026-05-07 Epic T.3 onward); **15.7 complete ✅ 2026-05-29** (stg_statsapi_umpire_snapshots + feature_pregame_umpire_status; natural key game_pk not (game_pk, ump_position) — no ump_position in source; hash on umpire_name not umpire_id — umpscorecards has no umpire_id; 3 SCD-2 singular tests; feature_pregame_umpire_features NOT re-pointed — forward-only SCD-2 would break historical z-score trailing averages); **15.8 complete ✅ 2026-05-29** (feature_pregame_park_status; natural key (venue_id, season); no staging model — source is annual grain; 6 retired venues closed at season_close+1; 362 rows, 36 venues, 11/11 tests pass; feature_pregame_park_features NOT re-pointed); **15.9 complete ✅ 2026-05-29** (AS-OF validation: 18/18 exact field matches across 3 games; per-mart coverage table in baseball_data_mart_inventory.md §6.8; ±0.001 reconstruction AC deferred — best_effort snapshots store raw features; build_imputation_pipeline() medians not persisted; follow-on: write post-imputation vector from predict_today.py live path; forward-only mart caveats added; Epic 15 COMPLETE); **15.4+ use dbt for all SCD-2 transformations** | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.6 complete ✅ 2026-05-29** (stg_actionnetwork_public_betting_snapshots + feature_pregame_public_betting_status + feature_pregame_public_betting_features; game_pk resolved via mart_game_results join; dual coverage gap documented; 3 SCD-2 singular tests; coverage 2026-05-07 Epic T.3 onward); **15.7 complete ✅ 2026-05-29** (stg_statsapi_umpire_snapshots + feature_pregame_umpire_status; natural key game_pk not (game_pk, ump_position) — no ump_position in source; hash on umpire_name not umpire_id — umpscorecards has no umpire_id; 3 SCD-2 singular tests; feature_pregame_umpire_features NOT re-pointed — forward-only SCD-2 would break historical z-score trailing averages); **15.8 complete ✅ 2026-05-29** (feature_pregame_park_status; natural key (venue_id, season); no staging model — source is annual grain; 6 retired venues closed at season_close+1; 362 rows, 36 venues, 11/11 tests pass; feature_pregame_park_features NOT re-pointed); **15.9 complete ✅ 2026-05-29** (AS-OF validation: 18/18 exact field matches across 3 games; per-mart coverage table in baseball_data_mart_inventory.md §6.8; ±0.001 reconstruction AC originally deferred — best_effort snapshots store raw features; re-validated 2026-05-29 against live snapshots: 3/3 reconstructions Δ=0.000000 ALL PASS after 15.10 shipped; validate_scd2_reconstruction.py updated to auto-discover live snapshots dynamically); **15.10 complete ✅ 2026-05-29** (betting_ml/scripts/predict_today.py updated to return 3-tuple from _build_feature_matrix() including imputed_df; _write_prediction_snapshots() stores post-imputation vector; reconstruction_type='live' for all new rows; model routing bug fixed — total_runs with --model-tag v1 was silently loading ngboost_tuned_2026.pkl (old LogNormal) due to explicit v1_artifact_path override; fix: added v3_artifact_path/v3_dist/v3_feature_columns_path to total_runs registry entry pointing at ngboost_market_blind_2026.pkl; --model-tag default changed v1→v3; Streamlit 1_Today_Picks.py both predict calls updated to --home-win-tag v3 --total-runs-tag v3 --run-diff-tag v3); **15.4+ use dbt for all SCD-2 transformations** | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -3187,68 +3186,15 @@ Acceptance criteria:
 
 ---
 
-# Epic 5 — Starter Suppression Model
-
-**Goal:** Build a pre-game starter quality signal that captures stuff, command, and expected depth.
-
----
-
-### 5.1 — Define training dataset
-
-Tasks:
-- [ ] Identify starter feature columns: Stuff+, CSW%, arsenal drift, velocity trend, recent workload, FIP, xFIP
-- [ ] Primary target: starter xwOBA allowed in game (cleaner than runs allowed)
-- [ ] Auxiliary targets: K%, BB%, innings pitched
-- [ ] Training window: 2021+ (Stuff+ coverage-dependent)
-
----
-
-### 5.2 — Train starter suppression model (v1)
-
-**Champion selection gate:** Case 1 (new model — no prior champion). Lower mean CV NLL wins outright (NLL is the primary gate for distributional models). MAE is the tiebreaker. See [Champion selection policy](#champion-selection-policy) and [Sub-model output standard](#sub-model-output-standard).
-
-**Distribution family:** Normal — xwOBA allowed is a rate metric (~0.28–0.38 realistic range), approximately symmetric, continuous. Emit `starter_suppression_mu` and `starter_suppression_sigma`.
-
-**Two-model minimum:** Must compare at least two candidate architectures before selecting a champion (see Sub-model output standard). Suggested pairing: NGBoost Normal vs. LightGBM mean + Normal sigma from residuals.
-
-Tasks:
-- [ ] Build feature matrix (rolling Stuff+, CSW% last 3 starts, velocity delta, arsenal drift, workload)
-- [ ] Train at least two distributional candidates (see Sub-model output standard for suggested pairing); compare on NLL, std(pred), 80% calibration, and MAE
-- [ ] Evaluate: correlation with in-game xwOBA, K%, IP; report per-fold NLL and MAE, fold win count, Wilcoxon p-value
-- [ ] Select champion per champion selection policy; lower mean CV NLL wins
-- [ ] Emit signals: `starter_suppression_mu`, `starter_suppression_sigma`, `starter_run_suppression_signal` (z-score of mu for backward compatibility), `uncertainty` (80% PI width)
-- [ ] Document in `sub_model_registry.yaml` with distributional output schema
-- [ ] **Wire MLflow instrumentation per Epic I.2 pattern before marking story complete** — experiment name `starter_suppression_v1`
-
----
-
-### 5.3 — Generate and store starter suppression signals
-
-> **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
-
-Tasks:
-- [ ] Generate: `starter_run_suppression_signal`, `starter_expected_ip_signal`, `starter_command_signal`, `starter_uncertainty_score`
-- [ ] Store in sub-model output mart
-- [ ] Backfill for 2021–2026
-
----
-
-### 5.4 — Ablation test
-
-Tasks:
-- [ ] Add signals to H2H and totals feature matrices
-- [ ] Temporal CV comparison
-- [ ] Gate before production integration
-
----
-
 # Epic 5A — Empirical Bayes Starter Quality Stabilization
 
-**Prerequisite:** Story 2.7 complete. Epic 5 Story 5.1 (training dataset defined).
+**Prerequisite:** Story 2.7 complete.
 
 **Goal:** Replace raw in-season xwOBA-against estimates for starters in `mart_starting_pitcher_game_log` with Normal-Normal empirical Bayes shrinkage estimates stratified by age band and season. Improves early-season and IL-return starter quality estimation.
 
 **Why this prior structure:** Pitcher aging curves are well-documented and age meaningfully stratifies the true talent distribution for xwOBA-against. A 22-year-old's first 3 starts should shrink toward a different population mean than a 35-year-old's first 3 starts after IL return. Season-level fitting captures era shifts.
+
+**Sequencing note:** 5A.1–5A.3 should run before Story 5.2 (training) so the trained model can consume EB-stabilized features. 5A.4 runs after 5.2 as a retrospective comparison.
 
 ---
 
@@ -3302,30 +3248,209 @@ Acceptance criteria:
 
 ### 5A.3 — Propagate EB starter estimates into the starter feature mart
 
-**dbt model:** update `feature_pregame_starter_features` (or equivalent model feeding `feature_pregame_game_features`)
+**dbt model:** update `feature_pregame_starter_features` in `dbt/models/feature/`
 
-> **Note (Epic 15 Story 15.4):** `feature_pregame_starter_features` now reads starter identity from `feature_pregame_starter_status WHERE is_current = true` (SCD-2 model) rather than `stg_statsapi_probable_pitchers`. The EB posterior join on `(game_pk, starter_pitcher_id)` should use the `starter_player_id` column from `feature_pregame_starter_status` as the join key.
+> **Data reality (confirmed 2026-05-29):** `feature_pregame_starter_features` already exists in `baseball_data.betting_features` with grain `(game_pk, side)` and 75+ columns. This story adds EB columns as additional columns alongside the existing raw rolling stats.
+
+> **Note (Epic 15 Story 15.4):** `feature_pregame_starter_features` now reads starter identity from `feature_pregame_starter_status WHERE is_current = true` (SCD-2 model) rather than `stg_statsapi_probable_pitchers`. The EB posterior join on `(game_pk, pitcher_id)` should use the `pitcher_id` column already present in `feature_pregame_starter_features` (which comes from the SCD-2 probable pitcher state).
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Add source entry for EB starter posterior output table
-- [ ] Join on (game_pk, starter_pitcher_id) for both home and away starters
-- [ ] Add columns: `home_eb_starter_xwoba_against`, `home_eb_starter_k_pct`, `home_eb_starter_bb_pct`, `home_eb_starter_xwoba_uncertainty`, `home_eb_starter_data_source` (and equivalent `away_*` columns)
-- [ ] Retain existing raw columns (`home_starter_xwoba_30d`, ZiPS projections) — add EB as additional columns, do not replace
-- [ ] Update `schema.yml` with descriptions, not_null tests on EB columns (always non-null — prior-only fills gaps)
+- [ ] Write EB posteriors to a Snowflake table (e.g., `baseball_data.betting.eb_starter_posteriors`) via VARCHAR temp + MERGE; add source entry in `sources.yml`
+- [ ] In `feature_pregame_starter_features.sql`, add LEFT JOIN on `(game_pk, pitcher_id)` to the EB posteriors table
+- [ ] Add columns: `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty`, `eb_data_source`
+- [ ] Retain all existing raw columns — EB columns are additive, not replacements
+- [ ] Update `schema.yml` with descriptions and `not_null` tests on EB columns (always non-null — prior-only fills gaps for debuts)
+- [ ] Run `dbtf build --select feature_pregame_starter_features` and `dbtf test --select feature_pregame_starter_features`
 
 Acceptance criteria:
-- [ ] `dbtf build --target dev --select feature_pregame_starter_features` green
-- [ ] `home_eb_starter_xwoba_against` is non-null for 100% of games (prior fills gaps)
-- [ ] Correlation between `eb_xwoba_against` and `xwoba_30d` is r > 0.75 for games with BF > 200
-- [ ] April game variance for `eb_xwoba_against` is lower than `xwoba_30d` — confirming shrinkage
+- [ ] `dbtf build` green; row count of `feature_pregame_starter_features` unchanged
+- [ ] `eb_xwoba_against` is non-null for 100% of rows (prior-only fills gaps)
+- [ ] Correlation between `eb_xwoba_against` and `xwoba_against_30d` is r > 0.75 for games with BF > 200 (spot-check via Snowflake query)
+- [ ] April game variance: `STDDEV(eb_xwoba_against) < STDDEV(xwoba_against_30d)` for April games — confirms shrinkage is active when samples are small
+- [ ] `eb_data_source` distribution reasonable: `prior_only` < 5% of all rows (only true debuts), `full_eb` majority
 
 ---
 
 ### 5A.4 — Ablation test: EB vs. raw starter features in suppression model
 
-Same structure as Story 4A.4 applied to starter_v1. Compare CV xwOBA prediction error with raw vs. EB starter features. Specific focus: performance on games where `current_season_bf < 100` (early season and IL returns).
+**Goal:** Quantify whether EB-stabilized starter features improve xwOBA prediction over raw rolling stats, particularly in the early-season window where shrinkage matters most.
+
+Tasks:
+- [ ] Retrain `starter_v1` using raw rolling features only (no `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`) — use the same CV folds and hyperparameters as the Story 5.2 champion for a fair comparison
+- [ ] Compare CV xwOBA MAE: raw features vs. EB features, for (a) all games, (b) games with `current_season_bf < 100` (early season / IL returns), (c) April games only
+- [ ] Report: delta MAE by subgroup, feature importance rank of `eb_xwoba_against` in the EB model
+- [ ] Decision rule: if EB improves MAE by ≥ 0.001 for the `current_season_bf < 100` subgroup, keep EB features in the champion; if not, document the result and keep EB anyway for the uncertainty benefit (the `eb_data_source` flag and `eb_xwoba_uncertainty` column are valuable to downstream models regardless of MAE impact)
+
+Acceptance criteria:
+- [ ] Raw-feature and EB-feature CV runs completed with identical fold splits and hyperparameters
+- [ ] MAE comparison table produced for all three subgroups (all games, BF < 100, April only)
+- [ ] `eb_xwoba_against` feature importance rank reported in the EB model
+- [ ] Decision documented: EB retained or rejected for the champion, with reasoning
+- [ ] Results written to `quant_sports_intel_models/baseball/ablation_results/starter_v1_eb_ablation.md`
+
+---
+
+# Epic 5 — Starter Suppression Model
+
+**Goal:** Build a pre-game starter quality signal that captures stuff, command, and expected depth. The primary output is a full Normal distribution over the starter's expected xwOBA-against, giving downstream models both a point estimate and calibrated uncertainty.
+
+**Prerequisites:** Stories 5A.1–5A.3 complete (EB posteriors propagated into `feature_pregame_starter_features`). Story 5A.4 runs after Story 5.2 as a retrospective ablation.
+
+**Data reality (confirmed 2026-05-29):** `feature_pregame_starter_features` already exists in `baseball_data.betting_features` with grain `(game_pk, side)` and 75+ columns covering: rolling xwOBA-against (7d/14d/30d/season), K%/BB%/whiff rate/CSW% at multiple windows, Stuff+ (season-level; 2020–2026 only), arsenal composition and drift, velocity trend, platoon splits, workload/rest, ZiPS projections. The feature matrix for training is largely assembled — Story 5.1 is a validation and finalization step, not a build-from-scratch step.
+
+**Stuff+ coverage constraint:** `stg_fangraphs__stuff_plus` covers 2020–2026 only. Training options:
+- **2020+ only (4 CV folds):** all features available, smaller sample
+- **2015+ with null-fill (8 CV folds):** Stuff+ columns are null for 2015–2019; include them with null-impute to league-season mean at training time, giving the model more temporal data at the cost of noisy Stuff+ signals for early years
+
+The recommended approach is **2020+ training** for the first champion — clean features, reproducible. Revisit with the larger window if CV variance is high.
+
+---
+
+### 5.1 — Define and validate training dataset
+
+**Script:** `betting_ml/scripts/starter_v1/build_training_dataset.py` (new)
+
+**Source of truth:** `feature_pregame_starter_features` joined to `mart_starting_pitcher_game_log` on `(game_pk, pitcher_id)` for the training label. Training grain: one row per `(game_pk, side)`.
+
+Tasks:
+- [ ] Query `feature_pregame_starter_features` for 2020–2026; join `mart_starting_pitcher_game_log` on `(game_pk, pitcher_id)` to attach targets (`xwoba_against`, `strikeouts / batters_faced` as k_pct, `walks / batters_faced` as bb_pct, `innings_pitched`)
+- [ ] Confirm Stuff+ null rate by season: expect 0% null 2020–2026, ~100% null pre-2020; log null counts per column
+- [ ] Confirm leakage guard: all rolling stats in `feature_pregame_starter_features` use `game_date <` (strictly less than) for the window cutoff — spot-check 5 games by comparing feature values to `mart_pitcher_rolling_stats` manually
+- [ ] Identify and document the final feature list: expected ~40–50 columns (rolling performance, Stuff+, arsenal, velocity, platoon splits, workload, ZiPS projections); exclude `STARTER_PROJ_XFIP` (confirmed 100% NULL in Story 2.7); **include EB columns from Story 5A.3** (`eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty`, `eb_data_source`)
+- [ ] Save feature list to `betting_ml/models/sub_models/starter_v1/feature_columns.json`
+- [ ] Smoke check: `SELECT COUNT(*), MIN(game_date), MAX(game_date), AVG(xwoba_against) FROM training_set WHERE xwoba_against IS NOT NULL` — expect 2020+ rows with avg xwOBA-against ~0.305–0.325
+
+Acceptance criteria:
+- [ ] Training set covers 2020–2026 with ≥ 8,000 starter-game rows (expect ~11,000 for 5 seasons × ~1,500 starters-per-season × 2 sides)
+- [ ] `xwoba_against` non-null rate ≥ 99% for training rows (Story 2.7 confirmed 50,292 / 50,293 non-null across full history)
+- [ ] Leakage guard spot-check passes: no rolling stat for game T includes game T's outcome
+- [ ] `feature_columns.json` written with the final column list
+- [ ] Null rates for each feature column logged; `STARTER_PROJ_XFIP` excluded and documented
+
+---
+
+### 5.2 — Train starter suppression model (v1)
+
+**Script:** `betting_ml/scripts/starter_v1/train_starter_v1.py` (new)
+
+**Champion selection gate:** Case 1 (new model — no prior champion). Lower mean CV NLL wins outright (NLL is the primary gate for distributional models). MAE is the tiebreaker. See [Champion selection policy](#champion-selection-policy) and [Sub-model output standard](#sub-model-output-standard).
+
+**Distribution family:** Normal — xwOBA-against is a rate metric (~0.28–0.38 realistic range), approximately symmetric and continuous. Model emits `starter_suppression_mu` (predicted mean xwOBA-against) and `starter_suppression_sigma` (predicted std).
+
+**CV strategy:** Walk-forward by season. With 2020–2026 data (6 seasons, min 3 train), expect 3–4 CV folds (eval years 2023–2026 or 2022–2025 depending on min_train_seasons setting). Document fold count in registry.
+
+**Two-model minimum:** Must compare at least two candidate architectures. Suggested pairing:
+- **Candidate A — NGBoost Normal:** end-to-end distributional training, native NLL loss
+- **Candidate B — LightGBM + Normal sigma:** LGBM predicts mean; sigma fitted from per-fold residuals (same pattern as offense_v2)
+- **Candidate C — GLM baseline:** OLS or statsmodels GLM; sigma = residual std; used as NLL floor, not a real competitor
+
+Tasks:
+- [ ] Load training data from Story 5.1 script output; apply null-impute strategy (document choices: mean impute within season for sparse columns)
+- [ ] Implement walk-forward CV with `min_train_seasons=3`; confirm fold count ≥ 3 before proceeding
+- [ ] Train Candidate A (NGBoost Normal) and Candidate B (LightGBM + Normal sigma); train Candidate C (GLM) as reference baseline
+- [ ] Per fold: compute NLL (Normal log-likelihood), MAE vs. `xwoba_against`, 80% calibration (fraction of actuals within ±1.28σ of mu), std(pred) (prediction spread — guards against constant-predictor collapse)
+- [ ] Gate summary print: report each candidate vs. GLM NLL floor; winner must have lower NLL than GLM and `std(pred) ≥ 0.010` (xwOBA range 0.28–0.38; std below 0.010 indicates near-constant predictions)
+- [ ] Run Optuna hyperparameter search (10-trial probe + 50-trial full) on winner architecture; minimize mean CV NLL
+- [ ] Retrain winner on full dataset (2020–2026); fit sigma from residuals if LightGBM wins
+- [ ] Save artifact to `s3://baseball-betting-ml-artifacts/sub_models/starter_v1.pkl` with keys: `model`, `sigma` (scalar or per-fold mean), `feature_columns`, `model_type`, `cv_nll`, `cv_mae`, `cv_folds`
+- [ ] Register in `sub_model_registry.yaml` under `starter_v1` with all required fields; set `promotion_status: champion`
+- [ ] **Wire MLflow instrumentation per Epic I.2 pattern before marking story complete** — experiment name `starter_suppression_v1`
+
+Acceptance criteria:
+- [ ] At least 3 CV folds completed; per-fold NLL and MAE tabulated in output
+- [ ] Winner NLL < GLM baseline NLL (or within 0.015 slack if GLM collapses to intercept-only)
+- [ ] Winner `std(pred) ≥ 0.010` — predictions are not collapsed to a near-constant
+- [ ] 80% calibration ≥ 0.75 (at least 75% of actuals fall within the predicted 80% PI)
+- [ ] MAE reported and within reasonable range for xwOBA prediction (expect 0.030–0.055)
+- [ ] `starter_v1.pkl` artifact uploaded to S3; artifact loads cleanly in a dry run
+- [ ] Registry entry for `starter_v1` complete with `output_signals`, `cv_metric`, `cv_score`, `cv_folds`, `promotion_status: champion`
+- [ ] MLflow run logged under `starter_suppression_v1` experiment; `mlflow_run_id` in registry
+
+---
+
+### 5.3 — Generate and store starter suppression signals
+
+**Script:** `betting_ml/scripts/starter_v1/generate_starter_signals.py` (new)
+
+**Storage:** Dedicated table `baseball_data.betting_features.starter_suppression_signals` (same pattern as `offense_v2_signals`). Do NOT write to `mart_sub_model_signals`. Use VARCHAR temp table + MERGE (idempotent).
+
+**Output signals (4 per game-side):**
+
+| Signal | Description |
+|---|---|
+| `starter_suppression_mu` | Predicted mean xwOBA-against for this starter |
+| `starter_suppression_sigma` | Predicted std of the Normal distribution |
+| `starter_suppression_signal` | Z-score of mu relative to season mean (negative = better suppression) |
+| `uncertainty` | 80% PI width: `2 × 1.28 × sigma` |
+
+> **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
+
+Tasks:
+- [ ] Create DDL for `baseball_data.betting_features.starter_suppression_signals`:
+  ```sql
+  CREATE TABLE IF NOT EXISTS baseball_data.betting_features.starter_suppression_signals (
+      game_pk                   VARCHAR(20)   NOT NULL,
+      side                      VARCHAR(4)    NOT NULL,
+      game_date                 DATE          NOT NULL,
+      game_year                 INTEGER       NOT NULL,
+      starter_suppression_mu    FLOAT         NOT NULL,
+      starter_suppression_sigma FLOAT         NOT NULL,
+      starter_suppression_signal FLOAT        NOT NULL,
+      uncertainty               FLOAT         NOT NULL,
+      model_version             VARCHAR(20)   NOT NULL,
+      ingestion_ts              TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (game_pk, side, model_version)
+  )
+  ```
+- [ ] Implement sanity checks before write: `starter_suppression_mu` p5 ≥ 0.250, p95 ≤ 0.400; `starter_suppression_sigma` median > 0; `uncertainty` median > 0; per-season mu mean/std printed
+- [ ] Backfill for all games in training window (2020–2026) using `--backfill` flag
+- [ ] Add source entry for `starter_suppression_signals` in `dbt/models/sources.yml`
+- [ ] Dry-run mode (`--dry-run`) must print sanity check output without writing
+
+Acceptance criteria:
+- [ ] Dry-run completes without error; sanity checks show `mu` p5 ≥ 0.250, p95 ≤ 0.400
+- [ ] Backfill inserts ≥ 8,000 rows (2020–2026); 0 updated on first run (fresh table)
+- [ ] Re-run is idempotent: second run shows inserted=0, updated=0 (no new games) or updated=N only for changed rows
+- [ ] Source entry in `sources.yml` references the fully-qualified table name
+- [ ] `starter_suppression_signal` is negative for high-quality starters (e.g., top-10 xwOBA suppressors per season) — spot-check 5 known elite starters
+
+---
+
+### 5.4 — Integrate signals into `feature_pregame_sub_model_signals`
+
+> **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
+
+Tasks:
+- [ ] Add LEFT JOIN to `starter_suppression_signals` in `feature_pregame_sub_model_signals.sql` on `(game_pk, side, model_version = 'starter_v1')`
+- [ ] Expose 4 columns: `starter_suppression_mu_v1`, `starter_suppression_sigma_v1`, `starter_suppression_signal_v1`, `starter_uncertainty_v1`; add `starter_suppression_mu_v1_available` boolean
+- [ ] Update header comment in the SQL file to list the new signals
+- [ ] Add source entry for `starter_suppression_signals` if not already added in Story 5.3
+- [ ] Update `schema.yml` for `feature_pregame_sub_model_signals`: add column entries for all 5 new columns; add `not_null: severity: warn` tests on the 4 signal columns (same pattern as offense_v2)
+- [ ] Run `dbtf build --select feature_pregame_sub_model_signals` and `dbtf test --select feature_pregame_sub_model_signals`
+
+Acceptance criteria:
+- [ ] `dbtf build` green
+- [ ] `dbtf test` passes all hard tests; 4 new not_null warnings fire only for games with no starter data (pre-2020 or games without a probable pitcher)
+- [ ] Row count of `feature_pregame_sub_model_signals` unchanged — LEFT JOIN must not drop rows
+- [ ] `starter_suppression_mu_v1_available` is TRUE for ≥ 95% of 2020–2026 game-sides
+
+---
+
+### 5.5 — Ablation test
+
+Tasks:
+- [ ] Add `starter_suppression_mu_v1` and `starter_suppression_signal_v1` to the H2H and totals feature matrices
+- [ ] Run walk-forward CV on the H2H and totals models (same protocol as Story 4.4); compare MAE and NLL with vs. without starter signals
+- [ ] Report: delta MAE, delta NLL, feature importance rank of starter signals in the model that includes them
+- [ ] Gate: starter signals must not degrade MAE by more than 0.005 in either target; improvement is expected but not required at this stage (the real payoff is Epic 9 stacking)
+
+Acceptance criteria:
+- [ ] CV results tabulated for both models (H2H and totals) with and without starter signals
+- [ ] No significant degradation: delta MAE < 0.005 for both targets
+- [ ] Feature importance rank of `starter_suppression_mu_v1` reported (expect top-20 in totals, lower in H2H)
+- [ ] Results documented in `quant_sports_intel_models/baseball/ablation_results/starter_v1_ablation.md`
 
 ---
 
@@ -4569,6 +4694,26 @@ Acceptance Criteria:
 - [x] Prediction reconstruction within ±0.001 — **N/A for best_effort snapshots** (2026-05-29): raw feature storage insufficient; imputation pipeline medians not persisted. Deferred to follow-on story: capture post-imputation vector in `predict_today.py` live path and re-validate against first `live` snapshots.
 - [x] `baseball_data_mart_inventory.md` §6.8 has per-mart coverage table for all 8 marts with coverage start, backfill type, and pre-cutoff approximation
 - [x] Any partial-coverage mart has a written caveat in its dbt model comments — verified in all 4 forward-only models (weather, public_betting × 2, umpire)
+
+---
+
+### 15.10 — Store post-imputation feature vector in predict_today.py
+
+**Goal:** Close the deferred ±0.001 prediction reconstruction AC from 15.9. Currently, `predict_today.py` writes the raw feature values (pre-imputation) to `prediction_snapshots.feature_snapshot`. The model actually receives the post-`build_imputation_pipeline()` vector. These differ by 0.8–1.9 units on tested games because `_PlatoonImputer` and `_FallbackImputer` fill missing values using training-set column means that are not persisted anywhere. Until the stored vector matches what the model saw, exact prediction reconstruction is impossible.
+
+**Prerequisite:** None — self-contained change to `predict_today.py`.
+
+**Scope:** Change the snapshot write in `predict_today.py` to capture the feature array *after* `pipeline.transform(X)` (or equivalent) rather than before it. Set `reconstruction_type = 'live'` on all new snapshots (already the intended convention). Then re-run `scripts/validate_scd2_reconstruction.py` against the first batch of `live` snapshots to close the AC.
+
+Tasks:
+- [x] Locate the snapshot write path in `predict_today.py` — `_write_prediction_snapshots()` built snapshots from `df_today.reindex(columns=feat_cols)` (raw); `_build_feature_matrix()` returned only `(X_numpy, feat_cols)` discarding the post-imputation DataFrame — DONE 2026-05-29
+- [x] Capture the post-imputation feature array (as a dict keyed by feature column name) immediately after `pipeline.transform(X)`: `_build_feature_matrix()` now returns `(X_numpy, feat_cols, imputed_df)`; `_write_prediction_snapshots()` now builds snapshots from `imputed_df` (post-imputation columns + values, including pipeline indicator columns) — DONE 2026-05-29
+- [x] Confirm `reconstruction_type` is set to `'live'` on all new snapshot rows — unchanged; already hardcoded `'live'` in `_write_prediction_snapshots()` — DONE 2026-05-29
+- [ ] Run `scripts/validate_scd2_reconstruction.py` after the first live prediction run using the new code; verify Part 2 passes within ±0.001
+
+Acceptance Criteria:
+- [x] `predict_today.py` stores the post-imputation feature vector in `feature_snapshot`; all new rows have `reconstruction_type = 'live'` — DONE 2026-05-29
+- [ ] `scripts/validate_scd2_reconstruction.py` Part 2 passes ±0.001 for ≥ 3 `live` snapshot rows — pending first live run with new code; closes the deferred AC from 15.9
 
 # Epic 16 — Sequential Prior Update Engine
 

@@ -6,6 +6,12 @@ Confirms that for 3 game_pks from prediction_snapshots:
   (2) Loading the stored model artifact and running inference on the stored
       feature_snapshot reproduces the stored prediction within ±0.001.
 
+Part 1 always runs against the original 2026-05-15 best_effort snapshots (AS-OF
+infrastructure test, independent of reconstruction_type).
+
+Part 2 auto-discovers the 3 most recent `live` snapshots for total_runs and
+validates model reconstruction. Skips with explanation if no live rows exist yet.
+
 Usage:
     python scripts/validate_scd2_reconstruction.py
 
@@ -26,13 +32,14 @@ from betting_ml.utils.data_loader import get_snowflake_connection
 from betting_ml.utils.artifact_store import load_artifact
 
 # ---------------------------------------------------------------------------
-# Validation targets
+# Part 1 constants — fixed AS-OF infrastructure test
 # 3 game_pks predicted at 2026-05-15T14:06:05 UTC, model_version=v2
 # ---------------------------------------------------------------------------
-GAME_PKS = [823384, 824280, 824360]
-PREDICTED_AT = "2026-05-15T14:06:05.028161"
-TARGET = "total_runs"
-MODEL_VERSION = "v2"
+_PART1_GAME_PKS = [823384, 824280, 824360]
+_PART1_PREDICTED_AT = "2026-05-15T14:06:05.028161"
+_PART1_TARGET = "total_runs"
+_PART1_MODEL_VERSION = "v2"
+
 TOLERANCE = 0.001
 
 
@@ -40,15 +47,15 @@ def get_conn():
     return get_snowflake_connection()
 
 
-def fetch_snapshots(conn):
-    """Pull stored prediction + feature_snapshot for the 3 game_pks."""
-    gks = ", ".join(str(g) for g in GAME_PKS)
+def fetch_snapshots_for_games(conn, game_pks, target, model_version):
+    """Pull stored prediction + feature_snapshot for given game_pks."""
+    gks = ", ".join(str(g) for g in game_pks)
     sql = f"""
         select game_pk, prediction, feature_snapshot, model_artifact_s3_uri, reconstruction_type
         from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
         where game_pk in ({gks})
-          and target = '{TARGET}'
-          and model_version = '{MODEL_VERSION}'
+          and target = '{target}'
+          and model_version = '{model_version}'
         order by game_pk
     """
     cur = conn.cursor()
@@ -66,17 +73,44 @@ def fetch_snapshots(conn):
     ]
 
 
-def fetch_asof_values(conn):
+def discover_live_snapshots(conn, n=3):
+    """Return up to n live snapshots for total_runs, most recent predicted_at first."""
+    sql = f"""
+        select game_pk, prediction, feature_snapshot, model_artifact_s3_uri,
+               reconstruction_type, model_version, predicted_at
+        from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
+        where target = 'total_runs'
+          and reconstruction_type = 'live'
+        order by predicted_at desc, game_pk
+        limit {n}
+    """
+    cur = conn.cursor()
+    cur.execute(sql)
+    rows = cur.fetchall()
+    return [
+        {
+            "game_pk": r[0],
+            "stored_prediction": r[1],
+            "feature_snapshot": json.loads(r[2]) if isinstance(r[2], str) else r[2],
+            "model_artifact_s3_uri": r[3],
+            "reconstruction_type": r[4],
+            "model_version": r[5],
+            "predicted_at": r[6],
+        }
+        for r in rows
+    ]
+
+
+def fetch_asof_values(conn, game_pks, predicted_at):
     """AS-OF SCD-2 query for weather, public_betting, and park at predicted_at."""
-    gks = ", ".join(str(g) for g in GAME_PKS)
-    ts = PREDICTED_AT
+    gks = ", ".join(str(g) for g in game_pks)
     sql = f"""
         with snapshots as (
             select game_pk, feature_snapshot
             from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
             where game_pk in ({gks})
-              and target = '{TARGET}'
-              and model_version = '{MODEL_VERSION}'
+              and target = '{_PART1_TARGET}'
+              and model_version = '{_PART1_MODEL_VERSION}'
         ),
         game_venues as (
             select game_pk, venue_id, game_year::integer as season
@@ -87,23 +121,23 @@ def fetch_asof_values(conn):
             select w.game_pk, w.wind_component_mph, w.temp_f, w.humidity_pct
             from BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_WEATHER_STATUS w
             where w.game_pk in ({gks})
-              and w.valid_from <= '{ts}'::timestamp_ntz
-              and (w.valid_to is null or w.valid_to > '{ts}'::timestamp_ntz)
+              and w.valid_from <= '{predicted_at}'::timestamp_ntz
+              and (w.valid_to is null or w.valid_to > '{predicted_at}'::timestamp_ntz)
         ),
         betting_asof as (
             select b.game_pk, b.home_ml_money_pct, b.over_money_pct
             from BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_PUBLIC_BETTING_STATUS b
             where b.game_pk in ({gks})
-              and b.valid_from <= '{ts}'::timestamp_ntz
-              and (b.valid_to is null or b.valid_to > '{ts}'::timestamp_ntz)
+              and b.valid_from <= '{predicted_at}'::timestamp_ntz
+              and (b.valid_to is null or b.valid_to > '{predicted_at}'::timestamp_ntz)
         ),
         park_asof as (
             select gv.game_pk, p.elevation_ft, p.center_ft
             from game_venues gv
             join BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_PARK_STATUS p
                 on  p.venue_id = gv.venue_id
-                and p.valid_from <= '{ts}'::timestamp_ntz
-                and (p.valid_to is null or p.valid_to > '{ts}'::timestamp_ntz)
+                and p.valid_from <= '{predicted_at}'::timestamp_ntz
+                and (p.valid_to is null or p.valid_to > '{predicted_at}'::timestamp_ntz)
         )
         select
             s.game_pk,
@@ -141,7 +175,6 @@ def load_feature_columns(artifact_uri: str) -> list[str]:
     registry_path = os.path.join(here, "..", "betting_ml", "models", "model_registry.yaml")
     with open(registry_path) as f:
         registry = yaml.safe_load(f)
-    # Search all entries for a version whose artifact_path matches the URI
     for _domain, entry in registry.items():
         if not isinstance(entry, dict):
             continue
@@ -172,12 +205,12 @@ def main():
 
     conn = get_conn()
 
-    # ── Part 1: AS-OF feature comparison ───────────────────────────────────
+    # ── Part 1: AS-OF feature comparison (fixed game_pks, always runs) ─────
     print("\n[1] AS-OF SCD-2 vs feature_snapshot comparison")
-    print(f"    Predicted_at: {PREDICTED_AT}")
-    print(f"    Game_pks:     {GAME_PKS}")
+    print(f"    Predicted_at: {_PART1_PREDICTED_AT}")
+    print(f"    Game_pks:     {_PART1_GAME_PKS}")
 
-    rows = fetch_asof_values(conn)
+    rows = fetch_asof_values(conn, _PART1_GAME_PKS, _PART1_PREDICTED_AT)
     fields = [
         ("wind_component_mph", 0, 1),
         ("temp_f",             2, 3),
@@ -204,46 +237,44 @@ def main():
 
     print(f"\n  Feature comparison: {'ALL PASS' if all_pass else 'FAILURES DETECTED'}")
 
-    # ── Part 2: Prediction reconstruction ──────────────────────────────────
+    # ── Part 2: Prediction reconstruction using live snapshots ─────────────
     print("\n[2] Model artifact prediction reconstruction (±0.001 tolerance)")
 
-    snapshots = fetch_snapshots(conn)
-    reconstruction_types = {r.get("reconstruction_type", "best_effort") for r in snapshots}
+    live_snapshots = discover_live_snapshots(conn, n=3)
 
-    if reconstruction_types == {"best_effort"} or "live" not in reconstruction_types:
+    if not live_snapshots:
         print(
-            "  SKIPPED — all snapshots are reconstruction_type='best_effort'.\n"
-            "  best_effort snapshots store raw feature values from feature_pregame_game_features,\n"
-            "  but predict_today.py feeds the model a post-build_imputation_pipeline() vector.\n"
-            "  The imputation pipeline is fit on historical data at prediction time and its\n"
-            "  medians are not persisted, so raw → imputed deltas (observed: 0.8–1.9) make\n"
-            "  ±0.001 reconstruction impossible from these rows.\n"
-            "  Follow-on: capture the post-imputation vector in predict_today.py live path\n"
-            "  and re-run this check against reconstruction_type='live' snapshots."
+            "  SKIPPED — no live snapshots found in prediction_snapshots.\n"
+            "  Run betting_ml/scripts/predict_today.py (without --dry-run) to produce\n"
+            "  reconstruction_type='live' rows, then re-run this validator."
         )
-        pred_pass = None  # N/A, not a failure
+        pred_pass = None
     else:
-        artifact_uri = snapshots[0]["model_artifact_s3_uri"]
+        artifact_uri = live_snapshots[0]["model_artifact_s3_uri"]
+        predicted_at = live_snapshots[0]["predicted_at"]
+        model_version = live_snapshots[0]["model_version"]
+        game_pks = [r["game_pk"] for r in live_snapshots]
         feature_columns = load_feature_columns(artifact_uri)
         model = load_model_from_s3(artifact_uri)
-        print(f"    Loaded model: {artifact_uri}")
-        print(f"    Feature count: {len(feature_columns)}")
+        print(f"    Loaded model:    {artifact_uri}")
+        print(f"    Model version:   {model_version}")
+        print(f"    Predicted_at:    {predicted_at}")
+        print(f"    Game_pks:        {game_pks}")
+        print(f"    Feature count:   {len(feature_columns)}")
 
         pred_pass = True
-        for row in snapshots:
-            if row.get("reconstruction_type") != "live":
-                continue
-            X = build_feature_row(row["feature_snapshot"], feature_columns)
+        for snap in live_snapshots:
+            X = build_feature_row(snap["feature_snapshot"], feature_columns)
             dist = model.pred_dist(X)
             reconstructed = float(dist.loc[0])
-            stored = row["stored_prediction"]
+            stored = snap["stored_prediction"]
             delta = abs(reconstructed - stored)
             match = delta <= TOLERANCE
             if not match:
                 pred_pass = False
             status = "✓" if match else "✗"
             print(
-                f"  game_pk={row['game_pk']}  stored={stored:.6f}  "
+                f"  game_pk={snap['game_pk']}  stored={stored:.6f}  "
                 f"reconstructed={reconstructed:.6f}  Δ={delta:.6f}  {status}"
             )
 

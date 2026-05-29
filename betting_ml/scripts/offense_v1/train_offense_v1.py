@@ -191,7 +191,7 @@ def load_data() -> pd.DataFrame:
     finally:
         conn.close()
     df = pd.DataFrame(rows, columns=cols)
-    for col in df.select_dtypes(include=["object", "str"]).columns:
+    for col in df.select_dtypes(include=["object"]).columns:
         if col == _CAT_FEATURE:
             continue
         try:

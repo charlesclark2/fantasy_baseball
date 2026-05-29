@@ -1,6 +1,6 @@
-# What We Built: Offensive Quality Model (Epic 4 & 4A)
+# What We Built: Offensive Quality Model (Epics 4, 4A & 4D)
 
-**Completed:** May 28, 2026
+**Last updated:** May 29, 2026
 
 ---
 
@@ -8,7 +8,7 @@
 
 When a betting line is set for a total (e.g., Over/Under 8.5 runs), the market is pricing in the offensive quality of both lineups. Our models had no independent way to assess lineup strength — we were relying on the same surface-level stats the market already knows.
 
-The goal of these two epics was to build a clean, systematic measure of lineup quality that we compute ourselves, independent of the market line, so we can compare our read against the market's.
+The goal of these epics was to build a clean, systematic measure of lineup quality that we compute ourselves, independent of the market line, so we can compare our read against the market's.
 
 ---
 
@@ -42,7 +42,7 @@ We stored these estimates for every game going back to 2015 — over 50,000 batt
 
 ---
 
-## Epic 4 — The Offensive Quality Model
+## Epic 4 — The Offensive Quality Model (v1)
 
 With the EB infrastructure in place, we trained the core model.
 
@@ -70,15 +70,72 @@ We backfilled 51,228 game-side records and built a data warehouse view that expo
 
 ---
 
+## Epic 4D — From a Single Number to a Full Distribution (v2)
+
+This was an upgrade to the offensive quality model. Instead of asking "how many runs will this team score?" and getting back one number, we now ask the same question and get back a full probability curve — answering questions like "what's the chance they score 6 or more?" or "how much uncertainty is there about this lineup's output?"
+
+### Why distributions matter for betting
+
+A point prediction (e.g., "this team will score 4.1 runs") treats all 4.1-run predictions as equally confident. But a team with Shohei Ohtani batting cleanup in a hitter's park is a very different 4.1 than a patchwork lineup in a pitcher's park after three days of rain. The *uncertainty* around the prediction is information — and the market doesn't always price it correctly.
+
+By modeling the full distribution, we can:
+- Compute the probability that a team scores over or under any threshold (directly useful for totals and first-5 bets)
+- Quantify how tight or wide our confidence interval is, which tells us when to trust a bet and when to stay out
+- Combine our offensive distributions with our run environment and starter suppression distributions to build a proper joint model in Epic 9
+
+### What the distribution looks like
+
+We use a **Negative Binomial distribution** — a standard model for count data (how many times something happens) that handles the extra variability in baseball scoring better than simpler alternatives. Two numbers define this distribution for each game-side:
+
+- **Mean (μ):** The center of the prediction. Typical values are 3.9–4.2 runs per game-side.
+- **Dispersion (r):** How spread out the distribution is around that mean. A fitted value of r ≈ 3.48 was learned from 10 years of historical data and held constant for all predictions.
+
+From these two numbers, we can compute the probability of any specific run total.
+
+### What we built (4D.1 / 4D.2) — Model training
+
+We retrained the offensive quality model using the same 60 lineup features and 8-fold walk-forward cross-validation as v1, but the scoring function changed: instead of minimizing average error, we minimized **negative log-likelihood** under the Negative Binomial distribution. This means the model is rewarded not just for getting the mean right, but for correctly shaping the probability curve.
+
+We compared three candidates:
+- **LightGBM + NegBin** (gradient-boosted trees with distributional loss)
+- **NGBoost** (a distributional boosting framework)
+- **GLM baseline** (a standard statistical model used as a minimum bar)
+
+LightGBM won:
+- CV NLL (log-likelihood): **2.484** — just below the GLM baseline floor of 2.487
+- CV MAE: **2.459 runs** — essentially matching v1 accuracy while also producing valid uncertainty estimates
+
+The trained model is stored as `offense_v2.pkl` on S3 and registered as the new champion, superseding v1.
+
+### What we built (4D.3) — Signal generation
+
+We scored the v2 model against every game from 2015 through today and stored four signals per team per game:
+
+| Signal | What it means |
+|---|---|
+| `pred_runs_mu` | The predicted mean runs scored for this team in this game |
+| `pred_runs_dispersion` | The dispersion parameter r (constant; tells you the distribution shape) |
+| `pred_runs_raw` | Same as `pred_runs_mu` — kept for compatibility with v1 consumers |
+| `uncertainty` | The width of the 80% prediction interval (e.g., 7 means there's an 80% chance the team scores within a 7-run band centered on the mean) |
+
+51,228 game-side records were backfilled covering 2015–2026.
+
+### What we built (4D.4) — Integration
+
+The four v2 signals were added to the main feature view (`feature_pregame_sub_model_signals`) that all downstream models read from. Any model in the stack can now consume the full distributional output of the offensive quality model without knowing the internals.
+
+---
+
 ## What This Means Going Forward
 
-We now have a model that, before first pitch, produces a score for every lineup's offensive quality — independent of what the market has priced in. That score is:
-- Calibrated to actual run scoring, not just rankings
-- Shrinkage-stabilized for early-season and low-PA situations
-- Normalized to season context (removing era effects)
-- Fully historical back to 2015, which enables backtesting
+We now have two layers of offensive quality signals available for every game since 2015:
 
-This becomes an input to the Layer 3 stacked model (Epic 9), which will combine offensive quality, starter suppression, bullpen state, and run environment into a final total runs prediction that we can directly compare to the market line.
+- **v1** (deprecated but retained): A point prediction of expected runs, bias-corrected, with a runs index normalized to league average
+- **v2** (champion): A full probability distribution over run scoring, with explicit uncertainty quantification
+
+Both are market-blind — they're built entirely from lineup composition and historical performance, not from what the line is set at.
+
+In Epic 9 (the stacked model), these distributional signals will be combined with run environment (weather, park, umpire) and starter suppression into a joint probability model over total runs and run differential — which we'll compare directly against Bovada's implied probabilities to find edges.
 
 ---
 
@@ -86,9 +143,11 @@ This becomes an input to the Layer 3 stacked model (Epic 9), which will combine 
 
 | Deliverable | What It Is |
 |---|---|
-| `offense_v1.pkl` (S3) | The trained LightGBM model |
-| `offense_v1_signals` (Snowflake) | 51,228 rows of pre-game offensive quality signals, 2015–2026 |
+| `offense_v1.pkl` (S3) | LightGBM point-prediction model (deprecated; superseded by v2) |
+| `offense_v2.pkl` (S3) | LightGBM + NegBin distributional model (champion) |
+| `offense_v1_signals` (Snowflake) | 51,228 rows: pred_runs_raw, runs_index (2015–2026) |
+| `offense_v2_signals` (Snowflake) | 51,228 rows: pred_runs_mu, pred_runs_dispersion, pred_runs_raw, uncertainty (2015–2026) |
 | `lineup_priors_{year}.json` | Statistical priors for each batting role × handedness × season cell |
 | `eb_batter_posteriors_raw` (Snowflake) | EB shrinkage estimates for every batter in every lineup |
-| `feature_pregame_lineup_features` (Snowflake) | Updated lineup feature table with EB columns, zero nulls |
-| `feature_pregame_sub_model_signals` (Snowflake) | Game-level view exposing home/away predicted runs for downstream models |
+| `feature_pregame_lineup_features` (Snowflake) | Lineup feature table with EB columns, zero nulls, 2015–2026 |
+| `feature_pregame_sub_model_signals` (Snowflake) | Game-level view exposing all v1 and v2 offensive signals for downstream models |
