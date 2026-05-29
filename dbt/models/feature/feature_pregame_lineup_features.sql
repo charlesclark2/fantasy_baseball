@@ -14,14 +14,13 @@
 
 with
 
--- Current lineup composition from the SCD-2 lineup state table (Story 15.2).
--- is_current = TRUE is the latest confirmed lineup for each game × side.
--- For point-in-time replay use:
---   WHERE valid_from <= :prediction_ts
---     AND (valid_to IS NULL OR valid_to > :prediction_ts)
--- Coverage: Epic T conversion date (2026-05-12) onward.
--- Pre-T games fall through as NULLs (no SCD-2 history available).
+-- Lineup composition: SCD-2 state (2026 onward) unioned with historical staging
+-- table for pre-SCD-2 games. The SCD-2 state is preferred when available — it
+-- tracks intra-day lineup changes with point-in-time accuracy. Historical games
+-- use stg_statsapi_lineups_wide (confirmed post-game lineups, 2015–2025).
+-- The NOT IN guard prevents duplicates in games covered by both sources.
 lineups as (
+    -- SCD-2 lineup state: confirmed current lineup for each game × side (2026+)
     select
         game_pk,
         official_date,
@@ -36,7 +35,6 @@ lineups as (
         slot_7_player_id,
         slot_8_player_id,
         slot_9_player_id,
-        -- Position tags used to identify catcher (Card 8.K)
         slot_1_position,
         slot_2_position,
         slot_3_position,
@@ -48,6 +46,50 @@ lineups as (
         slot_9_position
     from {{ source('betting_features', 'feature_pregame_lineup_state') }}
     where is_current = true
+
+    union all
+
+    -- Historical lineups (2015–2025): from stg_statsapi_lineups_wide for games
+    -- not yet in the SCD-2 state. has_full_lineup derived from null slot checks.
+    select
+        game_pk,
+        official_date,
+        home_away,
+        (
+            slot_1_player_id is not null and
+            slot_2_player_id is not null and
+            slot_3_player_id is not null and
+            slot_4_player_id is not null and
+            slot_5_player_id is not null and
+            slot_6_player_id is not null and
+            slot_7_player_id is not null and
+            slot_8_player_id is not null and
+            slot_9_player_id is not null
+        )::boolean                          as has_full_lineup,
+        slot_1_player_id,
+        slot_2_player_id,
+        slot_3_player_id,
+        slot_4_player_id,
+        slot_5_player_id,
+        slot_6_player_id,
+        slot_7_player_id,
+        slot_8_player_id,
+        slot_9_player_id,
+        slot_1_position,
+        slot_2_position,
+        slot_3_position,
+        slot_4_position,
+        slot_5_position,
+        slot_6_position,
+        slot_7_position,
+        slot_8_position,
+        slot_9_position
+    from {{ ref('stg_statsapi_lineups_wide') }}
+    where game_pk not in (
+        select distinct game_pk
+        from {{ source('betting_features', 'feature_pregame_lineup_state') }}
+        where is_current = true
+    )
 ),
 
 -- Identify the catcher for each lineup.

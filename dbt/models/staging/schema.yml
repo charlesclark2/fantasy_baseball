@@ -1366,6 +1366,28 @@ models:
           Full name of the probable starting pitcher as returned by the Stats
           API. Null when probable_pitcher_id is null.
 
+  - name: stg_statsapi_starter_snapshots
+    description: >
+      All ingestion snapshots of probable starting pitchers from monthly_schedule,
+      one row per (game_pk, side, ingestion_ts). Unlike stg_statsapi_probable_pitchers,
+      this model retains every ingestion snapshot without QUALIFY dedup so that
+      SCD-2 change detection can track starter scratches over time.
+      Pre-Epic-T rows (originally null ingestion_ts) are assigned the sentinel
+      value 1970-01-01 00:00:00 to appear as the first known state.
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: game_date
+        tests: [not_null]
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: ingestion_ts
+        tests: [not_null]
+
   - name: stg_statsapi_venues
     description: >
       One row per ballpark, flattened from baseball_data.statsapi.venues_raw.
