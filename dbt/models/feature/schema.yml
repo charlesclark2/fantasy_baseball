@@ -241,11 +241,49 @@ models:
         tests:
           - not_null
 
+  - name: feature_pregame_starter_status
+    description: >
+      SCD-2 table tracking projected starter changes for each team per game.
+      Grain: one row per (game_pk, side, valid_from) — a new row is inserted each
+      time the probable_pitcher_id changes between ingestion snapshots.
+
+      Point-in-time join pattern (use is_current = false for historical replay):
+        ON  ss.game_pk    = game_pk
+        AND ss.side       = side
+        AND ss.valid_from <= :prediction_ts
+        AND (ss.valid_to  > :prediction_ts OR ss.valid_to IS NULL)
+
+      Coverage: full history from monthly_schedule inception. SCD-2 temporal
+      resolution only available post-Epic-T (2026-05-12). Pre-Epic-T rows carry
+      sentinel valid_from = 1970-01-01 and represent a single "first known state"
+      with no change history.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, side, valid_from]
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: side
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: valid_from
+        tests: [not_null]
+      - name: is_current
+        tests: [not_null]
+      - name: record_hash
+        tests: [not_null]
+      - name: computed_at
+        tests: [not_null]
+
   - name: feature_pregame_starter_features
     description: >
       Pre-game starting pitcher features for ML. One row per game_pk × pitcher_id.
-      Only includes games with a confirmed probable pitcher (null probable_pitcher_id
-      rows from stg_statsapi_probable_pitchers are excluded). The master assembly
+      Only includes games with a confirmed probable pitcher (null starter_player_id
+      rows from feature_pregame_starter_status are excluded). The master assembly
       LEFT JOINs this model to detect missing starters.
       All rolling stat joins use game_date::date < pp.game_date (strictly less than).
       Platoon splits use the prior season (game_year - 1) to prevent in-season leakage.
@@ -1222,14 +1260,42 @@ models:
           pre-game totals prices. Null when no bookmaker has totals coverage.
           Source: mart_odds_consensus.
 
+  - name: feature_pregame_weather_status
+    description: >
+      SCD-2 history of forecast_pregame weather state per game. Grain: one
+      row per (game_pk, valid_from) — a new row is only written when the
+      weather hash (temp_f, wind_component_mph, humidity_pct, condition_text)
+      changes between fetches. Coverage: Epic T.2 (2026-05-01) onward.
+      forecast_intraday and observed_at_first_pitch are excluded — run_env
+      models were trained on forecast_pregame only.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, valid_from]
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: venue_id
+        tests: [not_null]
+      - name: valid_from
+        tests: [not_null]
+      - name: is_current
+        tests: [not_null]
+      - name: record_hash
+        tests: [not_null]
+      - name: computed_at
+        tests: [not_null]
+      - name: is_dome
+        tests: [not_null]
+
   - name: feature_pregame_weather_features
     description: >
       Pre-game weather features for MLB outdoor parks. Grain: one row per
       game_pk (games in weather_raw only). Dome parks have is_dome = TRUE
       and NULL wind_component_mph. Outdoor and convertible-roof parks have
       non-null wind_component_mph when coordinates and weather data are
-      available. The fetch closest to first pitch is selected via QUALIFY
-      on abs(fetch_offset_hours).
+      available. Re-pointed to feature_pregame_weather_status (SCD-2) in
+      Epic 15 story 15.5; reads is_current = true rows.
 
     columns:
       - name: game_pk

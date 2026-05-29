@@ -23,10 +23,11 @@ probable_pitchers as (
         game_pk,
         game_date,
         side,
-        probable_pitcher_id     as pitcher_id,
-        probable_pitcher_name   as pitcher_name
-    from {{ ref('stg_statsapi_probable_pitchers') }}
-    where probable_pitcher_id is not null
+        starter_player_id       as pitcher_id,
+        starter_player_name     as pitcher_name
+    from {{ ref('feature_pregame_starter_status') }}
+    where is_current = true
+      and starter_player_id is not null
 ),
 
 -- Most recent pre-game rolling stats row per pitcher (LEAKAGE GUARD applied)

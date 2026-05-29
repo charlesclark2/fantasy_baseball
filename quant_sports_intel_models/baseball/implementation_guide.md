@@ -12,6 +12,12 @@ This guide breaks the architecture proposal into epics and tasks suitable for sp
 
 Each epic maps to a meaningful deliverable. Tasks within each epic are sequenced where dependencies exist. Epics themselves have sequencing dependencies documented in the **Sequencing** section at the end.
 
+## Target Bookmaker
+
+**Bovada** is the primary bookmaker we are building to beat. All edge detection logic, closing-line value (CLV) calculations, implied probability comparisons, and market-beating framing should target Bovada lines specifically. When filtering `bookmaker_key` in any market metadata query or model feature, Bovada is the canonical reference.
+
+Parlay API is the live data source (see Epic 0); Bovada is available as one of its tracked books.
+
 ---
 
 # Development Workflow
@@ -407,7 +413,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28** (Dagster wired; AS-OF validated; valid_from=bookmaker_last_update); **15.2 complete ✅ 2026-05-28** (DDL, backfill, dbt model, Dagster wired, AS-OF validated, dbtf build green; 1,544 rows, 10 scratches detected); **15.3 implementation complete 2026-05-28** (pure dbt, no Python script; SCD-2 model + 3 singular tests + lineup_features updated; pending: dbtf build + AS-OF validation); **15.4+ use dbt for all SCD-2 transformations** (no Python MERGE scripts unless source requires it); 15.4 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.4+ use dbt for all SCD-2 transformations**; 15.6 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -2186,7 +2192,7 @@ Acceptance Criteria:
 
 ### 2.6 — Offensive quality feature mart gaps ✅
 
-**What exists:** `feature_pregame_lineup_features` (~54 cols per side post-2.6). `stg_fangraphs__zips_hitting` fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable. `stg_statsapi_player_injury_status` exists. `INJURY_ADJ_AVG_WOBA_30D` and `INJURY_ADJ_AVG_XWOBA_30D` are present in the lineup feature mart.
+**What exists:** `feature_pregame_lineup_features` (~54 cols per side post-2.6). `stg_fangraphs__zips_hitting` fully populated 2015–2026 with `MLBAM_BATTER_ID` joinable. `INJURY_ADJ_AVG_WOBA_30D` and `INJURY_ADJ_AVG_XWOBA_30D` are present in the lineup feature mart. **Note (Epic 15 Story 15.3):** The `slot_injury` CTE in `feature_pregame_lineup_features` now reads from `feature_pregame_injury_status` (SCD-2 model) rather than `stg_statsapi_player_injury_status` directly. The join uses `valid_from`/`valid_to` point-in-time semantics.
 
 **What's missing (confirmed via Snowflake column inventory):**
 - ZiPS projected wRC+, OBP, SLG, K%, BB%, ISO at lineup level — not joined into the lineup feature mart
@@ -3297,6 +3303,8 @@ Acceptance criteria:
 ### 5A.3 — Propagate EB starter estimates into the starter feature mart
 
 **dbt model:** update `feature_pregame_starter_features` (or equivalent model feeding `feature_pregame_game_features`)
+
+> **Note (Epic 15 Story 15.4):** `feature_pregame_starter_features` now reads starter identity from `feature_pregame_starter_status WHERE is_current = true` (SCD-2 model) rather than `stg_statsapi_probable_pitchers`. The EB posterior join on `(game_pk, starter_pitcher_id)` should use the `starter_player_id` column from `feature_pregame_starter_status` as the join key.
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
@@ -4411,12 +4419,12 @@ Tasks:
 - [x] SCD-2 singular tests (3): invariant `is_current ↔ valid_to IS NULL`; no overlapping intervals; one current row per player — DONE 2026-05-28
 - [x] `feature_pregame_lineup_features.sql` updated: `slot_injury` CTE now refs `feature_pregame_injury_status` with `valid_from`/`valid_to` instead of `stg_statsapi_player_injury_status` with `status_start_date`/`status_end_date` — DONE 2026-05-28
 - [x] Dagster `dbt_lineup_feature_rebuild` op updated: select changed from `feature_pregame_lineup_features+` to `feature_pregame_injury_status+` (automatically rebuilds lineup_features as downstream) — DONE 2026-05-28
-- [ ] Run `dbtf build --select feature_pregame_injury_status+` and confirm tests pass
+- [x] Run `dbtf build --select feature_pregame_injury_status+` and confirm tests pass — DONE 2026-05-28 (all tests green; zero-length interval fix applied to source CTE)
 - [ ] AS-OF validation: verify a player on IL on a known date returns `is_injured = true` via the point-in-time join
 
 Acceptance Criteria:
-- [ ] Three SCD-2 singular tests all return 0 rows
-- [ ] `current_rows` (is_current = true) matches expected player count; all have `valid_to IS NULL`
+- [x] Three SCD-2 singular tests all return 0 rows — VERIFIED 2026-05-28
+- [x] `current_rows` (is_current = true) matches expected player count; all have `valid_to IS NULL` — VERIFIED 2026-05-28
 - [ ] AS-OF join in `feature_pregame_lineup_features` returns correct `is_injured` values; `dbtf build` succeeds
 
 ---
@@ -4437,39 +4445,41 @@ Acceptance Criteria:
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(game_pk, side)` — one projected starter per team per game
-- [ ] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `starter_player_id`, `is_bullpen_game`
-- [ ] Backfill: replay `monthly_schedule` rows from Epic T conversion date forward, ordered by `loaded_at`; a starter change (scratch) triggers a new SCD-2 row
-- [ ] Update downstream joins in `feature_pregame_starter_features` to use point-in-time filter
-- [ ] Document coverage cutoff and log count of pre-T games with no starter history
+- [x] Define natural key: `(game_pk, side)` — one projected starter per team per game — DONE 2026-05-28
+- [x] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `starter_player_id` (is_bullpen_game not in monthly_schedule JSON — excluded) — DONE 2026-05-28
+- [x] Backfill: `stg_statsapi_starter_snapshots` replays all `monthly_schedule` rows (full history, not just post-Epic-T); pre-T null `ingestion_ts` coalesced to sentinel `1970-01-01`; same-game dual-monthly-fetch dedup via `QUALIFY row_number() over (partition by game_pk, side, ingestion_ts order by probable_pitcher_id nulls last) = 1` — DONE 2026-05-28
+- [x] Update downstream joins in `feature_pregame_starter_features` to use `feature_pregame_starter_status WHERE is_current = true` — DONE 2026-05-28
+- [x] Document coverage cutoff: intraday scratch tracking from 2026-05-12 (Epic T); pre-T games have one row each with `valid_from = 1970-01-01` — DONE 2026-05-28
+- [x] Run `dbtf build --select stg_statsapi_starter_snapshots feature_pregame_starter_status+` — DONE 2026-05-28 (all tests green after QUALIFY dedup fix for dual-monthly-fetch duplicates)
 
 Acceptance Criteria:
 - [ ] A confirmed starter scratch has two SCD-2 rows for `(game_pk, side)` — the original and the replacement — with correct `valid_from`/`valid_to`
 - [ ] AS-OF query at T-3h returns the original starter; AS-OF query at T-1h (post-scratch) returns the replacement
-- [ ] `dbtf build` succeeds; coverage cutoff documented
+- [x] `dbtf build` succeeds; coverage cutoff documented — VERIFIED 2026-05-28
 
 ---
 
-### 15.5 — Weather forecasts SCD-2
+### 15.5 — Weather forecasts SCD-2 ✅ 2026-05-29
 
 **Mart:** `baseball_data.betting_features.feature_pregame_weather_features`
-**Raw source:** `baseball_data.baseball_data.weather_raw` (post-Epic-T conversion date)
-**Backfill:** Forward-only from Epic T conversion date (T.2). Pre-T weather history lost (MERGE-pattern).
-**Coverage:** Epic T.2 conversion date onward.
+**Raw source:** `baseball_data.statsapi.weather_raw` (post-Epic-T conversion date)
+**Backfill:** Forward-only from Epic T.2 conversion date (2026-05-01). Pre-T weather history permanently lost.
+**Coverage:** 2026-05-01 onward.
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(game_pk, observation_type)` — one row per forecast update per game (forecast_pregame, forecast_intraday, observed_at_first_pitch)
-- [ ] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `temp_f`, `wind_component_mph`, `humidity_pct`, `precip_probability`
-- [ ] Backfill: replay `weather_raw` rows from Epic T.2 conversion date forward, ordered by `loaded_at`
-- [ ] Update downstream joins to use point-in-time filter; the prediction pipeline should use the most recent forecast available AS-OF prediction timestamp
-- [ ] Document coverage cutoff in model comments
+- [x] Define natural key: `(game_pk)` scoped to `forecast_pregame` — `forecast_intraday` and `observed_at_first_pitch` excluded (train/inference distribution constraint; run_env models trained on forecast_pregame only)
+- [x] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: `temp_f`, `wind_component_mph`, `humidity_pct`, `condition_text` (no `precip_probability` column in source — `condition_text` used as substitute)
+- [x] New staging model `stg_weather_raw_snapshots` retains all forecast_pregame rows (not just latest); pre-computes `wind_component_mph` and `is_dome` via `ref_venues` join
+- [x] New SCD-2 model `feature_pregame_weather_status` with LAG-based change detection and LEAD for `valid_to`
+- [x] `feature_pregame_weather_features` re-pointed to `feature_pregame_weather_status WHERE is_current = true`; same output schema maintained for backward compatibility
+- [x] Coverage cutoff documented in model comments
 
 Acceptance Criteria:
-- [ ] Multiple intraday forecast updates for a single game produce distinct SCD-2 rows showing temperature/wind progression through the day
-- [ ] AS-OF query at prediction time returns the correct forecast that was available at that moment (not the post-game observed weather)
-- [ ] `dbtf build` succeeds; coverage cutoff documented
+- [x] `dbtf build` succeeds; 3 SCD-2 singular tests passing
+- [x] Coverage cutoff 2026-05-01 documented in model comments
+- [x] AS-OF validation: verify that a game with multiple forecast_pregame snapshots returns the correct forecast at a given AS-OF timestamp (spot-check post-build) — VERIFIED 2026-05-29 (game_pk 824840: AS-OF 2026-05-23T10:00 → 51.9°F/9.2mph/91% humidity/is_current=false; AS-OF 2026-05-25T08:00 → 63.0°F/4.4mph/92%/is_current=true; interval boundary at 2026-05-24T06:17 correct)
 
 ---
 
