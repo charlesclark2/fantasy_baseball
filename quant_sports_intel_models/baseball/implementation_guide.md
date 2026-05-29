@@ -413,7 +413,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.6 complete ✅ 2026-05-29** (stg_actionnetwork_public_betting_snapshots + feature_pregame_public_betting_status + feature_pregame_public_betting_features; game_pk resolved via mart_game_results join; dual coverage gap documented; 3 SCD-2 singular tests; coverage 2026-05-07 Epic T.3 onward); **15.7 complete ✅ 2026-05-29** (stg_statsapi_umpire_snapshots + feature_pregame_umpire_status; natural key game_pk not (game_pk, ump_position) — no ump_position in source; hash on umpire_name not umpire_id — umpscorecards has no umpire_id; 3 SCD-2 singular tests; feature_pregame_umpire_features NOT re-pointed — forward-only SCD-2 would break historical z-score trailing averages); **15.4+ use dbt for all SCD-2 transformations**; 15.8 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28**; **15.2 complete ✅ 2026-05-28**; **15.3 complete ✅ 2026-05-28** (pure dbt, no Python; SCD-2 model + 3 singular tests passing; lineup_features slot_injury CTE re-pointed; zero-length interval filter added); **15.4 complete ✅ 2026-05-28** (stg_statsapi_starter_snapshots + feature_pregame_starter_status; dual-monthly-fetch dedup via QUALIFY; pre-Epic-T sentinel 1970-01-01; 3 SCD-2 singular tests passing; starter_features re-pointed); **15.5 complete ✅ 2026-05-29** (stg_weather_raw_snapshots + feature_pregame_weather_status; forecast_pregame scope only; wind_component_mph pre-computed in staging; 3 SCD-2 singular tests; weather_features re-pointed; coverage from Epic T.2 2026-05-01); **15.6 complete ✅ 2026-05-29** (stg_actionnetwork_public_betting_snapshots + feature_pregame_public_betting_status + feature_pregame_public_betting_features; game_pk resolved via mart_game_results join; dual coverage gap documented; 3 SCD-2 singular tests; coverage 2026-05-07 Epic T.3 onward); **15.7 complete ✅ 2026-05-29** (stg_statsapi_umpire_snapshots + feature_pregame_umpire_status; natural key game_pk not (game_pk, ump_position) — no ump_position in source; hash on umpire_name not umpire_id — umpscorecards has no umpire_id; 3 SCD-2 singular tests; feature_pregame_umpire_features NOT re-pointed — forward-only SCD-2 would break historical z-score trailing averages); **15.8 complete ✅ 2026-05-29** (feature_pregame_park_status; natural key (venue_id, season); no staging model — source is annual grain; 6 retired venues closed at season_close+1; 362 rows, 36 venues, 11/11 tests pass; feature_pregame_park_features NOT re-pointed); **15.4+ use dbt for all SCD-2 transformations**; 15.9 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -4528,25 +4528,24 @@ Acceptance Criteria:
 
 ---
 
-### 15.8 — Park factors SCD-2
+### 15.8 ✅ 2026-05-29 — Park factors SCD-2
 
-**Mart:** `baseball_data.betting_features.feature_pregame_park_features`
-**Raw source:** External / computed (annual `eb_park_run_factor` refresh)
-**Backfill:** Trivial — park factors update once per season; add `valid_from = season_start_date`, `valid_to = season_end_date` for each season's factor.
-**Coverage:** Full historical (annual values exist for all training years).
+**Mart:** `baseball_data.betting_features.feature_pregame_park_status` (new table; `feature_pregame_park_features` NOT re-pointed — game_year-1 join is correct)
+**Raw source:** `mart_eb_park_factors` (annual `eb_park_run_factor` refresh) + `stg_statsapi_venues` (physical dimensions)
+**Coverage:** Full historical (2015–2026, 36 venues, 362 rows).
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(venue_id, season)` — one row per park per season
-- [ ] Add `valid_from` (season opening day), `valid_to` (season final day), `is_current`; change-detection hash on: `eb_park_run_factor`, `elevation_ft`, `center_ft`, `roof_type`
-- [ ] Backfill: populate `valid_from`/`valid_to` for all historical seasons using season start/end dates from `mart_game_results`
-- [ ] Confirm downstream joins already handle this correctly (park factors are stable within-season, so most joins are fine — this story is mostly about bringing the mart into conformance with the SCD-2 standard)
+- [x] Define natural key: `(venue_id, season)` — one row per park per season
+- [x] Add `valid_from` (season opening day), `valid_to` (first game of next season at venue), `is_current`; change-detection hash on: `eb_park_run_factor`, `elevation_ft`, `center_ft`, `roof_type`
+- [x] Backfill: populate `valid_from`/`valid_to` for all historical seasons using per-venue season start/end dates from `mart_game_results`. Retired venues (6 venues, last season < 2026) get `valid_to = season_close + 1 day` to prevent mis-flagging as `is_current`. No snapshot staging needed — source is already at annual grain.
+- [x] Confirm downstream joins: `feature_pregame_park_features` uses game_year-1 join — already correct; left unchanged. `feature_pregame_park_status` available for AS-OF point-in-time queries.
 
 Acceptance Criteria:
-- [ ] Each `(venue_id, season)` pair has exactly one SCD-2 row with non-overlapping `valid_from`/`valid_to` bounds
+- [x] Each `(venue_id, season)` pair has exactly one SCD-2 row with non-overlapping `valid_from`/`valid_to` bounds — verified by `assert_park_status_scd2_no_overlapping_intervals` (pass)
 - [ ] AS-OF query for any historical game date returns the correct season's park factor
-- [ ] `dbtf build` succeeds; no regression in `feature_pregame_park_features` downstream consumers
+- [x] `dbtf build` succeeds (11/11); no regression in `feature_pregame_park_features` downstream consumers
 
 ---
 
