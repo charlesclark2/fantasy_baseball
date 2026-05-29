@@ -1580,6 +1580,30 @@ models:
         description: MD5 of (home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct).
         tests: [not_null]
 
+  - name: stg_statsapi_umpire_snapshots
+    description: >
+      All ingestion snapshots from statsapi.umpire_game_log. Grain: one row per
+      (game_pk, loaded_at). Preserves full snapshot history for SCD-2 change
+      detection in feature_pregame_umpire_status. QUALIFY deduplicates ties at
+      (game_pk, loaded_at) by preferring umpscorecards rows over statsapi rows.
+      Record hash covers umpire_id + tendency stats (total_runs, total_run_impact,
+      accuracy_above_expected) — detects both substitutions and post-game
+      UmpScorecards enrichment. Coverage: Epic T.4 onward (~2026-05-02).
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: umpire_name
+        description: HP umpire name. Non-null in all rows (both statsapi and umpscorecards). Primary identifier — umpire_id is null for all umpscorecards rows.
+        tests: [not_null]
+      - name: loaded_at
+        description: Ingestion timestamp; used as valid_from in SCD-2.
+        tests: [not_null]
+      - name: record_hash
+        description: MD5 of (umpire_name, total_runs, total_run_impact, accuracy_above_expected). umpire_id excluded — null in 99% of rows (umpscorecards source).
+        tests: [not_null]
+
   # ── Savant sprint speed ───────────────────────────────────────────────────────
 
   - name: stg_batter_sprint_speed
