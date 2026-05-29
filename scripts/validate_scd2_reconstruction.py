@@ -6,6 +6,12 @@ Confirms that for 3 game_pks from prediction_snapshots:
   (2) Loading the stored model artifact and running inference on the stored
       feature_snapshot reproduces the stored prediction within ±0.001.
 
+Part 1 always runs against the original 2026-05-15 best_effort snapshots (AS-OF
+infrastructure test, independent of reconstruction_type).
+
+Part 2 auto-discovers the 3 most recent `live` snapshots for total_runs and
+validates model reconstruction. Skips with explanation if no live rows exist yet.
+
 Usage:
     python scripts/validate_scd2_reconstruction.py
 
@@ -17,48 +23,39 @@ Requires:
 
 import json
 import os
-import pickle
-import io
 import sys
 
-import boto3
 import numpy as np
 import pandas as pd
-import snowflake.connector
+
+from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.utils.artifact_store import load_artifact
 
 # ---------------------------------------------------------------------------
-# Validation targets
+# Part 1 constants — fixed AS-OF infrastructure test
 # 3 game_pks predicted at 2026-05-15T14:06:05 UTC, model_version=v2
 # ---------------------------------------------------------------------------
-GAME_PKS = [823384, 824280, 824360]
-PREDICTED_AT = "2026-05-15T14:06:05.028161"
-TARGET = "total_runs"
-MODEL_VERSION = "v2"
+_PART1_GAME_PKS = [823384, 824280, 824360]
+_PART1_PREDICTED_AT = "2026-05-15T14:06:05.028161"
+_PART1_TARGET = "total_runs"
+_PART1_MODEL_VERSION = "v2"
+
 TOLERANCE = 0.001
 
-# ---------------------------------------------------------------------------
-# Snowflake connection (uses same env vars as the rest of the project)
-# ---------------------------------------------------------------------------
+
 def get_conn():
-    return snowflake.connector.connect(
-        account=os.environ["SNOWFLAKE_ACCOUNT"],
-        user=os.environ["SNOWFLAKE_USER"],
-        password=os.environ["SNOWFLAKE_PASSWORD"],
-        warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
-        database="BASEBALL_DATA",
-        schema="BETTING",
-    )
+    return get_snowflake_connection()
 
 
-def fetch_snapshots(conn):
-    """Pull stored prediction + feature_snapshot for the 3 game_pks."""
-    gks = ", ".join(str(g) for g in GAME_PKS)
+def fetch_snapshots_for_games(conn, game_pks, target, model_version):
+    """Pull stored prediction + feature_snapshot for given game_pks."""
+    gks = ", ".join(str(g) for g in game_pks)
     sql = f"""
-        select game_pk, prediction, feature_snapshot, model_artifact_s3_uri
+        select game_pk, prediction, feature_snapshot, model_artifact_s3_uri, reconstruction_type
         from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
         where game_pk in ({gks})
-          and target = '{TARGET}'
-          and model_version = '{MODEL_VERSION}'
+          and target = '{target}'
+          and model_version = '{model_version}'
         order by game_pk
     """
     cur = conn.cursor()
@@ -70,22 +67,50 @@ def fetch_snapshots(conn):
             "stored_prediction": r[1],
             "feature_snapshot": json.loads(r[2]) if isinstance(r[2], str) else r[2],
             "model_artifact_s3_uri": r[3],
+            "reconstruction_type": r[4],
         }
         for r in rows
     ]
 
 
-def fetch_asof_values(conn):
+def discover_live_snapshots(conn, n=3):
+    """Return up to n live snapshots for total_runs, most recent predicted_at first."""
+    sql = f"""
+        select game_pk, prediction, feature_snapshot, model_artifact_s3_uri,
+               reconstruction_type, model_version, predicted_at
+        from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
+        where target = 'total_runs'
+          and reconstruction_type = 'live'
+        order by predicted_at desc, game_pk
+        limit {n}
+    """
+    cur = conn.cursor()
+    cur.execute(sql)
+    rows = cur.fetchall()
+    return [
+        {
+            "game_pk": r[0],
+            "stored_prediction": r[1],
+            "feature_snapshot": json.loads(r[2]) if isinstance(r[2], str) else r[2],
+            "model_artifact_s3_uri": r[3],
+            "reconstruction_type": r[4],
+            "model_version": r[5],
+            "predicted_at": r[6],
+        }
+        for r in rows
+    ]
+
+
+def fetch_asof_values(conn, game_pks, predicted_at):
     """AS-OF SCD-2 query for weather, public_betting, and park at predicted_at."""
-    gks = ", ".join(str(g) for g in GAME_PKS)
-    ts = PREDICTED_AT
+    gks = ", ".join(str(g) for g in game_pks)
     sql = f"""
         with snapshots as (
             select game_pk, feature_snapshot
             from BASEBALL_DATA.BETTING.PREDICTION_SNAPSHOTS
             where game_pk in ({gks})
-              and target = '{TARGET}'
-              and model_version = '{MODEL_VERSION}'
+              and target = '{_PART1_TARGET}'
+              and model_version = '{_PART1_MODEL_VERSION}'
         ),
         game_venues as (
             select game_pk, venue_id, game_year::integer as season
@@ -96,23 +121,23 @@ def fetch_asof_values(conn):
             select w.game_pk, w.wind_component_mph, w.temp_f, w.humidity_pct
             from BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_WEATHER_STATUS w
             where w.game_pk in ({gks})
-              and w.valid_from <= '{ts}'::timestamp_ntz
-              and (w.valid_to is null or w.valid_to > '{ts}'::timestamp_ntz)
+              and w.valid_from <= '{predicted_at}'::timestamp_ntz
+              and (w.valid_to is null or w.valid_to > '{predicted_at}'::timestamp_ntz)
         ),
         betting_asof as (
             select b.game_pk, b.home_ml_money_pct, b.over_money_pct
             from BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_PUBLIC_BETTING_STATUS b
             where b.game_pk in ({gks})
-              and b.valid_from <= '{ts}'::timestamp_ntz
-              and (b.valid_to is null or b.valid_to > '{ts}'::timestamp_ntz)
+              and b.valid_from <= '{predicted_at}'::timestamp_ntz
+              and (b.valid_to is null or b.valid_to > '{predicted_at}'::timestamp_ntz)
         ),
         park_asof as (
             select gv.game_pk, p.elevation_ft, p.center_ft
             from game_venues gv
             join BASEBALL_DATA.BETTING_FEATURES.FEATURE_PREGAME_PARK_STATUS p
                 on  p.venue_id = gv.venue_id
-                and p.valid_from <= '{ts}'::timestamp_ntz
-                and (p.valid_to is null or p.valid_to > '{ts}'::timestamp_ntz)
+                and p.valid_from <= '{predicted_at}'::timestamp_ntz
+                and (p.valid_to is null or p.valid_to > '{predicted_at}'::timestamp_ntz)
         )
         select
             s.game_pk,
@@ -140,20 +165,28 @@ def fetch_asof_values(conn):
 
 
 def load_model_from_s3(s3_uri):
-    """Load a pickle from s3://bucket/key."""
-    # s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_v2.pkl
-    s3_uri = s3_uri.replace("s3://", "")
-    bucket, key = s3_uri.split("/", 1)
-    s3 = boto3.client("s3")
-    obj = s3.get_object(Bucket=bucket, Key=key)
-    return pickle.loads(obj["Body"].read())
+    return load_artifact(s3_uri)
 
 
-def load_feature_columns():
+def load_feature_columns(artifact_uri: str) -> list[str]:
+    """Look up the feature columns for a given artifact URI from model_registry.yaml."""
+    import yaml
     here = os.path.dirname(__file__)
-    fc_path = os.path.join(here, "..", "model_artifacts", "feature_columns.json")
-    with open(fc_path) as f:
-        return json.load(f)
+    registry_path = os.path.join(here, "..", "betting_ml", "models", "model_registry.yaml")
+    with open(registry_path) as f:
+        registry = yaml.safe_load(f)
+    for _domain, entry in registry.items():
+        if not isinstance(entry, dict):
+            continue
+        for key, val in entry.items():
+            if key.endswith("artifact_path") and val == artifact_uri:
+                fc_key = key.replace("artifact_path", "feature_columns_path")
+                fc_rel = entry.get(fc_key)
+                if fc_rel:
+                    fc_path = os.path.join(here, "..", fc_rel)
+                    with open(fc_path) as f:
+                        return json.load(f)
+    raise ValueError(f"No feature_columns_path found in registry for {artifact_uri}")
 
 
 def build_feature_row(feature_snapshot, feature_columns):
@@ -172,12 +205,12 @@ def main():
 
     conn = get_conn()
 
-    # ── Part 1: AS-OF feature comparison ───────────────────────────────────
+    # ── Part 1: AS-OF feature comparison (fixed game_pks, always runs) ─────
     print("\n[1] AS-OF SCD-2 vs feature_snapshot comparison")
-    print(f"    Predicted_at: {PREDICTED_AT}")
-    print(f"    Game_pks:     {GAME_PKS}")
+    print(f"    Predicted_at: {_PART1_PREDICTED_AT}")
+    print(f"    Game_pks:     {_PART1_GAME_PKS}")
 
-    rows = fetch_asof_values(conn)
+    rows = fetch_asof_values(conn, _PART1_GAME_PKS, _PART1_PREDICTED_AT)
     fields = [
         ("wind_component_mph", 0, 1),
         ("temp_f",             2, 3),
@@ -204,36 +237,51 @@ def main():
 
     print(f"\n  Feature comparison: {'ALL PASS' if all_pass else 'FAILURES DETECTED'}")
 
-    # ── Part 2: Prediction reconstruction ──────────────────────────────────
+    # ── Part 2: Prediction reconstruction using live snapshots ─────────────
     print("\n[2] Model artifact prediction reconstruction (±0.001 tolerance)")
 
-    snapshots = fetch_snapshots(conn)
-    feature_columns = load_feature_columns()
+    live_snapshots = discover_live_snapshots(conn, n=3)
 
-    model = load_model_from_s3(snapshots[0]["model_artifact_s3_uri"])
-    print(f"    Loaded model: {snapshots[0]['model_artifact_s3_uri']}")
-
-    pred_pass = True
-    for row in snapshots:
-        X = build_feature_row(row["feature_snapshot"], feature_columns)
-        # NGBoost dist.loc gives the predicted mean
-        dist = model.pred_dist(X)
-        reconstructed = float(dist.loc[0])
-        stored = row["stored_prediction"]
-        delta = abs(reconstructed - stored)
-        match = delta <= TOLERANCE
-        if not match:
-            pred_pass = False
-        status = "✓" if match else "✗"
+    if not live_snapshots:
         print(
-            f"  game_pk={row['game_pk']}  stored={stored:.6f}  "
-            f"reconstructed={reconstructed:.6f}  Δ={delta:.6f}  {status}"
+            "  SKIPPED — no live snapshots found in prediction_snapshots.\n"
+            "  Run betting_ml/scripts/predict_today.py (without --dry-run) to produce\n"
+            "  reconstruction_type='live' rows, then re-run this validator."
         )
+        pred_pass = None
+    else:
+        artifact_uri = live_snapshots[0]["model_artifact_s3_uri"]
+        predicted_at = live_snapshots[0]["predicted_at"]
+        model_version = live_snapshots[0]["model_version"]
+        game_pks = [r["game_pk"] for r in live_snapshots]
+        feature_columns = load_feature_columns(artifact_uri)
+        model = load_model_from_s3(artifact_uri)
+        print(f"    Loaded model:    {artifact_uri}")
+        print(f"    Model version:   {model_version}")
+        print(f"    Predicted_at:    {predicted_at}")
+        print(f"    Game_pks:        {game_pks}")
+        print(f"    Feature count:   {len(feature_columns)}")
 
-    print(f"\n  Prediction reconstruction: {'ALL PASS' if pred_pass else 'FAILURES DETECTED'}")
+        pred_pass = True
+        for snap in live_snapshots:
+            X = build_feature_row(snap["feature_snapshot"], feature_columns)
+            dist = model.pred_dist(X)
+            reconstructed = float(dist.loc[0])
+            stored = snap["stored_prediction"]
+            delta = abs(reconstructed - stored)
+            match = delta <= TOLERANCE
+            if not match:
+                pred_pass = False
+            status = "✓" if match else "✗"
+            print(
+                f"  game_pk={snap['game_pk']}  stored={stored:.6f}  "
+                f"reconstructed={reconstructed:.6f}  Δ={delta:.6f}  {status}"
+            )
+
+        print(f"\n  Prediction reconstruction: {'ALL PASS' if pred_pass else 'FAILURES DETECTED'}")
 
     conn.close()
-    overall = all_pass and pred_pass
+    overall = all_pass and (pred_pass is None or pred_pass)
     print("\n" + ("=" * 60))
     print(f"OVERALL: {'PASS ✓' if overall else 'FAIL ✗'}")
     sys.exit(0 if overall else 1)

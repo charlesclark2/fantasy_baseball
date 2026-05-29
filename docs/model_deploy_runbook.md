@@ -203,9 +203,13 @@ After the PR merges:
    git log --oneline model/{target}/v{N}
    ```
 
-2. Verify `predict_today.py` is loading the correct model version by checking `MODEL_VERSION` matches the registry `model_version`.
+2. Verify `betting_ml/scripts/predict_today.py` is loading the correct artifact by running a dry-run and confirming the S3 URI in the output matches the promoted `artifact_path` in the registry:
+   ```bash
+   uv run python betting_ml/scripts/predict_today.py --date $(date +%Y-%m-%d) --dry-run
+   ```
+   Check the "Loading models" log lines — each target should show the market-blind artifact URI.
 
-3. On the next prediction run, confirm `daily_model_predictions` rows show the new `model_version` value.
+3. On the next prediction run, confirm `daily_model_predictions` rows show the new `model_version` value, and `prediction_snapshots` rows show `reconstruction_type='live'`.
 
 ---
 
@@ -234,7 +238,13 @@ The old artifact is always preserved on disk and in git — rollback does not re
 
 | Tag | Target | Model | Deployed | CV metric |
 |---|---|---|---|---|
+| `model/total_runs/v3` | `total_runs` | ngboost_market_blind (Normal, 500 est) | 2026-05-11 | MAE 3.5521 (market-blind baseline) |
+| `model/run_differential/v2` | `run_differential` | ngboost_market_blind (Normal, 200 est) | 2026-05-11 | MAE 3.4981 (market-blind baseline) |
+| `model/home_win/v2` (Epic 1) | `home_win` | elasticnet_market_blind (545 features) | 2026-05-11 | Brier 0.2446 (market-blind baseline) |
+| `model/total_runs/v2` | `total_runs` | ngboost_decay_weighted (Normal) | 2026-05-08 | MAE 3.5107 |
 | `model/total_runs/v1` | `total_runs` | ngboost_tuned (LogNormal, 500 est) | 2026-05-04 | MAE 3.5190 |
 | `model/run_differential/v1` | `run_differential` | ngboost_tuned (Normal, 200 est) | 2026-05-04 | MAE 3.4724 |
-| `model/home_win/v2` | `home_win` | elasticnet (Pipeline) | 2026-05-04 | Brier 0.2425, ECE 0.0202 |
+| `model/home_win/v2` | `home_win` | elasticnet (487 features) | 2026-05-04 | Brier 0.2425, ECE 0.0202 |
 | `model/home_win/v1` | `home_win` | xgb_classifier_tuned + Platt | pre-7.MB | Brier 0.2439 |
+
+**Current production artifacts (as of 2026-05-29):** all three targets are on the Epic 1 market-blind models. In `betting_ml/scripts/predict_today.py` the default `--model-tag` is `v3`, which resolves to `artifact_path` (top-level) for all targets. The `v1` and `v2` explicit overrides on `total_runs` point to pre-market-blind artifacts and should only be used for historical backfills.

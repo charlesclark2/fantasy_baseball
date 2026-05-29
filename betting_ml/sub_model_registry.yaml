@@ -108,7 +108,7 @@ offense_v1:
     - pred_runs_raw
     - runs_index
   downstream_consumers: []
-  promotion_status: champion
+  promotion_status: deprecated
   promoted_at: '2026-05-28'
   notes: |
     Story 4.2 (2026-05-28). Training window 2015+; target = runs_scored (one row per game-side).
@@ -369,3 +369,41 @@ run_env_v4:
       C — NegBin GLM (statsmodels NB2) — NLL floor reference only
     Winner: Ridge+NegBin. CV NLL 2.8522, CV MAE 3.5165.
     Trained 2026-05-28. Promoted to champion — Ridge+NegBin CV NLL 2.8522 beats GLM floor; all gates pass.
+
+offense_v2:
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/offense_v2.pkl
+  feature_columns_path: models/sub_models/offense_v1/feature_columns.json
+  mlflow_run_id: f352c9dc866045babdac58cdd24ab360
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    primary_column: runs_scored   # one row per game-side
+    auxiliary_columns: []
+    grain: game_pk_side
+  training_window:
+    start: '2015-01-01'
+    end: null
+  cv_strategy: walk_forward_season
+  cv_folds: 8   # eval years 2018-2025
+  cv_metric: negbin_nll
+  cv_score: 2.484
+  cv_mae: 2.4594
+  negbin_r: 3.4777
+  promotion_gate:
+    metric: negbin_nll
+    direction: lower_is_better
+    must_beat: candidate_c_glm_nll
+    secondary:
+      - calib_80_ge: 0.8
+      - std_pred_ge: 0.3
+      - mae_le: 2.4604
+  output_signals:
+    - pred_runs_mu
+    - pred_runs_dispersion
+    - pred_runs_raw
+    - uncertainty
+  promotion_status: champion
+  promoted_at: '2026-05-29'
+  notes: |
+    Story 4D.1 / 4D.2 (Epic 4D). Distributional NegBin retrofit of offense_v1.
+    Winner: LightGBM+NegBin. CV NLL 2.4840, CV MAE 2.4594.
+    Trained 2026-05-29. Promoted to champion — LightGBM+NegBin CV NLL 2.4840 beats GLM floor; all gates pass.

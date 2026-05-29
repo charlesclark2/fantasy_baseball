@@ -241,6 +241,9 @@ total_runs:
   v2_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_v2.pkl
   v2_dist: Normal
   v2_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
+  v3_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
+  v3_dist: Normal
+  v3_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
   challengers:
   - card: Epic 1 / Story 1.2
     model_name: ngboost_market_blind

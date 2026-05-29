@@ -310,17 +310,16 @@ col_r1, col_r2 = st.columns([1, 1])
 with col_r1:
     if st.button("Refresh Predictions"):
         with st.spinner("Running predict_today.py…"):
-            # Per-target promotion: home_win=v1 (Card 7.MB), run_diff=v1 (Card 7.MB),
-            # total_runs=v2 (Card 7.V). model_version='prod' keeps these mixed-version
-            # rows separate from v0/v1/v2 backfills.
+            # Epic 1 market-blind models (2026-05-11): all three targets at v3.
+            # model_version='prod' keeps these rows separate from versioned backfills.
             result = subprocess.run(
                 [
                     "uv", "run", "python", "betting_ml/scripts/predict_today.py",
                     "--date", date_str,
                     "--model-tag", "prod",
-                    "--home-win-tag", "v1",
-                    "--total-runs-tag", "v2",
-                    "--run-diff-tag", "v1",
+                    "--home-win-tag", "v3",
+                    "--total-runs-tag", "v3",
+                    "--run-diff-tag", "v3",
                 ],
                 capture_output=True,
                 text=True,
@@ -429,7 +428,11 @@ with col_r2:
                     with st.spinner("Refreshing predictions with confirmed lineup data…"):
                         _r = subprocess.run(
                             ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
-                             "--date", date_str],
+                             "--date", date_str,
+                             "--model-tag", "prod",
+                             "--home-win-tag", "v3",
+                             "--total-runs-tag", "v3",
+                             "--run-diff-tag", "v3"],
                             capture_output=True, text=True,
                             cwd=str(_PROJECT_ROOT),
                         )

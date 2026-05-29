@@ -19,6 +19,10 @@
 --   run_env_v3.environment_volatility  → environment_volatility_v3  (deprecated)
 --   offense_v1_signals.pred_runs_raw   → pred_runs_raw_v1   (Epic 4; LightGBM, bias-corrected)
 --   offense_v1_signals.runs_index      → runs_index_v1       (100 = season avg)
+--   offense_v2_signals.pred_runs_mu    → pred_runs_mu_v2     (Epic 4D; LightGBM+NegBin μ; champion)
+--   offense_v2_signals.pred_runs_dispersion → pred_runs_dispersion_v2  (NegBin r; constant per model)
+--   offense_v2_signals.pred_runs_raw   → pred_runs_raw_v2    (alias for pred_runs_mu; no bias correction)
+--   offense_v2_signals.uncertainty     → pred_runs_uncertainty_v2  (80% PI width)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -118,10 +122,17 @@ select
     p.environment_volatility_v3,
     p.environment_volatility_v3_available,
 
-    -- Offensive quality signals (Epic 4 — from dedicated offense_v1_signals table)
+    -- Offensive quality signals v1 (Epic 4 — LightGBM, bias-corrected; deprecated)
     o.pred_runs_raw                                         as pred_runs_raw_v1,
     o.runs_index                                            as runs_index_v1,
     (o.pred_runs_raw is not null)                          as pred_runs_raw_v1_available,
+
+    -- Offensive quality signals v2 (Epic 4D — LightGBM+NegBin distributional; champion)
+    o2.pred_runs_mu                                         as pred_runs_mu_v2,
+    o2.pred_runs_dispersion                                 as pred_runs_dispersion_v2,
+    o2.pred_runs_raw                                        as pred_runs_raw_v2,
+    o2.uncertainty                                          as pred_runs_uncertainty_v2,
+    (o2.pred_runs_mu is not null)                          as pred_runs_mu_v2_available,
 
     -- Starter suppression signals (Epic 5)
     p.starter_suppression_signal_v1,
@@ -144,3 +155,7 @@ left join {{ source('betting_features', 'offense_v1_signals') }} o
     on  o.game_pk       = p.game_pk
     and o.side          = p.side
     and o.model_version = 'offense_v1'
+left join {{ source('betting_features', 'offense_v2_signals') }} o2
+    on  o2.game_pk       = p.game_pk
+    and o2.side          = p.side
+    and o2.model_version = 'offense_v2'

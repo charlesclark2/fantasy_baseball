@@ -985,3 +985,12 @@ sources:
           subtracted). runs_index = 100 × pred_runs_raw / season_league_avg_pred;
           100 = league average for that season. Backfilled 2015–2026.
           DDL: scripts/ddl/offense_v1_signals.sql.
+      - name: offense_v2_signals
+        description: >
+          Per game-side distributional offensive signals from the offense_v2 LightGBM+NegBin model.
+          Written by betting_ml/scripts/offense_v2/generate_offense_signals.py via
+          VARCHAR temp table + MERGE (idempotent). Grain: game_pk × side × model_version.
+          pred_runs_mu is the NegBin conditional mean; pred_runs_dispersion is the
+          global dispersion parameter r (constant per model); pred_runs_raw is an alias
+          for pred_runs_mu (no bias correction); uncertainty is the 80% PI width (hi−lo).
+          Backfilled 2015–2026. DDL: scripts/ddl/offense_v1_signals.sql (schema parity).
