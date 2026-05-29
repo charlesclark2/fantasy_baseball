@@ -1689,3 +1689,35 @@ models:
         tests: [not_null]
       - name: public_betting_snapshot_ts
         description: Timestamp of the most-recent snapshot (valid_from from SCD-2).
+
+  - name: feature_pregame_umpire_status
+    description: >
+      SCD-2 table for HP umpire assignments. Grain: one row per (game_pk, valid_from).
+      Natural key: game_pk (source has one HP ump per game; no ump_position column).
+      New row only when record_hash changes (LAG-based detection on umpire_id +
+      tendency stats). Most games have a single row (one assignment, no substitution).
+      Coverage: Epic T.4 onward (~2026-05-02). For pre-T history use
+      stg_statsapi_umpire_game_log (final deduped state only).
+
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: valid_from
+        description: Timestamp when this assignment was first observed (loaded_at from source).
+        tests: [not_null]
+      - name: valid_to
+        description: Timestamp when this assignment was superseded; null for the current row.
+      - name: is_current
+        description: True for the most-recent row per game_pk (valid_to is null).
+        tests: [not_null]
+      - name: record_hash
+        description: MD5 of (umpire_name, total_runs, total_run_impact, accuracy_above_expected). umpire_id excluded — null in 99% of rows (umpscorecards source has no umpire_id).
+        tests: [not_null]
+      - name: computed_at
+        description: Wall-clock timestamp when this SCD-2 row was materialized.
+        tests: [not_null]
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, valid_from]
