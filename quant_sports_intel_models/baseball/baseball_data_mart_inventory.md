@@ -1,5 +1,5 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-05-28
+## Current State Reference — As of 2026-05-29
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -11,9 +11,9 @@ This document inventories every Snowflake table created via DDL scripts and ever
 |---|---|---|
 | Raw source tables (DDL) | 18 tables + 2 tasks + 4 procedures | `scripts/ddl/` |
 | dbt sources | 35+ raw tables across 9 schemas | `dbt/models/sources.yml` |
-| dbt staging models | 22 models | `dbt/models/staging/` |
+| dbt staging models | 23 models | `dbt/models/staging/` |
 | dbt mart models | 57 models | `dbt/models/mart/` |
-| dbt feature models | 15 models (~400+ columns) | `dbt/models/feature/` |
+| dbt feature models | 16 models (~400+ columns) | `dbt/models/feature/` |
 
 **Data flow:**
 ```
@@ -148,7 +148,8 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 | Model | Grain | Key Transformation | Materialization |
 |---|---|---|---|
 | `stg_batter_pitches` | one row per pitch | Renames to snake_case. MD5 surrogate key on (game_pk, at_bat_number, pitch_number, batter_id, pitcher_id, inning, inning_half). Suppresses deprecated PitchF/X fields. | table |
-| `stg_weather_raw` | (game_pk, venue_id) | Cleans and validates weather observations. | view |
+| `stg_weather_raw` | (game_pk, venue_id) | Cleans and validates weather observations. QUALIFY deduplicates to latest row per (game_pk, venue_id, observation_type, hours_to_first_pitch). | view |
+| `stg_weather_raw_snapshots` | (game_pk, loaded_at) | All forecast_pregame ingestion snapshots from weather_raw — no latest-only dedup. Pre-computes wind_component_mph and is_dome via ref_venues join. Adds record_hash over (temp_f, wind_component_mph, humidity_pct, condition_text). Feeds feature_pregame_weather_status SCD-2 model. Coverage: Epic T.2 (2026-05-01) onward. **Added Epic 15 Story 15.5.** | table |
 
 ## 2.5 FanGraphs Staging
 
@@ -293,13 +294,14 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 |---|---|---|---|---|
 | `feature_pregame_injury_status` | (player_id, valid_from) | stg_statsapi_player_injury_status | ~8 | SCD-2 table tracking IL status per player. `valid_from`/`valid_to` are midnight TIMESTAMP_NTZ casts of status dates. `is_current = true` = currently on IL. Zero-length intervals (same-day place+activate noise) filtered at this layer. Consumed by `feature_pregame_lineup_features` slot_injury CTE for injury-adjusted wOBA. **Added Epic 15 Story 15.3.** Coverage: 2021-03-01 onward. |
 | `feature_pregame_starter_status` | (game_pk, side, valid_from) | stg_statsapi_starter_snapshots | ~8 | SCD-2 table tracking probable starter changes per game/side. `valid_from` = ingestion_ts when pitcher identity changed (detected via LAG). `is_current = true` = most recent assignment. Sentinel `valid_from = 1970-01-01` for pre-Epic-T games (no intraday change history available). Consumed by `feature_pregame_starter_features` `probable_pitchers` CTE. **Added Epic 15 Story 15.4.** Coverage: Full history (static) pre-Epic-T; intraday scratch tracking from 2026-05-12 onward. |
+| `feature_pregame_weather_status` | (game_pk, valid_from) | stg_weather_raw_snapshots | ~10 | SCD-2 table tracking forecast_pregame weather state per game. New row only when hash(temp_f, wind_component_mph, humidity_pct, condition_text) changes between fetches. `is_current = true` = most recent forecast. wind_component_mph pre-computed from ref_venues. Consumed by `feature_pregame_weather_features` via `is_current = true` filter. 3 SCD-2 singular tests. **Added Epic 15 Story 15.5.** Coverage: Epic T.2 (2026-05-01) onward. |
 | `feature_pregame_lineup_features` | (game_pk, side) | mart_batter_rolling_stats, mart_batter_vs_handedness_splits, mart_batter_profile_summary, stg_fangraphs__zips_hitting, mart_batter_bat_tracking_profile, **feature_pregame_injury_status** (SCD-2) | ~55 | Aggregates 30-day rolling and season-to-date batter stats across all 9 lineup slots. LHB/RHB counts. Handedness-specific wOBA (vs LHP/RHP). ZiPS hitting projections per slot with Bayesian rookie shrinkage (k=200 PA, Story 2.6). Bat-tracking columns (lineup_avg_bat_speed, lineup_bat_speed_std, lineup_avg_swing_length, lineup_avg_attack_angle, lineup_bat_speed_vs_starter_velo) — NULL pre-2023-07-14 (Story 2.9). SCD-2 columns present (valid_from, valid_to, is_current, computed_at, record_hash). `slot_injury` CTE reads from `feature_pregame_injury_status` with point-in-time `valid_from`/`valid_to` filter (Epic 15 Story 15.3). |
 | `feature_pregame_starter_features` | (game_pk, side) | mart_starter_rolling_stats, mart_pitcher_vs_handedness_splits, mart_starter_csw_rolling, mart_starter_pitch_mix_rolling, **feature_pregame_starter_status** (SCD-2) | ~30 | 30-day rolling starter stats + career platoon splits. CSW% last 3 starts. Pitch-mix drift score. NULL when pitcher has <30 IP career history. `probable_pitchers` CTE reads from `feature_pregame_starter_status WHERE is_current = true` (Epic 15 Story 15.4); previously read from `stg_statsapi_probable_pitchers`. |
 | `feature_pregame_bullpen_state_features` | (game_pk, side) | mart_bullpen_effectiveness, mart_bullpen_workload, mart_bullpen_leverage | ~25 | Bullpen effectiveness, leverage workload, handedness mix. High-leverage IP prior 1/3 days. Closer availability proxy. |
 | `feature_pregame_team_features` | (game_pk, side) | mart_team_rolling_offense, mart_team_rolling_pitching, mart_team_schedule_context, mart_team_pythagorean_rolling, mart_team_base_state_splits | ~20 | 30-day rolling team offensive/pitching metrics. Schedule context (days rest, home/away, back-to-back). Pythagorean residual. Base-state efficiency. |
 | `feature_pregame_odds_features` | game_pk | mart_odds_outcomes, mart_odds_line_movement, mart_bookmaker_disagreement, stg_actionnetwork_public_betting | ~15 | Market-implied probabilities, bookmaker disagreement spread (7 features), public betting percentages. Market columns — subject to exclusion in market-blind retrains. |
 | `feature_pregame_park_features` | game_pk | mart_park_run_factors | ~5 | Prior-season park run factors. NULL for season-opening games (no prior-season data). |
-| `feature_pregame_weather_features` | game_pk | statsapi.weather_raw | ~5 | Wind speed, wind direction, temperature, humidity. NULL for dome stadiums. |
+| `feature_pregame_weather_features` | game_pk | **feature_pregame_weather_status** (SCD-2) | ~5 | Wind speed, wind direction, temperature, humidity. NULL for dome stadiums. Re-pointed to SCD-2 source in Epic 15 Story 15.5; reads `is_current = true` rows. |
 | `feature_pregame_umpire_features` | game_pk | stg_statsapi_umpire_game_log | ~8 | HP umpire assignment + trailing z-scores of tendency metrics (called strikes above avg, run expectancy delta, run impact, accuracy). |
 | `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~260+ | Master pre-game feature table. Joins all 9 component feature tables including feature_pregame_sub_model_signals. `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. Home/away bat-tracking std columns added Story 2.9. |
 | `feature_pregame_sub_model_signals` | (game_pk, side) | mart_sub_model_signals (betting_ml DDL table) | dynamic | Wide-format pivot over mart_sub_model_signals. Each registered (signal_name, sub_model_version) pair becomes a column. Currently wired for run_env_v1 signals (run_env_signal_v1, environment_volatility_v1). Add column blocks as Epics 3–8 ship. SCD-2 filtered to is_current = true. **Added Epic 2, Story 2.1.** |
@@ -398,12 +400,12 @@ This section identifies what is missing or incomplete relative to the architectu
 | SCD Type-2 — lineup state | ✅ **Done (15.2)** | `feature_pregame_lineup_state` (Python-managed DDL table). 1,544 rows, 10 scratches detected. `feature_pregame_lineup_features` re-pointed. Dagster op wired. 2026-05-28. |
 | SCD Type-2 — injury status | ✅ **Done (15.3)** | `feature_pregame_injury_status` (dbt-managed). Coverage 2021-03-01+. 3 SCD-2 singular tests passing. `feature_pregame_lineup_features` slot_injury CTE re-pointed. 2026-05-28. |
 | SCD Type-2 — projected starter | ✅ **Done (15.4)** | `feature_pregame_starter_status` (dbt-managed). `stg_statsapi_starter_snapshots` feeds all history. Pre-Epic-T sentinel `valid_from = 1970-01-01`. Intraday scratch tracking from 2026-05-12. 3 SCD-2 singular tests passing. `feature_pregame_starter_features` re-pointed. 2026-05-28. |
-| SCD Type-2 — weather forecasts | **Missing** | `feature_pregame_weather_features`. Epic 15 Story 15.5. |
+| SCD Type-2 — weather forecasts | ✅ **Done (15.5)** | `feature_pregame_weather_status` (dbt-managed). `stg_weather_raw_snapshots` feeds all history. Coverage: Epic T.2 (2026-05-01) onward; forecast_pregame only. 3 SCD-2 singular tests passing. `feature_pregame_weather_features` re-pointed. 2026-05-29. |
 | SCD Type-2 — public betting | **Missing** | `feature_pregame_public_betting_features`. Epic 15 Story 15.6. |
 | SCD Type-2 — umpire assignments | **Missing** | `feature_pregame_umpire_features`. Epic 15 Story 15.7. |
 | SCD Type-2 — park factors | **Missing** | `feature_pregame_park_features`. Epic 15 Story 15.8. |
-| Point-in-time feature joins (AS OF semantics) | **Partial** | Implemented for: odds (15.1), lineup (15.2), injury (15.3), starter (15.4). Remaining: weather, public betting, umpire, park. |
-| `feature_ts` / `computed_at` on feature marts | **Partial** | `computed_at` on all SCD-2 feature models (15.1–15.4). Legacy mart models still lack it. |
+| Point-in-time feature joins (AS OF semantics) | **Partial** | Implemented for: odds (15.1), lineup (15.2), injury (15.3), starter (15.4), weather (15.5). Remaining: public betting, umpire, park. |
+| `feature_ts` / `computed_at` on feature marts | **Partial** | `computed_at` on all SCD-2 feature models (15.1–15.5). Legacy mart models still lack it. |
 | Historical CLV reconstruction infrastructure | **Missing** | No `feature_snapshot_id`, `prediction_ts`, `lineup_state_version` tracking at prediction time. Epic 15.9. |
 | Temporal audit of existing tables for leakage risk | **Not done** | Leakage guards enforced in feature layer but no formal temporal audit of the mart layer exists. Epic 13.1. |
 
@@ -430,4 +432,4 @@ This section identifies what is missing or incomplete relative to the architectu
 | Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
 | Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |
 | CLV meta-model | Correctly gated. 41 CLV games. | Large time horizon — not a data gap, a data-accumulation gap. |
-| Temporal/SCD infrastructure | **Partial** — 4 of 8 Epic 15 marts complete (odds, lineup, injury, starter). Weather, public betting, umpire, park remain. | Stories 15.5–15.8 next; CLV reconstruction (15.9) after all 8 marts done. |
+| Temporal/SCD infrastructure | **Partial** — 5 of 8 Epic 15 marts complete (odds, lineup, injury, starter, weather). Public betting, umpire, park remain. | Stories 15.6–15.8 next; CLV reconstruction (15.9) after all 8 marts done. |

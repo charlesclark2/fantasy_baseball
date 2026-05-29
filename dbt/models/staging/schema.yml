@@ -1388,6 +1388,26 @@ models:
       - name: ingestion_ts
         tests: [not_null]
 
+  - name: stg_weather_raw_snapshots
+    description: >
+      All ingestion snapshots of forecast_pregame weather observations from
+      weather_raw, one row per (game_pk, loaded_at). Retains every fetch so
+      SCD-2 change detection in feature_pregame_weather_status can track
+      forecast updates over time. wind_component_mph and is_dome are
+      pre-computed here via ref_venues join. Coverage: Epic T.2 conversion
+      date (2026-05-01) onward.
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: venue_id
+        tests: [not_null]
+      - name: loaded_at
+        tests: [not_null]
+      - name: is_dome
+        tests: [not_null]
+      - name: record_hash
+        tests: [not_null]
+
   - name: stg_statsapi_venues
     description: >
       One row per ballpark, flattened from baseball_data.statsapi.venues_raw.
