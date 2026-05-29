@@ -14,22 +14,19 @@
 
 with
 
+-- Current lineup composition from the SCD-2 lineup state table (Story 15.2).
+-- is_current = TRUE is the latest confirmed lineup for each game × side.
+-- For point-in-time replay use:
+--   WHERE valid_from <= :prediction_ts
+--     AND (valid_to IS NULL OR valid_to > :prediction_ts)
+-- Coverage: Epic T conversion date (2026-05-12) onward.
+-- Pre-T games fall through as NULLs (no SCD-2 history available).
 lineups as (
     select
         game_pk,
         official_date,
         home_away,
-        (
-            slot_1_player_id is not null and
-            slot_2_player_id is not null and
-            slot_3_player_id is not null and
-            slot_4_player_id is not null and
-            slot_5_player_id is not null and
-            slot_6_player_id is not null and
-            slot_7_player_id is not null and
-            slot_8_player_id is not null and
-            slot_9_player_id is not null
-        )::boolean                          as has_full_lineup,
+        has_full_lineup,
         slot_1_player_id,
         slot_2_player_id,
         slot_3_player_id,
@@ -49,7 +46,8 @@ lineups as (
         slot_7_position,
         slot_8_position,
         slot_9_position
-    from {{ ref('stg_statsapi_lineups_wide') }}
+    from {{ source('betting_features', 'feature_pregame_lineup_state') }}
+    where is_current = true
 ),
 
 -- Identify the catcher for each lineup.

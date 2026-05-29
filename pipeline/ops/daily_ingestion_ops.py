@@ -240,6 +240,24 @@ def dbt_pregame_odds_rebuild(context):
     ])
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_lineup_state_scd2(context):
+    # Runs after dbt_daily_build so monthly_schedule contains today's fresh lineup data.
+    # 2-day lookback processes upcoming games where pre-game scratches are most likely.
+    _run_script(context, "backfill_lineup_state_scd2.py", ["--since", _two_days_ago()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def dbt_lineup_feature_rebuild(context):
+    # Rebuild feature_pregame_lineup_features (and its dependents) now that the
+    # SCD-2 lineup state table has been updated with today's confirmed lineups.
+    _run_dbt(context, [
+        "build",
+        "--select", "feature_pregame_lineup_features+",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
 # ── Backfill phase ───────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
