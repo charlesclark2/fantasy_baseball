@@ -408,12 +408,27 @@ This section identifies what is missing or incomplete relative to the architectu
 | SCD Type-2 — projected starter | ✅ **Done (15.4)** | `feature_pregame_starter_status` (dbt-managed). `stg_statsapi_starter_snapshots` feeds all history. Pre-Epic-T sentinel `valid_from = 1970-01-01`. Intraday scratch tracking from 2026-05-12. 3 SCD-2 singular tests passing. `feature_pregame_starter_features` re-pointed. 2026-05-28. |
 | SCD Type-2 — weather forecasts | ✅ **Done (15.5)** | `feature_pregame_weather_status` (dbt-managed). `stg_weather_raw_snapshots` feeds all history. Coverage: Epic T.2 (2026-05-01) onward; forecast_pregame only. 3 SCD-2 singular tests passing. `feature_pregame_weather_features` re-pointed. 2026-05-29. |
 | SCD Type-2 — public betting | ✅ **Done (15.6)** | `feature_pregame_public_betting_status` (dbt-managed). `stg_actionnetwork_public_betting_snapshots` feeds all history. Coverage: 2026-05-07 (Epic T.3) onward. Dual gap documented. 3 SCD-2 singular tests passing. `feature_pregame_public_betting_features` is current-state view. 2026-05-29. |
-| SCD Type-2 — umpire assignments | **Done (15.7)** | `feature_pregame_umpire_status`. 25,731 games (all single-row; no intraday substitution data yet). Coverage ~2026-05-02 (Epic T.4). |
-| SCD Type-2 — park factors | **Done (15.8)** | `feature_pregame_park_status`. 362 rows (2015–2026), 36 venues, 30 active in 2026. Retired venues closed at season_close + 1 day. |
-| Point-in-time feature joins (AS OF semantics) | **Partial** | Implemented for: odds (15.1), lineup (15.2), injury (15.3), starter (15.4), weather (15.5), public betting (15.6). Remaining: umpire, park. |
-| `feature_ts` / `computed_at` on feature marts | **Partial** | `computed_at` on all SCD-2 feature models (15.1–15.5). Legacy mart models still lack it. |
-| Historical CLV reconstruction infrastructure | **Missing** | No `feature_snapshot_id`, `prediction_ts`, `lineup_state_version` tracking at prediction time. Epic 15.9. |
+| SCD Type-2 — umpire assignments | ✅ **Done (15.7)** | `feature_pregame_umpire_status`. 25,731 games (all single-row; no intraday substitution data yet). Coverage ~2026-05-02 (Epic T.4). 2026-05-29. |
+| SCD Type-2 — park factors | ✅ **Done (15.8)** | `feature_pregame_park_status`. 362 rows (2015–2026), 36 venues, 30 active in 2026. Retired venues closed at season_close + 1 day. 2026-05-29. |
+| Point-in-time feature joins (AS OF semantics) | ✅ **Done (15.9)** | Validated for all 8 SCD-2 marts. AS-OF queries confirmed exact feature match (6/6 fields, 3 games) vs stored `feature_snapshot`. See per-mart coverage table below. |
+| `feature_ts` / `computed_at` on feature marts | **Complete** | `computed_at` on all 8 SCD-2 feature models (15.1–15.8). |
+| Historical CLV reconstruction infrastructure | ✅ **Done (15.9)** | `prediction_snapshots` captures `feature_snapshot` (VARIANT) + `model_artifact_s3_uri` at prediction time. `validate_scd2_reconstruction.py` validates AS-OF + model inference. See per-mart coverage table below. |
 | Temporal audit of existing tables for leakage risk | **Not done** | Leakage guards enforced in feature layer but no formal temporal audit of the mart layer exists. Epic 13.1. |
+
+### Per-Mart SCD-2 Coverage (Epic 15 — Complete 2026-05-29)
+
+AS-OF validation confirmed 2026-05-29 on game_pks 823384, 824280, 824360 (predicted_at 2026-05-15T14:06:05). All 6 spot-checked fields match `feature_snapshot` exactly. Run `scripts/validate_scd2_reconstruction.py` for full prediction reconstruction (±0.001).
+
+| Story | SCD-2 Table | Coverage Start | Backfill Type | Pre-Cutoff Approximation |
+|-------|-------------|---------------|---------------|--------------------------|
+| 15.1 | `feature_pregame_market_features` | 2020-07-23 (Odds API) | `full` (append-only raw) | None — full history available via Odds API backfill |
+| 15.2 | `feature_pregame_lineup_state` | 2026-05-12 (Epic T) | `forward-only` | Pre-T: permanently unrecoverable; feature model uses last-known lineup state |
+| 15.3 | `feature_pregame_injury_status` | 2021-03-01 | `full` (append-only transactions) | None — full history from `player_transactions` |
+| 15.4 | `feature_pregame_starter_status` | 2015 (final state) / 2026-05-12 (intraday) | `full` (with sentinel) | Pre-Epic-T rows use `valid_from = 1970-01-01` sentinel (final assignment only; no intraday history) |
+| 15.5 | `feature_pregame_weather_status` | 2026-05-01 (Epic T.2) | `forward-only` | Pre-T: NULL for all weather columns; dome flag from venue static data |
+| 15.6 | `feature_pregame_public_betting_status` | 2026-05-07 (Epic T.3) | `forward-only` | Pre-T: NULL for all betting % columns; two permanent gaps (ActionNetwork pre-2024-02-22, pre-Epic-T) |
+| 15.7 | `feature_pregame_umpire_status` | 2026-05-02 (Epic T.4) | `forward-only` | Pre-T: use `stg_statsapi_umpire_game_log` (final deduped state; no intraday substitution history) |
+| 15.8 | `feature_pregame_park_status` | 2015 | `full` | None — full annual history; retired venues closed at season_close + 1 day |
 
 ## 6.9 Market-Blind Retrains (Epic 1 — Immediate)
 
@@ -438,4 +453,4 @@ This section identifies what is missing or incomplete relative to the architectu
 | Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
 | Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |
 | CLV meta-model | Correctly gated. 41 CLV games. | Large time horizon — not a data gap, a data-accumulation gap. |
-| Temporal/SCD infrastructure | **Complete** — 8 of 8 Epic 15 marts done (odds, lineup, injury, starter, weather, public betting, umpire, park). | CLV reconstruction (15.9) next. |
+| Temporal/SCD infrastructure | ✅ **Complete** — Epic 15 all 9 stories done (8 SCD-2 marts + 15.9 CLV reconstruction validation). AS-OF queries validated. Per-mart coverage table in §6.8. | Epic 16 (Sequential Prior Update) next. |

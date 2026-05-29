@@ -11,6 +11,10 @@
 -- Dual coverage gap documented:
 --   (1) Action Network API gap: pre-2024-02-22 permanently unrecoverable.
 --   (2) Pre-Epic-T gap: raw snapshots were not captured before 2026-05-07.
+-- Pre-cutoff approximation: no rows exist for pre-2026-05-07 games; downstream
+-- feature_pregame_public_betting_features returns NULL for all betting percentage
+-- columns for those games. Models trained on pre-T data treat public betting as
+-- missing (NULL-imputed) for those observations.
 -- For the current season, most games will have a single SCD-2 row (the fetcher
 -- runs once daily); multiple rows appear when the intraday data shifts noticeably.
 --
