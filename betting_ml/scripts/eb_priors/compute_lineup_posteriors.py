@@ -23,6 +23,7 @@ table + MERGE on (game_pk, batting_slot, batter_id).
 Usage:
     uv run python betting_ml/scripts/eb_priors/compute_lineup_posteriors.py
     uv run python betting_ml/scripts/eb_priors/compute_lineup_posteriors.py --game-date 2025-05-01
+    uv run python betting_ml/scripts/eb_priors/compute_lineup_posteriors.py --backfill-season 2019
 """
 
 from __future__ import annotations
@@ -324,7 +325,7 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
 
     cur.execute(
         """
-        CREATE TEMPORARY TABLE baseball_data.betting.tmp_eb_batter_posteriors (
+        CREATE OR REPLACE TEMPORARY TABLE baseball_data.betting.tmp_eb_batter_posteriors (
             game_pk              VARCHAR,
             batting_slot         VARCHAR,
             batter_id            VARCHAR,
@@ -426,6 +427,41 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def _process_date(conn, game_date: date, priors: dict) -> int:
+    """Process one game date. Returns number of rows written (0 if no lineups)."""
+    season = game_date.year
+    fit_date = date.today()
+    run_id = str(uuid.uuid4())
+
+    lineups = _load_lineups(conn, game_date)
+    if not lineups:
+        return 0
+
+    batter_ids = list({str(r["batter_id"]) for r in lineups})
+    rolling_map = _load_rolling_stats(conn, batter_ids, game_date, season)
+    zips_map = _load_zips(conn, batter_ids, season)
+
+    results = []
+    for lr in lineups:
+        bid = str(lr["batter_id"])
+        row = _compute_row(
+            game_pk=str(lr["game_pk"]),
+            batting_slot=int(lr["batting_slot"]),
+            batter_id=bid,
+            season=season,
+            game_date=game_date,
+            priors=priors,
+            rolling=rolling_map.get(bid),
+            zips=zips_map.get(bid),
+            fit_date=fit_date,
+            run_id=run_id,
+        )
+        results.append(row)
+
+    _write_to_snowflake(conn, results)
+    return len(results)
+
+
 def main(game_date: date) -> None:
     season = game_date.year
     fit_date = date.today()
@@ -492,6 +528,41 @@ def main(game_date: date) -> None:
         conn.close()
 
 
+def main_backfill_season(season: int) -> None:
+    """Process every game date in a season in chronological order."""
+    print(f"\n═══ Backfill season {season} ═══")
+    priors = _load_prior(season)
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT DISTINCT official_date
+            FROM baseball_data.betting.stg_statsapi_lineups
+            WHERE year(official_date) = %(season)s
+              AND batting_order BETWEEN 1 AND 9
+            ORDER BY official_date
+            """,
+            {"season": season},
+        )
+        game_dates = [r[0] for r in cur.fetchall()]
+        cur.close()
+
+        print(f"  {len(game_dates)} game dates to process")
+        total_rows = 0
+        for i, gd in enumerate(game_dates, 1):
+            gd_obj = gd if isinstance(gd, date) else datetime.strptime(str(gd)[:10], "%Y-%m-%d").date()
+            n = _process_date(conn, gd_obj, priors)
+            total_rows += n
+            if i % 50 == 0 or i == len(game_dates):
+                print(f"  [{i}/{len(game_dates)}] {gd_obj}  cumulative rows={total_rows}")
+
+        print(f"\n  Season {season} complete — {total_rows} total rows written.")
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Compute per-batter-slot EB posteriors and write to Snowflake"
@@ -499,8 +570,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--game-date",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d").date(),
-        default=date.today(),
-        help="Game date to process (YYYY-MM-DD, default: today)",
+        default=None,
+        help="Single game date to process (YYYY-MM-DD, default: today)",
+    )
+    parser.add_argument(
+        "--backfill-season",
+        type=int,
+        dest="backfill_season",
+        metavar="YEAR",
+        help="Backfill all game dates in the given season (requires prior JSON for that season)",
     )
     args = parser.parse_args()
-    main(args.game_date)
+
+    if args.backfill_season:
+        main_backfill_season(args.backfill_season)
+    else:
+        main(args.game_date or date.today())

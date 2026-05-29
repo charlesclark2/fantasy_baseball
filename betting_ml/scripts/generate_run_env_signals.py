@@ -1,19 +1,26 @@
 """
-generate_run_env_signals.py — Run environment signal generation (Epic 3, Story 3.3)
+generate_run_env_signals.py — Run environment signal generation (Epic 3D, Story 3D.3)
 
-Loads the trained run_env_v3 artifact and writes two signals per game into
-mart_sub_model_signals via the SCD-2 writer:
+Loads the trained run_env_v4 artifact (Ridge + Negative Binomial) and writes
+three distributional signals per game into mart_sub_model_signals via the
+SCD-2 writer:
 
-  run_env_signal        — z-scored predicted total runs
-                          (pred - training_mean) / training_std
-                          Positive = run-friendly environment; negative = suppressed.
+  run_env_mu           — NegBin predicted mean total runs (μ); primary signal.
+                         Positive values indicate a high-scoring environment.
 
-  environment_volatility — per-venue run std dev computed over completed games
-                           in the training window. Captures how volatile run
-                           scoring is at each park (e.g., Coors > pitcher parks).
+  run_env_dispersion   — NegBin dispersion parameter r fitted on training data.
+                         Constant across all games for a given model version;
+                         stored per row for downstream join convenience.
 
-Both signals are game-level (not side-level) but are written as separate rows
-for side='home' and side='away' so the feature mart can join on (game_pk, side).
+  run_env_signal       — z-scored μ: (mu - target_mean) / target_std
+                         Retained for backwards-compatible downstream joins
+                         (matches the signal_name used by run_env_v3).
+
+All three signals carry an `uncertainty` value — the game-level 80% predictive
+interval width from NegBin(mu_i, r): ppf(0.90) - ppf(0.10).
+
+Signals are written as separate rows for side='home' and side='away' so the
+feature mart can join on (game_pk, side).
 
 Usage:
     # Backfill all 2021+ completed regular-season games
@@ -37,6 +44,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy.stats import nbinom
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
@@ -44,24 +52,23 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from betting_ml.utils.data_loader import get_snowflake_connection
 from betting_ml.utils.artifact_store import load_artifact
 from betting_ml.scripts.scd2_writer import scd2_upsert, _SCHEMA_PROD, _SCHEMA_DEV
-from betting_ml.scripts.train_run_env import _TRAINING_START
 from betting_ml.scripts.train_run_env_v3 import (
-    FEATURE_COLS_V3,
     _add_era_features,
     _apply_imputation_v3,
 )
 
-_ARTIFACT_S3_URI  = "s3://baseball-betting-ml-artifacts/sub_models/run_env_v3.pkl"
-_ARTIFACT_LOCAL   = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v3.pkl"
-_SUB_MODEL_NAME = "run_env_v3"
-_SUB_MODEL_VERSION = "v3"
+_TRAINING_START   = "2021-01-01"
+_ARTIFACT_S3_URI  = "s3://baseball-betting-ml-artifacts/sub_models/run_env_v4.pkl"
+_ARTIFACT_LOCAL   = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "run_env_v4.pkl"
+_SUB_MODEL_NAME   = "run_env_v4"
+_SUB_MODEL_VERSION = "v4"
 _SIDES = ("home", "away")
 
 
 def _resolve_tables(env: str) -> tuple[str, str]:
-    """Return (target_table, temp_table) for the given environment."""
     schema = _SCHEMA_PROD if env == "prod" else _SCHEMA_DEV
     return f"{schema}.mart_sub_model_signals", f"{schema}.tmp_scd2_incoming"
+
 
 # ---------------------------------------------------------------------------
 # Feature query (no outcome filter — includes upcoming games)
@@ -139,46 +146,29 @@ def load_games(start_date: str, end_date: str) -> pd.DataFrame:
             if converted.notna().sum() >= df[col].notna().sum() * 0.9:
                 df[col] = converted
 
-    # game_year is required by era feature engineering
     df["game_year"] = pd.to_datetime(df["game_date"]).dt.year
     return df
 
 
 # ---------------------------------------------------------------------------
-# Environment volatility
+# 80% PI width from NegBin(mu, r) — vectorized over a 1-D array of mu values
 # ---------------------------------------------------------------------------
 
-def compute_venue_volatility(df: pd.DataFrame) -> dict[int, float]:
-    """Compute per-venue run std dev over completed games.
-
-    Venue IDs with fewer than 10 completed games fall back to the league-wide
-    std dev (prevents noisy estimates from single-game venues).
-    """
-    completed = df[df["total_runs"].notna()].copy()
-    league_std = float(completed["total_runs"].std()) if len(completed) > 1 else 3.0
-
-    venue_stats = (
-        completed.groupby("venue_id")["total_runs"]
-        .agg(["std", "count"])
-        .reset_index()
-    )
-    venue_vol: dict[int, float] = {}
-    for _, row in venue_stats.iterrows():
-        if row["count"] >= 10:
-            venue_vol[int(row["venue_id"])] = float(row["std"])
-        else:
-            venue_vol[int(row["venue_id"])] = league_std
-
-    return venue_vol
+def _negbin_pi_width(mu: np.ndarray, r: float) -> np.ndarray:
+    """Return the 80% predictive interval width for each game's NegBin(mu_i, r)."""
+    p = r / (r + mu)  # nbinom parameterizes as (n=r, p=r/(r+mu))
+    lo = nbinom.ppf(0.10, n=r, p=p)
+    hi = nbinom.ppf(0.90, n=r, p=p)
+    return hi - lo
 
 
 # ---------------------------------------------------------------------------
-# Feature hashing
+# Feature hashing (idempotency key for SCD-2)
 # ---------------------------------------------------------------------------
 
-def _feature_hash(row: pd.Series) -> str:
+def _feature_hash(row: pd.Series, feature_cols: list[str]) -> str:
     parts = "|".join(
-        "" if pd.isna(row[c]) else f"{row[c]:.6g}" for c in FEATURE_COLS_V3
+        "" if pd.isna(row[c]) else f"{row[c]:.6g}" for c in feature_cols
     )
     return hashlib.md5(parts.encode()).hexdigest()
 
@@ -187,60 +177,64 @@ def _feature_hash(row: pd.Series) -> str:
 # Signal generation
 # ---------------------------------------------------------------------------
 
-def generate_signals(
-    df: pd.DataFrame,
-    artifact: dict,
-    venue_vol: dict[int, float],
-    league_vol: float,
-) -> list[dict]:
-    """Return a list of signal dicts ready for scd2_upsert."""
-    model = artifact["model"]
-    impute_vals = artifact["impute_values"]
+def generate_signals(df: pd.DataFrame, artifact: dict) -> list[dict]:
+    """Return signal rows ready for scd2_upsert.
+
+    Emits three signal_names per (game_pk, side):
+      run_env_mu          — NegBin μ (predicted mean total runs)
+      run_env_dispersion  — NegBin r (dispersion; constant per model version)
+      run_env_signal      — z-score of μ (backwards-compatible)
+
+    All three carry uncertainty = game-level 80% PI width from NegBin(mu_i, r).
+    """
+    model            = artifact["model"]
+    impute_vals      = artifact["impute_values"]
     prior_season_runs = artifact["prior_season_runs"]
-    target_mean = artifact["target_mean"]
-    target_std = artifact["target_std"]
-    cv_mae = artifact["cv_mae"]
+    feature_cols     = artifact["feature_cols"]
+    target_mean      = artifact["target_mean"]
+    target_std       = artifact["target_std"]
+    min_mu           = artifact["min_mu"]
+    negbin_r         = artifact["negbin_r"]
 
     df_era = _add_era_features(df, prior_season_runs)
     df_imp = _apply_imputation_v3(df_era, impute_vals)
 
-    X = df_imp[FEATURE_COLS_V3].to_numpy(dtype=float)
-    y_pred = model.predict(X)
-    run_env_z = (y_pred - target_mean) / target_std
+    X = df_imp[feature_cols].to_numpy(dtype=float)
+    mu_pred = np.clip(model.predict(X), min_mu, None)
+    run_env_z = (mu_pred - target_mean) / target_std
+    pi_widths = _negbin_pi_width(mu_pred, negbin_r)
 
     rows = []
     for i, (_, game_row) in enumerate(df.iterrows()):
-        game_pk = int(game_row["game_pk"])
-        venue_id = int(game_row["venue_id"]) if pd.notna(game_row.get("venue_id")) else -1
-        feat_hash = _feature_hash(df_imp.iloc[i])
-
-        vol = venue_vol.get(venue_id, league_vol)
-        vol_z = (vol - league_vol) / (league_vol * 0.5) if league_vol > 0 else 0.0
+        game_pk  = int(game_row["game_pk"])
+        feat_hash = _feature_hash(df_imp.iloc[i], feature_cols)
+        mu_i     = float(mu_pred[i])
+        z_i      = float(run_env_z[i])
+        pi_i     = float(pi_widths[i])
 
         for side in _SIDES:
-            # run_env_signal
-            rows.append({
-                "game_pk": game_pk,
-                "side": side,
-                "signal_name": "run_env_signal",
-                "sub_model_name": _SUB_MODEL_NAME,
-                "sub_model_version": _SUB_MODEL_VERSION,
-                "signal_value": float(run_env_z[i]),
-                "uncertainty": float(cv_mae),
-                "signal_available": True,
+            base = {
+                "game_pk":            game_pk,
+                "side":               side,
+                "sub_model_name":     _SUB_MODEL_NAME,
+                "sub_model_version":  _SUB_MODEL_VERSION,
+                "signal_available":   True,
                 "input_feature_hash": feat_hash,
+            }
+            rows.append({**base,
+                "signal_name":  "run_env_mu",
+                "signal_value": mu_i,
+                "uncertainty":  pi_i,
             })
-            # environment_volatility
-            rows.append({
-                "game_pk": game_pk,
-                "side": side,
-                "signal_name": "environment_volatility",
-                "sub_model_name": _SUB_MODEL_NAME,
-                "sub_model_version": _SUB_MODEL_VERSION,
-                "signal_value": float(vol),
-                "uncertainty": None,
-                "signal_available": True,
-                "input_feature_hash": feat_hash,
+            rows.append({**base,
+                "signal_name":  "run_env_dispersion",
+                "signal_value": float(negbin_r),
+                "uncertainty":  None,
+            })
+            rows.append({**base,
+                "signal_name":  "run_env_signal",
+                "signal_value": z_i,
+                "uncertainty":  pi_i,
             })
 
     return rows
@@ -251,7 +245,7 @@ def generate_signals(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate run_env_v3 signals (Story 3.3)")
+    parser = argparse.ArgumentParser(description="Generate run_env_v4 signals (Story 3D.3)")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(
         "--backfill",
@@ -278,7 +272,6 @@ def main() -> None:
 
     target_table, temp_table = _resolve_tables(args.env)
 
-    # Date range
     today = date.today().isoformat()
     if args.backfill:
         start_date, end_date = _TRAINING_START, today
@@ -291,7 +284,12 @@ def main() -> None:
     artifact_path = _ARTIFACT_S3_URI if os.environ.get("AWS_ACCESS_KEY_ID") else _ARTIFACT_LOCAL
     print(f"\nLoading artifact from {artifact_path}...")
     artifact = load_artifact(artifact_path)
-    print(f"  model_type={artifact['model_type']}, CV MAE={artifact['cv_mae']}")
+    print(
+        f"  model_type={artifact['model_type']}, "
+        f"NegBin r={artifact['negbin_r']:.4f}, "
+        f"CV NLL={artifact['cv_nll']:.4f}, "
+        f"CV MAE={artifact['cv_mae']:.4f}"
+    )
 
     print(f"\nLoading games {start_date} → {end_date}...")
     df = load_games(start_date, end_date)
@@ -301,19 +299,14 @@ def main() -> None:
         print("No games found for the given date range. Exiting.")
         return
 
-    print("\nComputing environment volatility by venue...")
-    venue_vol = compute_venue_volatility(df)
-    league_vol = float(np.mean(list(venue_vol.values()))) if venue_vol else 3.0
-    print(f"  {len(venue_vol)} venues tracked. League-mean vol: {league_vol:.3f} runs.")
-
     print("\nGenerating signals...")
-    signal_rows = generate_signals(df, artifact, venue_vol, league_vol)
+    signal_rows = generate_signals(df, artifact)
     n_games = len(df)
-    print(f"  {len(signal_rows):,} signal rows ({n_games:,} games × 2 signals × 2 sides).")
+    print(f"  {len(signal_rows):,} signal rows ({n_games:,} games × 3 signals × 2 sides).")
 
     if args.dry_run:
-        print("\n[DRY RUN] Sample rows (first 4):")
-        for r in signal_rows[:4]:
+        print("\n[DRY RUN] Sample rows (first 6):")
+        for r in signal_rows[:6]:
             print(f"  {r}")
         print("[DRY RUN] Skipping Snowflake write.")
         return
@@ -335,7 +328,11 @@ def main() -> None:
         f"  Done. inserted={result['inserted']}, "
         f"skipped={result['skipped']}, closed={result['closed']}"
     )
-    print("\nStory 3.3 complete. Next: run dbtf build to refresh feature_pregame_sub_model_signals.")
+    print("\nStory 3D.3 complete.")
+    print("Next steps (Story 3D.4):")
+    print("  1. Add run_env_mu and run_env_dispersion columns to mart_sub_model_signals DDL")
+    print("  2. Update dbt/models/feature/feature_pregame_sub_model_signals.sql")
+    print("  3. dbtf build --select feature_pregame_sub_model_signals")
 
 
 if __name__ == "__main__":

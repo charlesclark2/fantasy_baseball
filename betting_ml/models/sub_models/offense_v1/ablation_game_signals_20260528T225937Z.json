@@ -1,0 +1,164 @@
+{
+  "meta": {
+    "story": "4.4",
+    "script": "ablation_offense_v1_signals.py",
+    "run_ts": "2026-05-28T22:59:28.110787+00:00",
+    "base_feature_count": 564,
+    "signal_feature_count": 568,
+    "signal_cols": [
+      "home_pred_runs_v1",
+      "away_pred_runs_v1",
+      "home_runs_index_v1",
+      "away_runs_index_v1"
+    ],
+    "regression_gate": 0.05
+  },
+  "targets": {
+    "total_runs": {
+      "baseline_mean_mae": 3.511689742525558,
+      "signal_mean_mae": 3.5033287169937264,
+      "delta": -0.0083610255318316,
+      "april_delta": -0.02131464724157839,
+      "folds_improved": 2,
+      "n_folds": 3,
+      "regression_gate_triggered": false,
+      "baseline_folds": [
+        {
+          "tag": "baseline",
+          "target": "total_runs",
+          "eval_year": 2024,
+          "n_eval": 2002,
+          "n_eval_april": 197,
+          "mae": 3.4097202065246095,
+          "bias": 0.20284833229780125,
+          "mae_april": 3.365916482758707
+        },
+        {
+          "tag": "baseline",
+          "target": "total_runs",
+          "eval_year": 2025,
+          "n_eval": 2025,
+          "n_eval_april": 207,
+          "mae": 3.604144890728182,
+          "bias": -0.2530370693006119,
+          "mae_april": 3.438852355900608
+        },
+        {
+          "tag": "baseline",
+          "target": "total_runs",
+          "eval_year": 2026,
+          "n_eval": 576,
+          "n_eval_april": 227,
+          "mae": 3.5212041303238832,
+          "bias": -0.018522553301922626,
+          "mae_april": 3.5950756310953564
+        }
+      ],
+      "signal_folds": [
+        {
+          "tag": "with_signals",
+          "target": "total_runs",
+          "eval_year": 2024,
+          "n_eval": 2002,
+          "n_eval_april": 197,
+          "mae": 3.388193583721219,
+          "bias": 0.18398991703704193,
+          "mae_april": 3.336049119853377
+        },
+        {
+          "tag": "with_signals",
+          "target": "total_runs",
+          "eval_year": 2025,
+          "n_eval": 2025,
+          "n_eval_april": 207,
+          "mae": 3.5906727361440782,
+          "bias": -0.25704172838408573,
+          "mae_april": 3.4117421548699327
+        },
+        {
+          "tag": "with_signals",
+          "target": "total_runs",
+          "eval_year": 2026,
+          "n_eval": 576,
+          "n_eval_april": 227,
+          "mae": 3.5311198311158822,
+          "bias": -0.03856388063938127,
+          "mae_april": 3.588109253306627
+        }
+      ]
+    },
+    "run_differential": {
+      "baseline_mean_mae": 3.4926589222949738,
+      "signal_mean_mae": 3.4829664656901613,
+      "delta": -0.009692456604812438,
+      "april_delta": -0.0078025502052678775,
+      "folds_improved": 2,
+      "n_folds": 3,
+      "regression_gate_triggered": false,
+      "baseline_folds": [
+        {
+          "tag": "baseline",
+          "target": "run_differential",
+          "eval_year": 2024,
+          "n_eval": 2002,
+          "n_eval_april": 197,
+          "mae": 3.3820927831475376,
+          "bias": 0.3852586029378585,
+          "mae_april": 3.213334532605444
+        },
+        {
+          "tag": "baseline",
+          "target": "run_differential",
+          "eval_year": 2025,
+          "n_eval": 2025,
+          "n_eval_april": 207,
+          "mae": 3.504622699902787,
+          "bias": 0.05976424360765549,
+          "mae_april": 3.341453573292361
+        },
+        {
+          "tag": "baseline",
+          "target": "run_differential",
+          "eval_year": 2026,
+          "n_eval": 576,
+          "n_eval_april": 227,
+          "mae": 3.591261283834598,
+          "bias": 0.009177276702079117,
+          "mae_april": 3.5547569520695177
+        }
+      ],
+      "signal_folds": [
+        {
+          "tag": "with_signals",
+          "target": "run_differential",
+          "eval_year": 2024,
+          "n_eval": 2002,
+          "n_eval_april": 197,
+          "mae": 3.370713959051922,
+          "bias": 0.39574912357850056,
+          "mae_april": 3.18992064660349
+        },
+        {
+          "tag": "with_signals",
+          "target": "run_differential",
+          "eval_year": 2025,
+          "n_eval": 2025,
+          "n_eval_april": 207,
+          "mae": 3.4810553032254843,
+          "bias": 0.04939615668752681,
+          "mae_april": 3.325915987345265
+        },
+        {
+          "tag": "with_signals",
+          "target": "run_differential",
+          "eval_year": 2026,
+          "n_eval": 576,
+          "n_eval_april": 227,
+          "mae": 3.597130134793078,
+          "bias": 0.011339173666455612,
+          "mae_april": 3.5703007734027628
+        }
+      ]
+    }
+  }
+}

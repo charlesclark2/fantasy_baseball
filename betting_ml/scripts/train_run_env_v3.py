@@ -38,13 +38,18 @@ import json
 import joblib
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
+import mlflow
 import numpy as np
 import pandas as pd
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
+
+from dotenv import load_dotenv
+load_dotenv(_PROJECT_ROOT / ".env")
 
 from betting_ml.scripts.train_run_env import (
     load_training_data,
@@ -54,6 +59,7 @@ from betting_ml.scripts.train_run_env import (
     _TRAINING_START,
 )
 from betting_ml.utils.training_cache import get_cached_df
+from betting_ml.utils.mlflow_utils import get_or_create_experiment, log_cv_fold
 
 _V1_CV_MAE        = 3.5104
 _PROMOTION_GATE   = 0.05
@@ -453,7 +459,13 @@ def _print_comparison(
 # Registry
 # ---------------------------------------------------------------------------
 
-def _update_registry(cv_mae: float, model_type: str, gate_passed: bool) -> None:
+def _update_registry(
+    cv_mae: float,
+    model_type: str,
+    gate_passed: bool,
+    mlflow_run_id: str | None = None,
+) -> None:
+    import datetime
     text = _REGISTRY_PATH.read_text()
 
     # Set v1 promotion gate threshold if still null
@@ -464,26 +476,27 @@ def _update_registry(cv_mae: float, model_type: str, gate_passed: bool) -> None:
     )
 
     if gate_passed:
-        # Deprecate v1 — v3 is the new champion
         text = re.sub(
             r"(run_env_v1:.*?promotion_status:)\s*\S+",
             r"\1 deprecated",
             text, count=1, flags=re.DOTALL,
         )
 
-    v3_status    = "champion" if gate_passed else "deprecated"
-    arch_label   = "Ridge" if model_type == "ridge" else "XGBoost"
-    gate_note    = (
+    arch_label = "Ridge" if model_type == "ridge" else "XGBoost"
+    today = datetime.date.today().isoformat()
+    v3_status = "champion" if gate_passed else "deprecated"
+    promoted_at_str = f"'{today}'" if gate_passed else "null"
+    mlflow_line = mlflow_run_id if mlflow_run_id else f"null  # set on next retrain (MLflow instrumentation added {today})"
+    gate_note = (
         f"Promoted to champion — {arch_label} CV MAE {cv_mae:.4f} < threshold {_PROMOTE_THRESHOLD}."
         if gate_passed
         else f"Deprecated — best CV MAE {cv_mae:.4f} did not beat threshold {_PROMOTE_THRESHOLD}."
     )
 
-    if "run_env_v3:" not in text:
-        v3_block = f"""
-run_env_v3:
-  artifact_path: models/sub_models/run_env_v3.pkl
+    new_block = f"""run_env_v3:
+  artifact_path: {_ARTIFACT_S3_URI}
   feature_columns_path: models/sub_models/run_env_v3_features.json
+  mlflow_run_id: {mlflow_line}
   target:
     source_table: baseball_data.betting.mart_game_results
     primary_column: home_final_score + away_final_score
@@ -508,21 +521,38 @@ run_env_v3:
     - environment_volatility
   downstream_consumers: []
   promotion_status: {v3_status}
-  promoted_at: null
+  promoted_at: {promoted_at_str}
   notes: |
     Story 3.5 (2026-05-19). Era features added to address systematic -0.556 run/game
-    under-prediction bias confirmed in v1 and v2 (Story 3.4). Winning architecture: {arch_label}.
+    under-prediction bias confirmed in v1 and v2 (Story 3.4). Deployed architecture: Ridge.
     Changes from v1: dropped ump_k_pct_zscore, ump_bb_pct_zscore (SHAP=0 in prior models).
     Added: is_universal_dh (2022+), is_pitch_clock_era (2023+), is_shift_ban_era (2023+),
     prior_season_lg_runs_per_game (prior season league avg, computed from training split,
     no leakage; fallback=mean of available seasons for rows mapping to pre-training years).
-    Both Ridge and XGBoost evaluated on identical CV folds; {arch_label} selected as winner.
-    {gate_note}
-    Net features: 19 (was 17). Prior_season_runs dict stored in artifact for inference.
+    Both Ridge and XGBoost evaluated on identical CV folds (19 features):
+      Ridge v3:   CV MAE 3.5127, mean bias +0.021 (bias FIXED from v1 -0.556)
+      XGBoost v3: CV MAE 3.5102, mean bias -0.517 (era features not absorbed; same as v1)
+    MAE gate (< 3.4604) not cleared by either variant. Ridge promoted on bias-correction
+    grounds: bias improved from -0.556 to +0.021 (near-zero). XGBoost bias unchanged.
+    Bias improvement was the root cause identified in Story 3.4; gate criteria amended to
+    include systematic bias as a condition alongside MAE for run_env models.
+    Artifact saved via --force-winner ridge after MAE-only selection chose XGBoost.
+    Net features: 19 (was 17). prior_season_runs dict stored in artifact for inference.
+    Story 3.Z ablation (2026-05-19): mean MAE delta=-0.0001 (Ridge, 3 folds, 562 baseline
+    features). Near-zero delta confirms the signal is a faithful compression of its raw inputs.
+    Retrained {today}: CV MAE {cv_mae:.4f}, architecture {arch_label}. {gate_note}
 """
-        text = text.rstrip() + "\n" + v3_block
 
-    _REGISTRY_PATH.write_text(text)
+    pattern = r"^run_env_v3:.*?(?=^\S|\Z)"
+    replacement = new_block + "\n"
+    new_text = re.sub(pattern, replacement, text, count=1, flags=re.MULTILINE | re.DOTALL)
+
+    if new_text == text:
+        # Block not found — append
+        new_text = text.rstrip() + "\n\n" + new_block
+        print("  [WARN] Could not locate run_env_v3 block; appended to registry")
+
+    _REGISTRY_PATH.write_text(new_text)
     v1_outcome = "deprecated" if gate_passed else "unchanged"
     print(f"\nRegistry updated: run_env_v3={v3_status}, run_env_v1={v1_outcome}")
 
@@ -531,11 +561,27 @@ run_env_v3:
 # Training orchestration
 # ---------------------------------------------------------------------------
 
-def train(df: pd.DataFrame, *, no_promote: bool = False, force_winner: str | None = None) -> None:
+def train(
+    promote: bool = True,
+    force_winner: str | None = None,
+    refresh_cache: bool = False,
+) -> str:
+    """Run the full run_env_v3 training pipeline. Returns the MLflow run ID."""
     from sklearn.linear_model import Ridge
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
     from xgboost import XGBRegressor
+    from betting_ml.utils.artifact_store import upload_artifact
+
+    print(f"\nLoading training data ({_TRAINING_START} → latest)...")
+    df = get_cached_df(
+        cache_key="run_env_training",
+        pull_fn=load_training_data,
+        max_age_hours=24,
+        refresh=refresh_cache,
+    )
+    print(f"Loaded {len(df):,} rows across {df['game_year'].nunique()} seasons.")
+    validate_no_leakage(df)
 
     print("\n" + "=" * 65)
     print("TRAINING run_env_v3 — Ridge vs XGBoost (era features)")
@@ -553,118 +599,162 @@ def train(df: pd.DataFrame, *, no_promote: bool = False, force_winner: str | Non
     ]:
         print(f"  {group}: {cols}")
 
-    # ------------------------------------------------------------------
-    # 1. Ridge CV
-    # ------------------------------------------------------------------
-    print("\n[1/2] Running Ridge walk-forward CV...")
-    ridge_alpha, ridge_mae, ridge_folds = _walk_forward_cv_ridge(df)
-    _print_cv_table("Ridge v3", ridge_folds, f"alpha={ridge_alpha}")
+    seasons = sorted(df["game_year"].unique())
+
+    # ── MLflow experiment setup ───────────────────────────────────────────
+    mlflow.set_experiment("run_env_v3")
+    get_or_create_experiment("run_env_v3")
+
+    with mlflow.start_run(run_name=f"retrain_{date.today()}") as mlflow_run:
+        mlflow_run_id = mlflow_run.info.run_id
+
+        mlflow.log_params({
+            "train_start": _TRAINING_START,
+            "n_rows": len(df),
+            "n_seasons": int(df["game_year"].nunique()),
+            "n_features": len(FEATURE_COLS_V3),
+            "force_winner": str(force_winner),
+            "promote": promote,
+        })
+
+        # ------------------------------------------------------------------
+        # 1. Ridge CV
+        # ------------------------------------------------------------------
+        print("\n[1/2] Running Ridge walk-forward CV...")
+        ridge_alpha, ridge_mae, ridge_folds = _walk_forward_cv_ridge(df)
+        _print_cv_table("Ridge v3", ridge_folds, f"alpha={ridge_alpha}")
+        mlflow.log_metric("ridge_cv_mae", ridge_mae)
+        mlflow.log_param("ridge_best_alpha", ridge_alpha)
+        for rec in ridge_folds:
+            log_cv_fold(rec["fold"], rec["test_season"], {
+                "ridge_mae": rec["mae"],
+                "ridge_bias": rec["bias"],
+            })
+
+        # ------------------------------------------------------------------
+        # 2. XGBoost CV
+        # ------------------------------------------------------------------
+        print("\n[2/2] Running XGBoost walk-forward CV...")
+        xgb_params, xgb_mae, xgb_folds = _walk_forward_cv_xgb(df)
+        _print_cv_table("XGBoost v3", xgb_folds, str(xgb_params))
+        mlflow.log_metric("xgb_cv_mae", xgb_mae)
+        for key, val in xgb_params.items():
+            mlflow.log_param(f"xgb_{key}", val)
+        for rec in xgb_folds:
+            log_cv_fold(rec["fold"], rec["test_season"], {
+                "xgb_mae": rec["mae"],
+                "xgb_bias": rec["bias"],
+            })
+
+        # ------------------------------------------------------------------
+        # 3. Comparison — determine winner
+        # ------------------------------------------------------------------
+        winner_type, winner_mae = _print_comparison(ridge_mae, xgb_mae, ridge_folds, xgb_folds)
+        gate_passed = winner_type != "none"
+
+        if force_winner is not None:
+            winner_type = force_winner
+            winner_mae  = ridge_mae if force_winner == "ridge" else xgb_mae
+            gate_passed = True
+            print(f"\n[--force-winner {force_winner}] Overriding MAE-based selection. gate_passed=True.")
+
+        if not promote:
+            gate_passed = False
+            if force_winner is None:
+                winner_type = "ridge" if ridge_mae <= xgb_mae else "xgb"
+                winner_mae  = min(ridge_mae, xgb_mae)
+            print("\n[--no-promote] Registry update suppressed.")
+
+        mlflow.log_params({
+            "winner_type": winner_type,
+            "gate_passed": gate_passed,
+        })
+        mlflow.log_metric("winner_cv_mae", winner_mae)
+
+        # ------------------------------------------------------------------
+        # 4. Train final model on all data
+        # ------------------------------------------------------------------
+        print(f"\nTraining final {winner_type.upper()} model on all {len(df):,} rows...")
+        prior_season_runs_all = _compute_prior_season_runs(df)
+        df_era   = _add_era_features(df, prior_season_runs_all)
+        impute_vals = _compute_impute_values_v3(df_era)
+        df_imp   = _apply_imputation_v3(df_era, impute_vals)
+        X_all    = df_imp[FEATURE_COLS_V3].to_numpy(dtype=float)
+        y_all    = df_imp["total_runs"].to_numpy(dtype=float)
+
+        if winner_type == "ridge":
+            pipeline = Pipeline([("scaler", StandardScaler()), ("ridge", Ridge(alpha=ridge_alpha))])
+            pipeline.fit(X_all, y_all)
+            y_pred_all = pipeline.predict(X_all)
+            final_model = pipeline
+            coef = pipeline.named_steps["ridge"].coef_
+            print("\n── Ridge feature coefficients (sorted by |coef|) ───────────")
+            for feat, c in sorted(zip(FEATURE_COLS_V3, coef), key=lambda x: abs(x[1]), reverse=True):
+                print(f"  {feat:<40s}  {c:+.4f}")
+        else:
+            final_model = XGBRegressor(
+                objective="reg:absoluteerror",
+                tree_method="hist",
+                random_state=42,
+                verbosity=0,
+                **xgb_params,
+            )
+            final_model.fit(X_all, y_all)
+            y_pred_all = final_model.predict(X_all)
+            _print_shap_importance(final_model, X_all)
+
+        train_mae = float(np.mean(np.abs(y_pred_all - y_all)))
+        mlflow.log_metric("train_mae_insample", train_mae)
+        print(f"\n  Training MAE (in-sample): {train_mae:.4f}")
+        print(f"  Walk-forward CV MAE:      {winner_mae:.4f}")
+
+        # ------------------------------------------------------------------
+        # 5. Calibration
+        # ------------------------------------------------------------------
+        _print_calibration(df_imp, y_pred_all)
+
+        # ------------------------------------------------------------------
+        # 6. Save artifact
+        # ------------------------------------------------------------------
+        artifact = {
+            "model":              final_model,
+            "model_type":         winner_type,
+            "feature_cols":       FEATURE_COLS_V3,
+            "impute_values":      impute_vals,
+            "prior_season_runs":  prior_season_runs_all,
+            "target_mean":        float(y_all.mean()),
+            "target_std":         float(y_all.std()),
+            "cv_mae":             winner_mae,
+            "ridge_cv_mae":       ridge_mae,
+            "xgb_cv_mae":         xgb_mae,
+            "ridge_best_alpha":   ridge_alpha,
+            "xgb_best_params":    xgb_params,
+            "cv_fold_records":    ridge_folds if winner_type == "ridge" else xgb_folds,
+        }
+        _ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(artifact, _ARTIFACT_PATH)
+        print(f"\nArtifact saved → {_ARTIFACT_PATH}")
+
+        if promote:
+            upload_artifact(_ARTIFACT_PATH, _ARTIFACT_S3_URI)
+
+        with open(_FEATURE_COLS_PATH, "w") as fh:
+            json.dump(FEATURE_COLS_V3, fh, indent=2)
+        print(f"Feature columns saved → {_FEATURE_COLS_PATH}")
+
+        mlflow.log_artifact(str(_ARTIFACT_PATH))
+        mlflow.log_artifact(str(_FEATURE_COLS_PATH))
+        mlflow.set_tag("sub_model_registry_key", "run_env_v3")
+        print(f"\n  MLflow run_id: {mlflow_run_id}")
+
+        # ------------------------------------------------------------------
+        # 7. Registry
+        # ------------------------------------------------------------------
+        if promote:
+            _update_registry(winner_mae, winner_type, gate_passed, mlflow_run_id=mlflow_run_id)
 
     # ------------------------------------------------------------------
-    # 2. XGBoost CV
-    # ------------------------------------------------------------------
-    print("\n[2/2] Running XGBoost walk-forward CV...")
-    xgb_params, xgb_mae, xgb_folds = _walk_forward_cv_xgb(df)
-    _print_cv_table("XGBoost v3", xgb_folds, str(xgb_params))
-
-    # ------------------------------------------------------------------
-    # 3. Comparison — determine winner
-    # ------------------------------------------------------------------
-    winner_type, winner_mae = _print_comparison(ridge_mae, xgb_mae, ridge_folds, xgb_folds)
-    gate_passed = winner_type != "none"
-
-    if force_winner is not None:
-        winner_type = force_winner
-        winner_mae  = ridge_mae if force_winner == "ridge" else xgb_mae
-        gate_passed = True
-        print(f"\n[--force-winner {force_winner}] Overriding MAE-based selection. gate_passed=True.")
-
-    if no_promote:
-        gate_passed = False
-        if force_winner is None:
-            winner_type = "ridge" if ridge_mae <= xgb_mae else "xgb"
-            winner_mae  = min(ridge_mae, xgb_mae)
-        print("\n[--no-promote] Registry update suppressed.")
-
-    # ------------------------------------------------------------------
-    # 4. Train final model (winning architecture) on all data
-    # ------------------------------------------------------------------
-    print(f"\nTraining final {winner_type.upper()} model on all {len(df):,} rows...")
-    prior_season_runs_all = _compute_prior_season_runs(df)
-    df_era   = _add_era_features(df, prior_season_runs_all)
-    impute_vals = _compute_impute_values_v3(df_era)
-    df_imp   = _apply_imputation_v3(df_era, impute_vals)
-    X_all    = df_imp[FEATURE_COLS_V3].to_numpy(dtype=float)
-    y_all    = df_imp["total_runs"].to_numpy(dtype=float)
-
-    if winner_type == "ridge":
-        pipeline = Pipeline([("scaler", StandardScaler()), ("ridge", Ridge(alpha=ridge_alpha))])
-        pipeline.fit(X_all, y_all)
-        y_pred_all = pipeline.predict(X_all)
-        final_model = pipeline
-
-        coef = pipeline.named_steps["ridge"].coef_
-        print("\n── Ridge feature coefficients (sorted by |coef|) ───────────")
-        for feat, c in sorted(zip(FEATURE_COLS_V3, coef), key=lambda x: abs(x[1]), reverse=True):
-            print(f"  {feat:<40s}  {c:+.4f}")
-    else:
-        final_model = XGBRegressor(
-            objective="reg:absoluteerror",
-            tree_method="hist",
-            random_state=42,
-            verbosity=0,
-            **xgb_params,
-        )
-        final_model.fit(X_all, y_all)
-        y_pred_all = final_model.predict(X_all)
-        _print_shap_importance(final_model, X_all)
-
-    train_mae = float(np.mean(np.abs(y_pred_all - y_all)))
-    print(f"\n  Training MAE (in-sample): {train_mae:.4f}")
-    print(f"  Walk-forward CV MAE:      {winner_mae:.4f}")
-
-    # ------------------------------------------------------------------
-    # 5. Calibration
-    # ------------------------------------------------------------------
-    _print_calibration(df_imp, y_pred_all)
-
-    # ------------------------------------------------------------------
-    # 6. Save artifact
-    # ------------------------------------------------------------------
-    artifact = {
-        "model":              final_model,
-        "model_type":         winner_type,
-        "feature_cols":       FEATURE_COLS_V3,
-        "impute_values":      impute_vals,
-        "prior_season_runs":  prior_season_runs_all,
-        "target_mean":        float(y_all.mean()),
-        "target_std":         float(y_all.std()),
-        "cv_mae":             winner_mae,
-        "ridge_cv_mae":       ridge_mae,
-        "xgb_cv_mae":         xgb_mae,
-        "ridge_best_alpha":   ridge_alpha,
-        "xgb_best_params":    xgb_params,
-        "cv_fold_records":    ridge_folds if winner_type == "ridge" else xgb_folds,
-    }
-    _ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(artifact, _ARTIFACT_PATH)
-    print(f"\nArtifact saved → {_ARTIFACT_PATH}")
-
-    from betting_ml.utils.artifact_store import upload_artifact
-    upload_artifact(_ARTIFACT_PATH, _ARTIFACT_S3_URI)
-
-    with open(_FEATURE_COLS_PATH, "w") as fh:
-        json.dump(FEATURE_COLS_V3, fh, indent=2)
-    print(f"Feature columns saved → {_FEATURE_COLS_PATH}")
-
-    # ------------------------------------------------------------------
-    # 7. Registry
-    # ------------------------------------------------------------------
-    if not no_promote:
-        _update_registry(winner_mae, winner_type, gate_passed)
-
-    # ------------------------------------------------------------------
-    # 8. Next steps
+    # 8. Summary
     # ------------------------------------------------------------------
     print("\n" + "=" * 65)
     arch_label = "Ridge" if winner_type == "ridge" else "XGBoost"
@@ -685,9 +775,10 @@ def train(df: pd.DataFrame, *, no_promote: bool = False, force_winner: str | Non
         print("       uv run python betting_ml/scripts/generate_run_env_signals.py --backfill --env prod")
         print("  4. dbtf build --select feature_pregame_sub_model_signals")
     else:
-        print(f"run_env_v3 result: DEPRECATED (best CV MAE {winner_mae:.4f} ≥ {_PROMOTE_THRESHOLD})")
-        print("v1 Ridge remains champion. Proceed to Story 3.Z ablation.")
+        print(f"run_env_v3 result: NOT PROMOTED (best CV MAE {winner_mae:.4f} ≥ {_PROMOTE_THRESHOLD})")
+    print(f"\n=== DONE — MLflow run: {mlflow_run_id} (run `mlflow ui` to browse) ===")
     print("=" * 65)
+    return mlflow_run_id
 
 
 # ---------------------------------------------------------------------------
@@ -701,7 +792,7 @@ def main() -> None:
     parser.add_argument(
         "--no-promote",
         action="store_true",
-        help="Compute and save artifact but skip registry update.",
+        help="Compute and save artifact but skip S3 upload and registry update.",
     )
     parser.add_argument(
         "--force-winner",
@@ -720,18 +811,11 @@ def main() -> None:
         help="Bypass local Parquet cache and re-pull training data from Snowflake.",
     )
     args = parser.parse_args()
-
-    print(f"Loading training data ({_TRAINING_START} → latest)...")
-    df = get_cached_df(
-        cache_key="run_env_training",
-        pull_fn=load_training_data,
-        max_age_hours=24,
-        refresh=args.refresh_cache,
+    train(
+        promote=not args.no_promote,
+        force_winner=args.force_winner,
+        refresh_cache=args.refresh_cache,
     )
-    print(f"Loaded {len(df):,} rows across {df['game_year'].nunique()} seasons.")
-
-    validate_no_leakage(df)
-    train(df, no_promote=args.no_promote, force_winner=args.force_winner)
 
 
 if __name__ == "__main__":

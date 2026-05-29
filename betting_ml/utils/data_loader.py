@@ -171,7 +171,7 @@ _VENUE_COLUMNS = [
 ]
 
 
-def _connect() -> snowflake.connector.SnowflakeConnection:
+def _connect(schema: str | None = None) -> snowflake.connector.SnowflakeConnection:
     with open(_KEY_PATH, "rb") as fh:
         p_key = serialization.load_pem_private_key(
             fh.read(), password=None, backend=default_backend()
@@ -181,7 +181,7 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    return snowflake.connector.connect(
+    kwargs: dict = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
         user=os.environ.get("SNOWFLAKE_USER", "dbt_rw"),
         private_key=pkb,
@@ -189,14 +189,18 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
         warehouse=os.environ.get("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
         database="baseball_data",
     )
+    if schema:
+        kwargs["schema"] = schema
+    return snowflake.connector.connect(**kwargs)
 
 
-def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
+def get_snowflake_connection(schema: str | None = None) -> snowflake.connector.SnowflakeConnection:
     """Return an open Snowflake connection using the project RSA key.
 
     Caller is responsible for closing the connection.
+    Pass schema to set a default schema for unqualified references (e.g. temp tables).
     """
-    return _connect()
+    return _connect(schema=schema)
 
 
 def _numeric_convert(df: pd.DataFrame) -> pd.DataFrame:

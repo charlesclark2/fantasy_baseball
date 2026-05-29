@@ -1,4 +1,5 @@
 from pipeline.assets.dbt_assets import baseball_dbt_assets
 from pipeline.assets.historical_matches_asset import parlay_historical_matches_catchup
+from pipeline.assets.training_assets import offense_v1_model, run_env_v3_model
 
-all_assets = [baseball_dbt_assets, parlay_historical_matches_catchup]
+all_assets = [baseball_dbt_assets, parlay_historical_matches_catchup, offense_v1_model, run_env_v3_model]

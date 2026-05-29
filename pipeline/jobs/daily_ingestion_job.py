@@ -8,6 +8,7 @@ from pipeline.ops.daily_ingestion_ops import (
     compute_model_health,
     dbt_daily_build,
     dbt_mart_prediction_clv,
+    dbt_pregame_odds_rebuild,
     dbt_umpire_feature_rebuild,
     ingest_action_network,
     ingest_fangraphs_catcher_framing,
@@ -25,6 +26,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_umpires_late,
     ingest_weather,
     predict_today_morning,
+    update_market_features_scd2,
 )
 
 
@@ -47,7 +49,11 @@ def daily_ingestion_job():
     s14 = compute_elo(start=s13)
     s15 = check_data_freshness(start=s14)
     s16 = dbt_daily_build(start=s15)
-    s17 = ingest_umpires_late(start=s16)
+    # SCD-2 update: mart_odds_outcomes is now fresh; update market features and
+    # rebuild feature_pregame_odds_features before the prediction step.
+    s16b = update_market_features_scd2(start=s16)
+    s16c = dbt_pregame_odds_rebuild(start=s16b)
+    s17 = ingest_umpires_late(start=s16c)
     s18 = dbt_umpire_feature_rebuild(start=s17)
     s19 = predict_today_morning(start=s18)
     s20 = check_prediction_coverage(start=s19)

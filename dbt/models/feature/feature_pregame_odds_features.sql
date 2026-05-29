@@ -13,22 +13,21 @@
 --   All other major bookmakers (draftkings, fanduel, bovada, etc.) are ≥4.0% h2h vig.
 --   lowvig is the clear winner on both vig metrics.
 --
--- Leakage guard: only odds snapshots where bookmaker_last_update < commence_time are used.
--- bookmaker_last_update is the API-returned timestamp of when the bookmaker last changed
--- their line — used instead of ingestion_ts so that historical backfill rows (where
--- ingestion_ts is the backfill run date, not the pre-game snapshot time) are not
--- incorrectly excluded. The most recent pre-game snapshot per
--- (event_id, market_key, outcome_name) is selected via ROW_NUMBER() ordered by
--- ingestion_ts desc. No same-game-day prices inferred after first pitch are ever included.
+-- Source (Story 15.1): feature_pregame_market_features (SCD-2 mart).
+--   Replaces direct mart_odds_outcomes query. Reads is_current = TRUE rows,
+--   which are equivalent to the prior most-recent-pre-game-snapshot logic.
+--   For point-in-time replay use:
+--     WHERE valid_from <= :prediction_ts
+--       AND (valid_to IS NULL OR valid_to > :prediction_ts)
 --
 -- has_odds: inherited from mart_game_odds_bridge — true when an event_id was matched
 -- for the game. Does NOT guarantee odds price columns are populated. Card 3 (historical
 -- odds backfill) is partial: 2023 (226 events) + live 2026 only. All price columns are
 -- null when no pre-game lowvig snapshot exists for an event.
 --
--- Vig-adjusted implied probabilities:
---   raw_i = 1.0 / decimal_price_i
---   implied_prob_i = raw_i / sum(raw) → home + away = 1.0, over + under = 1.0
+-- Historical coverage cutoff:
+--   Odds API (source_system = 'odds_api'):   2021-01-01 onward
+--   Parlay API (source_system = 'parlay_api'): 2026-05-26 onward
 -- =============================================================================
 
 {{ config(materialized='table') }}
@@ -54,69 +53,45 @@ bridge as (
     from {{ ref('mart_game_odds_bridge') }}
 ),
 
--- Pre-game lowvig snapshots only (ingestion_ts < commence_time).
--- Dedup to most recent snapshot per outcome so line movement doesn't
--- produce multiple rows. Filtering happens before ROW_NUMBER so the
--- window only ranks pre-game rows.
-odds_pre_game as (
-    select
-        event_id,
-        market_key,
-        outcome_name,
-        ingestion_ts,
-        commence_time,
-        outcome_price_american,
-        outcome_price_decimal,
-        outcome_point,
-        is_home_outcome,
-        is_away_outcome,
-        row_number() over (
-            partition by event_id, market_key, outcome_name
-            order by ingestion_ts desc
-        ) as _rn
-    from {{ ref('mart_odds_outcomes') }}
-    where bookmaker_key = 'lowvig'
-      and bookmaker_last_update < commence_time
-),
-
--- Pivot home and away moneylines into one row per event.
--- SUM(1/decimal) - 1 gives the total overround (vig) on the h2h market.
+-- Current lowvig h2h snapshot from the SCD-2 market features table.
+-- is_current = TRUE is equivalent to the prior "most recent pre-game snapshot"
+-- logic. For point-in-time replay, replace with valid_from/valid_to filter.
 h2h as (
     select
-        event_id,
-        max(ingestion_ts)                                               as odds_ingestion_ts,
-        max(commence_time)                                              as commence_time,
-        max(case when is_home_outcome then outcome_price_american end)  as home_moneyline_american,
-        max(case when is_away_outcome then outcome_price_american end)  as away_moneyline_american,
-        max(case when is_home_outcome then outcome_price_decimal  end)  as home_moneyline_decimal,
-        max(case when is_away_outcome then outcome_price_decimal  end)  as away_moneyline_decimal,
-        sum(1.0 / outcome_price_decimal) - 1.0                         as total_market_vig
-    from odds_pre_game
-    where market_key = 'h2h'
-      and _rn = 1
-    group by event_id
+        game_pk,
+        valid_from                          as odds_ingestion_ts,
+        commence_time,
+        home_moneyline_american,
+        away_moneyline_american,
+        home_moneyline_decimal,
+        away_moneyline_decimal,
+        home_implied_prob,
+        away_implied_prob,
+        total_market_vig
+    from {{ source('betting_features', 'feature_pregame_market_features') }}
+    where bookmaker_key = 'lowvig'
+      and market_type   = 'h2h'
+      and is_current    = true
 ),
 
 consensus_odds as (
     select * from {{ ref('mart_odds_consensus') }}
 ),
 
--- Pivot Over and Under into one row per event.
--- outcome_point carries the line (e.g. 8.5); most recent snapshot wins
--- when the line moves during the day.
+-- Current lowvig totals snapshot.
 totals as (
     select
-        event_id,
-        max(case when outcome_name = 'Over'  then outcome_point          end) as total_line,
-        max(case when outcome_name = 'Over'  then outcome_price_american end) as over_american,
-        max(case when outcome_name = 'Under' then outcome_price_american end) as under_american,
-        max(case when outcome_name = 'Over'  then outcome_price_decimal  end) as over_decimal,
-        max(case when outcome_name = 'Under' then outcome_price_decimal  end) as under_decimal,
-        sum(1.0 / outcome_price_decimal) - 1.0                               as totals_market_vig
-    from odds_pre_game
-    where market_key = 'totals'
-      and _rn = 1
-    group by event_id
+        game_pk,
+        total_line,
+        over_american,
+        under_american,
+        over_implied_prob,
+        under_implied_prob,
+        totals_market_vig
+    from {{ source('betting_features', 'feature_pregame_market_features') }}
+    where bookmaker_key = 'lowvig'
+      and market_type   = 'totals'
+      and is_current    = true
 )
 
 select
@@ -146,44 +121,17 @@ select
     h2h.home_moneyline_decimal,
     h2h.away_moneyline_decimal,
 
-    -- ── Vig-adjusted win probabilities ────────────────────────────────────────
-    -- home_implied_prob + away_implied_prob = 1.0 by construction
-    case
-        when h2h.home_moneyline_decimal is not null
-         and h2h.away_moneyline_decimal is not null
-        then (1.0 / h2h.home_moneyline_decimal)
-             / ((1.0 / h2h.home_moneyline_decimal) + (1.0 / h2h.away_moneyline_decimal))
-    end::float                                                          as home_implied_prob,
-
-    case
-        when h2h.home_moneyline_decimal is not null
-         and h2h.away_moneyline_decimal is not null
-        then (1.0 / h2h.away_moneyline_decimal)
-             / ((1.0 / h2h.home_moneyline_decimal) + (1.0 / h2h.away_moneyline_decimal))
-    end::float                                                          as away_implied_prob,
-
+    -- ── Vig-adjusted win probabilities (pre-computed in feature_pregame_market_features)
+    h2h.home_implied_prob,
+    h2h.away_implied_prob,
     h2h.total_market_vig,
 
     -- ── Totals (over/under market) ────────────────────────────────────────────
     totals.total_line,
     totals.over_american,
     totals.under_american,
-
-    -- over_implied_prob + under_implied_prob = 1.0 by construction
-    case
-        when totals.over_decimal  is not null
-         and totals.under_decimal is not null
-        then (1.0 / totals.over_decimal)
-             / ((1.0 / totals.over_decimal) + (1.0 / totals.under_decimal))
-    end::float                                                          as over_implied_prob,
-
-    case
-        when totals.over_decimal  is not null
-         and totals.under_decimal is not null
-        then (1.0 / totals.under_decimal)
-             / ((1.0 / totals.over_decimal) + (1.0 / totals.under_decimal))
-    end::float                                                          as under_implied_prob,
-
+    totals.over_implied_prob,
+    totals.under_implied_prob,
     totals.totals_market_vig,
 
     -- ── Consensus market features (mart_odds_consensus, Card 3.11) ────────────
@@ -203,7 +151,7 @@ select
     con.over_prob_consensus
 
 from games g
-left join bridge b       on b.game_pk    = g.game_pk
-left join h2h            on h2h.event_id  = b.event_id
-left join totals         on totals.event_id = b.event_id
+left join bridge b       on b.game_pk  = g.game_pk
+left join h2h            on h2h.game_pk = g.game_pk
+left join totals         on totals.game_pk = g.game_pk
 left join consensus_odds con on con.event_id = b.event_id
