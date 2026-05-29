@@ -407,7 +407,7 @@ The work ahead splits into three execution tracks that run in parallel after Epi
 | C.1 | **13.1** — Temporal audit across all three schemas ✅ | Complete | — |
 | C.2 | **13.2** — `computed_at` convention for all new Phase 9 models ✅ | Complete (end-of-phase audit pending) | — |
 | C.3 | **13.4 partial** — `prediction_snapshots` DDL + wire `predict_today.py` + best-effort backfill ✅ | Complete 2026-05-28 | 13.1 complete |
-| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28** (Dagster wired; AS-OF validated; valid_from=bookmaker_last_update); 15.2 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
+| C.4 | **Epic 15** — SCD-2 migration of existing marts — **15.1 complete ✅ 2026-05-28** (Dagster wired; AS-OF validated; valid_from=bookmaker_last_update); **15.2 complete ✅ 2026-05-28** (DDL, backfill, dbt model, Dagster wired, AS-OF validated, dbtf build green; 1,544 rows, 10 scratches detected); 15.3 next | Phase 9, immediately after C.1 | 13.1 complete (drives priority order) |
 | C.5 | **13.3** — SCD-2 for projected starters, lineup, bullpen (+ any additions from audit) | Phase 10 | Epic 15 establishes the pattern; entity list finalized by 13.1 |
 | C.6 | **13.4 remainder** — `odds_snapshots`, replay script, CLV update | Phase 10 | 13.3 + ≥6 months Parlay API ingest |
 
@@ -4357,25 +4357,35 @@ Acceptance Criteria:
 
 ### 15.2 — Lineup state SCD-2
 
-**Mart:** `baseball_data.betting_features.feature_pregame_lineup_features`
-**Raw source:** `baseball_data.baseball_data.monthly_schedule` (post-Epic-T conversion date)
-**Backfill:** Forward-only from Epic T conversion date. Pre-T history permanently lost (MERGE-pattern).
-**Coverage:** Epic T conversion date onward (~2026-05-12).
+**SCD-2 table:** `baseball_data.betting_features.feature_pregame_lineup_state` (Python-managed)
+**dbt feature model:** `feature_pregame_lineup_features` (reads from SCD-2 table; still dbt-managed)
+**Raw source:** `baseball_data.statsapi.monthly_schedule` (append-only, post-Epic-T)
+**Backfill:** Forward-only from Epic T conversion date. Pre-T history permanently unrecoverable.
+**Coverage:** Epic T conversion date onward (2026-05-12).
+
+> **Design note:** Natural key is `(game_pk, home_away)` at wide/game-side grain (not slot-level),
+> matching `feature_pregame_lineup_features` consumption pattern. A scratch triggers a new
+> wide SCD-2 row for the entire lineup state. Change-detection hash covers slot_1..9 player_ids only;
+> position changes for the same player do not trigger a new row.
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
 Tasks:
-- [ ] Define natural key: `(game_pk, side, player_id, batting_order)` — each lineup slot is a separate row
-- [ ] Add `valid_from`, `valid_to`, `is_current`; change-detection hash on: full lineup composition, batting order, `is_dh_active`
-- [ ] Backfill: replay `monthly_schedule` rows from Epic T conversion date forward, ordered by `loaded_at`, to reconstruct lineup state at each ingest snapshot
-- [ ] Handle scratched player events: a scratch creates a new SCD-2 row closing the scratched player's slot and opening the replacement's slot at the same `valid_from` timestamp
-- [ ] Update downstream `feature_pregame_lineup_features` joins in prediction pipeline to use point-in-time filter
-- [ ] Document coverage cutoff (Epic T date) in model comments; log count of pre-T games with no lineup history
+- [x] Define natural key: `(game_pk, home_away, valid_from)` — wide format, one row per distinct lineup composition per game × side — DONE 2026-05-28
+- [x] DDL: `scripts/ddl/feature_pregame_lineup_state.sql` — SCD-2 columns plus slot_1..9 player_id and position; PK on `(game_pk, home_away, valid_from)` — DONE 2026-05-28
+- [x] Backfill script: `scripts/backfill_lineup_state_scd2.py` — flattens `monthly_schedule` JSON, pivots wide, detects changes via LAG on MD5(slot player_ids), MERGE via `valid_from = ingestion_ts`; supports `--since`, `--dry-run`, `--target dev` — DONE 2026-05-28
+- [x] `feature_pregame_lineup_features.sql` updated: `lineups` CTE now reads from `{{ source('betting_features', 'feature_pregame_lineup_state') }} WHERE is_current = true` instead of `stg_statsapi_lineups_wide`; point-in-time AS-OF pattern documented in comment — DONE 2026-05-28
+- [x] `feature_pregame_lineup_state` registered in `dbt/models/sources.yml` under `betting_features` source block — DONE 2026-05-28
+- [x] Coverage cutoff documented in DDL, backfill script docstring, and dbt model comment (Epic T date 2026-05-12) — DONE 2026-05-28
+- [x] **[DONE 2026-05-28]** Live-path Dagster wiring: `update_lineup_state_scd2` op (runs `backfill_lineup_state_scd2.py --since 2-days-ago`) + `dbt_lineup_feature_rebuild` op (runs `dbtf build --select feature_pregame_lineup_features+`) inserted into `daily_ingestion_job.py` as s16d/s16e, after `dbt_pregame_odds_rebuild` (s16c) and before `ingest_umpires_late` (s17)
+- [x] Run DDL against prod to create the table; run backfill script for full history; verify row counts and SCD-2 invariant (`current_rows == open_rows`) — DONE 2026-05-28 (1,544 rows; 767 games × 2 sides = 1,534 current; 10 scratch rows detected)
+- [x] AS-OF validation: find a game with a confirmed pre-game scratch; verify two SCD-2 rows with non-overlapping valid_from/valid_to — DONE 2026-05-28 (game_pk 824595 home: row 1 valid_from=08:30/valid_to=10:30/is_current=false; row 2 valid_from=10:30/valid_to=NULL/is_current=true; 5 slot changes confirmed)
+- [x] Run `dbtf build --select feature_pregame_lineup_features+` and confirm it succeeds — DONE 2026-05-28
 
 Acceptance Criteria:
-- [ ] A game with a confirmed pre-game scratch has two SCD-2 rows for the affected slot — the original starter and the replacement — with non-overlapping `valid_from`/`valid_to`
-- [ ] AS-OF query at T-2h returns the pre-scratch lineup; AS-OF query at T-30min returns the post-scratch lineup
-- [ ] Coverage cutoff date documented; `dbtf build` succeeds
+- [x] A game with a confirmed pre-game scratch has two SCD-2 rows with non-overlapping `valid_from`/`valid_to`; AS-OF at T-2h returns pre-scratch lineup, T-30min returns post-scratch lineup — VERIFIED 2026-05-28
+- [x] `current_rows == open_rows` SCD-2 invariant holds — VERIFIED 2026-05-28 (1,534 = 1,534)
+- [x] Coverage cutoff date documented; `dbtf build` succeeds — VERIFIED 2026-05-28
 
 ---
 

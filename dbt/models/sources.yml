@@ -966,6 +966,16 @@ sources:
           Coverage: Odds API 2021-01-01+; Parlay API 2026-05-26+.
           DDL: scripts/ddl/feature_pregame_market_features.sql.
 
+      - name: feature_pregame_lineup_state
+        description: >
+          SCD-2 store for pre-game lineup state. One row per distinct lineup composition
+          per (game_pk, home_away). Populated by scripts/backfill_lineup_state_scd2.py
+          via MERGE. Enables point-in-time lineup replay for pre-scratch vs. post-scratch
+          predictions (Story 15.2). Natural key: (game_pk, home_away, valid_from).
+          Change-detection: record_hash over slot_1..9 player_ids (position changes for
+          the same player do not trigger a new row). Coverage: Epic T date 2026-05-12+;
+          pre-T history permanently unavailable. DDL: scripts/ddl/feature_pregame_lineup_state.sql.
+
       - name: offense_v1_signals
         description: >
           Per game-side offensive quality signals from the offense_v1 LightGBM model.
