@@ -290,20 +290,18 @@ sources:
             description: Calendar date on which this venue record was last ingested.
             tests: [not_null]
 
-      - name: player_profiles
+      - name: player_profiles_raw
         description: >
-          One row per MLBAM player ID. Physical profile data fetched from the
-          StatsAPI /people endpoint via scripts/ingest_player_profiles.py.
-          SCD-1 — MERGE on player_id overwrites with the latest values.
+          Append-only raw profile rows fetched from the StatsAPI /people endpoint
+          via scripts/ingest_player_profiles.py. Multiple rows per player_id are
+          expected; stg_statsapi_player_profiles deduplicates to the latest row
+          per player_id using ROW_NUMBER() on last_fetched_at DESC.
           Height, weight, birth_date, and primary_position_code are used as
           features in Epic 7 archetype clustering (stories 7.1 and 7.2).
-          Refreshed weekly via Dagster ingest_player_profiles_op.
+          Refreshed weekly via Dagster weekly_player_profiles_job.
         columns:
           - name: player_id
-            description: MLBAM player ID. Primary key.
-            tests:
-              - not_null
-              - unique
+            description: MLBAM player ID.
           - name: full_name
             description: Player full name from StatsAPI.
           - name: birth_date
