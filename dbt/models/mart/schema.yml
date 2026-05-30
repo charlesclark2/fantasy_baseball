@@ -40,6 +40,212 @@ models:
           fly-ball contact against groundball pitchers.
 
   # ============================================================================
+  # mart_batter_profile_summary
+  # ============================================================================
+  - name: mart_batter_profile_summary
+    description: >
+      One row per batter_id × game_year (2015+, minimum 100 PA).
+      Cross-season hitting vector used for k-means batter archetype clustering
+      (Card 7.1). Statcast batted-ball metrics (gb_pct, fb_pct, ld_pct,
+      pull_pct, hard_hit_pct, barrel_pct, avg_exit_velocity) sourced from
+      stg_batter_pitches joined via pitch_sk. K%, BB%, and ISO derived from
+      plate_appearance_event terminal events in mart_pitch_play_event.
+      FanGraphs projected k_pct / bb_pct joined as supplementary signals when
+      available.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [batter_id, game_year]
+
+    columns:
+
+      - name: batter_id
+        description: MLB Stats API player identifier for the batter.
+        tests:
+          - not_null
+
+      - name: game_year
+        description: Regular season year. Second component of the composite grain key.
+        tests:
+          - not_null
+
+      - name: pa_count
+        description: Total plate appearances in the season. Always ≥ 100 (model filter).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 100"
+
+      - name: k_pct
+        description: Strikeout rate (strikeouts / PA). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (k_pct between 0 and 1)"
+
+      - name: bb_pct
+        description: Walk rate (walks / PA). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (bb_pct between 0 and 1)"
+
+      - name: iso
+        description: >
+          Isolated power (extra bases per at-bat). Typically between 0 and 0.4
+          for qualified batters; capped test excludes rare extreme seasons.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (iso between 0 and 0.6)"
+
+      - name: pull_pct
+        description: >
+          Proportion of balls in play hit to the batter's pull side.
+          Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (pull_pct between 0 and 1)"
+
+      - name: hard_hit_pct
+        description: >
+          Proportion of PA with exit velocity ≥ 95 mph. Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (hard_hit_pct between 0 and 1)"
+
+      - name: gb_pct
+        description: >
+          Ground ball rate (ground balls / balls in play). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (gb_pct between 0 and 1)"
+
+      - name: avg_exit_velocity
+        description: >
+          Mean exit velocity (mph) across all contact events in the season.
+          Typically between 70 and 115 mph for qualified batters.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (avg_exit_velocity between 60 and 125)"
+
+      - name: avg_xwoba
+        description: >
+          Mean expected weighted on-base average across all PA in the season.
+          Typically between 0.2 and 0.6 for qualified batters.
+
+      - name: fb_pct
+        description: Fly ball rate (fly balls / balls in play). Between 0 and 1.
+
+      - name: ld_pct
+        description: Line drive rate (line drives / balls in play). Between 0 and 1.
+
+      - name: barrel_pct
+        description: >
+          Barrel rate: exit velocity ≥ 98 mph and launch angle 26–30°, over all PA.
+
+      - name: proj_k_pct
+        description: >
+          FanGraphs ZiPS projected strikeout rate for the season. NULL when no
+          projection is available (e.g., pre-2015 or players without projections).
+
+      - name: proj_bb_pct
+        description: >
+          FanGraphs ZiPS projected walk rate for the season. NULL when no
+          projection is available.
+
+  # ============================================================================
+  # mart_pitcher_profile_summary
+  # ============================================================================
+  - name: mart_pitcher_profile_summary
+    description: >
+      One row per pitcher × game_year. Per-pitcher-season profile vector for
+      k-means pitcher archetype clustering (Card 7.2). Joins mart_pitcher_arsenal_summary
+      (pitch mix, velocity, movement, arm angle, Stuff+) with season-level outcome
+      metrics (K%, BB%, whiff rate, GB rate) from stg_batter_pitches. Birth date joined
+      from stg_statsapi_player_profiles for age computation in the clustering script.
+      Season coverage: 2020+ (inherits from mart_pitcher_arsenal_summary). Minimum 100 BF.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [pitcher_id, game_year]
+
+    columns:
+      - name: pitcher_id
+        description: MLBAM pitcher ID. Joins to statsapi.pitcher_clusters and stg_statsapi_player_profiles.
+        tests: [not_null]
+
+      - name: game_year
+        description: Season year. 2020+.
+        tests: [not_null]
+
+      - name: bf_count
+        description: Batters faced in the season. Minimum 100 (gate enforced in mart).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 100"
+
+      - name: k_pct
+        description: Strikeout rate (strikeouts / BF). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (k_pct between 0 and 1)"
+
+      - name: bb_pct
+        description: Walk rate (walks / BF). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (bb_pct between 0 and 1)"
+
+      - name: whiff_pct
+        description: Swing-and-miss rate (swinging strikes / total swings). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (whiff_pct between 0 and 1)"
+
+      - name: gb_pct
+        description: Groundball rate (ground balls / balls in play). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (gb_pct between 0 and 1)"
+
+      - name: fastball_pct
+        description: Fastball family usage share (FF + SI + FC). Between 0 and 1.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (fastball_pct between 0 and 1)"
+
+      - name: overall_stuff_plus
+        description: >
+          FanGraphs composite Stuff+ score. 100 = league average; higher = better raw stuff.
+          Fully populated for 2020+ in mart_pitcher_arsenal_summary (0 nulls).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (overall_stuff_plus between 0 and 250)"
+
+      - name: fb_avg_velocity
+        description: Average fastball velocity in mph.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (fb_avg_velocity between 60 and 105)"
+
+  # ============================================================================
   # mart_closing_line_value
   # ============================================================================
   - name: mart_closing_line_value
@@ -7445,3 +7651,111 @@ models:
         description: Season-to-date breaking usage through this start. NULL when career_starts_before_game < 5.
       - name: offspeed_pct_season
         description: Season-to-date offspeed usage through this start. NULL when career_starts_before_game < 5.
+
+  # mart_batter_archetype_vs_pitcher_cluster
+  # ============================================================================
+  - name: mart_batter_archetype_vs_pitcher_cluster
+    description: >
+      Population-level rolling soft-weighted wOBA for each batter-archetype × pitcher-archetype pair.
+      Grain: batter_cluster_label × pitcher_cluster_label × game_date (anchor).
+
+      Soft-assignment weighting (Epic 7A.3): each PA contributes fractionally to all 25 cells
+      with weight p_batter_b × p_pitcher_p, drawn from mart_player_archetype_posteriors using
+      the latest snapshot strictly before game_date. pa_weight replaces the old hard pa_count.
+
+      Leakage guard: posteriors joined on as_of_date < game_date (strict less-than).
+      Rolling window: 180-day preceding. Gate: pa_weight >= 50.
+      Shrinkage toward league average (wOBA=0.320, xwOBA=0.315) with prior weight 100.
+      Availability: effective from 2021 games (posteriors begin 2021).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [batter_cluster_label, pitcher_cluster_label, game_date]
+
+    columns:
+      - name: batter_cluster_label
+        description: Batter archetype name from mart_player_archetype_posteriors MAP cluster.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['groundball_speed', 'high_whiff', 'contact_spray', 'patient_obp', 'power_pull']
+
+      - name: pitcher_cluster_label
+        description: Pitcher archetype name from mart_player_archetype_posteriors MAP cluster.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['changeup_deceptive', 'multi_pitch_mix', 'power_swing_and_miss', 'contact_sinker_ball', 'soft_command']
+
+      - name: game_date
+        description: Anchor date for the rolling window.
+        tests:
+          - not_null
+
+      - name: pa_weight
+        description: >
+          Sum of soft joint weights (p_batter × p_pitcher) over the 180-day rolling window
+          ending the day before game_date. Replaces hard pa_count. Always >= 50 (model gate).
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: ">= 50"
+
+      - name: raw_woba
+        description: Soft-weighted wOBA = woba_num / woba_denom over the rolling window. Null when woba_denom = 0.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+              config:
+                where: "raw_woba is not null"
+
+      - name: raw_xwoba
+        description: Soft-weighted xwOBA average over the rolling window. Null when no xwOBA-eligible PAs exist.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+              config:
+                where: "raw_xwoba is not null"
+
+      - name: shrink_weight
+        description: >
+          Bayesian shrinkage weight: pa_weight / (pa_weight + 100). Range [0, 1).
+          At the gate minimum of 50 this equals ~0.33.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+      - name: adj_woba
+        description: >
+          Shrinkage-adjusted wOBA toward league average (0.320).
+          adj_woba = shrink_weight × raw_woba + (1 − shrink_weight) × 0.320.
+          Primary feature for downstream ML use.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2
+
+      - name: adj_xwoba
+        description: >
+          Shrinkage-adjusted xwOBA toward league average (0.315).
+          adj_xwoba = shrink_weight × raw_xwoba + (1 − shrink_weight) × 0.315.
+          Primary feature for downstream ML use.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2

@@ -5,9 +5,11 @@
 -- Combines Statcast physical pitch characteristics with FanGraphs Stuff+
 -- from fct_fangraphs_pitcher_arsenal_wide via mlbam_pitcher_id crosswalk.
 --
--- Data availability: Statcast pitch-level data with reliable movement metrics
--- is available from 2017+, but FanGraphs Stuff+ is only available from 2020+.
--- Filter: game_year >= 2020 to ensure Stuff+ coverage.
+-- Data availability: Statcast pitch-level movement data is available from 2015+.
+-- FanGraphs Stuff+ and MLB arm_angle tracking are both only available from 2020+;
+-- those columns will be NULL for 2015-2019 seasons (LEFT join produces NULL).
+-- Stratum-A features (velocity, movement, pitch mix, outcomes) are used for clustering;
+-- stratum-B features (stuff_plus, arm_angle) are recorded but excluded from k-means.
 -- Minimum threshold: 200 pitches (~5 quality starts).
 
 with pitch_chars as (
@@ -26,7 +28,7 @@ with pitch_chars as (
         avg(pitcher_arm_angle_degrees)         as avg_arm_angle
     from {{ ref('mart_pitch_characteristics') }}
     where pitch_category in ('fastball', 'breaking', 'offspeed')
-      and game_year >= 2020
+      and game_year >= 2015
     group by 1, 2, 3
 ),
 

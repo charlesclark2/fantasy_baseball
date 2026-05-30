@@ -347,6 +347,25 @@ platoon_lhb as (
         and hs.game_year    = year(pp.game_date) - 1
 ),
 
+-- Prior-season pitcher archetype label (Story 7.4).
+-- Prefers season - 1; falls back to season - 2 when season - 1 is unavailable
+-- (handles pitchers who missed a season due to injury, COVID-2020 data thinness, etc.).
+-- Both lookbacks are leakage-safe (strictly prior seasons). NULL only when the pitcher
+-- has no MLB cluster assignment in either of the prior two seasons (true rookies).
+pitcher_archetype as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        coalesce(pc1.cluster_label, pc2.cluster_label) as starter_pitcher_archetype
+    from probable_pitchers pp
+    left join {{ source('statsapi', 'pitcher_clusters') }} pc1
+        on  pc1.pitcher_id = pp.pitcher_id
+        and pc1.season     = year(pp.game_date) - 1
+    left join {{ source('statsapi', 'pitcher_clusters') }} pc2
+        on  pc2.pitcher_id = pp.pitcher_id
+        and pc2.season     = year(pp.game_date) - 2
+),
+
 -- EB posteriors: pre-game xwOBA-against, K%, BB%, and uncertainty (Story 5A.3).
 -- Leakage guard is baked into eb_starter_posteriors at write time (the script
 -- uses game_date < target_date before aggregating current-season stats).
@@ -532,7 +551,12 @@ final as (
         eb.eb_k_pct,
         eb.eb_bb_pct,
         eb.eb_xwoba_uncertainty,
-        eb.eb_data_source
+        eb.eb_data_source,
+
+        -- ── Prior-season pitcher archetype label (Story 7.4) ─────────────────
+        -- NULL for rookies or pitchers not in the prior-season cluster table.
+        -- Epic 7A falls back to the Dirichlet prior for NULL starters.
+        pa.starter_pitcher_archetype
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -571,6 +595,9 @@ final as (
     left join eb_posteriors eb
         on  eb.game_pk      = pp.game_pk
         and eb.pitcher_id   = pp.pitcher_id
+    left join pitcher_archetype pa
+        on  pa.game_pk      = pp.game_pk
+        and pa.pitcher_id   = pp.pitcher_id
 )
 
 select * from final

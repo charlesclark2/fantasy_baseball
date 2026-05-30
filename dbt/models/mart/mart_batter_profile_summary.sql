@@ -94,7 +94,7 @@ with statcast_pa as (
     join {{ ref('stg_batter_pitches') }} bp
         on  bp.pitch_sk = ppe.pitch_sk
     where ppe.plate_appearance_event is not null
-      and ppe.game_year >= 2020
+      and ppe.game_year >= 2015
     group by 1, 2
 ),
 
@@ -105,7 +105,7 @@ fg_hitting as (
         proj_k_pct,
         proj_bb_pct
     from {{ ref('fct_fangraphs_hitting_analytics') }}
-    where season >= 2020
+    where season >= 2015
       and mlbam_batter_id is not null
 )
 

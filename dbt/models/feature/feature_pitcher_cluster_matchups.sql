@@ -5,19 +5,13 @@
 -- scheduled starter's cluster for each side.
 --
 -- Leakage guard:
---   - Cluster assignments use the most recent snapshot_date strictly before
---     game_date.  This covers both in-season monthly snapshots (June–Sep)
---     and the prior-season end-of-year snapshot used in April/May.
+--   - Pitcher cluster joined on prior-season assignment (pc.season = game_year - 1).
+--     PK on pitcher_clusters is (pitcher_id, season) — one row per pair, no deduplication.
 --   - Batter wOBA stats come from mart_batter_woba_vs_cluster which itself
 --     enforces a game_date < anchor_date strict-prior window.
 --
--- Snapshot cadence: cluster_pitchers.py is run monthly during the season
--- (~June 1, July 1, August 1, September 1) and once after the World Series.
--- April/early-May games fall back to the prior-season end-of-year snapshot.
---
--- Availability: cluster data begins 2020; rows for 2020 games will have
--- null cluster coverage because no snapshot exists before the 2020 season.
--- Effective coverage begins for games in 2021+.
+-- Availability: cluster data begins 2015; effective coverage begins for games in 2016+
+-- (prior-season lag: game_year - 1 = 2015 is the minimum season in pitcher_clusters).
 
 with games as (
     select
@@ -38,30 +32,20 @@ starters as (
     where probable_pitcher_id is not null
 ),
 
--- Most recent snapshot strictly before game_date prevents leakage.
--- Covers in-season monthly snapshots (Jun–Sep) and prior-season fallback (Apr–May).
-snapshot_ranked as (
+-- Prior-season pitcher cluster (no leakage): season = game_year - 1.
+-- PK is (pitcher_id, season) — one row per pair, no deduplication needed.
+starter_cluster as (
     select
         g.game_pk,
         s.side,
         s.pitcher_id,
-        pc.cluster_id,
-        row_number() over (
-            partition by g.game_pk, s.pitcher_id, s.side
-            order by pc.snapshot_date desc
-        ) as rn
+        pc.cluster_id
     from games g
     join starters s
         on  s.game_pk = g.game_pk
     left join {{ source('statsapi', 'pitcher_clusters') }} pc
-        on  pc.pitcher_id    = s.pitcher_id
-        and pc.snapshot_date < g.game_date
-),
-
-starter_cluster as (
-    select game_pk, side, pitcher_id, cluster_id
-    from snapshot_ranked
-    where rn = 1
+        on  pc.pitcher_id = s.pitcher_id
+        and pc.season     = g.game_year - 1
 ),
 
 lineups as (

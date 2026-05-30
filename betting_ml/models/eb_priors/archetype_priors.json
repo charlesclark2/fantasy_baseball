@@ -1,0 +1,191 @@
+{
+  "fit_date": "2026-05-30",
+  "first_season": 2015,
+  "age_bands": {
+    "u24": {
+      "lo": null,
+      "hi": 23
+    },
+    "a24": {
+      "lo": 24,
+      "hi": 27
+    },
+    "a28": {
+      "lo": 28,
+      "hi": 999
+    }
+  },
+  "total_alpha_by_band": {
+    "u24": 5,
+    "a24": 15,
+    "a28": 30
+  },
+  "batter_clusters": [
+    "groundball_speed",
+    "high_whiff",
+    "contact_spray",
+    "patient_obp",
+    "power_pull"
+  ],
+  "pitcher_clusters": [
+    "changeup_deceptive",
+    "multi_pitch_mix",
+    "power_swing_and_miss",
+    "contact_sinker_ball",
+    "soft_command"
+  ],
+  "batters": {
+    "base_prior": {
+      "u24": {
+        "alpha": {
+          "groundball_speed": 1.2186,
+          "high_whiff": 1.4785,
+          "contact_spray": 1.1022,
+          "patient_obp": 0.5018,
+          "power_pull": 0.6989
+        },
+        "total_alpha": 5,
+        "n_players": 558,
+        "fallback": false
+      },
+      "a24": {
+        "alpha": {
+          "groundball_speed": 3.4199,
+          "high_whiff": 3.954,
+          "contact_spray": 3.3605,
+          "patient_obp": 1.8249,
+          "power_pull": 2.4407
+        },
+        "total_alpha": 15,
+        "n_players": 2022,
+        "fallback": false
+      },
+      "a28": {
+        "alpha": {
+          "groundball_speed": 5.2759,
+          "high_whiff": 5.2283,
+          "contact_spray": 7.372,
+          "patient_obp": 6.2287,
+          "power_pull": 5.8952
+        },
+        "total_alpha": 30,
+        "n_players": 2519,
+        "fallback": false
+      }
+    },
+    "peaked_rule": {
+      "description": "For players with a confirmed prior-season cluster label (\u2265 100 PA/starts): confirmed cluster \u03b1_k = 0.8 \u00d7 total_alpha; remaining 20% split uniformly. Apply _fit_peaked_dirichlet() at runtime in compute_archetype_posteriors.py.",
+      "peak_fraction": 0.8,
+      "uniform_fraction": 0.2,
+      "example": {
+        "u24": {
+          "confirmed_cluster": "groundball_speed",
+          "alpha": {
+            "groundball_speed": 4.0,
+            "high_whiff": 0.25,
+            "contact_spray": 0.25,
+            "patient_obp": 0.25,
+            "power_pull": 0.25
+          }
+        },
+        "a24": {
+          "confirmed_cluster": "groundball_speed",
+          "alpha": {
+            "groundball_speed": 12.0,
+            "high_whiff": 0.75,
+            "contact_spray": 0.75,
+            "patient_obp": 0.75,
+            "power_pull": 0.75
+          }
+        },
+        "a28": {
+          "confirmed_cluster": "groundball_speed",
+          "alpha": {
+            "groundball_speed": 24.0,
+            "high_whiff": 1.5,
+            "contact_spray": 1.5,
+            "patient_obp": 1.5,
+            "power_pull": 1.5
+          }
+        }
+      }
+    }
+  },
+  "pitchers": {
+    "base_prior": {
+      "u24": {
+        "alpha": {
+          "changeup_deceptive": 0.5213,
+          "multi_pitch_mix": 0.9834,
+          "power_swing_and_miss": 1.2559,
+          "contact_sinker_ball": 1.3981,
+          "soft_command": 0.8412
+        },
+        "total_alpha": 5,
+        "n_players": 422,
+        "fallback": false
+      },
+      "a24": {
+        "alpha": {
+          "changeup_deceptive": 2.0337,
+          "multi_pitch_mix": 3.0904,
+          "power_swing_and_miss": 3.5689,
+          "contact_sinker_ball": 4.0806,
+          "soft_command": 2.2264
+        },
+        "total_alpha": 15,
+        "n_players": 2257,
+        "fallback": false
+      },
+      "a28": {
+        "alpha": {
+          "changeup_deceptive": 4.6342,
+          "multi_pitch_mix": 6.5022,
+          "power_swing_and_miss": 6.8084,
+          "contact_sinker_ball": 7.0228,
+          "soft_command": 5.0323
+        },
+        "total_alpha": 30,
+        "n_players": 2939,
+        "fallback": false
+      }
+    },
+    "peaked_rule": {
+      "description": "For players with a confirmed prior-season cluster label (\u2265 100 PA/starts): confirmed cluster \u03b1_k = 0.8 \u00d7 total_alpha; remaining 20% split uniformly. Apply _fit_peaked_dirichlet() at runtime in compute_archetype_posteriors.py.",
+      "peak_fraction": 0.8,
+      "uniform_fraction": 0.2,
+      "example": {
+        "u24": {
+          "confirmed_cluster": "changeup_deceptive",
+          "alpha": {
+            "changeup_deceptive": 4.0,
+            "multi_pitch_mix": 0.25,
+            "power_swing_and_miss": 0.25,
+            "contact_sinker_ball": 0.25,
+            "soft_command": 0.25
+          }
+        },
+        "a24": {
+          "confirmed_cluster": "changeup_deceptive",
+          "alpha": {
+            "changeup_deceptive": 12.0,
+            "multi_pitch_mix": 0.75,
+            "power_swing_and_miss": 0.75,
+            "contact_sinker_ball": 0.75,
+            "soft_command": 0.75
+          }
+        },
+        "a28": {
+          "confirmed_cluster": "changeup_deceptive",
+          "alpha": {
+            "changeup_deceptive": 24.0,
+            "multi_pitch_mix": 1.5,
+            "power_swing_and_miss": 1.5,
+            "contact_sinker_ball": 1.5,
+            "soft_command": 1.5
+          }
+        }
+      }
+    }
+  }
+}
