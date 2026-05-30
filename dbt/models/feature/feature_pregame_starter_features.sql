@@ -113,11 +113,13 @@ prior_start as (
 
 -- Average innings pitched: last 3 starts and season-to-date (LEAKAGE GUARD applied)
 -- Uses outs_recorded / 3.0 for proper decimal averaging (not the traditional 7.2 format).
+-- Also computes cumulative season IP and pitch count (total through all prior starts this season).
 ip_starts as (
     select
         pp.game_pk,
         pp.pitcher_id,
         gl.outs_recorded,
+        gl.total_pitches,
         year(gl.game_date)                      as start_year,
         year(pp.game_date)                      as target_year,
         row_number() over (
@@ -139,7 +141,12 @@ ip_stats as (
         2)                                      as avg_ip_last_3,
         round(
             avg(case when start_year = target_year then outs_recorded::float / 3.0 end),
-        2)                                      as avg_ip_season
+        2)                                      as avg_ip_season,
+        round(
+            sum(case when start_year = target_year then outs_recorded::float / 3.0 end),
+        2)                                      as cumulative_season_ip,
+        sum(case when start_year = target_year then total_pitches end)
+                                                as cumulative_season_pitches
     from ip_starts
     group by game_pk, pitcher_id
 ),
@@ -340,6 +347,22 @@ platoon_lhb as (
         and hs.game_year    = year(pp.game_date) - 1
 ),
 
+-- EB posteriors: pre-game xwOBA-against, K%, BB%, and uncertainty (Story 5A.3).
+-- Leakage guard is baked into eb_starter_posteriors at write time (the script
+-- uses game_date < target_date before aggregating current-season stats).
+-- Casting VARCHAR keys to integer to match probable_pitchers grain types.
+eb_posteriors as (
+    select
+        game_pk::integer        as game_pk,
+        pitcher_id::integer     as pitcher_id,
+        eb_xwoba_against,
+        eb_k_pct,
+        eb_bb_pct,
+        eb_xwoba_uncertainty,
+        eb_data_source
+    from baseball_data.betting.eb_starter_posteriors
+),
+
 -- Prior-season platoon splits vs RHB
 platoon_rhb as (
     select
@@ -444,12 +467,16 @@ final as (
         pr.xwoba_vs_rhb,
         pr.whiff_rate_vs_rhb,
 
-        -- ── Recent IP trend and history flag ─────────────────────────────────
+        -- ── Recent IP trend, cumulative workload, and history flag ──────────
         -- avg_ip_last_3: average decimal innings over the 3 most recent starts
         -- avg_ip_season: season-to-date average decimal innings per start
+        -- cumulative_season_ip: total innings pitched this season before this start
+        -- cumulative_season_pitches: total pitches thrown this season before this start
         -- has_ip_history: false for debut starters with no prior starts in the dataset
         ips.avg_ip_last_3,
         ips.avg_ip_season,
+        coalesce(ips.cumulative_season_ip, 0.0)  as cumulative_season_ip,
+        coalesce(ips.cumulative_season_pitches, 0) as cumulative_season_pitches,
         (ips.game_pk is not null)::boolean       as has_ip_history,
 
         -- ── FanGraphs Stuff+ arsenal features (Card 7.F) ─────────────────────
@@ -496,7 +523,16 @@ final as (
         coalesce(
             round(pmpg.offspeed_pct_5start - pmpg.offspeed_pct_season, 4),
             0.0
-        )                                       as offspeed_pct_drift_5start
+        )                                       as offspeed_pct_drift_5start,
+
+        -- ── EB posteriors (Story 5A.3) ────────────────────────────────────────
+        -- Shrinkage toward experience-band prior; null when game has no entry
+        -- (pre-2016 or pitcher not listed as a probable starter at run time).
+        eb.eb_xwoba_against,
+        eb.eb_k_pct,
+        eb.eb_bb_pct,
+        eb.eb_xwoba_uncertainty,
+        eb.eb_data_source
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -532,6 +568,9 @@ final as (
     left join pitch_mix_pre_game pmpg
         on  pmpg.game_pk    = pp.game_pk
         and pmpg.pitcher_id = pp.pitcher_id
+    left join eb_posteriors eb
+        on  eb.game_pk      = pp.game_pk
+        and eb.pitcher_id   = pp.pitcher_id
 )
 
 select * from final

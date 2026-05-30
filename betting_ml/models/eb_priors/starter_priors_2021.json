@@ -1,0 +1,60 @@
+{
+  "season": 2021,
+  "fit_date": "2026-05-29",
+  "priors": {
+    "xwoba_against": {
+      "u25": {
+        "mu": 0.3367,
+        "sigma": 0.0335,
+        "n_starters": 59
+      },
+      "a25": {
+        "mu": 0.3235,
+        "sigma": 0.0343,
+        "n_starters": 78
+      },
+      "a30": {
+        "mu": 0.3142,
+        "sigma": 0.035,
+        "n_starters": 71
+      },
+      "a33": null
+    },
+    "k_pct": {
+      "u25": {
+        "mu": 0.2047,
+        "sigma": 0.0453,
+        "n_starters": 59
+      },
+      "a25": {
+        "mu": 0.2215,
+        "sigma": 0.053,
+        "n_starters": 78
+      },
+      "a30": {
+        "mu": 0.2336,
+        "sigma": 0.0584,
+        "n_starters": 71
+      },
+      "a33": null
+    },
+    "bb_pct": {
+      "u25": {
+        "mu": 0.0818,
+        "sigma": 0.0198,
+        "n_starters": 59
+      },
+      "a25": {
+        "mu": 0.0788,
+        "sigma": 0.0244,
+        "n_starters": 78
+      },
+      "a30": {
+        "mu": 0.0717,
+        "sigma": 0.0205,
+        "n_starters": 71
+      },
+      "a33": null
+    }
+  }
+}

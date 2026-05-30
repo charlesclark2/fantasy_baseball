@@ -1,0 +1,36 @@
+{
+  "season": 2016,
+  "fit_date": "2026-05-29",
+  "priors": {
+    "xwoba_against": {
+      "u25": {
+        "mu": 0.3246,
+        "sigma": 0.0316,
+        "n_starters": 209
+      },
+      "a25": null,
+      "a30": null,
+      "a33": null
+    },
+    "k_pct": {
+      "u25": {
+        "mu": 0.1966,
+        "sigma": 0.046,
+        "n_starters": 209
+      },
+      "a25": null,
+      "a30": null,
+      "a33": null
+    },
+    "bb_pct": {
+      "u25": {
+        "mu": 0.0786,
+        "sigma": 0.0222,
+        "n_starters": 209
+      },
+      "a25": null,
+      "a30": null,
+      "a33": null
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "season": 2026,
+  "fit_date": "2026-05-29",
+  "priors": {
+    "xwoba_against": {
+      "u25": {
+        "mu": 0.3295,
+        "sigma": 0.0327,
+        "n_starters": 14,
+        "fallback": true
+      },
+      "a25": {
+        "mu": 0.3189,
+        "sigma": 0.0365,
+        "n_starters": 60
+      },
+      "a30": {
+        "mu": 0.3249,
+        "sigma": 0.0368,
+        "n_starters": 41
+      },
+      "a33": {
+        "mu": 0.3363,
+        "sigma": 0.0277,
+        "n_starters": 16
+      }
+    },
+    "k_pct": {
+      "u25": {
+        "mu": 0.2016,
+        "sigma": 0.0477,
+        "n_starters": 14,
+        "fallback": true
+      },
+      "a25": {
+        "mu": 0.2283,
+        "sigma": 0.0515,
+        "n_starters": 60
+      },
+      "a30": {
+        "mu": 0.2049,
+        "sigma": 0.0515,
+        "n_starters": 41
+      },
+      "a33": {
+        "mu": 0.2138,
+        "sigma": 0.0464,
+        "n_starters": 16
+      }
+    },
+    "bb_pct": {
+      "u25": {
+        "mu": 0.0816,
+        "sigma": 0.0241,
+        "n_starters": 14,
+        "fallback": true
+      },
+      "a25": {
+        "mu": 0.0824,
+        "sigma": 0.0217,
+        "n_starters": 60
+      },
+      "a30": {
+        "mu": 0.0809,
+        "sigma": 0.0218,
+        "n_starters": 41
+      },
+      "a33": {
+        "mu": 0.0774,
+        "sigma": 0.0221,
+        "n_starters": 16
+      }
+    }
+  }
+}
