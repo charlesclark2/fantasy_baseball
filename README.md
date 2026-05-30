@@ -281,6 +281,38 @@ Key data availability notes (verified against actual row counts — see [`data_q
 
 ---
 
+## ML Artifact Store (S3)
+
+Trained model artifacts and empirical-Bayes prior files are stored in S3 so that inference scripts can pull them without committing large binaries to git. `.pkl` model files are excluded from the repo via `.gitignore`.
+
+**Bucket:** `s3://baseball-betting-ml-artifacts/` (private; versioning enabled)
+
+| Prefix | Contents |
+|---|---|
+| `sub_models/<name>.pkl` | Champion sub-model `.pkl` artifacts (run environment, offense v1/v2, starter suppression, bullpen state) |
+| `sub_models/eb_priors/<file>.json` | Empirical-Bayes prior JSON files (lineup, starter, bullpen — one file per season, 2015/2016–2026) |
+| `mlflow/` | MLflow experiment artifacts (fold metrics, feature importances, hyperparameter trials) |
+
+**Accessing artifacts** — all inference and training scripts use `betting_ml/utils/artifact_store.py`:
+
+```python
+from betting_ml.utils.artifact_store import load_artifact, upload_artifact
+
+artifact = load_artifact("s3://baseball-betting-ml-artifacts/sub_models/run_env_v4.pkl")
+upload_artifact("betting_ml/models/sub_models/run_env_v4.pkl",
+                "s3://baseball-betting-ml-artifacts/sub_models/run_env_v4.pkl")
+```
+
+Scripts fall back gracefully to a local path when AWS credentials are absent (development without S3 access). A warning is printed; no exception is raised.
+
+**Re-syncing EB priors to S3** (run after `fit_*_priors.py` produces new season files):
+
+```bash
+aws s3 sync betting_ml/models/eb_priors/ s3://baseball-betting-ml-artifacts/sub_models/eb_priors/
+```
+
+---
+
 ## dbt MCP Server (Claude Code)
 
 The repo includes a dbt MCP server so Claude Code can introspect the dbt project — list models, retrieve column descriptions, and trace lineage — without reading schema.yml manually.

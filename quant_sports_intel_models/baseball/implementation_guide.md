@@ -1020,8 +1020,8 @@ Write targets by environment:
 - [x] Implement `betting_ml/utils/artifact_store.py` with `upload_artifact` / `download_artifact`
 - [x] Wire `upload_artifact` into `train_offense_v1.py`; champion `.pkl` uploads on promotion ✅ (offense_v1 uploaded 2026-05-28)
 - [x] Wire `download_artifact` into `generate_offense_signals.py` — pulls champion at inference time
-- [ ] Add `sub_models/eb_priors/` prefix for EB prior JSON files (currently stored only locally — backfill as part of Epic 4A closeout)
-- [ ] Document bucket structure in `README.md`: `sub_models/`, `mlflow/`, `eb_priors/` prefixes
+- [x] Add `sub_models/eb_priors/` prefix for EB prior JSON files — synced via `aws s3 sync betting_ml/models/eb_priors/ s3://baseball-betting-ml-artifacts/sub_models/eb_priors/` (2026-05-29)
+- [x] Document bucket structure in `README.md`: `sub_models/`, `mlflow/`, `eb_priors/` prefixes — added "ML Artifact Store (S3)" section (2026-05-29)
 
 **Acceptance criteria:**
 - Champion `.pkl` is retrievable from S3 after a promotion run

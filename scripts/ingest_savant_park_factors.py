@@ -121,8 +121,12 @@ def _parse_rows(raw_rows: list[dict], season: int, run_id: str) -> list[dict]:
     return out
 
 
-def _upsert_rows(rows: list[dict], conn) -> int:
-    """MERGE rows into savant_park_factors_raw via a VARCHAR temp table."""
+def _insert_rows(rows: list[dict], conn) -> int:
+    """Append rows into savant_park_factors_raw via a VARCHAR temp table.
+
+    Raw ingest is append-only; deduplication by (venue_id, season, bat_side,
+    num_years_rolling) happens in the downstream dbt model using the latest run_id.
+    """
     if not rows:
         return 0
 
@@ -169,63 +173,34 @@ def _upsert_rows(rows: list[dict], conn) -> int:
         ],
     )
 
-    # Step 2: MERGE into target
+    # Step 2: append-only INSERT from temp table
     cur.execute(f"""
-        MERGE INTO {_TABLE} AS tgt
-        USING (
-            SELECT
-                TRY_CAST(venue_id AS INTEGER)           AS venue_id,
-                venue_name,
-                TRY_CAST(season AS INTEGER)             AS season,
-                bat_side,
-                TRY_CAST(num_years_rolling AS INTEGER)  AS num_years_rolling,
-                TRY_CAST(n_pa AS INTEGER)               AS n_pa,
-                TRY_CAST(index_runs AS INTEGER)         AS index_runs,
-                TRY_CAST(index_hr AS INTEGER)           AS index_hr,
-                TRY_CAST(index_1b AS INTEGER)           AS index_1b,
-                TRY_CAST(index_2b AS INTEGER)           AS index_2b,
-                TRY_CAST(index_3b AS INTEGER)           AS index_3b,
-                TRY_CAST(index_bb AS INTEGER)           AS index_bb,
-                TRY_CAST(index_so AS INTEGER)           AS index_so,
-                TRY_CAST(index_woba AS INTEGER)         AS index_woba,
-                TRY_CAST(index_hardhit AS INTEGER)      AS index_hardhit,
-                TRY_CAST(index_wobacon AS INTEGER)      AS index_wobacon,
-                TRY_CAST(index_xwobacon AS INTEGER)     AS index_xwobacon,
-                run_id
-            FROM _tmp_savant_pf
-        ) AS src
-        ON  tgt.venue_id          = src.venue_id
-        AND tgt.season            = src.season
-        AND tgt.bat_side          = src.bat_side
-        AND tgt.num_years_rolling = src.num_years_rolling
-        WHEN MATCHED THEN UPDATE SET
-            venue_name      = src.venue_name,
-            n_pa            = src.n_pa,
-            index_runs      = src.index_runs,
-            index_hr        = src.index_hr,
-            index_1b        = src.index_1b,
-            index_2b        = src.index_2b,
-            index_3b        = src.index_3b,
-            index_bb        = src.index_bb,
-            index_so        = src.index_so,
-            index_woba      = src.index_woba,
-            index_hardhit   = src.index_hardhit,
-            index_wobacon   = src.index_wobacon,
-            index_xwobacon  = src.index_xwobacon,
-            run_id          = src.run_id,
-            ingestion_ts    = CURRENT_TIMESTAMP
-        WHEN NOT MATCHED THEN INSERT (
+        INSERT INTO {_TABLE} (
             venue_id, venue_name, season, bat_side, num_years_rolling,
             n_pa, index_runs, index_hr, index_1b, index_2b, index_3b,
             index_bb, index_so, index_woba, index_hardhit, index_wobacon,
             index_xwobacon, run_id
-        ) VALUES (
-            src.venue_id, src.venue_name, src.season, src.bat_side,
-            src.num_years_rolling, src.n_pa, src.index_runs, src.index_hr,
-            src.index_1b, src.index_2b, src.index_3b, src.index_bb,
-            src.index_so, src.index_woba, src.index_hardhit, src.index_wobacon,
-            src.index_xwobacon, src.run_id
         )
+        SELECT
+            TRY_CAST(venue_id AS INTEGER),
+            venue_name,
+            TRY_CAST(season AS INTEGER),
+            bat_side,
+            TRY_CAST(num_years_rolling AS INTEGER),
+            TRY_CAST(n_pa AS INTEGER),
+            TRY_CAST(index_runs AS INTEGER),
+            TRY_CAST(index_hr AS INTEGER),
+            TRY_CAST(index_1b AS INTEGER),
+            TRY_CAST(index_2b AS INTEGER),
+            TRY_CAST(index_3b AS INTEGER),
+            TRY_CAST(index_bb AS INTEGER),
+            TRY_CAST(index_so AS INTEGER),
+            TRY_CAST(index_woba AS INTEGER),
+            TRY_CAST(index_hardhit AS INTEGER),
+            TRY_CAST(index_wobacon AS INTEGER),
+            TRY_CAST(index_xwobacon AS INTEGER),
+            run_id
+        FROM _tmp_savant_pf
     """)
     return cur.rowcount
 
@@ -244,8 +219,8 @@ def ingest_season(season: int, dry_run: bool, conn) -> int:
                      r["index_hr"], r["index_runs"], r["index_bb"], r["index_so"])
         return len(rows)
 
-    inserted = _upsert_rows(rows, conn)
-    log.info("  Upserted %d rows for season=%d", inserted, season)
+    inserted = _insert_rows(rows, conn)
+    log.info("  Inserted %d rows for season=%d", inserted, season)
     return inserted
 
 

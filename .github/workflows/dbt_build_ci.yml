@@ -140,7 +140,8 @@ jobs:
               --project-dir dbt \
               --profiles-dir dbt \
               --select state:modified+ \
-              --state dbt/state
+              --state dbt/state \
+              --defer
           else
             echo "No manifest artifact found — falling back to full build"
             dbtf build \
