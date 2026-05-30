@@ -8,12 +8,12 @@ Two modes:
 
   backfill  — Collects all unique batter and pitcher IDs from
               mart_pitch_play_event (2020+) and batch-fetches profiles from
-              /api/v1/people?personIds=.... Safe to re-run; MERGE on player_id
-              is idempotent.
+              /api/v1/people?personIds=.... Appends rows to player_profiles_raw;
+              stg_statsapi_player_profiles deduplicates downstream.
 
   update    — Calls /api/v1/people/changes to fetch recently updated profiles
               (weight corrections, name changes) and also detects new player IDs
-              from the last 14 days of game data absent from player_profiles
+              from the last 14 days of game data absent from player_profiles_raw
               (call-ups, international signings). Designed for weekly Dagster
               invocation.
 
@@ -27,7 +27,7 @@ Authentication — same environment variables as ingest_statsapi.py:
         SNOWFLAKE_ROLE              (optional)
 
 DDL (created inline at startup if not exists):
-    CREATE TABLE IF NOT EXISTS baseball_data.statsapi.player_profiles (
+    CREATE TABLE IF NOT EXISTS baseball_data.statsapi.player_profiles_raw (
         player_id              NUMBER        NOT NULL,
         full_name              TEXT,
         birth_date             DATE,
@@ -37,6 +37,9 @@ DDL (created inline at startup if not exists):
         active                 BOOLEAN,
         last_fetched_at        TIMESTAMP_NTZ
     );
+    Deduplication (latest row per player_id) is handled by the dbt model
+    stg_statsapi_player_profiles via ROW_NUMBER() OVER (PARTITION BY player_id
+    ORDER BY last_fetched_at DESC).
 
 Usage:
     # One-time backfill for all historical player IDs (2020+)
@@ -84,7 +87,7 @@ REQUEST_DELAY = 0.3   # seconds between API calls (polite crawl rate)
 
 TARGET_DB     = "baseball_data"
 TARGET_SCHEMA = "statsapi"
-TARGET_TABLE  = "player_profiles"
+TARGET_TABLE  = "player_profiles_raw"
 
 _DDL = f"""
 CREATE TABLE IF NOT EXISTS {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} (
@@ -199,8 +202,8 @@ def parse_person(p: dict) -> dict | None:
 
 # ── Snowflake write ───────────────────────────────────────────────────────────
 
-def merge_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: list[dict]) -> int:
-    """MERGE profiles into player_profiles via VARCHAR temp table. Returns rows merged."""
+def insert_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: list[dict]) -> int:
+    """Append profiles into player_profiles_raw via VARCHAR temp table. Returns rows inserted."""
     if not profiles:
         return 0
 
@@ -230,35 +233,21 @@ def merge_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: list
         )
 
         cur.execute(f"""
-            MERGE INTO {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} t
-            USING (
-                SELECT
-                    TRY_TO_NUMBER(player_id)               AS player_id,
-                    full_name::TEXT                         AS full_name,
-                    TRY_TO_DATE(birth_date)                AS birth_date,
-                    TRY_TO_NUMBER(height_inches)           AS height_inches,
-                    TRY_TO_NUMBER(weight_lbs)              AS weight_lbs,
-                    primary_position_code::TEXT             AS primary_position_code,
-                    (active = 'True')::BOOLEAN             AS active,
-                    TRY_TO_TIMESTAMP_NTZ(last_fetched_at)  AS last_fetched_at
-                FROM {tmp}
-                WHERE TRY_TO_NUMBER(player_id) IS NOT NULL
-            ) s ON t.player_id = s.player_id
-            WHEN MATCHED THEN UPDATE SET
-                full_name              = s.full_name,
-                birth_date             = s.birth_date,
-                height_inches          = s.height_inches,
-                weight_lbs             = s.weight_lbs,
-                primary_position_code  = s.primary_position_code,
-                active                 = s.active,
-                last_fetched_at        = s.last_fetched_at
-            WHEN NOT MATCHED THEN INSERT (
+            INSERT INTO {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} (
                 player_id, full_name, birth_date, height_inches, weight_lbs,
                 primary_position_code, active, last_fetched_at
-            ) VALUES (
-                s.player_id, s.full_name, s.birth_date, s.height_inches, s.weight_lbs,
-                s.primary_position_code, s.active, s.last_fetched_at
             )
+            SELECT
+                TRY_TO_NUMBER(player_id),
+                full_name::TEXT,
+                TRY_TO_DATE(birth_date),
+                TRY_TO_NUMBER(height_inches),
+                TRY_TO_NUMBER(weight_lbs),
+                primary_position_code::TEXT,
+                (active = 'True')::BOOLEAN,
+                TRY_TO_TIMESTAMP_NTZ(last_fetched_at)
+            FROM {tmp}
+            WHERE TRY_TO_NUMBER(player_id) IS NOT NULL
         """)
 
         return cur.rowcount
@@ -321,11 +310,11 @@ def query_last_fetch_time(conn: snowflake.connector.SnowflakeConnection) -> date
 
 # ── Batch fetch + merge ───────────────────────────────────────────────────────
 
-def fetch_and_merge_ids(
+def fetch_and_insert_ids(
     conn: snowflake.connector.SnowflakeConnection,
     player_ids: list[int],
 ) -> int:
-    """Batch-fetch profiles for player_ids in BATCH_SIZE chunks and MERGE."""
+    """Batch-fetch profiles for player_ids in BATCH_SIZE chunks and INSERT."""
     total_merged = 0
     batches = [player_ids[i:i + BATCH_SIZE] for i in range(0, len(player_ids), BATCH_SIZE)]
 
@@ -343,8 +332,8 @@ def fetch_and_merge_ids(
             continue
 
         profiles = [p for raw in people if (p := parse_person(raw)) is not None]
-        n = merge_profiles(conn, profiles)
-        log.info("  Merged %d row(s)", n)
+        n = insert_profiles(conn, profiles)
+        log.info("  Inserted %d row(s)", n)
         total_merged += n
         time.sleep(REQUEST_DELAY)
 
@@ -362,8 +351,8 @@ def run_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
         log.warning("No player IDs found — aborting backfill")
         return
 
-    total = fetch_and_merge_ids(conn, sorted(all_ids))
-    log.info("Backfill complete — %d total rows merged", total)
+    total = fetch_and_insert_ids(conn, sorted(all_ids))
+    log.info("Backfill complete — %d total rows inserted", total)
 
 
 def run_update(conn: snowflake.connector.SnowflakeConnection) -> None:
@@ -383,14 +372,14 @@ def run_update(conn: snowflake.connector.SnowflakeConnection) -> None:
 
     if changed_people:
         changed_profiles = [p for raw in changed_people if (p := parse_person(raw)) is not None]
-        n = merge_profiles(conn, changed_profiles)
-        log.info("  Merged %d changed profile(s)", n)
+        n = insert_profiles(conn, changed_profiles)
+        log.info("  Inserted %d changed profile(s)", n)
 
     # 2. New player IDs from recent game data not yet in player_profiles
     new_ids = query_missing_recent_player_ids(conn)
     if new_ids:
         log.info("Found %d new player ID(s) not in player_profiles (call-ups/signings)", len(new_ids))
-        fetch_and_merge_ids(conn, sorted(new_ids))
+        fetch_and_insert_ids(conn, sorted(new_ids))
     else:
         log.info("No new player IDs found in last 14 days")
 
