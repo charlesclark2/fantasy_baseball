@@ -162,14 +162,15 @@ bullpen_v1:
   artifact_path: models/sub_models/bullpen_v1.pkl    # rules-based; no pkl until v1.1
   feature_columns_path: models/sub_models/bullpen_v1_features.json
   target:
-    source_table: null    # v1.0 is rules-based; no supervised target
-    primary_column: null
-    auxiliary_columns: []
-    grain: game_pk_side
+    source_table: baseball_data.betting.stg_batter_pitches    # actual game-level bullpen xwOBA
+    primary_column: actual_bullpen_xwoba
+    auxiliary_columns:
+      - actual_bullpen_pa
+    grain: pitching_team x game_pk
   training_window:
-    start: null
-    end: null
-  cv_strategy: null    # rules-based; no CV
+    start: "2016-01-01"
+    end: null    # rolling; through current season
+  cv_strategy: null    # availability index is rules-based; quality model CV in 6.3
   cv_metric: null
   cv_score: null
   promotion_gate:
@@ -180,15 +181,45 @@ bullpen_v1:
     - feature_pregame_bullpen_state_features
   output_signals:
     - bullpen_state_signal
+    - bullpen_availability_index
+    - bullpen_quality_mu
+    - bullpen_quality_sigma
   downstream_consumers: []
   promotion_status: pending
   promoted_at: null
+  availability_index_v1:
+    formula: "clip(1 - fatigue_score / p95, 0, 1)"
+    fatigue_formula: "3.0*ip_day1 + 2.0*ip_day2 + 1.0*ip_day3 + 0.5*closer_used_prev_1d + 0.25*high_leverage_used_prev_2d"
+    normalization_anchor: "p95 of 2016-2025 training data"
+    p95_value: 30.75
+    params_path: models/sub_models/bullpen_availability_index_v1.json
+    validation_2016_2025:
+      pearson_r_fatigue_vs_xwoba: 0.0005    # near-zero — expected; see notes
+      spearman_r_avail_vs_pitchers_used_3d: -0.727
+      xwoba_low_fatigue:  0.2978
+      xwoba_mid_fatigue:  0.2973
+      xwoba_high_fatigue: 0.2983
   notes: |
-    v1.0 is a rules-based composite (no ML training). Inputs: mart_bullpen_leverage,
-    mart_bullpen_workload, mart_bullpen_effectiveness. No artifact or CV.
-    v1.1 (supervised) requires mart_bullpen_game_outcomes (Story 2.8) — deferred
-    until after Epic 6 v1.0 ships and signal value is evaluated.
-    See implementation_guide.md Story 2.8 for supervised target specification.
+    Epic 6 bullpen state model. Two components:
+      availability_index (6.2): rules-based weighted-IP fatigue signal.
+      quality model (6.3): distributional model (Normal) predicting next-game bullpen
+        xwOBA from workload + rolling effectiveness + EB posteriors (6A.3).
+
+    Availability index validation (Story 6.2, 2026-05-29):
+      Fatigue score has near-zero Pearson r (+0.0005) with same-game actual_bullpen_xwoba.
+      This is expected and correct: fatigued teams manage their pen (shorter leashes,
+      depth arms), so the arms that appear still perform comparably. The availability
+      index predicts roster depth / matchup flexibility, not pitch-level quality.
+      Internal validity confirmed: Spearman r = -0.727 with pitchers_used_prev_3d.
+      The index is an orthogonal feature to EB xwOBA — combine both in 6.3 training.
+
+    Training dataset (Story 6.1, 2026-05-29):
+      45,948 rows | 2016-2026 | 100% target fill | 100% EB coverage.
+      Saved to: betting_ml/data/bullpen_state_train.parquet.
+      0.8% null on rolling xwoba_14d/30d (start-of-season, expected).
+
+    v1.1 (supervised refinement) requires mart_bullpen_game_outcomes (Story 2.8) —
+    deferred until after Epic 6 v1.0 ships and signal value is evaluated.
 
 matchup_v1:
   artifact_path: models/sub_models/matchup_v1.pkl

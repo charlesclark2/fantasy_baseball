@@ -79,6 +79,23 @@ eb_factors as (
         and eb.season   = g.game_year - 1
 ),
 
+-- EB-smoothed granular park factors (game_year - 1) — same leakage guard
+eb_granular as (
+    select
+        g.game_pk,
+        eg.eb_hr_factor,
+        eg.eb_doubles_triples_factor,
+        eg.eb_singles_factor,
+        eg.eb_bb_factor,
+        eg.eb_so_factor,
+        eg.eb_woba_factor,
+        eg.n_pa                         as park_granular_n_pa
+    from games g
+    left join {{ ref('mart_park_factors_granular') }} eg
+        on  eg.venue_id = g.venue_id
+        and eg.season   = g.game_year - 1
+),
+
 final as (
     select
         g.game_pk,
@@ -104,7 +121,16 @@ final as (
 
         -- ── EB-smoothed run environment (replaces null imputation) ────────────
         eb.eb_park_run_factor,
-        eb.shrinkage_factor
+        eb.shrinkage_factor,
+
+        -- ── EB-smoothed granular factors (ratio; 1.0 = league average) ───────
+        eg.eb_hr_factor,
+        eg.eb_doubles_triples_factor,
+        eg.eb_singles_factor,
+        eg.eb_bb_factor,
+        eg.eb_so_factor,
+        eg.eb_woba_factor,
+        eg.park_granular_n_pa
 
     from games g
     left join venues v
@@ -113,6 +139,8 @@ final as (
         on  pf.game_pk = g.game_pk
     left join eb_factors eb
         on  eb.game_pk = g.game_pk
+    left join eb_granular eg
+        on  eg.game_pk = g.game_pk
 )
 
 select * from final

@@ -900,6 +900,17 @@ sources:
           DDL: scripts/ddl/eb_park_factors_raw.sql.
           Grain: venue_id × season.
 
+      - name: eb_park_factors_granular_raw
+        description: >
+          EB-smoothed granular park factors (HR, 2B/3B, 1B, BB, SO, wOBA) derived
+          from Baseball Savant statcast-park-factors 3yr rolling data. All factor
+          columns are ratios (1.0 = league average). Written by
+          betting_ml/scripts/eb_priors/fit_granular_park_priors.py via MERGE upsert.
+          Normal-Normal conjugate: per-event Bernoulli σ²_ε used as likelihood
+          variance; prior fit from established venues (≥ 5,000 PA in 3yr window).
+          DDL: scripts/ddl/eb_park_factors_granular_raw.sql.
+          Grain: venue_id × season.
+
       - name: eb_batter_posteriors_raw
         description: >
           Per-batter-slot Empirical Bayes posteriors for wOBA, K%, BB%, and ISO.
@@ -911,6 +922,31 @@ sources:
           'full_eb' (PA ≥ 150).
           DDL: scripts/ddl/create_eb_batter_posteriors_raw.sql.
           Grain: game_pk × batting_slot × batter_id.
+
+      - name: eb_starter_posteriors
+        description: >
+          Per-starter Empirical Bayes posteriors for xwOBA-against, K%, and BB%.
+          Written by betting_ml/scripts/eb_priors/compute_starter_posteriors.py via
+          VARCHAR temp table + MERGE on (game_pk, pitcher_id). Conjugate priors are
+          stratified by experience band (u25/a25/a30/a33) × season, fit by
+          fit_starter_priors.py (5A.1). IL-return blend applied when current-season
+          starts < 3 and prior-season starts ≥ 10.
+          eb_data_source: 'prior_only' (BF=0), 'il_return_blend', 'full_eb'.
+          Joined into feature_pregame_starter_features on (game_pk, pitcher_id).
+          Grain: game_pk × pitcher_id.
+
+      - name: eb_bullpen_team_posteriors
+        description: >
+          Per-team Empirical Bayes posteriors for bullpen xwOBA-against, aggregated
+          to game level. Written by betting_ml/scripts/eb_priors/compute_bullpen_posteriors.py
+          via MERGE upsert. Conjugate priors fit by fit_bullpen_priors.py (6A.1).
+          team_eb_bullpen_xwoba is the shrunk posterior mean (shrunk toward the
+          league-average prior). team_eb_bullpen_uncertainty is the posterior std dev
+          (high = few observed relievers or high variability). n_relievers is the count
+          of relievers with season plate-appearance data; n_prior_only is the count
+          using only the prior (no observed data).
+          DDL: scripts/ddl/eb_bullpen_posteriors.sql.
+          Grain: game_pk × team.
 
   - name: betting_ml
     database: baseball_data
@@ -994,3 +1030,14 @@ sources:
           global dispersion parameter r (constant per model); pred_runs_raw is an alias
           for pred_runs_mu (no bias correction); uncertainty is the 80% PI width (hi−lo).
           Backfilled 2015–2026. DDL: scripts/ddl/offense_v1_signals.sql (schema parity).
+      - name: starter_suppression_signals
+        description: >
+          Per game-side distributional starter suppression signals from the starter_v1 model
+          (LightGBM + Normal sigma, or NGBoost Normal — champion selected by walk-forward CV NLL).
+          Written by betting_ml/scripts/starter_v1/generate_starter_signals.py via
+          VARCHAR temp table + MERGE (idempotent). Grain: game_pk × side × model_version.
+          starter_suppression_mu is the predicted mean xwOBA-against; starter_suppression_sigma
+          is the Normal standard deviation (constant per model for LightGBM, per-row for NGBoost);
+          starter_suppression_signal is the z-score of mu relative to the season mean (negative
+          values indicate better-than-average suppression); uncertainty is the 80% PI width
+          (2 × 1.28 × sigma). Backfilled 2020–2026 (Statcast xwOBA coverage starts 2020).

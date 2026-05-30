@@ -28,6 +28,17 @@ Usage:
         --end-date   2025-10-31 \\
         --timestamps 12:00,17:00,23:00 \\
         [--bookmaker draftkings] \\
+        [--region us] \\
+        [--sleep-seconds 1.5] \\
+        [--dry-run]
+
+    # Pinnacle closing lines (EU region):
+    uv run backfill_historical_odds_snapshots.py \\
+        --start-date 2021-04-01 \\
+        --end-date   2025-10-01 \\
+        --timestamps 17:00,23:00 \\
+        --bookmaker  pinnacle \\
+        --region     eu \\
         [--sleep-seconds 1.5] \\
         [--dry-run]
 
@@ -417,6 +428,7 @@ def fetch_snapshot(
     snapshot_ts: str,
     bookmaker: str,
     sleep_seconds: float,
+    region: str = "us",
 ) -> tuple[list[dict], int | None, int | None]:
     """
     Fetch h2h + totals odds from the OddsAPI historical endpoint at a single UTC
@@ -427,7 +439,7 @@ def fetch_snapshot(
     params = {
         "apiKey":     _get_api_key(),
         "date":       snapshot_ts,
-        "regions":    "us",
+        "regions":    region,
         "markets":    "h2h,totals",
         "oddsFormat": "american",
         "bookmakers": bookmaker,
@@ -679,6 +691,7 @@ def run_backfill(
     bookmaker: str,
     sleep_seconds: float,
     min_snapshots: int = 2,
+    region: str = "us",
 ) -> None:
     log.info("Connecting to Snowflake ...")
     conn = get_snowflake_connection()
@@ -740,7 +753,7 @@ def run_backfill(
                 calls_skipped += 1
                 continue
 
-            events, used, remaining = fetch_snapshot(ts_label, bookmaker, sleep_seconds)
+            events, used, remaining = fetch_snapshot(ts_label, bookmaker, sleep_seconds, region)
             if remaining is not None:
                 last_remaining = remaining
 
@@ -812,6 +825,7 @@ def run_backfill(
     print("=" * 60)
     print(f"  Date range         : {start_date} → {end_date}")
     print(f"  Bookmaker          : {bookmaker}")
+    print(f"  Region             : {region}")
     print(f"  Total calls        : {call_num}")
     print(f"  Calls skipped      : {calls_skipped}")
     print(f"  Rows inserted      : {total_inserted}")
@@ -853,6 +867,15 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_BOOKMAKER,
         metavar="KEY",
         help=f"OddsAPI bookmaker key (default: {DEFAULT_BOOKMAKER}).",
+    )
+    parser.add_argument(
+        "--region",
+        default="us",
+        metavar="REGION",
+        help=(
+            "OddsAPI region key (default: us). Use 'eu' to access European bookmakers "
+            "such as Pinnacle, which are not available in the us/us2 markets."
+        ),
     )
     parser.add_argument(
         "--sleep-seconds",
@@ -905,13 +928,19 @@ def main() -> None:
         print(f"Date range     : {start_date} → {end_date}")
         print(f"Timestamps     : {', '.join(timestamps)}")
         print(f"Bookmaker      : {args.bookmaker}")
+        print(f"Region         : {args.region}")
         print(f"Sleep (seconds): {args.sleep_seconds}")
         span_days      = (end_date - start_date).days + 1
         approx_dates   = round(span_days * 0.6)  # rough: ~60% of days are game days
         approx_calls   = approx_dates * len(timestamps)
+        # Historical endpoint credit cost varies by region and events returned.
+        # EU region (e.g. Pinnacle): ~20 credits/call. US region: ~1 credit/call.
+        credits_per_call = 20 if args.region != "us" else 1
+        approx_credits   = approx_calls * credits_per_call
         print(f"\nEstimated game dates in range : ~{approx_dates} (exact count from Snowflake at runtime)")
         print(f"Estimated API calls           : ~{approx_calls}")
-        print(f"Estimated credits consumed    : ~{approx_calls} (1 credit per h2h+totals snapshot)")
+        print(f"Credits per call (approx)     : ~{credits_per_call} (region={args.region})")
+        print(f"Estimated credits consumed    : ~{approx_credits}")
         print("\nDry-run complete.")
         return
 
@@ -922,6 +951,7 @@ def main() -> None:
         bookmaker     = args.bookmaker,
         sleep_seconds = args.sleep_seconds,
         min_snapshots = args.min_snapshots,
+        region        = args.region,
     )
 
 

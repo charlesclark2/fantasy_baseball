@@ -456,11 +456,14 @@ else:
 
 with st.sidebar:
     if _all_versions:
+        _deployed_versions = sorted({m["Version"] for m in _active_models}) if _active_models else []
+        _default_versions = [v for v in _deployed_versions if v in _all_versions] or _all_versions
         _selected_versions = st.multiselect(
             "Show versions",
             options=_all_versions,
-            default=_all_versions,
+            default=_default_versions,
             key="version_filter",
+            help="Defaults to currently deployed versions. Expand to compare historical variants.",
         )
         if _selected_versions and set(_selected_versions) != set(_all_versions):
             df_view = df_view[df_view["model_version"].isin(_selected_versions)]
@@ -1155,6 +1158,25 @@ st.caption(
     "in the chart and metrics. Pending bets are excluded from the cumulative line."
 )
 
+with st.sidebar:
+    st.divider()
+    st.subheader("Bankroll Setup")
+    _deposit = st.number_input(
+        "Initial Deposit ($)",
+        min_value=0.0,
+        value=200.0,
+        step=10.0,
+        help="Real cash deposited into your sportsbook account.",
+    )
+    _bonus = st.number_input(
+        "Bonus / Free Play ($)",
+        min_value=0.0,
+        value=100.0,
+        step=10.0,
+        help="Promotional bonus credited by the book (e.g. deposit match).",
+    )
+    _starting_balance = _deposit + _bonus
+
 df_bets = load_placed_bets()
 
 if df_bets.empty:
@@ -1177,20 +1199,57 @@ else:
     total_wagered_b = float(settled_bets["stake"].sum()) if not settled_bets.empty else 0.0
     total_pl_b = float(settled_bets["_pl"].sum()) if not settled_bets.empty else 0.0
     roi_b = total_pl_b / total_wagered_b if total_wagered_b > 0 else 0.0
+    roi_on_deposit = total_pl_b / _deposit if _deposit > 0 else 0.0
+    implied_balance = _starting_balance + total_pl_b
     total_bets = len(df_bets)
     pending_count = int(df_bets["_outcome"].isna().sum())
 
-    bm1, bm2, bm3, bm4, bm5 = st.columns(5)
-    bm1.metric("Total Bets", total_bets, help=f"{pending_count} pending settlement.")
-    bm2.metric("Total Wagered ($)", f"{total_wagered_b:.2f}", help="Sum of stakes for settled bets.")
-    bm3.metric(
-        "Total P&L ($)",
+    # ── Bankroll context row ──────────────────────────────────────────────────
+    bk1, bk2, bk3, bk4 = st.columns(4)
+    bk1.metric(
+        "Starting Balance",
+        f"${_starting_balance:.2f}",
+        help=f"Deposit (${_deposit:.2f}) + Bonus (${_bonus:.2f}). Adjust in the sidebar.",
+    )
+    bk2.metric(
+        "Net P&L ($)",
         f"{total_pl_b:+.2f}",
         delta=f"{total_pl_b:+.2f}",
-        help="Actual realized profit/loss across all settled bets.",
+        help="Realized profit/loss across all settled bets.",
     )
-    bm4.metric("ROI%", f"{roi_b:+.1%}", help="Total P&L ÷ Total Wagered (settled bets).")
-    bm5.metric("Record (W-L-P)", f"{wins_b}-{losses_b}-{pushes_b}")
+    bk3.metric(
+        "Implied Balance",
+        f"${implied_balance:.2f}",
+        delta=f"{total_pl_b:+.2f}",
+        help="Starting balance + net P&L. Does not account for pending stakes.",
+    )
+    bk4.metric(
+        "Return on Deposit",
+        f"{roi_on_deposit:+.1%}",
+        help="Net P&L ÷ initial deposit (real cash only, excluding bonus).",
+    )
+
+    st.divider()
+
+    # ── Bet activity row ──────────────────────────────────────────────────────
+    bm1, bm2, bm3, bm4, bm5 = st.columns(5)
+    bm1.metric("Total Bets", total_bets, help=f"{pending_count} pending settlement.")
+    bm2.metric("Record (W-L-P)", f"{wins_b}-{losses_b}-{pushes_b}")
+    bm3.metric(
+        "Win Rate",
+        f"{wins_b / max(wins_b + losses_b, 1):.1%}",
+        help="Wins ÷ (wins + losses), excluding pushes.",
+    )
+    bm4.metric("Total Wagered ($)", f"{total_wagered_b:.2f}", help="Sum of stakes on settled bets.")
+    bm5.metric(
+        "ROI on Staked",
+        f"{roi_b:+.1%}",
+        help=(
+            "Net P&L ÷ total amount staked on settled bets. "
+            "This is the standard betting ROI — measures edge per dollar risked, "
+            "not return on your deposited bankroll."
+        ),
+    )
 
     if not settled_bets.empty:
         settled_bets = settled_bets.sort_values("score_date").copy()
@@ -1203,33 +1262,63 @@ else:
             .reset_index()
         )
         daily_pl["date"] = pd.to_datetime(daily_pl["score_date"])
+        daily_pl["balance"] = _starting_balance + daily_pl["cumulative_pl"]
 
-        # Add a zero-origin row so the chart starts at 0
+        # Add an origin row so charts start from the deposit date
         origin = pd.DataFrame([{
             "date": daily_pl["date"].min() - pd.Timedelta(days=1),
             "cumulative_pl": 0.0,
             "daily_pl": 0.0,
+            "balance": float(_starting_balance),
         }])
         daily_pl = pd.concat([origin, daily_pl], ignore_index=True).sort_values("date")
 
-        line = (
-            alt.Chart(daily_pl)
-            .mark_line(point=True, color="#2196F3")
-            .encode(
-                x=alt.X("date:T", title="Date",
-                        axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
-                y=alt.Y("cumulative_pl:Q", title="Cumulative P&L ($)"),
-                tooltip=[
-                    alt.Tooltip("date:T", title="Date", format="%b %d"),
-                    alt.Tooltip("cumulative_pl:Q", title="Cumulative P&L ($)", format="+.2f"),
-                    alt.Tooltip("daily_pl:Q", title="Day P&L ($)", format="+.2f"),
-                ],
-            )
-        )
-        zero_rule = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
-            color="grey", strokeDash=[4, 4]
-        ).encode(y="y:Q")
+        tab_pl, tab_balance = st.tabs(["Cumulative P&L", "Running Balance"])
 
-        st.altair_chart((line + zero_rule).properties(height=300), width='stretch')
+        with tab_pl:
+            line = (
+                alt.Chart(daily_pl)
+                .mark_line(point=True, color="#2196F3")
+                .encode(
+                    x=alt.X("date:T", title="Date",
+                            axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
+                    y=alt.Y("cumulative_pl:Q", title="Cumulative P&L ($)"),
+                    tooltip=[
+                        alt.Tooltip("date:T", title="Date", format="%b %d"),
+                        alt.Tooltip("cumulative_pl:Q", title="Cumulative P&L ($)", format="+.2f"),
+                        alt.Tooltip("daily_pl:Q", title="Day P&L ($)", format="+.2f"),
+                    ],
+                )
+            )
+            zero_rule = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(
+                color="grey", strokeDash=[4, 4]
+            ).encode(y="y:Q")
+            st.altair_chart((line + zero_rule).properties(height=300), width='stretch')
+            st.caption("Net profit/loss from settled bets over time. Starts at $0.")
+
+        with tab_balance:
+            deposit_rule = alt.Chart(pd.DataFrame({"y": [float(_starting_balance)]})).mark_rule(
+                color="grey", strokeDash=[4, 4]
+            ).encode(y="y:Q")
+            balance_line = (
+                alt.Chart(daily_pl)
+                .mark_line(point=True, color="#4CAF50")
+                .encode(
+                    x=alt.X("date:T", title="Date",
+                            axis=alt.Axis(format="%b %d", labelAngle=-45, tickCount="day")),
+                    y=alt.Y("balance:Q", title="Implied Balance ($)", scale=alt.Scale(zero=False)),
+                    tooltip=[
+                        alt.Tooltip("date:T", title="Date", format="%b %d"),
+                        alt.Tooltip("balance:Q", title="Balance ($)", format=".2f"),
+                        alt.Tooltip("daily_pl:Q", title="Day P&L ($)", format="+.2f"),
+                    ],
+                )
+            )
+            st.altair_chart((balance_line + deposit_rule).properties(height=300), width='stretch')
+            st.caption(
+                f"Running balance starting from ${_starting_balance:.2f} "
+                f"(${_deposit:.2f} deposit + ${_bonus:.2f} bonus). "
+                "Dashed line = starting balance. Adjust deposit/bonus in the sidebar."
+            )
     else:
         st.info("No bets have settled yet — check back after today's games are final.")

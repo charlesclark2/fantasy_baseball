@@ -22,7 +22,8 @@ from app.utils.db import run_execute, run_query
 _PICKS_SQL = """
 SELECT
     p.*,
-    COALESCE(l.both_confirmed, FALSE) AS both_confirmed
+    COALESCE(l.both_confirmed, FALSE) AS both_confirmed,
+    g.game_date                        AS game_datetime_utc
 FROM (
     SELECT *,
            ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
@@ -37,6 +38,10 @@ LEFT JOIN (
     WHERE official_date = '{date}'
     GROUP BY game_pk
 ) l ON p.game_pk = l.game_pk
+LEFT JOIN (
+    SELECT game_pk, game_date
+    FROM baseball_data.betting.stg_statsapi_games
+) g ON g.game_pk = p.game_pk
 WHERE p._rn = 1
 ORDER BY p.home_team ASC
 """
@@ -105,6 +110,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
 
             total_line = _safe_float(r.get("total_line_consensus")) if "over" in market_name or "under" in market_name else None
             inserted_at = r.get("inserted_at")
+            game_datetime_utc = r.get("game_datetime_utc")
 
             rows.append({
                 "game_pk": game_pk,
@@ -122,6 +128,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
                 "actionable": actionable,
                 "total_line": total_line,
                 "inserted_at": inserted_at,
+                "game_datetime_utc": game_datetime_utc,
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
@@ -245,6 +252,7 @@ if not pending_rows.empty:
 st.subheader("All Markets")
 
 _ALL_MARKETS_HELP = {
+    "Game Time (CT)": "Scheduled game start time in Central Time. Click column header to sort by game time.",
     "Matchup": "Away team @ Home team. Doubleheaders show G1/G2 with the game_pk to distinguish games.",
     "Market": "h2h home = bet home to win | h2h away = bet away to win | over/under = totals market",
     "Model Prob": "Model-estimated probability for this side (blended NGBoost + XGBoost for h2h; NGBoost for totals)",
@@ -287,7 +295,13 @@ def _fmt_odds_at(val) -> str:
         return "—"
 
 
+_game_time_series = (
+    pd.to_datetime(df_ev["game_datetime_utc"], utc=True, errors="coerce")
+    .dt.tz_convert("America/Chicago")
+)
+
 df_display = pd.DataFrame({
+    "Game Time (CT)": _game_time_series,
     "Matchup": df_ev["matchup_label"],
     "Market": df_ev["market"],
     "Model Prob": df_ev["model_prob"].map(lambda v: f"{v:.1%}" if v is not None else "—"),
@@ -295,15 +309,32 @@ df_display = pd.DataFrame({
     "Decimal Odds": df_ev["decimal_odds"].map(lambda v: f"{v:.3f}" if v is not None else "—"),
     "Odds At (UTC)": df_ev["inserted_at"].map(_fmt_odds_at),
     "EV": df_ev["ev"].map(lambda v: f"{v:+.4f}" if v is not None else "—"),
-    "Raw Kelly%": df_ev["kelly_raw"].map(lambda v: f"{v:.2%}" if v is not None else "—"),
+    "Raw Kelly%": df_ev["kelly_raw"] * 100,
     "Capped Kelly%": df_ev["kelly_capped"].map(lambda v: f"{v:.2%}" if v is not None else "—"),
     "Actionable": df_ev["actionable"],
 })
 
+_all_markets_col_config = {
+    col: st.column_config.TextColumn(col, help=h)
+    for col, h in _ALL_MARKETS_HELP.items()
+    if col not in ("Game Time (CT)", "Raw Kelly%")
+}
+_all_markets_col_config["Game Time (CT)"] = st.column_config.DatetimeColumn(
+    "Game Time (CT)",
+    help="Scheduled game start time in Central Time. Click column header to sort.",
+    format="MMM D h:mm a",
+    timezone="America/Chicago",
+)
+_all_markets_col_config["Raw Kelly%"] = st.column_config.NumberColumn(
+    "Raw Kelly%",
+    help=_ALL_MARKETS_HELP["Raw Kelly%"],
+    format="%.2f%%",
+)
+
 st.dataframe(
     df_display,
     width='stretch',
-    column_config={col: st.column_config.TextColumn(col, help=h) for col, h in _ALL_MARKETS_HELP.items()},
+    column_config=_all_markets_col_config,
 )
 
 # ---------------------------------------------------------------------------

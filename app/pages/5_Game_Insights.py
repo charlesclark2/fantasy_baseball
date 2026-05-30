@@ -182,6 +182,307 @@ else:
 st.divider()
 
 # ===========================================================================
+# Section 1B — Projected Starters & Lineup
+# ===========================================================================
+
+_STARTERS_SQL = """
+SELECT side, probable_pitcher_id, probable_pitcher_name
+FROM baseball_data.betting.stg_statsapi_probable_pitchers
+WHERE game_pk = {game_pk}
+"""
+
+_STARTER_STATS_SQL = """
+WITH last_30 AS (
+    SELECT
+        pitcher_id,
+        runs_allowed,
+        hits_allowed,
+        walks,
+        strikeouts,
+        batters_faced,
+        innings_pitched,
+        ROW_NUMBER() OVER (PARTITION BY pitcher_id ORDER BY game_date DESC) AS rn
+    FROM baseball_data.betting.mart_starting_pitcher_game_log
+    WHERE pitcher_id IN ({pitcher_ids})
+      AND game_date < '{date}'
+)
+SELECT
+    pitcher_id,
+    COUNT(*)                                                                           AS starts,
+    ROUND(SUM(runs_allowed) * 9.0 / NULLIF(SUM(innings_pitched), 0), 2)               AS ra9,
+    ROUND((SUM(walks) + SUM(hits_allowed)) / NULLIF(SUM(innings_pitched), 0), 2)      AS whip,
+    ROUND(SUM(strikeouts)::FLOAT / NULLIF(SUM(batters_faced), 0) * 100, 1)            AS k_pct
+FROM last_30
+WHERE rn <= 30
+GROUP BY pitcher_id
+"""
+
+_LINEUP_SQL = """
+SELECT
+    home_away,
+    slot_1_player_id,  slot_1_full_name,  slot_1_position,
+    slot_2_player_id,  slot_2_full_name,  slot_2_position,
+    slot_3_player_id,  slot_3_full_name,  slot_3_position,
+    slot_4_player_id,  slot_4_full_name,  slot_4_position,
+    slot_5_player_id,  slot_5_full_name,  slot_5_position,
+    slot_6_player_id,  slot_6_full_name,  slot_6_position,
+    slot_7_player_id,  slot_7_full_name,  slot_7_position,
+    slot_8_player_id,  slot_8_full_name,  slot_8_position,
+    slot_9_player_id,  slot_9_full_name,  slot_9_position
+FROM baseball_data.betting.stg_statsapi_lineups_wide
+WHERE game_pk = {game_pk}
+"""
+
+_BATTER_STATS_SQL = """
+SELECT
+    batter_id,
+    ops_std      AS ops,
+    xwoba_std    AS xwoba,
+    pa_count_std AS pa
+FROM baseball_data.betting.mart_batter_rolling_stats
+WHERE batter_id IN ({batter_ids})
+  AND game_year  = {season}
+  AND game_date  < '{date}'
+QUALIFY ROW_NUMBER() OVER (PARTITION BY batter_id ORDER BY game_date DESC) = 1
+"""
+
+_MATCHUP_SQL = """
+WITH pa_level AS (
+    SELECT
+        batter_id,
+        game_pk,
+        at_bat_number,
+        MAX(COALESCE(woba_denom, 0))                                               AS woba_denom,
+        SUM(CASE WHEN woba_denom = 1 THEN COALESCE(xwoba, woba_value) ELSE 0 END) AS xwoba_num
+    FROM baseball_data.betting.stg_batter_pitches
+    WHERE pitcher_id  = {pitcher_id}
+      AND batter_id   IN ({batter_ids})
+      AND game_date   < '{date}'
+    GROUP BY batter_id, game_pk, at_bat_number
+)
+SELECT
+    batter_id,
+    COUNT(*)                                                    AS pa,
+    ROUND(SUM(xwoba_num) / NULLIF(SUM(woba_denom), 0), 3)     AS xwoba
+FROM pa_level
+GROUP BY batter_id
+"""
+
+
+@st.cache_data(ttl=300)
+def load_starters(game_pk: int) -> pd.DataFrame:
+    df = run_query(_STARTERS_SQL.format(game_pk=game_pk))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+@st.cache_data(ttl=300)
+def load_starter_stats(pitcher_ids: tuple[int, ...], date_str: str) -> pd.DataFrame:
+    """Return trailing 30-start RA/9, WHIP, K% for each pitcher_id."""
+    if not pitcher_ids:
+        return pd.DataFrame()
+    ids_str = ", ".join(str(p) for p in pitcher_ids)
+    df = run_query(_STARTER_STATS_SQL.format(pitcher_ids=ids_str, date=date_str))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+@st.cache_data(ttl=300)
+def load_lineups(game_pk: int) -> pd.DataFrame:
+    df = run_query(_LINEUP_SQL.format(game_pk=game_pk))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+@st.cache_data(ttl=300)
+def load_batter_stats(player_ids: tuple[int, ...], date_str: str) -> dict[int, dict]:
+    """Season-to-date OPS + xwOBA for each player, latest row before date."""
+    if not player_ids:
+        return {}
+    season = int(date_str[:4])
+    ids_str = ", ".join(str(p) for p in player_ids)
+    df = run_query(_BATTER_STATS_SQL.format(batter_ids=ids_str, season=season, date=date_str))
+    if df.empty:
+        return {}
+    df.columns = [c.lower() for c in df.columns]
+    return {
+        int(r["batter_id"]): {
+            "ops":   _safe_float(r.get("ops")),
+            "xwoba": _safe_float(r.get("xwoba")),
+            "pa":    int(r["pa"]) if r.get("pa") is not None else 0,
+        }
+        for _, r in df.iterrows()
+    }
+
+
+@st.cache_data(ttl=300)
+def load_matchup_stats(batter_ids: tuple[int, ...], pitcher_id: int, date_str: str) -> dict[int, dict]:
+    """Career PA + xwOBA per batter vs. a specific pitcher, through date_str."""
+    if not batter_ids or pitcher_id is None:
+        return {}
+    ids_str = ", ".join(str(b) for b in batter_ids)
+    df = run_query(_MATCHUP_SQL.format(pitcher_id=pitcher_id, batter_ids=ids_str, date=date_str))
+    if df.empty:
+        return {}
+    df.columns = [c.lower() for c in df.columns]
+    return {
+        int(r["batter_id"]): {
+            "pa":    int(r["pa"]) if r.get("pa") is not None else 0,
+            "xwoba": _safe_float(r.get("xwoba")),
+        }
+        for _, r in df.iterrows()
+    }
+
+
+def _extract_player_ids(lineup_row: pd.Series | None) -> list[int]:
+    """Return ordered list of player IDs (None → 0 skipped) from a wide lineup row."""
+    if lineup_row is None:
+        return []
+    ids = []
+    for slot in range(1, 10):
+        pid = lineup_row.get(f"slot_{slot}_player_id")
+        if pid is not None:
+            try:
+                ids.append(int(pid))
+            except (TypeError, ValueError):
+                pass
+    return ids
+
+
+def _lineup_table(
+    lineup_row: pd.Series | None,
+    batter_stats: dict[int, dict],
+    matchup_stats: dict[int, dict],
+    opp_sp_name: str | None = None,
+) -> pd.DataFrame:
+    """Build a 9-row DataFrame from a wide lineup row with batter stats."""
+    show_matchup = opp_sp_name is not None
+    rows = []
+    for slot in range(1, 10):
+        pid_raw = lineup_row.get(f"slot_{slot}_player_id") if lineup_row is not None else None
+        pid = int(pid_raw) if pid_raw is not None else None
+        name = lineup_row.get(f"slot_{slot}_full_name") if lineup_row is not None else None
+        pos  = lineup_row.get(f"slot_{slot}_position")  if lineup_row is not None else None
+
+        bs = batter_stats.get(pid, {}) if pid else {}
+        ms = matchup_stats.get(pid, {}) if pid else {}
+
+        ops_val   = bs.get("ops")
+        xwoba_val = bs.get("xwoba")
+
+        row: dict = {
+            "#":     slot,
+            "Player": name or "—",
+            "Pos":   pos or "—",
+            "OPS":   f"{ops_val:.3f}"   if ops_val   is not None else "—",
+            "xwOBA": f"{xwoba_val:.3f}" if xwoba_val is not None else "—",
+        }
+        if show_matchup:
+            pa = ms.get("pa", 0)
+            mx = ms.get("xwoba")
+            row["vs SP PA"]    = str(pa) if pa else "—"
+            row["vs SP xwOBA"] = f"{mx:.3f}" if mx is not None and pa > 0 else "—"
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+st.subheader("Projected Starters & Lineup")
+
+starters_df = load_starters(game_pk)
+lineups_df = load_lineups(game_pk)
+
+# Extract per-side data
+def _get_side(df: pd.DataFrame, side_col: str, side_val: str) -> pd.Series | None:
+    if df.empty:
+        return None
+    mask = df[side_col] == side_val
+    return df[mask].iloc[0] if mask.any() else None
+
+home_starter = _get_side(starters_df, "side", "home")
+away_starter = _get_side(starters_df, "side", "away")
+home_lineup_row = _get_side(lineups_df, "home_away", "home")
+away_lineup_row = _get_side(lineups_df, "home_away", "away")
+
+# Load trailing stats for both pitchers in one query
+_pitcher_id_list = []
+_home_pid = int(home_starter["probable_pitcher_id"]) if home_starter is not None and home_starter.get("probable_pitcher_id") is not None else None
+_away_pid = int(away_starter["probable_pitcher_id"]) if away_starter is not None and away_starter.get("probable_pitcher_id") is not None else None
+if _home_pid is not None:
+    _pitcher_id_list.append(_home_pid)
+if _away_pid is not None:
+    _pitcher_id_list.append(_away_pid)
+
+starter_stats_df = load_starter_stats(tuple(_pitcher_id_list), date_str)
+
+def _get_pitcher_stats(pitcher_id: int | None) -> pd.Series | None:
+    if pitcher_id is None or starter_stats_df.empty:
+        return None
+    mask = starter_stats_df["pitcher_id"] == pitcher_id
+    return starter_stats_df[mask].iloc[0] if mask.any() else None
+
+def _render_starter_stats(stats: pd.Series | None) -> None:
+    """Render RA/9, WHIP, K% as metrics. Falls back to N/A gracefully."""
+    ra9 = _safe_float(stats["ra9"]) if stats is not None else None
+    whip = _safe_float(stats["whip"]) if stats is not None else None
+    k_pct = _safe_float(stats["k_pct"]) if stats is not None else None
+    starts = int(stats["starts"]) if stats is not None and stats.get("starts") is not None else None
+    label_suffix = f" (last {starts} starts)" if starts else ""
+    m1, m2, m3 = st.columns(3)
+    m1.metric(f"RA/9{label_suffix}", f"{ra9:.2f}" if ra9 is not None else "N/A",
+              help="Runs allowed per 9 innings over the last 30 starts. Proxy for ERA — no earned/unearned distinction.")
+    m2.metric(f"WHIP{label_suffix}", f"{whip:.2f}" if whip is not None else "N/A",
+              help="(Walks + Hits) / IP over the last 30 starts.")
+    m3.metric(f"K%{label_suffix}", f"{k_pct:.1f}%" if k_pct is not None else "N/A",
+              help="Strikeout rate (K / batters faced) over the last 30 starts.")
+
+# Collect player IDs for stat lookups
+_home_player_ids = _extract_player_ids(home_lineup_row)
+_away_player_ids = _extract_player_ids(away_lineup_row)
+_all_player_ids  = tuple(set(_home_player_ids + _away_player_ids))
+
+batter_stats_map  = load_batter_stats(_all_player_ids, date_str)
+home_matchup_map  = load_matchup_stats(tuple(_home_player_ids), _away_pid, date_str)
+away_matchup_map  = load_matchup_stats(tuple(_away_player_ids), _home_pid, date_str)
+
+_home_sp_name = home_starter["probable_pitcher_name"] if home_starter is not None else None
+_away_sp_name = away_starter["probable_pitcher_name"] if away_starter is not None else None
+
+lineup_col1, lineup_col2 = st.columns(2)
+
+with lineup_col1:
+    st.markdown(f"**{home_team_name}**")
+    st.markdown(f"SP: **{_home_sp_name or 'TBD'}**")
+    _render_starter_stats(_get_pitcher_stats(_home_pid))
+    if home_lineup_row is not None:
+        st.caption("OPS and xwOBA are season-to-date. 'vs SP' shows career PA and xwOBA against the opposing starter.")
+        st.dataframe(
+            _lineup_table(home_lineup_row, batter_stats_map, home_matchup_map, _away_sp_name),
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption("Lineup not yet confirmed.")
+
+with lineup_col2:
+    st.markdown(f"**{away_team_name}**")
+    st.markdown(f"SP: **{_away_sp_name or 'TBD'}**")
+    _render_starter_stats(_get_pitcher_stats(_away_pid))
+    if away_lineup_row is not None:
+        st.caption("OPS and xwOBA are season-to-date. 'vs SP' shows career PA and xwOBA against the opposing starter.")
+        st.dataframe(
+            _lineup_table(away_lineup_row, batter_stats_map, away_matchup_map, _home_sp_name),
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption("Lineup not yet confirmed.")
+
+st.divider()
+
+# ===========================================================================
 # Section 2 — Team Performance Comparison
 # ===========================================================================
 # Column aliases map spec names → actual DB columns so both the SQL query and

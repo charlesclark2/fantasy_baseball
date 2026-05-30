@@ -350,7 +350,7 @@ This section identifies what is missing or incomplete relative to the architectu
 
 | Gap | Status | Notes |
 |---|---|---|
-| Historical weather backfill (pre-ingestion-start) | **Unknown** | Weather coverage before the ingestion script was added is not documented. |
+| Historical weather backfill (pre-ingestion-start) | ✅ **Done** | `observed_at_first_pitch` coverage from 2021-04-01 onward (12,469 games through 2026-05-28). Pre-Epic-T rows have NULL `weather_observation_type` (same date range, 12,073 rows). `forecast_pregame` forward-only from 2026-05-14; `forecast_intraday` from 2026-05-15. No pre-2021 data, consistent with overall training window. |
 | Run environment signal mart | **Missing** | `run_environment_signal`, `weather_run_modifier`, `umpire_run_modifier`, `environment_volatility_signal` not yet generated. |
 | Opponent quality controls in training dataset | **Present** | Team and starter features exist; dataset join logic needs to be defined. |
 
@@ -444,7 +444,7 @@ AS-OF validation confirmed 2026-05-29 on game_pks 823384, 824280, 824360 (predic
 
 | Architecture Layer | Current State | Gap Size |
 |---|---|---|
-| Raw data ingestion | Comprehensive. Statcast, FanGraphs, Odds API (historical), Parlay API (live, 2026+), Stats API, Action Network, weather, umpires, OAA. | Small — historical weather backfill unknown. Parlay API cutover 2026-06-01. |
+| Raw data ingestion | Comprehensive. Statcast, FanGraphs, Odds API (historical), Parlay API (live, 2026+), Stats API, Action Network, weather, umpires, OAA. | Minimal — historical weather confirmed 2021+. Parlay API cutover 2026-06-01. |
 | Staging layer | Complete for all current sources including all 3 Parlay API staging models. | None — add new staging models as new sources are added. |
 | Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | Small — sub-model output marts not yet created. |
 | Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. | Medium — ZiPS features partially unused; sub-model signals not yet flowing. |
