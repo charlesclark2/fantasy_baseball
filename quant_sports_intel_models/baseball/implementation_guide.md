@@ -4157,31 +4157,31 @@ The gate has five candidate criteria. A game becomes a "qualified bet" when at l
 5. **Prior freshness:** `prior_age_days` ≤ 7 days for the key players in the game — beliefs are fresh, not stale IL-return guesses
 
 Tasks:
-- [ ] Document final gate criteria set and configurable thresholds in `sub_model_registry.yaml` under a new top-level `bet_gate` block
-- [ ] Specify `min_criteria_met` (N of M) — initial recommendation: 3 of 5; tune after 19.3 backtest
-- [ ] Document which criteria are available now vs. dependent on later epics; implement available criteria first and add remaining criteria as signals come online
-- [ ] `bet_gate` config block schema: `min_criteria_met`, per-criterion `threshold`, `enabled` boolean, `depends_on_epic`
+- [x] Document final gate criteria set and configurable thresholds in `sub_model_registry.yaml` under a new top-level `bet_gate` block (2026-05-29)
+- [x] Specify `min_criteria_met` (N of M) — initial recommendation: 3 of 5; tune after 19.3 backtest (2026-05-29)
+- [x] Document which criteria are available now vs. dependent on later epics; implement available criteria first and add remaining criteria as signals come online (2026-05-29)
+- [x] `bet_gate` config block schema: `min_criteria_met`, per-criterion `threshold`, `enabled` boolean, `depends_on_epic` (2026-05-29)
 
 Acceptance Criteria:
-- [ ] `bet_gate` block exists in `sub_model_registry.yaml` with all five criteria defined
-- [ ] Each criterion has a documented threshold and an `enabled` flag
-- [ ] Initial `min_criteria_met = 3` is set with rationale documented
+- [x] `bet_gate` block exists in `sub_model_registry.yaml` with all five criteria defined (2026-05-29)
+- [x] Each criterion has a documented threshold and an `enabled` flag (2026-05-29)
+- [x] Initial `min_criteria_met = 3` is set with rationale documented (2026-05-29)
 
 ---
 
 ### 19.2 — Build compute_bet_permission()
 
 Tasks:
-- [ ] Build `compute_bet_permission(game_pk, prediction_row) -> dict` in `betting_ml/utils/probability_layer.py` returning `{qualified_bet: bool, gate_signals_met: int, game_conviction_score: float, gate_detail: dict}`
-- [ ] `gate_detail` documents which criteria fired: `{offensive_signal_qualifies: bool, run_env_supports: bool, uncertainty_below_threshold: bool, market_disagreement_visible: bool, prior_fresh: bool}`
-- [ ] Add `qualified_bet` (boolean), `gate_signals_met` (integer 0–5), and `game_conviction_score` (float 0.0–1.0) columns to `daily_model_predictions` via DDL migration
-- [ ] Wire `compute_bet_permission()` into `predict_today.py` immediately after the existing Kelly sizing step — gate runs on every scored game and populates all three new columns
-- [ ] Criteria whose dependencies haven't shipped yet are treated as `False`; the gate degrades gracefully as signals come online
+- [x] Build `compute_bet_permission(game_pk, prediction_row) -> dict` in `betting_ml/utils/probability_layer.py` returning `{qualified_bet: bool, gate_signals_met: int, game_conviction_score: float, gate_detail: dict}` (2026-05-29)
+- [x] `gate_detail` documents which criteria fired: `{offensive_signal_qualifies: bool, run_env_supports: bool, uncertainty_below_threshold: bool, market_disagreement_visible: bool, prior_fresh: bool}` (2026-05-29)
+- [x] Add `qualified_bet` (boolean), `gate_signals_met` (integer 0–5), and `game_conviction_score` (float 0.0–1.0) columns to `daily_model_predictions` via DDL migration — `scripts/ddl/add_bet_gate_columns.sql` (2026-05-29)
+- [x] Wire `compute_bet_permission()` into `predict_today.py` immediately after the existing Kelly sizing step — gate runs on every scored game and populates all three new columns (2026-05-29)
+- [x] Criteria whose dependencies haven't shipped yet are treated as `False`; the gate degrades gracefully as signals come online (2026-05-29)
 
 Acceptance Criteria:
-- [ ] `daily_model_predictions` has `qualified_bet`, `gate_signals_met`, and `game_conviction_score` columns populated for all scored games
-- [ ] A game with `prior_age_days > 7` never achieves `qualified_bet = true` solely on signal strength — freshness criterion blocks it
-- [ ] `compute_bet_permission()` has unit tests covering each of the five criteria firing/not firing independently
+- [x] `daily_model_predictions` has `qualified_bet`, `gate_signals_met`, and `game_conviction_score` columns populated for all scored games (2026-05-29)
+- [x] A game with `prior_age_days > 7` never achieves `qualified_bet = true` solely on signal strength — freshness criterion blocks it (2026-05-29)
+- [x] `compute_bet_permission()` has unit tests covering each of the five criteria firing/not firing independently — 24 tests in `betting_ml/tests/test_bet_permission.py`, all passing (2026-05-29)
 
 ---
 

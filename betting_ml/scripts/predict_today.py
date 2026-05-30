@@ -42,6 +42,7 @@ from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
     compute_kelly,
+    compute_bet_permission,
 )
 from betting_ml.models.total_runs_trainer import p_over_line
 
@@ -249,7 +250,10 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     totals_posterior_prob   FLOAT,
     totals_edge             FLOAT,
     totals_kelly_fraction   FLOAT,
-    data_source             VARCHAR(50)    -- 'feature_store' or 'intraday_fallback'
+    data_source             VARCHAR(50),   -- 'feature_store' or 'intraday_fallback'
+    qualified_bet           BOOLEAN,       -- Story 19.2: bet permission gate result
+    gate_signals_met        INTEGER,       -- 0-5 gate criteria that fired
+    game_conviction_score   FLOAT          -- 0.0-1.0 weighted gate strength
 )
 """
 
@@ -272,7 +276,8 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
-    data_source
+    data_source,
+    qualified_bet, gate_signals_met, game_conviction_score
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -286,7 +291,8 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
-    %(data_source)s
+    %(data_source)s,
+    %(qualified_bet)s, %(gate_signals_met)s, %(game_conviction_score)s
 )
 """
 
@@ -359,6 +365,15 @@ def _write_predictions_to_snowflake(
         else:
             tot_edge = tot_post = tot_kelly = None
 
+        game_pk_val = _s(df_today, "game_pk", i)
+
+        # --- Bet permission gate (Story 19.2) ---
+        gate_row = {
+            "pred_total_runs":       float(pred_total_mean[i]),
+            "total_line_consensus":  total_line_v if has_odds else None,
+        }
+        gate_result = compute_bet_permission(str(game_pk_val), gate_row)
+
         raw_dt = _s(df_today, "game_datetime", i)
         game_dt: datetime | None = None
         if raw_dt is not None:
@@ -366,8 +381,6 @@ def _write_predictions_to_snowflake(
                 game_dt = pd.Timestamp(raw_dt).to_pydatetime().replace(tzinfo=None)
             except Exception:
                 pass
-
-        game_pk_val = _s(df_today, "game_pk", i)
 
         rows.append(_sanitize({
             "model_version":          model_version,
@@ -404,6 +417,9 @@ def _write_predictions_to_snowflake(
             "totals_edge":            tot_edge,
             "totals_kelly_fraction":  tot_kelly,
             "data_source":            data_source,
+            "qualified_bet":          gate_result["qualified_bet"],
+            "gate_signals_met":       gate_result["gate_signals_met"],
+            "game_conviction_score":  gate_result["game_conviction_score"],
         }))
 
     if dry_run:
@@ -416,6 +432,10 @@ def _write_predictions_to_snowflake(
         try:
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
+            # Story 19.2 migration — idempotent; safe to run on every scoring pass
+            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
+            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")
+            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")
 
             inserted = 0
             skipped = 0

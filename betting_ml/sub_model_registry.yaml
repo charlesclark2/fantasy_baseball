@@ -38,6 +38,59 @@
 # is promoted, the prior champion is marked deprecated immediately.
 # =============================================================================
 
+# =============================================================================
+# Bet Permission Gate — Story 19.1 (2026-05-29)
+# =============================================================================
+# Controls which games qualify as "approved bets" based on multi-signal alignment.
+# A game qualifies when gate_signals_met >= min_criteria_met.
+#
+# Architectural rationale (Penumbra ETF study, 2026-01-14):
+#   Forecast magnitude does not reliably map to returns. Signal value is
+#   concentrated on rare days where multiple independent signals align.
+#   The gate separates the decision to bet (Epic 19) from how much to bet
+#   (Kelly sizing). Most games, most days, do nothing.
+#
+# Criteria rollout status:
+#   offensive_signal_qualifies — ENABLED (Epic 4A shipped)
+#   run_env_supports           — disabled until Epic 9 wires run_env_v4 into inference
+#   uncertainty_below_threshold — disabled until Epic 9.F1 (game_uncertainty_score)
+#   market_disagreement_visible — disabled until Epic 12 CLV/market layer
+#   prior_fresh                — disabled until EB prior tracking ships (post-10M)
+# =============================================================================
+
+bet_gate:
+  min_criteria_met: 3
+  rationale: |
+    N=3 of M=5 initial setting provides meaningful signal concentration filtering while
+    remaining achievable as additional sub-model signals come online. Tune after 19.3
+    backtest confirms CLV lift ≥ 0.3% for qualified vs. non-qualified bets.
+  criteria:
+    offensive_signal_qualifies:
+      threshold: 0.5       # run disagreement vs. market line (model pred_total_runs − total_line_consensus)
+      enabled: true
+      depends_on_epic: "4A"
+      description: "EB-stabilized offensive quality signal implies run total ≥ 0.5 run disagreement with market line"
+    run_env_supports:
+      threshold: null      # directional check only; no numeric threshold
+      enabled: false
+      depends_on_epic: "9"
+      description: "Run environment signal (run_env_v4) directionally supports the offensive call"
+    uncertainty_below_threshold:
+      threshold: null      # defined in Epic 9.F1 (game_uncertainty_score)
+      enabled: false
+      depends_on_epic: "9.F1"
+      description: "game_uncertainty_score below threshold — excludes debut starters, opening-week games, stale posteriors"
+    market_disagreement_visible:
+      threshold: null      # sharp-money alignment sourced from mart_game_odds_bridge
+      enabled: false
+      depends_on_epic: "12"
+      description: "Bookmaker line spread or public betting skew indicates sharp money on the same side"
+    prior_fresh:
+      threshold: 7         # prior_age_days for key players in the game
+      enabled: false
+      depends_on_epic: "I"
+      description: "prior_age_days ≤ 7 for key players — beliefs are fresh, not stale IL-return guesses"
+
 run_env_v1:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v1.pkl
   feature_columns_path: models/sub_models/run_env_v1_features.json
