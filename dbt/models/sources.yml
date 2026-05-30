@@ -290,6 +290,35 @@ sources:
             description: Calendar date on which this venue record was last ingested.
             tests: [not_null]
 
+      - name: player_profiles
+        description: >
+          One row per MLBAM player ID. Physical profile data fetched from the
+          StatsAPI /people endpoint via scripts/ingest_player_profiles.py.
+          SCD-1 — MERGE on player_id overwrites with the latest values.
+          Height, weight, birth_date, and primary_position_code are used as
+          features in Epic 7 archetype clustering (stories 7.1 and 7.2).
+          Refreshed weekly via Dagster ingest_player_profiles_op.
+        columns:
+          - name: player_id
+            description: MLBAM player ID. Primary key.
+            tests:
+              - not_null
+              - unique
+          - name: full_name
+            description: Player full name from StatsAPI.
+          - name: birth_date
+            description: Date of birth. Used to compute age_at_season_start in clustering scripts.
+          - name: height_inches
+            description: Player height in inches, parsed from StatsAPI string (e.g. "6' 2\"" → 74).
+          - name: weight_lbs
+            description: Player weight in pounds as reported by StatsAPI.
+          - name: primary_position_code
+            description: Primary position code from StatsAPI (e.g. "1" = pitcher, "7" = LF).
+          - name: active
+            description: Whether the player is currently active on a roster.
+          - name: last_fetched_at
+            description: UTC timestamp of the most recent successful profile fetch.
+
       - name: player_transactions
         description: >
           One row per roster transaction event per player. Fetched from the

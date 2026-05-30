@@ -2,6 +2,33 @@ version: 2
 
 models:
 
+  - name: stg_statsapi_player_profiles
+    description: >
+      One row per MLBAM player ID. Passthrough from baseball_data.statsapi.player_profiles.
+      Physical traits (height_inches, weight_lbs, birth_date) are used as clustering
+      features in Epic 7 stories 7.1 (batter archetypes) and 7.2 (pitcher archetypes).
+      Populated by scripts/ingest_player_profiles.py; refreshed weekly via Dagster.
+    columns:
+      - name: player_id
+        description: MLBAM player ID. Primary key.
+        tests:
+          - unique
+          - not_null
+      - name: full_name
+        description: Player full name from StatsAPI.
+      - name: birth_date
+        description: Date of birth. Used to derive age_at_season_start in clustering scripts.
+      - name: height_inches
+        description: Height in inches, parsed from StatsAPI string (e.g. "6' 2\"" → 74).
+      - name: weight_lbs
+        description: Weight in pounds as reported by StatsAPI.
+      - name: primary_position_code
+        description: Primary position code (e.g. "1" = pitcher, "7" = LF).
+      - name: active
+        description: Whether the player is currently active on a roster.
+      - name: last_fetched_at
+        description: UTC timestamp of the most recent successful profile fetch.
+
   - name: stg_statsapi_transactions
     description: >
       One row per transaction_id. Deduplicated from player_transactions using
