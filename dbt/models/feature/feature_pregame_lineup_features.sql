@@ -284,6 +284,27 @@ slot_platoon as (
     group by ls.game_pk, ls.home_away
 ),
 
+-- Prior-season batter archetype distribution across 9 lineup slots (Story 7.4)
+-- Leakage guard: season = year(official_date) - 1 (prior season only)
+-- n_no_label: slots where batter has no prior-season archetype (rookie / debut)
+batter_archetype_dist as (
+    select
+        ls.game_pk,
+        ls.home_away,
+        count(case when bc.cluster_label = 'power_pull'       then 1 end) as n_power_pull,
+        count(case when bc.cluster_label = 'patient_obp'      then 1 end) as n_patient_obp,
+        count(case when bc.cluster_label = 'high_whiff'       then 1 end) as n_high_whiff,
+        count(case when bc.cluster_label = 'groundball_speed' then 1 end) as n_groundball_speed,
+        count(case when bc.cluster_label = 'contact_spray'    then 1 end) as n_contact_spray,
+        count(case when bc.cluster_label is null               then 1 end) as n_no_label
+    from lineup_slots ls
+    left join {{ source('statsapi', 'batter_clusters') }} bc
+        on  bc.batter_id = ls.batter_id
+        and bc.season    = year(ls.official_date) - 1
+    where ls.batter_id is not null
+    group by ls.game_pk, ls.home_away
+),
+
 -- Starter pitch archetype and fastball velocity for each game × side
 -- pitch_archetype: prior-season LEAKAGE GUARD (game_year - 1)
 -- avg_fastball_velo_7d: rolling pre-game window already leakage-free in source
@@ -625,6 +646,17 @@ final as (
         ea.avg_eb_woba_uncertainty,
         coalesce(ea.eb_coverage_pct, 0.0)                           as eb_coverage_pct,
 
+        -- Prior-season batter archetype distribution (Story 7.4)
+        -- Count of lineup slots assigned to each batter archetype (prior season).
+        -- n_no_label: slots with no prior-season archetype (rookies, debuts).
+        -- Sums to 9 for full lineups; may be < 9 when batter_id is null for a slot.
+        coalesce(bad.n_power_pull,       0)                         as n_power_pull,
+        coalesce(bad.n_patient_obp,      0)                         as n_patient_obp,
+        coalesce(bad.n_high_whiff,       0)                         as n_high_whiff,
+        coalesce(bad.n_groundball_speed, 0)                         as n_groundball_speed,
+        coalesce(bad.n_contact_spray,    0)                         as n_contact_spray,
+        coalesce(bad.n_no_label,         9)                         as n_no_label,
+
         -- SCD-2 sentinel columns (Story 2.4 convention — born SCD-2-ready)
         current_timestamp()::timestamp_ntz                          as valid_from,
         null::timestamp_ntz                                         as valid_to,
@@ -678,6 +710,9 @@ final as (
     left join eb_agg ea
         on  ea.game_pk   = l.game_pk
         and ea.home_away = l.home_away
+    left join batter_archetype_dist bad
+        on  bad.game_pk   = l.game_pk
+        and bad.home_away = l.home_away
 )
 
 select * from final

@@ -5,8 +5,8 @@
 -- archetype composition facing the opposing starter's pitcher cluster (Card 7.K2).
 --
 -- Leakage guards:
---   - Starter pitcher cluster: most recent snapshot_date strictly before game_date
---     (same leakage guard as feature_pitcher_cluster_matchups).
+--   - Starter pitcher cluster: prior-season assignment (pc.season = game_year - 1);
+--     PK on pitcher_clusters is (pitcher_id, season) — one row per pair, no deduplication.
 --   - Batter cluster assignments: game_year - 1 = season (prior-season batter archetype).
 --   - Matchup mart lookup: game_date strictly before anchor game_date in
 --     mart_batter_archetype_vs_pitcher_cluster.
@@ -42,30 +42,20 @@ starters as (
     where probable_pitcher_id is not null
 ),
 
--- Most recent pitcher cluster snapshot strictly before game_date (no leakage).
--- Covers in-season monthly snapshots and prior-season fallback for April/May.
-starter_snapshot_ranked as (
+-- Prior-season pitcher cluster (no leakage): season = game_year - 1.
+-- PK is (pitcher_id, season) — one row per pair, no deduplication needed.
+starter_cluster as (
     select
         g.game_pk,
         s.side,
         s.pitcher_id,
-        pc.cluster_id,
-        row_number() over (
-            partition by g.game_pk, s.pitcher_id, s.side
-            order by pc.snapshot_date desc
-        ) as rn
+        pc.cluster_label as pitcher_cluster_label
     from games g
     join starters s
         on  s.game_pk = g.game_pk
     left join {{ source('statsapi', 'pitcher_clusters') }} pc
-        on  pc.pitcher_id    = s.pitcher_id
-        and pc.snapshot_date < g.game_date
-),
-
-starter_cluster as (
-    select game_pk, side, pitcher_id, cluster_id as pitcher_cluster_id
-    from starter_snapshot_ranked
-    where rn = 1
+        on  pc.pitcher_id = s.pitcher_id
+        and pc.season     = g.game_year - 1
 ),
 
 lineups as (
@@ -112,7 +102,6 @@ batter_cluster_joined as (
         ls.side,
         ls.slot,
         ls.batter_id,
-        bc.cluster_id    as batter_cluster_id,
         bc.cluster_label as batter_cluster_label
     from lineup_slots ls
     join games g
@@ -130,35 +119,33 @@ slot_opp_cluster as (
         bcj.side,
         bcj.slot,
         bcj.batter_id,
-        bcj.batter_cluster_id,
         bcj.batter_cluster_label,
         -- Each side's lineup faces the OPPOSING side's starter
-        opp_sc.pitcher_cluster_id as opp_pitcher_cluster_id
+        opp_sc.pitcher_cluster_label as opp_pitcher_cluster_label
     from batter_cluster_joined bcj
     left join starter_cluster opp_sc
         on  opp_sc.game_pk = bcj.game_pk
         and opp_sc.side    = case when bcj.side = 'home' then 'away' else 'home' end
 ),
 
--- Look up population-level adj_woba for (batter_cluster_id, opp_pitcher_cluster_id)
+-- Look up population-level adj_woba for (batter_cluster_label, opp_pitcher_cluster_label)
 -- from mart_batter_archetype_vs_pitcher_cluster using most recent prior record.
 slot_matchup_stats as (
     select
         soc.game_pk,
         soc.side,
         soc.slot,
-        soc.batter_cluster_id,
         soc.batter_cluster_label,
-        soc.opp_pitcher_cluster_id,
+        soc.opp_pitcher_cluster_label,
         bam.adj_woba,
         bam.adj_xwoba
     from slot_opp_cluster soc
     join games g
         on  g.game_pk = soc.game_pk
     left join {{ ref('mart_batter_archetype_vs_pitcher_cluster') }} bam
-        on  bam.batter_cluster_id   = soc.batter_cluster_id
-        and bam.pitcher_cluster_id  = soc.opp_pitcher_cluster_id
-        and bam.game_date           < g.game_date
+        on  bam.batter_cluster_label  = soc.batter_cluster_label
+        and bam.pitcher_cluster_label = soc.opp_pitcher_cluster_label
+        and bam.game_date             < g.game_date
     qualify row_number() over (
         partition by soc.game_pk, soc.side, soc.slot
         order by bam.game_date desc nulls last

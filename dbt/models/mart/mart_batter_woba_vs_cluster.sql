@@ -11,49 +11,30 @@
 -- Shrinkage toward league average for small samples (prior 30 PA).
 -- Gate: only emit rows where pa_count >= 10 (min PA vs. a cluster).
 --
--- Availability: cluster data begins 2020. Only game_year >= 2020 rows are populated.
+-- Availability: cluster data begins 2015; game_year >= 2016 rows are populated
+-- (prior-season join: game_year - 1 = season in pitcher_clusters).
 -- Full table refresh required (career cumulative cannot be computed incrementally).
+--
+-- Leakage guard: pitcher cluster joined on prior-season assignment
+-- (pc.season = game_year - 1). PK on pitcher_clusters is (pitcher_id, season) —
+-- one row per pair, no deduplication needed.
 
--- Most recent cluster snapshot strictly before game_date (no leakage).
--- Mirrors the join logic in feature_pitcher_cluster_matchups.
-with pa_with_clusters_raw as (
+with pa_with_clusters as (
     select
         ppe.batter_id,
         ppe.game_date,
         ppe.game_year,
-        ppe.pitcher_id,
         ppe.woba_value,
         ppe.woba_denom,
-        ppe.xwoba
+        ppe.xwoba,
+        pc.cluster_id
     from {{ ref('mart_pitch_play_event') }} ppe
-    where ppe.plate_appearance_event is not null
-      and ppe.game_year >= 2020
-),
-
-snapshot_ranked as (
-    select
-        p.batter_id,
-        p.game_date,
-        p.game_year,
-        p.woba_value,
-        p.woba_denom,
-        p.xwoba,
-        pc.cluster_id,
-        row_number() over (
-            partition by p.batter_id, p.game_date, p.pitcher_id
-            order by pc.snapshot_date desc
-        ) as rn
-    from pa_with_clusters_raw p
     left join {{ source('statsapi', 'pitcher_clusters') }} pc
-        on  pc.pitcher_id    = p.pitcher_id
-        and pc.snapshot_date < p.game_date
-),
-
-pa_with_clusters as (
-    select batter_id, game_date, game_year, woba_value, woba_denom, xwoba, cluster_id
-    from snapshot_ranked
-    where rn = 1
-      and cluster_id is not null
+        on  pc.pitcher_id = ppe.pitcher_id
+        and pc.season     = ppe.game_year - 1
+    where ppe.plate_appearance_event is not null
+      and ppe.game_year >= 2016
+      and pc.cluster_id is not null
 ),
 
 -- Step 1: Daily PA aggregation to make rolling windows efficient

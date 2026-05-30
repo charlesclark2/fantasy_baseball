@@ -271,6 +271,31 @@ def query_all_historical_player_ids(conn: snowflake.connector.SnowflakeConnectio
         return {int(row[0]) for row in cur.fetchall() if row[0] is not None}
 
 
+def query_missing_cluster_player_ids(conn: snowflake.connector.SnowflakeConnection) -> set[int]:
+    """
+    Return player IDs that appear in batter_clusters or pitcher_clusters but have
+    no row in player_profiles_raw. These are pre-2020 retired players that the
+    original backfill (2020+ only) never fetched.
+    """
+    sql = f"""
+        WITH cluster_ids AS (
+            SELECT DISTINCT batter_id AS player_id
+            FROM baseball_data.statsapi.batter_clusters
+            UNION
+            SELECT DISTINCT pitcher_id AS player_id
+            FROM baseball_data.statsapi.pitcher_clusters
+        )
+        SELECT c.player_id
+        FROM cluster_ids c
+        LEFT JOIN {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} p
+            ON c.player_id = p.player_id
+        WHERE p.player_id IS NULL
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        return {int(row[0]) for row in cur.fetchall() if row[0] is not None}
+
+
 def query_missing_recent_player_ids(conn: snowflake.connector.SnowflakeConnection) -> set[int]:
     """Return player IDs in the last 14 days of game data not yet in player_profiles."""
     sql = f"""
@@ -342,6 +367,30 @@ def fetch_and_insert_ids(
 
 # ── Subcommand runners ────────────────────────────────────────────────────────
 
+def run_cluster_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
+    """
+    Fetch profiles for player IDs in batter_clusters / pitcher_clusters that are
+    absent from player_profiles_raw. Fills the pre-2020 retired-player gap left by
+    the original backfill mode (which only sourced IDs from mart_pitch_play_event
+    where game_year >= 2020).
+
+    After this completes, run:
+        dbtf run --select stg_statsapi_player_profiles
+    to refresh the deduped downstream table.
+    """
+    log.info("Cluster backfill: finding player IDs in cluster tables missing from player_profiles_raw")
+    missing_ids = query_missing_cluster_player_ids(conn)
+    log.info("Found %d player ID(s) to backfill", len(missing_ids))
+
+    if not missing_ids:
+        log.info("No missing IDs — player_profiles_raw already has full cluster coverage")
+        return
+
+    total = fetch_and_insert_ids(conn, sorted(missing_ids))
+    log.info("Cluster backfill complete — %d total rows inserted into player_profiles_raw", total)
+    log.info("Next step: run `dbtf run --select stg_statsapi_player_profiles` to refresh downstream")
+
+
 def run_backfill(conn: snowflake.connector.SnowflakeConnection) -> None:
     log.info("Backfill: collecting all historical player IDs from Snowflake (2020+)")
     all_ids = query_all_historical_player_ids(conn)
@@ -394,6 +443,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("backfill", help="Fetch all historical player profiles (2020+). Idempotent.")
+    sub.add_parser(
+        "cluster-backfill",
+        help=(
+            "Fetch profiles for player IDs in batter_clusters/pitcher_clusters that are "
+            "absent from player_profiles_raw (pre-2020 retired players). One-time run. "
+            "Follow up with: dbtf run --select stg_statsapi_player_profiles"
+        ),
+    )
     sub.add_parser("update", help="Fetch recently changed profiles and new call-ups. Run weekly.")
     return parser
 
@@ -411,6 +468,8 @@ def main() -> None:
 
         if args.command == "backfill":
             run_backfill(conn)
+        elif args.command == "cluster-backfill":
+            run_cluster_backfill(conn)
         elif args.command == "update":
             run_update(conn)
     finally:

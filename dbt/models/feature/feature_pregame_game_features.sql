@@ -235,6 +235,14 @@ final as (
         h_ln.lineup_archetype_pa_coverage       as home_lineup_archetype_pa_coverage,
         h_ln.starter_pitch_archetype            as home_starter_pitch_archetype,
 
+        -- ── Home lineup batter archetype distribution (Story 7.4) ────────────
+        h_ln.n_power_pull                       as home_n_power_pull,
+        h_ln.n_patient_obp                      as home_n_patient_obp,
+        h_ln.n_high_whiff                       as home_n_high_whiff,
+        h_ln.n_groundball_speed                 as home_n_groundball_speed,
+        h_ln.n_contact_spray                    as home_n_contact_spray,
+        h_ln.n_no_label                         as home_n_no_label,
+
         -- ── Away lineup ───────────────────────────────────────────────────────
         a_ln.has_full_lineup                    as away_has_full_lineup,
         a_ln.lhb_count                          as away_lhb_count,
@@ -276,6 +284,14 @@ final as (
         a_ln.lineup_iso_vs_starter_archetype    as away_lineup_iso_vs_starter_archetype,
         a_ln.lineup_archetype_pa_coverage       as away_lineup_archetype_pa_coverage,
         a_ln.starter_pitch_archetype            as away_starter_pitch_archetype,
+
+        -- ── Away lineup batter archetype distribution (Story 7.4) ────────────
+        a_ln.n_power_pull                       as away_n_power_pull,
+        a_ln.n_patient_obp                      as away_n_patient_obp,
+        a_ln.n_high_whiff                       as away_n_high_whiff,
+        a_ln.n_groundball_speed                 as away_n_groundball_speed,
+        a_ln.n_contact_spray                    as away_n_contact_spray,
+        a_ln.n_no_label                         as away_n_no_label,
 
         -- ── Home starting pitcher ─────────────────────────────────────────────
         h_st.pitcher_id                         as home_starter_pitcher_id,
@@ -364,6 +380,10 @@ final as (
         h_st.breaking_pct_drift_5start          as home_starter_breaking_pct_drift_5start,
         h_st.offspeed_pct_drift_5start          as home_starter_offspeed_pct_drift_5start,
 
+        -- ── Home starter: pitcher archetype label (Story 7.4) ────────────────
+        -- Prior-season cluster label. NULL for rookies / pitchers not in table.
+        h_st.starter_pitcher_archetype          as home_starter_pitcher_archetype,
+
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
         a_st.pitcher_name                       as away_starter_pitcher_name,
@@ -450,6 +470,10 @@ final as (
         a_st.fastball_pct_drift_5start          as away_starter_fastball_pct_drift_5start,
         a_st.breaking_pct_drift_5start          as away_starter_breaking_pct_drift_5start,
         a_st.offspeed_pct_drift_5start          as away_starter_offspeed_pct_drift_5start,
+
+        -- ── Away starter: pitcher archetype label (Story 7.4) ────────────────
+        -- Prior-season cluster label. NULL for rookies / pitchers not in table.
+        a_st.starter_pitcher_archetype          as away_starter_pitcher_archetype,
 
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,

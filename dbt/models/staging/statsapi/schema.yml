@@ -4,30 +4,74 @@ models:
 
   - name: stg_statsapi_player_profiles
     description: >
-      One row per MLBAM player ID. Passthrough from baseball_data.statsapi.player_profiles.
-      Physical traits (height_inches, weight_lbs, birth_date) are used as clustering
-      features in Epic 7 stories 7.1 (batter archetypes) and 7.2 (pitcher archetypes).
-      Populated by scripts/ingest_player_profiles.py; refreshed weekly via Dagster.
+      One row per MLBAM player ID. Deduplicated from baseball_data.statsapi.player_profiles_raw
+      via ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY last_fetched_at DESC) — latest
+      fetch wins. Physical traits (height_inches, weight_lbs, birth_date) are used as
+      clustering features in Epic 7 stories 7.1 (batter archetypes) and 7.2 (pitcher
+      archetypes). birth_date drives age-band assignment in Epic 7A.1 Dirichlet prior fitting.
+      Populated by scripts/ingest_player_profiles.py (backfill + cluster-backfill modes);
+      refreshed weekly via Dagster weekly_player_profiles_job.
+      Coverage: 100% for 2020+ players; pre-2020 retired players backfilled via cluster-backfill
+      mode targeting batter_clusters / pitcher_clusters player IDs.
     columns:
       - name: player_id
         description: MLBAM player ID. Primary key.
         tests:
           - unique
           - not_null
+
       - name: full_name
         description: Player full name from StatsAPI.
+        tests:
+          - not_null
+
       - name: birth_date
-        description: Date of birth. Used to derive age_at_season_start in clustering scripts.
+        description: >
+          Date of birth (DATE). Used to derive age_at_season_start in clustering and
+          Dirichlet prior scripts. NULL is possible for a small number of historical
+          players whose birth date is not available in the StatsAPI /people endpoint.
+          Not tested not_null — nulls are expected and handled by age-band fallback logic.
+
       - name: height_inches
-        description: Height in inches, parsed from StatsAPI string (e.g. "6' 2\"" → 74).
+        description: >
+          Height in inches, parsed from StatsAPI string (e.g. "6' 2\"" → 74).
+          NULL when StatsAPI returns no height. Valid range: 60–84 inches (5'0"–7'0").
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 60
+                max_value: 84
+                inclusive: true
+
       - name: weight_lbs
-        description: Weight in pounds as reported by StatsAPI.
+        description: >
+          Weight in pounds as reported by StatsAPI. NULL when not available.
+          Valid range: 140–375 lbs (covers the full MLB player distribution).
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 140
+                max_value: 375
+                inclusive: true
+
       - name: primary_position_code
-        description: Primary position code (e.g. "1" = pitcher, "7" = LF).
+        description: >
+          Primary position code from StatsAPI (e.g. "1" = pitcher, "2" = catcher,
+          "3"–"6" = infield, "7"–"9" = outfield, "10" = DH, "Y" = two-way).
+        tests:
+          - not_null
+
       - name: active
-        description: Whether the player is currently active on a roster.
+        description: >
+          Whether the player is currently on an active MLB roster per StatsAPI.
+          false for retired players backfilled via cluster-backfill.
+        tests:
+          - not_null
+
       - name: last_fetched_at
-        description: UTC timestamp of the most recent successful profile fetch.
+        description: UTC timestamp of the most recent successful profile fetch from StatsAPI.
+        tests:
+          - not_null
 
   - name: stg_statsapi_transactions
     description: >

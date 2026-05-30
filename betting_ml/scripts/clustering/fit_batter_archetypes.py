@@ -1,0 +1,545 @@
+"""
+fit_batter_archetypes.py
+------------------------
+Epic 7.1 — Batter Archetype Clustering (revalidation).
+
+Fits ONE cluster model across all seasons (2015–current) pooled simultaneously,
+then assigns labels per (batter_id, season). Cross-season pooling prevents the
+per-season convergence instability in the prototype (silhouette=0.141,
+contact_spray missing from 4 of 6 seasons).
+
+Algorithm comparison (configurable via --algorithms):
+    kmeans       — KMeans with n_init=20
+    gmm          — GaussianMixture
+    hierarchical — AgglomerativeClustering (ward linkage)
+
+Features (stratum A — all seasons, consistent):
+    k_pct, bb_pct, iso, pull_pct, hard_hit_pct, gb_pct
+    height_inches, weight_lbs, age_at_season_start
+    bb_k_ratio (derived: bb_pct / (k_pct + 0.001))
+    contact_power (derived: (1 - k_pct) * iso)
+
+Bat tracking (bat_speed_avg, attack_angle_avg) is intentionally EXCLUDED from
+clustering: it only exists from 2023+, and mean-imputing pre-2023 rows pins them
+to a single point in bat-tracking space, creating a hard 2022/2023 era boundary
+that dominates the cluster geometry and collapses silhouette to ~0.11.
+
+k evaluated over --k-range (default 4–7). Best model selected by silhouette score.
+Heuristic labels are suggested from centroids; inspect and override with --label-map.
+
+Persistence:
+    DELETE all existing batter_clusters rows → INSERT full cross-season assignments.
+    Writes model artifacts to betting_ml/models/batter_archetypes/.
+
+Usage:
+    # Dry-run: print centroids and suggested labels, no Snowflake write
+    uv run betting_ml/scripts/clustering/fit_batter_archetypes.py --dry-run
+
+    # Full run with defaults (k=4–7, all three algorithms, min-pa=100)
+    uv run betting_ml/scripts/clustering/fit_batter_archetypes.py
+
+    # Override label assignments from centroid inspection
+    uv run betting_ml/scripts/clustering/fit_batter_archetypes.py \\
+        --label-map '{"0": "power_pull", "1": "high_whiff", "2": "patient_obp", "3": "groundball_speed", "4": "contact_spray"}'
+
+    # Compare only kmeans and gmm, restrict k range
+    uv run betting_ml/scripts/clustering/fit_batter_archetypes.py \\
+        --algorithms kmeans gmm --k-range 4 6
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from datetime import date
+from pathlib import Path
+
+import joblib
+import numpy as np
+import pandas as pd
+from sklearn.cluster import AgglomerativeClustering, KMeans
+from sklearn.metrics import silhouette_score
+from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import StandardScaler
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from betting_ml.utils.data_loader import get_snowflake_connection
+
+_MODELS_DIR = PROJECT_ROOT / "betting_ml" / "models" / "batter_archetypes"
+_SILHOUETTE_WARN = 0.30  # AC target; warn if below
+
+FEATURE_COLS = [
+    "k_pct",
+    "bb_pct",
+    "iso",
+    "pull_pct",
+    "hard_hit_pct",
+    "gb_pct",
+    "height_inches",
+    "weight_lbs",
+    "age_at_season_start",
+    "bb_k_ratio",
+    "contact_power",
+]
+
+_DDL = """
+CREATE OR REPLACE TABLE baseball_data.statsapi.batter_clusters (
+    batter_id        INTEGER      NOT NULL,
+    season           INTEGER      NOT NULL,
+    cluster_id       INTEGER      NOT NULL,
+    cluster_label    VARCHAR(50)  NOT NULL,
+    silhouette_score FLOAT,
+    fit_date         DATE,
+    run_timestamp    TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+    PRIMARY KEY (batter_id, season)
+)
+"""
+
+_BATTER_PROFILE_QUERY = """
+SELECT
+    p.batter_id,
+    p.game_year     AS season,
+    p.pa_count,
+    p.k_pct,
+    p.bb_pct,
+    p.iso,
+    p.pull_pct,
+    p.hard_hit_pct,
+    p.gb_pct,
+    pr.height_inches,
+    pr.weight_lbs,
+    pr.birth_date
+FROM baseball_data.betting.mart_batter_profile_summary p
+LEFT JOIN baseball_data.betting.stg_statsapi_player_profiles pr
+    ON p.batter_id = pr.player_id
+WHERE p.game_year >= {min_season}
+  AND p.pa_count >= {min_pa}
+ORDER BY p.game_year, p.batter_id
+"""
+
+_NAMES_QUERY = """
+SELECT mlb_bam_id, player_name
+FROM baseball_data.savant.ref_players
+WHERE mlb_bam_id IN ({id_list})
+"""
+
+_SPOT_CHECK_NAMES = {
+    "Judge, Aaron", "Arraez, Luis", "Soto, Juan", "Alvarez, Yordan",
+    "Kwan, Steven", "Freeman, Freddie", "Alonso, Pete", "Bichette, Bo",
+    "Ramirez, Jose", "Goldschmidt, Paul", "Betts, Mookie", "Turner, Trea",
+}
+
+
+# ── Data loading ──────────────────────────────────────────────────────────────
+
+def _load_data(min_season: int, min_pa: int) -> pd.DataFrame:
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_BATTER_PROFILE_QUERY.format(min_season=min_season, min_pa=min_pa))
+        rows = cur.fetchall()
+        cols = [d[0].lower() for d in cur.description]
+        return pd.DataFrame(rows, columns=cols)
+    finally:
+        conn.close()
+
+
+def _load_names(batter_ids: list[int]) -> dict[int, str]:
+    if not batter_ids:
+        return {}
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_NAMES_QUERY.format(id_list=", ".join(str(i) for i in batter_ids)))
+        rows = cur.fetchall()
+        cols = [d[0].lower() for d in cur.description]
+        df = pd.DataFrame(rows, columns=cols)
+        return dict(zip(df["mlb_bam_id"], df["player_name"]))
+    finally:
+        conn.close()
+
+
+# ── Feature preparation ───────────────────────────────────────────────────────
+
+def _compute_age(birth_date, season: int) -> float | None:
+    if birth_date is None or (isinstance(birth_date, float) and np.isnan(birth_date)):
+        return None
+    if isinstance(birth_date, str):
+        try:
+            bd = date.fromisoformat(birth_date)
+        except ValueError:
+            return None
+    else:
+        bd = birth_date
+    season_start = date(int(season), 4, 1)
+    return (season_start - bd).days / 365.25
+
+
+def _prepare_features(
+    df_profile: pd.DataFrame,
+) -> tuple[pd.DataFrame, np.ndarray, StandardScaler, list[str]]:
+    df = df_profile.copy()
+
+    # Age at April 1 of each season
+    df["age_at_season_start"] = df.apply(
+        lambda r: _compute_age(r["birth_date"], r["season"]), axis=1
+    )
+
+    # Derived features
+    df["bb_k_ratio"] = df["bb_pct"] / (df["k_pct"] + 0.001)
+    df["contact_power"] = (1.0 - df["k_pct"]) * df["iso"]
+
+    # Drop rows where >30% of features are null
+    null_frac = df[FEATURE_COLS].isnull().mean(axis=1)
+    mask = null_frac <= 0.30
+    n_dropped = (~mask).sum()
+    if n_dropped:
+        print(f"Dropped {n_dropped} rows with >30% null features.")
+    df_clean = df[mask].reset_index(drop=True)
+    X = df_clean[FEATURE_COLS].copy()
+
+    # Column-median imputation for remaining nulls
+    for col in X.columns:
+        if X[col].isnull().any():
+            X[col] = X[col].fillna(X[col].median())
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    return df_clean, X_scaled, scaler, FEATURE_COLS
+
+
+# ── Model comparison ──────────────────────────────────────────────────────────
+
+def _compare_algorithms(
+    X_scaled: np.ndarray,
+    k_range: range,
+    algorithms: list[str],
+    random_state: int = 42,
+) -> tuple[str, int, float, np.ndarray]:
+    """Try each (algorithm, k) combination; return the combo with highest silhouette."""
+    best_algo, best_k, best_score, best_labels = None, k_range.start, -1.0, None
+
+    print(f"\nComparing algorithms {algorithms} for k={k_range.start}–{k_range.stop - 1}:")
+    for k in k_range:
+        for algo in algorithms:
+            labels = _fit_one(X_scaled, algo, k, random_state)
+            if labels is None:
+                continue
+            score = silhouette_score(X_scaled, labels)
+            marker = " ◀ best so far" if score > best_score else ""
+            print(f"  algo={algo:12s}  k={k}  silhouette={score:.4f}{marker}")
+            if score > best_score:
+                best_score, best_k, best_algo, best_labels = score, k, algo, labels
+
+    return best_algo, best_k, best_score, best_labels
+
+
+def _fit_one(
+    X_scaled: np.ndarray,
+    algo: str,
+    k: int,
+    random_state: int,
+) -> np.ndarray | None:
+    try:
+        if algo == "kmeans":
+            model = KMeans(n_clusters=k, n_init=20, random_state=random_state)
+            return model.fit_predict(X_scaled)
+        elif algo == "gmm":
+            model = GaussianMixture(n_components=k, n_init=5, random_state=random_state)
+            return model.fit_predict(X_scaled)
+        elif algo == "hierarchical":
+            model = AgglomerativeClustering(n_clusters=k, linkage="ward")
+            return model.fit_predict(X_scaled)
+    except Exception as exc:
+        print(f"  WARNING: {algo} k={k} failed: {exc}")
+    return None
+
+
+def _refit_best_kmeans(
+    X_scaled: np.ndarray,
+    best_algo: str,
+    best_k: int,
+    random_state: int = 42,
+) -> KMeans | None:
+    """Refit KMeans for the winning k so we have a model object with .cluster_centers_."""
+    if best_algo == "kmeans":
+        model = KMeans(n_clusters=best_k, n_init=20, random_state=random_state)
+        model.fit(X_scaled)
+        return model
+    return None
+
+
+# ── Centroid inspection & label suggestions ───────────────────────────────────
+
+def _print_centroid_summary(
+    X_scaled: np.ndarray,
+    labels: np.ndarray,
+    feature_cols: list[str],
+) -> pd.DataFrame:
+    df_tmp = pd.DataFrame(X_scaled, columns=feature_cols)
+    df_tmp["cluster_id"] = labels
+    centroids = df_tmp.groupby("cluster_id")[feature_cols].mean()
+    print("\nCluster centroids (standardized z-scores; positive = above league average):")
+    print(centroids.round(3).to_string())
+    return centroids
+
+
+def _suggest_labels(centroids: pd.DataFrame) -> dict[int, str]:
+    """
+    Heuristic label suggestions based on centroid feature rankings.
+    Inspect the centroid table above and override via --label-map if needed.
+    """
+    c = centroids.copy()
+    labels: dict[int, str] = {}
+    used: set[int] = set()
+
+    def _pick_max(s: pd.Series) -> int:
+        return int(s.drop(index=list(used), errors="ignore").idxmax())
+
+    def _pick_min(s: pd.Series) -> int:
+        return int(s.drop(index=list(used), errors="ignore").idxmin())
+
+    def _assign(idx: int, label: str) -> None:
+        labels[idx] = label
+        used.add(idx)
+
+    n = len(c)
+
+    if n >= 1 and "iso" in c.columns and "pull_pct" in c.columns:
+        score = c.get("iso", 0) + c.get("pull_pct", 0) + c.get("hard_hit_pct", 0)
+        _assign(_pick_max(score), "power_pull")
+
+    if n >= 2 and "bb_pct" in c.columns:
+        score = c.get("bb_pct", 0) + c.get("bb_k_ratio", 0)
+        _assign(_pick_max(score), "patient_obp")
+
+    if n >= 3 and "gb_pct" in c.columns:
+        _assign(_pick_max(c["gb_pct"]), "groundball_speed")
+
+    if n >= 4 and "k_pct" in c.columns:
+        _assign(_pick_max(c["k_pct"]), "high_whiff")
+
+    if n >= 5 and "k_pct" in c.columns and "pull_pct" in c.columns:
+        score = c.get("k_pct", 0) + c.get("pull_pct", 0)
+        _assign(_pick_min(score), "contact_spray")
+
+    for idx in c.index:
+        if idx not in used:
+            labels[idx] = "balanced"
+
+    return labels
+
+
+# ── Stability report ──────────────────────────────────────────────────────────
+
+def _stability_report(df_result: pd.DataFrame) -> None:
+    pivot = (
+        df_result.groupby(["season", "cluster_label"])
+        .size()
+        .unstack(fill_value=0)
+        .sort_index()
+    )
+    print("\nCluster member counts by season (≥50 required per AC):")
+    print(pivot.to_string())
+
+    below = {
+        (s, lbl): n
+        for (s, lbl), n in pivot.stack().items()
+        if n < 50 and n > 0
+    }
+    missing = {
+        (s, lbl)
+        for s in df_result["season"].unique()
+        for lbl in df_result["cluster_label"].unique()
+        if lbl not in pivot.columns or pivot.loc[s, lbl] == 0
+    }
+
+    if below:
+        print(f"\nWARNING: {len(below)} (season, archetype) pairs below 50-member threshold:")
+        for (s, lbl), n in sorted(below.items()):
+            print(f"  {s} {lbl}: {n}")
+    if missing:
+        print(f"\nWARNING: {len(missing)} (season, archetype) pairs absent entirely:")
+        for s, lbl in sorted(missing):
+            print(f"  {s} {lbl}")
+    if not below and not missing:
+        print("All archetypes present with ≥ 50 members in every season. ✓")
+
+
+def _spot_check(df_result: pd.DataFrame, id_name_map: dict[int, str]) -> None:
+    df_result = df_result.copy()
+    df_result["player_name"] = df_result["batter_id"].map(id_name_map)
+    check = df_result[df_result["player_name"].isin(_SPOT_CHECK_NAMES)][
+        ["player_name", "season", "cluster_id", "cluster_label"]
+    ].sort_values(["player_name", "season"])
+    if check.empty:
+        print("No spot-check batters found in data.")
+    else:
+        print("\nSpot-check — well-known batters:")
+        print(check.to_string(index=False))
+    print()
+
+
+# ── Persistence ───────────────────────────────────────────────────────────────
+
+def _persist(df_result: pd.DataFrame, best_score: float, fit_date: str) -> None:
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_DDL)
+
+        rows = [
+            (
+                int(r["batter_id"]),
+                int(r["season"]),
+                int(r["cluster_id"]),
+                str(r["cluster_label"]),
+                float(best_score),
+                fit_date,
+            )
+            for _, r in df_result.iterrows()
+        ]
+        cur.executemany(
+            """
+            INSERT INTO baseball_data.statsapi.batter_clusters
+                (batter_id, season, cluster_id, cluster_label, silhouette_score, fit_date)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
+        conn.commit()
+        print(f"Inserted {len(rows)} rows (silhouette={best_score:.4f}, fit_date={fit_date}).")
+    finally:
+        conn.close()
+
+
+def _save_artifacts(
+    best_algo: str,
+    best_k: int,
+    scaler: StandardScaler,
+    feature_cols: list[str],
+    labels: np.ndarray,
+    fit_date: str,
+    model: KMeans | None,
+) -> None:
+    _MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    artifact = {
+        "best_algo": best_algo,
+        "best_k": best_k,
+        "feature_cols": feature_cols,
+        "fit_date": fit_date,
+    }
+    joblib.dump(artifact, _MODELS_DIR / f"meta_{fit_date}.pkl")
+    joblib.dump(scaler, _MODELS_DIR / f"scaler_{fit_date}.pkl")
+    if model is not None:
+        joblib.dump(model, _MODELS_DIR / f"kmeans_{fit_date}.pkl")
+    print(f"Artifacts saved to {_MODELS_DIR}/")
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="Fit batter archetype clusters across all seasons pooled (Epic 7.1).",
+    )
+    p.add_argument("--min-season", type=int, default=2015, help="Earliest season to include")
+    p.add_argument("--min-pa", type=int, default=100, help="Minimum PA threshold per season")
+    p.add_argument(
+        "--k-range", type=int, nargs=2, default=[4, 7], metavar=("K_MIN", "K_MAX"),
+        help="Range of k values to evaluate (inclusive)",
+    )
+    p.add_argument(
+        "--algorithms", nargs="+",
+        default=["kmeans", "gmm", "hierarchical"],
+        choices=["kmeans", "gmm", "hierarchical"],
+        help="Algorithms to compare",
+    )
+    p.add_argument(
+        "--label-map", type=str, default=None,
+        help='JSON mapping cluster_id → label, e.g. \'{"0":"power_pull","1":"high_whiff"}\'. '
+             "If omitted, heuristic suggestions are used.",
+    )
+    p.add_argument("--dry-run", action="store_true", help="Skip Snowflake writes")
+    p.add_argument("--random-state", type=int, default=42)
+    return p
+
+
+def main() -> None:
+    args = _build_parser().parse_args()
+    k_range = range(args.k_range[0], args.k_range[1] + 1)
+    fit_date = date.today().isoformat()
+
+    print(f"Loading batter profiles (min_season={args.min_season}, min_pa={args.min_pa})...")
+    df_profile = _load_data(args.min_season, args.min_pa)
+    print(f"  {len(df_profile)} batter-season rows across {df_profile['season'].nunique()} seasons")
+
+    if df_profile.empty:
+        print("ERROR: No profile data found. Has dbtf build been run?")
+        sys.exit(1)
+
+    print("\nPreparing cross-season feature matrix...")
+    df_clean, X_scaled, scaler, feature_cols = _prepare_features(df_profile)
+    print(f"  {len(df_clean)} batter-seasons in feature matrix")
+    print(f"  {len(feature_cols)} features: {feature_cols}")
+
+    n_bio_nulls = df_clean["height_inches"].isna().sum() + df_clean["weight_lbs"].isna().sum()
+    if n_bio_nulls > 0:
+        print(f"  NOTE: {n_bio_nulls} height/weight nulls — median-imputed (player_profiles may be incomplete)")
+
+    best_algo, best_k, best_score, best_labels = _compare_algorithms(
+        X_scaled, k_range, args.algorithms, args.random_state
+    )
+
+    print(f"\nWinner: algo={best_algo}, k={best_k}, silhouette={best_score:.4f}")
+    if best_score < _SILHOUETTE_WARN:
+        print(
+            f"WARNING: silhouette {best_score:.4f} < AC target {_SILHOUETTE_WARN}. "
+            "Consider adding features or adjusting k range."
+        )
+
+    centroids = _print_centroid_summary(X_scaled, best_labels, feature_cols)
+
+    if args.label_map:
+        raw_map = json.loads(args.label_map)
+        cluster_label_map = {int(k): v for k, v in raw_map.items()}
+        print("\nUsing --label-map overrides:")
+    else:
+        cluster_label_map = _suggest_labels(centroids)
+        print("\nHeuristic label suggestions (pass --label-map to override):")
+    for cid, lbl in sorted(cluster_label_map.items()):
+        print(f"  cluster {cid} → {lbl}")
+
+    df_result = df_clean[["batter_id", "season"]].copy()
+    df_result["cluster_id"] = best_labels
+    df_result["cluster_label"] = df_result["cluster_id"].map(
+        lambda i: cluster_label_map.get(i, "balanced")
+    )
+
+    print(f"\nOverall cluster distribution (n={len(df_result)}):")
+    print(df_result["cluster_label"].value_counts().to_string())
+
+    _stability_report(df_result)
+
+    id_name_map = _load_names(df_result["batter_id"].tolist())
+    _spot_check(df_result, id_name_map)
+
+    refit_model = _refit_best_kmeans(X_scaled, best_algo, best_k, args.random_state)
+
+    if args.dry_run:
+        print(
+            f"[dry-run] Would write {len(df_result)} rows "
+            f"(algo={best_algo}, k={best_k}, silhouette={best_score:.4f}). No changes made."
+        )
+    else:
+        _persist(df_result, best_score, fit_date)
+        _save_artifacts(best_algo, best_k, scaler, feature_cols, best_labels, fit_date, refit_model)
+
+    print("\nDone.")
+
+
+if __name__ == "__main__":
+    main()

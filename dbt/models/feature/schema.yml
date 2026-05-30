@@ -358,6 +358,52 @@ models:
         tests:
           - not_null
 
+      - name: n_power_pull
+        description: >
+          Count of lineup slots assigned to the power_pull batter archetype (prior season).
+          COALESCEd to 0 — 0 is valid when no batter in the lineup had a prior-season power_pull assignment.
+          Story 7.4; leakage guard: batter_clusters joined on season = game_year - 1.
+        tests:
+          - not_null
+
+      - name: n_patient_obp
+        description: >
+          Count of lineup slots assigned to the patient_obp batter archetype (prior season).
+          COALESCEd to 0. Same leakage guard as n_power_pull.
+        tests:
+          - not_null
+
+      - name: n_high_whiff
+        description: >
+          Count of lineup slots assigned to the high_whiff batter archetype (prior season).
+          COALESCEd to 0. Same leakage guard as n_power_pull.
+        tests:
+          - not_null
+
+      - name: n_groundball_speed
+        description: >
+          Count of lineup slots assigned to the groundball_speed batter archetype (prior season).
+          COALESCEd to 0. Same leakage guard as n_power_pull.
+        tests:
+          - not_null
+
+      - name: n_contact_spray
+        description: >
+          Count of lineup slots assigned to the contact_spray batter archetype (prior season).
+          COALESCEd to 0. Same leakage guard as n_power_pull.
+        tests:
+          - not_null
+
+      - name: n_no_label
+        description: >
+          Count of lineup slots where the batter has no prior-season archetype assignment
+          (rookies, debuts, or players not in batter_clusters for season = game_year - 1).
+          COALESCEd to 9 (all slots unlabeled) when no archetype data is available for the game.
+          n_power_pull + n_patient_obp + n_high_whiff + n_groundball_speed + n_contact_spray +
+          n_no_label = 9 for a full lineup; may be < 9 when lineup slots contain null batter_ids.
+        tests:
+          - not_null
+
   - name: feature_pregame_starter_status
     description: >
       SCD-2 table tracking projected starter changes for each team per game.
@@ -570,6 +616,17 @@ models:
           prior-season starts; estimate is 50% current-season EB posterior + 50% prior-season
           observed rate.
           'full_eb': standard EB posterior with prior shrinkage applied to current-season data.
+
+      - name: starter_pitcher_archetype
+        description: >
+          Pitcher archetype cluster label from statsapi.pitcher_clusters.
+          Prefers season = game_year - 1; falls back to season = game_year - 2 when
+          the prior season is unavailable (injury absence, COVID-2020 data thinness).
+          Possible values: power_swing_and_miss, changeup_deceptive, contact_sinker_ball,
+          multi_pitch_mix, soft_command.
+          NULL for true rookies with no MLB cluster assignment in either prior season.
+          Story 7.4; both lookbacks are leakage-safe (strictly prior seasons).
+          Achieved coverage: ~83% for 2021+ games (ceiling set by true rookies).
 
   - name: feature_pregame_team_features
     description: >
@@ -1589,21 +1646,15 @@ models:
       to produce a single game-level matchup score per side.
 
       Leakage guards:
-        - Cluster assignments use the most recent snapshot_date strictly before
-          game_date (snapshot_ranked CTE with rn = 1).
-        - Batter wOBA stats are joined on game_date = game_date - 1 (strictly
-          prior day), inheriting mart_batter_woba_vs_cluster's own leakage guard.
+        - Pitcher cluster joined on prior-season assignment (pc.season = game_year - 1).
+          PK on pitcher_clusters is (pitcher_id, season); no deduplication needed.
+        - Batter wOBA stats are joined on game_date < game_date (strictly prior),
+          inheriting mart_batter_woba_vs_cluster's own leakage guard.
 
-      Availability: effective coverage begins 2021 (clusters require at least
-      one snapshot from the prior 2020 post-season run; 2020 games have no
-      prior snapshot and will produce nulls). April/early-May games fall back
-      to the prior-season end-of-year snapshot automatically.
-
-      Null pattern: avg_woba/xwoba_vs_cluster are null when (a) no snapshot
-      exists before the game (2020 games), (b) the starter has no cluster
-      assignment, or (c) no lineup batter has ≥ 10 PA vs. that cluster in the
-      rolling window. slot_coverage tracks how many of 9 lineup slots had a
-      non-null adj_woba match.
+      Availability: cluster data begins 2015; effective coverage begins for games
+      in 2016+ (prior-season lag). Null when starter has no prior-season cluster
+      assignment (rookies, debuts) or no lineup batter has ≥ 10 PA vs. that cluster.
+      slot_coverage tracks how many of 9 lineup slots had a non-null adj_woba match.
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -1681,15 +1732,128 @@ models:
 
       - name: home_starter_cluster_id
         description: >
-          Cluster ID of the home starter from the most recent pitcher_clusters
-          snapshot strictly before game_date. Null for 2020 games (no prior
-          snapshot) and for games without a confirmed probable home pitcher.
+          Prior-season cluster ID of the home starter (season = game_year - 1).
+          Null for rookies/debuts with no prior-season cluster and for games
+          without a confirmed probable home pitcher.
 
       - name: away_starter_cluster_id
         description: >
-          Cluster ID of the away starter from the most recent pitcher_clusters
-          snapshot strictly before game_date. Null for same reasons as
-          home_starter_cluster_id.
+          Prior-season cluster ID of the away starter (season = game_year - 1).
+          Null for same reasons as home_starter_cluster_id.
+
+  # feature_batter_archetype_matchups
+  # ============================================================================
+  - name: feature_batter_archetype_matchups
+    description: >
+      Pre-game batter archetype × pitcher cluster matchup features for ML.
+      One row per game_pk (regular season only).
+
+      For each game, computes expected wOBA advantage based on each lineup's
+      batter archetype composition facing the opposing starter's pitcher cluster.
+      Archetype pair stats are drawn from mart_batter_archetype_vs_pitcher_cluster
+      using the most recent row strictly before game_date.
+
+      Leakage guards:
+        - Pitcher cluster joined on prior-season assignment (pc.season = game_year - 1).
+        - Batter cluster joined on prior-season assignment (bc.season = game_year - 1).
+        - mart_batter_archetype_vs_pitcher_cluster joined on game_date < game_date.
+
+      Availability: effective from 2021+ (both cluster tables require a prior season;
+      cluster data begins 2015). Null for rookies/debuts with no prior-season assignment.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+
+    columns:
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+          - unique
+
+      - name: home_lineup_archetype_avg_woba
+        description: >
+          Average population-level adj_woba across home lineup slots, using each
+          batter's prior-season archetype vs. the away starter's prior-season cluster.
+          Null when no archetype coverage for the pairing.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "home_lineup_archetype_avg_woba is not null"
+
+      - name: home_lineup_archetype_avg_xwoba
+        description: >
+          Average population-level adj_xwoba across home lineup slots. Null under
+          same conditions as home_lineup_archetype_avg_woba.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "home_lineup_archetype_avg_xwoba is not null"
+
+      - name: home_lineup_archetype_slot_coverage
+        description: >
+          Number of the 9 home lineup slots with a non-null archetype matchup adj_woba.
+          0 when no slot has coverage; null when no home lineup was found.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 9
+              config:
+                where: "home_lineup_archetype_slot_coverage is not null"
+
+      - name: away_lineup_archetype_avg_woba
+        description: >
+          Average population-level adj_woba across away lineup slots vs. the home
+          starter's prior-season cluster. Null when no archetype coverage.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "away_lineup_archetype_avg_woba is not null"
+
+      - name: away_lineup_archetype_avg_xwoba
+        description: >
+          Average population-level adj_xwoba across away lineup slots. Null under
+          same conditions as away_lineup_archetype_avg_woba.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "away_lineup_archetype_avg_xwoba is not null"
+
+      - name: away_lineup_archetype_slot_coverage
+        description: >
+          Number of the 9 away lineup slots with a non-null archetype matchup adj_woba.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 9
+              config:
+                where: "away_lineup_archetype_slot_coverage is not null"
+
+      - name: home_batter_cluster_mode
+        description: >
+          Most common prior-season batter archetype label in the home lineup.
+          Null when no batter in the lineup has a prior-season cluster assignment.
+
+      - name: away_batter_cluster_mode
+        description: >
+          Most common prior-season batter archetype label in the away lineup.
+          Null when no batter in the lineup has a prior-season cluster assignment.
 
   # ============================================================================
   # feature_pitcher_batter_h2h_matchups (Card 8.J)
