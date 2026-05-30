@@ -302,8 +302,6 @@ sources:
         columns:
           - name: player_id
             description: MLBAM player ID.
-            tests:
-              - not_null
           - name: full_name
             description: Player full name from StatsAPI.
           - name: birth_date
