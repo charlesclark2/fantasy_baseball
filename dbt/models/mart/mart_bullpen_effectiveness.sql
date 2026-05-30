@@ -349,6 +349,21 @@ rolling as (
 
     from team_date
 
+),
+
+eb_bullpen as (
+
+    select
+        game_pk,
+        team,
+        team_eb_bullpen_xwoba,
+        team_eb_bullpen_uncertainty,
+        round(
+            n_relievers / nullif(n_relievers + n_prior_only, 0),
+            4
+        )                                                       as eb_bullpen_coverage_pct
+    from {{ source('betting', 'eb_bullpen_team_posteriors') }}
+
 )
 
 -- Join rolling effectiveness back to game_pk grain
@@ -373,12 +388,20 @@ select
     r.xwoba_against_30d,
     r.hard_hit_pct_30d,
     r.whiff_rate_30d,
-    r.innings_pitched_30d
+    r.innings_pitched_30d,
+
+    -- ── Empirical Bayes bullpen estimates ────────────────────────────────────
+    eb.team_eb_bullpen_xwoba                                   as eb_bullpen_xwoba,
+    eb.team_eb_bullpen_uncertainty                             as eb_bullpen_uncertainty,
+    eb.eb_bullpen_coverage_pct
 
 from team_game tg
 left join rolling r
     on  tg.game_date     = r.game_date
     and tg.pitching_team = r.pitching_team
+left join eb_bullpen eb
+    on  cast(tg.game_pk as text) = eb.game_pk
+    and tg.pitching_team         = eb.team
 {% if is_incremental() %}
 where tg.game_date > (select max(game_date) from {{ this }})
 {% endif %}

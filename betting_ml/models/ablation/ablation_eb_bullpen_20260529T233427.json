@@ -1,0 +1,214 @@
+{
+  "run_ts": "20260529T233427",
+  "gate_pass": true,
+  "min_year": 2016,
+  "raw_mean_mae": 3.5886,
+  "eb_mean_mae": 3.5822,
+  "delta_mae": -0.0065,
+  "folds_improved": 10,
+  "total_folds": 10,
+  "raw_folds": [
+    {
+      "tag": "raw",
+      "eval_year": 2017,
+      "n_eval": 2430,
+      "mae": 3.5251,
+      "bias": -0.3063,
+      "eb_home_coverage": 0.99,
+      "eb_away_coverage": 0.986,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2018,
+      "n_eval": 2017,
+      "mae": 3.6109,
+      "bias": 0.1368,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.992,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2019,
+      "n_eval": 2429,
+      "mae": 3.7141,
+      "bias": -0.536,
+      "eb_home_coverage": 0.988,
+      "eb_away_coverage": 0.993,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2020,
+      "n_eval": 898,
+      "mae": 3.5404,
+      "bias": -0.1087,
+      "eb_home_coverage": 0.986,
+      "eb_away_coverage": 0.982,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2021,
+      "n_eval": 2429,
+      "mae": 3.5835,
+      "bias": 0.2352,
+      "eb_home_coverage": 0.99,
+      "eb_away_coverage": 0.989,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2022,
+      "n_eval": 2430,
+      "mae": 3.5509,
+      "bias": 0.6724,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.992,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2023,
+      "n_eval": 2430,
+      "mae": 3.6427,
+      "bias": -0.1086,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.994,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2024,
+      "n_eval": 2429,
+      "mae": 3.4626,
+      "bias": 0.3435,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.995,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2025,
+      "n_eval": 2430,
+      "mae": 3.6408,
+      "bias": 0.2005,
+      "eb_home_coverage": 0.995,
+      "eb_away_coverage": 0.993,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2026,
+      "n_eval": 841,
+      "mae": 3.6154,
+      "bias": 0.2661,
+      "eb_home_coverage": 0.996,
+      "eb_away_coverage": 0.995,
+      "n_features": 24
+    }
+  ],
+  "eb_folds": [
+    {
+      "tag": "eb",
+      "eval_year": 2017,
+      "n_eval": 2430,
+      "mae": 3.5243,
+      "bias": -0.3041,
+      "eb_home_coverage": 0.99,
+      "eb_away_coverage": 0.986,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2018,
+      "n_eval": 2017,
+      "mae": 3.6083,
+      "bias": 0.135,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.992,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2019,
+      "n_eval": 2429,
+      "mae": 3.7116,
+      "bias": -0.5283,
+      "eb_home_coverage": 0.988,
+      "eb_away_coverage": 0.993,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2020,
+      "n_eval": 898,
+      "mae": 3.5318,
+      "bias": -0.0888,
+      "eb_home_coverage": 0.986,
+      "eb_away_coverage": 0.982,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2021,
+      "n_eval": 2429,
+      "mae": 3.5776,
+      "bias": 0.2359,
+      "eb_home_coverage": 0.99,
+      "eb_away_coverage": 0.989,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2022,
+      "n_eval": 2430,
+      "mae": 3.5421,
+      "bias": 0.672,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.992,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2023,
+      "n_eval": 2430,
+      "mae": 3.636,
+      "bias": -0.1021,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.994,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2024,
+      "n_eval": 2429,
+      "mae": 3.4535,
+      "bias": 0.3424,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.995,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2025,
+      "n_eval": 2430,
+      "mae": 3.6329,
+      "bias": 0.2013,
+      "eb_home_coverage": 0.995,
+      "eb_away_coverage": 0.993,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2026,
+      "n_eval": 841,
+      "mae": 3.6038,
+      "bias": 0.2919,
+      "eb_home_coverage": 0.996,
+      "eb_away_coverage": 0.995,
+      "n_features": 10
+    }
+  ]
+}
