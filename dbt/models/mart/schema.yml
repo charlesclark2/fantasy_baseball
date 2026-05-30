@@ -2584,6 +2584,55 @@ models:
 
 
   # ============================================================================
+  # mart_park_factors_granular
+  # ============================================================================
+  - name: mart_park_factors_granular
+    description: >
+      EB-smoothed granular park factors (HR, 2B/3B, 1B, BB, SO, wOBA) derived
+      from Baseball Savant statcast-park-factors 3yr rolling data. One row per
+      (venue_id, season). All eb_* factor columns are ratios (1.0 = league
+      average). Thin passthrough from eb_park_factors_granular_raw.
+      Leakage guard: feature layer joins on game_year - 1.
+      Grain: one row per venue_id per season.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [venue_id, season]
+
+    columns:
+      - name: venue_id
+        description: MLB Stats API venue identifier.
+        tests:
+          - not_null
+      - name: season
+        description: Season year (3yr rolling window ending in this year).
+        tests:
+          - not_null
+      - name: n_pa
+        description: Total plate appearances in 3yr rolling window at this venue.
+      - name: eb_hr_factor
+        description: EB-smoothed HR park factor ratio (1.0 = league average).
+      - name: eb_doubles_triples_factor
+        description: EB-smoothed 2B+3B park factor ratio (geometric mean of 2B/3B indices).
+      - name: eb_singles_factor
+        description: EB-smoothed 1B park factor ratio.
+      - name: eb_bb_factor
+        description: EB-smoothed walk park factor ratio.
+      - name: eb_so_factor
+        description: EB-smoothed strikeout park factor ratio.
+      - name: eb_woba_factor
+        description: EB-smoothed wOBA park factor ratio.
+      - name: fit_date
+        description: Date the EB fit was run.
+        tests:
+          - not_null
+      - name: run_id
+        description: UUID identifying the fit_granular_park_priors.py batch run.
+        tests:
+          - not_null
+
+  # ============================================================================
   # mart_team_season_record
   # ============================================================================
   - name: mart_team_season_record
@@ -4778,6 +4827,39 @@ models:
           - accepted_values:
               arguments:
                 values: [0, 1]
+      - name: bullpen_ip_prev_1d
+        description: >
+          Bullpen innings pitched (outs_recorded / 3) by this team in the 1
+          calendar day immediately preceding the game date. Null if no games
+          were played in that window.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or bullpen_ip_prev_1d >= 0"
+      - name: bullpen_ip_prev_2d
+        description: >
+          Bullpen innings pitched (outs_recorded / 3) by this team in the 2
+          calendar days immediately preceding the game date.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or bullpen_ip_prev_2d >= 0"
+      - name: bullpen_ip_prev_3d
+        description: >
+          Bullpen innings pitched (outs_recorded / 3) by this team in the 3
+          calendar days immediately preceding the game date. Primary fatigue
+          depth metric for the Epic 6 bullpen state model.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or bullpen_ip_prev_3d >= 0"
+      - name: pitchers_used_prev_2d
+        description: >
+          Sum of distinct-per-game reliever counts across the prior 2 days.
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or pitchers_used_prev_2d >= 0"
 
   # ============================================================================
   # mart_bullpen_effectiveness
@@ -4956,6 +5038,41 @@ models:
           - dbt_utils.expression_is_true:
               arguments:
                 expression: ">= 0"
+
+      # ── Empirical Bayes bullpen estimates ──────────────────────────────────
+      - name: eb_bullpen_xwoba
+        description: >
+          Empirical Bayes shrunk xwOBA-against estimate for this team's bullpen,
+          entering the game. Posterior mean from a Normal-Normal conjugate model
+          (fit_bullpen_priors.py / compute_bullpen_posteriors.py). Shrinks toward
+          the league-average prior for teams with few relievers or high variability.
+          Null when no EB posterior exists for this (game_pk, team).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (eb_bullpen_xwoba between 0 and 1.5)"
+
+      - name: eb_bullpen_uncertainty
+        description: >
+          Posterior standard deviation for this team's EB bullpen xwOBA estimate.
+          Higher values indicate fewer observed relievers or greater inter-reliever
+          variability; the estimate is pulled more strongly toward the prior mean.
+          Null when no EB posterior exists for this (game_pk, team).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or eb_bullpen_uncertainty >= 0"
+
+      - name: eb_bullpen_coverage_pct
+        description: >
+          Fraction of team relievers with observed season data (n_relievers /
+          (n_relievers + n_prior_only)). 1.0 = all relievers had observation data;
+          lower values indicate more reliance on the prior (e.g. early season or
+          roster turnover). Null when no EB posterior exists for this (game_pk, team).
+        tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "is null or (eb_bullpen_coverage_pct between 0 and 1)"
 
 
   - name: mart_pitcher_vs_handedness_splits

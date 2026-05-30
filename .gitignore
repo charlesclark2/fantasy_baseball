@@ -52,3 +52,8 @@ model_artifacts/
 
 # MLflow local tracking store (artifact history stored in S3 under mlflow/ prefix)
 mlruns/
+mlflow.db
+
+# Training data snapshots (large binary Parquet files — regenerated from Snowflake on demand)
+betting_ml/data/*.parquet
+betting_ml/data/**/*.parquet

@@ -49,7 +49,7 @@ game_times as (
 historical as (
     select
         h.game_pk,
-        h.game_date                                                     as game_date,
+        coalesce(gt.game_date, h.game_date)                             as game_date,
         h.snapshot_ts,
         h.bookmaker,
         h.home_win_prob                                                 as vf_home,

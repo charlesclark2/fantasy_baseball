@@ -117,10 +117,50 @@ models:
         tests: [not_null]
 
       # -----------------------------------------------------------------------
-      # Epics 5, 6, 8 (placeholder — NULL until those epics ship)
+      # Epic 5 — Starter suppression signals v1
       # -----------------------------------------------------------------------
+      - name: starter_suppression_mu_v1
+        description: >
+          Predicted mean xwOBA-against for this starter from starter_v1 (Normal distribution).
+          Lower values indicate better expected suppression (e.g. 0.290 = elite; 0.340 = average).
+          NULL for games before 2020 (Statcast xwOBA coverage) or where no probable pitcher is set.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_suppression_sigma_v1
+        description: >
+          Normal distribution standard deviation from starter_v1. For LightGBM champion, this is
+          constant across all predictions (residual sigma from training); for NGBoost, it is
+          per-row. Used with mu to construct the full predictive distribution over xwOBA-against.
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: starter_suppression_signal_v1
-        description: Starter suppression signal from starter_v1 (Epic 5). NULL until Epic 5 ships.
+        description: >
+          Z-score of starter_suppression_mu relative to the season mean. Negative values indicate
+          better-than-average suppression; positive values indicate worse-than-average. Primary
+          signal for comparing starters within a season context.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_uncertainty_v1
+        description: >
+          80% predictive interval width for starter xwOBA-against: 2 × 1.28 × sigma. Higher values
+          indicate less certainty about the starter's quality (early season, IL returns, debut).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_suppression_mu_v1_available
+        description: TRUE when starter_v1 signals are populated for this game-side (2020+ regular season with a probable pitcher).
+        tests: [not_null]
+
+      # -----------------------------------------------------------------------
+      # Epics 6, 8 (placeholder — NULL until those epics ship)
+      # -----------------------------------------------------------------------
       - name: bullpen_state_signal_v1
         description: Bullpen readiness/fatigue signal from bullpen_v1 (Epic 6). NULL until Epic 6 ships.
       - name: matchup_advantage_signal_v1
@@ -497,6 +537,40 @@ models:
           this game (any season). False for debut starters. Used as a filter flag to distinguish
           null avg_ip_* values due to missing data from null due to first-career-start nullability.
 
+      - name: eb_xwoba_against
+        description: >
+          Empirical Bayes posterior mean xwOBA-against for this starter going into the game.
+          Normal-Normal conjugate shrinkage toward an experience-band prior (u25/a25/a30/a33).
+          Leakage guard baked in at write time: only current-season starts strictly before
+          the game date are used. Null for games before 2016 or starters not listed as
+          probable at EB compute time.
+
+      - name: eb_k_pct
+        description: >
+          Empirical Bayes posterior mean K% (strikeouts / batters faced) for this starter.
+          Same conjugate shrinkage and leakage guard as eb_xwoba_against.
+
+      - name: eb_bb_pct
+        description: >
+          Empirical Bayes posterior mean BB% (walks / batters faced) for this starter.
+          Same conjugate shrinkage and leakage guard as eb_xwoba_against.
+
+      - name: eb_xwoba_uncertainty
+        description: >
+          Posterior standard deviation of the xwOBA-against estimate. Larger values indicate
+          the estimate is closer to the prior (fewer observed batters faced). Useful as a
+          confidence weight when combining EB features with raw rolling stats.
+
+      - name: eb_data_source
+        description: >
+          Label describing which estimation path was used.
+          'prior_only': pitcher had zero batters faced this season (debut or season start);
+          estimate equals the prior mean.
+          'il_return_blend': pitcher had fewer than 3 current-season starts but ≥ 10
+          prior-season starts; estimate is 50% current-season EB posterior + 50% prior-season
+          observed rate.
+          'full_eb': standard EB posterior with prior shrinkage applied to current-season data.
+
   - name: feature_pregame_team_features
     description: >
       Pre-game team context features for ML. One row per game_pk × team_abbrev
@@ -728,6 +802,33 @@ models:
               config:
                 warn_if: ">= 100"
                 error_if: ">= 10000"
+
+      - name: eb_hr_factor
+        description: >
+          EB-smoothed HR park factor (ratio; 1.0 = league average) from
+          mart_park_factors_granular, joined on game_year - 1. Null before
+          the 2016 season (no Savant data) and for venues not covered by
+          the Savant park factors page.
+
+      - name: eb_doubles_triples_factor
+        description: >
+          EB-smoothed 2B+3B combined park factor (ratio; geometric mean of
+          2B and 3B Savant indices). game_year - 1 leakage guard.
+
+      - name: eb_singles_factor
+        description: EB-smoothed 1B park factor ratio. game_year - 1 leakage guard.
+
+      - name: eb_bb_factor
+        description: EB-smoothed walk park factor ratio. game_year - 1 leakage guard.
+
+      - name: eb_so_factor
+        description: EB-smoothed strikeout park factor ratio. game_year - 1 leakage guard.
+
+      - name: eb_woba_factor
+        description: EB-smoothed wOBA park factor ratio. game_year - 1 leakage guard.
+
+      - name: park_granular_n_pa
+        description: Total PAs in the 3yr Savant rolling window for the prior season.
 
   - name: feature_pregame_park_status
     description: >

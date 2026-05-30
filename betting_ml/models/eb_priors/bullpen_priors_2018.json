@@ -1,0 +1,295 @@
+{
+  "season": 2018,
+  "prior_season": 2017,
+  "fit_date": "2026-05-29",
+  "priors": {
+    "xwoba_against": {
+      "closer_tier": {
+        "lt_26": {
+          "mu": 0.29513,
+          "sigma": 0.04308,
+          "n_relievers": 3,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.29895,
+          "sigma": 0.04386,
+          "n_relievers": 18
+        },
+        "31_34": {
+          "mu": 0.29021,
+          "sigma": 0.04699,
+          "n_relievers": 13
+        },
+        "gte_35": {
+          "mu": 0.29513,
+          "sigma": 0.04308,
+          "n_relievers": 5,
+          "fallback": true
+        }
+      },
+      "high_leverage": {
+        "lt_26": {
+          "mu": 0.30028,
+          "sigma": 0.03797,
+          "n_relievers": 6,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.30167,
+          "sigma": 0.03577,
+          "n_relievers": 38
+        },
+        "31_34": {
+          "mu": 0.30349,
+          "sigma": 0.04102,
+          "n_relievers": 30
+        },
+        "gte_35": {
+          "mu": 0.30028,
+          "sigma": 0.03797,
+          "n_relievers": 6,
+          "fallback": true
+        }
+      },
+      "low_leverage": {
+        "lt_26": {
+          "mu": 0.31929,
+          "sigma": 0.04995,
+          "n_relievers": 8,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.32355,
+          "sigma": 0.0521,
+          "n_relievers": 57
+        },
+        "31_34": {
+          "mu": 0.31454,
+          "sigma": 0.0406,
+          "n_relievers": 24
+        },
+        "gte_35": {
+          "mu": 0.31197,
+          "sigma": 0.05224,
+          "n_relievers": 11
+        }
+      },
+      "no_prior_season": {
+        "lt_26": {
+          "mu": 0.31822,
+          "sigma": 0.04861,
+          "n_relievers": 81
+        },
+        "26_30": {
+          "mu": 0.32302,
+          "sigma": 0.05037,
+          "n_relievers": 120
+        },
+        "31_34": {
+          "mu": 0.32574,
+          "sigma": 0.05167,
+          "n_relievers": 34
+        },
+        "gte_35": {
+          "mu": 0.32142,
+          "sigma": 0.04976,
+          "n_relievers": 2,
+          "fallback": true
+        }
+      }
+    },
+    "k_pct": {
+      "closer_tier": {
+        "lt_26": {
+          "mu": 0.25807,
+          "sigma": 0.08198,
+          "n_relievers": 3,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.27956,
+          "sigma": 0.08812,
+          "n_relievers": 18
+        },
+        "31_34": {
+          "mu": 0.24652,
+          "sigma": 0.06103,
+          "n_relievers": 13
+        },
+        "gte_35": {
+          "mu": 0.25807,
+          "sigma": 0.08198,
+          "n_relievers": 5,
+          "fallback": true
+        }
+      },
+      "high_leverage": {
+        "lt_26": {
+          "mu": 0.24638,
+          "sigma": 0.06021,
+          "n_relievers": 6,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.24226,
+          "sigma": 0.0485,
+          "n_relievers": 38
+        },
+        "31_34": {
+          "mu": 0.24801,
+          "sigma": 0.05954,
+          "n_relievers": 30
+        },
+        "gte_35": {
+          "mu": 0.24638,
+          "sigma": 0.06021,
+          "n_relievers": 6,
+          "fallback": true
+        }
+      },
+      "low_leverage": {
+        "lt_26": {
+          "mu": 0.21683,
+          "sigma": 0.06924,
+          "n_relievers": 8,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.21537,
+          "sigma": 0.07225,
+          "n_relievers": 57
+        },
+        "31_34": {
+          "mu": 0.21081,
+          "sigma": 0.04928,
+          "n_relievers": 24
+        },
+        "gte_35": {
+          "mu": 0.21346,
+          "sigma": 0.06817,
+          "n_relievers": 11
+        }
+      },
+      "no_prior_season": {
+        "lt_26": {
+          "mu": 0.21095,
+          "sigma": 0.06919,
+          "n_relievers": 81
+        },
+        "26_30": {
+          "mu": 0.21743,
+          "sigma": 0.06456,
+          "n_relievers": 120
+        },
+        "31_34": {
+          "mu": 0.20918,
+          "sigma": 0.07099,
+          "n_relievers": 34
+        },
+        "gte_35": {
+          "mu": 0.21402,
+          "sigma": 0.06666,
+          "n_relievers": 2,
+          "fallback": true
+        }
+      }
+    },
+    "bb_pct": {
+      "closer_tier": {
+        "lt_26": {
+          "mu": 0.08847,
+          "sigma": 0.03788,
+          "n_relievers": 3,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.08911,
+          "sigma": 0.0313,
+          "n_relievers": 18
+        },
+        "31_34": {
+          "mu": 0.09197,
+          "sigma": 0.04623,
+          "n_relievers": 13
+        },
+        "gte_35": {
+          "mu": 0.08847,
+          "sigma": 0.03788,
+          "n_relievers": 5,
+          "fallback": true
+        }
+      },
+      "high_leverage": {
+        "lt_26": {
+          "mu": 0.08557,
+          "sigma": 0.03213,
+          "n_relievers": 6,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.08936,
+          "sigma": 0.033,
+          "n_relievers": 38
+        },
+        "31_34": {
+          "mu": 0.08311,
+          "sigma": 0.03041,
+          "n_relievers": 30
+        },
+        "gte_35": {
+          "mu": 0.08557,
+          "sigma": 0.03213,
+          "n_relievers": 6,
+          "fallback": true
+        }
+      },
+      "low_leverage": {
+        "lt_26": {
+          "mu": 0.08691,
+          "sigma": 0.03606,
+          "n_relievers": 8,
+          "fallback": true
+        },
+        "26_30": {
+          "mu": 0.09006,
+          "sigma": 0.03393,
+          "n_relievers": 57
+        },
+        "31_34": {
+          "mu": 0.08096,
+          "sigma": 0.04467,
+          "n_relievers": 24
+        },
+        "gte_35": {
+          "mu": 0.0848,
+          "sigma": 0.03571,
+          "n_relievers": 11
+        }
+      },
+      "no_prior_season": {
+        "lt_26": {
+          "mu": 0.09317,
+          "sigma": 0.03547,
+          "n_relievers": 81
+        },
+        "26_30": {
+          "mu": 0.08779,
+          "sigma": 0.04521,
+          "n_relievers": 120
+        },
+        "31_34": {
+          "mu": 0.0813,
+          "sigma": 0.03109,
+          "n_relievers": 34
+        },
+        "gte_35": {
+          "mu": 0.08821,
+          "sigma": 0.04047,
+          "n_relievers": 2,
+          "fallback": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "formula": "clip(1 - fatigue_score / p95, 0, 1)",
+  "fatigue_weights": {
+    "ip_day1": 3.0,
+    "ip_day2": 2.0,
+    "ip_day3": 1.0,
+    "closer_used_prev_1d": 0.5,
+    "high_leverage_used_prev_2d": 0.25
+  },
+  "normalization": {
+    "method": "p95",
+    "anchor_years": "2016-2025",
+    "p95_value": 30.75
+  },
+  "output_range": [
+    0.0,
+    1.0
+  ],
+  "interpretation": "higher = more rested / available"
+}

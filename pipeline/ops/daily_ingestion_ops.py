@@ -260,6 +260,14 @@ def dbt_lineup_feature_rebuild(context):
     ])
 
 
+# ── Player profile update (weekly) ───────────────────────────────────────────
+
+@op(out=Out(Nothing))
+def ingest_player_profiles_update(context):
+    """Weekly update: fetch changed profiles via people/changes + detect new call-ups."""
+    _run_script(context, "ingest_player_profiles.py", ["update"])
+
+
 # ── Backfill phase ───────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

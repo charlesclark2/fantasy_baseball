@@ -204,6 +204,16 @@ rolling as (
             ), 0) / 3.0, 1
         )                                                           as bullpen_ip_prev_2d,
 
+        -- Innings pitched (outs / 3): prior 3 days
+        round(
+            coalesce(sum(outs_recorded) over (
+                partition by pitching_team
+                order by game_date
+                range between interval '3 days' preceding
+                          and interval '1 day' preceding
+            ), 0) / 3.0, 1
+        )                                                           as bullpen_ip_prev_3d,
+
         -- Pitchers used: prior 2 days (2d window complement to existing 3d/7d)
         sum(pitchers_used) over (
             partition by pitching_team
@@ -244,6 +254,7 @@ select
     r.closer_used_prev_2d,
     r.bullpen_ip_prev_1d,
     r.bullpen_ip_prev_2d,
+    r.bullpen_ip_prev_3d,
     r.pitchers_used_prev_2d
 
 from game_bullpen gb

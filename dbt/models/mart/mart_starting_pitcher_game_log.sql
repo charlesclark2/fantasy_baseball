@@ -136,41 +136,69 @@ runs_allowed_agg as (
     from {{ ref('mart_pitch_game_context') }} pgc
     where pgc.game_type = 'R'
     group by pgc.game_pk, pgc.pitcher_id
+),
+
+final as (
+    select
+        s.game_pk,
+        s.game_date,
+        s.game_year,
+        s.pitcher_id,
+        s.pitching_team,
+        s.batting_team,
+        s.home_team,
+        s.away_team,
+        s.is_home_team,
+
+        s.total_pitches,
+        s.batters_faced,
+        s.outs_recorded,
+        -- Traditional innings pitched format: 6 outs = 2.0, 7 outs = 2.1, 8 outs = 2.2
+        floor(s.outs_recorded / 3) + (mod(s.outs_recorded, 3) * 0.1)  as innings_pitched,
+
+        s.strikeouts,
+        s.walks,
+        s.hit_by_pitch,
+        s.home_runs_allowed,
+        s.hits_allowed,
+
+        coalesce(rag.runs_allowed, 0)                                   as runs_allowed,
+
+        round(
+            s.xwoba_numerator / nullif(s.xwoba_denom, 0),
+            4
+        )                                                               as xwoba_against,
+
+        round(s.avg_fastball_velo, 1)                                   as avg_fastball_velo
+
+    from starters s
+    left join runs_allowed_agg rag
+        on  rag.game_pk    = s.game_pk
+        and rag.pitcher_id = s.pitcher_id
 )
 
 select
-    s.game_pk,
-    s.game_date,
-    s.game_year,
-    s.pitcher_id,
-    s.pitching_team,
-    s.batting_team,
-    s.home_team,
-    s.away_team,
-    s.is_home_team,
+    *,
 
-    s.total_pitches,
-    s.batters_faced,
-    s.outs_recorded,
-    -- Traditional innings pitched format: 6 outs = 2.0, 7 outs = 2.1, 8 outs = 2.2
-    floor(s.outs_recorded / 3) + (mod(s.outs_recorded, 3) * 0.1)  as innings_pitched,
+    -- Cumulative season workload strictly before this start (leakage guard).
+    -- NULL on a pitcher's first career start (no preceding rows); 0 for first
+    -- start of a new season after having started in a prior season.
+    coalesce(
+        sum(innings_pitched) over (
+            partition by pitcher_id, game_year
+            order by game_date
+            rows between unbounded preceding and 1 preceding
+        ),
+        0
+    )                                                               as cumulative_season_ip,
 
-    s.strikeouts,
-    s.walks,
-    s.hit_by_pitch,
-    s.home_runs_allowed,
-    s.hits_allowed,
+    coalesce(
+        sum(total_pitches) over (
+            partition by pitcher_id, game_year
+            order by game_date
+            rows between unbounded preceding and 1 preceding
+        ),
+        0
+    )                                                               as cumulative_season_pitches
 
-    coalesce(rag.runs_allowed, 0)                                   as runs_allowed,
-
-    round(
-        s.xwoba_numerator / nullif(s.xwoba_denom, 0),
-        4
-    )                                                               as xwoba_against,
-
-    round(s.avg_fastball_velo, 1)                                   as avg_fastball_velo
-
-from starters s
-left join runs_allowed_agg rag
-    on  rag.game_pk    = s.game_pk
-    and rag.pitcher_id = s.pitcher_id
+from final

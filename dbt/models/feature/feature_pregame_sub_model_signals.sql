@@ -23,6 +23,10 @@
 --   offense_v2_signals.pred_runs_dispersion → pred_runs_dispersion_v2  (NegBin r; constant per model)
 --   offense_v2_signals.pred_runs_raw   → pred_runs_raw_v2    (alias for pred_runs_mu; no bias correction)
 --   offense_v2_signals.uncertainty     → pred_runs_uncertainty_v2  (80% PI width)
+--   starter_suppression_signals.starter_suppression_mu     → starter_suppression_mu_v1     (Epic 5; Normal μ)
+--   starter_suppression_signals.starter_suppression_sigma  → starter_suppression_sigma_v1  (Normal σ; constant per model)
+--   starter_suppression_signals.starter_suppression_signal → starter_suppression_signal_v1 (z-score; negative = better suppression)
+--   starter_suppression_signals.uncertainty                → starter_uncertainty_v1         (80% PI width: 2×1.28×σ)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -73,11 +77,7 @@ pivoted as (
         max(case when signal_name = 'environment_volatility' and sub_model_version = 'v3' then signal_value end)     as environment_volatility_v3,
         max(case when signal_name = 'environment_volatility' and sub_model_version = 'v3' then signal_available end) as environment_volatility_v3_available,
 
-        -- ------------------------------------------------------------------
-        -- Starter suppression sub-model (Epic 5)
-        -- ------------------------------------------------------------------
-        max(case when signal_name = 'starter_suppression_signal' and sub_model_version = 'v1' then signal_value end)     as starter_suppression_signal_v1,
-        max(case when signal_name = 'starter_suppression_signal' and sub_model_version = 'v1' then signal_available end) as starter_suppression_signal_v1_available,
+        -- (starter suppression signals sourced from dedicated table below; no pivot needed)
 
         -- ------------------------------------------------------------------
         -- Bullpen state sub-model (Epic 6)
@@ -134,9 +134,12 @@ select
     o2.uncertainty                                          as pred_runs_uncertainty_v2,
     (o2.pred_runs_mu is not null)                          as pred_runs_mu_v2_available,
 
-    -- Starter suppression signals (Epic 5)
-    p.starter_suppression_signal_v1,
-    p.starter_suppression_signal_v1_available,
+    -- Starter suppression signals v1 (Epic 5 — LightGBM+Normal distributional; champion)
+    ss.starter_suppression_mu                                   as starter_suppression_mu_v1,
+    ss.starter_suppression_sigma                                as starter_suppression_sigma_v1,
+    ss.starter_suppression_signal                               as starter_suppression_signal_v1,
+    ss.uncertainty                                              as starter_uncertainty_v1,
+    (ss.starter_suppression_mu is not null)                    as starter_suppression_mu_v1_available,
 
     -- Bullpen state signals (Epic 6)
     p.bullpen_state_signal_v1,
@@ -159,3 +162,7 @@ left join {{ source('betting_features', 'offense_v2_signals') }} o2
     on  o2.game_pk       = p.game_pk
     and o2.side          = p.side
     and o2.model_version = 'offense_v2'
+left join {{ source('betting_features', 'starter_suppression_signals') }} ss
+    on  ss.game_pk       = p.game_pk
+    and ss.side          = p.side
+    and ss.model_version = 'starter_v1'

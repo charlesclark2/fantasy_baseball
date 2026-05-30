@@ -353,6 +353,11 @@ final as (
         be.whiff_rate_30d                       as bp_whiff_rate_30d,
         be.innings_pitched_30d                  as bp_innings_pitched_30d,
 
+        -- ── Empirical Bayes bullpen estimates (Epic 6A) ───────────────────────
+        be.eb_bullpen_xwoba                     as bp_eb_xwoba,
+        be.eb_bullpen_uncertainty               as bp_eb_uncertainty,
+        be.eb_bullpen_coverage_pct              as bp_eb_coverage_pct,
+
         -- ── Momentum deltas: 7-day minus 30-day (positive = trending up) ─────
         off.woba_7d - off.woba_30d                   as off_woba_7d_minus_30d,
         pit.xwoba_against_7d - pit.xwoba_against_30d as pit_xwoba_7d_minus_30d,
