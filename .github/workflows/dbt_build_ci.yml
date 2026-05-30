@@ -132,6 +132,13 @@ jobs:
             echo "No dbt-manifest artifact found — will fall back to full build"
           fi
 
+      - name: Pre-build teardown (ensure clean CI schemas)
+        run: |
+          dbtf run-operation drop_ci_schemas \
+            --target ci \
+            --project-dir dbt \
+            --profiles-dir dbt
+
       - name: Build modified models in CI schemas
         run: |
           if [ -f dbt/state/manifest.json ]; then
