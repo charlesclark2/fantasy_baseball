@@ -1,0 +1,130 @@
+{
+  "run_ts": "20260601T053223",
+  "story": "6D.5",
+  "min_year": 2021,
+  "champion": {
+    "n_features": 24,
+    "cv_nll": 2.05044,
+    "tuned_cv_nll": 1.8939553468755033,
+    "cv_calib_80": 0.8484200000000002,
+    "cv_mean_r": 85.1487,
+    "high_fatigue_nll": 1.877
+  },
+  "no_eb": {
+    "n_features": 21,
+    "features_dropped": [
+      "eb_bullpen_coverage_pct",
+      "eb_bullpen_uncertainty",
+      "eb_bullpen_xwoba"
+    ],
+    "cv_nll": 2.1409,
+    "cv_mae": 1.8213,
+    "cv_calib_80": 0.8173,
+    "cv_mean_r": 94.9097,
+    "high_fatigue_nll": 1.7788,
+    "fold_records": [
+      {
+        "fold": 1,
+        "train_seasons": [
+          2021
+        ],
+        "test_season": 2022,
+        "n_train": 4808,
+        "n_test": 4824,
+        "nll": 2.317,
+        "mae": 1.8735,
+        "calib_80": 0.7114,
+        "r": 403.4268
+      },
+      {
+        "fold": 2,
+        "train_seasons": [
+          2021,
+          2022
+        ],
+        "test_season": 2023,
+        "n_train": 9632,
+        "n_test": 4825,
+        "nll": 2.2762,
+        "mae": 1.8296,
+        "calib_80": 0.7619,
+        "r": 56.7047
+      },
+      {
+        "fold": 3,
+        "train_seasons": [
+          2021,
+          2022,
+          2023
+        ],
+        "test_season": 2024,
+        "n_train": 14457,
+        "n_test": 4830,
+        "nll": 2.0613,
+        "mae": 1.7663,
+        "calib_80": 0.8447,
+        "r": 7.2279
+      },
+      {
+        "fold": 4,
+        "train_seasons": [
+          2021,
+          2022,
+          2023,
+          2024
+        ],
+        "test_season": 2025,
+        "n_train": 19287,
+        "n_test": 4831,
+        "nll": 2.048,
+        "mae": 1.8276,
+        "calib_80": 0.871,
+        "r": 4.1684
+      },
+      {
+        "fold": 5,
+        "train_seasons": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "test_season": 2026,
+        "n_train": 24118,
+        "n_test": 1675,
+        "nll": 2.0019,
+        "mae": 1.8095,
+        "calib_80": 0.8973,
+        "r": 3.0207
+      }
+    ],
+    "subset_eval": {
+      "fatigue_thresh": 0.7,
+      "final_r": 2.846,
+      "high_fatigue": {
+        "n": 25432,
+        "nll": 1.7788,
+        "calib_80": 0.9469
+      },
+      "rested": {
+        "n": 361,
+        "nll": 1.9144,
+        "calib_80": 0.9335
+      }
+    }
+  },
+  "deltas": {
+    "nll_delta": 0.0904,
+    "calib_80_delta": -0.0312,
+    "high_fatigue_nll_delta": -0.0982
+  },
+  "eb_adds_nll_lift": true,
+  "eb_adds_calib_lift": true,
+  "eb_adds_hf_lift": false,
+  "nll_lift_material": true,
+  "decision": "RETAIN",
+  "rationale": [
+    "EB reduces CV NLL by 0.0904 (>= 0.005 threshold)"
+  ]
+}

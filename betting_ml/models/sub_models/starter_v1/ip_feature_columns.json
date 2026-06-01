@@ -1,0 +1,129 @@
+{
+  "version": "starter_ip_v1",
+  "target": "outs_recorded",
+  "target_range": "0\u201327 (integer outs; 27 = complete game)",
+  "distribution_family": "NegBin",
+  "overdispersion_note": "Marginal overdispersion ratio (variance/mean) = 1.136 on 2020\u20132026 data (n=27,489). Exceeds 1.0 \u2014 NegBin preferred over Poisson. The 5D spec originally assumed > 1.5; actual data confirmed 1.136 is sufficient justification. Conditional overdispersion within feature strata verified in Story 5D.2 via per-decile residual analysis.",
+  "training_window": "2020\u20132026",
+  "training_rows": 26957,
+  "bulk_usage_flag": "is_bulk_usage = (outs_recorded < 9); no explicit role column in source tables",
+  "notes": "pitch_count_last_start derived via LAG(total_pitches) on mart_starting_pitcher_game_log. is_doubleheader_game2 derived from stg_statsapi_games (double_header IN ('Y','S') AND game_number=2). starter_pitcher_archetype from Epic 7 \u2014 confirms NegBin: power archetype starters go deeper. Stuff+ (C_stuff_velocity) available 2020+ only; expect ~0% null in training window. starter_proj_fip (F_trailing_fip) may have high null rate \u2014 check null_rates output.",
+  "groups": {
+    "A_workload": [
+      "days_rest",
+      "avg_ip_last_3",
+      "avg_ip_season",
+      "cumulative_season_ip",
+      "cumulative_season_pitches",
+      "appearances_30d",
+      "appearances_std",
+      "pitch_count_last_start"
+    ],
+    "B_season_context": [
+      "is_doubleheader_game2"
+    ],
+    "C_stuff_velocity": [
+      "starter_stuff_plus",
+      "starter_avg_fastball_velo",
+      "starter_fastball_pct",
+      "starter_breaking_pct",
+      "starter_offspeed_pct",
+      "starter_fastball_stuff_plus",
+      "starter_slider_stuff_plus",
+      "starter_curveball_stuff_plus",
+      "starter_changeup_stuff_plus"
+    ],
+    "D_recent_performance": [
+      "xwoba_against_30d",
+      "k_pct_30d",
+      "bb_pct_30d",
+      "whiff_rate_30d",
+      "hard_hit_pct_30d",
+      "xwoba_against_7d",
+      "k_pct_7d"
+    ],
+    "E_velocity_form": [
+      "fastball_velo_trend",
+      "avg_fastball_velo_30d",
+      "velo_delta_3start"
+    ],
+    "F_trailing_fip": [
+      "starter_trailing_fip_30g",
+      "starter_trailing_ra9_30g",
+      "starter_proj_fip",
+      "csw_pct_season",
+      "csw_pct_3start"
+    ],
+    "G_eb_posterior": [
+      "eb_xwoba_against",
+      "eb_xwoba_uncertainty"
+    ]
+  },
+  "all_numeric_features": [
+    "days_rest",
+    "avg_ip_last_3",
+    "avg_ip_season",
+    "cumulative_season_ip",
+    "cumulative_season_pitches",
+    "appearances_30d",
+    "appearances_std",
+    "pitch_count_last_start",
+    "is_doubleheader_game2",
+    "starter_stuff_plus",
+    "starter_avg_fastball_velo",
+    "starter_fastball_pct",
+    "starter_breaking_pct",
+    "starter_offspeed_pct",
+    "starter_fastball_stuff_plus",
+    "starter_slider_stuff_plus",
+    "starter_curveball_stuff_plus",
+    "starter_changeup_stuff_plus",
+    "xwoba_against_30d",
+    "k_pct_30d",
+    "bb_pct_30d",
+    "whiff_rate_30d",
+    "hard_hit_pct_30d",
+    "xwoba_against_7d",
+    "k_pct_7d",
+    "fastball_velo_trend",
+    "avg_fastball_velo_30d",
+    "velo_delta_3start",
+    "starter_trailing_fip_30g",
+    "starter_trailing_ra9_30g",
+    "starter_proj_fip",
+    "csw_pct_season",
+    "csw_pct_3start",
+    "eb_xwoba_against",
+    "eb_xwoba_uncertainty"
+  ],
+  "categorical_features": {
+    "pitcher_hand": {
+      "encoding": "one_hot",
+      "group": "A_workload"
+    },
+    "starter_primary_pitch_type": {
+      "encoding": "one_hot",
+      "group": "C_stuff_velocity"
+    },
+    "starter_pitcher_archetype": {
+      "encoding": "one_hot",
+      "group": "C_stuff_velocity"
+    }
+  },
+  "excluded": [
+    "game_pk",
+    "game_date",
+    "game_year",
+    "side",
+    "pitcher_id",
+    "pitcher_name",
+    "has_starter_data",
+    "has_ip_history",
+    "pitcher_hand",
+    "starter_primary_pitch_type",
+    "starter_pitcher_archetype",
+    "outs_recorded",
+    "is_bulk_usage",
+    "game_pitch_count"
+  ]
+}

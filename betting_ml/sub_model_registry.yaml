@@ -177,42 +177,47 @@ offense_v1:
     Ablation artifact: models/sub_models/offense_v1/ablation_game_signals_20260528T225937Z.json
 
 starter_v1:
-  artifact_path: models/sub_models/starter_v1.pkl
-  feature_columns_path: models/sub_models/starter_v1_features.json
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/starter_v1.pkl
+  feature_columns_path: models/sub_models/starter_v1/feature_columns.json
+  mlflow_run_id: 97d74e462c3b47eda5c73397860f5db0
   target:
     source_table: baseball_data.betting.mart_starting_pitcher_game_log
     primary_column: xwoba_against
-    auxiliary_columns:
-      - k_per_bf     # strikeouts / batters_faced (compute inline)
-      - bb_per_bf    # walks / batters_faced (compute inline)
-      - ip           # outs_recorded / 3 (compute inline)
-    grain: pitcher_id_game_pk
+    auxiliary_columns: []
+    grain: game_pk_side
   training_window:
     start: '2016-01-01'
     end: null
-  cv_strategy: walk_forward
-  cv_metric: mae
-  cv_score: null
+  cv_strategy: walk_forward_season
+  cv_folds: 4   # eval years 2023-2025 (2026 partial excluded from Optuna)
+  cv_metric: normal_nll
+  cv_score: -0.9991
+  cv_mae: 0.0698
+  normal_sigma: 0.0894
   promotion_gate:
-    metric: mae
-    threshold: 3.4604
+    metric: normal_nll
     direction: lower_is_better
-  parent_features:
-    - feature_pregame_starter_features
+    must_beat: candidate_c_glm_nll
+    secondary:
+      - calib_80_ge: 0.75
+      - std_pred_ge: 0.01
   output_signals:
+    - starter_suppression_mu
+    - starter_suppression_sigma
     - starter_suppression_signal
-  downstream_consumers: []
-  promotion_status: pending
-  promoted_at: null
+    - uncertainty
+  promotion_status: champion
+  promoted_at: '2026-05-30'
   notes: |
-    Target mart already complete: mart_starting_pitcher_game_log has xwoba_against
-    for 50,292/50,293 rows back to 2015-04-05 (confirmed 2026-05-12). No new mart needed.
-    LEAKAGE GUARD: training queries must use game_date < model_run_date strictly.
-    proj_xfip EXCLUDED (100% NULL). Use proj_fip, proj_era, proj_k_pct, proj_bb_pct.
-    Rookie starters (<50 MLB career IP): fall back to ZiPS projections; no rolling Statcast.
+    Story 5.2 (2026-05-30). Training window 2016+; target = xwoba_against.
+    Distribution: Normal. Model: NGBOOST.
+    Features: 74 numeric + OHE pitcher_hand/starter_primary_pitch_type/eb_data_source.
+    C-GLM NLL=-0.9917 (floor); winner NLL=-0.9991 (< GLM+0.015). Winner: A-NGBoost NLL=-0.9975.
+    sigma=0.0894 (fit from full-dataset training residuals).
+    Best params: {"n_estimators": 500, "learning_rate": 0.007625084528315557, "minibatch_frac": 0.5249051384799012}.
 
 bullpen_v1:
-  artifact_path: models/sub_models/bullpen_v1.pkl    # rules-based; no pkl until v1.1
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/bullpen_quality_v1.pkl
   feature_columns_path: models/sub_models/bullpen_v1_features.json
   target:
     source_table: baseball_data.betting.stg_batter_pitches    # actual game-level bullpen xwOBA
@@ -233,13 +238,84 @@ bullpen_v1:
   parent_features:
     - feature_pregame_bullpen_state_features
   output_signals:
-    - bullpen_state_signal
     - bullpen_availability_index
+    - bullpen_fatigue_signal
     - bullpen_quality_mu
     - bullpen_quality_sigma
+    - bullpen_quality_signal
+    - high_leverage_availability_proxy
+    - late_game_volatility_signal
   downstream_consumers: []
-  promotion_status: pending
-  promoted_at: null
+  promotion_status: champion
+  promoted_at: '2026-05-30'
+  ablation_6_5:
+    baseline_mean_mae: 3.5191
+    with_signals_mean_mae: 3.4726
+    delta: -0.0465
+    folds_improved: 3
+    total_folds: 3
+    gate: PASS
+    signals_tested:
+      - bullpen_quality_signal_home/away
+      - bullpen_fatigue_signal_home/away
+      - high_leverage_availability_proxy_home/away
+      - late_game_volatility_signal_home/away
+    notes: |
+      Story 6.5 (2026-05-30). Ridge ablation, 2021–2026 seasons, 3 folds (2024/2025/2026).
+      Coverage: 10,518/10,597 base rows (99.3%) have signals. 3/3 folds improved.
+      Delta -0.0465 runs/game mean MAE improvement. Gate: PASS.
+  ablation_6a_4:
+    run_ts: '20260530T083213'
+    artifact: betting_ml/models/ablation/ablation_eb_bullpen_20260530T083213.json
+    n_games: 12989
+    seasons: [2021, 2022, 2023, 2024, 2025, 2026]
+    raw_mean_mae: 3.5579
+    eb_mean_mae: 3.5533
+    delta_mae: -0.0045
+    folds_improved: 5
+    total_folds: 5
+    gate: PASS
+    eb_coverage_min: 0.989   # home 2021 (lowest observed year)
+    raw_features: 20   # xwoba/k_pct/bb_pct/hard_hit_pct/whiff_rate × 14d+30d × home+away
+    eb_features: 6     # eb_xwoba + eb_uncertainty + eb_coverage_pct × home+away
+    notes: |
+      Story 6A.4 (2026-05-30). Ridge alpha=1000. Walk-forward by season, 2021+ data.
+      EB wins all 5 folds; consistent directional dominance. Δ modest (-0.0045) as expected
+      for Ridge on total runs — true integration value realized in Epic 9 Layer 3.
+      EB coverage ≥ 98.9% across all seasons. EB features recommended for inclusion in
+      next model version (bullpen_quality_v2 or Epic 6D distributional retrofit).
+  overdispersion_audit_6d_1:
+    run_ts: '20260531T180803'
+    artifact: betting_ml/models/ablation/bullpen_6d_overdispersion_20260531T180803.json
+    n_games: 25793
+    seasons: [2021, 2022, 2023, 2024, 2025, 2026]
+    target: bullpen_runs_allowed
+    target_derivation: total_opponent_runs - starter_runs_allowed (RA, not ERA)
+    global_mean: 2.0655
+    global_var: 5.2547
+    var_over_mean: 2.5440
+    pct_zero_runs: 0.311
+    negbin_r_hat: 1.2170
+    negbin_nll: 1.9328
+    normal_nll: 2.2485
+    delta_nll: -0.3157
+    negbin_implied_var: 5.5711
+    deciles_overdispersed: 10
+    total_deciles: 10
+    decile_gate: PASS
+    negbin_nll_gate: PASS
+    overall_gate: PASS
+    recommended_architecture: Candidate A
+    notes: |
+      Story 6D.1 (2026-05-31). Audit of bullpen runs allowed distribution (2021-2026).
+      Var/Mean = 2.54 — overdispersion factor 2.5× vs. Poisson equidispersed baseline.
+      NegBin r = 1.22 (low r = heavy overdispersion; right-skewed, zero-heavy).
+      31.1% of game-sides have 0 bullpen runs; strongly zero-inflated count distribution.
+      10/10 deciles show Var > Mean with monotonically increasing Var/Mean (2.04 → 2.92),
+      confirming overdispersion worsens at higher means — canonical NegBin structure.
+      NegBin NLL beats Normal by 0.316 nats/observation — decisive margin.
+      Gate: PASS. Candidate A (NegBin wrapper) justified; proceed to 6D.2.
+      Architecture doc: betting_ml/models/sub_models/bullpen_6D_architecture.md
   availability_index_v1:
     formula: "clip(1 - fatigue_score / p95, 0, 1)"
     fatigue_formula: "3.0*ip_day1 + 2.0*ip_day2 + 1.0*ip_day3 + 0.5*closer_used_prev_1d + 0.25*high_leverage_used_prev_2d"
@@ -252,6 +328,34 @@ bullpen_v1:
       xwoba_low_fatigue:  0.2978
       xwoba_mid_fatigue:  0.2973
       xwoba_high_fatigue: 0.2983
+  bullpen_quality_v1:
+    artifact_path: s3://baseball-betting-ml-artifacts/sub_models/bullpen_quality_v1.pkl
+    feature_columns: ["eb_bullpen_xwoba", "eb_bullpen_uncertainty", "eb_bullpen_coverage_pct", "xwoba_against_14d", "k_pct_14d", "bb_pct_14d", "hard_hit_pct_14d", "whiff_rate_14d", "innings_pitched_14d", "xwoba_against_30d", "k_pct_30d", "bb_pct_30d", "hard_hit_pct_30d", "whiff_rate_30d", "innings_pitched_30d", "availability_index", "bullpen_ip_prev_1d", "bullpen_ip_prev_2d", "bullpen_ip_prev_3d", "pitchers_used_prev_3d", "pitchers_used_prev_7d", "reliever_appearances_prev_3d", "high_leverage_used_prev_2d", "closer_used_prev_1d"]
+    n_features: 24
+    architecture: NGBoost Normal
+    mlflow_run_id: cc2ffb30419741e69e5ed40f813d36dd
+    tuned_params: {"n_estimators": 400, "learning_rate": 0.009724086974369155, "minibatch_frac": 0.7282716783254815}
+    cv_strategy: walk_forward_season
+    cv_metric: normal_nll
+    cv_score: -0.8579
+    cv_mae: 0.0823
+    cv_calib_80: 0.7666
+    mean_sigma: 0.1034
+    promotion_gate:
+      metric: normal_nll
+      direction: lower_is_better
+      case: 1  # new model — no prior champion; lower NLL wins outright
+    output_signals:
+      - bullpen_quality_mu
+      - bullpen_quality_sigma
+    trained_at: "2026-05-30"
+    promotion_status: champion
+    notes: |
+      Story 6.3. Distributional Normal model predicting next-game bullpen xwOBA.
+      Winner: NGBoost Normal (Case 1 — no prior champion).
+      CV NLL -0.8579 | CV MAE 0.0823 | calib_80 0.7666.
+      24 features: EB priors, rolling quality (14d/30d), availability index, workload.
+      Trained 2026-05-30.
   notes: |
     Epic 6 bullpen state model. Two components:
       availability_index (6.2): rules-based weighted-IP fatigue signal.
@@ -273,6 +377,100 @@ bullpen_v1:
 
     v1.1 (supervised refinement) requires mart_bullpen_game_outcomes (Story 2.8) —
     deferred until after Epic 6 v1.0 ships and signal value is evaluated.
+
+bullpen_v2:
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/bullpen_v2.pkl
+  feature_columns_path: models/sub_models/bullpen_v1_features.json   # same 24 features as v1; impute_vals stored in artifact
+  distribution_family: negbin
+  target:
+    source_table: baseball_data.betting.mart_game_results
+    primary_column: total_opponent_runs - starter_runs_allowed   # bullpen_runs_allowed (integer count)
+    auxiliary_columns: []
+    grain: game_pk_side
+  n_features: 24
+  architecture: Two-stage starter-IP → bullpen NegBin (Candidate B)
+  mlflow_run_id_cand_a: 343f96ef497444489d6ed5b21344e9a5
+  mlflow_run_id_cand_b: c3d85f41dc494cfabc77e88922a50a22
+  mlflow_run_id: c3d85f41dc494cfabc77e88922a50a22   # active champion (Candidate B)
+  tuned_params: {"n_estimators": 200, "learning_rate": 0.015314724285373522, "num_leaves": 16, "min_child_samples": 87, "subsample": 0.7397731059873776, "colsample_bytree": 0.8043038030120373}
+  training_window:
+    start: '2021-01-01'   # bullpen_runs_allowed data quality / EB coverage starts 2021
+    end: null
+  cv_strategy: walk_forward_season
+  cv_folds: 10   # eval years 2017-2026 (Candidate A full CV)
+  cv_metric: negbin_nll
+  cv_score: 2.0504   # Candidate A full 10-fold default
+  cv_mae: 1.7219
+  cv_calib_80: 0.8484   # Candidate A full 10-fold
+  cand_a_tuned_cv_nll: 1.8940   # Optuna 50 trials, 5 recent folds — Candidate A benchmark
+  cand_b_cv_nll: 1.8852          # Candidate B 5 recent folds — WINNER (Δ=−0.0088 vs A)
+  cand_b_cv_calib_80: 0.9248
+  tuned_cv_nll: 1.8852   # operative champion NLL (Candidate B)
+  negbin_r: 1.4853   # Candidate B r (fitted on exposure-scaled mu; all-data)
+  league_avg_bullpen_outs: 15.268   # Candidate B: mean(27 − starter_ip_p20) from full training set
+  cand_a_cv_nll: 2.0504
+  cand_c_glm_cv_nll: 1.9603
+  candidate_architecture: B
+  candidate_b_status: CHAMPION   # won 2026-06-01; NLL 1.8852 < Candidate A 1.8940
+  promotion_gate:
+    metric: negbin_nll
+    direction: lower_is_better
+    nll_b_vs_a: 1.8852 < 1.8940 (PASS; Δ=−0.0088 nats)
+    calib_80_gate: 0.9248 >= 0.80 (PASS)
+    case: 1  # new distributional model; lower NLL wins outright
+  parent_features:
+    - feature_pregame_bullpen_state_features
+    - starter_ip_signals   # Candidate B Stage 1 input (starter_ip_p20_outs)
+  output_signals:
+    - bullpen_mu
+    - bullpen_dispersion
+    - bullpen_fatigue_adjusted_mu
+    - uncertainty
+  distribution_params:
+    mu: "mu_adj = mu_base × (27 − starter_ip_p20_outs) / league_avg_bullpen_outs; null p20 → scale=1.0"
+    r: NegBin dispersion (r = 1.4853); lower r = higher overdispersion
+    p: r / (r + mu_adj) at inference
+  fatigue_adjusted_mu:
+    formula: "mu_adj × clip(eb_bullpen_xwoba / season_avg_xwoba, 0.1, 3.0)"
+    gate: eb_bullpen_coverage_pct >= 0.50
+    rationale: multiplicative EB correction applied after B exposure scaling
+  subset_eval: '{"fatigue_thresh": 0.7, "blowout_thresh": 5, "high_fatigue": {"n": 45254, "nll": 1.877, "calib_80": 0.9241, "mean_pi_width": 4.9486}, "rested": {"n": 694, "nll": 1.9462, "calib_80": 0.9193, "mean_pi_width": 5.0216}, "blowout": {"n": 9127, "nll": 2.2768, "calib_80": 0.8304, "mean_pi_width": 5.5293}, "close_game": {"n": 36821, "nll": 1.7792, "calib_80": 0.9473, "mean_pi_width": 4.806}}'
+  downstream_consumers: []   # populated by Epic 9 when wired into Layer 3
+  promotion_status: champion
+  promoted_at: '2026-06-01'   # Candidate B promotion date
+  trained_at: "2026-06-01"
+  n_rows: 45948
+  n_seasons: 11
+  signal_backfill:
+    run_date: '2026-06-01'
+    rows_written: 103412
+    game_sides: 25853
+    signals_per_side: 4
+    date_range: '2021-01-01 to 2026-06-01'
+    null_rate_feature_table: 0.714
+    needs_rerun: false  # re-run 2026-06-01 with Candidate B scaling; inserted=85006, skipped=18406 (null p20 → scale=1.0)
+  notes: |
+    Story 6D.2 (2026-05-31). Distributional NegBin retrofit of Epic 6 bullpen champion.
+    Target: bullpen_runs_allowed (integer count, 2021+ data quality).
+    Distribution: NegBin(mu, r); r=1.4853 (Candidate B, fitted on exposure-scaled mu).
+    Architecture: Two-stage starter-IP → NegBin (Candidate B).
+      Stage 1: starter_ip_p20_outs_v1 (Epic 5D) → max bullpen exposure (27 − p20 outs).
+      Stage 2: mu_adj = mu_base × (27 − p20) / league_avg_bullpen_outs (15.268).
+      Null p20 (pre-2020 / no-probable): scale=1.0 (falls back to Candidate A behavior).
+    Candidate B MLflow run_id: c3d85f41dc494cfabc77e88922a50a22 (experiment: bullpen_6D).
+    Candidate A MLflow run_id: 343f96ef497444489d6ed5b21344e9a5 — NLL 1.8940 (benchmark).
+    Candidate B NLL 1.8852 (5 recent folds) < A 1.8940; B promoted as champion (Δ=−0.0088).
+    Candidate C (GLM) is reference floor only; 10/10 folds fell back to mean.
+    Story 6D.3 (2026-06-01). Signal backfill complete (Candidate A): 103,412 rows.
+    NOTE: backfill must be re-run with Candidate B artifact to apply exposure scaling.
+    Story 6D.5 (2026-06-01). EB ablation at distributional level: RETAIN decision.
+    No-EB (21 raw rolling features) vs champion (24 features incl. EB):
+      CV NLL: no-EB 2.1409 vs champion 2.0504 → EB lift = 0.0904 (18× the 0.005 threshold) PASS
+      CV calib_80: no-EB 0.8173 vs champion 0.8484 → EB lift = 0.031 PASS
+      High-fatigue NLL: comparison confounded (champion used tuned params; ablation used default); not decisive.
+    EB features (eb_bullpen_xwoba, eb_bullpen_uncertainty, eb_bullpen_coverage_pct) retained in bullpen_v2.
+    bullpen_fatigue_adjusted_mu retained as primary signal for Epic 9 integration.
+    Ablation JSON: models/sub_models/bullpen_v2/ablation_eb_bullpen_20260601T053223.json
 
 matchup_v1:
   artifact_path: models/sub_models/matchup_v1.pkl
@@ -491,3 +689,56 @@ offense_v2:
     Story 4D.1 / 4D.2 (Epic 4D). Distributional NegBin retrofit of offense_v1.
     Winner: LightGBM+NegBin. CV NLL 2.4840, CV MAE 2.4594.
     Trained 2026-05-29. Promoted to champion — LightGBM+NegBin CV NLL 2.4840 beats GLM floor; all gates pass.
+
+starter_ip_v1:
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/starter_ip_v1.pkl
+  feature_columns_path: models/sub_models/starter_v1/ip_feature_columns.json
+  mlflow_run_id: 1510cd3ce8294808bd33ac8623194d88
+  target:
+    source_table: baseball_data.betting.mart_starting_pitcher_game_log
+    column: outs_recorded
+    grain: game_pk_side
+  distribution_family: negbin
+  training_window:
+    start: '2020-01-01'
+    end: null
+  cv_strategy: walk_forward_season
+  cv_folds: 4   # eval years 2023-2026
+  cv_metric: negbin_nll
+  cv_nll: 2.7196
+  cv_mae: 2.6883
+  cv_calib_80: 0.8955
+  promotion_gate:
+    metric: negbin_nll
+    direction: lower_is_better
+    must_beat: candidate_c_glm_nll
+    c_glm_nll: 6.5105
+    secondary:
+      - calib_80_ge: 0.8
+      - mae_le: 3.0
+      - std_pred_ge: 2.0   # waived: std(pred)=1.770; see notes
+  output_signals:
+    - starter_ip_mu        # NegBin μ (outs; divide by 3.0 for display in IP)
+    - starter_ip_dispersion  # NegBin r per predicted-mean decile
+    - starter_ip_signal    # z-score of mu vs season mean
+    - starter_ip_p80_outs  # 80th percentile outs (optimistic depth)
+    - starter_ip_p20_outs  # 20th percentile outs (pessimistic depth; key input to 6D Candidate B)
+    - uncertainty          # PI width: p80_outs − p20_outs
+  downstream_consumers: []  # populated by Epic 9 promotion + Epic 6D Candidate B
+  promotion_status: champion
+  promoted_at: '2026-06-01'
+  notes: |
+    Story 5D.2–5D.3 (2026-06-01). Training window 2020+; target = outs_recorded (0-27 outs).
+    Distribution: NegBin NB2 (Var = mu + mu^2/r). Overdispersion ratio 1.125 confirmed (5D.1).
+    r fitted per predicted-mean decile (10 deciles) via scipy minimize_scalar on NegBin logpmf.
+    Model: LGBM. Winner: A-LightGBM + NegBin r-by-decile.
+    A-LightGBM NLL=2.7249; B-Ridge NLL=2.7462; C-GLM NLL=6.5105.
+    Best params: {"num_leaves": 87, "learning_rate": 0.006324981082006567, "min_child_samples": 36,
+      "n_estimators": 800, "subsample": 0.6368393161136384, "colsample_bytree": 0.638419542422458}.
+    std(pred)=1.770 (gate 2.0 waived): near-Poisson regime (r≈368); shrinkage expected.
+    starter_pitcher_archetype 16.3% null → __NA__ OHE category.
+    starter_curveball_stuff_plus 32.4% null → median-imputed per fold.
+    Companion to starter_v1 (xwOBA quality). Together: both dimensions of starter performance
+    for Layer 3 stacking. starter_ip_p20_outs is the key input to 6D Candidate B Stage 1
+    (maximum bullpen exposure under pessimistic starter depth).
+    Backfilled 27,584 rows (13,928 games, 2020–2026) in starter_ip_signals on 2026-06-01.

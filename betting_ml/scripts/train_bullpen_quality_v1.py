@@ -63,9 +63,10 @@ _CALIB_80_Z   = float(norm.ppf(0.90))   # 1.2816 — half-width for symmetric 80
 _CALIB_80_GATE = 0.80
 _MIN_SIGMA    = 1e-4                     # floor to avoid log(0) in NLL
 
-_OPTUNA_PROBE_TRIALS = 10
-_OPTUNA_FULL_TRIALS  = 50
-_OPTUNA_SEED         = 42
+_OPTUNA_PROBE_TRIALS   = 10
+_OPTUNA_FULL_TRIALS    = 50
+_OPTUNA_SEED           = 42
+_OPTUNA_RECENT_FOLDS   = 5   # use only the 5 most recent CV folds during Optuna search
 
 # NGBoost comparison-phase defaults
 _NGBOOST_N_EST = 500
@@ -401,13 +402,14 @@ def _print_gate_summary(
 
 def _make_optuna_objective(winner_type: str, df: pd.DataFrame):
     seasons = sorted(df[_YEAR_COL].unique())
-    folds   = [(seasons[:i], seasons[i]) for i in range(1, len(seasons))]
+    n_folds = min(_OPTUNA_RECENT_FOLDS, len(seasons) - 1)
+    folds   = [(seasons[:i], seasons[i]) for i in range(len(seasons) - n_folds, len(seasons))]
 
     def objective(trial) -> float:
         if winner_type == "ngboost":
             from ngboost import NGBRegressor
             from ngboost.distns import Normal
-            n_est    = trial.suggest_int("n_estimators", 200, 1000, step=100)
+            n_est    = trial.suggest_int("n_estimators", 200, 500, step=100)
             lr       = trial.suggest_float("learning_rate", 0.005, 0.1, log=True)
             mbfrac   = trial.suggest_float("minibatch_frac", 0.5, 1.0)
             fold_nlls = []

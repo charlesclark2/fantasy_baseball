@@ -1,0 +1,114 @@
+{
+  "run_ts": "20260530T083213",
+  "gate_pass": true,
+  "min_year": 2021,
+  "raw_mean_mae": 3.5579,
+  "eb_mean_mae": 3.5533,
+  "delta_mae": -0.0045,
+  "folds_improved": 5,
+  "total_folds": 5,
+  "raw_folds": [
+    {
+      "tag": "raw",
+      "eval_year": 2022,
+      "n_eval": 2430,
+      "mae": 3.5178,
+      "bias": 0.4989,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.992,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2023,
+      "n_eval": 2430,
+      "mae": 3.629,
+      "bias": -0.4165,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.994,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2024,
+      "n_eval": 2429,
+      "mae": 3.4306,
+      "bias": 0.1667,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.995,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2025,
+      "n_eval": 2430,
+      "mae": 3.6164,
+      "bias": 0.0247,
+      "eb_home_coverage": 0.995,
+      "eb_away_coverage": 0.993,
+      "n_features": 24
+    },
+    {
+      "tag": "raw",
+      "eval_year": 2026,
+      "n_eval": 841,
+      "mae": 3.5955,
+      "bias": 0.1269,
+      "eb_home_coverage": 0.996,
+      "eb_away_coverage": 0.995,
+      "n_features": 24
+    }
+  ],
+  "eb_folds": [
+    {
+      "tag": "eb",
+      "eval_year": 2022,
+      "n_eval": 2430,
+      "mae": 3.5155,
+      "bias": 0.4979,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.992,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2023,
+      "n_eval": 2430,
+      "mae": 3.6261,
+      "bias": -0.416,
+      "eb_home_coverage": 0.992,
+      "eb_away_coverage": 0.994,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2024,
+      "n_eval": 2429,
+      "mae": 3.4263,
+      "bias": 0.1638,
+      "eb_home_coverage": 0.993,
+      "eb_away_coverage": 0.995,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2025,
+      "n_eval": 2430,
+      "mae": 3.6125,
+      "bias": 0.022,
+      "eb_home_coverage": 0.995,
+      "eb_away_coverage": 0.993,
+      "n_features": 10
+    },
+    {
+      "tag": "eb",
+      "eval_year": 2026,
+      "n_eval": 841,
+      "mae": 3.5863,
+      "bias": 0.1391,
+      "eb_home_coverage": 0.996,
+      "eb_away_coverage": 0.995,
+      "n_features": 10
+    }
+  ]
+}

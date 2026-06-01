@@ -1068,3 +1068,17 @@ sources:
           starter_suppression_signal is the z-score of mu relative to the season mean (negative
           values indicate better-than-average suppression); uncertainty is the 80% PI width
           (2 × 1.28 × sigma). Backfilled 2020–2026 (Statcast xwOBA coverage starts 2020).
+      - name: starter_ip_signals
+        description: >
+          Per game-side distributional starter innings-pitched signals from the starter_ip_v1 model
+          (LightGBM mean + NegBin r fitted per predicted-mean decile — Story 5D.2 champion).
+          Written by betting_ml/scripts/starter_v1/generate_starter_ip_signals.py via
+          VARCHAR temp table + MERGE (idempotent). Grain: game_pk × side × model_version.
+          All outs columns are in outs (divide by 3.0 for innings pitched — do NOT convert
+          internally; keep as outs for NegBin CDF computations in Epic 6D Candidate B).
+          starter_ip_mu is the NegBin conditional mean outs; starter_ip_dispersion is the
+          per-decile r parameter; starter_ip_signal is the z-score of mu vs. season mean
+          (negative = shorter-than-average outing expected); starter_ip_p80_outs and
+          starter_ip_p20_outs are the 80th/20th percentile outs from the NegBin CDF;
+          uncertainty is the PI width (p80 - p20); is_bulk_usage flags predicted mu < 9 outs.
+          Backfilled 2020–2026. DDL embedded in generate_starter_ip_signals.py.
