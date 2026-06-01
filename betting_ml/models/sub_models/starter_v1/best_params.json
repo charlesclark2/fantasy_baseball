@@ -1,0 +1,11 @@
+{
+  "winner_type": "ngboost",
+  "best_params": {
+    "n_estimators": 500,
+    "learning_rate": 0.007625084528315557,
+    "minibatch_frac": 0.5249051384799012
+  },
+  "mean_best_iteration": 500,
+  "tuned_cv_nll": -0.9934,
+  "final_cv_nll": -0.9991
+}

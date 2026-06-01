@@ -159,10 +159,143 @@ models:
         tests: [not_null]
 
       # -----------------------------------------------------------------------
-      # Epics 6, 8 (placeholder — NULL until those epics ship)
+      # Epic 5D — Starter IP depth signals v1 (LightGBM+NegBin; outs units)
       # -----------------------------------------------------------------------
-      - name: bullpen_state_signal_v1
-        description: Bullpen readiness/fatigue signal from bullpen_v1 (Epic 6). NULL until Epic 6 ships.
+      - name: starter_ip_mu_v1
+        description: >
+          NegBin μ: LightGBM predicted mean outs recorded for this starter.
+          Units are OUTS — divide by 3.0 to convert to innings pitched for display;
+          keep as outs for NegBin CDF computations (e.g. 6D Candidate B).
+          NULL before 2020 or where no probable pitcher is set.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_dispersion_v1
+        description: >
+          NegBin r (dispersion parameter) for starter outs recorded. Higher r = less
+          overdispersion (more Poisson-like). Assigned per predicted-mean decile from training.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_signal_v1
+        description: >
+          Z-score of starter_ip_mu relative to the season-year mean. Positive = above-average
+          expected depth; negative = below-average. Mean-zero by construction within each season.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_p80_outs_v1
+        description: >
+          80th-percentile outs recorded from NegBin posterior (optimistic depth scenario).
+          Used with p20 to bound the expected bullpen exposure range.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_p20_outs_v1
+        description: >
+          20th-percentile outs recorded from NegBin posterior (pessimistic depth scenario).
+          Key input to 6D Candidate B Stage 1: maximum bullpen exposure estimate under short outing.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_uncertainty_v1
+        description: >
+          80% NegBin predictive interval width: starter_ip_p80_outs − starter_ip_p20_outs.
+          Higher values indicate greater uncertainty about how deep the starter will go.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: starter_ip_is_bulk_usage_v1
+        description: >
+          TRUE when starter_ip_mu < 9.0 outs (< 3 innings). Flags bulk or opener roles
+          where the bullpen exposure model should not assume a full starter arc.
+      - name: starter_ip_mu_v1_available
+        description: TRUE when starter_ip_v1 signals are populated for this game-side (2020+ with a confirmed probable pitcher).
+        tests: [not_null]
+
+      # -----------------------------------------------------------------------
+      # Bullpen distributional signals v2 (Epic 6D — LightGBM+NegBin; champion)
+      # -----------------------------------------------------------------------
+      - name: bullpen_mu_v2
+        description: >
+          NegBin μ: LightGBM predicted mean bullpen runs allowed per game-side.
+          Primary v2 distributional signal. Mean ~2.04 runs; r=1.4474 (high overdispersion).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_mu_v2_uncertainty
+        description: 80% NegBin PI width for bullpen_mu_v2 (ppf(0.90) − ppf(0.10)).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_mu_v2_available
+        description: TRUE when eb_bullpen_coverage_pct ≥ 0.50 (EB posterior well-supported). NULL for pre-2021 game_pks that predate the backfill window.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_dispersion_v2
+        description: >
+          NegBin dispersion parameter r = 1.4474 (constant per model; fit from all-data residuals).
+          Lower r = higher overdispersion (r < 2 indicates heavy right tail).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_dispersion_v2_available
+        description: TRUE when eb_bullpen_coverage_pct ≥ 0.50. NULL for pre-2021 game_pks that predate the backfill window.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_fatigue_adjusted_mu_v2
+        description: >
+          bullpen_mu_v2 × (eb_bullpen_xwoba / season_avg_xwoba). Multiplicative EB correction:
+          teams with better-than-league-average xwOBA posteriors receive downward-adjusted
+          expected runs (fewer runs allowed). Bounded ratio [0.1, 3.0] to cap extreme adjustments.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_fatigue_adjusted_mu_v2_uncertainty
+        description: Same 80% NegBin PI width as bullpen_mu_v2_uncertainty (r unchanged by EB correction).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_fatigue_adjusted_mu_v2_available
+        description: TRUE when eb_bullpen_coverage_pct ≥ 0.50. NULL for pre-2021 game_pks that predate the backfill window.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_uncertainty_v2
+        description: >
+          80% NegBin predictive interval width: nbinom.ppf(0.90) − nbinom.ppf(0.10).
+          Wider values indicate higher uncertainty about bullpen run outcomes. Blowout games
+          (score_delta > 5) show ~15% wider PI than close games (5.53 vs 4.81).
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: bullpen_uncertainty_v2_available
+        description: TRUE when eb_bullpen_coverage_pct ≥ 0.50. NULL for pre-2021 game_pks that predate the backfill window.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+      # -----------------------------------------------------------------------
+      # Epics 8 (placeholder — NULL until those epics ship)
+      # -----------------------------------------------------------------------
       - name: matchup_advantage_signal_v1
         description: Batter-archetype vs. pitcher-archetype advantage signal from matchup_v1 (Epic 8). NULL until Epic 8 ships.
 

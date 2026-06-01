@@ -1,0 +1,142 @@
+{
+  "audit_ts": "20260531T180803",
+  "min_year": 2021,
+  "n_games": 25793,
+  "global_mean": 2.0655,
+  "global_var": 5.2547,
+  "global_std": 2.2923,
+  "var_over_mean": 2.544,
+  "pct_zero_runs": 0.311,
+  "run_distribution": {
+    "0": 8022,
+    "1": 5294,
+    "2": 4017,
+    "3": 2945,
+    "4": 1978,
+    "5": 1344,
+    "6": 887,
+    "7": 511,
+    "8": 328,
+    "9": 176,
+    "10": 109,
+    "11": 67,
+    "12": 48,
+    "13": 28,
+    "14": 14,
+    "15": 11
+  },
+  "negbin_r_hat": 1.217,
+  "negbin_nll": 1.9328,
+  "normal_nll": 2.2485,
+  "delta_nll": -0.3157,
+  "negbin_implied_var": 5.5711,
+  "decile_records": [
+    {
+      "decile": 1,
+      "n": 2580,
+      "pred_mean_lo": -4.0123,
+      "pred_mean_hi": 1.6129,
+      "actual_mean": 1.2709,
+      "actual_var": 2.5952,
+      "var_over_mean": 2.042,
+      "overdispersed": true
+    },
+    {
+      "decile": 2,
+      "n": 2579,
+      "pred_mean_lo": 1.6129,
+      "pred_mean_hi": 1.7898,
+      "actual_mean": 1.5859,
+      "actual_var": 3.5245,
+      "var_over_mean": 2.2224,
+      "overdispersed": true
+    },
+    {
+      "decile": 3,
+      "n": 2579,
+      "pred_mean_lo": 1.7898,
+      "pred_mean_hi": 1.9008,
+      "actual_mean": 1.7204,
+      "actual_var": 3.7927,
+      "var_over_mean": 2.2045,
+      "overdispersed": true
+    },
+    {
+      "decile": 4,
+      "n": 2579,
+      "pred_mean_lo": 1.9008,
+      "pred_mean_hi": 1.9989,
+      "actual_mean": 1.9023,
+      "actual_var": 4.0703,
+      "var_over_mean": 2.1397,
+      "overdispersed": true
+    },
+    {
+      "decile": 5,
+      "n": 2580,
+      "pred_mean_lo": 1.9989,
+      "pred_mean_hi": 2.0848,
+      "actual_mean": 1.9779,
+      "actual_var": 4.717,
+      "var_over_mean": 2.3848,
+      "overdispersed": true
+    },
+    {
+      "decile": 6,
+      "n": 2579,
+      "pred_mean_lo": 2.0848,
+      "pred_mean_hi": 2.1665,
+      "actual_mean": 2.2148,
+      "actual_var": 5.3831,
+      "var_over_mean": 2.4305,
+      "overdispersed": true
+    },
+    {
+      "decile": 7,
+      "n": 2579,
+      "pred_mean_lo": 2.1665,
+      "pred_mean_hi": 2.2532,
+      "actual_mean": 2.3594,
+      "actual_var": 6.2527,
+      "var_over_mean": 2.6501,
+      "overdispersed": true
+    },
+    {
+      "decile": 8,
+      "n": 2579,
+      "pred_mean_lo": 2.2532,
+      "pred_mean_hi": 2.3566,
+      "actual_mean": 2.4827,
+      "actual_var": 6.1745,
+      "var_over_mean": 2.487,
+      "overdispersed": true
+    },
+    {
+      "decile": 9,
+      "n": 2579,
+      "pred_mean_lo": 2.3566,
+      "pred_mean_hi": 2.5007,
+      "actual_mean": 2.5564,
+      "actual_var": 6.685,
+      "var_over_mean": 2.615,
+      "overdispersed": true
+    },
+    {
+      "decile": 10,
+      "n": 2580,
+      "pred_mean_lo": 2.5007,
+      "pred_mean_hi": 10.651,
+      "actual_mean": 2.5845,
+      "actual_var": 7.5444,
+      "var_over_mean": 2.9191,
+      "overdispersed": true
+    }
+  ],
+  "n_deciles_overdispersed": 10,
+  "n_deciles_valid": 10,
+  "decile_gate": "PASS",
+  "negbin_nll_gate": "PASS",
+  "overall_gate": "PASS",
+  "recommended_architecture": "Candidate A",
+  "arch_rationale": "Overdispersion confirmed. Wrap Epic 6 champion mean with NegBin r fitted from training residuals (same pattern as 3D/4D)."
+}

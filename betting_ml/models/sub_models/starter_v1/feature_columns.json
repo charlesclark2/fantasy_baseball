@@ -1,0 +1,219 @@
+{
+  "version": "starter_v1",
+  "target": "xwoba_against",
+  "secondary_targets": [
+    "label_k_pct",
+    "label_bb_pct",
+    "innings_pitched"
+  ],
+  "training_window": "2020\u20132026",
+  "notes": "starter_proj_xfip excluded: 100% NULL confirmed (Story 2.7). Stuff+ (J_stuff_arsenal) available 2020\u20132026 only; expect ~0% null in training window. EB posteriors (A_eb_posteriors) available 2016\u20132026 from Story 5A.3; eb_data_source is categorical (prior_only / il_return_blend / full_eb). pitcher_hand and starter_primary_pitch_type are categorical \u2014 one-hot at training time.",
+  "groups": {
+    "A_eb_posteriors": [
+      "eb_xwoba_against",
+      "eb_k_pct",
+      "eb_bb_pct",
+      "eb_xwoba_uncertainty"
+    ],
+    "B_rolling_7d": [
+      "xwoba_against_7d",
+      "k_pct_7d",
+      "bb_pct_7d",
+      "hard_hit_pct_7d",
+      "barrel_pct_7d",
+      "whiff_rate_7d",
+      "batter_chase_rate_7d",
+      "avg_fastball_velo_7d"
+    ],
+    "C_rolling_14d": [
+      "xwoba_against_14d",
+      "k_pct_14d",
+      "bb_pct_14d",
+      "hard_hit_pct_14d",
+      "barrel_pct_14d",
+      "whiff_rate_14d",
+      "batter_chase_rate_14d",
+      "avg_fastball_velo_14d"
+    ],
+    "D_rolling_30d": [
+      "xwoba_against_30d",
+      "k_pct_30d",
+      "bb_pct_30d",
+      "hard_hit_pct_30d",
+      "barrel_pct_30d",
+      "whiff_rate_30d",
+      "batter_chase_rate_30d",
+      "avg_fastball_velo_30d"
+    ],
+    "E_rolling_season": [
+      "xwoba_against_std",
+      "k_pct_std",
+      "bb_pct_std",
+      "hard_hit_pct_std",
+      "barrel_pct_std",
+      "whiff_rate_std",
+      "batter_chase_rate_std",
+      "avg_fastball_velo_std"
+    ],
+    "F_velocity_form": [
+      "fastball_velo_trend",
+      "avg_fastball_velo_3start",
+      "velo_delta_3start",
+      "k_pct_7d_minus_std",
+      "xwoba_7d_minus_std"
+    ],
+    "G_activity": [
+      "appearances_30d",
+      "appearances_std"
+    ],
+    "H_platoon": [
+      "k_pct_vs_lhb",
+      "bb_pct_vs_lhb",
+      "xwoba_vs_lhb",
+      "whiff_rate_vs_lhb",
+      "k_pct_vs_rhb",
+      "bb_pct_vs_rhb",
+      "xwoba_vs_rhb",
+      "whiff_rate_vs_rhb"
+    ],
+    "I_workload": [
+      "avg_ip_last_3",
+      "avg_ip_season",
+      "cumulative_season_ip",
+      "cumulative_season_pitches",
+      "days_rest"
+    ],
+    "J_stuff_arsenal": [
+      "starter_stuff_plus",
+      "starter_fastball_pct",
+      "starter_breaking_pct",
+      "starter_offspeed_pct",
+      "starter_avg_fastball_velo",
+      "starter_fastball_stuff_plus",
+      "starter_slider_stuff_plus",
+      "starter_curveball_stuff_plus",
+      "starter_changeup_stuff_plus"
+    ],
+    "K_zips_trailing": [
+      "starter_proj_fip",
+      "starter_trailing_fip_30g",
+      "starter_trailing_ra9_30g",
+      "starter_fip_ra9_gap"
+    ],
+    "L_csw_pitch_mix": [
+      "csw_pct_3start",
+      "csw_pct_season",
+      "fastball_pct_drift_5start",
+      "breaking_pct_drift_5start",
+      "offspeed_pct_drift_5start"
+    ]
+  },
+  "all_numeric_features": [
+    "eb_xwoba_against",
+    "eb_k_pct",
+    "eb_bb_pct",
+    "eb_xwoba_uncertainty",
+    "xwoba_against_7d",
+    "k_pct_7d",
+    "bb_pct_7d",
+    "hard_hit_pct_7d",
+    "barrel_pct_7d",
+    "whiff_rate_7d",
+    "batter_chase_rate_7d",
+    "avg_fastball_velo_7d",
+    "xwoba_against_14d",
+    "k_pct_14d",
+    "bb_pct_14d",
+    "hard_hit_pct_14d",
+    "barrel_pct_14d",
+    "whiff_rate_14d",
+    "batter_chase_rate_14d",
+    "avg_fastball_velo_14d",
+    "xwoba_against_30d",
+    "k_pct_30d",
+    "bb_pct_30d",
+    "hard_hit_pct_30d",
+    "barrel_pct_30d",
+    "whiff_rate_30d",
+    "batter_chase_rate_30d",
+    "avg_fastball_velo_30d",
+    "xwoba_against_std",
+    "k_pct_std",
+    "bb_pct_std",
+    "hard_hit_pct_std",
+    "barrel_pct_std",
+    "whiff_rate_std",
+    "batter_chase_rate_std",
+    "avg_fastball_velo_std",
+    "fastball_velo_trend",
+    "avg_fastball_velo_3start",
+    "velo_delta_3start",
+    "k_pct_7d_minus_std",
+    "xwoba_7d_minus_std",
+    "appearances_30d",
+    "appearances_std",
+    "k_pct_vs_lhb",
+    "bb_pct_vs_lhb",
+    "xwoba_vs_lhb",
+    "whiff_rate_vs_lhb",
+    "k_pct_vs_rhb",
+    "bb_pct_vs_rhb",
+    "xwoba_vs_rhb",
+    "whiff_rate_vs_rhb",
+    "avg_ip_last_3",
+    "avg_ip_season",
+    "cumulative_season_ip",
+    "cumulative_season_pitches",
+    "days_rest",
+    "starter_stuff_plus",
+    "starter_fastball_pct",
+    "starter_breaking_pct",
+    "starter_offspeed_pct",
+    "starter_avg_fastball_velo",
+    "starter_fastball_stuff_plus",
+    "starter_slider_stuff_plus",
+    "starter_curveball_stuff_plus",
+    "starter_changeup_stuff_plus",
+    "starter_proj_fip",
+    "starter_trailing_fip_30g",
+    "starter_trailing_ra9_30g",
+    "starter_fip_ra9_gap",
+    "csw_pct_3start",
+    "csw_pct_season",
+    "fastball_pct_drift_5start",
+    "breaking_pct_drift_5start",
+    "offspeed_pct_drift_5start"
+  ],
+  "categorical_features": {
+    "pitcher_hand": {
+      "encoding": "one_hot",
+      "group": "H_platoon"
+    },
+    "starter_primary_pitch_type": {
+      "encoding": "one_hot",
+      "group": "J_stuff_arsenal"
+    },
+    "eb_data_source": {
+      "encoding": "one_hot",
+      "group": "A_eb_posteriors"
+    }
+  },
+  "excluded": [
+    "game_pk",
+    "game_date",
+    "game_year",
+    "side",
+    "pitcher_id",
+    "pitcher_name",
+    "has_starter_data",
+    "has_ip_history",
+    "starter_proj_xfip",
+    "pitcher_hand",
+    "starter_primary_pitch_type",
+    "eb_data_source",
+    "xwoba_against",
+    "label_k_pct",
+    "label_bb_pct",
+    "innings_pitched"
+  ]
+}
