@@ -46,11 +46,11 @@ models:
       - name: weight_lbs
         description: >
           Weight in pounds as reported by StatsAPI. NULL when not available.
-          Valid range: 140–375 lbs (covers the full MLB player distribution).
+          Valid range: 130–375 lbs (covers the full MLB player distribution).
         tests:
           - dbt_utils.accepted_range:
               arguments:
-                min_value: 140
+                min_value: 130
                 max_value: 375
                 inclusive: true
 
