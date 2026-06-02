@@ -1,6 +1,10 @@
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+# libgomp1 = GNU OpenMP runtime (libgomp.so.1). LightGBM / XGBoost / CatBoost
+# dlopen it at import time; the python:3.12-slim base does not ship it, so
+# unpickling any tree-model artifact (e.g. offense_v2, starter_ip_v1) fails with
+# "OSError: libgomp.so.1: cannot open shared object file".
+RUN apt-get update && apt-get install -y curl libgomp1 && rm -rf /var/lib/apt/lists/*
 
 # Required: the dbt-fusion install script references $SHELL when updating shell configs.
 # In Docker there is no $SHELL by default; setting it here prevents a non-zero exit.
@@ -50,7 +54,8 @@ RUN pip install --no-cache-dir \
     lightgbm \
     catboost \
     requests \
-    pyyaml
+    pyyaml \
+    mlflow
 
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`

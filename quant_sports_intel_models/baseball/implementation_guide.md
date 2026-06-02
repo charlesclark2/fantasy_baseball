@@ -322,7 +322,7 @@ No local or ad-hoc command should ever set `TARGET_ENV=prod`.
 
 # Current Roadmap & Parallel Execution
 
-As of 2026-05-30. Five parallel tracks run concurrently. The tracks are not strictly serial — work that is independent should run simultaneously. The dependency table below is the authoritative gate reference; the track boxes show organizational grouping, not execution order. The phase table shows what is executable TODAY vs. what is blocked.
+As of 2026-06-02. Five parallel tracks run concurrently. The tracks are not strictly serial — work that is independent should run simultaneously. The dependency table below is the authoritative gate reference; the track boxes show organizational grouping, not execution order. The phase table shows what is executable TODAY vs. what is blocked.
 
 Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated (hard dependency unmet) · ⏳ CLV-gated (minimum live game count not yet reached)
 
@@ -363,7 +363,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic 5A  EB Starter Stabilization           ✅ Complete (5A.1–5A.5)          │
 │   5A.4 ✅ Δ=0.0000 MAE (EB=Raw); EB kept — top-2 features, no degradation   │
 │   5A.5 ✅ cumulative_season_ip/pitches added; dbtf build 2026-05-29          │
-│ Epic 5   Starter Suppression Model          🔄 5.1–5.2 ✅ champion: NGBoost   │
+│ Epic 5   Starter Suppression Model          ✅ Complete (champion: NGBoost)  │
 │   5.1 ✅  5.2 ✅  5.3 ✅  5.4 ✅  5.5 ✅ → 5D.1 ✅  5D.2 ✅  5D.3 ✅  5D.4 ✅  5D.5 ✅  5D.6 ✅  │
 │                                                                              │
 │ ── Bullpen ──────────────────────────────────────────────────────────────── │
@@ -384,8 +384,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   8.1 ✅  8.2 ✅  8.3 ✅  8.4 ✅  8.5 ✅                                      │
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
-│ Epic 9   Signal Integration & Ablation      🔒 Blocked on Epics 5D + 6D     │
-│   9.1 ⬜  9.2 ⬜  9.3 ⬜  9.4 ⬜  9.5 ⬜                                      │
+│ Epic 9   Signal Integration & Ablation      ⬜ UNBLOCKED (5D ✅ + 6D ✅)     │
+│   9.1 ⬜  9.2 ⬜  9.3 ⬜  9.4 ⬜  9.5 ⬜  9.6 ⬜                              │
 │ Epic 10  Totals Distribution Model          🔒 Blocked on Epic 9             │
 │   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
@@ -494,7 +494,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
 | **1 — NEXT** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 + ≥50 CLV | Activate with 12.9 |
 | **0 — DONE** | Epic 5A.4 ablation | 5.2 champion ✅ | ✅ 2026-05-31: Δ=0.0000 MAE (EB=Raw); EB kept — top-2 by importance |
-| **0 — NOW** | Epic 6.4–6.5 (signals + ablation) | 6.3 champion ✅ | Run now |
+| **0 — DONE** | Epic 6.4–6.5 (signals + ablation) | 6.3 champion ✅ | ✅ Epic 6 complete (6.1–6.5) |
 | **0 — DONE** | Epic 8.0 (Bayesian interaction matrix) | 7.1–7.2 ✅, 2.9 ✅, 7A ✅ | ✅ 2026-06-02: grand_mean=0.3164, σ_interaction=0.0033, k_ratio=17099; matchup_cell_priors.json written; all ACs pass |
 | **0 — NOW** | Epic 12.0 (CLV label infrastructure) | No gate | Immediate |
 | **0 — NOW** | Epic 12.1 (Meta-model feature mart) | No gate | Immediate |
@@ -516,7 +516,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic 12.3 (proxy CLV analysis) | ≥50 live games | ✅ 2026-06-02: 1,334 games, CV AUC=0.548, power threshold=500 games confirmed |
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
-| **2 — LAYER 3** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D, 6D signals | After 5D + 6D |
+| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | Unblocked 2026-06-02 |
 | **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
 | **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
@@ -535,7 +535,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 
 ## CLV Game Count Gate Tracker
 
-Track live CLV-labeled game count daily via `mart_clv_label_count`. Current count: ~41–50 games (as of 2026-05-30).
+Track live CLV-labeled game count daily via `mart_clv_label_count`. ⚠️ As of 2026-06-02 that table reports 1,669 h2h / 7,655 totals labeled games spanning 2021-04-01 → 2026-06-01 — this is the **full historical proxy set** (Pinnacle backfill era), NOT the production-live subset these gates count. The production-live count (predict_today-era games with captured line movement) was ~41–50 as of 2026-05-30 and must be derived from prediction-era games, not read directly from this table. TODO: add a `production_live_count` measure that filters to the predict_today go-live date forward.
 
 | Threshold | Stories Unlocked | Estimated Date |
 |---|---|---|
