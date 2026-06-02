@@ -59,6 +59,7 @@ log = logging.getLogger(__name__)
 
 _ABLATION_DIR = _PROJECT_ROOT / "quant_sports_intel_models" / "baseball" / "ablation_results"
 _WEIGHTS_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "layer3" / "stacking_weights.json"
+_WEIGHTS_S3_URI = "s3://baseball-betting-ml-artifacts/layer3/stacking_weights.json"
 _MLFLOW_EXPERIMENT = "layer3_evaluation"
 _FOLD_STABILITY_FLAG = 0.15
 
@@ -283,6 +284,17 @@ def _persist_weights(result: dict) -> Path:
     return _WEIGHTS_PATH
 
 
+def _upload_weights_to_s3() -> None:
+    """Upload the local stacking_weights.json to S3 (Story 9.6 / Epic O.3).
+
+    Runtime consumers (predict_today, Epic 10/11 training) read weights from S3,
+    so the weekly Dagster recompute uploads after writing local.
+    """
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(_WEIGHTS_PATH, _WEIGHTS_S3_URI)
+    log.info("Uploaded weights → %s", _WEIGHTS_S3_URI)
+
+
 def _log_mlflow(result: dict) -> None:
     import mlflow
     from betting_ml.utils.mlflow_utils import get_or_create_experiment
@@ -304,11 +316,16 @@ def main() -> None:
     parser.add_argument("--min-train-seasons", type=int, default=2)
     parser.add_argument("--start-date", default="2021-01-01")
     parser.add_argument("--no-mlflow", action="store_true")
+    parser.add_argument("--s3-upload", action="store_true",
+                        help="After writing locally, upload stacking_weights.json to S3 "
+                             "(layer3/stacking_weights.json). Used by the weekly Dagster job.")
     args = parser.parse_args()
 
     result = run(env=args.env, eval_json=args.eval_json,
                  min_train_seasons=args.min_train_seasons, start_date=args.start_date)
     _persist_weights(result)
+    if args.s3_upload:
+        _upload_weights_to_s3()
     if not args.no_mlflow:
         try:
             _log_mlflow(result)

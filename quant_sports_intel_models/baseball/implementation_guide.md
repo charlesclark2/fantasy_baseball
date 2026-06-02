@@ -387,9 +387,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   8.1 ✅  8.2 ✅  8.3 ✅  8.4 ✅  8.5 ✅                                      │
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
-│ Epic 9   Signal Integration & Ablation      🔄 In progress (2026-06-02)     │
-│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ⬜                              │
-│ Epic 10  Totals Distribution Model          🔒 Blocked on Epic 9             │
+│ Epic 9   Signal Integration & Ablation      ✅ COMPLETE (2026-06-02)         │
+│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
+│ Epic 10  Totals Distribution Model          🟢 UNBLOCKED (Epic 9 complete)   │
 │   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
 │   11.1 ⬜  11.2 ⬜  11.3 ⬜  11.4 ⬜  11.5 ⬜  11.6 ⬜  11.7 ⬜                │
@@ -496,7 +496,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic O.1–O.2 (wire 5 sub-model signals into Dagster) | Epic 0.5 ✅ + ≥1 signal generator ✅ | ✅ 2026-06-02: flag contract uniform (O.1); 7 ops wired into `daily_ingestion_job` (O.2). Completed-game (Layer-3 feed) semantics, non-blocking freshness check — see O.2 Status note. Prod-run verification pending next deploy |
 | **0 — DONE** | Epic O.7 (sub-model signal ops runbook) | O.2 | ✅ 2026-06-02: `runbooks/sub_model_signal_ops.md` written |
 | **0 — DONE** | Epic O.6 / Story 8.6 (matchup signal op) | Epic 8.3 ✅ | ✅ 2026-06-02: `generate_matchup_signals_op` wired; 6th fan-in input + freshness reporting added |
-| **1 — NEXT** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 ✅ | 9.3 shipped (`compute_stacking_weights.py`); stub wired — activate with 9.6 |
+| **DONE** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 ✅ | ✅ Activated by 9.6 (2026-06-02): `weekly_ml_job` + Monday-10:00-UTC schedule; deploy-time UI/alert checks pending |
 | **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
 | **1 — NEXT** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 + ≥50 CLV | Activate with 12.9 |
 | **0 — DONE** | Epic 5A.4 ablation | 5.2 champion ✅ | ✅ 2026-05-31: Δ=0.0000 MAE (EB=Raw); EB kept — top-2 by importance |
@@ -523,8 +523,8 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
-| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | 🔄 2026-06-02: 9.1 ✅ matrix (11,661 games); 9.2 ✅ NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 ✅ stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003; O.3/9.6 unblocked); 9.4 ✅ contract+stacking wired into train/inference loaders + predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 ✅ promotion log + registry verdicts + AC-table gate; 9.6 next (Dagster weekly recompute → activates O.3) |
-| **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
+| **0 — DONE** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | ✅ COMPLETE 2026-06-02: 9.1 matrix (11,661 games); 9.2 NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003); 9.4 contract+loaders+predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 promotion log + registry verdicts; 9.6 Dagster weekly recompute (`weekly_ml_job`, activates O.3). **→ Epic 10 unblocked.** |
+| **1 — NEXT** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🟢 Unblocked 2026-06-02 — Epic 9 complete (matrix, promoted signals, stacking weights, contract all shipped) |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
 | **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
@@ -1895,6 +1895,8 @@ dbt_daily_build (existing)
 ---
 
 ### O.3 — Add weekly stacking weight recomputation schedule
+
+**Status:** ✅ ACTIVATED (2026-06-02) by Epic 9 Story 9.6 — see the 9.6 Status for the implementation ( op in `pipeline/ops/weekly_ml_ops.py`, job + Monday-10:00-UTC schedule registered, `--s3-upload` wired). The "stub mode" robustness (no-op success if the 9.3 script is absent) is preserved in the op even though the script now exists.
 
 **Overview:** `compute_stacking_weights.py` (Epic 9 Story 9.3) reads NLL scores from the most recent MLflow evaluation run and writes updated pseudo-BMA weights to `betting_ml/models/layer3/stacking_weights.json` in S3. This needs to run weekly — not daily — because NLL scores only change when a sub-model is retrained or a new signal is promoted. A weekly Monday schedule matches the Bayesian meta-model retraining cadence (Epic 12 Story 12.4).
 
@@ -5646,22 +5648,24 @@ Acceptance criteria:
 
 ### 9.6 — Wire stacking weight recomputation into Dagster
 
+**Status:** ✅ COMPLETE (2026-06-02, code/wiring — local-verified; manual-trigger/S3/alert ACs are deploy-time). Built the Epic O.3 stack fresh (no prior stub existed): `pipeline/ops/weekly_ml_ops.py::compute_stacking_weights_op` (stub-guard if the 9.3 script is absent → logs + succeeds; else runs `compute_stacking_weights.py --env <env> --s3-upload`, reads back `stacking_weights.json`, attaches per-target weights + `fold_weight_std` to Dagster run metadata), `pipeline/jobs/weekly_ml_job.py::weekly_ml_job` (single-op, in-process), `pipeline/schedules/weekly_ml_schedules.py::weekly_ml_schedule` (`0 10 * * 1`, Mondays 10:00 UTC). `compute_stacking_weights.py` gained `--s3-upload` → `s3://baseball-betting-ml-artifacts/layer3/stacking_weights.json` via `artifact_store.upload_artifact`. Registered in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py`; `Definitions` loads cleanly (job present; schedule cron/tz/job verified). **Deviation:** O.3 spec put the op inside `weekly_ml_schedules.py`; placed in `pipeline/ops/` per repo convention. **Naming:** Dagster auto-names the schedule `weekly_ml_job_schedule` (consistent with all other repo schedules). **Deploy-time (user):** confirm the schedule shows in Dagster Cloud Schedules, a manual `weekly_ml_job` trigger writes a fresh S3 object, and the failure alert routes to the `daily_ingestion_job` channel.
+
 **Overview:** Story 9.3 produces `compute_stacking_weights.py`, which writes pseudo-BMA weights to `stacking_weights.json` in S3. Those weights only change when a sub-model is retrained or a signal is promoted, so the recomputation belongs on a weekly schedule, not the daily pipeline. This story activates the weekly Dagster schedule defined as a stub in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.3.
 
 **Gate:** Story 9.3 complete (`compute_stacking_weights.py` exists and writes `stacking_weights.json`).
 
 **Tasks:**
 
-- [ ] Flip Epic O Story O.3's `compute_stacking_weights_op` out of stub mode: it now invokes `compute_stacking_weights.py` for real, reading NLL scores from MLflow experiment `layer3_evaluation` and writing `layer3/stacking_weights.json` to S3
-- [ ] Confirm `weekly_ml_job` / `weekly_ml_schedule` (Mondays 10:00 UTC) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
-- [ ] Log the resulting weights dict and per-fold `weight_stability_check` std to Dagster run metadata so weights are auditable from run history without opening S3
-- [ ] Confirm the Dagster failure alert on `weekly_ml_job` routes to the same email channel as `daily_ingestion_job`
+- [x] Flip Epic O Story O.3's `compute_stacking_weights_op` out of stub mode — *built fresh (no prior stub); invokes `compute_stacking_weights.py --env <env> --s3-upload`, which writes `layer3/stacking_weights.json` to S3. NLL scores come from the latest `layer3_signal_evaluation_*.json` artifact (the canonical record); MLflow `layer3_evaluation` is still written for history*
+- [x] Confirm `weekly_ml_job` / schedule (Mondays 10:00 UTC) is registered — *registered in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py`; `Definitions` loads it (schedule `weekly_ml_job_schedule`, cron `0 10 * * 1`, UTC). Dagster Cloud UI visibility is deploy-time*
+- [x] Log the resulting weights dict and per-fold `weight_stability_check` std to Dagster run metadata — *`compute_stacking_weights_op` attaches per-target `__weights` + `__fold_weight_std` via `context.add_output_metadata`*
+- [ ] Confirm the Dagster failure alert on `weekly_ml_job` routes to the same email channel as `daily_ingestion_job` — **deploy-time (user)**
 
 **Acceptance criteria:**
 
-- [ ] A manual `weekly_ml_job` trigger writes a fresh `stacking_weights.json` to S3 with a newer timestamp — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/`
-- [ ] Weights logged to Dagster run metadata match the contents of `stacking_weights.json`
-- [ ] Re-running with identical MLflow NLL inputs produces identical weights (deterministic), consistent with the 9.3 acceptance criteria
+- [ ] A manual `weekly_ml_job` trigger writes a fresh `stacking_weights.json` to S3 with a newer timestamp — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/` — **deploy-time (user)**
+- [x] Weights logged to Dagster run metadata match the contents of `stacking_weights.json` — *op reads the written file and logs its weights/std; metadata is derived from the same JSON*
+- [x] Re-running with identical NLL inputs produces identical weights (deterministic), consistent with the 9.3 acceptance criteria — *9.3 writes sorted/rounded JSON; verified deterministic in 9.3*
 
 ---
 
