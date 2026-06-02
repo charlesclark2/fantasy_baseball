@@ -1,19 +1,34 @@
 """
 ingest_oaa.py
 -------------
-Fetches team-level Outs Above Average (OAA) and Defensive Runs Saved (DRS)
-from the FanGraphs major-league fielding leaderboard (team aggregate view)
-and loads them to Snowflake.
+Fetches team-level Outs Above Average (OAA) from the Baseball Savant
+"Fielding Team" leaderboard and loads it to Snowflake.
+
+Source change (2026-06-02): previously sourced from the FanGraphs fielding
+leaderboard, but FanGraphs is now behind a Cloudflare managed JavaScript
+challenge (`cf-mitigated: challenge`) that curl_cffi cannot solve. OAA is a
+Statcast metric whose canonical home is Baseball Savant anyway, and Savant's
+CSV leaderboard is not challenge-gated. See the FanGraphs-block diagnosis in
+the conversation/runbook for the broader (still-open) FanGraphs client issue.
 
 Target table: baseball_data.external.oaa_team_season_raw
   team_abbrev     VARCHAR  -- project team abbreviation (e.g. SF, CWS)
   game_year       INTEGER
-  oaa             FLOAT    -- Outs Above Average (Statcast-era, NULL before ~2016)
-  drs             FLOAT    -- Defensive Runs Saved (broader era coverage)
-  n_opportunities INTEGER  -- total defensive plays (FanGraphs 'Plays' column)
-  defense         FLOAT    -- FanGraphs composite Defense metric
+  oaa             FLOAT    -- Outs Above Average (Statcast-era, 2016+)
+  drs             FLOAT    -- NULL going forward: DRS is an SIS metric only
+                           --   exposed by FanGraphs; not available from Savant.
+                           --   Nothing downstream consumes it (mart passes it
+                           --   through as team_drs_prior_season but no feature
+                           --   reads it). Pre-2026 rows keep their FanGraphs DRS.
+  n_opportunities INTEGER  -- NULL going forward: not in the Savant team CSV.
+  defense         FLOAT    -- NULL going forward: FanGraphs composite only.
 
-Load is idempotent: existing rows for the same team × year are updated via MERGE.
+Only `oaa` flows into features (team_oaa_prior_season / team_oaa_blended via
+mart_team_fielding_oaa), and only the PRIOR season's value is used (leakage
+guard), so the daily current-season fetch is for monitoring freshness.
+
+Load is append-only; mart_team_fielding_oaa dedupes per team×year by latest
+loaded_at, so re-runs are safe.
 
 Usage:
     # Backfill 2016–2025
@@ -29,6 +44,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import logging
 import os
 import sys
@@ -39,9 +56,7 @@ from typing import Any
 import snowflake.connector
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
-from fangraphs_client import _get_with_retry  # noqa: E402
+from curl_cffi import requests as cffi_requests
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,21 +71,24 @@ _KEY_PATH = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.path.expanduser(
 
 TABLE_FQN = "baseball_data.external.oaa_team_season_raw"
 
-# FanGraphs team abbreviation → project team abbreviation
-_FG_TO_PROJECT: dict[str, str] = {
-    "ARI": "AZ",
-    "CHW": "CWS",
-    "KCR": "KC",
-    "SDP": "SD",
-    "SFG": "SF",
-    "TBR": "TB",
-    "WSN": "WSH",
-    # The A's became ATH in 2025 in our data; FanGraphs may still say OAK
-    # Keep OAK→OAK for 2024 and earlier (handled by year-aware mapping below)
+# Baseball Savant team OAA leaderboard (CSV). team_id is the MLB StatsAPI id.
+SAVANT_URL = "https://baseballsavant.mlb.com/leaderboard/outs_above_average"
+REQUEST_DELAY = 1.5  # seconds between season requests
+
+# MLB StatsAPI team_id → project canonical team abbreviation (see ref_teams.csv).
+# NOTE: ref_teams.csv's own team_id column is an internal scheme, NOT the MLB
+# id, so it cannot be joined to Savant directly — hence this explicit map.
+_MLB_ID_TO_ABBREV: dict[int, str] = {
+    108: "LAA", 109: "AZ",  110: "BAL", 111: "BOS", 112: "CHC", 113: "CIN",
+    114: "CLE", 115: "COL", 116: "DET", 117: "HOU", 118: "KC",  119: "LAD",
+    120: "WSH", 121: "NYM", 133: "ATH", 134: "PIT", 135: "SD",  136: "SEA",
+    137: "SF",  138: "STL", 139: "TB",  140: "TEX", 141: "TOR", 142: "MIN",
+    143: "PHI", 144: "ATL", 145: "CWS", 146: "MIA", 147: "NYY", 158: "MIL",
 }
 
-FANGRAPHS_URL = "https://www.fangraphs.com/api/leaders/major-league/data"
-REQUEST_DELAY = 1.5  # seconds between season requests
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [2, 4, 8]
+_session: cffi_requests.Session | None = None
 
 _DDL = f"""
 CREATE TABLE IF NOT EXISTS {TABLE_FQN} (
@@ -118,47 +136,80 @@ def _connect() -> snowflake.connector.SnowflakeConnection:
     )
 
 
-def _fg_abbrev_to_project(fg_abbrev: str, game_year: int) -> str:
-    """Map FanGraphs team abbreviation to project abbreviation."""
-    if fg_abbrev == "OAK" and game_year >= 2025:
-        return "ATH"
-    return _FG_TO_PROJECT.get(fg_abbrev, fg_abbrev)
+def _get_session() -> cffi_requests.Session:
+    global _session
+    if _session is None:
+        # Savant is not behind the Cloudflare JS challenge, but we keep the
+        # Chrome TLS fingerprint for parity with the rest of the project.
+        _session = cffi_requests.Session(impersonate="chrome124")
+    return _session
+
+
+def _savant_get(url: str, params: dict) -> cffi_requests.Response:
+    sess = _get_session()
+    last_exc: Exception | None = None
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            resp = sess.get(url, params=params, timeout=60)
+            resp.raise_for_status()
+            return resp
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Attempt %d/%d failed for %s: %s", attempt, _MAX_RETRIES, url, exc)
+            last_exc = exc
+            if attempt < _MAX_RETRIES:
+                time.sleep(_RETRY_DELAYS[attempt - 1])
+    raise RuntimeError(f"All {_MAX_RETRIES} attempts failed for {url}") from last_exc
+
+
+def _mlb_id_to_project(team_id: int, game_year: int) -> str | None:
+    """Map MLB StatsAPI team_id to project abbreviation (year-aware for the A's)."""
+    if team_id == 133:  # Athletics franchise: OAK through 2024, ATH from 2025
+        return "ATH" if game_year >= 2025 else "OAK"
+    return _MLB_ID_TO_ABBREV.get(team_id)
 
 
 def fetch_season(season: int) -> list[dict[str, Any]]:
-    """Fetch team-level OAA/DRS for a single season from FanGraphs."""
-    resp = _get_with_retry(
-        FANGRAPHS_URL,
+    """Fetch team-level OAA for a single season from Baseball Savant."""
+    resp = _savant_get(
+        SAVANT_URL,
         {
-            "age": "", "pos": "all", "stats": "fld", "lg": "all", "qual": "y",
-            "season": season, "season1": season,
-            "startdate": "", "enddate": "",
-            "month": 0, "hand": "", "team": "0,ts",
-            "pageitems": 100, "pagenum": 1,
-            "ind": 0, "rost": 0, "players": "", "type": 1, "postseason": "",
-            "sortdir": "default", "sortstat": "Defense",
-        },
-        extra_headers={
-            "Accept": "application/json",
-            "Referer": "https://www.fangraphs.com/leaders/major-league",
+            "type": "Fielding_Team",
+            "startYear": season,
+            "endYear": season,
+            "split": "no",
+            "team": "",
+            "range": "year",
+            "min": "q",
+            "pos": "",
+            "roles": "",
+            "viz": "show",
+            "csv": "true",
         },
     )
-    payload = resp.json()
-    rows = payload.get("data", []) if isinstance(payload, dict) else payload
+    # utf-8-sig strips the BOM Savant prepends to the header row.
+    rows = list(csv.DictReader(io.StringIO(resp.content.decode("utf-8-sig"))))
 
     records = []
     for row in rows:
-        fg_abbrev = row.get("TeamNameAbb", "")
-        if not fg_abbrev or fg_abbrev in ("2 Tms", "3 Tms", "4 Tms", "5 Tms"):
+        raw_id = row.get("team_id")
+        try:
+            team_id = int(raw_id)
+        except (TypeError, ValueError):
             continue
-        team_abbrev = _fg_abbrev_to_project(fg_abbrev, season)
+        team_abbrev = _mlb_id_to_project(team_id, season)
+        if not team_abbrev:
+            log.warning("  Unmapped MLB team_id %s (%s) — skipping",
+                        team_id, row.get("team_name"))
+            continue
+        oaa_val = row.get("outs_above_average")
         records.append({
             "team_abbrev": team_abbrev,
             "game_year": season,
-            "oaa": row.get("OAA"),
-            "drs": row.get("DRS"),
-            "n_opportunities": int(row["Plays"]) if row.get("Plays") is not None else None,
-            "defense": row.get("Defense"),
+            "oaa": float(oaa_val) if oaa_val not in (None, "") else None,
+            # Not available from Savant — see module docstring. Unused downstream.
+            "drs": None,
+            "n_opportunities": None,
+            "defense": None,
         })
 
     log.info("  Season %d: %d team rows fetched", season, len(records))
@@ -179,7 +230,7 @@ def write_to_snowflake(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest FanGraphs team OAA/DRS to Snowflake")
+    parser = argparse.ArgumentParser(description="Ingest Baseball Savant team OAA to Snowflake")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--season", type=int, help="Single season to ingest")
     group.add_argument("--start-season", type=int, default=2016,
@@ -195,7 +246,7 @@ def main() -> None:
     else:
         seasons = list(range(args.start_season, args.end_season + 1))
 
-    log.info("Fetching team OAA/DRS for seasons: %s", seasons)
+    log.info("Fetching team OAA for seasons: %s", seasons)
 
     all_records: list[dict] = []
     for i, season in enumerate(seasons):
