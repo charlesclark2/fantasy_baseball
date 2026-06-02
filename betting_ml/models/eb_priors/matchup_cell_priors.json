@@ -1,0 +1,314 @@
+{
+  "metadata": {
+    "fit_date": "2026-06-02",
+    "calibration_window": [
+      2016,
+      2020
+    ],
+    "n_batter_archetypes": 5,
+    "n_pitcher_archetypes": 5,
+    "n_cells": 25,
+    "sigma_noise": 0.43,
+    "sigma_noise_squared": 0.1849
+  },
+  "global": {
+    "grand_mean_xwoba": 0.31642,
+    "sigma_interaction": 0.003288,
+    "sigma_interaction_squared": 1.1e-05,
+    "k_ratio": 17099.1178,
+    "residual_skewness": 0.266,
+    "residual_kurtosis": -0.5496,
+    "n_cells_used_for_sigma_fit": 25
+  },
+  "batter_effects": {
+    "contact_spray": 0.003456,
+    "groundball_speed": -0.039242,
+    "high_whiff": -0.016607,
+    "patient_obp": 0.010147,
+    "power_pull": 0.029325
+  },
+  "pitcher_effects": {
+    "changeup_deceptive": -0.00199,
+    "contact_sinker_ball": 0.010987,
+    "multi_pitch_mix": 0.002591,
+    "power_swing_and_miss": -0.019763,
+    "soft_command": 0.001928
+  },
+  "cells": {
+    "contact_spray__changeup_deceptive": {
+      "batter_archetype": "contact_spray",
+      "pitcher_archetype": "changeup_deceptive",
+      "cell_mean_xwoba": 0.32218,
+      "raw_interaction": 0.004295,
+      "shrunk_interaction": 0.002235,
+      "mu_cell": 0.320121,
+      "cell_n_pa": 18556.17,
+      "cell_shrinkage_factor": 0.520432,
+      "cell_data_source": "full_eb"
+    },
+    "contact_spray__contact_sinker_ball": {
+      "batter_archetype": "contact_spray",
+      "pitcher_archetype": "contact_sinker_ball",
+      "cell_mean_xwoba": 0.32883,
+      "raw_interaction": -0.002032,
+      "shrunk_interaction": -0.001464,
+      "mu_cell": 0.329399,
+      "cell_n_pa": 44018.59,
+      "cell_shrinkage_factor": 0.720226,
+      "cell_data_source": "full_eb"
+    },
+    "contact_spray__multi_pitch_mix": {
+      "batter_archetype": "contact_spray",
+      "pitcher_archetype": "multi_pitch_mix",
+      "cell_mean_xwoba": 0.324045,
+      "raw_interaction": 0.001578,
+      "shrunk_interaction": 0.00107,
+      "mu_cell": 0.323536,
+      "cell_n_pa": 35946.27,
+      "cell_shrinkage_factor": 0.677651,
+      "cell_data_source": "full_eb"
+    },
+    "contact_spray__power_swing_and_miss": {
+      "batter_archetype": "contact_spray",
+      "pitcher_archetype": "power_swing_and_miss",
+      "cell_mean_xwoba": 0.30004,
+      "raw_interaction": -7.3e-05,
+      "shrunk_interaction": -4.6e-05,
+      "mu_cell": 0.300067,
+      "cell_n_pa": 30131.3,
+      "cell_shrinkage_factor": 0.637964,
+      "cell_data_source": "full_eb"
+    },
+    "contact_spray__soft_command": {
+      "batter_archetype": "contact_spray",
+      "pitcher_archetype": "soft_command",
+      "cell_mean_xwoba": 0.320211,
+      "raw_interaction": -0.001592,
+      "shrunk_interaction": -0.001043,
+      "mu_cell": 0.320761,
+      "cell_n_pa": 32420.69,
+      "cell_shrinkage_factor": 0.654701,
+      "cell_data_source": "full_eb"
+    },
+    "groundball_speed__changeup_deceptive": {
+      "batter_archetype": "groundball_speed",
+      "pitcher_archetype": "changeup_deceptive",
+      "cell_mean_xwoba": 0.276352,
+      "raw_interaction": 0.001165,
+      "shrunk_interaction": 0.000557,
+      "mu_cell": 0.275744,
+      "cell_n_pa": 15646.5,
+      "cell_shrinkage_factor": 0.47782,
+      "cell_data_source": "full_eb"
+    },
+    "groundball_speed__contact_sinker_ball": {
+      "batter_archetype": "groundball_speed",
+      "pitcher_archetype": "contact_sinker_ball",
+      "cell_mean_xwoba": 0.285006,
+      "raw_interaction": -0.003158,
+      "shrunk_interaction": -0.002203,
+      "mu_cell": 0.285961,
+      "cell_n_pa": 39448.24,
+      "cell_shrinkage_factor": 0.697614,
+      "cell_data_source": "full_eb"
+    },
+    "groundball_speed__multi_pitch_mix": {
+      "batter_archetype": "groundball_speed",
+      "pitcher_archetype": "multi_pitch_mix",
+      "cell_mean_xwoba": 0.276632,
+      "raw_interaction": -0.003137,
+      "shrunk_interaction": -0.002012,
+      "mu_cell": 0.277756,
+      "cell_n_pa": 30610.0,
+      "cell_shrinkage_factor": 0.641596,
+      "cell_data_source": "full_eb"
+    },
+    "groundball_speed__power_swing_and_miss": {
+      "batter_archetype": "groundball_speed",
+      "pitcher_archetype": "power_swing_and_miss",
+      "cell_mean_xwoba": 0.264459,
+      "raw_interaction": 0.007044,
+      "shrunk_interaction": 0.00425,
+      "mu_cell": 0.261664,
+      "cell_n_pa": 25998.79,
+      "cell_shrinkage_factor": 0.603249,
+      "cell_data_source": "full_eb"
+    },
+    "groundball_speed__soft_command": {
+      "batter_archetype": "groundball_speed",
+      "pitcher_archetype": "soft_command",
+      "cell_mean_xwoba": 0.278979,
+      "raw_interaction": -0.000127,
+      "shrunk_interaction": -7.9e-05,
+      "mu_cell": 0.279026,
+      "cell_n_pa": 28575.37,
+      "cell_shrinkage_factor": 0.625631,
+      "cell_data_source": "full_eb"
+    },
+    "high_whiff__changeup_deceptive": {
+      "batter_archetype": "high_whiff",
+      "pitcher_archetype": "changeup_deceptive",
+      "cell_mean_xwoba": 0.294144,
+      "raw_interaction": -0.003678,
+      "shrunk_interaction": -0.001561,
+      "mu_cell": 0.296261,
+      "cell_n_pa": 12603.42,
+      "cell_shrinkage_factor": 0.424321,
+      "cell_data_source": "full_eb"
+    },
+    "high_whiff__contact_sinker_ball": {
+      "batter_archetype": "high_whiff",
+      "pitcher_archetype": "contact_sinker_ball",
+      "cell_mean_xwoba": 0.311063,
+      "raw_interaction": 0.000264,
+      "shrunk_interaction": 0.000164,
+      "mu_cell": 0.310964,
+      "cell_n_pa": 28232.56,
+      "cell_shrinkage_factor": 0.6228,
+      "cell_data_source": "full_eb"
+    },
+    "high_whiff__multi_pitch_mix": {
+      "batter_archetype": "high_whiff",
+      "pitcher_archetype": "multi_pitch_mix",
+      "cell_mean_xwoba": 0.308428,
+      "raw_interaction": 0.006025,
+      "shrunk_interaction": 0.003603,
+      "mu_cell": 0.306006,
+      "cell_n_pa": 25435.94,
+      "cell_shrinkage_factor": 0.597999,
+      "cell_data_source": "full_eb"
+    },
+    "high_whiff__power_swing_and_miss": {
+      "batter_archetype": "high_whiff",
+      "pitcher_archetype": "power_swing_and_miss",
+      "cell_mean_xwoba": 0.276869,
+      "raw_interaction": -0.003181,
+      "shrunk_interaction": -0.001756,
+      "mu_cell": 0.278294,
+      "cell_n_pa": 21058.29,
+      "cell_shrinkage_factor": 0.551879,
+      "cell_data_source": "full_eb"
+    },
+    "high_whiff__soft_command": {
+      "batter_archetype": "high_whiff",
+      "pitcher_archetype": "soft_command",
+      "cell_mean_xwoba": 0.300669,
+      "raw_interaction": -0.001071,
+      "shrunk_interaction": -0.000588,
+      "mu_cell": 0.301152,
+      "cell_n_pa": 20817.05,
+      "cell_shrinkage_factor": 0.549028,
+      "cell_data_source": "full_eb"
+    },
+    "patient_obp__changeup_deceptive": {
+      "batter_archetype": "patient_obp",
+      "pitcher_archetype": "changeup_deceptive",
+      "cell_mean_xwoba": 0.325915,
+      "raw_interaction": 0.001339,
+      "shrunk_interaction": 0.000635,
+      "mu_cell": 0.325211,
+      "cell_n_pa": 15415.71,
+      "cell_shrinkage_factor": 0.474113,
+      "cell_data_source": "full_eb"
+    },
+    "patient_obp__contact_sinker_ball": {
+      "batter_archetype": "patient_obp",
+      "pitcher_archetype": "contact_sinker_ball",
+      "cell_mean_xwoba": 0.338016,
+      "raw_interaction": 0.000462,
+      "shrunk_interaction": 0.000311,
+      "mu_cell": 0.337864,
+      "cell_n_pa": 35178.1,
+      "cell_shrinkage_factor": 0.672915,
+      "cell_data_source": "full_eb"
+    },
+    "patient_obp__multi_pitch_mix": {
+      "batter_archetype": "patient_obp",
+      "pitcher_archetype": "multi_pitch_mix",
+      "cell_mean_xwoba": 0.325198,
+      "raw_interaction": -0.00396,
+      "shrunk_interaction": -0.002443,
+      "mu_cell": 0.326715,
+      "cell_n_pa": 27535.04,
+      "cell_shrinkage_factor": 0.616905,
+      "cell_data_source": "full_eb"
+    },
+    "patient_obp__power_swing_and_miss": {
+      "batter_archetype": "patient_obp",
+      "pitcher_archetype": "power_swing_and_miss",
+      "cell_mean_xwoba": 0.31013,
+      "raw_interaction": 0.003326,
+      "shrunk_interaction": 0.001929,
+      "mu_cell": 0.308733,
+      "cell_n_pa": 23621.37,
+      "cell_shrinkage_factor": 0.580086,
+      "cell_data_source": "full_eb"
+    },
+    "patient_obp__soft_command": {
+      "batter_archetype": "patient_obp",
+      "pitcher_archetype": "soft_command",
+      "cell_mean_xwoba": 0.327839,
+      "raw_interaction": -0.000655,
+      "shrunk_interaction": -0.000396,
+      "mu_cell": 0.328099,
+      "cell_n_pa": 26103.07,
+      "cell_shrinkage_factor": 0.604207,
+      "cell_data_source": "full_eb"
+    },
+    "power_pull__changeup_deceptive": {
+      "batter_archetype": "power_pull",
+      "pitcher_archetype": "changeup_deceptive",
+      "cell_mean_xwoba": 0.338971,
+      "raw_interaction": -0.004784,
+      "shrunk_interaction": -0.002671,
+      "mu_cell": 0.341084,
+      "cell_n_pa": 21618.2,
+      "cell_shrinkage_factor": 0.55836,
+      "cell_data_source": "full_eb"
+    },
+    "power_pull__contact_sinker_ball": {
+      "batter_archetype": "power_pull",
+      "pitcher_archetype": "contact_sinker_ball",
+      "cell_mean_xwoba": 0.360732,
+      "raw_interaction": 0.004,
+      "shrunk_interaction": 0.002995,
+      "mu_cell": 0.359727,
+      "cell_n_pa": 50956.16,
+      "cell_shrinkage_factor": 0.748747,
+      "cell_data_source": "full_eb"
+    },
+    "power_pull__multi_pitch_mix": {
+      "batter_archetype": "power_pull",
+      "pitcher_archetype": "multi_pitch_mix",
+      "cell_mean_xwoba": 0.349614,
+      "raw_interaction": 0.001278,
+      "shrunk_interaction": 0.000893,
+      "mu_cell": 0.349229,
+      "cell_n_pa": 39703.38,
+      "cell_shrinkage_factor": 0.698972,
+      "cell_data_source": "full_eb"
+    },
+    "power_pull__power_swing_and_miss": {
+      "batter_archetype": "power_pull",
+      "pitcher_archetype": "power_swing_and_miss",
+      "cell_mean_xwoba": 0.31994,
+      "raw_interaction": -0.006042,
+      "shrunk_interaction": -0.004089,
+      "mu_cell": 0.321893,
+      "cell_n_pa": 35803.56,
+      "cell_shrinkage_factor": 0.676782,
+      "cell_data_source": "full_eb"
+    },
+    "power_pull__soft_command": {
+      "batter_archetype": "power_pull",
+      "pitcher_archetype": "soft_command",
+      "cell_mean_xwoba": 0.34981,
+      "raw_interaction": 0.002137,
+      "shrunk_interaction": 0.00147,
+      "mu_cell": 0.349143,
+      "cell_n_pa": 37658.15,
+      "cell_shrinkage_factor": 0.687729,
+      "cell_data_source": "full_eb"
+    }
+  }
+}

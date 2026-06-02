@@ -22,6 +22,9 @@ Usage:
 
     # Dry-run: compute without writing to Snowflake
     uv run python betting_ml/scripts/starter_v1/generate_starter_signals.py --backfill --dry-run
+
+    # Target the dev schema (dev_betting_features) instead of prod
+    uv run python betting_ml/scripts/starter_v1/generate_starter_signals.py --date 2026-06-01 --env dev
 """
 
 from __future__ import annotations
@@ -49,11 +52,24 @@ _ARTIFACT_LOCAL  = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "sta
 _MODEL_VERSION   = "starter_v1"
 _TRAINING_START  = "2020-01-01"
 
-_TARGET_TABLE = "baseball_data.betting_features.starter_suppression_signals"
+_DB           = "baseball_data"
+_WRITE_SCHEMA = {"prod": "betting_features", "dev": "dev_betting_features"}
+_TABLE_NAME   = "starter_suppression_signals"
 _TEMP_TABLE   = "tmp_starter_suppression_signals_incoming"
 
-_DDL = f"""
-CREATE TABLE IF NOT EXISTS {_TARGET_TABLE} (
+
+def _resolve_target(env: str) -> str:
+    """Fully-qualified write target for the chosen environment.
+
+    prod → baseball_data.betting_features.starter_suppression_signals
+    dev  → baseball_data.dev_betting_features.starter_suppression_signals
+    """
+    return f"{_DB}.{_WRITE_SCHEMA[env]}.{_TABLE_NAME}"
+
+
+def _ddl(target_table: str) -> str:
+    return f"""
+CREATE TABLE IF NOT EXISTS {target_table} (
     game_pk                    VARCHAR(20)   NOT NULL,
     side                       VARCHAR(4)    NOT NULL,
     game_date                  DATE          NOT NULL,
@@ -296,11 +312,11 @@ def compute_signals(df: pd.DataFrame, artifact: dict) -> pd.DataFrame:
 # Snowflake write (VARCHAR temp table + MERGE)
 # ---------------------------------------------------------------------------
 
-def ensure_table(conn) -> None:
-    conn.cursor().execute(_DDL)
+def ensure_table(conn, target_table: str) -> None:
+    conn.cursor().execute(_ddl(target_table))
 
 
-def write_signals(conn, df: pd.DataFrame, dry_run: bool = False) -> dict[str, int]:
+def write_signals(conn, df: pd.DataFrame, target_table: str, dry_run: bool = False) -> dict[str, int]:
     rows = [
         (
             str(row["game_pk"]),
@@ -317,7 +333,7 @@ def write_signals(conn, df: pd.DataFrame, dry_run: bool = False) -> dict[str, in
     ]
 
     if dry_run:
-        print(f"\n[DRY RUN] Would write {len(rows):,} rows to {_TARGET_TABLE}.")
+        print(f"\n[DRY RUN] Would write {len(rows):,} rows to {target_table}.")
         print("  Sample (first 4):")
         for r in rows[:4]:
             print(f"    {r}")
@@ -346,7 +362,7 @@ def write_signals(conn, df: pd.DataFrame, dry_run: bool = False) -> dict[str, in
     print(f"  Staged {len(rows):,} rows in temp table.")
 
     merge_sql = f"""
-        MERGE INTO {_TARGET_TABLE} AS tgt
+        MERGE INTO {target_table} AS tgt
         USING (
             SELECT
                 game_pk::VARCHAR(20)               AS game_pk,
@@ -454,11 +470,21 @@ def main() -> None:
         help="Score games for a single date.",
     )
     parser.add_argument(
+        "--env",
+        choices=["prod", "dev"],
+        default="prod",
+        help="Target environment: prod (betting_features) or dev (dev_betting_features). "
+             "Default: prod. Reads always come from prod feature tables.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Compute signals but skip the Snowflake write.",
     )
     args = parser.parse_args()
+
+    target_table = _resolve_target(args.env)
+    print(f"[{args.env.upper()}] target={target_table}")
 
     today = date.today().isoformat()
     if args.backfill:
@@ -495,18 +521,18 @@ def main() -> None:
     run_sanity_checks(df_out)
 
     if args.dry_run:
-        write_signals(None, df_out, dry_run=True)
+        write_signals(None, df_out, target_table, dry_run=True)
         print("\n[DRY RUN] Complete. No rows written.")
         return
 
     # Ensure table + write
-    conn = get_snowflake_connection(schema="betting_features")
+    conn = get_snowflake_connection(schema=_WRITE_SCHEMA[args.env])
     try:
-        print(f"\nEnsuring table {_TARGET_TABLE} exists ...")
-        ensure_table(conn)
+        print(f"\nEnsuring table {target_table} exists ...")
+        ensure_table(conn, target_table)
 
-        print(f"Writing to {_TARGET_TABLE} ...")
-        result = write_signals(conn, df_out, dry_run=False)
+        print(f"Writing to {target_table} ...")
+        result = write_signals(conn, df_out, target_table, dry_run=False)
     finally:
         conn.close()
 

@@ -47,6 +47,25 @@ def _two_days_ago() -> str:
     return (date.today() - timedelta(days=2)).strftime("%Y-%m-%d")
 
 
+def _one_day_ago() -> str:
+    return (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def _target_env() -> str:
+    # prod deployment sets TARGET_ENV=prod; branch/local default to dev.
+    return os.environ.get("TARGET_ENV", "dev")
+
+
+def _recent_completed_dates() -> list[str]:
+    # Sub-model signal generators are anchored on mart_game_results, which is
+    # pitch-derived (completed games only). After ingest_statcast + dbt_daily_build,
+    # yesterday's games are present. A 2-day completed-game window mirrors the
+    # SCD-2 ops' 2-day lookback buffer — robust to ingestion lag / a missed run,
+    # and idempotent (MERGE / SCD-2 skip unchanged rows). Today is excluded: its
+    # games have no pitch data yet, so it would score zero rows.
+    return [_two_days_ago(), _one_day_ago()]
+
+
 def _is_sunday() -> bool:
     return date.today().weekday() == 6
 
@@ -178,6 +197,108 @@ def check_data_freshness(context):
 def dbt_daily_build(context):
     # Sunday → full-refresh; odd day → build; even day → run
     _run_dbt(context, _dbt_daily_build_args())
+
+
+# ── Epic O.2 — Sub-model signal generation ───────────────────────────────────
+# Each op scores the recently-completed game window (see _recent_completed_dates)
+# and MERGEs into its signal table. These keep feature_pregame_sub_model_signals
+# current as new games complete — the Layer-3 training feed. They do NOT score
+# today's upcoming slate (the generators are anchored on the pitch-derived
+# mart_game_results), so they do not feed today's predict_today; that link is
+# Epic 9. concurrency_key tags the ops for the "snowflake_write" pool if/when the
+# job moves off in_process_executor.
+
+_SUB_MODEL_OP_TAGS = {"dagster/concurrency_key": "snowflake_write"}
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_run_env_signals_op(context):
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/generate_run_env_signals.py",
+                    ["--date", d, "--env", env])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_offense_signals_op(context):
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/offense_v2/generate_offense_signals.py",
+                    ["--date", d, "--env", env])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_starter_signals_op(context):
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/starter_v1/generate_starter_signals.py",
+                    ["--date", d, "--env", env])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_starter_ip_signals_op(context):
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/starter_v1/generate_starter_ip_signals.py",
+                    ["--date", d, "--env", env])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_bullpen_signals_op(context):
+    # Champion is v2; --v2-only keeps the daily op fast. (bullpen_v1 is superseded
+    # by 6D; drop the flag if v1 needs to advance daily too.) Wired downstream of
+    # the starter-IP op because bullpen_v2 Candidate B reads starter_ip_signals
+    # (starter_ip_p20_outs) for exposure scaling.
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/generate_bullpen_signals.py",
+                    ["--date", d, "--env", env, "--v2-only"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_matchup_signals_op(context):
+    # Epic 8.6 / O.6. matchup_v1 writes to mart_sub_model_signals via the SCD-2
+    # writer. signal_available is false for games without enough lineup/pitcher
+    # archetype-posterior coverage (early-season call-ups, sparse history) — that
+    # is expected and handled by the freshness check (matchup is reported but
+    # excluded from the catastrophic completeness floor).
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/eb_priors/generate_matchup_signals.py",
+                    ["--date", d, "--env", env])
+
+
+@op(
+    ins={
+        "run_env_done":   In(Nothing),
+        "offense_done":   In(Nothing),
+        "starter_done":   In(Nothing),
+        "starter_ip_done": In(Nothing),
+        "bullpen_done":   In(Nothing),
+        "matchup_done":   In(Nothing),
+    },
+    out=Out(Nothing),
+)
+def dbt_sub_model_signals_rebuild(context):
+    # Fan-in: refresh the wide PIVOT once all six signal tables are written.
+    _run_dbt(context, [
+        "build",
+        "--select", "feature_pregame_sub_model_signals",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def signal_freshness_check(context):
+    # NON-BLOCKING for now: predict_today does not yet consume these signals
+    # (Epic 9), so a signal gap must not block predictions. The script still
+    # exits non-zero on catastrophic loss; we log it as a warning rather than
+    # raising. Flip to blocking (drop the try/except) once Epic 9 wires the
+    # signals into predict_today.
+    try:
+        _run_script(context, "check_signal_freshness.py", ["--env", _target_env()])
+    except Exception as e:
+        context.log.warning(f"Signal freshness check reported a problem: {e}")
 
 
 # ── Predict phase ────────────────────────────────────────────────────────────
