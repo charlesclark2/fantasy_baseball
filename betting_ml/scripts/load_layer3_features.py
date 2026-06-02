@@ -446,10 +446,13 @@ def build_totals_dataset(
     start_date: str = "2021-01-01",
     min_games_played: int = 15,
     env: str = "prod",
-) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, dict]:
+    return_meta: bool = False,
+):
     """Canonical Layer 3 totals training dataset (Story 10.1).
 
-    Returns ``(X, y, eval_lines, report)``:
+    Returns ``(X, y, eval_lines, report)`` — or ``(X, y, eval_lines, report, meta)``
+    when ``return_meta`` (``meta`` = game_pk/game_year/season/game_date aligned to
+    X/y, for walk-forward CV in Story 10.2):
       * ``X``/``y`` — game-level training matrix for `total_runs` (completeness ≥
         0.40, contract columns, no leakage), per `load_layer3_features_for_training`.
       * ``eval_lines`` — eval-only Bovada-preferred total line per kept game_pk
@@ -468,6 +471,7 @@ def build_totals_dataset(
     feature_cols = _load_feature_contract()
     X = df[feature_cols].copy()
     y = df["total_runs"].astype(float).copy()
+    meta = df[["game_pk", "game_year", "season", "game_date"]].copy()
     if "total_line_bovada" in X.columns:
         raise ValueError("Eval-only total_line_bovada leaked into training features.")
 
@@ -492,6 +496,8 @@ def build_totals_dataset(
              X.shape, len(y), overdispersion["overdispersion_ratio"],
              overdispersion["recommend_negbin"], line_coverage["n_with_line"],
              line_coverage["n_games"], n_bovada, line_coverage["n_consensus_fallback"])
+    if return_meta:
+        return X, y, eval_lines, report, meta
     return X, y, eval_lines, report
 
 

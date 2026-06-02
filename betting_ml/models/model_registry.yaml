@@ -408,16 +408,23 @@ total_runs:
 # promotion_status to 'champion'.
 # ---------------------------------------------------------------------------
 layer3_totals:
-  artifact_path: null            # populated by Epic 10 (train_totals.py)
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/totals_v1.pkl
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
   stacking_weights_path: betting_ml/models/layer3/stacking_weights.json
   target: total_runs
-  promotion_status: candidate    # -> champion once Epic 10 trains a model
+  model_type: lightgbm
+  architecture: LightGBM+NegBin
+  mlflow_run_id: 149f5af4125e4aa6806c7611482bda0a
+  cv_nll: 2.7835
+  cv_mae: 3.2229
+  cv_calib_80: 0.8037
+  cv_std_pred: 3.7331
+  promotion_status: champion    # Layer 3 champion architecture; production go-live gated by Story 10.6/10.7
   promoted_signals: [run_env, offense, bullpen]
+  trained_at: '2026-06-02'
   notes: >
-    Layer 3 totals stacked model. Contract + pseudo-BMA stacking weights wired in
-    Story 9.4; awaiting Epic 10 to train the champion NegBin model on the
-    promoted distributional signals.
+    Epic 10 Story 10.2 — LightGBM+NegBin Layer 3 totals model. CV NLL 2.7835, MAE 3.223, calib_80 0.804, std(pred) 3.733.
+    NOT yet the production totals source — awaiting Story 10.6 champion-vs-challenger decision.
 
 layer3_h2h:
   artifact_path: null            # populated by Epic 11 (train_h2h.py)
