@@ -339,6 +339,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   I.2 S3 artifact store            ✅       I.4 Dagster MLflow integration ⬜│
 │ Epic 0.5  Dagster Orchestration             ✅ Complete (2026-06-02)          │
 │   0.5.1–0.5.9 ✅  0.5.10 ✅ (GH Actions crons disabled; billing verify 6-09) │
+│ Epic FG   FanGraphs Cloudflare Bypass       🔄 URGENT (opened 2026-06-02)    │
+│   FG.1 FlareSolverr deploy ⬜  FG.2 client integ ✅  FG.3–FG.5 ⬜            │
 │ Epic 23   Model Drift & Signal Decay        ⬜ Not Started                  │
 │   Gate: ≥1 full month of production predictions with Epics 10–11 live       │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -516,6 +518,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic 12.3 (proxy CLV analysis) | ≥50 live games | ✅ 2026-06-02: 1,334 games, CV AUC=0.548, power threshold=500 games confirmed |
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
+| **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄 2026-06-02: FanGraphs JS-challenge blocked 4 ingests (ZiPS pit/hit, Stuff+, batting dashboard); FlareSolverr chosen; FG.2 client integ done, FG.1 deploy next |
 | **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | Unblocked 2026-06-02 |
 | **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
@@ -1342,6 +1345,84 @@ Write targets by environment:
 - [ ] The run ID matches a real run visible in `mlflow ui` — verify on next retrain (both models)
 
 **Prerequisite:** Epic 0.5 (Dagster migration) must be in progress or complete before I.4 is actionable. Stories I.1–I.3 are independent of Dagster.
+
+---
+
+# Epic FG — FanGraphs Ingestion Continuity (Cloudflare Challenge Bypass)
+
+**Status:** 🔄 IN PROGRESS — opened 2026-06-02, **URGENT** (active production outage of FanGraphs-derived features).
+
+**Depends on:** Epic 0.5 (Dagster) for the jobs these ingests run in. No model dependency.
+
+**Context / impact:** As of 2026-06-02, every request to `https://www.fangraphs.com/*` from `fangraphs_client` returns **HTTP 403 with `cf-mitigated: challenge`** — FanGraphs enabled a Cloudflare *managed JavaScript challenge*. `curl_cffi` matches Chrome's TLS fingerprint but cannot execute the challenge JS, so all calls fail. Verified reproducible across endpoints, five impersonation profiles, and multiple egress IPs (so it is **not** a datacenter-IP block). This silently breaks four daily ingests feeding high-value, mostly FanGraphs-exclusive features:
+
+| Ingest script | Feature(s) | Alternate source? |
+|---|---|---|
+| `ingest_fangraphs_zips_pitching.py` | ZiPS pitching projections | None — FanGraphs-exclusive |
+| `ingest_fangraphs_zips_hitting.py` | ZiPS hitting projections | None — FanGraphs-exclusive |
+| `ingest_fangraphs_stuff_plus.py` | Stuff+ / Location+ / Pitching+ | None clean/free |
+| `ingest_fangraphs_hitting_leaderboard.py` | wRC+, fWAR, OBP, SLG, K%, BB% | wRC+/fWAR FanGraphs-only |
+
+(`ingest_oaa.py` was migrated to Baseball Savant on 2026-06-02; `ingest_savant_park_factors.py` hits Savant and is unaffected.)
+
+**Chosen approach (decided 2026-06-02):** Self-hosted **FlareSolverr** (headless-Chromium challenge solver) as a separate Railway service. `fangraphs_client` solves the challenge once per run via FlareSolverr, harvests the `cf_clearance` cookie + user-agent, and replays both on fast `curl_cffi` requests for the actual JSON API calls. Rejected alternatives: re-sourcing (data is FanGraphs-exclusive), a managed bypass API (per-request cost + external dependency), and embedded Playwright (bloats the Dagster agent image with Chromium).
+
+**Key risk — `cf_clearance` IP binding:** `cf_clearance` is bound to the solving host's egress IP **and** the returned user-agent. The Dagster agent (which replays the cookie) must share FlareSolverr's egress — on Railway, same project + region. The client re-solves once automatically on a 403; a persistent 403 *after* re-solve almost always means an agent↔FlareSolverr IP mismatch (see FG.1 acceptance criteria).
+
+---
+
+### FG.1 — Deploy FlareSolverr service on Railway
+
+Tasks:
+- [ ] Add a new Railway service from image `ghcr.io/flaresolverr/flaresolverr:latest` in the **same project + region** as the Dagster agent (shared egress for `cf_clearance`).
+- [ ] Keep it on the Railway private network; record its internal URL `http://<service>.railway.internal:8191/v1`.
+- [ ] Service env: `LOG_LEVEL=info`, `BROWSER_TIMEOUT=60000`, `TZ=America/New_York`. Budget ~1 GB RAM (headless Chromium).
+- [ ] On the Dagster agent service, set `FLARESOLVERR_URL` to that internal `/v1` URL.
+
+Acceptance criteria:
+- [ ] FlareSolverr `/v1` reachable from the Dagster agent over private networking.
+- [ ] A `cmd: request.get` to a `fangraphs.com` page returns `status: ok` with a `cf_clearance` cookie.
+- [ ] **Egress-IP check:** a `cf_clearance` harvested by FlareSolverr is accepted (no 403) on a `curl_cffi` request originating from the agent. If it is rejected, the agent and FlareSolverr are NOT sharing an egress — resolve (same region, or static egress) before declaring FG.1 done.
+
+### FG.2 — Integrate FlareSolverr into `fangraphs_client` ✅ DONE (2026-06-02)
+
+Tasks:
+- [x] `_solve_challenge()` POSTs `cmd: request.get` to FlareSolverr; `_ensure_clearance()` caches the `cf_clearance` cookie + user-agent for the process run.
+- [x] `_get_with_retry` replays cookie + UA on each call; on a 403 it re-solves once then retries; raises a clear error if `FLARESOLVERR_URL` is unset.
+- [x] `fetch_projections` / `fetch_leaderboard` signatures unchanged → the four ingest scripts need **no** edits.
+
+Acceptance criteria:
+- [x] With a reachable FlareSolverr, all four endpoints return 200 + parseable JSON — **verified locally (same-IP) 2026-06-02** against a FlareSolverr container.
+- [ ] Re-verified in prod (Railway) after FG.1's egress-IP check passes.
+
+### FG.3 — Restore & verify the four ingests
+
+Tasks:
+- [ ] Run each of the four ingests for the current season; confirm exit 0 and row counts in line with the last good (pre-outage) load.
+- [ ] Spot-check a few known values against the FanGraphs site (e.g. a team wRC+, a pitcher Stuff+, a ZiPS projection).
+
+Acceptance criteria:
+- [ ] All four ingests exit 0 and write expected row volumes; no schema drift vs the raw target tables.
+
+### FG.4 — Backfill the outage gap + confirm Dagster green
+
+Tasks:
+- [ ] Determine the outage window per ingest (last successful load date → today) from `pipeline_run_log` / target-table max load dates.
+- [ ] Backfill the gap (user-run, per the no-long-running-scripts policy). Projections/leaderboards are season snapshots, so a single current-season re-fetch usually suffices; rolling ZiPS (`rzips`) only needs the latest.
+- [ ] Re-run `daily_ingestion_job`; confirm the FanGraphs ops and dbt build go green.
+
+Acceptance criteria:
+- [ ] `feature_pregame_*` models show non-stale FanGraphs-derived columns for the current slate.
+- [ ] `daily_ingestion_job` completes with no FanGraphs op failures.
+
+### FG.5 — Runbook + monitoring cross-link
+
+Tasks:
+- [ ] Add a runbook section: FlareSolverr ops (restart, memory, `BROWSER_TIMEOUT` tuning), the `cf_clearance` IP-binding gotcha, and how to distinguish a challenge *escalation* (Cloudflare captcha — FlareSolverr can't solve) from a transient failure.
+- [ ] Cross-link the signal/ingest staleness alerting (owned by the separate monitoring story) so a silent FanGraphs outage surfaces faster next time.
+
+Acceptance criteria:
+- [ ] Runbook committed; on-call can restore FanGraphs ingestion from it without reading source.
 
 ---
 
