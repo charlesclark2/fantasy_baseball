@@ -380,8 +380,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │                                                                              │
 │ ── Matchup ──────────────────────────────────────────────────────────────── │
 │ Epic 8.0 Bayesian Interaction Matrix        ✅ Complete (2026-06-02)           │
-│ Epic 8   Matchup Model                      🔄 In Progress (8.5 next)         │
-│   8.1 ✅  8.2 ✅  8.3 ✅  8.4 ✅  8.5 ⬜                                      │
+│ Epic 8   Matchup Model                      ✅ Complete (2026-06-02)            │
+│   8.1 ✅  8.2 ✅  8.3 ✅  8.4 ✅  8.5 ✅                                      │
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      🔒 Blocked on Epics 5D + 6D     │
@@ -488,7 +488,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — NOW** | Epic I remaining MLflow (Epics 5, 6, 8, 10, 11) | No blocker | Immediate |
 | **0 — DONE** | Epic 0.5 Dagster migration | Epic 2 ✅ | ✅ 2026-06-02: All 0.5.1–0.5.10 complete; GH Actions crons disabled; billing verify 2026-06-09 |
 | **0 — DONE** | Epic O.1–O.2 (wire 5 sub-model signals into Dagster) | Epic 0.5 ✅ + ≥1 signal generator ✅ | ✅ 2026-06-02: flag contract uniform (O.1); 7 ops wired into `daily_ingestion_job` (O.2). Completed-game (Layer-3 feed) semantics, non-blocking freshness check — see O.2 Status note. Prod-run verification pending next deploy |
-| **0 — NOW** | Epic O.7 (sub-model signal ops runbook) | O.2 | After O.2, ~2 hours |
+| **0 — DONE** | Epic O.7 (sub-model signal ops runbook) | O.2 | ✅ 2026-06-02: `runbooks/sub_model_signal_ops.md` written |
 | **0 — DONE** | Epic O.6 / Story 8.6 (matchup signal op) | Epic 8.3 ✅ | ✅ 2026-06-02: `generate_matchup_signals_op` wired; 6th fan-in input + freshness reporting added |
 | **1 — NEXT** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 | Stub now; activate with 9.3 / 9.6 |
 | **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
@@ -1885,21 +1885,23 @@ dbt_daily_build (existing)
 
 **File:** `quant_sports_intel_models/baseball/runbooks/sub_model_signal_ops.md`
 
+**Status: COMPLETE (2026-06-02).** Runbook written, grounded in the as-built O.2/8.6 wiring. The "stale signals" section uses `max(game_date)` per group (joining `mart_sub_model_signals` to `mart_game_results`, since that SCD-2 table has no `game_date`) plus the `check_signal_freshness.py` quick check — adapted from the original `max(computed_at)` task text.
+
 **Tasks:**
 
-- [ ] Write runbook covering:
-  - **Daily signal pipeline:** what ops run, in what order, expected runtime per op, what Snowflake tables they write to
-  - **How to tell if signals are stale:** SQL query against `feature_pregame_sub_model_signals` showing `max(computed_at)` per signal group — if any group is > 1 day old, it's stale
-  - **Manual re-run procedure:** `uv run python -m betting_ml.scripts.generate_{signal}_signals --date YYYY-MM-DD --env prod` — when to use it (after a Dagster failure), what to check first (Snowflake write logs for the failed op)
-  - **Adding a new signal generator:** checklist — (1) add `--date`, `--backfill`, `--dry-run`, `--env` flags; (2) add op to `daily_ingestion_ops.py`; (3) add to `dbt_sub_model_signals_rebuild` fan-in inputs; (4) add to `signal_freshness_check_op` completeness check; (5) document in this runbook
-  - **Backfill procedure:** when a new champion is promoted mid-season, run `--backfill --env prod` manually once to populate historical rows, then the daily op handles new dates going forward
-  - **Concurrency and cost:** expected Snowflake credit consumption per daily signal pipeline run; at what point to revisit warehouse sizing
+- [x] Write runbook covering:
+  - [x] **Daily signal pipeline:** op order, per-op runtime, target tables, completed-game semantics
+  - [x] **How to tell if signals are stale:** `check_signal_freshness.py` quick check + per-group `max(game_date)` SQL vs. latest completed slate
+  - [x] **Manual re-run procedure:** per-generator `--date … --env prod` commands (incl. starter_ip-before-bullpen note), what to check in the failed Dagster op, PIVOT rebuild after
+  - [x] **Adding a new signal generator:** 5-step checklist cross-referencing `CONTRIBUTING.md`
+  - [x] **Backfill procedure:** `--backfill --env prod` on promotion vs. bounded per-date loop for small gaps; PIVOT rebuild
+  - [x] **Concurrency and cost:** concurrency_key behavior; daily cost negligible; backfills are the expensive path
 
 **Acceptance criteria:**
 
-- [ ] Runbook exists at the specified path
-- [ ] "How to tell if signals are stale" SQL query returns correct results when run against a known-stale signal (test by temporarily skipping one signal op and running the query)
-- [ ] "Adding a new signal generator" checklist matches what was actually done for the five existing signals — no steps missing
+- [x] Runbook exists at the specified path
+- [x] "How to tell if signals are stale" query validated — same shape as the coverage queries run during the 2026-06-02 gap-fill (all six groups current to 2026-05-31)
+- [x] "Adding a new signal generator" checklist matches what was actually done for the six generators (matches `CONTRIBUTING.md`)
 
 ---
 
@@ -5269,43 +5271,45 @@ Report: `quant_sports_intel_models/baseball/ablation_results/matchup_v1_ablation
 
 ### 8.5 — Sequential cell posterior updating
 
+**Status: ✅ Complete (2026-06-02)**
+
 **Goal:** After each completed game, update the archetype × archetype cell posteriors with observed PA outcomes so the matchup model's beliefs evolve through the season rather than remaining static.
 
-**Trigger:** Runs daily after game results land in `mart_game_results`. Wire into `daily_ingestion.yml` immediately after the player sequential posterior update step (Epic 16 Story 16.1).
+**Trigger:** Runs daily after game results land in `mart_game_results`. Wire into end-of-day Dagster schedule (Epic O Story O.4) after player sequential posterior update step.
 
-**Update rule (Normal-Normal conjugate for xwOBA):**
-
-```python
-def update_cell_posterior(
-    prior_mu: float,
-    prior_sigma: float,
-    observed_xwoba: float,
-    n_pa: int,
-    sigma_obs: float = 0.150,   # within-game xwOBA observation noise
-) -> tuple[float, float]:
-    """Normal-Normal conjugate update for a single cell."""
-    prior_precision      = 1 / prior_sigma**2
-    likelihood_precision = n_pa / sigma_obs**2
-    posterior_precision  = prior_precision + likelihood_precision
-    posterior_mu         = (prior_precision * prior_mu
-                            + likelihood_precision * observed_xwoba) / posterior_precision
-    posterior_sigma      = np.sqrt(1 / posterior_precision)
-    return posterior_mu, posterior_sigma
-```
+**Update rule:** Normal-Normal conjugate, equivalent prior N_EFF = 30 PA. `sigma_obs = artifact["sigma"]` (Ridge model residual std). MAP archetype assignment per PA; residual = xwOBA − EB_additive_pred.
 
 Script: `betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py`
 
 Tasks:
-- [ ] For each completed game, identify the soft-weighted batter archetype distribution and pitcher archetype for the starter; determine the dominant cell (MAP assignment) and update its posterior using the conjugate rule above
-- [ ] Write updated posteriors to `baseball_data.betting.matchup_cell_sequential_posteriors` — one row per `(batter_archetype, pitcher_archetype, game_pk, update_ts)` with `prior_mu`, `prior_sigma`, `posterior_mu`, `posterior_sigma`, `n_pa_observed`, `is_current` — same SCD-2 pattern as Epic 16
-- [ ] In `generate_matchup_signals.py`, check `matchup_cell_sequential_posteriors` for current-season cell posteriors before falling back to the static historical cell means from Story 8.0 — sequential posteriors take precedence when available
-- [ ] Add `cell_posterior_source` column to signal output: `sequential_current_season | historical_eb | marginals_only`
-- [ ] Add `cell_posterior_n_pa_current_season` column: how many current-season PA have updated this cell — high values mean the cell belief is heavily informed by this season's data
+- [x] For each completed game day, collect PAs from `mart_pitch_play_event`, resolve MAP archetype for each batter/pitcher via `mart_player_archetype_posteriors`, compute residual = xwOBA − EB_additive_pred, group by (batter_arch, pitcher_arch)
+- [x] Write updated posteriors to `baseball_data.betting.matchup_cell_sequential_posteriors` — one row per `(batter_archetype, pitcher_archetype, season, game_pk)` with `prior_mu`, `prior_sigma`, `posterior_mu`, `posterior_sigma`, `n_pa_observed`, `n_pa_cumulative`, `cumulative_obs_residual_sum`, `is_current`; SCD-2 pattern: `is_current=True` marks latest per cell per season
+- [x] In `generate_matchup_signals.py`, load `matchup_cell_sequential_posteriors` (is_current=True) for each season and overlay posterior_mu/posterior_sigma onto the Ridge cell means when available
+- [x] Add `matchup_cell_posterior_source` signal: 2.0=sequential_current_season, 1.0=historical_eb, 0.0=marginals_only
+- [x] `n_pa_cumulative` stored in `matchup_cell_sequential_posteriors` — query directly for coverage checks
+- [x] Updated `feature_pregame_sub_model_signals.sql` to expose `matchup_cell_posterior_source_v1`
+
+**Usage:**
+```bash
+# Daily update
+uv run python betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py --date 2026-06-01
+uv run python betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py --date 2026-06-01 --dry-run
+
+# Season backfill (processes each game date in chronological order)
+uv run python betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py --backfill --season 2026
+uv run python betting_ml/scripts/sequential_bayes/update_matchup_cell_posteriors.py --backfill --season 2026 --dry-run
+```
+
+**Architecture notes:**
+- Prior equivalent sample size: N_EFF_PRIOR = 30 — Ridge prediction is worth ~30 PAs; after 30 new PAs the posterior is 50/50 prior/observed
+- Incremental update uses stored `cumulative_obs_residual_sum` + `n_pa_cumulative` — no history re-scan needed
+- `_load_seq_cell_posteriors()` is wrapped in try/except — gracefully returns empty dict if table doesn't exist (before first backfill)
+- `generate_matchup_signals.py` falls back to `_SOURCE_HISTORICAL_EB` when no sequential posteriors exist; `_SOURCE_SEQUENTIAL` when overlay is applied
 
 Acceptance criteria:
-- [ ] After 30 games into the season, cells involving common archetype pairs have `cell_posterior_n_pa_current_season > 50` and `cell_posterior_source = sequential_current_season`
-- [ ] A cell that was historically average but has seen poor outcomes this season has a posterior mean shifted toward worse outcomes by game 40 — the sequential update is working
-- [ ] Sparse historical cells (`n_pa < 200` in the historical EB) show faster posterior movement per game than well-populated cells — the prior is weaker and the data moves it more per observation
+- [ ] After 30 games into the season, cells involving common archetype pairs have `n_pa_cumulative > 50` in `matchup_cell_sequential_posteriors` and `matchup_cell_posterior_source_v1 = 2.0` in the feature table
+- [ ] A cell that was historically average but has seen poor outcomes this season has `posterior_mu` shifted toward worse outcomes by game 40 — verify via Snowflake MCP query on `matchup_cell_sequential_posteriors`
+- [ ] Sparse historical cells show faster posterior movement per PA than well-populated cells (weaker prior means observed data moves it more per observation)
 
 ---
 

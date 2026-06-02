@@ -1,21 +1,28 @@
 """
-generate_matchup_signals.py — Epic 8, Story 8.3
+generate_matchup_signals.py — Epic 8, Story 8.3 / 8.5
 
 Loads the matchup_v1 champion artifact (Ridge raw, alpha=0.2873) and archetype
 posterior soft assignments, scores every regular-season game-side in 2021+, and
-writes 6 signals per game-side to mart_sub_model_signals via the SCD-2 writer.
+writes 7 signals per game-side to mart_sub_model_signals via the SCD-2 writer.
 
 Grain: (game_pk, side) — two rows per game.
   side='home': home lineup batters facing away probable starter
   side='away': away lineup batters facing home probable starter
 
 Signals per game-side:
-    matchup_advantage_mu        — soft-mixture xwOBA interaction residual (vs. EB additive pred)
-    matchup_advantage_sigma     — predictive uncertainty from the soft archetype mixture
-    matchup_volatility_signal   — Shannon entropy of joint P(batter_arch)×P(pitcher_arch)
-    matchup_soft_vs_hard_delta  — diagnostic: soft mu − MAP-cell mu
-    matchup_k_pressure_signal   — soft-weighted expected K% across cells
-    matchup_power_signal        — soft-weighted expected hard-hit% across cells
+    matchup_advantage_mu          — soft-mixture xwOBA interaction residual (vs. EB additive pred)
+    matchup_advantage_sigma       — predictive uncertainty from the soft archetype mixture
+    matchup_volatility_signal     — Shannon entropy of joint P(batter_arch)×P(pitcher_arch)
+    matchup_soft_vs_hard_delta    — diagnostic: soft mu − MAP-cell mu
+    matchup_k_pressure_signal     — soft-weighted expected K% across cells
+    matchup_power_signal          — soft-weighted expected hard-hit% across cells
+    matchup_cell_posterior_source — 2.0=sequential_current_season, 1.0=historical_eb, 0.0=marginals_only
+
+Story 8.5 integration:
+    When matchup_cell_sequential_posteriors has is_current=True rows for the current
+    season, those posterior_mu / posterior_sigma values replace the Ridge model's
+    static cell predictions for the soft mixture. The cell_posterior_source signal
+    records which path was taken.
 
 signal_available = True when:
   - Probable starter posterior exists with pa_count >= _MIN_PITCHER_PA
@@ -88,6 +95,48 @@ _MIN_LINEUP_SLOTS = 6  # lineup slots that need at least 1 PA in posterior
 _FALLBACK_K_PCT       = 0.224
 _FALLBACK_BB_PCT      = 0.082
 _FALLBACK_HARD_HIT_PCT = 0.375
+
+# cell_posterior_source numeric encoding (emitted as signal_value)
+_SOURCE_MARGINALS_ONLY  = 0.0   # no posterior data; uniform priors
+_SOURCE_HISTORICAL_EB   = 1.0   # Ridge model static cell means (no sequential update yet)
+_SOURCE_SEQUENTIAL      = 2.0   # sequential current-season posteriors from Story 8.5
+
+_SEQ_POSTERIORS_TABLE = "baseball_data.betting.matchup_cell_sequential_posteriors"
+
+_SEQ_POSTERIORS_SQL = """
+SELECT
+    batter_archetype,
+    pitcher_archetype,
+    posterior_mu,
+    posterior_sigma,
+    n_pa_cumulative
+FROM {table}
+WHERE is_current = TRUE
+  AND season = %(season)s
+"""
+
+
+def _load_seq_cell_posteriors(conn, season: int) -> dict[tuple[str, str], dict]:
+    """
+    Return {(batter_arch, pitcher_arch): {posterior_mu, posterior_sigma, n_pa_cumulative}}
+    for the current season. Empty dict if the table doesn't exist or has no rows.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            _SEQ_POSTERIORS_SQL.format(table=_SEQ_POSTERIORS_TABLE),
+            {"season": season},
+        )
+        cols = [d[0].lower() for d in cur.description]
+        rows = {
+            (r[0], r[1]): dict(zip(cols, r))
+            for r in cur.fetchall()
+        }
+        cur.close()
+        return rows
+    except Exception:
+        # Table doesn't exist yet (before 8.5 runs for the first time)
+        return {}
 
 
 # ── Schema resolution ──────────────────────────────────────────────────────────
@@ -468,12 +517,17 @@ def _signals_for_side(
     cell_sigmas: np.ndarray,
     k_pct_mat: np.ndarray,
     hard_hit_mat: np.ndarray,
+    seq_cell_posteriors: dict | None = None,
 ) -> list[dict]:
     """
-    Compute all 6 signals for one game-side.
+    Compute all 7 signals for one game-side.
 
     side='home': home lineup faces away probable starter
     side='away': away lineup faces home probable starter
+
+    seq_cell_posteriors: {(b_arch, p_arch): {posterior_mu, posterior_sigma, n_pa_cumulative}}
+        from matchup_cell_sequential_posteriors (Story 8.5). When provided, sequential
+        posterior_mu / posterior_sigma replace the static Ridge cell predictions.
     """
     game_pk   = int(game["game_pk"])
     game_date = game["game_date"]
@@ -508,8 +562,24 @@ def _signals_for_side(
     slots_with_data = sum(1 for pa in batter_pa_counts if pa >= 1)
     sig_avail = pitcher_pa >= _MIN_PITCHER_PA and slots_with_data >= _MIN_LINEUP_SLOTS
 
+    # Story 8.5: overlay sequential posteriors onto cell_means / cell_sigmas when available
+    if seq_cell_posteriors:
+        active_cell_means  = cell_means.copy()
+        active_cell_sigmas = cell_sigmas.copy()
+        for bi, b in enumerate(_BATTER_CATS):
+            for pi, p in enumerate(_PITCHER_CATS):
+                row = seq_cell_posteriors.get((b, p))
+                if row is not None:
+                    active_cell_means[bi, pi]  = float(row["posterior_mu"])
+                    active_cell_sigmas[bi, pi] = float(row["posterior_sigma"])
+        cell_posterior_source = _SOURCE_SEQUENTIAL
+    else:
+        active_cell_means  = cell_means
+        active_cell_sigmas = cell_sigmas
+        cell_posterior_source = _SOURCE_HISTORICAL_EB
+
     # Primary signals — soft mixture
-    mu, sigma = compute_matchup_signal_soft(batter_probs, pitcher_probs, cell_means, cell_sigmas)
+    mu, sigma = compute_matchup_signal_soft(batter_probs, pitcher_probs, active_cell_means, active_cell_sigmas)
     entropy   = _joint_entropy(batter_probs, pitcher_probs)
 
     # Hard MAP signal (dominant batter archetype vs. MAP pitcher archetype)
@@ -520,7 +590,7 @@ def _signals_for_side(
         if pitcher_map in _PITCHER_CATS
         else int(np.argmax(pitcher_probs))
     )
-    mu_hard            = float(cell_means[hard_b_idx, hard_p_idx])
+    mu_hard            = float(active_cell_means[hard_b_idx, hard_p_idx])
     soft_vs_hard_delta = mu - mu_hard
 
     # Secondary signals — soft-weighted cell stat means
@@ -541,12 +611,13 @@ def _signals_for_side(
     }
 
     return [
-        {**base, "signal_name": "matchup_advantage_mu",       "signal_value": mu,                  "uncertainty": pi_width},
-        {**base, "signal_name": "matchup_advantage_sigma",    "signal_value": sigma,               "uncertainty": None},
-        {**base, "signal_name": "matchup_volatility_signal",  "signal_value": entropy,             "uncertainty": None},
-        {**base, "signal_name": "matchup_soft_vs_hard_delta", "signal_value": soft_vs_hard_delta,  "uncertainty": None},
-        {**base, "signal_name": "matchup_k_pressure_signal",  "signal_value": k_pressure,          "uncertainty": None},
-        {**base, "signal_name": "matchup_power_signal",       "signal_value": power_signal,        "uncertainty": None},
+        {**base, "signal_name": "matchup_advantage_mu",           "signal_value": mu,                   "uncertainty": pi_width},
+        {**base, "signal_name": "matchup_advantage_sigma",        "signal_value": sigma,                "uncertainty": None},
+        {**base, "signal_name": "matchup_volatility_signal",      "signal_value": entropy,              "uncertainty": None},
+        {**base, "signal_name": "matchup_soft_vs_hard_delta",     "signal_value": soft_vs_hard_delta,   "uncertainty": None},
+        {**base, "signal_name": "matchup_k_pressure_signal",      "signal_value": k_pressure,           "uncertainty": None},
+        {**base, "signal_name": "matchup_power_signal",           "signal_value": power_signal,         "uncertainty": None},
+        {**base, "signal_name": "matchup_cell_posterior_source",  "signal_value": cell_posterior_source, "uncertainty": None},
     ]
 
 
@@ -594,8 +665,16 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
             posteriors = _load_posteriors(conn, season)
             n_players  = len(posteriors)
             print(f"    {n_players:,} players with posterior records")
+
+            print(f"    Loading sequential cell posteriors for season {season}...")
+            seq_cell_posteriors = _load_seq_cell_posteriors(conn, season)
         finally:
             conn.close()
+
+        if seq_cell_posteriors:
+            print(f"    {len(seq_cell_posteriors)} sequential posteriors found — using Story 8.5 path")
+        else:
+            print(f"    No sequential posteriors for {season} — using Ridge model (historical_eb)")
 
         print(f"    Scoring cells with Ridge model...")
         cell_means, cell_sigmas, k_pct_mat, hard_hit_mat = _score_cells(artifact, cell_df)
@@ -605,7 +684,8 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
             for side in ("home", "away"):
                 rows = _signals_for_side(
                     game, side, posteriors,
-                    cell_means, cell_sigmas, k_pct_mat, hard_hit_mat
+                    cell_means, cell_sigmas, k_pct_mat, hard_hit_mat,
+                    seq_cell_posteriors=seq_cell_posteriors or None,
                 )
                 all_rows.extend(rows)
                 if rows and rows[0]["signal_available"]:
@@ -615,15 +695,16 @@ def run(start_date: str, end_date: str, env: str, dry_run: bool) -> None:
         pct = 100.0 * n_available / n_sides if n_sides > 0 else 0.0
         print(f"    {n_sides:,} game-sides → {n_available:,} signal_available=True ({pct:.1f}%)")
 
-    n_total = len(all_rows)
-    n_sides = n_total // 6
-    print(f"\n  Total rows: {n_total:,}  ({n_sides:,} game-sides × 6 signals)")
+    n_total  = len(all_rows)
+    n_signals = 7   # 6 core matchup signals + matchup_cell_posterior_source
+    n_sides  = n_total // n_signals
+    print(f"\n  Total rows: {n_total:,}  ({n_sides:,} game-sides × {n_signals} signals)")
 
     if dry_run:
-        print("\n[DRY RUN] Sample — first game, home side (6 rows):")
-        for r in all_rows[:6]:
+        print("\n[DRY RUN] Sample — first game, home side (7 rows):")
+        for r in all_rows[:7]:
             sv = r['signal_value']
-            print(f"  {r['signal_name']:<30s}  {sv:+.6f}  avail={r['signal_available']}")
+            print(f"  {r['signal_name']:<35s}  {sv:+.6f}  avail={r['signal_available']}")
         print("[DRY RUN] Skipping Snowflake write.")
         return
 
