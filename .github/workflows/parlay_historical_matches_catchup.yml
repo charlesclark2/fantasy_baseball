@@ -12,8 +12,7 @@ name: Parlay Historical Matches Catch-Up
 # rows on the next run.
 
 on:
-  schedule:
-    - cron: '0 10 * * 1'   # 06:00 EDT every Monday
+  # CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
   workflow_dispatch:
     inputs:
       start_date:

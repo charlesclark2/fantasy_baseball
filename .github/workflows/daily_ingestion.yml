@@ -1,8 +1,7 @@
 name: Daily Ingestion
 
+# CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
 on:
-  schedule:
-    - cron: '0 12 * * *'  # 08:00 EDT (UTC-4) — covers April–October season
   workflow_dispatch:
     inputs:
       triggered_by:
@@ -117,7 +116,6 @@ jobs:
 
       # FanGraphs: Stuff+ runs weekly (Sundays) — rolling 14d/30d/season windows
       - name: Ingest FanGraphs Stuff+ (weekly, Sundays only)
-        if: ${{ github.event_name == 'workflow_dispatch' || format('{0}', github.event.schedule) == '0 12 * * 0' || startsWith(github.event.schedule, '0 12 * * 0') }}
         working-directory: scripts
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
@@ -127,9 +125,8 @@ jobs:
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
         run: uv run ingest_fangraphs_stuff_plus.py --season $(date +%Y) --window-types 14d,30d,season
 
-      # FanGraphs: Catcher framing runs weekly (Sundays) — cumulative season stats
-      - name: Ingest FanGraphs catcher framing (weekly, Sundays only)
-        if: ${{ github.event_name == 'workflow_dispatch' || format('{0}', github.event.schedule) == '0 12 * * 0' || startsWith(github.event.schedule, '0 12 * * 0') }}
+      # FanGraphs: Catcher framing runs on manual dispatch
+      - name: Ingest FanGraphs catcher framing
         working-directory: scripts
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}

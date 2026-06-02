@@ -1,8 +1,7 @@
 name: Lineup Monitor
 
+# CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
 on:
-  schedule:
-    - cron: '0 * * * *'  # every hour
   workflow_dispatch: {}
 
 jobs:

@@ -7,10 +7,8 @@ name: Intraday Weather Capture
 # All four checkpoints are attempted each hour; the script skips games
 # already captured at a given checkpoint (idempotent).
 
+# CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
 on:
-  schedule:
-    - cron: '0 10-23 * * *'   # 06:00–19:00 ET (10:00–23:00 UTC)
-    - cron: '0 0-2 * * *'     # 20:00–22:00 ET (00:00–02:00 UTC)
   workflow_dispatch:
     inputs:
       game_date:

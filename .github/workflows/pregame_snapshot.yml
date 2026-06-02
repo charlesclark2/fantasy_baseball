@@ -6,9 +6,8 @@ name: Pre-Game Snapshot Monitor
 # If any such game is missing a snapshot, runs the full odds ingestion and
 # rebuilds the CLV mart so the closing-line computation has the latest prices.
 
+# CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
 on:
-  schedule:
-    - cron: '0,30 * * * *'   # every 30 minutes at :00 and :30
   workflow_dispatch: {}
 
 jobs:
