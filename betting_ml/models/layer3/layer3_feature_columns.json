@@ -1,0 +1,228 @@
+{
+  "version": "9.4",
+  "generated_at": "2026-06-02T20:56:46+00:00",
+  "grain": "one row per game_pk",
+  "completeness_floor": 0.4,
+  "feature_columns": [
+    "run_env_mu_v4",
+    "run_env_dispersion_v4",
+    "run_env_mu_v4_uncertainty",
+    "run_env_mu_v4_available",
+    "home_pred_runs_mu_v2",
+    "away_pred_runs_mu_v2",
+    "home_pred_runs_dispersion_v2",
+    "away_pred_runs_dispersion_v2",
+    "home_pred_runs_uncertainty_v2",
+    "away_pred_runs_uncertainty_v2",
+    "home_pred_runs_mu_v2_available",
+    "away_pred_runs_mu_v2_available",
+    "home_starter_suppression_mu_v1",
+    "away_starter_suppression_mu_v1",
+    "home_starter_suppression_sigma_v1",
+    "away_starter_suppression_sigma_v1",
+    "home_starter_uncertainty_v1",
+    "away_starter_uncertainty_v1",
+    "home_starter_suppression_mu_v1_available",
+    "away_starter_suppression_mu_v1_available",
+    "home_starter_ip_mu_v1",
+    "away_starter_ip_mu_v1",
+    "home_starter_ip_dispersion_v1",
+    "away_starter_ip_dispersion_v1",
+    "home_starter_ip_uncertainty_v1",
+    "away_starter_ip_uncertainty_v1",
+    "home_starter_ip_mu_v1_available",
+    "away_starter_ip_mu_v1_available",
+    "home_bullpen_mu_v2",
+    "away_bullpen_mu_v2",
+    "home_bullpen_dispersion_v2",
+    "away_bullpen_dispersion_v2",
+    "home_bullpen_uncertainty_v2",
+    "away_bullpen_uncertainty_v2",
+    "home_bullpen_mu_v2_available",
+    "away_bullpen_mu_v2_available",
+    "home_matchup_advantage_mu_v1",
+    "away_matchup_advantage_mu_v1",
+    "home_matchup_advantage_sigma_v1",
+    "away_matchup_advantage_sigma_v1",
+    "home_matchup_advantage_mu_v1_uncertainty",
+    "away_matchup_advantage_mu_v1_uncertainty",
+    "home_matchup_advantage_mu_v1_available",
+    "away_matchup_advantage_mu_v1_available"
+  ],
+  "signal_groups": {
+    "run_env": {
+      "mu": "run_env_mu_v4",
+      "spread": "run_env_dispersion_v4",
+      "uncertainty": "run_env_mu_v4_uncertainty",
+      "available": "run_env_mu_v4_available",
+      "env_level": true,
+      "counts_toward_completeness": true,
+      "columns": [
+        "run_env_mu_v4",
+        "run_env_dispersion_v4",
+        "run_env_mu_v4_uncertainty",
+        "run_env_mu_v4_available"
+      ]
+    },
+    "offense": {
+      "mu": "pred_runs_mu_v2",
+      "spread": "pred_runs_dispersion_v2",
+      "uncertainty": "pred_runs_uncertainty_v2",
+      "available": "pred_runs_mu_v2_available",
+      "env_level": false,
+      "counts_toward_completeness": true,
+      "columns": [
+        "home_pred_runs_mu_v2",
+        "away_pred_runs_mu_v2",
+        "home_pred_runs_dispersion_v2",
+        "away_pred_runs_dispersion_v2",
+        "home_pred_runs_uncertainty_v2",
+        "away_pred_runs_uncertainty_v2",
+        "home_pred_runs_mu_v2_available",
+        "away_pred_runs_mu_v2_available"
+      ]
+    },
+    "starter": {
+      "mu": "starter_suppression_mu_v1",
+      "spread": "starter_suppression_sigma_v1",
+      "uncertainty": "starter_uncertainty_v1",
+      "available": "starter_suppression_mu_v1_available",
+      "env_level": false,
+      "counts_toward_completeness": true,
+      "columns": [
+        "home_starter_suppression_mu_v1",
+        "away_starter_suppression_mu_v1",
+        "home_starter_suppression_sigma_v1",
+        "away_starter_suppression_sigma_v1",
+        "home_starter_uncertainty_v1",
+        "away_starter_uncertainty_v1",
+        "home_starter_suppression_mu_v1_available",
+        "away_starter_suppression_mu_v1_available"
+      ]
+    },
+    "starter_ip": {
+      "mu": "starter_ip_mu_v1",
+      "spread": "starter_ip_dispersion_v1",
+      "uncertainty": "starter_ip_uncertainty_v1",
+      "available": "starter_ip_mu_v1_available",
+      "env_level": false,
+      "counts_toward_completeness": true,
+      "columns": [
+        "home_starter_ip_mu_v1",
+        "away_starter_ip_mu_v1",
+        "home_starter_ip_dispersion_v1",
+        "away_starter_ip_dispersion_v1",
+        "home_starter_ip_uncertainty_v1",
+        "away_starter_ip_uncertainty_v1",
+        "home_starter_ip_mu_v1_available",
+        "away_starter_ip_mu_v1_available"
+      ]
+    },
+    "bullpen": {
+      "mu": "bullpen_mu_v2",
+      "spread": "bullpen_dispersion_v2",
+      "uncertainty": "bullpen_uncertainty_v2",
+      "available": "bullpen_mu_v2_available",
+      "env_level": false,
+      "counts_toward_completeness": true,
+      "columns": [
+        "home_bullpen_mu_v2",
+        "away_bullpen_mu_v2",
+        "home_bullpen_dispersion_v2",
+        "away_bullpen_dispersion_v2",
+        "home_bullpen_uncertainty_v2",
+        "away_bullpen_uncertainty_v2",
+        "home_bullpen_mu_v2_available",
+        "away_bullpen_mu_v2_available"
+      ]
+    },
+    "matchup": {
+      "mu": "matchup_advantage_mu_v1",
+      "spread": "matchup_advantage_sigma_v1",
+      "uncertainty": "matchup_advantage_mu_v1_uncertainty",
+      "available": "matchup_advantage_mu_v1_available",
+      "env_level": false,
+      "counts_toward_completeness": false,
+      "columns": [
+        "home_matchup_advantage_mu_v1",
+        "away_matchup_advantage_mu_v1",
+        "home_matchup_advantage_sigma_v1",
+        "away_matchup_advantage_sigma_v1",
+        "home_matchup_advantage_mu_v1_uncertainty",
+        "away_matchup_advantage_mu_v1_uncertainty",
+        "home_matchup_advantage_mu_v1_available",
+        "away_matchup_advantage_mu_v1_available"
+      ]
+    }
+  },
+  "promoted_by_target": {
+    "total_runs": {
+      "groups": [
+        "bullpen",
+        "offense",
+        "run_env"
+      ],
+      "columns": [
+        "home_bullpen_mu_v2",
+        "away_bullpen_mu_v2",
+        "home_bullpen_dispersion_v2",
+        "away_bullpen_dispersion_v2",
+        "home_bullpen_uncertainty_v2",
+        "away_bullpen_uncertainty_v2",
+        "home_bullpen_mu_v2_available",
+        "away_bullpen_mu_v2_available",
+        "home_pred_runs_mu_v2",
+        "away_pred_runs_mu_v2",
+        "home_pred_runs_dispersion_v2",
+        "away_pred_runs_dispersion_v2",
+        "home_pred_runs_uncertainty_v2",
+        "away_pred_runs_uncertainty_v2",
+        "home_pred_runs_mu_v2_available",
+        "away_pred_runs_mu_v2_available",
+        "run_env_mu_v4",
+        "run_env_dispersion_v4",
+        "run_env_mu_v4_uncertainty",
+        "run_env_mu_v4_available"
+      ]
+    },
+    "home_win": {
+      "groups": [
+        "bullpen",
+        "offense"
+      ],
+      "columns": [
+        "home_bullpen_mu_v2",
+        "away_bullpen_mu_v2",
+        "home_bullpen_dispersion_v2",
+        "away_bullpen_dispersion_v2",
+        "home_bullpen_uncertainty_v2",
+        "away_bullpen_uncertainty_v2",
+        "home_bullpen_mu_v2_available",
+        "away_bullpen_mu_v2_available",
+        "home_pred_runs_mu_v2",
+        "away_pred_runs_mu_v2",
+        "home_pred_runs_dispersion_v2",
+        "away_pred_runs_dispersion_v2",
+        "home_pred_runs_uncertainty_v2",
+        "away_pred_runs_uncertainty_v2",
+        "home_pred_runs_mu_v2_available",
+        "away_pred_runs_mu_v2_available"
+      ]
+    }
+  },
+  "non_feature_columns": [
+    "away_final_score",
+    "away_team",
+    "game_date",
+    "game_pk",
+    "home_final_score",
+    "home_team",
+    "home_win",
+    "low_signal_completeness",
+    "season",
+    "signal_completeness_score",
+    "total_runs",
+    "winning_team"
+  ],
+  "notes": "Single source of truth for the Layer 3 column contract (Story 9.4). feature_columns lists ALL signal columns; promoted_by_target (from stacking_weights.json) is the subset Epic 10/11 should train on."
+}

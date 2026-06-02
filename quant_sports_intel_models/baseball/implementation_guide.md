@@ -387,9 +387,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   8.1 ✅  8.2 ✅  8.3 ✅  8.4 ✅  8.5 ✅                                      │
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
-│ Epic 9   Signal Integration & Ablation      ⬜ UNBLOCKED (5D ✅ + 6D ✅)     │
-│   9.1 ⬜  9.2 ⬜  9.3 ⬜  9.4 ⬜  9.5 ⬜  9.6 ⬜                              │
-│ Epic 10  Totals Distribution Model          🔒 Blocked on Epic 9             │
+│ Epic 9   Signal Integration & Ablation      ✅ COMPLETE (2026-06-02)         │
+│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
+│ Epic 10  Totals Distribution Model          🟢 UNBLOCKED (Epic 9 complete)   │
 │   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
 │   11.1 ⬜  11.2 ⬜  11.3 ⬜  11.4 ⬜  11.5 ⬜  11.6 ⬜  11.7 ⬜                │
@@ -496,7 +496,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic O.1–O.2 (wire 5 sub-model signals into Dagster) | Epic 0.5 ✅ + ≥1 signal generator ✅ | ✅ 2026-06-02: flag contract uniform (O.1); 7 ops wired into `daily_ingestion_job` (O.2). Completed-game (Layer-3 feed) semantics, non-blocking freshness check — see O.2 Status note. Prod-run verification pending next deploy |
 | **0 — DONE** | Epic O.7 (sub-model signal ops runbook) | O.2 | ✅ 2026-06-02: `runbooks/sub_model_signal_ops.md` written |
 | **0 — DONE** | Epic O.6 / Story 8.6 (matchup signal op) | Epic 8.3 ✅ | ✅ 2026-06-02: `generate_matchup_signals_op` wired; 6th fan-in input + freshness reporting added |
-| **1 — NEXT** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 | Stub now; activate with 9.3 / 9.6 |
+| **DONE** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 ✅ | ✅ Activated by 9.6 (2026-06-02): `weekly_ml_job` + Monday-10:00-UTC schedule; deploy-time UI/alert checks pending |
 | **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
 | **1 — NEXT** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 + ≥50 CLV | Activate with 12.9 |
 | **0 — DONE** | Epic 5A.4 ablation | 5.2 champion ✅ | ✅ 2026-05-31: Δ=0.0000 MAE (EB=Raw); EB kept — top-2 by importance |
@@ -523,8 +523,8 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
-| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | Unblocked 2026-06-02 |
-| **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
+| **0 — DONE** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | ✅ COMPLETE 2026-06-02: 9.1 matrix (11,661 games); 9.2 NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003); 9.4 contract+loaders+predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 promotion log + registry verdicts; 9.6 Dagster weekly recompute (`weekly_ml_job`, activates O.3). **→ Epic 10 unblocked.** |
+| **1 — NEXT** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🟢 Unblocked 2026-06-02 — Epic 9 complete (matrix, promoted signals, stacking weights, contract all shipped) |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
 | **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
@@ -1895,6 +1895,8 @@ dbt_daily_build (existing)
 ---
 
 ### O.3 — Add weekly stacking weight recomputation schedule
+
+**Status:** ✅ ACTIVATED (2026-06-02) by Epic 9 Story 9.6 — see the 9.6 Status for the implementation ( op in `pipeline/ops/weekly_ml_ops.py`, job + Monday-10:00-UTC schedule registered, `--s3-upload` wired). The "stub mode" robustness (no-op success if the 9.3 script is absent) is preserved in the op even though the script now exists.
 
 **Overview:** `compute_stacking_weights.py` (Epic 9 Story 9.3) reads NLL scores from the most recent MLflow evaluation run and writes updated pseudo-BMA weights to `betting_ml/models/layer3/stacking_weights.json` in S3. This needs to run weekly — not daily — because NLL scores only change when a sub-model is retrained or a new signal is promoted. A weekly Monday schedule matches the Bayesian meta-model retraining cadence (Epic 12 Story 12.4).
 
@@ -5469,6 +5471,8 @@ Acceptance criteria:
 
 ### 9.1 — Build Layer 3 feature matrix
 
+**Status:** ✅ COMPLETE (2026-06-02) — `betting_ml/scripts/load_layer3_features.py`. Game-level matrix, 11,661 games (2021–2026), `home_*`/`away_*` champion signals + collapsed `run_env_*`, derived `total_runs`/`home_win`, `signal_completeness_score`. Foundational coverage 1.0000; completeness mean 0.992 (100% ≥0.60); 0 target/raw-feature leakage. Deviation: the spec's as-of `computed_at` guard is reframed as a *version-churn diagnostic* — all historical signals were backfilled post-hoc (so `computed_at > game_date` universally), making leakage-freedom an architectural property (pre-game features only), not a timestamp check. Audit: `ablation_results/layer3_matrix_audit.md`.
+
 **Overview:** Construct the purpose-built feature matrix that Layer 3 aggregation models (Epics 10 and 11) will train on. This matrix uses sub-model distributional parameters as its primary inputs rather than raw engineered features. Unlike `load_features()`, this matrix is narrow by design — only the distributional signals and the minimal context features that the sub-models do not already encode.
 
 **Feature groups for the Layer 3 matrix:**
@@ -5505,6 +5509,8 @@ Acceptance criteria:
 ---
 
 ### 9.2 — Signal-level NLL evaluation pipeline
+
+**Status:** ✅ COMPLETE (2026-06-02) — `betting_ml/scripts/evaluate_layer3_signals.py`. Walk-forward CV (4 season folds, 2023–26), groups added incrementally. **AC passed:** run_env + offense both promote on `total_runs` (Epic 10 unblocked). Verdicts — `total_runs`: promote {run_env −0.0137, offense −0.0117, bullpen −0.0292}, defer {starter −0.0026, starter_ip −0.0010, matchup −0.0010}; `home_win`: promote {offense −0.0133 Brier, bullpen −0.0266}, defer {run_env, starter, starter_ip}, reject {matchup +0.0000}. Self-PI calibration: run_env 0.836, offense 0.829 (≥0.70 OK); latent groups → None (gated in source epic). Deviations: consistency gate adapted to ≥⌈0.6·n_folds⌉ (4 folds avail, not 8); conditional mean via Poisson GLM + separate NB2 dispersion MLE for stability; `uncertainty_calibration_score` only for in-matrix-observable groups (offense, run_env). Results: `ablation_results/layer3_signal_evaluation_{ts}.{json,md}`; MLflow `layer3_evaluation`. The defers are directional-but-marginal *in context* (info overlaps promoted signals); revisit in 9.3 stacking.
 
 **Overview:** For each sub-model signal group, measure its incremental predictive value using NLL as the primary gate — consistent with the Sub-model output standard. The key architectural point is that this evaluation tests whether the distributional signal adds value: not just whether the mu column improves MAE, but whether the full (mu, sigma) pair reduces NLL on held-out games. Coverage-conditional evaluation is mandatory for any signal with known sparse regimes.
 
@@ -5543,6 +5549,8 @@ Acceptance criteria:
 
 ### 9.3 — Pseudo-BMA stacking weights
 
+**Status:** ✅ COMPLETE (2026-06-02) — `betting_ml/scripts/compute_stacking_weights.py`. Pseudo-BMA weights from **standalone** per-signal walk-forward NLL (single-feature GLM maps each signal onto the target scale — resolves scale heterogeneity and yields comparable *absolute* NLLs, unlike 9.2's incremental deltas). Weights the **promoted set only** (D2): `total_runs` {bullpen 0.337, offense 0.332, run_env 0.331}, `home_win` {bullpen 0.507, offense 0.493}. **Near-uniform by design** — standalone NLLs are nearly tied (totals 2.8405/2.8564/2.8576; home_win 0.6395/0.6666) because each signal *alone* explains a similar absolute share of the target; 9.2's differentiation was *marginal/incremental* value, which is small. Bullpen edges ahead on both. **AC scorecard:** weights sum to 1.0 ✅; promoted non-zero / deferred=0 ✅; fold-weight std ≤0.15 for run_env & offense ✅ (0.0027 / 0.0023 — all signals stable); high-disagreement → larger σ ✅; determinism (sorted/rounded) ✅; MLflow logged ✅. **Deviation:** "fewer signals → larger σ" AC reported `False` (σ 4.4507→4.4529, flat) — the LTV-of-weighted-average combiner is *not* inverse-variance pooling, so dropping inputs doesn't inflate σ when signals agree on the mean (tiny across-model `Var(μ_i)`; within-model NB-variance term dominates and is ~constant under reweighting). Real finding, not a blocker; precision-pooling combiner is a candidate **Epic 10** refinement if σ should grow with fewer inputs. Output: `betting_ml/models/layer3/stacking_weights.json` (nested by target); MLflow `layer3_evaluation`. Epic 9.6/O.3 weekly recompute schedule unblocked.
+
 **Overview:** Rather than treating all sub-model mu columns as equal features and relying on gradient boosting to discover weights implicitly, compute explicit evidence-based stacking coefficients derived from held-out NLL. This is pseudo-Bayesian Model Averaging (pseudo-BMA): sub-models that predict outcomes more accurately on held-out folds receive proportionally higher weight in the Layer 3 combined prediction. The combined uncertainty is computed using the law of total variance — the same principle applied in Epic 8's matchup soft assignment (Story 8.3).
 
 **Why pseudo-BMA rather than full BMA:** Full BMA requires computing the marginal likelihood of each model, which is expensive and requires MCMC for the sub-model posteriors. Pseudo-BMA uses the held-out NLL from Story 9.2 as an approximation to the log marginal likelihood, giving principled weights at a fraction of the cost (Yao et al., 2018; the approach ArviZ's `compare()` function implements).
@@ -5573,66 +5581,74 @@ combined_sigma = np.sqrt(expected_within_model_var + variance_of_model_means)
 Script: `betting_ml/scripts/compute_stacking_weights.py`
 
 Tasks:
-- [ ] Implement `compute_pseudo_bma_weights(nll_scores: dict[str, float]) -> dict[str, float]` using the softmax-over-negative-NLL formula above; handle the case where fewer than all five signal groups have NLL scores (only promoted signals receive a weight; deferred/rejected signals receive weight 0)
-- [ ] Implement `combine_distributional_signals(signal_mus, signal_sigmas, weights) -> tuple[float, float]` using the law of total variance as above; return `(combined_mu, combined_sigma)`
-- [ ] Persist stacking weights to `betting_ml/models/layer3/stacking_weights.json` with schema: `{signal_group: {weight, nll_score, n_folds, verdict}}`; update this file whenever Story 9.2 evaluation is re-run with new signal data
-- [ ] Add a `weight_stability_check`: re-compute weights on each individual CV fold's NLL and report the standard deviation of per-fold weights per signal; high variance in fold-level weights (std > 0.15) flags a signal as unstable — its stacking weight is unreliable across regimes
-- [ ] Expose `combined_mu`, `combined_sigma`, and `stacking_weights_used` as columns in `predict_today.py`'s output when Layer 3 model is active — these become the primary model prediction inputs replacing the current NGBoost outputs for totals
-- [ ] Log stacking weights and their fold-stability scores to MLflow under experiment `layer3_evaluation`; tag with the signal group champion versions that produced the NLL scores (e.g. `run_env_v4`, `offense_v2`) so weight history is reproducible
+- [x] Implement `compute_pseudo_bma_weights(nll_scores: dict[str, float]) -> dict[str, float]` using the softmax-over-negative-NLL formula above; handle the case where fewer than all five signal groups have NLL scores (only promoted signals receive a weight; deferred/rejected signals receive weight 0) — numerically stabilized (subtract min NLL), deterministic
+- [x] Implement `combine_distributional_signals(signal_mus, signal_sigmas, weights) -> tuple[float, float]` using the law of total variance as above; return `(combined_mu, combined_sigma)`
+- [x] Persist stacking weights to `betting_ml/models/layer3/stacking_weights.json` — schema extended to nest by target: `{target: {signal_group: {weight, nll_score, n_folds, fold_weight_std, fold_weight_unstable, verdict, champion_version}}}` (targets have different promoted sets); update this file whenever Story 9.2 evaluation is re-run with new signal data
+- [x] Add a `weight_stability_check`: re-compute weights on each individual CV fold's NLL and report the standard deviation of per-fold weights per signal; high variance in fold-level weights (std > 0.15) flags a signal as unstable — its stacking weight is unreliable across regimes
+- [ ] Expose `combined_mu`, `combined_sigma`, and `stacking_weights_used` as columns in `predict_today.py`'s output when Layer 3 model is active — these become the primary model prediction inputs replacing the current NGBoost outputs for totals **(deferred to Epic 10 — D5: predict_today wiring belongs with the story that creates the Layer 3 champion artifact; 9.3 delivers weights + combiner)**
+- [x] Log stacking weights and their fold-stability scores to MLflow under experiment `layer3_evaluation`; tag with the signal group champion versions that produced the NLL scores (e.g. `run_env_v4`, `offense_v2`) so weight history is reproducible
 
 Acceptance criteria:
-- [ ] Stacking weights sum to 1.0 within floating point tolerance for all games where at least one signal is available
-- [ ] For games where only `run_env` and `offense` signals are available (no starter/bullpen/matchup — the current state before Epics 5–8 complete), `combined_sigma` is larger than it will be once all five signals are available — reflecting higher uncertainty from fewer inputs
-- [ ] `combined_sigma` is demonstrably larger for games with high across-model disagreement (e.g., `run_env` predicts 10.5 total runs but `offense_v2` predicts 7.0): verify manually on 3 known high-disagreement games from the 2025 backfill
-- [ ] `weight_stability_check` passes for `run_env_v4` and `offense_v2` (std of per-fold weights ≤ 0.15) — these are the most established signals
-- [ ] `stacking_weights.json` written and version-controlled; re-running `compute_stacking_weights.py` with the same NLL inputs produces identical weights (deterministic)
-- [ ] MLflow run records weights, stability scores, and signal group versions used
+- [x] Stacking weights sum to 1.0 within floating point tolerance for all games where at least one signal is available — verified per target (1.0)
+- [⚠️] For games where only `run_env` and `offense` signals are available, `combined_sigma` is larger than with all signals — **reported `False`** (σ 4.4507→4.4529, flat). Not a blocker: the LTV-of-weighted-average combiner isn't inverse-variance pooling, so σ doesn't grow with fewer inputs when the signals agree on the mean (`Var(μ_i)`≈0). Candidate precision-pooling refinement for Epic 10; the run *reports* the relationship rather than asserting it.
+- [x] `combined_sigma` is demonstrably larger for games with high across-model disagreement — `high-disagreement→larger=True`; top-3 2025 high-`Var(μ_i)` games surfaced in the JSON for manual check
+- [x] `weight_stability_check` passes for `run_env_v4` and `offense_v2` (std of per-fold weights ≤ 0.15) — std 0.0027 / 0.0023; all signals `fold_weight_unstable: false`
+- [x] `stacking_weights.json` written and version-controlled; re-running with the same NLL inputs produces identical weights (deterministic — sorted keys, rounded)
+- [x] MLflow run records weights, stability scores, and signal group versions used
 
 ---
 
 ### 9.4 — Inject promoted signals into Layer 3 training pipeline
+
+**Status:** ✅ COMPLETE (2026-06-02) — Snowflake-verified: training `X=(11661, 44)`, `y=11661`, no target leak, columns == contract; inference returned one row per requested game_pk incl. a bogus pk (`low_confidence=True`, completeness 0.0); freshness on slate 2026-06-01 — promoted signals fresh (1 day old), fully covered, MLflow logged. Adds to `load_layer3_features.py`: `load_layer3_features_for_training(target, start_date, env)` (completeness ≥0.40 filter, drops **both** targets + context → `(X, y)` in contract order) and `load_layer3_features_for_inference(game_pks, env)` (no row drops; one row per requested game_pk via reindex; `signal_completeness_score` + `low_confidence` always non-null). New `betting_ml/models/layer3/layer3_feature_columns.json` — 44-column contract (4 env + 5 per-side groups × 8), built deterministically from `_SIGNAL_GROUPS` via `--write-contract` (no Snowflake), with a `promoted_by_target` block from `stacking_weights.json` (totals 20 cols, home_win 16). `predict_today.py` gains `--model-source {monolithic,layer3}` with **graceful fallback** (`_layer3_champion_ready()`/`_resolve_model_source()` → monolithic + warning while Layer 3 stubs are null). `model_registry.yaml`: inert `layer3_totals`/`layer3_h2h` stubs (`artifact_path: null`, `promotion_status: candidate`). `sub_model_registry.yaml`: `downstream_consumers` set target-accurately — run_env_v4 `[layer3_totals]` (deferred on home_win per 9.2), offense_v2 & bullpen_v2 `[layer3_totals, layer3_h2h]`. **Deviation (D1):** freshness check wired in **Dagster** (`signal_freshness_check` already runs after `dbt_sub_model_signals_rebuild` and before `predict_today_morning`), not the legacy `daily_ingestion.yml` (GH Actions path slated for 0.5.10 decommission); `check_signal_freshness.py` augmented with promoted-signal staleness + non-blocking MLflow logging (`layer3_signal_freshness`). **Deviation (D5):** `predict_today` Layer 3 *scoring* (combined_mu/sigma output columns) deferred to Epic 10 when the champion artifact exists — 9.4 wires the contract + flag + fallback.
 
 **Overview:** Wire the promoted signals and stacking weights into the training scripts for Epics 10 and 11. This story does not train any model — it establishes the canonical data-loading contract that Epic 10 (`train_totals.py`) and Epic 11 (`train_h2h.py`) will call, and updates `predict_today.py` to generate Layer 3 features at inference time.
 
 Script: Updates to `betting_ml/scripts/load_layer3_features.py` and `betting_ml/scripts/predict_today.py`
 
 Tasks:
-- [ ] Add `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` function: calls `load_layer3_features()`, filters to rows where `signal_completeness_score ≥ 0.40`, joins target column from `mart_game_results`, and returns `(X_train, y_train)` ready for walk-forward CV; document the `signal_completeness_score` filter threshold and rationale in a comment block
-- [ ] Add `load_layer3_features_for_inference(game_pks: list[int])` function: same matrix construction but for today's games using `signal_available` flags rather than dropping rows — all games get a prediction even if some signals are missing; `signal_completeness_score < 0.40` predictions get a `low_confidence` flag in output
-- [ ] Add `layer3_feature_columns.json` to `betting_ml/models/layer3/` — the canonical feature column list for the Layer 3 matrix; mirrors the pattern of `elasticnet_feature_columns.json` and the sub-model `feature_columns.json` files; consumed by both training and inference scripts
-- [ ] Update `predict_today.py` to support a `--model-source layer3` flag: when set, calls `load_layer3_features_for_inference()` instead of `load_features()` and routes to the Layer 3 champion artifact (to be populated by Epic 10); run both monolithic and Layer 3 predictions in parallel during transition
-- [ ] Update `sub_model_registry.yaml` for each promoted signal: set `downstream_consumers: ['layer3_totals', 'layer3_h2h']` on all promoted signal entries; set `promotion_status: champion` on the Layer 3 entry once Epics 10 and 11 have trained models
-- [ ] Add `feature_pregame_sub_model_signals` refresh step to `daily_ingestion.yml` immediately before `predict_today.py` — signals must be current before inference runs; add a data freshness check: if any promoted signal has `prior_age_days > 1` for a game day with scheduled games, log a warning to MLflow
+- [x] Add `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` function: calls `load_layer3_features()`, filters to rows where `signal_completeness_score ≥ 0.40`, joins target column from `mart_game_results`, and returns `(X_train, y_train)` ready for walk-forward CV; document the `signal_completeness_score` filter threshold and rationale in a comment block — *targets joined upstream by `load_layer3_features`; wrapper drops both targets + context*
+- [x] Add `load_layer3_features_for_inference(game_pks: list[int])` function: same matrix construction but for today's games using `signal_available` flags rather than dropping rows — all games get a prediction even if some signals are missing; `signal_completeness_score < 0.40` predictions get a `low_confidence` flag in output — *reindex guarantees a row per requested game_pk; final scores not required (left join)*
+- [x] Add `layer3_feature_columns.json` to `betting_ml/models/layer3/` — the canonical feature column list for the Layer 3 matrix; mirrors the pattern of `elasticnet_feature_columns.json` and the sub-model `feature_columns.json` files; consumed by both training and inference scripts — *44 cols; deterministic via `--write-contract`; verified `contract == generator`*
+- [x] Update `predict_today.py` to support a `--model-source layer3` flag — *flag + graceful fallback to monolithic added; Layer 3 **scoring** routing deferred to Epic 10 (D5) when the champion artifact exists*
+- [x] Update `sub_model_registry.yaml` for each promoted signal: set `downstream_consumers` — *target-accurate (run_env totals-only); Layer 3 `promotion_status` stays `candidate` until Epics 10/11 train models*
+- [x] Add `feature_pregame_sub_model_signals` refresh step immediately before `predict_today` + a freshness check — *implemented in **Dagster** (D1), not the legacy `daily_ingestion.yml`: `dbt_sub_model_signals_rebuild → signal_freshness_check → … → predict_today_morning`; `check_signal_freshness.py` now logs promoted-signal staleness to MLflow (non-blocking)*
 
 Acceptance criteria:
-- [ ] `load_layer3_features_for_training(target='total_runs')` returns a DataFrame with correct column names matching `layer3_feature_columns.json` — no raw feature columns present, no target leakage
-- [ ] `load_layer3_features_for_inference()` returns a row for every `game_pk` in the input list; `signal_completeness_score` and `low_confidence` columns always non-null
-- [ ] `predict_today.py --model-source layer3` runs without error in dev environment (even before Epic 10 champion exists — graceful fallback to monolithic model when Layer 3 artifact path is null in registry)
-- [ ] `layer3_feature_columns.json` exists and is referenced by both the training and inference functions — single source of truth for Layer 3 column contract
-- [ ] `daily_ingestion.yml` freshness check fires a logged warning (not a job failure) if any promoted signal is stale — non-blocking but observable
+- [x] `load_layer3_features_for_training(target='total_runs')` returns a DataFrame with correct column names matching `layer3_feature_columns.json` — no raw feature columns present, no target leakage — *Snowflake-verified: `X=(11661, 44)`, `y=11661`, no leak, columns == contract*
+- [x] `load_layer3_features_for_inference()` returns a row for every `game_pk` in the input list; `signal_completeness_score` and `low_confidence` columns always non-null — *Snowflake-verified: 6/6 rows incl. bogus pk (completeness 0.0, `low_confidence=True`); real games 0.8 (game-level needs both sides — see note)*
+- [x] `predict_today.py --model-source layer3` runs without error (graceful fallback to monolithic when Layer 3 artifact path is null) — *verified: `_layer3_champion_ready()=False → monolithic` + warning*
+- [x] `layer3_feature_columns.json` exists and is referenced by both the training and inference functions — single source of truth for Layer 3 column contract
+- [x] Freshness check fires a logged warning (not a job failure) if any promoted signal is stale — non-blocking but observable — *`signal_freshness_check` op wraps non-blocking; promoted-staleness warning + MLflow log added*
+
+*Note: inference `signal_completeness_score` is game-level (a per-side group counts as present only when BOTH sides have it), so it can read lower than the side-level coverage `check_signal_freshness.py` reports for the same slate — by design (Layer 3 needs both teams). 0.8 = 4/5 core groups, well above the 0.40 floor → `low_confidence=False`.*
 
 ---
 
 ### 9.5 — Document signal promotion decisions
 
+**Status:** ✅ COMPLETE (2026-06-02). `ablation_results/layer3_promotion_log.md` written — one section per signal group (6) with per-target verdict tables (NLL/Brier delta, fold win-count, Wilcoxon p, calibration, coverage-conditional), plain-language rationales, and explicit re-evaluation triggers for every defer/reject. `sub_model_registry.yaml`: all 6 champion entries (run_env_v4, offense_v2, starter_v1, starter_ip_v1, bullpen_v2, matchup_v1) carry a `layer3_verdict` summary + nested `layer3_evaluation` block (per-target verdict/delta/fold_win_count/wilcoxon_p/calibration + eval_artifact + promotion_log + reeval_trigger). **Deviation:** verdicts recorded **per target** (run_env promote-totals/defer-home_win; matchup defer-totals/reject-home_win) — the spec's singular `layer3_verdict` would lose that; a summary string preserves the literal field. **Deviation:** the 9.2 MLflow run_id wasn't persisted in the artifact, so entries reference `eval_artifact` (the canonical JSON) + `mlflow_experiment: layer3_evaluation` instead. Acceptance Criteria Summary table Epic 9 row updated to the specific gate. Verified: stacking_weights.json contains promoted-only ({totals: run_env/offense/bullpen}, {home_win: offense/bullpen}); deferred/rejected groups have `downstream_consumers: []`.
+
 **Overview:** Record the outcome of each signal group's evaluation in a durable, queryable form so that future retrains, signal updates, and architecture reviews have a clear audit trail. Includes a written rationale for each promotion and rejection decision that will inform Epic 12 (CLV meta-model feature selection) and Epic 17 (PyMC hierarchical model).
 
 Tasks:
-- [ ] For each signal group evaluated in Story 9.2, record in `sub_model_registry.yaml` under the signal's entry: `layer3_verdict ∈ {promote, reject, defer}`, `layer3_nll_delta`, `layer3_fold_win_count`, `layer3_evaluated_date`, `layer3_mlflow_run_id`
-- [ ] Write `quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md` — one section per signal group with: verdict, NLL delta, fold win count, Wilcoxon p-value, `uncertainty_calibration_score`, coverage-conditional result, and a 2–3 sentence written rationale explaining the decision in plain language
-- [ ] For any signal group with verdict `defer`: document the specific condition that would trigger re-evaluation (e.g., "re-evaluate `matchup_v1` once Epic 8 champion has ≥ 50 games of sequential posterior updates in `matchup_cell_sequential_posteriors`")
-- [ ] Update `downstream_consumers` in `sub_model_registry.yaml` for all promoted signals to include `layer3_totals` and `layer3_h2h` — consumed by Epics 10 and 11
-- [ ] Update the Acceptance Criteria Summary table at the end of the implementation guide: Epic 9 gate = "`run_env_v4` and `offense_v2` NLL gates pass; stacking weights written to `stacking_weights.json`; at least 2 of 5 signal groups promoted; Layer 3 feature matrix validated leak-free"
+- [x] For each signal group evaluated in Story 9.2, record in `sub_model_registry.yaml` under the signal's entry — *recorded as a nested `layer3_evaluation` block (per-target verdict/nll_delta or brier_delta/fold_win_count/wilcoxon_p/calibration) + a `layer3_verdict` summary string + `evaluated_date`; `mlflow_run_id` not persisted in 9.2 → `eval_artifact` + `mlflow_experiment` recorded instead*
+- [x] Write `quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md` — one section per signal group with verdict, NLL/Brier delta, fold win count, Wilcoxon p-value, `uncertainty_calibration_score`, coverage-conditional result, and a 2–3 sentence rationale
+- [x] For any signal group with verdict `defer`: document the specific re-evaluation trigger — *triggers recorded in both the log and the registry `reeval_trigger` fields (starter → Epic 5D; starter_ip → Epic 6D Candidate B; matchup totals → ≥50 sequential-posterior games; matchup home_win → Epic 8 arch change; run_env home_win → Epic 11 Approach B)*
+- [x] Update `downstream_consumers` in `sub_model_registry.yaml` for promoted signals — *target-accurate (run_env totals-only); deferred/rejected stay `[]`*
+- [x] Update the Acceptance Criteria Summary table: Epic 9 gate definition
 
 Acceptance criteria:
-- [ ] Every signal group that was evaluated in Story 9.2 has a `layer3_verdict` in its registry entry
-- [ ] `layer3_promotion_log.md` exists with one section per signal group; deferred signals have an explicit re-evaluation trigger condition
-- [ ] `stacking_weights.json` references only promoted signal groups (verdict = `promote`); rejected and deferred groups have weight 0 or are absent
-- [ ] The Acceptance Criteria Summary table is updated with the Epic 9 gate definition
+- [x] Every signal group that was evaluated in Story 9.2 has a `layer3_verdict` in its registry entry — *all 6 champions; per-target nested + summary*
+- [x] `layer3_promotion_log.md` exists with one section per signal group; deferred signals have an explicit re-evaluation trigger condition
+- [x] `stacking_weights.json` references only promoted signal groups; rejected and deferred groups have weight 0 or are absent — *verified: totals {run_env, offense, bullpen}, home_win {offense, bullpen}; deferred/rejected `downstream_consumers: []`*
+- [x] The Acceptance Criteria Summary table is updated with the Epic 9 gate definition
 
 ---
 
 ### 9.6 — Wire stacking weight recomputation into Dagster
+
+**Status:** ✅ COMPLETE (2026-06-02, code/wiring — local-verified; manual-trigger/S3/alert ACs are deploy-time). Built the Epic O.3 stack fresh (no prior stub existed): `pipeline/ops/weekly_ml_ops.py::compute_stacking_weights_op` (stub-guard if the 9.3 script is absent → logs + succeeds; else runs `compute_stacking_weights.py --env <env> --s3-upload`, reads back `stacking_weights.json`, attaches per-target weights + `fold_weight_std` to Dagster run metadata), `pipeline/jobs/weekly_ml_job.py::weekly_ml_job` (single-op, in-process), `pipeline/schedules/weekly_ml_schedules.py::weekly_ml_schedule` (`0 10 * * 1`, Mondays 10:00 UTC). `compute_stacking_weights.py` gained `--s3-upload` → `s3://baseball-betting-ml-artifacts/layer3/stacking_weights.json` via `artifact_store.upload_artifact`. Registered in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py`; `Definitions` loads cleanly (job present; schedule cron/tz/job verified). **Deviation:** O.3 spec put the op inside `weekly_ml_schedules.py`; placed in `pipeline/ops/` per repo convention. **Naming:** Dagster auto-names the schedule `weekly_ml_job_schedule` (consistent with all other repo schedules). **Deploy-time (user):** confirm the schedule shows in Dagster Cloud Schedules, a manual `weekly_ml_job` trigger writes a fresh S3 object, and the failure alert routes to the `daily_ingestion_job` channel.
 
 **Overview:** Story 9.3 produces `compute_stacking_weights.py`, which writes pseudo-BMA weights to `stacking_weights.json` in S3. Those weights only change when a sub-model is retrained or a signal is promoted, so the recomputation belongs on a weekly schedule, not the daily pipeline. This story activates the weekly Dagster schedule defined as a stub in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.3.
 
@@ -5640,16 +5656,16 @@ Acceptance criteria:
 
 **Tasks:**
 
-- [ ] Flip Epic O Story O.3's `compute_stacking_weights_op` out of stub mode: it now invokes `compute_stacking_weights.py` for real, reading NLL scores from MLflow experiment `layer3_evaluation` and writing `layer3/stacking_weights.json` to S3
-- [ ] Confirm `weekly_ml_job` / `weekly_ml_schedule` (Mondays 10:00 UTC) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
-- [ ] Log the resulting weights dict and per-fold `weight_stability_check` std to Dagster run metadata so weights are auditable from run history without opening S3
-- [ ] Confirm the Dagster failure alert on `weekly_ml_job` routes to the same email channel as `daily_ingestion_job`
+- [x] Flip Epic O Story O.3's `compute_stacking_weights_op` out of stub mode — *built fresh (no prior stub); invokes `compute_stacking_weights.py --env <env> --s3-upload`, which writes `layer3/stacking_weights.json` to S3. NLL scores come from the latest `layer3_signal_evaluation_*.json` artifact (the canonical record); MLflow `layer3_evaluation` is still written for history*
+- [x] Confirm `weekly_ml_job` / schedule (Mondays 10:00 UTC) is registered — *registered in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py`; `Definitions` loads it (schedule `weekly_ml_job_schedule`, cron `0 10 * * 1`, UTC). Dagster Cloud UI visibility is deploy-time*
+- [x] Log the resulting weights dict and per-fold `weight_stability_check` std to Dagster run metadata — *`compute_stacking_weights_op` attaches per-target `__weights` + `__fold_weight_std` via `context.add_output_metadata`*
+- [ ] Confirm the Dagster failure alert on `weekly_ml_job` routes to the same email channel as `daily_ingestion_job` — **deploy-time (user)**
 
 **Acceptance criteria:**
 
-- [ ] A manual `weekly_ml_job` trigger writes a fresh `stacking_weights.json` to S3 with a newer timestamp — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/`
-- [ ] Weights logged to Dagster run metadata match the contents of `stacking_weights.json`
-- [ ] Re-running with identical MLflow NLL inputs produces identical weights (deterministic), consistent with the 9.3 acceptance criteria
+- [ ] A manual `weekly_ml_job` trigger writes a fresh `stacking_weights.json` to S3 with a newer timestamp — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/` — **deploy-time (user)**
+- [x] Weights logged to Dagster run metadata match the contents of `stacking_weights.json` — *op reads the written file and logs its weights/std; metadata is derived from the same JSON*
+- [x] Re-running with identical NLL inputs produces identical weights (deterministic), consistent with the 9.3 acceptance criteria — *9.3 writes sorted/rounded JSON; verified deterministic in 9.3*
 
 ---
 
@@ -5784,6 +5800,8 @@ def compute_over_prob_ci(
 
 When `p_over_ci_low > 0.55` and `p_over_ci_high > 0.55`, the entire CI is on the over side — a high-conviction over signal. When the CI straddles 0.50, confidence is low and the bet gate should not pass.
 
+> **⚠️ Carried over from Epic 9 Story 9.3 — combiner does not inflate σ with fewer/agreeing signals.** 9.3's validation found the law-of-total-variance combiner (`combine_distributional_signals`) reported `fewer signals → larger combined_sigma = False` (σ stayed flat: 4.4507 → 4.4529). Cause: it is a *weighted-average* combiner, **not** inverse-variance (precision) pooling — when the promoted signals agree on the mean, the across-model variance term `Var(μ_i)` ≈ 0, so the within-model NB-variance term dominates and is roughly constant under reweighting. **Consequence for 10.3:** the AC "low signal coverage / early-season games produce wider CIs" is **not** guaranteed by the current combiner and must be verified empirically here, not assumed. **Decision required in Epic 10:** if we want `combined_sigma` (and hence the P(over) CI) to widen when signal coverage is low, switch `combine_distributional_signals` to **precision-pooling** (`σ_combined² = 1 / Σ(wᵢ/σᵢ²)`, so fewer/noisier inputs → larger σ) and re-validate 9.3's stability checks. If empirical April-vs-August CIs already differ enough via the per-game NB `r` (dispersion grows when mu is uncertain), the weighted-average combiner may be acceptable as-is. Pick one **before** wiring the bet gate, since gate conviction keys off CI width.
+
 Tasks:
 - [ ] Implement `compute_over_under_probs()` as above in `betting_ml/utils/totals_probability.py`; handle integer lines (push) and half-point lines (no push) separately; add unit tests for both cases
 - [ ] Implement `compute_over_prob_ci()` using the delta method as above; add unit tests confirming that wider `combined_sigma` produces wider CIs
@@ -5796,7 +5814,7 @@ Acceptance criteria:
 - [ ] `totals_p_over + totals_p_under + totals_p_push = 1.0` for all games within floating point tolerance
 - [ ] Half-point line games have `totals_p_push = 0.0`
 - [ ] `totals_p_over_ci_low < totals_p_over < totals_p_over_ci_high` for all games
-- [ ] Games where `combined_sigma` is larger (early season, low signal coverage) produce wider CIs — confirm empirically on April vs. August games from the 2025 backfill
+- [ ] Games where `combined_sigma` is larger (early season, low signal coverage) produce wider CIs — confirm **empirically** on April vs. August games from the 2025 backfill. **Note (Story 9.3 finding):** the current weighted-average combiner does *not* guarantee σ grows with lower coverage; if this check fails, adopt the precision-pooling combiner described in the 10.3 overview callout rather than treating it as a pass
 - [ ] `bovada_devig_over_prob` sums to ≈ 1.0 with `bovada_devig_under_prob` (within vig rounding); confirm no vig-removal errors on spot-checked historical games
 - [ ] All 10 new output columns present in `daily_model_predictions` for every game with a Bovada line
 
@@ -6770,7 +6788,7 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 | 6 — Bullpen state | Ablation shows incremental improvement in totals CV |
 | 7 — Archetype clustering | Clusters interpretable; labels stable year-over-year; stored in mart |
 | 8 — Matchup model | Ablation shows incremental improvement in H2H CV |
-| 9 — Signal integration | Promoted signals show positive incremental value; no calibration regressions |
+| 9 — Signal integration | `run_env_v4` and `offense_v2` NLL gates pass on `total_runs`; stacking weights written to `stacking_weights.json`; ≥ 2 of 5 signal groups promoted; Layer 3 feature matrix validated leak-free. *(Met 2026-06-02: 3 promoted on totals — run_env/offense/bullpen; 2 on home_win — offense/bullpen.)* |
 | 10 — Totals distribution | std(pred) > 1.5; quantile calibration pass; MAE ≤ current baseline |
 | 11 — H2H with signals | CV Brier beats market-blind baseline; mean CLV positive over 30+ live games |
 | 12 — Meta-model | 1000+ CLV games; AUC > 0.55; positive mean CLV in holdout |

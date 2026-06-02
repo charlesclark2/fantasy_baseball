@@ -294,11 +294,15 @@ def dbt_sub_model_signals_rebuild(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def signal_freshness_check(context):
-    # NON-BLOCKING for now: predict_today does not yet consume these signals
-    # (Epic 9), so a signal gap must not block predictions. The script still
-    # exits non-zero on catastrophic loss; we log it as a warning rather than
-    # raising. Flip to blocking (drop the try/except) once Epic 9 wires the
-    # signals into predict_today.
+    # Runs after dbt_sub_model_signals_rebuild (which refreshes
+    # feature_pregame_sub_model_signals) and before predict_today_morning.
+    # NON-BLOCKING: Story 9.4 wired the Layer 3 signal contract + stacking
+    # weights, but predict_today still defaults to --model-source monolithic
+    # (Layer 3 stays inert until Epic 10/11 register a champion), so a signal gap
+    # must not block predictions. The script logs promoted-signal staleness to
+    # MLflow and still exits non-zero only on catastrophic loss; we log that as a
+    # warning rather than raising. Flip to blocking (drop the try/except) once
+    # Epic 10 makes --model-source layer3 the active prediction path.
     try:
         _run_script(context, "check_signal_freshness.py", ["--env", _target_env()])
     except Exception as e:

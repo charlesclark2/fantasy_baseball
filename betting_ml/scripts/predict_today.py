@@ -111,6 +111,37 @@ def _model_version_label(model_tag: str) -> str:
     return model_tag
 
 
+# Story 9.4 — Layer 3 source routing (graceful until Epic 10 trains a champion).
+_LAYER3_REGISTRY_KEYS = ("layer3_totals", "layer3_h2h")
+
+
+def _layer3_champion_ready() -> bool:
+    """True only if BOTH Layer 3 registry entries exist with a non-null artifact path.
+
+    Epic 10 (totals) and Epic 11 (h2h) populate these. Until then the entries are
+    inert stubs (`artifact_path: null`), so `--model-source layer3` falls back to
+    the monolithic champions rather than erroring.
+    """
+    registry = _load_registry()
+    for key in _LAYER3_REGISTRY_KEYS:
+        entry = registry.get(key)
+        if not entry or not entry.get("artifact_path"):
+            return False
+    return True
+
+
+def _resolve_model_source(requested: str) -> str:
+    """Resolve the effective prediction source, applying the Layer 3 fallback."""
+    if requested != "layer3":
+        return "monolithic"
+    if _layer3_champion_ready():
+        # Epic 10/11 attach real Layer 3 routing here (load champion + combiner).
+        return "layer3"
+    print("  [model-source] layer3 requested but no Layer 3 champion is registered "
+          "(Epic 10 not yet shipped) — falling back to monolithic models.")
+    return "monolithic"
+
+
 # ---------------------------------------------------------------------------
 # Feature matrix builder — registry-aware
 # ---------------------------------------------------------------------------
@@ -939,6 +970,15 @@ def _parse_args() -> argparse.Namespace:
         help="Label stored in feature_version column (default: same as --model-tag).",
     )
     parser.add_argument(
+        "--model-source",
+        choices=["monolithic", "layer3"],
+        default="monolithic",
+        help="Prediction source. 'monolithic' (default) uses the per-target NGBoost/"
+             "XGBoost champions. 'layer3' routes to the Epic 9 Layer 3 stacked model — "
+             "if no Layer 3 champion is registered yet (Epic 10 not shipped), it logs a "
+             "warning and falls back to monolithic. Both run in parallel during transition.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -1217,6 +1257,12 @@ def main() -> None:
     model_version = _model_version_label(model_tag)
     dry_run       = args.dry_run
     log_snowflake = not args.no_log_snowflake
+
+    # Story 9.4 — resolve prediction source (Layer 3 falls back to monolithic
+    # until Epic 10/11 register a champion). Real Layer 3 scoring attaches in Epic 10.
+    effective_source = _resolve_model_source(args.model_source)
+    print(f"Model source: {effective_source}"
+          + (f" (requested: {args.model_source})" if effective_source != args.model_source else ""))
 
     target_tags_str = (
         f"home_win={home_win_tag}, total_runs={total_runs_tag}, run_diff={run_diff_tag}"
