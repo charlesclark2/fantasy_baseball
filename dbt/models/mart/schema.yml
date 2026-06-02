@@ -7759,3 +7759,104 @@ models:
               arguments:
                 min_value: 0
                 max_value: 2
+
+  # ============================================================================
+  # mart_clv_labeled_games  (Epic 12.0)
+  # ============================================================================
+  - name: mart_clv_labeled_games
+    description: >
+      One row per (game_pk, market_type) for each live game meeting all four
+      CLV label conditions: (1) live pre-game prediction exists, (2) opening
+      market price exists, (3) closing market price exists, (4) game result
+      exists. market_type in {h2h, totals}. This is the canonical source for
+      Epic 12 gate thresholds. "50 CLV-labeled games" means 50 distinct
+      game_pk values in this mart. Live data only (2026-05-10+).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, market_type]
+
+    columns:
+
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date of the game.
+        tests:
+          - not_null
+
+      - name: market_type
+        description: "Betting market: 'h2h' (moneyline) or 'totals' (over/under)."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['h2h', 'totals']
+
+      - name: predicted_at
+        description: Timestamp when predict_today.py produced this prediction.
+        tests:
+          - not_null
+
+      - name: bovada_open_devig_prob
+        description: >
+          Vig-free opening implied probability for the reference side
+          (home win for h2h; over for totals), averaged across bookmakers
+          in mart_closing_line_value.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+      - name: bovada_close_devig_prob
+        description: Vig-free closing implied probability for the reference side.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+
+      - name: model_prob
+        description: >
+          Model predicted probability for the reference side
+          (consensus_win_prob for h2h; totals_model_prob for totals).
+        tests:
+          - not_null
+
+      - name: clv
+        description: >
+          bovada_close_devig_prob minus bovada_open_devig_prob. Positive means
+          the market moved toward the reference side by close.
+        tests:
+          - not_null
+
+      - name: clv_positive
+        description: "Boolean; true when clv > 0."
+        tests:
+          - not_null
+
+      - name: actual_outcome
+        description: >
+          1 if the reference side won: home team won for h2h; over won
+          (total runs > opening total line) for totals.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+
+  # ============================================================================
+  # mart_clv_label_count  (Epic 12.0)
+  # ============================================================================
+  - name: mart_clv_label_count
+    description: >
+      Single-row summary view over mart_clv_labeled_games. Canonical gate
+      threshold tracker for Epic 12. live_total_count is the authoritative
+      count checked against the 50/100/200/500/1000-game gates.

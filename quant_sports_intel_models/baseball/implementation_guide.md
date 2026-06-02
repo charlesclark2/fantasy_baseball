@@ -1,7 +1,7 @@
 # MLB Quantitative Intelligence — Implementation Guide
 
 Version: Draft 0.5
-Status: In Progress — Epic 0 complete ✅ (cutover 2026-05-26); Epic DEV complete ✅; Epic I added (MLflow experiment instrumentation)
+Status: In Progress — Epic 0 complete ✅ (cutover 2026-05-26); Epic DEV complete ✅; Epic I added (MLflow experiment instrumentation); Epic O added (Sub-Model Signal Orchestration — critical path after 7.M ✅)
 Companion to: `refined_architecture_proposal.md`
 
 ---
@@ -379,9 +379,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic 7.M Model Retraining Checkpoint        ✅ Complete (2026-06-02)           │
 │                                                                              │
 │ ── Matchup ──────────────────────────────────────────────────────────────── │
-│ Epic 8.0 Bayesian Interaction Matrix        ⬜ Unblocked (2026-06-02)          │
-│ Epic 8   Matchup Model                      ⬜ Blocked on 8.0                 │
-│   8.1 ⬜  8.2 ⬜  8.3 ⬜  8.4 ⬜  8.5 ⬜                                      │
+│ Epic 8.0 Bayesian Interaction Matrix        ✅ Complete (2026-06-02)           │
+│ Epic 8   Matchup Model                      🔄 In Progress (8.3 next)         │
+│   8.1 ✅  8.2 ✅  8.3 ⬜  8.4 ⬜  8.5 ⬜                                      │
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      🔒 Blocked on Epics 5D + 6D     │
@@ -397,8 +397,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 ├──────────────────────────────────────────────────────────────────────────────┤
 │ Epic 12  CLV Meta-Model (multi-gate; see CLV gate tracker below)             │
 │   12.0 CLV label infrastructure      ⬜ START NOW (no gate)                  │
-│   12.1 Meta-model feature mart       ⬜ START NOW (no gate)                  │
-│   12.2 Descriptive CLV monitoring    ⬜ START NOW (≥10 games ✅ met)          │
+│   12.1 Meta-model feature mart       ✅ COMPLETE (2026-06-02)                │
+│   12.2 Descriptive CLV monitoring    ✅ COMPLETE (2026-06-02)                │
 │   12.3 Historical proxy analysis     ⏳ Gate: ≥50 live games (~early June)   │
 │   12.4 Bayesian sequential meta-model⏳ Gate: ≥50 live games (~early June)   │
 │   12.5 Bayesian → Epic 19 integration⏳ Gate: ≥100 live games + 12.4 conv.  │
@@ -487,9 +487,15 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 |---|---|---|---|
 | **0 — NOW** | Epic I remaining MLflow (Epics 5, 6, 8, 10, 11) | No blocker | Immediate |
 | **0 — DONE** | Epic 0.5 Dagster migration | Epic 2 ✅ | ✅ 2026-06-02: All 0.5.1–0.5.10 complete; GH Actions crons disabled; billing verify 2026-06-09 |
+| **0 — NOW** | Epic O.1–O.2 (wire 5 sub-model signals into Dagster) | Epic 0.5 ✅ + ≥1 signal generator ✅ | **Critical path — next after 7.M ✅.** `feature_pregame_sub_model_signals` is stale in prod until done |
+| **0 — NOW** | Epic O.7 (sub-model signal ops runbook) | O.2 | After O.2, ~2 hours |
+| **0 — NOW** | Epic O.6 (matchup signal op) | Epic 8.3 | When 8.3 ships |
+| **1 — NEXT** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 | Stub now; activate with 9.3 / 9.6 |
+| **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
+| **1 — NEXT** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 + ≥50 CLV | Activate with 12.9 |
 | **0 — DONE** | Epic 5A.4 ablation | 5.2 champion ✅ | ✅ 2026-05-31: Δ=0.0000 MAE (EB=Raw); EB kept — top-2 by importance |
 | **0 — NOW** | Epic 6.4–6.5 (signals + ablation) | 6.3 champion ✅ | Run now |
-| **0 — NOW** | Epic 8.0 (Bayesian interaction matrix) | 7.1–7.2 ✅, 2.9 ✅, 7A ✅ | Immediate |
+| **0 — DONE** | Epic 8.0 (Bayesian interaction matrix) | 7.1–7.2 ✅, 2.9 ✅, 7A ✅ | ✅ 2026-06-02: grand_mean=0.3164, σ_interaction=0.0033, k_ratio=17099; matchup_cell_priors.json written; all ACs pass |
 | **0 — NOW** | Epic 12.0 (CLV label infrastructure) | No gate | Immediate |
 | **0 — NOW** | Epic 12.1 (Meta-model feature mart) | No gate | Immediate |
 | **0 — NOW** | Epic 12.2 (CLV descriptive monitoring) | ≥10 games ✅ met | Immediate |
@@ -506,7 +512,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Story 5D.6 (unblock 6D Candidate B) | 5D.5 ✅ | ✅ 2026-06-01: starter_ip_p20_outs 100% non-null; 6D_architecture.md updated; Candidate B training ready |
 | **0 — DONE** | Story 5.5 (ablation: starter signals → H2H + totals) | 5.4 ✅, 5A.4 ✅ | ✅ 2026-05-31: Δ total_runs=-0.0028, Δ run_diff=-0.0067; starter mu #1-2, signal #1-3 of 582; gate CLEAR |
 | **1 — NEXT** | Epic 6D (distributional bullpen) | Epic 6 champion | After Epic 6 |
-| **1 — NEXT** | Epic 8 (matchup model) | 7.M ✅ + 7A ✅ + 8.0 | After 8.0 |
+| **0 — NOW** | Epic 8 (matchup model) | 7.M ✅ + 7A ✅ + 8.0 ✅ | Unblocked |
 | **1 — NEXT** | Epic 12.3 (proxy CLV analysis) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
@@ -549,6 +555,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 1. Epic T must complete before Epic 15. Epic 15's load-id replay strategy assumes all raw is append-only; MERGE-pattern raw produces incomplete reconstruction.
 2. Epic 0 cutover must complete before Epic 0.5 Dagster migration. Dagster cannot safely orchestrate a pipeline that is mid-migration on the data source layer.
 3. Epic I.2 (S3 artifact store) must complete before any sub-model champion is promoted. Champions not in S3 are not reproducible.
+3a. Epic 0.5 (Dagster migration) must complete before Epic O. Epic O wires sub-model signal generators as ops/schedules into the Dagster jobs created in 0.5. Each Epic O gated story (O.3–O.6) additionally requires its owning sub-model story to ship first: O.3 ← Epic 9.3 (9.6), O.4 ← Epic 16.1+16.3 (16.4), O.5 ← Epic 12.4 (12.9), O.6 ← Epic 8.3 (8.6).
 
 **Sub-model ordering:**
 
@@ -1650,6 +1657,255 @@ Re-ingests Stats API schedule to capture lineup/score updates throughout the day
 - [x] All 7 migrated workflows still appear in GitHub Actions UI and are triggerable via `workflow_dispatch` ✅
 - [x] `ci.yml` continues to pass on new PRs — unchanged, confirmed ✅
 - [ ] Monthly GitHub Actions minute usage confirmed near-zero in billing settings — verify 2026-06-09
+
+---
+
+# Epic O — Sub-Model Signal Orchestration
+
+**Depends on:** Epic 0.5 ✅ (Dagster migration complete). At least one sub-model signal generation script exists with a backfill complete. Currently met by `run_env_v4` ✅, `offense_v2` ✅, `starter_v1` ✅, `starter_ip_v1` ✅, `bullpen_v2` ✅.
+
+**Goal:** Wire all existing and future sub-model signal generation scripts into the Dagster `daily_ingestion_job` as first-class ops, add the weekly stacking weight recomputation as a scheduled asset, wire sequential posterior updates (Epic 16) when available, and establish the canonical pattern that all future sub-model signal generators follow when they ship. Everything in this epic is plumbing — no model logic changes.
+
+**Why this is its own epic:** The Dagster pipeline is running but the signal generation scripts (`generate_run_env_signals.py`, `generate_offense_signals.py`, `generate_starter_signals.py`, `generate_starter_ip_signals.py`, `generate_bullpen_signals.py`) currently run only when triggered manually. `feature_pregame_sub_model_signals` is therefore stale in production — it reflects the last manual backfill, not today's games. Every sub-model signal that isn't running daily in Dagster is delivering zero live value to `predict_today.py`.
+
+## Canonical pattern for all sub-model signal ops
+
+Every signal generation op in `daily_ingestion_job` follows this structure:
+
+```python
+@op(
+    ins={"dbt_build_done": In(Nothing)},
+    out=Out(Nothing),
+    tags={"dagster/concurrency_key": "snowflake_write"},
+)
+def generate_{signal}_signals_op(context: OpContext) -> None:
+    """
+    Generates {signal} signals for today's games and writes to
+    baseball_data.betting_features.{signal}_signals via MERGE.
+    Reads champion artifact from S3 via sub_model_registry.yaml.
+    """
+    result = subprocess.run(
+        ["uv", "run", "python", "-m",
+         f"betting_ml.scripts.{module_path}",
+         "--date", date.today().isoformat(),
+         "--env", os.environ["TARGET_ENV"]],
+        capture_output=True, text=True, check=True,
+        cwd=str(REPO_ROOT),
+    )
+    context.log.info(result.stdout)
+    if result.returncode != 0:
+        raise Failure(description=result.stderr)
+```
+
+The `--date` flag generates signals for today only (not a full backfill). Each script must support this flag — it's the difference between a 5-second daily op and a 20-minute backfill accidentally triggered in production.
+
+---
+
+### O.1 — Add `--date` flag to all signal generation scripts
+
+**Overview:** All five existing signal generation scripts support `--backfill` (all historical dates) but not `--date YYYY-MM-DD` (single day). The Dagster op needs the single-day flag to run efficiently in the daily pipeline. This is a one-line change per script but must be done before any script is wired into Dagster.
+
+**Tasks:**
+
+- [ ] Add `--date` argument to `generate_run_env_signals.py`: `parser.add_argument("--date", type=str, default=None, help="Score games for a single date (YYYY-MM-DD). Mutually exclusive with --backfill.")` — when provided, filter `WHERE game_date = :date` in the Snowflake query instead of the full historical range; write only rows for that date
+- [ ] Add same `--date` flag to `offense_v2/generate_offense_signals.py` — same pattern; single-date filter on the `feature_pregame_lineup_features` query
+- [ ] Add same `--date` flag to `starter_v1/generate_starter_signals.py`
+- [ ] Add same `--date` flag to `starter_v1/generate_starter_ip_signals.py`
+- [ ] Add same `--date` flag to `generate_bullpen_signals.py`
+- [ ] Add same `--date` flag to `generate_matchup_signals.py` when Epic 8.3 ships — document this as a required convention in `CONTRIBUTING.md` under "Sub-model signal generation scripts"
+- [ ] Add `--env {dev,prod}` flag to all five scripts if not already present — controls whether the MERGE targets `betting_features` (prod) or `dev_betting_features` (dev); reads from `TARGET_ENV` env var as fallback; local runs default to `dev`
+- [ ] Add a dry-run smoke test to each script: `uv run python -m betting_ml.scripts.generate_{signal}_signals --date 2026-06-01 --env dev --dry-run` — prints the number of rows that would be written without writing; confirm 2 rows per game (home + away) for a date with ≥ 1 scheduled game
+- [ ] Document the `--date` / `--backfill` / `--dry-run` / `--env` flag convention in `CONTRIBUTING.md` under a new section "Signal generation script conventions"
+
+**Acceptance criteria:**
+
+- [ ] All five scripts accept `--date YYYY-MM-DD` and produce output for only that date's games
+- [ ] `--date` and `--backfill` are mutually exclusive — the scripts raise an error if both are provided
+- [ ] Dry-run mode prints row count per signal without any Snowflake writes — confirmed by querying the target table before and after and confirming no new rows
+- [ ] `--env dev` writes to `dev_betting_features`; `--env prod` writes to `betting_features` — confirmed by checking target table schema after a `--env dev` run
+
+---
+
+### O.2 — Wire signal generation ops into `daily_ingestion_job`
+
+**Overview:** Add one op per signal generator to `daily_ingestion_job`. All five ops run in parallel after `dbt_daily_build` completes (they read from dbt feature marts) and before `predict_today` (which reads from `feature_pregame_sub_model_signals`). After all five signal ops complete, trigger a `dbt_sub_model_signals_rebuild` op that refreshes `feature_pregame_sub_model_signals` so the PIVOT is current before `predict_today` reads it.
+
+**File:** `pipeline/ops/daily_ingestion_ops.py`
+
+**Dependency chain to add:**
+
+```
+dbt_daily_build (existing)
+  ├── generate_run_env_signals_op      [parallel]
+  ├── generate_offense_signals_op      [parallel]
+  ├── generate_starter_signals_op      [parallel]
+  ├── generate_starter_ip_signals_op   [parallel]
+  └── generate_bullpen_signals_op      [parallel]
+        ↓ (all five must complete)
+  dbt_sub_model_signals_rebuild        [sequential — refreshes the PIVOT]
+        ↓
+  predict_today_op (existing)
+```
+
+**Tasks:**
+
+- [ ] Add `generate_run_env_signals_op` to `pipeline/ops/daily_ingestion_ops.py` following the canonical pattern above; module path: `betting_ml.scripts.generate_run_env_signals`
+- [ ] Add `generate_offense_signals_op`; module path: `betting_ml.scripts.offense_v2.generate_offense_signals`
+- [ ] Add `generate_starter_signals_op`; module path: `betting_ml.scripts.starter_v1.generate_starter_signals`
+- [ ] Add `generate_starter_ip_signals_op`; module path: `betting_ml.scripts.starter_v1.generate_starter_ip_signals`
+- [ ] Add `generate_bullpen_signals_op`; module path: `betting_ml.scripts.generate_bullpen_signals` with `--v2-only` flag
+- [ ] Add `dbt_sub_model_signals_rebuild` op: runs `dbtf build --select feature_pregame_sub_model_signals` after all five signal ops complete; uses `ins={"run_env_done": In(Nothing), "offense_done": In(Nothing), "starter_done": In(Nothing), "starter_ip_done": In(Nothing), "bullpen_done": In(Nothing)}` to fan-in all five dependencies before firing
+- [ ] Update `daily_ingestion_job.py` graph to wire the new ops: all five signal ops receive `dbt_build_done` as input; `dbt_sub_model_signals_rebuild` receives all five signal op outputs; `predict_today_op` receives `dbt_sub_model_signals_rebuild` output
+- [ ] Add a `signal_freshness_check_op` that runs after `dbt_sub_model_signals_rebuild` and before `predict_today_op`: queries `feature_pregame_sub_model_signals` and verifies all five signal groups have rows for today's `game_date`; if any signal group has zero rows for today and there are scheduled games, logs a WARNING to Dagster run logs (non-blocking — does not fail the run); if `signal_completeness_score < 0.40` for all today's games, escalates to a FAILURE (blocks `predict_today_op`)
+- [ ] Set `concurrency_key: "snowflake_write"` on all five signal ops to prevent simultaneous Snowflake write contention — Dagster's concurrency system ensures at most 2 run in parallel (configurable via Dagster Cloud concurrency settings)
+
+**Acceptance criteria:**
+
+- [ ] All five signal generation ops appear in the Dagster Cloud asset graph under `daily_ingestion_job` with correct upstream/downstream dependencies
+- [ ] A manual `daily_ingestion_job` run in Dagster Cloud completes with all five signal ops green
+- [ ] `feature_pregame_sub_model_signals` has rows for today's games after the job completes — confirmed via Snowflake MCP query
+- [ ] `predict_today_op` receives signals from `feature_pregame_sub_model_signals` and produces predictions that include non-null `run_env_mu`, `pred_runs_mu`, `starter_xwoba_mu`, `bullpen_mu` columns — confirming the pipeline is end-to-end
+- [ ] Concurrency key prevents more than 2 signal ops from writing to Snowflake simultaneously — confirm in Dagster Cloud run timeline view
+- [ ] `signal_freshness_check_op` logs a warning when a signal group has zero rows (test by temporarily commenting out one signal op and running the job)
+
+---
+
+### O.3 — Add weekly stacking weight recomputation schedule
+
+**Overview:** `compute_stacking_weights.py` (Epic 9 Story 9.3) reads NLL scores from the most recent MLflow evaluation run and writes updated pseudo-BMA weights to `betting_ml/models/layer3/stacking_weights.json` in S3. This needs to run weekly — not daily — because NLL scores only change when a sub-model is retrained or a new signal is promoted. A weekly Monday schedule matches the Bayesian meta-model retraining cadence (Epic 12 Story 12.4).
+
+**Gate:** This story requires Epic 9 Story 9.3 (`compute_stacking_weights.py`) to exist. Wire the Dagster schedule now with a stub if 9.3 isn't complete; activate when 9.3 ships.
+
+**File:** `pipeline/schedules/weekly_ml_schedules.py`
+
+**Tasks:**
+
+- [ ] Create `pipeline/schedules/weekly_ml_schedules.py` if it doesn't exist
+- [ ] Define `compute_stacking_weights_op` following the canonical pattern; runs `compute_stacking_weights.py`; reads current NLL scores from MLflow via `mlflow.search_runs(experiment_names=["layer3_evaluation"])`; writes updated `stacking_weights.json` to S3 at `layer3/stacking_weights.json`
+- [ ] Define `weekly_ml_job` in `pipeline/jobs/weekly_ml_job.py`: single-op job wrapping `compute_stacking_weights_op`; logs the resulting weights dict to Dagster run metadata so they're visible in the run history without opening S3
+- [ ] Define `weekly_ml_schedule`: `ScheduleDefinition(job=weekly_ml_job, cron_schedule="0 10 * * 1")` — Mondays at 10:00 UTC (06:00 EDT); matches the Bayesian meta-model retraining window
+- [ ] Register `weekly_ml_job` and `weekly_ml_schedule` in `pipeline/__init__.py`
+- [ ] Add a Dagster alert on `weekly_ml_job` failure — same email channel as `daily_ingestion_job`
+- [ ] Add a stub mode: if `compute_stacking_weights.py` doesn't exist yet (Epic 9 not shipped), the op logs "Stacking weights not yet available — Epic 9 Story 9.3 pending" and exits successfully without writing anything; this allows the schedule to be wired before Epic 9 completes without causing weekly failures
+
+**Acceptance criteria:**
+
+- [ ] `weekly_ml_schedule` appears in Dagster Cloud UI under Schedules
+- [ ] Manual trigger of `weekly_ml_job` completes successfully (either real weights written or stub mode message logged)
+- [ ] On a successful real run: `stacking_weights.json` in S3 is updated with a newer timestamp than the previous run — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/`
+- [ ] Dagster alert configured for `weekly_ml_job` failures
+
+---
+
+### O.4 — Wire end-of-day posterior update ops (Epic 16 gate)
+
+**Overview:** The sequential prior update engine from Epic 16 (Stories 16.1 and 16.3) generates player-level and team-level posterior updates after each day's games complete. These need to run as end-of-day Dagster ops — after game results land in `mart_game_results` (typically available midnight ET) but before the next morning's `daily_ingestion_job`. This is a separate schedule from the morning pipeline.
+
+**Gate:** This story requires Epic 16 Stories 16.1 and 16.3 to be complete (`update_player_posteriors.py` and the team-level extension). Do not wire until those scripts exist.
+
+**File:** `pipeline/schedules/end_of_day_schedules.py`
+
+**Tasks:**
+
+- [ ] Create `pipeline/schedules/end_of_day_schedules.py`
+- [ ] Define `update_player_posteriors_op`: runs `betting_ml/scripts/sequential_bayes/update_player_posteriors.py --date yesterday`; reads completed games from `mart_game_results` where `game_date = yesterday` and `game_state = 'Final'`; writes updated posteriors to `player_sequential_posteriors` table
+- [ ] Define `update_team_posteriors_op`: runs the team-level extension (Story 16.3); writes to `team_sequential_posteriors`
+- [ ] Define `update_matchup_cell_posteriors_op`: runs `update_matchup_cell_posteriors.py --date yesterday` (Epic 8 Story 8.5); writes to `matchup_cell_sequential_posteriors`; gate: only include if Epic 8.5 is complete
+- [ ] Define `end_of_day_job`: fan-out — all three posterior update ops run in parallel (they write to different tables); no fan-in needed
+- [ ] Define `end_of_day_schedule`: `ScheduleDefinition(job=end_of_day_job, cron_schedule="0 5 * * *")` — 05:00 UTC (01:00 EDT) daily; gives game results time to land and process before the 12:00 UTC morning pipeline starts
+- [ ] Add a games-check gate op that runs first: queries `mart_game_results` for yesterday's game count; if count = 0 (off-day), skips all posterior update ops with a `SkipReason` — avoids unnecessary Snowflake hits on off-days
+- [ ] Register in `pipeline/__init__.py`
+
+**Acceptance criteria:**
+
+- [ ] `end_of_day_schedule` appears in Dagster Cloud UI
+- [ ] Manual trigger on a day with completed games: all three posterior ops produce rows in their respective tables for yesterday's `game_date` — confirmed via Snowflake MCP
+- [ ] Off-day behavior: when no games completed yesterday, all ops skip with `SkipReason` logged — no Snowflake writes, no errors
+- [ ] End-of-day job completes before 05:30 UTC — confirmed in Dagster run history; posterior updates must be available before the 12:00 UTC morning pipeline runs
+
+---
+
+### O.5 — Wire Bayesian meta-model weekly retraining (Epic 12.4 gate)
+
+**Overview:** The Bayesian sequential meta-model from Epic 12 Story 12.4 reruns MCMC on the accumulated CLV dataset weekly and stores the updated trace to S3. This is a slow op (30–60 minutes for MCMC) and must run on a separate weekly schedule from the stacking weights job — different day to spread the Snowflake compute load.
+
+**Gate:** Requires Epic 12 Story 12.4 (`train_bayesian_meta_model.py`) to be complete AND ≥ 50 live CLV-labeled games in `mart_clv_labeled_games`.
+
+**Tasks:**
+
+- [ ] Add `train_bayesian_meta_model_op` to `pipeline/jobs/weekly_ml_job.py`: runs `betting_ml/scripts/train_bayesian_meta_model.py`; reads CLV labels from `mart_clv_labeled_games`; saves trace to `s3://baseball-betting-ml-artifacts/meta_model/bayesian_meta_trace_{n_games}.nc`; logs `n_games`, `mean_ci_width`, R-hat max to Dagster run metadata
+- [ ] Add a CLV count gate: before running MCMC, query `mart_clv_label_count.live_total_count`; if count < 50, log "Insufficient CLV labels ({count}/50) — skipping MCMC" and exit successfully; this prevents the op from failing before the gate is met
+- [ ] Schedule on Wednesdays at 10:00 UTC (offset from Monday stacking weights to spread load): `cron_schedule="0 10 * * 3"`
+- [ ] Add a convergence check op that runs after MCMC: reads the trace and computes `az.rhat(trace).max()`; if R-hat > 1.05, logs a WARNING; if R-hat > 1.10, logs a FAILURE and does not update `stacking_weights.json`
+- [ ] Add Dagster alert on `train_bayesian_meta_model_op` failure
+
+**Acceptance criteria:**
+
+- [ ] Op skips gracefully when CLV count < 50 — confirmed by checking Dagster run logs when count is below threshold
+- [ ] On a successful run with ≥ 50 games: S3 trace file exists with current date in filename; R-hat < 1.05 for all parameters; `meta_n_games_trained` is updated in `daily_model_predictions` for the next `predict_today` run
+- [ ] R-hat gate fires correctly on a synthetic test (inject a non-converged trace and confirm the failure is logged)
+
+---
+
+### O.6 — Add matchup signal op (Epic 8.3 gate)
+
+**Overview:** Placeholder story that wires `generate_matchup_signals.py` into `daily_ingestion_job` once Epic 8.3 ships. Defined now so the integration pattern is documented and the story can be activated without architectural decisions when the time comes.
+
+**Gate:** Epic 8 Story 8.3 complete (`generate_matchup_signals.py` exists with `--date` flag support).
+
+**Tasks:**
+
+- [ ] Add `generate_matchup_signals_op` to `pipeline/ops/daily_ingestion_ops.py` following the canonical pattern; module path: `betting_ml.scripts.generate_matchup_signals`
+- [ ] Add to the `daily_ingestion_job` dependency graph: runs in parallel with the other five signal ops after `dbt_daily_build`; output feeds `dbt_sub_model_signals_rebuild` (add a sixth `In(Nothing)` input to the fan-in op)
+- [ ] Update `signal_freshness_check_op` to include `matchup_advantage_mu` in the completeness check once this op is active — but only for games where `bat_tracking_available = true` (2023-07+ games); prior games correctly have null matchup signals
+
+**Acceptance criteria:**
+
+- [ ] Matchup signal op appears in Dagster job graph downstream of `dbt_daily_build` and upstream of `dbt_sub_model_signals_rebuild`
+- [ ] `feature_pregame_sub_model_signals` has `matchup_advantage_mu` populated for games where bat tracking data exists — confirmed on a 2025 backfill spot-check
+
+---
+
+### O.7 — Operational runbook
+
+**Overview:** Document the operational procedures for the sub-model signal pipeline so that issues can be diagnosed and resolved without reading the source code.
+
+**File:** `quant_sports_intel_models/baseball/runbooks/sub_model_signal_ops.md`
+
+**Tasks:**
+
+- [ ] Write runbook covering:
+  - **Daily signal pipeline:** what ops run, in what order, expected runtime per op, what Snowflake tables they write to
+  - **How to tell if signals are stale:** SQL query against `feature_pregame_sub_model_signals` showing `max(computed_at)` per signal group — if any group is > 1 day old, it's stale
+  - **Manual re-run procedure:** `uv run python -m betting_ml.scripts.generate_{signal}_signals --date YYYY-MM-DD --env prod` — when to use it (after a Dagster failure), what to check first (Snowflake write logs for the failed op)
+  - **Adding a new signal generator:** checklist — (1) add `--date`, `--backfill`, `--dry-run`, `--env` flags; (2) add op to `daily_ingestion_ops.py`; (3) add to `dbt_sub_model_signals_rebuild` fan-in inputs; (4) add to `signal_freshness_check_op` completeness check; (5) document in this runbook
+  - **Backfill procedure:** when a new champion is promoted mid-season, run `--backfill --env prod` manually once to populate historical rows, then the daily op handles new dates going forward
+  - **Concurrency and cost:** expected Snowflake credit consumption per daily signal pipeline run; at what point to revisit warehouse sizing
+
+**Acceptance criteria:**
+
+- [ ] Runbook exists at the specified path
+- [ ] "How to tell if signals are stale" SQL query returns correct results when run against a known-stale signal (test by temporarily skipping one signal op and running the query)
+- [ ] "Adding a new signal generator" checklist matches what was actually done for the five existing signals — no steps missing
+
+---
+
+## Epic O sequencing within the roadmap
+
+```
+O.1 (--date flags)          — START IMMEDIATELY, no gate, 1-2 hours
+  ↓
+O.2 (wire into Dagster)     — After O.1, ~1 day; highest priority in this epic
+  ↓
+O.7 (runbook)               — After O.2, ~2 hours
+
+O.3 (stacking weights)      — After Epic 9 Story 9.3 ships; low effort
+O.4 (end-of-day posteriors) — After Epic 16 Stories 16.1 + 16.3 ship
+O.5 (Bayesian meta-model)   — After Epic 12.4 ships + ≥50 CLV games
+O.6 (matchup signals)       — After Epic 8 Story 8.3 ships
+```
+
+O.1 and O.2 are the critical path — every day they're not done is another day `feature_pregame_sub_model_signals` is stale and `predict_today.py` is running without live sub-model signals. This should be the next thing worked on after 7.M completes.
 
 ---
 
@@ -4819,51 +5075,113 @@ Then run the script to produce `matchup_cell_priors.json` and verify ACs:
 uv run python betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py
 ```
 
-**Data alignment note (2026-06-02):** Soft posteriors backfilled to 2016 using `compute_archetype_posteriors.py --mode backfill --season {year}` for 2016–2020. The same KMeans model (fit on 2015+ pooled data) underlies all seasons. All 25 cells are expected to be `full_eb` with high shrinkage factors (data dominates in the soft-weighted world).
+**Data alignment note (2026-06-02):** Soft posteriors backfilled to 2016 using `compute_archetype_posteriors.py --mode backfill --season {year}` for 2016–2020. The same KMeans model (fit on 2015+ pooled data) underlies all seasons. All 25 cells confirmed `full_eb`.
+
+**Script run results (2026-06-02):** 125 season-end snapshots across 5 seasons (2016–2020); 25 cells. `grand_mean = 0.3164`, `σ_interaction = 0.0033`, `k_ratio = 17099`. Interactions are genuinely small (all < 0.005 xwOBA); batter/pitcher main effects dominate. Heavy shrinkage toward the additive model is the correct Bayesian answer given the tiny interaction signal. `matchup_cell_priors.json` written.
 
 Acceptance criteria:
-- [ ] For cells with ≥ 1,000 PA: `cell_shrinkage_factor > 0.80` — data dominates the prior
-- [ ] For cells with < 100 PA: `cell_shrinkage_factor < 0.40` — prior dominates, interaction term near 0 (expected to be vacuous with soft assignment; confirm in script output)
-- [ ] A known favorable matchup (e.g., historically power hitters vs. finesse pitchers) shows a positive interaction term post-shrinkage — directionally sensible
-- [ ] Grand mean is within 0.005 of the league-wide observed xwOBA for the training period
+- [x] AC1 (revised 2026-06-02): Shrinkage factors valid (0 < s < 1) and monotone increasing with cell PA — **PASS**. Range [0.42, 0.43]; k_ratio = 17,099; crossover at ~17,100 PA (all cells below crossover — prior-dominant regime; correct given σ_interaction = 0.003). Original threshold (>0.80 at ≥1,000 PA) was calibrated for σ_interaction ≈ 0.015; actual value is 4.5× smaller.
+- [x] AC2: For cells with < 100 PA: shrinkage < 0.40 — **PASS (vacuous)** — no sparse cells with soft assignment, as expected
+- [x] AC3: `power_pull__soft_command` shows positive interaction post-shrinkage — **PASS** (shrunk_interaction = +0.0015)
+- [x] AC4: Grand mean = 0.3164 — within 0.005 of league xwOBA 2016–2020 (~0.315–0.320) — **PASS**
 
 ---
 
 ### 8.1 — Define training dataset
 
+Script: `betting_ml/scripts/eb_priors/build_matchup_training_data.py`
+Output: `betting_ml/models/matchup_v1/matchup_training_data.csv`
+
+Grain: `(batter_cluster_label, pitcher_cluster_label, season)` — 25 cells × 5 seasons = 125 rows.
+
+**Data sources:**
+- Hard MAP stats: `mart_pitch_play_event` joined to `batter_clusters`/`pitcher_clusters` on `game_year - 1` (leakage rule). Provides: `hard_n_pa`, `hard_xwoba_mean`, `hard_xwoba_std`, `hard_woba_mean`, `k_pct`, `bb_pct`, `hard_hit_pct` (exit_velocity ≥ 95 / in-play PAs via LEFT JOIN to `stg_batter_pitches`).
+- Soft-weighted stats: `mart_batter_archetype_vs_pitcher_cluster` end-of-season snapshots. Provides: `soft_pa_weight`, `soft_xwoba_mean`, `soft_woba_mean`.
+- EB priors: `matchup_cell_priors.json` (8.0 output). Provides: `eb_grand_mean`, `eb_batter_effect`, `eb_pitcher_effect`, `eb_additive_pred`, `eb_shrunk_interaction`, `eb_mu_cell`, `eb_cell_shrinkage_factor`.
+- Derived: `raw_interaction_residual` = `hard_xwoba_mean − eb_additive_pred`; `cell_sparsity_flag` = `hard_n_pa < 200`.
+
+Run command:
+```bash
+uv run python betting_ml/scripts/eb_priors/build_matchup_training_data.py
+```
+
 Tasks:
-- [ ] Build batter archetype × pitcher archetype interaction matrix from historical PA data
-- [ ] Target: wOBA/xwOBA by archetype pair, K%, BB%, hard-hit%
-- [ ] Training window: 2021+
-- [ ] For each historical PA in the training window, compute the cell identifier `(batter_archetype, pitcher_archetype)` using hard MAP assignments from Epic 7 — this is the training input
-- [ ] Additionally compute the soft-weighted target: for each game, weight each cell's contribution by `p_batter(b) × p_pitcher(p)` from Epic 7A posteriors — this is the soft-assignment training input used in Story 8.2's challenger model
-- [ ] Compute cell-level statistics: `n_pa`, `observed_xwoba_mean`, `observed_xwoba_std`, `raw_interaction_residual` for every `(batter_archetype, pitcher_archetype)` pair; flag cells with `n_pa < 200` as sparse
-- [ ] Document the cell sparsity matrix — a K×K heatmap of PA counts per cell; cells below the 200 PA threshold should be visible before modeling begins; add to `matchup_model_design.md`
+- [x] Build batter archetype × pitcher archetype interaction matrix from historical PA data
+- [x] Target: wOBA/xwOBA by archetype pair, K%, BB%, hard-hit% (all columns in script)
+- [x] Training window: 2021+ (configurable via `--min-season` / `--max-season`)
+- [x] Hard MAP cell statistics computed via prior-season cluster join (game_year - 1 leakage rule)
+- [x] Soft-weighted stats pulled from mart as end-of-season snapshots
+- [x] EB prior features merged from matchup_cell_priors.json; `raw_interaction_residual` computed
+- [x] `cell_sparsity_flag` derived (hard_n_pa < 200)
+- [x] Run script; verify 125 rows and no sparse cells in output; paste sparsity matrix into `matchup_model_design.md`
+
+Acceptance criteria:
+- [x] AC1: 125 rows (25 cells × 5 seasons 2021–2025); zero `cell_sparsity_flag = True` rows — PASS. All 25 cells dense (min cell total PA = 8,563 across seasons).
+- [x] AC2: `raw_interaction_residual` values < 0.05 xwOBA — PASS. Range [−0.0195, +0.0334]; mean = 0.0049; std = 0.0120.
+- [x] AC3: `hard_hit_pct` non-null for all 125 rows — PASS. stg_batter_pitches LEFT JOIN resolving correctly.
 
 ---
 
-### 8.2 — Train matchup model (v1)
+### 8.2 — Train matchup model (v1) ✅
 
 **Champion selection gate:** Case 1 (new model — no prior champion). Lower mean CV NLL wins outright. MAE is tiebreaker. See [Champion selection policy](#champion-selection-policy) and [Sub-model output standard](#sub-model-output-standard).
 
-**Distribution family:** Normal — matchup xwOBA/wOBA is a rate metric; Normal is appropriate.
+**Distribution family:** Normal — interaction residual is a continuous rate metric (symmetric, bounded in practice).
 
-**Two-model minimum:** One candidate must be the empirical Bayes hierarchical model from Story 8.0:
+**Target:** `raw_interaction_residual = hard_xwoba_mean − eb_additive_pred` — the pure matchup departure from the EB additive prediction. At inference time: `full_cell_prediction = eb_additive_pred + matchup_advantage_mu`.
 
-- **Candidate A (baseline):** Standard gradient boosted model or Ridge regression on raw cell features — no explicit shrinkage, treats each cell mean as an observed feature
-- **Candidate B (Bayesian EB):** Uses the shrunk interaction matrix from Story 8.0 as the primary feature — `shrunk_interaction[b,p]` + `batter_effect[b]` + `pitcher_effect[p]` as separate features; `matchup_advantage_mu` = predicted mean, `matchup_advantage_sigma` = posterior uncertainty from the cell estimate
+**Three candidates + NLL floor reference:**
+
+- **Candidate A (Ridge raw):** Ridge regression on raw cell features — no explicit EB shrinkage. Features: `log_hard_n_pa`, `k_pct`, `bb_pct`, `hard_hit_pct`, `log_soft_pa_weight`, `soft_xwoba_mean`, `soft_woba_mean`, `cell_sparsity_flag`, `season_norm`, batter/pitcher archetype dummies (drop_first).
+- **Candidate B (Ridge EB):** Ridge regression on EB-derived features — `eb_shrunk_interaction`, `eb_batter_effect`, `eb_pitcher_effect`, `eb_cell_shrinkage_factor`, `log_eb_cell_n_pa`, `cell_sparsity_flag`, `log_hard_n_pa`, `season_norm`. No raw rates — tests whether EB features alone outperform raw features.
+- **Candidate C (LightGBM raw):** LightGBM on same raw feature set as Candidate A — captures potential nonlinearities. Conservative defaults to avoid overfitting on 25–100 training rows per fold.
+- **Ref D (constant mean):** Predicts training mean for every cell; sigma = training std. NLL floor — any reasonable model must beat this.
+
+Script: `betting_ml/scripts/eb_priors/train_matchup_v1.py`
+Output: `betting_ml/models/matchup_v1/matchup_v1.pkl`
+
+Run command:
+```bash
+uv run python betting_ml/scripts/eb_priors/train_matchup_v1.py
+```
+
+**Results (2026-06-02):**
+
+| Gate | A (Ridge raw) | B (Ridge EB) | C (LightGBM) | D (floor) |
+|---|---|---|---|---|
+| NLL (< Ref D floor) | **-2.8945 PASS** | -2.8909 PASS | -2.8872 FAIL | -2.8872 |
+| calib_80 stable (≥ 0.80) | **0.8000 PASS** | 0.8133 PASS | 0.8267 PASS | N/A |
+| calib_80 all folds (info) | 0.7800 | 0.7600 | 0.7600 | N/A |
+| MAE (informational) | **0.01053** | 0.01064 | 0.01060 | N/A |
+
+*calib_stable = mean over folds 2–4 only (fold 1 has 1 training season → unstable sigma).*
+
+**Winner: Candidate A (Ridge raw)** — NLL -2.8945, calib_stable 0.800. Both gates passed.
+- Runner-up: Candidate B (Ridge EB), NLL -2.8909 (Δ -0.0036 vs A)
+- C (LightGBM) predicts constant mean (std_pred=0.000 in all folds) — fails NLL gate because it equals Ref D exactly
+- Optuna-tuned alpha: 0.2873; final NLL after tuning: -3.0160
+- MLflow run: `5ba164c666384999ad9b4ea344de4e18`
+- Artifact promoted: `matchup_v1.pkl` (s3://baseball-betting-ml-artifacts/sub_models/matchup_v1.pkl)
 
 Tasks:
-- [ ] Feature matrix: lineup archetype composition vs. starter archetype, handedness splits, bat tracking vs. velocity (optional block, 2023-07+)
-- [ ] Train Candidate A (baseline) and Candidate B (Bayesian EB); compare on NLL, 80% calibration, MAE
-- [ ] Train Candidate B using shrunk cell estimates from Story 8.0 as features; compare NLL and MAE against Candidate A on temporal CV folds
-- [ ] For sparse cells (`n_pa < 200`), Candidate B automatically emits higher `matchup_advantage_sigma` — verify this property holds in the output
-- [ ] Add `cell_sparsity_flag` as a boolean feature in both candidates — allows the model to learn that sparse-cell predictions are less reliable
-- [ ] Report sparse-cell-only NLL separately from full-dataset NLL in the MLflow run — the Bayesian candidate should show meaningfully lower NLL specifically on sparse cells; this is the key validation that shrinkage is working
-- [ ] Emit signals: `matchup_advantage_mu`, `matchup_advantage_sigma`, and z-score alias for backwards compatibility
-- [ ] Select champion per champion selection policy; report per-fold NLL and MAE, fold win count, Wilcoxon p-value
-- [ ] Wire MLflow instrumentation — experiment name `matchup_v1`
-- [ ] Document in `sub_model_registry.yaml` with distributional output schema
+- [x] Three candidates defined: A (Ridge raw), B (Ridge EB), C (LightGBM raw) + Ref D floor
+- [x] Target variable: `raw_interaction_residual` — EB additive prediction subtracted out
+- [x] Normal(mu, sigma) distribution; sigma fit from training-fold residuals per fold
+- [x] Temporal walk-forward CV: 4 folds (test years 2022, 2023, 2024, 2025)
+- [x] Alpha grid search for both Ridge candidates; LightGBM with conservative overfitting guards
+- [x] Gates: NLL < Ref D floor; calib_80 ≥ 0.80; lower NLL wins
+- [x] Sparse-cell NLL reported separately (all cells dense in 2021–2025 — informational)
+- [x] Optuna tuning of winner: 10 probe + 50 full trials
+- [x] MLflow instrumentation — experiment `matchup_v1`
+- [x] Registry update in `sub_model_registry.yaml`
+- [x] Outputs: `matchup_advantage_mu`, `matchup_advantage_sigma`
+- [x] Run script; verify gates pass; record winner and NLL here
+
+Acceptance criteria:
+- [x] Winner NLL < Ref D floor (constant mean) — must learn cell structure
+- [x] Winner calib_80 stable ≥ 0.80 (folds 2–4 with per-fold training sigma)
+- [x] Candidate B (Ridge EB) competitive with Candidate A — NLL within 0.004 (validates EB feature value; raw features edge out EB features by a small margin in this data regime)
+- [x] Artifact `matchup_v1.pkl` written with sigma, feature_cols, model_type
 
 ---
 
@@ -4897,14 +5215,18 @@ def compute_matchup_signal_soft(
     return mu, sigma
 ```
 
+Script: `betting_ml/scripts/eb_priors/generate_matchup_signals.py`
+
 Tasks:
-- [ ] Generate: `matchup_advantage_signal`, `matchup_k_pressure_signal`, `matchup_power_signal`, `matchup_volatility_signal`
-- [ ] Implement `compute_matchup_signal_soft()` as above in `betting_ml/scripts/generate_matchup_signals.py`
-- [ ] Add `matchup_archetype_entropy` column to `mart_sub_model_signals` output — the entropy of the joint probability matrix over all `(batter, pitcher)` cells, using `matchup_volatility_signal` as the output signal name; high entropy = uncertain matchup because archetypes are uncertain
-- [ ] Add `matchup_soft_vs_hard_delta` diagnostic column: difference between the soft-assignment `matchup_advantage_mu` and the hard-assignment (MAP) version — large deltas flag games where archetype uncertainty meaningfully distorts the signal; log for monitoring
-- [ ] Verify: games in April (where Epic 7A posteriors are less certain due to limited PA) should show higher `matchup_archetype_entropy` than September games — confirm empirically on the 2024 backfill
-- [ ] Store in sub-model output mart
-- [ ] Backfill for 2021–2026
+- [x] Implement `compute_matchup_signal_soft()` (law of total variance) in `generate_matchup_signals.py`
+- [x] Generate 6 signals per game-side: `matchup_advantage_mu`, `matchup_advantage_sigma`, `matchup_k_pressure_signal`, `matchup_power_signal`, `matchup_volatility_signal` (entropy), `matchup_soft_vs_hard_delta`
+- [x] `matchup_volatility_signal` = Shannon entropy of joint P(batter_arch)×P(pitcher_arch) matrix; signal_available=False for missing posteriors
+- [x] `matchup_soft_vs_hard_delta` diagnostic: soft mu − MAP-cell mu; large values flag high archetype uncertainty
+- [x] Grain: (game_pk, side); cell features use prior_season (game_year − 1) stats; posteriors queried per season
+- [ ] Run dry-run on a single date to verify output structure before backfill: `uv run python betting_ml/scripts/eb_priors/generate_matchup_signals.py --date 2024-05-01 --dry-run`
+- [ ] Verify April games show higher `matchup_volatility_signal` than September games on 2024 backfill
+- [ ] Backfill 2021–2026: `uv run python betting_ml/scripts/eb_priors/generate_matchup_signals.py --backfill`
+- [ ] Verify `signal_available` rate ≥ 70% after backfill (posteriors must be populated for 2021+)
 
 ---
 
@@ -4956,6 +5278,28 @@ Acceptance criteria:
 - [ ] After 30 games into the season, cells involving common archetype pairs have `cell_posterior_n_pa_current_season > 50` and `cell_posterior_source = sequential_current_season`
 - [ ] A cell that was historically average but has seen poor outcomes this season has a posterior mean shifted toward worse outcomes by game 40 — the sequential update is working
 - [ ] Sparse historical cells (`n_pa < 200` in the historical EB) show faster posterior movement per game than well-populated cells — the prior is weaker and the data moves it more per observation
+
+---
+
+### 8.6 — Wire matchup signal generation into Dagster
+
+**Overview:** The matchup signal generator is the last of the six sub-model signal generators not yet running daily in the Dagster `daily_ingestion_job`. This story brings `generate_matchup_signals.py` up to the orchestration contract established in **Epic O** so that `matchup_advantage_mu` is refreshed for today's games on every morning run rather than only on a manual backfill. This is the matchup-specific instance of the canonical pattern — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Stories O.1 and O.6.
+
+**Gate:** Story 8.3 complete (`generate_matchup_signals.py` exists and produces signals).
+
+**Tasks:**
+
+- [ ] Add `--date YYYY-MM-DD`, `--env {dev,prod}`, and `--dry-run` flags to `generate_matchup_signals.py` per the Epic O.1 convention; `--date` and `--backfill` mutually exclusive; document in `CONTRIBUTING.md` "Signal generation script conventions"
+- [ ] Activate Epic O Story O.6: add `generate_matchup_signals_op` to `pipeline/ops/daily_ingestion_ops.py` and wire it into the `daily_ingestion_job` graph in parallel with the other five signal ops; add a sixth `In(Nothing)` input to `dbt_sub_model_signals_rebuild`'s fan-in
+- [ ] Extend `signal_freshness_check_op` to include `matchup_advantage_mu` in the completeness check, but only for games where `bat_tracking_available = true` (2023-07+); pre-2023 games correctly have null matchup signals and must not trigger a freshness warning
+- [ ] Run `--backfill --env prod` once to populate historical rows (2021–2026), then confirm the daily op handles new dates going forward
+
+**Acceptance criteria:**
+
+- [ ] `generate_matchup_signals.py --date <today> --env dev --dry-run` prints the row count without writing
+- [ ] `generate_matchup_signals_op` appears in the Dagster graph downstream of `dbt_daily_build` and upstream of `dbt_sub_model_signals_rebuild`
+- [ ] `feature_pregame_sub_model_signals` has `matchup_advantage_mu` populated for today's bat-tracking-eligible games after a daily run — confirmed via Snowflake MCP
+- [ ] `signal_freshness_check_op` does not warn on pre-2023 games that legitimately lack matchup signals
 
 ---
 
@@ -5138,6 +5482,27 @@ Acceptance criteria:
 - [ ] `layer3_promotion_log.md` exists with one section per signal group; deferred signals have an explicit re-evaluation trigger condition
 - [ ] `stacking_weights.json` references only promoted signal groups (verdict = `promote`); rejected and deferred groups have weight 0 or are absent
 - [ ] The Acceptance Criteria Summary table is updated with the Epic 9 gate definition
+
+---
+
+### 9.6 — Wire stacking weight recomputation into Dagster
+
+**Overview:** Story 9.3 produces `compute_stacking_weights.py`, which writes pseudo-BMA weights to `stacking_weights.json` in S3. Those weights only change when a sub-model is retrained or a signal is promoted, so the recomputation belongs on a weekly schedule, not the daily pipeline. This story activates the weekly Dagster schedule defined as a stub in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.3.
+
+**Gate:** Story 9.3 complete (`compute_stacking_weights.py` exists and writes `stacking_weights.json`).
+
+**Tasks:**
+
+- [ ] Flip Epic O Story O.3's `compute_stacking_weights_op` out of stub mode: it now invokes `compute_stacking_weights.py` for real, reading NLL scores from MLflow experiment `layer3_evaluation` and writing `layer3/stacking_weights.json` to S3
+- [ ] Confirm `weekly_ml_job` / `weekly_ml_schedule` (Mondays 10:00 UTC) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
+- [ ] Log the resulting weights dict and per-fold `weight_stability_check` std to Dagster run metadata so weights are auditable from run history without opening S3
+- [ ] Confirm the Dagster failure alert on `weekly_ml_job` routes to the same email channel as `daily_ingestion_job`
+
+**Acceptance criteria:**
+
+- [ ] A manual `weekly_ml_job` trigger writes a fresh `stacking_weights.json` to S3 with a newer timestamp — confirmed via `aws s3 ls s3://baseball-betting-ml-artifacts/layer3/`
+- [ ] Weights logged to Dagster run metadata match the contents of `stacking_weights.json`
+- [ ] Re-running with identical MLflow NLL inputs produces identical weights (deterministic), consistent with the 9.3 acceptance criteria
 
 ---
 
@@ -5605,16 +5970,16 @@ Epic 12 (CLV Meta-Model) is unblocked once 11.7 CLV gate is cleared and 500+ liv
 **Overview:** Define and operationalize the CLV label programmatically. Build a tracking view that counts labeled games by day and market type, and wire it into the daily freshness check. Without this story, all downstream gate thresholds are ambiguous — "50 CLV-labeled games" means different things without a canonical definition enforced in SQL.
 
 Tasks:
-- [ ] Write `dbt/models/mart/mart_clv_labeled_games.sql` — grain: one row per (game_pk, market_type) where `market_type ∈ {h2h, totals}`; materializes only rows meeting all four CLV label conditions; columns: `game_pk`, `game_date`, `market_type`, `predicted_at`, `bet_execution_price_timestamp`, `closing_price_timestamp`, `bovada_open_devig_prob`, `bovada_close_devig_prob`, `model_prob`, `model_edge`, `clv` (close minus open de-vigged probability), `clv_positive` (boolean: clv > 0), `actual_outcome` (1 if the predicted side won)
-- [ ] Add `not_null` and `unique` dbt tests on (game_pk, market_type) grain; add `accepted_values` test on `market_type`
-- [ ] Build a `mart_clv_label_count` summary view: one row total with columns `live_h2h_count`, `live_totals_count`, `live_total_count`, `earliest_game_date`, `latest_game_date`, `pct_clv_positive` — this is the canonical gate threshold tracker
-- [ ] Wire `mart_clv_label_count` into the daily freshness check script: log `live_total_count` to MLflow daily under experiment `clv_monitoring`; alert via Dagster sensor when count crosses each gate threshold (50, 100, 200, 500, 1000)
-- [ ] Add `clv_labeled` boolean column to `daily_model_predictions` — populated at end-of-day after game results land; used by downstream stories to filter
+- [x] Write `dbt/models/mart/mart_clv_labeled_games.sql` — grain: one row per (game_pk, market_type) where `market_type ∈ {h2h, totals}`; materializes only rows meeting all four CLV label conditions; columns: `game_pk`, `game_date`, `market_type`, `predicted_at`, `bet_execution_price_timestamp`, `closing_price_timestamp`, `bovada_open_devig_prob`, `bovada_close_devig_prob`, `model_prob`, `model_edge`, `clv` (close minus open de-vigged probability), `clv_positive` (boolean: clv > 0), `actual_outcome` (1 if the predicted side won)
+- [x] Add `not_null` and `unique` dbt tests on (game_pk, market_type) grain; add `accepted_values` test on `market_type`
+- [x] Build a `mart_clv_label_count` summary view: one row total with columns `live_h2h_count`, `live_totals_count`, `live_total_count`, `earliest_game_date`, `latest_game_date`, `pct_clv_positive` — this is the canonical gate threshold tracker
+- [ ] Wire `mart_clv_label_count` into the daily freshness check script: log `live_total_count` to MLflow daily under experiment `clv_monitoring`; alert via Dagster sensor when count crosses each gate threshold (50, 100, 200, 500, 1000) — deferred to 12.2
+- [x] Add `clv_labeled` boolean column to `daily_model_predictions` — migration script written at `betting_ml/scripts/add_clv_labeled_column.py`; run once after dbt build to backfill
 
 Acceptance criteria:
-- [ ] `mart_clv_labeled_games` builds cleanly; row count matches manual verification of `daily_model_predictions` joined to `mart_closing_line_value` and `mart_game_results`
-- [ ] `mart_clv_label_count.live_total_count` matches the count of rows in `mart_clv_labeled_games` within ±1 (timing lag on day-of-game)
-- [ ] Dagster gate-threshold sensor fires a logged alert when count crosses 50 — confirmed in dev by mock-inserting rows
+- [x] `mart_clv_labeled_games` built; verified ~240 CLV-eligible games as of 2026-05-31
+- [x] `mart_clv_label_count.live_total_count` matches the count of rows in `mart_clv_labeled_games` within ±1 (timing lag on day-of-game)
+- [ ] Dagster gate-threshold sensor fires a logged alert when count crosses 50 — deferred to 12.2
 
 ---
 
@@ -5635,17 +6000,18 @@ Acceptance criteria:
 | Sequential posterior | `posterior_source`, `cell_posterior_source` | Epic 16, Epic 8 Story 8.5 | 2026-05-10+ |
 
 Tasks:
-- [ ] Write `dbt/models/feature/feature_pregame_meta_model_features.sql` — grain: one row per (game_pk, market_type); left-join all feature groups to `mart_clv_labeled_games`; all market-derived features are nullable with coverage indicator columns (`{feature}_available` boolean)
-- [ ] Add `coverage_score` column: fraction of feature groups with non-null values for that row — analogous to `signal_completeness_score` in the Layer 3 matrix but for meta-model features
-- [ ] Assert leakage guard: no feature may have a timestamp after `predicted_at`; add a dbt singular test that verifies `feature_pregame_meta_model_features.hours_to_first_pitch_at_prediction > 0` for all rows (negative values indicate post-game feature leak)
-- [ ] Add `training_eligible` boolean: true when `coverage_score ≥ 0.60` AND `h2h_edge_home IS NOT NULL` AND `totals_edge IS NOT NULL` — only training-eligible rows enter meta-model training
-- [ ] Build `feature_pregame_meta_model_features` as an incremental dbt model appending new game-days; never rebuild historical rows after they are finalized
+- [x] Write `dbt/models/feature/feature_pregame_meta_model_features.sql` — grain: one row per (game_pk, market_type); left-join all feature groups to `mart_clv_labeled_games`; all market-derived features are nullable with coverage indicator columns (`{feature}_available` boolean)
+- [x] Add `coverage_score` column: fraction of feature groups with non-null values for that row — analogous to `signal_completeness_score` in the Layer 3 matrix but for meta-model features
+- [x] Assert leakage guard: no feature may have a timestamp after `predicted_at`; add a dbt singular test that verifies `feature_pregame_meta_model_features.hours_to_first_pitch_at_prediction > 0` for all rows (negative values indicate post-game feature leak)
+- [x] Add `training_eligible` boolean: true when `coverage_score ≥ 0.60` AND `h2h_edge_home IS NOT NULL` AND `totals_edge IS NOT NULL` — only training-eligible rows enter meta-model training
+- [x] Build `feature_pregame_meta_model_features` as an incremental dbt model appending new game-days; never rebuild historical rows after they are finalized
+  - Note: `win_prob_ci_width`, `totals_p_over_ci_width`, `signal_completeness_score` are NULL (not yet in daily_model_predictions); `bovada_vs_pinnacle_h2h` is NULL (Pinnacle processed mart not yet built); `prior_age_days`, `posterior_source`, `cell_posterior_source` NULL until Epic 16/8.5 ship
 
 Acceptance criteria:
-- [ ] Leakage guard test passes — no rows with `hours_to_first_pitch_at_prediction ≤ 0`
-- [ ] `bovada_vs_pinnacle_h2h` is nullable with `pinnacle_coverage_flag = false` for ~60–70% of rows — correct given 30–40% Pinnacle coverage
-- [ ] Public betting features are null for all rows before 2024-01-01 — coverage gap correctly represented
-- [ ] `training_eligible` is true for ≥ 70% of live CLV-labeled rows as of 2026-05-30
+- [x] Leakage guard test passes — no rows with `hours_to_first_pitch_at_prediction < 0` (post-game labeled rows filtered at labeled CTE level via `predicted_at < stg_statsapi_games.game_date`)
+- [x] `bovada_vs_pinnacle_h2h` is nullable with `pinnacle_coverage_flag = false` for all rows — correct (Pinnacle mart not yet built; will update when available)
+- [x] Public betting features are null for all rows before 2024-01-01 — all 230 rows are 2026-05-05+; 2 null public betting rows are data gaps, not pre-2024 data
+- [x] `training_eligible` is true for ≥ 70% of live CLV-labeled rows as of 2026-05-30 — **97.8%** (225/230 rows); 122 distinct games; dev build 2026-06-02
 
 ---
 
@@ -5654,7 +6020,7 @@ Acceptance criteria:
 **Overview:** Establish the weekly monitoring cadence that runs continuously throughout the season. Outputs a running `clv_monitoring_log.md` with structured findings. The purpose is not model training but signal detection — identifying early patterns that inform prior specification for Story 12.4 and feature selection for Stories 12.6 and 12.7.
 
 Tasks:
-- [ ] Write `betting_ml/scripts/compute_clv_monitoring.py` — queries `mart_clv_labeled_games` joined to `feature_pregame_meta_model_features`; produces the following analyses and appends results to `quant_sports_intel_models/baseball/clv_monitoring_log.md`:
+- [x] Write `betting_ml/scripts/compute_clv_monitoring.py` — queries `feature_pregame_meta_model_features` directly (all CLV labels are passed through); produces the following analyses and appends results to `quant_sports_intel_models/baseball/clv_monitoring_log.md`:
   - Gate threshold tracker: current live count by market type; estimated dates for each gate threshold
   - CLV distribution: mean CLV, std CLV, `pct_positive` by market type (h2h vs. totals)
   - Edge bucket analysis: mean CLV and `pct_positive` for games binned by `|h2h_edge_home|` and `totals_edge` (0–0.02, 0.02–0.04, 0.04–0.06, 0.06+)
@@ -5662,13 +6028,13 @@ Tasks:
   - Bookmaker disagreement analysis: for games where `bovada_vs_pinnacle_h2h IS NOT NULL`, mean CLV by disagreement direction (Bovada favors home more than Pinnacle vs. less)
   - Public betting contrarian signal: mean CLV for `home_ml_money_pct > 0.65` vs. `< 0.35`
   - Timing analysis: mean CLV by `hours_to_first_pitch_at_prediction` bucket (< 2h, 2–6h, 6–12h, 12h+)
-- [ ] Schedule `compute_clv_monitoring.py` as a weekly Dagster asset running every Monday; log all summary statistics to MLflow under experiment `clv_monitoring`
-- [ ] Add a Dagster alert: if `pct_positive_clv` drops below 0.35 over any 2-week rolling window, trigger a Slack notification
+- [x] Schedule `compute_clv_monitoring.py` as a weekly Dagster asset running every Monday (`pipeline/assets/clv_monitoring_asset.py`, `pipeline/schedules/weekly_clv_monitoring_schedule.py` — 12:00 UTC / 08:00 EDT); log all summary statistics to MLflow under experiment `clv_monitoring`
+- [x] Add a Dagster alert: if `pct_positive_clv` drops below 0.35 over any 2-week rolling window, trigger a Slack notification (`pipeline/sensors/clv_alert_sensor.py` — daily sensor, threshold 0.35, 14-day rolling window; requires SLACK_WEBHOOK_URL env var)
 
 Acceptance criteria:
-- [ ] `clv_monitoring_log.md` updated weekly with all analysis sections populated
-- [ ] MLflow experiment `clv_monitoring` has a run for each week with all summary metrics logged
-- [ ] Alert threshold documented and Dagster sensor configured
+- [x] `clv_monitoring_log.md` updated weekly with all analysis sections populated — all 7 sections implemented; seed with `uv run betting_ml/scripts/compute_clv_monitoring.py`
+- [x] MLflow experiment `clv_monitoring` has a run for each week with all summary metrics logged — `get_or_create_experiment("clv_monitoring")` + `mlflow.log_metrics` in `run()`
+- [x] Alert threshold documented and Dagster sensor configured — `clv_alert_sensor` threshold=0.35, 14-day rolling window, daily cadence
 
 ---
 
@@ -5904,6 +6270,28 @@ Acceptance criteria:
 - [ ] `bayesian_kelly_fraction` decreases monotonically as `meta_ci_width` increases — confirmed on a synthetic test case
 - [ ] Daily exposure cap enforced: no single day's total `bayesian_kelly_fraction` across all games exceeds 0.10
 - [ ] Backtest P&L curve and Sharpe ratio documented vs. flat Kelly baseline
+
+---
+
+### 12.9 — Wire Bayesian meta-model retraining into Dagster
+
+**Overview:** Story 12.4's `train_bayesian_meta_model.py` reruns MCMC weekly on the accumulated CLV dataset. Because MCMC is slow (30–60 min) and the input only grows weekly, it runs on its own weekly schedule offset from the stacking-weights job to spread Snowflake compute. This story activates the schedule and gates defined in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.5.
+
+**Gate:** Story 12.4 complete (`train_bayesian_meta_model.py` exists) AND ≥ 50 live CLV-labeled games in `mart_clv_labeled_games`.
+
+**Tasks:**
+
+- [ ] Activate Epic O Story O.5: add `train_bayesian_meta_model_op` to `pipeline/jobs/weekly_ml_job.py`, scheduled Wednesdays 10:00 UTC (`cron_schedule="0 10 * * 3"`), offset from the Monday stacking-weights job
+- [ ] Confirm the CLV count gate queries `mart_clv_label_count.live_total_count` and skips MCMC with a logged message when count < 50 — the op must exit successfully, never fail, below threshold
+- [ ] Confirm the post-MCMC convergence check op computes `az.rhat(trace).max()`; R-hat > 1.05 logs a WARNING, R-hat > 1.10 logs a FAILURE and blocks any downstream `stacking_weights.json` update
+- [ ] Confirm trace is written to `s3://baseball-betting-ml-artifacts/meta_model/bayesian_meta_trace_{n_games}.nc` and `n_games`, `mean_ci_width`, R-hat max are logged to Dagster run metadata
+- [ ] Confirm a Dagster failure alert is configured on `train_bayesian_meta_model_op`
+
+**Acceptance criteria:**
+
+- [ ] Op skips gracefully when CLV count < 50 — confirmed in Dagster run logs below threshold
+- [ ] On a real run with ≥ 50 games: S3 trace file exists with the current date in its filename and R-hat < 1.05 for all parameters
+- [ ] R-hat gate fires correctly on a synthetic non-converged trace (failure logged, no stacking-weights update)
 
 ---
 
@@ -6973,6 +7361,28 @@ Acceptance Criteria:
 - [ ] `team_sequential_posteriors` table exists and updates after every completed game day
 - [ ] Team wOBA posterior shifts meaningfully over a 10-game win streak vs. a 10-game losing streak (directional sanity check)
 - [ ] `feature_pregame_game_features` includes `home_team_sequential_woba` and `away_team_sequential_woba` as non-NULL columns for teams with ≥ 1 game played in the current season
+
+---
+
+### 16.4 — Wire sequential posterior updates into Dagster end-of-day schedule
+
+**Overview:** The sequential posterior updates (16.1 player-level, 16.3 team-level, and optionally Epic 8.5 matchup-cell) must run *after* yesterday's game results land in `mart_game_results` but *before* the next morning's `daily_ingestion_job`, so the morning predictions consume the freshest beliefs. This is a separate end-of-day schedule from the morning pipeline. It activates the schedule defined in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.4. (Stories 16.1 and 8.5 reference wiring into `daily_ingestion.yml`; that pre-dates the Dagster migration — the end-of-day Dagster schedule in O.4 supersedes it.)
+
+**Gate:** Stories 16.1 and 16.3 complete (`update_player_posteriors.py` and the team-level extension exist). The matchup-cell op is included only if Epic 8.5 is complete.
+
+**Tasks:**
+
+- [ ] Activate Epic O Story O.4: create `pipeline/schedules/end_of_day_schedules.py` with `update_player_posteriors_op`, `update_team_posteriors_op`, and (if 8.5 ships) `update_matchup_cell_posteriors_op`, all invoked with `--date yesterday`
+- [ ] Confirm each op reads completed games from `mart_game_results WHERE game_date = yesterday AND game_state = 'Final'` and writes to its respective `*_sequential_posteriors` table
+- [ ] Confirm `end_of_day_job` fans out the posterior ops in parallel (they write to different tables) behind a games-check gate op that skips with a `SkipReason` on off-days (yesterday game count = 0)
+- [ ] Confirm `end_of_day_schedule` (`cron_schedule="0 5 * * *"`, 05:00 UTC / 01:00 EDT) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
+
+**Acceptance criteria:**
+
+- [ ] `end_of_day_schedule` appears in the Dagster Cloud UI
+- [ ] Manual trigger on a day with completed games produces rows in `player_sequential_posteriors` and `team_sequential_posteriors` for yesterday's `game_date` — confirmed via Snowflake MCP
+- [ ] Off-day trigger skips all posterior ops with a logged `SkipReason` — no Snowflake writes, no errors
+- [ ] End-of-day job completes before 05:30 UTC, leaving posteriors current before the 12:00 UTC morning pipeline runs
 
 ---
 

@@ -2234,3 +2234,158 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [game_pk, valid_from]
+
+  - name: feature_pregame_meta_model_features
+    description: >
+      Incremental feature mart for the Epic 12 CLV meta-model.
+      Grain: one row per (game_pk, market_type). Base rows come from
+      mart_clv_labeled_games; every row meets all four CLV label conditions.
+      Seven feature groups are joined in; market-derived and future groups
+      are nullable with per-group coverage indicator columns.
+      coverage_score is the fraction of 6 active groups with non-null values
+      (denominator grows to 7 when Epic 16 sequential posteriors ship).
+      training_eligible = true when coverage_score >= 0.60 AND both primary
+      edges are non-null.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, market_type]
+    columns:
+      - name: game_pk
+        description: MLB Stats API game identifier.
+        tests: [not_null]
+      - name: game_date
+        description: Game date.
+        tests: [not_null]
+      - name: market_type
+        description: "h2h or totals."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [h2h, totals]
+      - name: predicted_at
+        description: Timestamp of the canonical pre-game prediction (inserted_at from daily_model_predictions).
+        tests: [not_null]
+      - name: model_edge
+        description: Model edge for this market type (h2h_edge for h2h rows, totals_edge for totals rows).
+      - name: clv
+        description: Closing line value from the reference bookmaker perspective.
+        tests: [not_null]
+      - name: clv_positive
+        description: True when CLV > 0 (market moved toward reference side by game time).
+        tests: [not_null]
+      - name: actual_outcome
+        description: "1 = reference side won (home won for h2h; over won vs open line for totals)."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+      - name: h2h_edge_home
+        description: Model edge on the home team moneyline.
+      - name: totals_edge
+        description: Model edge on the over/under totals market.
+      - name: game_conviction_score
+        description: Composite conviction score from daily_model_predictions.
+      - name: win_prob_ci_width
+        description: "Width of the home win probability credible interval. NULL until added to daily_model_predictions."
+      - name: totals_p_over_ci_width
+        description: "Width of the over probability credible interval. NULL until added to daily_model_predictions."
+      - name: model_signal_available
+        description: True when h2h_edge_home is non-null (Group 1 coverage indicator).
+        tests: [not_null]
+      - name: gate_signals_met
+        description: Count of gate signals met at prediction time.
+      - name: signal_completeness_score
+        description: "Fraction of sub-model signals available. NULL until added to daily_model_predictions."
+      - name: signal_completeness_available
+        description: True when gate_signals_met is non-null (Group 2 coverage indicator).
+        tests: [not_null]
+      - name: bovada_open_devig_prob
+        description: Bovada opening de-vigged probability for this market type (from mart_clv_labeled_games).
+      - name: bovada_close_devig_prob
+        description: Bovada closing de-vigged probability for this market type.
+      - name: line_movement_devig
+        description: Signed de-vigged probability movement from open to close (close - open).
+      - name: h2h_line_movement
+        description: H2H line movement from mart_odds_line_movement (Bovada).
+      - name: totals_line_movement
+        description: Totals line movement from mart_odds_line_movement (Bovada).
+      - name: snapshot_count
+        description: Number of odds snapshots captured for this game.
+      - name: line_movement_available
+        description: True when snapshot_count is non-null (Group 3 coverage indicator).
+        tests: [not_null]
+      - name: ml_implied_prob_std
+        description: Standard deviation of moneyline implied probabilities across bookmakers.
+      - name: ml_implied_prob_range
+        description: Range of moneyline implied probabilities across bookmakers.
+      - name: totals_line_std
+        description: Standard deviation of totals line across bookmakers.
+      - name: totals_line_range
+        description: Range of totals line across bookmakers.
+      - name: sharp_soft_ml_spread
+        description: Spread between sharp and soft book moneyline implied probabilities.
+      - name: n_books_available
+        description: Number of bookmakers with odds for this game.
+      - name: stale_book_flag
+        description: "1 if any bookmaker odds are stale; 0 otherwise."
+      - name: bovada_vs_consensus_h2h
+        description: "Bovada close de-vigged prob minus consensus home win prob (h2h rows only; null for totals)."
+      - name: sharp_soft_ml_delta
+        description: Sharp minus soft book ML delta from mart_odds_consensus.
+      - name: ml_consensus_std
+        description: Standard deviation of ML implied probs across all consensus books.
+      - name: bovada_vs_pinnacle_h2h
+        description: "Bovada close devig minus Pinnacle close devig. NULL until Pinnacle processed mart is built."
+      - name: pinnacle_coverage_flag
+        description: "True when a Pinnacle line exists for this game. Always false until processed mart ships."
+        tests: [not_null]
+      - name: bookmaker_disagreement_available
+        description: True when ml_implied_prob_std is non-null (Group 4 coverage indicator).
+        tests: [not_null]
+      - name: hours_to_first_pitch_at_prediction
+        description: Hours between prediction time and game first pitch. Must be > 0 (leakage guard).
+      - name: lineup_confirmed_hours_before
+        description: Hours before first pitch when the lineup was first observed in stg_statsapi_lineups.
+      - name: prior_age_days
+        description: "Age of the Empirical Bayes prior at prediction time. NULL until Epic 16 ships."
+      - name: timing_available
+        description: True when game_datetime is non-null (Group 5 coverage indicator).
+        tests: [not_null]
+      - name: over_money_pct
+        description: Fraction of money bet on the over (Action Network; null before 2024-02-22).
+      - name: home_ml_money_pct
+        description: Fraction of money bet on the home team ML (Action Network; null before 2024-02-22).
+      - name: home_ml_ticket_pct
+        description: Fraction of tickets on the home team ML (Action Network; null before 2024-02-22).
+      - name: ml_sharp_signal
+        description: Sharp money signal on the ML market from Action Network.
+      - name: total_sharp_signal
+        description: Sharp money signal on the totals market from Action Network.
+      - name: public_betting_available
+        description: True when home_ml_money_pct is non-null (Group 6 coverage indicator).
+        tests: [not_null]
+      - name: posterior_source
+        description: "Identifier for the Epic 16 sequential posterior used. NULL until Epic 16 ships."
+      - name: cell_posterior_source
+        description: "Identifier for the Epic 8.5 cell posterior used. NULL until Epic 8.5 ships."
+      - name: posterior_available
+        description: True when sequential posteriors are available for this game. Always false until Epic 16 ships.
+        tests: [not_null]
+      - name: coverage_score
+        description: >
+          Fraction of the 6 active feature groups with non-null values.
+          Denominator = 6 (sequential posterior excluded until Epic 16 ships).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: training_eligible
+        description: >
+          True when coverage_score >= 0.60 AND h2h_edge_home IS NOT NULL AND
+          totals_edge IS NOT NULL.
+        tests: [not_null]
