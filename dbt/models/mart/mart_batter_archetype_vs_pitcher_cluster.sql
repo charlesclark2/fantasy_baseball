@@ -21,7 +21,7 @@
 --   shrink_weight = pa_weight / (pa_weight + 100)
 --
 -- Gate: emit rows where pa_weight >= 50.
--- Availability: posteriors begin 2021; effective from 2021 games.
+-- Availability: posteriors backfilled to 2016 (2026-06-02); effective from 2016 games.
 
 with
 {% if is_incremental() %}
@@ -41,7 +41,7 @@ pa_events as (
         ppe.xwoba
     from {{ ref('mart_pitch_play_event') }} ppe
     where ppe.plate_appearance_event is not null
-      and ppe.game_year >= 2021
+      and ppe.game_year >= 2016
     {% if is_incremental() %}
       and ppe.game_date > (select max_date from max_anchor)
     {% endif %}

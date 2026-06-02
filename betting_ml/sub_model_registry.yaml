@@ -473,51 +473,40 @@ bullpen_v2:
     Ablation JSON: models/sub_models/bullpen_v2/ablation_eb_bullpen_20260601T053223.json
 
 matchup_v1:
-  artifact_path: models/sub_models/matchup_v1.pkl
-  feature_columns_path: models/sub_models/matchup_v1_features.json
+  artifact_path: s3://baseball-betting-ml-artifacts/sub_models/matchup_v1.pkl
+  feature_columns_path: models/matchup_v1/matchup_v1_features.json
+  mlflow_run_id: 5ba164c666384999ad9b4ea344de4e18
   target:
-    source_table: baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster
-    primary_column: avg_woba    # population-level; individual batter-vs-starter too sparse
-    auxiliary_columns:
-      - avg_xwoba
-      - avg_k_pct
-      - avg_bb_pct
-      - avg_hard_hit_pct
-    grain: game_pk    # aggregated to game level via archetype composition
+    source_table: baseball_data.betting.mart_pitch_play_event
+    primary_column: raw_interaction_residual
+    grain: (batter_cluster_label, pitcher_cluster_label, season)
   training_window:
-    start: '2020-01-01'    # batter_clusters and pitcher_clusters data begins 2020; no matchup signal pre-2020
-    end: null
+    start: '2021-01-01'
+    end: '2025-12-31'
   cv_strategy: walk_forward
-  cv_metric: mae
-  cv_score: null
+  cv_metric: normal_nll
+  cv_score: -2.8945
+  cv_mae: 0.010527
+  normal_sigma: 0.004938
   promotion_gate:
-    metric: mae
-    threshold: null
+    metric: normal_nll
     direction: lower_is_better
-  parent_features:
-    - feature_pregame_lineup_features    # bat-tracking cols (lineup_avg_bat_speed, lineup_bat_speed_std,
-                                         # lineup_bat_speed_vs_starter_velo) added Story 2.9; NULL pre-2023-07-14
+    must_beat: constant_mean_floor
+    secondary:
+      - calib_80_ge: 0.8
   output_signals:
-    - matchup_advantage_signal
+    - matchup_advantage_mu
+    - matchup_advantage_sigma
   downstream_consumers: []
-  promotion_status: pending
-  promoted_at: null
+  promotion_status: champion
+  promoted_at: '2026-06-02'
   notes: |
-    Requires Epic 7 (archetype clustering revalidation) before training.
-    See quant_sports_intel_models/baseball/archetype_definitions.md for cluster definitions,
-    feature drivers, example players, and stability analysis (Story 2.9, 2026-05-19).
-    Training filter: exclude (cluster_label, season) pairs where member_count < 50
-    (see stability tables in archetype_definitions.md). Problem seasons: contact_spray
-    absent 4/6 seasons; elite_breaking_ball 2021-2022 < 50; contact_sinker_ball 2024 = 6;
-    multi_pitch_mix absent 2021/2023/2025; soft_command absent 2023/2025.
-    Effective usable range: 2021-2025 with per-archetype season filters applied.
-    Bat-tracking features (lineup_avg_bat_speed, lineup_bat_speed_std,
-    lineup_bat_speed_vs_starter_velo) live in feature_pregame_lineup_features — not a
-    separate model. Available 2023-07-14+; NULL for prior games — treated as
-    signal_available=false, not imputed. Rookie batters in top-5 slots: bat-tracking NULL;
-    use archetype mean. Rookie starters (<50 IP): fall back to ZiPS projections for
-    pitch-mix opponent model.
-    mart_batter_archetype_vs_pitcher_cluster confirmed as canonical training source (2026-05-12).
+    Story 8.2 (Epic 8). Predicts raw_interaction_residual = hard_xwoba_mean - eb_additive_pred.
+    Three candidates: A (Ridge raw), B (Ridge EB), C (LightGBM raw). Constant-mean Ref D as NLL floor.
+    Winner: Ridge (raw features). CV NLL=-2.8945, CV MAE=0.01053, sigma=0.00494.
+    Training grain: (batter_cluster_label, pitcher_cluster_label, season) — 125 rows.
+    EB calibration window: 2016–2020 (prior features). Training window: 2021–2025.
+    Trained 2026-06-02. Tuned with Optuna (10 probe + 50 full trials).
 
 run_env_v2:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v2.pkl
