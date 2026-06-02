@@ -1,0 +1,674 @@
+{
+  "meta": {
+    "env": "prod",
+    "start_date": "2021-01-01",
+    "n_games": 11661,
+    "min_train_seasons": 2,
+    "generated_at": "2026-06-02T15:18:56"
+  },
+  "targets": {
+    "total_runs": {
+      "promoted_order": [
+        "run_env",
+        "offense",
+        "bullpen"
+      ],
+      "groups": [
+        {
+          "signal_group": "run_env",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.013689,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": -0.037616,
+          "calib80_delta": 0.019155,
+          "coverage_conditional": {
+            "available": {
+              "n": 7269,
+              "nll_delta": -0.01449
+            },
+            "unavailable": {
+              "n": 0,
+              "nll_delta": null
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.021763,
+              "mae_delta": -0.038539,
+              "calib80_delta": 0.019082
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.012264,
+              "mae_delta": -0.046482,
+              "calib80_delta": 0.01819
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.010775,
+              "mae_delta": -0.014522,
+              "calib80_delta": 0.010904
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": -0.009956,
+              "mae_delta": -0.050919,
+              "calib80_delta": 0.028443
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "promote",
+          "uncertainty_calibration": {
+            "score": 0.8356,
+            "n": 11661,
+            "miscalibrated": false
+          }
+        },
+        {
+          "signal_group": "offense",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.011749,
+          "win_count": "3/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.25,
+          "mae_delta": -0.051833,
+          "calib80_delta": -0.004057,
+          "coverage_conditional": {
+            "available": {
+              "n": 7269,
+              "nll_delta": -0.01675
+            },
+            "unavailable": {
+              "n": 0,
+              "nll_delta": null
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.015891,
+              "mae_delta": -0.048054,
+              "calib80_delta": 0.003635
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.017469,
+              "mae_delta": -0.093259,
+              "calib80_delta": -0.001364
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.025854,
+              "mae_delta": -0.103516,
+              "calib80_delta": 0.005452
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": 0.012217,
+              "mae_delta": 0.037497,
+              "calib80_delta": -0.023952
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "promote",
+          "uncertainty_calibration": {
+            "score": 0.829,
+            "n": 23322,
+            "miscalibrated": false
+          }
+        },
+        {
+          "signal_group": "starter",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.002587,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": -0.008923,
+          "calib80_delta": 0.002827,
+          "coverage_conditional": {
+            "available": {
+              "n": 7260,
+              "nll_delta": -0.00261
+            },
+            "unavailable": {
+              "n": 9,
+              "nll_delta": -0.00825
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.000551,
+              "mae_delta": 0.005932,
+              "calib80_delta": 0.0
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.003192,
+              "mae_delta": -0.010218,
+              "calib80_delta": 0.002729
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.004147,
+              "mae_delta": -0.0152,
+              "calib80_delta": 0.004089
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": -0.002459,
+              "mae_delta": -0.016207,
+              "calib80_delta": 0.004491
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 5"
+          }
+        },
+        {
+          "signal_group": "starter_ip",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.000967,
+          "win_count": "3/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.625,
+          "mae_delta": -0.010014,
+          "calib80_delta": 0.00024,
+          "coverage_conditional": {
+            "available": {
+              "n": 7134,
+              "nll_delta": -0.00155
+            },
+            "unavailable": {
+              "n": 135,
+              "nll_delta": -0.00042
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.000505,
+              "mae_delta": -0.008577,
+              "calib80_delta": 0.000454
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.001313,
+              "mae_delta": -0.006304,
+              "calib80_delta": 0.000455
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.00378,
+              "mae_delta": -0.01896,
+              "calib80_delta": 0.004543
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": 0.001732,
+              "mae_delta": -0.006215,
+              "calib80_delta": -0.004491
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 5D"
+          }
+        },
+        {
+          "signal_group": "bullpen",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.029174,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": -0.08209,
+          "calib80_delta": 0.005981,
+          "coverage_conditional": {
+            "available": {
+              "n": 7125,
+              "nll_delta": -0.03228
+            },
+            "unavailable": {
+              "n": 144,
+              "nll_delta": 0.011
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.029974,
+              "mae_delta": -0.082469,
+              "calib80_delta": 0.002272
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.030869,
+              "mae_delta": -0.097067,
+              "calib80_delta": -0.000455
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.037131,
+              "mae_delta": -0.109513,
+              "calib80_delta": 0.008632
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": -0.018723,
+              "mae_delta": -0.03931,
+              "calib80_delta": 0.013473
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "promote",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 6D"
+          }
+        },
+        {
+          "signal_group": "matchup",
+          "target": "total_runs",
+          "n_folds": 4,
+          "gate_metric": "nll",
+          "gate_threshold": -0.005,
+          "mean_delta": -0.000972,
+          "win_count": "3/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.625,
+          "mae_delta": -0.004954,
+          "calib80_delta": 0.000421,
+          "coverage_conditional": {
+            "available": {
+              "n": 6927,
+              "nll_delta": -0.00162
+            },
+            "unavailable": {
+              "n": 342,
+              "nll_delta": -0.00283
+            }
+          },
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "nll_delta": -0.001915,
+              "mae_delta": -0.015303,
+              "calib80_delta": 0.002726
+            },
+            {
+              "eval_year": 2024,
+              "nll_delta": -0.00096,
+              "mae_delta": -0.000202,
+              "calib80_delta": 0.001364
+            },
+            {
+              "eval_year": 2025,
+              "nll_delta": -0.003463,
+              "mae_delta": -0.021467,
+              "calib80_delta": -0.000909
+            },
+            {
+              "eval_year": 2026,
+              "nll_delta": 0.002452,
+              "mae_delta": 0.017156,
+              "calib80_delta": -0.001497
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 8"
+          }
+        }
+      ]
+    },
+    "home_win": {
+      "promoted_order": [
+        "offense",
+        "bullpen"
+      ],
+      "groups": [
+        {
+          "signal_group": "run_env",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": -0.000251,
+          "win_count": "3/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.625,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": -0.000226,
+              "logloss_delta": -0.000454
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": -0.000306,
+              "logloss_delta": -0.000614
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": -0.000864,
+              "logloss_delta": -0.001733
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": 0.000392,
+              "logloss_delta": 0.000791
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": 0.8356,
+            "n": 11661,
+            "miscalibrated": false
+          }
+        },
+        {
+          "signal_group": "offense",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": -0.013349,
+          "win_count": "3/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.25,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": -0.015357,
+              "logloss_delta": -0.02552
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": -0.021586,
+              "logloss_delta": -0.04519
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": -0.017403,
+              "logloss_delta": -0.034842
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": 0.000952,
+              "logloss_delta": 0.004729
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "promote",
+          "uncertainty_calibration": {
+            "score": 0.829,
+            "n": 23322,
+            "miscalibrated": false
+          }
+        },
+        {
+          "signal_group": "starter",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": -0.000697,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": -0.000957,
+              "logloss_delta": -0.00264
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": -0.000412,
+              "logloss_delta": -0.000917
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": -0.000205,
+              "logloss_delta": -0.000742
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": -0.001214,
+              "logloss_delta": -0.002576
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 5"
+          }
+        },
+        {
+          "signal_group": "starter_ip",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": -0.000902,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": -0.000358,
+              "logloss_delta": -0.000756
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": -0.000807,
+              "logloss_delta": -0.001948
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": -0.002338,
+              "logloss_delta": -0.005608
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": -0.000105,
+              "logloss_delta": -8.5e-05
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "defer",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 5D"
+          }
+        },
+        {
+          "signal_group": "bullpen",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": -0.026583,
+          "win_count": "4/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": -0.027536,
+              "logloss_delta": -0.040945
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": -0.025878,
+              "logloss_delta": -0.046828
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": -0.028334,
+              "logloss_delta": -0.050892
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": -0.024584,
+              "logloss_delta": -0.034435
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "promote",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 6D"
+          }
+        },
+        {
+          "signal_group": "matchup",
+          "target": "home_win",
+          "n_folds": 4,
+          "gate_metric": "brier",
+          "gate_threshold": -0.001,
+          "mean_delta": 7e-06,
+          "win_count": "0/4",
+          "consistency_needed": 3,
+          "wilcoxon_p": 0.125,
+          "mae_delta": null,
+          "calib80_delta": null,
+          "coverage_conditional": {},
+          "per_fold": [
+            {
+              "eval_year": 2023,
+              "brier_delta": 2e-06,
+              "logloss_delta": 2.6e-05
+            },
+            {
+              "eval_year": 2024,
+              "brier_delta": 0.0,
+              "logloss_delta": 0.0
+            },
+            {
+              "eval_year": 2025,
+              "brier_delta": 0.0,
+              "logloss_delta": 0.0
+            },
+            {
+              "eval_year": 2026,
+              "brier_delta": 2.4e-05,
+              "logloss_delta": 7.1e-05
+            }
+          ],
+          "eval_years": [
+            "2023",
+            "2024",
+            "2025",
+            "2026"
+          ],
+          "signal_verdict": "reject",
+          "uncertainty_calibration": {
+            "score": null,
+            "reason": "latent/out-of-matrix target \u2014 (mu,sigma) calibration gated at training in Epic 8"
+          }
+        }
+      ]
+    }
+  }
+}
