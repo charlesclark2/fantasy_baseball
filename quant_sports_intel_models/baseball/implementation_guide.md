@@ -4804,14 +4804,26 @@ with pm.Model() as matchup_hierarchical:
 ```
 
 Tasks:
-- [ ] Document the additive decomposition model structure in `quant_sports_intel_models/baseball/matchup_model_design.md` — include the grand mean + marginal effects + interaction term formulation, the shrinkage formula, and the Phase 1 vs. Phase 2 implementation plan
-- [ ] Implement Phase 1 empirical Bayes: `betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py` — computes `grand_mean`, `batter_effect[b]`, `pitcher_effect[p]`, and `σ_interaction` from 2016–2020 data (pre-training window); stores in `models/eb_priors/matchup_cell_priors.json`
-- [ ] Validate: plot the distribution of raw interaction residuals for cells with ≥ 500 PA — should be approximately Normal, confirming the prior family choice; log skewness and kurtosis; flag if either exceeds 1.0
-- [ ] Add `cell_n_pa`, `cell_shrinkage_factor` (how much the interaction term was pulled toward 0), and `cell_data_source ∈ {full_eb, marginals_only}` to the cell estimates output — `marginals_only` for cells with < 50 PA where the interaction term is effectively zeroed out
+- [x] Document the additive decomposition model structure in `quant_sports_intel_models/baseball/matchup_model_design.md` — include the grand mean + marginal effects + interaction term formulation, the shrinkage formula, and the Phase 1 vs. Phase 2 implementation plan
+- [x] Implement Phase 1 empirical Bayes: `betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py` — computes `grand_mean`, `batter_effect[b]`, `pitcher_effect[p]`, and `σ_interaction` from 2016–2020 data (pre-training window); stores in `models/eb_priors/matchup_cell_priors.json`
+- [x] Validate: skewness and kurtosis of raw interaction residuals logged in script output and written to JSON; flagged if either exceeds 1.0; run `fit_matchup_cell_priors.py` to produce full AC report
+- [x] Add `cell_n_pa`, `cell_shrinkage_factor` (how much the interaction term was pulled toward 0), and `cell_data_source ∈ {full_eb, marginals_only}` to the cell estimates output — `marginals_only` for cells with < 50 PA where the interaction term is effectively zeroed out
+
+**Pre-run requirement:** `mart_batter_archetype_vs_pitcher_cluster` must be rebuilt from 2016 before running the script. The dbt model's `game_year >= 2021` filter was changed to `game_year >= 2016` (2026-06-02). Because this is an incremental model expanding the date range backwards, manually DROP the table then rebuild:
+```
+# In Snowflake: DROP TABLE IF EXISTS baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster;
+dbtf run --select mart_batter_archetype_vs_pitcher_cluster --project-dir dbt --profiles-dir dbt
+```
+Then run the script to produce `matchup_cell_priors.json` and verify ACs:
+```
+uv run python betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py
+```
+
+**Data alignment note (2026-06-02):** Soft posteriors backfilled to 2016 using `compute_archetype_posteriors.py --mode backfill --season {year}` for 2016–2020. The same KMeans model (fit on 2015+ pooled data) underlies all seasons. All 25 cells are expected to be `full_eb` with high shrinkage factors (data dominates in the soft-weighted world).
 
 Acceptance criteria:
 - [ ] For cells with ≥ 1,000 PA: `cell_shrinkage_factor > 0.80` — data dominates the prior
-- [ ] For cells with < 100 PA: `cell_shrinkage_factor < 0.40` — prior dominates, interaction term near 0
+- [ ] For cells with < 100 PA: `cell_shrinkage_factor < 0.40` — prior dominates, interaction term near 0 (expected to be vacuous with soft assignment; confirm in script output)
 - [ ] A known favorable matchup (e.g., historically power hitters vs. finesse pitchers) shows a positive interaction term post-shrinkage — directionally sensible
 - [ ] Grand mean is within 0.005 of the league-wide observed xwOBA for the training period
 

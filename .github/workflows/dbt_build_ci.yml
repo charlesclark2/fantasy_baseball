@@ -148,15 +148,13 @@ jobs:
               --profiles-dir dbt \
               --select state:modified+ \
               --state dbt/state \
-              --defer \
-              --full-refresh
+              --defer
           else
             echo "No manifest artifact found — falling back to full build"
             dbtf build \
               --target ci \
               --project-dir dbt \
-              --profiles-dir dbt \
-              --full-refresh
+              --profiles-dir dbt
           fi
 
       - name: Tear down CI schemas
