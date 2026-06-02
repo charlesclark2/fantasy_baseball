@@ -243,6 +243,14 @@ final as (
         h_ln.n_contact_spray                    as home_n_contact_spray,
         h_ln.n_no_label                         as home_n_no_label,
 
+        -- ── Home lineup: Empirical Bayes batter posteriors (Epic 4A) ──────────
+        h_ln.avg_eb_woba                        as home_avg_eb_woba,
+        h_ln.avg_eb_k_pct                       as home_avg_eb_k_pct,
+        h_ln.avg_eb_bb_pct                      as home_avg_eb_bb_pct,
+        h_ln.avg_eb_iso                         as home_avg_eb_iso,
+        h_ln.avg_eb_woba_uncertainty            as home_avg_eb_woba_uncertainty,
+        h_ln.eb_coverage_pct                    as home_eb_coverage_pct,
+
         -- ── Away lineup ───────────────────────────────────────────────────────
         a_ln.has_full_lineup                    as away_has_full_lineup,
         a_ln.lhb_count                          as away_lhb_count,
@@ -292,6 +300,14 @@ final as (
         a_ln.n_groundball_speed                 as away_n_groundball_speed,
         a_ln.n_contact_spray                    as away_n_contact_spray,
         a_ln.n_no_label                         as away_n_no_label,
+
+        -- ── Away lineup: Empirical Bayes batter posteriors (Epic 4A) ──────────
+        a_ln.avg_eb_woba                        as away_avg_eb_woba,
+        a_ln.avg_eb_k_pct                       as away_avg_eb_k_pct,
+        a_ln.avg_eb_bb_pct                      as away_avg_eb_bb_pct,
+        a_ln.avg_eb_iso                         as away_avg_eb_iso,
+        a_ln.avg_eb_woba_uncertainty            as away_avg_eb_woba_uncertainty,
+        a_ln.eb_coverage_pct                    as away_eb_coverage_pct,
 
         -- ── Home starting pitcher ─────────────────────────────────────────────
         h_st.pitcher_id                         as home_starter_pitcher_id,
@@ -384,6 +400,12 @@ final as (
         -- Prior-season cluster label. NULL for rookies / pitchers not in table.
         h_st.starter_pitcher_archetype          as home_starter_pitcher_archetype,
 
+        -- ── Home starter: Empirical Bayes posteriors (Epic 5A) ────────────────
+        h_st.eb_xwoba_against                   as home_starter_eb_xwoba_against,
+        h_st.eb_k_pct                           as home_starter_eb_k_pct,
+        h_st.eb_bb_pct                          as home_starter_eb_bb_pct,
+        h_st.eb_xwoba_uncertainty               as home_starter_eb_xwoba_uncertainty,
+
         -- ── Away starting pitcher ─────────────────────────────────────────────
         a_st.pitcher_id                         as away_starter_pitcher_id,
         a_st.pitcher_name                       as away_starter_pitcher_name,
@@ -474,6 +496,12 @@ final as (
         -- ── Away starter: pitcher archetype label (Story 7.4) ────────────────
         -- Prior-season cluster label. NULL for rookies / pitchers not in table.
         a_st.starter_pitcher_archetype          as away_starter_pitcher_archetype,
+
+        -- ── Away starter: Empirical Bayes posteriors (Epic 5A) ────────────────
+        a_st.eb_xwoba_against                   as away_starter_eb_xwoba_against,
+        a_st.eb_k_pct                           as away_starter_eb_k_pct,
+        a_st.eb_bb_pct                          as away_starter_eb_bb_pct,
+        a_st.eb_xwoba_uncertainty               as away_starter_eb_xwoba_uncertainty,
 
         -- ── Home team context ─────────────────────────────────────────────────
         h_tm.wins                               as home_wins,
@@ -585,6 +613,11 @@ final as (
         h_tm.off_games_played_30d               as home_games_played_30d,
         h_tm.off_games_played_std               as home_games_played_std,
 
+        -- ── Home bullpen: Empirical Bayes quality (Epic 6A) ──────────────────
+        h_tm.bp_eb_xwoba                        as home_bp_eb_xwoba,
+        h_tm.bp_eb_uncertainty                  as home_bp_eb_uncertainty,
+        h_tm.bp_eb_coverage_pct                 as home_bp_eb_coverage_pct,
+
         -- ── Away team context ─────────────────────────────────────────────────
         a_tm.wins                               as away_wins,
         a_tm.losses                             as away_losses,
@@ -694,6 +727,11 @@ final as (
         a_tm.off_games_played_14d               as away_games_played_14d,
         a_tm.off_games_played_30d               as away_games_played_30d,
         a_tm.off_games_played_std               as away_games_played_std,
+
+        -- ── Away bullpen: Empirical Bayes quality (Epic 6A) ──────────────────
+        a_tm.bp_eb_xwoba                        as away_bp_eb_xwoba,
+        a_tm.bp_eb_uncertainty                  as away_bp_eb_uncertainty,
+        a_tm.bp_eb_coverage_pct                 as away_bp_eb_coverage_pct,
 
         -- ── Elo team strength ratings (Card 8.D) ─────────────────────────────
         -- Pre-game snapshot from compute_elo.py. NULL until backfill is run.

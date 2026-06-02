@@ -1,5 +1,5 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-05-29 (15.8 complete)
+## Current State Reference — As of 2026-06-02 (7.M complete)
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -11,9 +11,9 @@ This document inventories every Snowflake table created via DDL scripts and ever
 |---|---|---|
 | Raw source tables (DDL) | 18 tables + 2 tasks + 4 procedures | `scripts/ddl/` |
 | dbt sources | 35+ raw tables across 9 schemas | `dbt/models/sources.yml` |
-| dbt staging models | 25 models | `dbt/models/staging/` |
-| dbt mart models | 57 models | `dbt/models/mart/` |
-| dbt feature models | 19 models (~400+ columns) | `dbt/models/feature/` |
+| dbt staging models | 27 models | `dbt/models/staging/` |
+| dbt mart models | 55 models | `dbt/models/mart/` |
+| dbt feature models | 20 models (~400+ columns) | `dbt/models/feature/` |
 
 **Data flow:**
 ```
@@ -122,7 +122,6 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 |---|---|---|---|
 | `stg_oddsapi_events` | one row per event_id (latest snapshot) | Deduplicates to latest snapshot per event. Excludes null raw_json. | table |
 | `stg_oddsapi_odds` | (ingestion_ts, event_id, bookmaker, market, outcome) | 3-level lateral flatten: bookmakers → markets → outcomes. Deduplicates us/us2 regions within load_id. | table |
-| `stg_oddsapi_market_consensus` | one row per (event_id, market_key) | Aggregates American/decimal odds across all bookmakers. Vig-free aggregation via additive method. | table |
 
 ## 2.2 Action Network Staging
 
@@ -142,6 +141,8 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 | `stg_statsapi_starter_snapshots` | (game_pk, side, ingestion_ts) | All ingestion snapshots of probable pitcher from `monthly_schedule` — no latest-only dedup. Feeds `feature_pregame_starter_status` SCD-2 model. QUALIFY deduplicates at `(game_pk, side, ingestion_ts)` to handle same game appearing in multiple monthly fetch responses simultaneously. Pre-Epic-T null `ingestion_ts` coalesced to sentinel `1970-01-01`. **Added Epic 15 Story 15.4.** | table |
 | `stg_statsapi_venues` | venue_id | Flattens venue JSON (roof_type, turf, coordinates, timezone). | table |
 | `stg_statsapi_player_injury_status` | (player_id, transaction_date) | Derives IL status (10d, 60d, 7d, none) from transaction type codes. | table |
+| `stg_statsapi_player_profiles` | one row per player_id (latest) | Deduplicates player_profiles_raw to latest by last_fetched_at. Exposes full_name, birth_date, height_inches, weight_lbs, primary_position_code, active flag. Used for age computation in archetype clustering. | table |
+| `stg_statsapi_transactions` | one row per transaction_id | Deduplicates from player_transactions raw table. IL placements, activations, reinstatements with player_id, team_id, transaction_date, type_code. Card 7.I. | table |
 | `stg_statsapi_umpire_game_log` | (game_pk, umpire_name) | Cleans umpire assignment + tendency metrics. Computes trailing z-scores. | table |
 | `stg_statsapi_umpire_snapshots` | (game_pk, loaded_at) | All ingestion snapshots from statsapi.umpire_game_log — no latest-only dedup. QUALIFY deduplicates at (game_pk, loaded_at) preferring umpscorecards rows. Record hash on (umpire_name, total_runs, total_run_impact, accuracy_above_expected). Feeds feature_pregame_umpire_status SCD-2. Coverage: ~2026-05-02 (Epic T.4). **Added Epic 15 Story 15.7.** | table |
 
@@ -150,6 +151,7 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 | Model | Grain | Key Transformation | Materialization |
 |---|---|---|---|
 | `stg_batter_pitches` | one row per pitch | Renames to snake_case. MD5 surrogate key on (game_pk, at_bat_number, pitch_number, batter_id, pitcher_id, inning, inning_half). Suppresses deprecated PitchF/X fields. | table |
+| `stg_batter_sprint_speed` | one row per (player_mlbam_id, season) — latest snapshot | Deduplicates sprint_speed_raw to most recent snapshot_date per player × season. Exposes Statcast sprint speed (ft/s). Used in lineup features. | table |
 | `stg_weather_raw` | (game_pk, venue_id) | Cleans and validates weather observations. QUALIFY deduplicates to latest row per (game_pk, venue_id, observation_type, hours_to_first_pitch). | view |
 | `stg_weather_raw_snapshots` | (game_pk, loaded_at) | All forecast_pregame ingestion snapshots from weather_raw — no latest-only dedup. Pre-computes wind_component_mph and is_dome via ref_venues join. Adds record_hash over (temp_f, wind_component_mph, humidity_pct, condition_text). Feeds feature_pregame_weather_status SCD-2 model. Coverage: Epic T.2 (2026-05-01) onward. **Added Epic 15 Story 15.5.** | table |
 
@@ -158,6 +160,7 @@ All staging models output to `baseball_data.betting`. Default materialization: `
 | Model | Grain | Key Transformation | Materialization |
 |---|---|---|---|
 | `stg_fangraphs__stuff_plus` | (fg_pitcher_id, season) — latest ingestion | Deduplicates to latest. Unpacks pitch-mix percentages (FA, SI, FC, SL, CU, CH, FS). | table |
+| `stg_fangraphs__pitcher_arsenal` | (fg_pitcher_id, pitch_type, season) | Unpivots the wide Stuff+ raw payload into per-pitch-type rows. Normalizes FA/FF (pfx vs. sp system naming). Source: fg_stuff_plus_raw. | table |
 | `stg_fangraphs__hitting_leaderboard` | (fg_batter_id, season, window_type, window_date_range) | Deduplicates raw snapshot. Unpacks rolling hitting stats. | table |
 | `stg_fangraphs__zips_pitching` | (fg_pitcher_id, season, projection_type) — latest | Deduplicates. Unpacks ZiPS/Steamer pitching projections. | table |
 | `stg_fangraphs__zips_hitting` | (fg_batter_id, season, projection_type) — latest | Deduplicates. Unpacks ZiPS/Steamer hitting projections. | table |
@@ -222,6 +225,7 @@ All mart models output to `baseball_data.betting`. Most materialize as `table`; 
 | `mart_batter_profile_summary` | (batter_id, season) | table | Season batting profile: PA, wOBA, strikeout%, walk%, HR%, hard-hit%. |
 | `mart_batter_vs_handedness_splits` | (batter_id, season, pitcher_hand) | table | Prior-season platoon splits vs LHP and RHP. |
 | `mart_pitcher_arsenal_summary` | (pitcher_id, season) | table | Pitcher arsenal composition and effectiveness per pitch type. |
+| `mart_pitcher_profile_summary` | (pitcher_id, game_year) | table | Pitcher season profile for k-means archetype clustering (Card 7.2). Joins arsenal summary (pitch mix, velocity, movement, Stuff+) with outcome metrics (K%, BB%, whiff rate, GB rate). Includes birth_date from stg_statsapi_player_profiles for age computation. Stratum-B features NULL 2015–2019. Season coverage: 2015+. |
 | `mart_pitcher_vs_handedness_splits` | (pitcher_id, season, batter_hand) | table | Prior-season platoon performance vs LHB and RHB. |
 
 ## 3.5 Bullpen
@@ -256,6 +260,8 @@ All mart models output to `baseball_data.betting`. Most materialize as `table`; 
 | Model | Grain | Materialization | Description |
 |---|---|---|---|
 | `mart_park_run_factors` | (venue_id, season) | table | Prior-season park run factors: home run rate, total runs per game. |
+| `mart_eb_park_factors` | (venue_id, season) | table | Thin passthrough over `betting.eb_park_factors_raw` (MERGE-upserted by fit_park_priors.py). Exposes EB-smoothed overall run factor, uncertainty, shrinkage_factor, prior_mean/variance, n_games. Feature layer joins on game_year − 1. Replaces raw_park_run_factor_3yr in `feature_pregame_park_features`. |
+| `mart_park_factors_granular` | (venue_id, season) | table | EB-smoothed granular park factors (HR, 2B/3B, 1B, BB, SO, wOBA) from Baseball Savant statcast-park-factors (3yr rolling, all bat sides). Written by fit_granular_park_priors.py (Epic 3A.2). All eb_* columns are ratios (1.0 = league average). Feature layer joins on game_year − 1. |
 
 ## 3.9 Pitch-Level Facts (Incremental)
 
@@ -309,7 +315,7 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 | `feature_pregame_weather_features` | game_pk | **feature_pregame_weather_status** (SCD-2) | ~5 | Wind speed, wind direction, temperature, humidity. NULL for dome stadiums. Re-pointed to SCD-2 source in Epic 15 Story 15.5; reads `is_current = true` rows. |
 | `feature_pregame_umpire_status` | (game_pk, valid_from) | stg_statsapi_umpire_snapshots (SCD-2) | ~10 | SCD-2 table for HP umpire assignments. Natural key: game_pk (one HP ump per game; no ump_position column in source). New row when umpire_name or tendency stats change. Coverage: ~2026-05-02 (Epic T.4). **Added Epic 15 Story 15.7.** |
 | `feature_pregame_umpire_features` | game_pk | stg_statsapi_umpire_game_log | ~8 | HP umpire assignment + trailing z-scores of tendency metrics (called strikes above avg, run expectancy delta, run impact, accuracy). Reads stg_statsapi_umpire_game_log directly (not re-pointed to SCD-2) — forward-only SCD-2 coverage would break historical trailing z-score computation. feature_pregame_umpire_status available for AS-OF point-in-time queries. |
-| `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~260+ | Master pre-game feature table. Joins all 9 component feature tables including feature_pregame_sub_model_signals. `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. Home/away bat-tracking std columns added Story 2.9. |
+| `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~285+ | Master pre-game feature table. Joins lineup, starter, team, odds, park, weather, umpire, cluster matchup, batter archetype matchup, H2H matchup, line movement, bookmaker disagreement, bullpen handedness/leverage, base-state splits, and public betting feature models. **Does NOT join feature_pregame_sub_model_signals** — that integration is Layer 3 (Epic 9). `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. Bat-tracking columns added Story 2.9. EB batter posteriors (avg_eb_woba/k_pct/bb_pct/iso/uncertainty, eb_coverage_pct × home/away), EB starter posteriors (eb_xwoba_against/k_pct/bb_pct/xwoba_uncertainty × home/away), and EB bullpen quality (bp_eb_xwoba/uncertainty/coverage_pct × home/away) added to SQL (Epic 7.M, 2026-06-01) — requires `dbtf run -s feature_pregame_game_features` + `validate_feature_selection.py` re-run to propagate. |
 | `feature_pregame_sub_model_signals` | (game_pk, side) | mart_sub_model_signals (betting_ml DDL table) | dynamic | Wide-format pivot over mart_sub_model_signals. Each registered (signal_name, sub_model_version) pair becomes one column via MAX(CASE WHEN) static pivot. SCD-2 filtered to is_current = true. **Registered signal blocks (2026-06-01):** run_env_v3/v4 (run_env_mu, run_env_dispersion, run_env_signal, environment_volatility); offense_v1 (pred_runs_raw, runs_index); offense_v2 (pred_runs_mu, pred_runs_dispersion, pred_runs_raw, uncertainty); starter_v1 (starter_suppression_mu/sigma/signal, uncertainty — via direct JOIN not pivot); starter_ip_v1 (starter_ip_mu, starter_ip_dispersion, starter_ip_signal, starter_ip_p80_outs, starter_ip_p20_outs, starter_ip_uncertainty, starter_ip_is_bulk_usage — **OUTS UNITS: divide by 3.0 for innings display; keep as outs for NegBin CDF in 6D Candidate B** — via direct JOIN to starter_ip_signals); bullpen_v1 (availability_index, fatigue_signal, quality_mu/sigma/signal, high_leverage_availability_proxy, late_game_volatility_signal); bullpen_v2 (bullpen_mu, bullpen_dispersion, bullpen_fatigue_adjusted_mu, uncertainty — NegBin distributional, Epic 6D). **Added Epic 2, Story 2.1. Last updated Epic 5D, Story 5D.4 (2026-06-01).** |
 | `feature_pitcher_batter_h2h_matchups` | (game_pk, batter_id) | mart_pitcher_batter_history, mart_pitcher_pitch_archetype, mart_batter_vs_pitch_archetype | ~20 | Career h2h history for each batter vs today's opposing starter. PA, K%, wOBA, xwOBA with Bayesian shrinkage for low-sample pairs. |
 | `feature_pitcher_cluster_matchups` | (game_pk, batter_id) | statsapi.pitcher_clusters, statsapi.batter_clusters, mart_batter_archetype_vs_pitcher_cluster | ~10 | Batter archetype vs pitcher cluster matchup stats. Generalization when direct h2h history is sparse. 6-cluster batter taxonomy. |
@@ -329,7 +335,7 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 | Strict leakage guards | All rolling windows use `<` (not `<=`) on game_date. Prior-season-only for platoon splits and park factors. |
 | `has_full_data` flag | Feature master table gate for unbiased training subset selection. |
 | Incremental MERGE | 13 mart models use incremental strategy with `unique_key` MERGE to avoid full rebuilds on large pitch-level tables. |
-| Model versioning | `daily_model_predictions` includes `model_version` (v0/v1/v2). `model_registry.yaml` tracks artifact paths, gates, and wave decisions. |
+| Model versioning | `daily_model_predictions` includes `model_version` (v0 through v4). `model_registry.yaml` tracks artifact paths, gates, and wave decisions. Sidebar filter on 4_Model_Performance.py reads versions dynamically — no code change needed on promotion. |
 
 ---
 
@@ -360,7 +366,8 @@ This section identifies what is missing or incomplete relative to the architectu
 |---|---|---|
 | ZiPS/Steamer projection features in lineup model | **Partial** | `fg_zips_hitting_raw` exists and is staged, but ZiPS features are not currently in `feature_pregame_lineup_features`. |
 | Lineup depth / entropy features | **Partial** | `lineup_depth_score` appears in `idea_notes.md` but is not confirmed in the current `feature_pregame_lineup_features` schema. |
-| Lineup injury penalty | **Partial** | `stg_statsapi_player_injury_status` exists; injury-adjusted feature use in lineup model is not confirmed. |
+| Lineup injury penalty | **Present** | Injury-adjusted wOBA (`injury_adj_avg_woba_30d`, `injury_adj_avg_xwoba_30d`, `injured_player_count`) live in `feature_pregame_lineup_features` via `slot_injury` CTE (Epic 15 Story 15.3). |
+| EB batter posteriors in master feature table | ✅ **Done** | `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso`, `avg_eb_woba_uncertainty`, `eb_coverage_pct` (home + away) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
 | Offensive quality signal mart | **Missing** | `lineup_run_creation_signal`, `top_3_lineup_strength`, `lineup_uncertainty_score` not materialized as sub-model outputs. |
 
 ## 6.4 Starter Suppression Model (Epic 5)
@@ -369,6 +376,7 @@ This section identifies what is missing or incomplete relative to the architectu
 |---|---|---|
 | CSW% rolling | **Present** | `mart_starter_csw_rolling` added in Phase 8. In `feature_pregame_starter_features`. |
 | Arsenal drift score | **Present** | `mart_starter_pitch_mix_rolling` added in Phase 8. |
+| EB starter posteriors in master feature table | ✅ **Done** | `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty` (home_starter + away_starter) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
 | Starter suppression signal mart | **Missing** | `starter_run_suppression_signal`, `starter_expected_ip_signal` not materialized as sub-model outputs. |
 | Projected xFIP from ZiPS | **Partial** | `fg_zips_pitching_raw` is staged but columns `home_starter_proj_xfip` / `away_starter_proj_xfip` are all-NaN in production (noted in model_registry.yaml). |
 
@@ -377,6 +385,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | Gap | Status | Notes |
 |---|---|---|
 | Leverage-weighted workload features | **Present** | `mart_bullpen_leverage` added in Phase 8. In `feature_pregame_bullpen_state_features`. |
+| EB bullpen quality in master feature table | ✅ **Done** | `bp_eb_xwoba`, `bp_eb_uncertainty`, `bp_eb_coverage_pct` (home + away) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
 | Bullpen fatigue signal mart | **Missing** | `bullpen_fatigue_signal`, `high_leverage_availability_proxy` not materialized as sub-model outputs. |
 | Version 2 target (conditional on game-state model) | **Future** | No game-state leverage-context model exists yet. V2 is correctly deferred. |
 
@@ -430,13 +439,13 @@ AS-OF validation confirmed 2026-05-29 on game_pks 823384, 824280, 824360 (predic
 | 15.7 | `feature_pregame_umpire_status` | 2026-05-02 (Epic T.4) | `forward-only` | Pre-T: use `stg_statsapi_umpire_game_log` (final deduped state; no intraday substitution history) |
 | 15.8 | `feature_pregame_park_status` | 2015 | `full` | None — full annual history; retired venues closed at season_close + 1 day |
 
-## 6.9 Market-Blind Retrains (Epic 1 — Immediate)
+## 6.9 Market-Blind Retrains (Epic 7.M — ✅ Complete 2026-06-01)
 
-| Gap | Status | Notes |
-|---|---|---|
-| home_win market-blind retrain | **Ready to run** | `_MARKET_COLS_TO_EXCLUDE` populated in `train_elasticnet_prod.py`. Target date ~2026-05-22. |
-| total_runs market-blind retrain | **Needs script update** | NGBoost training script needs market exclusion list added. 4 noise features to drop. |
-| run_diff market-blind retrain | **Needs script update + feature set upgrade** | Must switch from `feature_columns.json` (294 features) to `load_features()` full set. Most urgent. |
+| Model | Status | Version | CV Metric | Notes |
+|---|---|---|---|---|
+| home_win market-blind retrain | ✅ **Promoted** | v3 | Brier 0.1985 | XGBoost, 369 features, market_blind: true. max_depth=4, lr=0.0241, n_estimators=380. |
+| run_differential market-blind retrain | ✅ **Promoted** | v3 | MAE 3.1041 | NGBoost Normal, 369 features, market_blind: true. n_estimators=500. |
+| total_runs market-blind retrain | ✅ **Promoted** | v4 | MAE 3.4008 | NGBoost Normal (switched from LogNormal), 369 features, market_blind: true. |
 
 ---
 
@@ -448,7 +457,7 @@ AS-OF validation confirmed 2026-05-29 on game_pks 823384, 824280, 824360 (predic
 | Staging layer | Complete for all current sources including all 3 Parlay API staging models. | None — add new staging models as new sources are added. |
 | Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | Small — sub-model output marts not yet created. |
 | Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. | Medium — ZiPS features partially unused; sub-model signals not yet flowing. |
-| Market-blind model retrains | Ready but not yet run. | Small — scripts need updates; target date ~2026-05-22. |
+| Market-blind model retrains | ✅ Complete (Epic 7.M, 2026-06-01). All three targets promoted: home_win v3 (Brier 0.1985), run_diff v3 (MAE 3.1041), total_runs v4 (MAE 3.4008). 493-day backfill run. | None. |
 | Sub-model infrastructure | ✅ Complete (Epic 2). Output table, registry, eval harness, SCD-2 columns all shipped. | None — infrastructure ready for Epics 3–8. |
 | Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
 | Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |

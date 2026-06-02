@@ -917,19 +917,19 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--home-win-tag",
-        choices=["v0", "v1", "v2", "v3"],
+        choices=["v0", "v1", "v2", "v3", "v4"],
         default=None,
         help="Artifact tag to load for the home_win model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--total-runs-tag",
-        choices=["v0", "v1", "v2", "v3"],
+        choices=["v0", "v1", "v2", "v3", "v4"],
         default=None,
         help="Artifact tag to load for the total_runs model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--run-diff-tag",
-        choices=["v0", "v1", "v2", "v3"],
+        choices=["v0", "v1", "v2", "v3", "v4"],
         default=None,
         help="Artifact tag to load for the run_differential model. Defaults to --model-tag.",
     )

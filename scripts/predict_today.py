@@ -703,11 +703,7 @@ def main() -> None:
         ngb_diff_dist, {"loc": loc_diff, "scale": scale_diff}, total_line=0
     )
 
-    X_clf = (
-        df_today
-        .reindex(columns=hw_feat_cols, fill_value=np.nan)
-        .values.astype(np.float32)
-    )
+    X_clf = X_today_imp.reindex(columns=hw_feat_cols, fill_value=0.0).values.astype(np.float32)
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
 
     has_odds_col = df_today["has_odds"].fillna(False).astype(bool)

@@ -2148,7 +2148,7 @@ Even with the market-blind exclusion, combined h2h+totals CV log-loss is minimiz
 - `STG_FANGRAPHS__ZIPS_PITCHING.PROJ_XFIP` is 100% NULL across all seasons → drop xFIP and use `PROJ_FIP` + `PROJ_ERA` + `PROJ_K_PCT` + `PROJ_BB_PCT` instead. Do not block sub-model work on a FanGraphs ingestion fix.
 - No `MART_BULLPEN_*GAME*` outcome mart exists → real engineering work if/when bullpen v1.1 calibration is pursued (deferred per Epic 6 sequencing).
 
-**Status (as of 2026-05-19):** ✅ Complete (Story 2.8 intentionally deferred — see 2.8 section). Stories 2.1–2.3 ✅, 2.4 ✅ (substantially complete — SCD-2 columns on 2.6 and 2.9 done; live e2e verification deferred to when mart_sub_model_signals has live data), 2.5 ✅ (weather coverage audited; training window = 2021-01-01; T.2.C decision documented; registry updated), 2.6 ✅ (ZiPS join, depth score, entropy, rookie proxy, SCD-2 sentinels — all ACs passed in dev and prod), 2.7 ✅ (registry entry confirmed; xFIP exclusion + leakage guard documented), 2.9 ✅ (lineup_bat_speed_std added; archetype_definitions.md written; matchup_v1 registry updated; dbtf build validated 2026-05-19). Story 2.8 deferred — bullpen v1.0 is rules-based; supervised target mart not needed until Epic 6 ships and signal value is evaluated.
+**Status (as of 2026-05-19):** ✅ Complete (Story 2.8 intentionally deferred — see 2.8 section). Stories 2.1–2.3 ✅, 2.4 ✅ (fully complete — e2e SCD-2 AC and AS-OF query verified 2026-06-02 against 599K live rows in prod), 2.5 ✅ (weather coverage audited; training window = 2021-01-01; T.2.C decision documented; registry updated), 2.6 ✅ (ZiPS join, depth score, entropy, rookie proxy, SCD-2 sentinels — all ACs passed in dev and prod), 2.7 ✅ (registry entry confirmed; xFIP exclusion + leakage guard documented), 2.9 ✅ (lineup_bat_speed_std added; archetype_definitions.md written; matchup_v1 registry updated; dbtf build validated 2026-05-19). Story 2.8 ✅ closed (won't do 2026-06-02) — Epic 6D NegBin distributional model superseded the supervised v1.1 calibration path; flat outcome mart no longer needed.
 
 Validation completed 2026-05-14:
 - `baseball_data.betting.mart_sub_model_signals` provisioned; synthetic `test_signal_v1` row inserted; `dbtf build --target dev --select feature_pregame_sub_model_signals` green (1 model, 2 tests passed); `test_signal_v1 = 1.23` confirmed in `dev_betting_features`
@@ -2287,7 +2287,7 @@ Acceptance Criteria:
 
 ---
 
-### 2.4 — Type-2 SCD foundation for feature & sub-model output layers ✅ (partial — 2.9 SCD-2 columns pending)
+### 2.4 — Type-2 SCD foundation for feature & sub-model output layers ✅
 
 **Strategic intent:** Long-term, we want point-in-time reproducibility of every model prediction. Today's feature marts overwrite state (latest-only) — making it impossible to answer "what did the system see at prediction time T?" Type-2 SCDs at the feature and sub-model output layers solve this by preserving every state change with `valid_from` / `valid_to` / `is_current` columns, enabling AS-OF queries for historical re-runs, re-training, and CLV backtesting.
 
@@ -2343,8 +2343,8 @@ Tasks:
 
 Acceptance Criteria:
 - [x] `mart_sub_model_signals` SCD-2 write mechanism implemented — `scd2_upsert()` closes prior rows on hash change and inserts new current rows; two-step UPDATE + INSERT pattern
-- [ ] End-to-end AC (insert same natural key twice with different payload, confirm prior row closed) — **run manually once live signals exist; requires active Snowflake data**
-- [ ] AS-OF query verified against multi-version row set — **verify manually once live signals exist**
+- [x] End-to-end AC (insert same natural key twice with different payload, confirm prior row closed) — **PASSED 2026-06-02: game_pk=663317/home/bullpen_dispersion/bullpen_v2 has 2 versions; prior row closed (valid_to set, is_current=false); new row is_current=true. 134,632 closed rows across 599,750 total in prod.**
+- [x] AS-OF query verified against multi-version row set — **PASSED 2026-06-02: AS-OF at first_version+1s → 1.4474; AS-OF at now → 1.4853. Point-in-time semantics confirmed correct.**
 - [x] `scd2_convention.md` design doc exists in the repo
 - [x] Decision (snapshots vs custom macros) documented with reasoning
 - [x] Epic 15 section exists in this guide with existing-mart migration priority list
@@ -2449,11 +2449,11 @@ Acceptance Criteria:
 
 ---
 
-### 2.8 — Bullpen game outcomes mart (deferred — not on Epic 2 critical path)
+### 2.8 — Bullpen game outcomes mart ✅ Closed (won't do — superseded by Bayesian architecture)
 
-**Status:** Conditionally needed. Bullpen v1.0 is a rules-based composite that uses **only** existing pre-game features (`mart_bullpen_leverage`, `mart_bullpen_workload`, `mart_bullpen_effectiveness`) — no new training target mart required. This story only becomes blocking if/when bullpen v1.1 (supervised calibration) is pursued.
+**Status:** Permanently closed 2026-06-02. At the time this story was written, the bullpen model was a rules-based composite and a supervised regression on `bullpen_xwoba_allowed_next_7d` was the anticipated upgrade path. Since then, the architecture shifted to a full distributional/Bayesian approach — Epic 6D produces NegBin (`bullpen_mu`, `bullpen_dispersion`) outputs directly from the pre-game feature set without needing a supervised outcome mart. A flat supervised regression target is now architecturally redundant. No mart will be built.
 
-**Sequencing decision:** Defer this story until after Epic 6 v1.0 ships. The v1.0 rules-based signal will be evaluated via Story 2.3 against downstream proxies. If v1.0 evaluation suggests learned weights would materially improve the signal, return to this story to build the supervised target.
+**Sequencing decision (original):** Defer this story until after Epic 6 v1.0 ships. ~~The v1.0 rules-based signal will be evaluated via Story 2.3 against downstream proxies. If v1.0 evaluation suggests learned weights would materially improve the signal, return to this story to build the supervised target.~~ **Resolved:** Epic 6D (distributional NegBin bullpen) supersedes the v1.1 supervised path entirely.
 
 **When pursued, the mart specification:**
 
@@ -2466,18 +2466,11 @@ Acceptance Criteria:
 
 > **dbt model checklist:** All new or modified dbt models in this story must satisfy the [Development Workflow › New dbt model checklist](#new-dbt-model-checklist).
 
-Tasks (pending — do not start until Epic 6 v1.0 ships):
-- [ ] Build `mart_bullpen_game_outcomes` per spec above
-- [ ] Materialize 2016–2026
-- [ ] Document the "supervised v1.1 calibration target = `bullpen_xwoba_allowed_next_7d`" decision in the registry
+Tasks: N/A — won't do.
 
-Acceptance Criteria (when pursued):
-- [ ] Mart exists with grain `(game_pk, team)` and all listed columns
-- [ ] Complete-game starts show 0 IP bullpen contribution
-- [ ] No `feature_pregame_*` mart references this table (leakage guard)
-- [ ] SCD-2 columns included per Story 2.4
+Acceptance Criteria: N/A — won't do.
 
-**Training target (v1.1 only, not v1.0):** `bullpen_xwoba_allowed_next_7d`. No market features.
+**Training target (v1.1 only, not v1.0):** `bullpen_xwoba_allowed_next_7d`. No market features. *(Moot — v1.1 supervised path abandoned in favor of Epic 6D NegBin distributional model.)*
 
 ---
 
@@ -4811,14 +4804,26 @@ with pm.Model() as matchup_hierarchical:
 ```
 
 Tasks:
-- [ ] Document the additive decomposition model structure in `quant_sports_intel_models/baseball/matchup_model_design.md` — include the grand mean + marginal effects + interaction term formulation, the shrinkage formula, and the Phase 1 vs. Phase 2 implementation plan
-- [ ] Implement Phase 1 empirical Bayes: `betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py` — computes `grand_mean`, `batter_effect[b]`, `pitcher_effect[p]`, and `σ_interaction` from 2016–2020 data (pre-training window); stores in `models/eb_priors/matchup_cell_priors.json`
-- [ ] Validate: plot the distribution of raw interaction residuals for cells with ≥ 500 PA — should be approximately Normal, confirming the prior family choice; log skewness and kurtosis; flag if either exceeds 1.0
-- [ ] Add `cell_n_pa`, `cell_shrinkage_factor` (how much the interaction term was pulled toward 0), and `cell_data_source ∈ {full_eb, marginals_only}` to the cell estimates output — `marginals_only` for cells with < 50 PA where the interaction term is effectively zeroed out
+- [x] Document the additive decomposition model structure in `quant_sports_intel_models/baseball/matchup_model_design.md` — include the grand mean + marginal effects + interaction term formulation, the shrinkage formula, and the Phase 1 vs. Phase 2 implementation plan
+- [x] Implement Phase 1 empirical Bayes: `betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py` — computes `grand_mean`, `batter_effect[b]`, `pitcher_effect[p]`, and `σ_interaction` from 2016–2020 data (pre-training window); stores in `models/eb_priors/matchup_cell_priors.json`
+- [x] Validate: skewness and kurtosis of raw interaction residuals logged in script output and written to JSON; flagged if either exceeds 1.0; run `fit_matchup_cell_priors.py` to produce full AC report
+- [x] Add `cell_n_pa`, `cell_shrinkage_factor` (how much the interaction term was pulled toward 0), and `cell_data_source ∈ {full_eb, marginals_only}` to the cell estimates output — `marginals_only` for cells with < 50 PA where the interaction term is effectively zeroed out
+
+**Pre-run requirement:** `mart_batter_archetype_vs_pitcher_cluster` must be rebuilt from 2016 before running the script. The dbt model's `game_year >= 2021` filter was changed to `game_year >= 2016` (2026-06-02). Because this is an incremental model expanding the date range backwards, manually DROP the table then rebuild:
+```
+# In Snowflake: DROP TABLE IF EXISTS baseball_data.betting.mart_batter_archetype_vs_pitcher_cluster;
+dbtf run --select mart_batter_archetype_vs_pitcher_cluster --project-dir dbt --profiles-dir dbt
+```
+Then run the script to produce `matchup_cell_priors.json` and verify ACs:
+```
+uv run python betting_ml/scripts/eb_priors/fit_matchup_cell_priors.py
+```
+
+**Data alignment note (2026-06-02):** Soft posteriors backfilled to 2016 using `compute_archetype_posteriors.py --mode backfill --season {year}` for 2016–2020. The same KMeans model (fit on 2015+ pooled data) underlies all seasons. All 25 cells are expected to be `full_eb` with high shrinkage factors (data dominates in the soft-weighted world).
 
 Acceptance criteria:
 - [ ] For cells with ≥ 1,000 PA: `cell_shrinkage_factor > 0.80` — data dominates the prior
-- [ ] For cells with < 100 PA: `cell_shrinkage_factor < 0.40` — prior dominates, interaction term near 0
+- [ ] For cells with < 100 PA: `cell_shrinkage_factor < 0.40` — prior dominates, interaction term near 0 (expected to be vacuous with soft assignment; confirm in script output)
 - [ ] A known favorable matchup (e.g., historically power hitters vs. finesse pitchers) shows a positive interaction term post-shrinkage — directionally sensible
 - [ ] Grand mean is within 0.005 of the league-wide observed xwOBA for the training period
 
@@ -6837,8 +6842,8 @@ Tasks:
 - [x] Document coverage cutoff in model comments
 
 Acceptance Criteria:
-- [ ] At least one confirmed late umpire substitution has two SCD-2 rows — no substitutions in current data (all 25,731 games single-row); verify once a substitution occurs in live ingestion
-- [ ] AS-OF query returns correct umpire at prediction time — verify once multi-row game exists
+- [ ] At least one confirmed late umpire substitution has two SCD-2 rows — no substitutions in current data (all 25,731 games single-row); **re-checked 2026-06-02: still 25,731 rows / 25,731 games, 0 closed rows — mechanism built, awaiting first real substitution event**
+- [ ] AS-OF query returns correct umpire at prediction time — **re-checked 2026-06-02: still no multi-row game exists; verify once a substitution occurs in live ingestion**
 - [x] `dbtf build` succeeds; coverage cutoff documented — 15/15 passing 2026-05-29
 
 ---

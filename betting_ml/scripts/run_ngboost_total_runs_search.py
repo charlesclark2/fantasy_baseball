@@ -21,6 +21,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from betting_ml.scripts.train_total_runs_prod import _MARKET_COLS_TO_EXCLUDE
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
 from betting_ml.utils.feature_selection import load_retained_features
@@ -77,11 +78,13 @@ def run_search() -> None:
     )
 
     retained = load_retained_features()
-    feature_cols = [f for f in retained if f in df.columns]
-    missing = [f for f in retained if f not in df.columns]
+    feature_cols = [f for f in retained if f in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
+    missing = [f for f in retained if f not in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
     if missing:
         print(f"WARNING: {len(missing)} retained features absent from DataFrame (skipped): {missing[:5]}")
-    print(f"Using {len(feature_cols)} features")
+    print(f"Using {len(feature_cols)} features (market-blind)")
+    market_removed = [f for f in retained if f in _MARKET_COLS_TO_EXCLUDE]
+    print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
 
     print("Preparing imputed CV folds...")
     folds = _prepare_folds(df, feature_cols)

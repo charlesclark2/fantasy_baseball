@@ -5,22 +5,22 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.472398397626046
+      "cv_mae": 3.1284279501460097
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.478764079827689
+      "cv_mae": 3.104099532134471
     },
     {
       "n_estimators": 1000,
       "dist": "Normal",
-      "cv_mae": 3.4992867484137107
+      "cv_mae": 3.1105808748536603
     }
   ],
-  "best_n_estimators": 200,
+  "best_n_estimators": 500,
   "best_dist": "Normal",
-  "best_cv_mae": 3.472398397626046,
+  "best_cv_mae": 3.104099532134471,
   "persisted_models": [
     {
       "target": "run_differential",

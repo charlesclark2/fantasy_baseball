@@ -12,6 +12,10 @@ class PlattCalibratedXGBClassifier:
         self.xgb_classifier = xgb_classifier
         self.calibrator = calibrator
 
+    @property
+    def n_features_in_(self) -> int:
+        return self.xgb_classifier.n_features_in_
+
     def predict_proba(self, X) -> np.ndarray:
         raw = self.xgb_classifier.predict_proba(X)[:, 1]
         return self.calibrator.predict_proba(raw.reshape(-1, 1))
