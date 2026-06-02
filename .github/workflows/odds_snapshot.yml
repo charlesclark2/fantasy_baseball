@@ -25,27 +25,7 @@ name: Odds Snapshot
 #   - Post-lineup feature rebuild + second predictions pass (lineup_monitor.yml)
 
 on:
-  schedule:
-    # ── Hourly morning / midday coverage (10:00–17:00 EDT) ───────────────────
-    - cron: '0 14 * * *'   # 10:00 EDT
-    - cron: '0 15 * * *'   # 11:00 EDT
-    - cron: '0 16 * * *'   # 12:00 EDT (noon)
-    - cron: '0 17 * * *'   # 13:00 EDT — also ~5 min before 1:05 PM afternoon starts
-    - cron: '0 18 * * *'   # 14:00 EDT
-    - cron: '30 18 * * *'  # 14:30 EDT — T-1h pre-afternoon
-    - cron: '0 19 * * *'   # 15:00 EDT
-    - cron: '0 20 * * *'   # 16:00 EDT
-    - cron: '0 21 * * *'   # 17:00 EDT
-    # ── Pre-evening coverage (18:00–19:00 EDT) ───────────────────────────────
-    - cron: '0 22 * * *'   # 18:00 EDT — pre-evening games
-    - cron: '0 23 * * *'   # 19:00 EDT — ~5 min before 7:05 PM ET starts
-    - cron: '30 23 * * *'  # 19:30 EDT — T-30min for typical 8:00 PM ET starts
-    # ── Near-close snapshots (closing line for each start-time band) ─────────
-    - cron: '55 23 * * *'  # 19:55 EDT — closing line for 8:00 PM ET primetime
-    - cron: '5 0 * * *'    # 20:05 EDT — closing line for 8:10 PM ET late starts
-    - cron: '30 1 * * *'   # 21:30 EDT — closing line for 9:05 PM ET (west coast early)
-    - cron: '0 2 * * *'    # 22:00 EDT — closing line for 10:05 PM ET (west coast late)
-    - cron: '0 3 * * *'    # 23:00 EDT — safety net: extra-late starts, extra innings
+  # CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
   workflow_dispatch: {}
 
 jobs:

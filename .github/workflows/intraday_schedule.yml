@@ -9,9 +9,7 @@ name: Intraday Schedule Capture
 # capture_reason=intraday_gameday tags these rows separately from the daily pull.
 
 on:
-  schedule:
-    - cron: '*/30 14-23 * * *'
-    - cron: '0,30 0-3 * * *'
+  # CRON DISABLED: Migrated to Dagster Cloud (Epic 0.5). Workflow_dispatch preserved for emergency use. Do not re-enable schedule.
   workflow_dispatch:
     inputs:
       game_date:
