@@ -39,8 +39,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -83,6 +85,12 @@ _N_FLOOR_GROUPS = sum(1 for *_, in_floor in _SIGNAL_GROUPS if in_floor)  # = 5
 _COMPLETENESS_FLOOR = 0.40
 _MLFLOW_EXPERIMENT = "layer3_matrix"
 
+# Story 9.4 — Layer 3 training/inference targets and the canonical column contract.
+_TARGETS = ("total_runs", "home_win")
+_LAYER3_DIR = _PROJECT_ROOT / "betting_ml" / "models" / "layer3"
+_FEATURE_COLUMNS_PATH = _LAYER3_DIR / "layer3_feature_columns.json"
+_STACKING_WEIGHTS_PATH = _LAYER3_DIR / "stacking_weights.json"
+
 _AUDIT_PATH = (
     _PROJECT_ROOT / "quant_sports_intel_models" / "baseball"
     / "ablation_results" / "layer3_matrix_audit.md"
@@ -113,6 +121,221 @@ def _numeric_signal_columns() -> list[str]:
     for _, mu, spread, unc, _, _ in _SIGNAL_GROUPS:
         cols += [mu, spread, unc]
     return cols
+
+
+# ---------------------------------------------------------------------------
+# Story 9.4 — canonical Layer 3 column contract
+#
+# `layer3_feature_columns.json` is the single source of truth for the Layer 3
+# matrix's model-input columns, mirroring `elasticnet_feature_columns.json` and
+# the sub-model `feature_columns.json` files. It is derived deterministically
+# from `_SIGNAL_GROUPS` (no Snowflake read needed) so it always matches the
+# columns `load_layer3_features` actually produces, and it carries a
+# `promoted_by_target` block sourced from `stacking_weights.json` so Epic 10
+# (totals) / Epic 11 (h2h) can subset to the promoted signals while the contract
+# itself stays complete.
+# ---------------------------------------------------------------------------
+
+def _reshaped_group_columns(label: str, mu: str, spread: str, unc: str, avail: str) -> list[str]:
+    """The matrix column names a signal group contributes, in matrix order.
+
+    Mirrors `_reshape_to_game_level`: environment groups keep one copy; per-side
+    groups emit home_/away_ pairs, iterating mu→spread→unc→avail.
+    """
+    if label in _ENV_GROUPS:
+        return [mu, spread, unc, avail]
+    cols: list[str] = []
+    for c in (mu, spread, unc, avail):
+        cols += [f"home_{c}", f"away_{c}"]
+    return cols
+
+
+def layer3_feature_columns() -> list[str]:
+    """Ordered list of Layer 3 model-input columns (the feature contract).
+
+    Equals `[c for c in load_layer3_features(...).columns if c not in _NON_FEATURE_COLS]`,
+    computed without a Snowflake read.
+    """
+    cols: list[str] = []
+    for label, mu, spread, unc, avail, _ in _SIGNAL_GROUPS:
+        cols += _reshaped_group_columns(label, mu, spread, unc, avail)
+    return cols
+
+
+def _promoted_by_target() -> dict:
+    """Map each target → promoted signal groups + their matrix columns, from
+    stacking_weights.json. Empty (with a note) if weights aren't written yet."""
+    if not _STACKING_WEIGHTS_PATH.exists():
+        return {t: {"groups": [], "columns": [], "note": "stacking_weights.json not found"} for t in _TARGETS}
+
+    weights = json.loads(_STACKING_WEIGHTS_PATH.read_text())
+    targets = weights.get("targets", {})
+    group_lookup = {label: (label, mu, spread, unc, avail)
+                    for label, mu, spread, unc, avail, _ in _SIGNAL_GROUPS}
+
+    out: dict = {}
+    for target in _TARGETS:
+        promoted = sorted(targets.get(target, {}).keys())
+        columns: list[str] = []
+        for label in promoted:
+            if label in group_lookup:
+                columns += _reshaped_group_columns(*group_lookup[label])
+        out[target] = {"groups": promoted, "columns": columns}
+    return out
+
+
+def write_feature_columns_contract() -> Path:
+    """Write `layer3_feature_columns.json`. Deterministic; no Snowflake read."""
+    _LAYER3_DIR.mkdir(parents=True, exist_ok=True)
+    contract = {
+        "version": "9.4",
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "grain": "one row per game_pk",
+        "completeness_floor": _COMPLETENESS_FLOOR,
+        "feature_columns": layer3_feature_columns(),
+        "signal_groups": {
+            label: {
+                "mu": mu, "spread": spread, "uncertainty": unc, "available": avail,
+                "env_level": label in _ENV_GROUPS, "counts_toward_completeness": in_floor,
+                "columns": _reshaped_group_columns(label, mu, spread, unc, avail),
+            }
+            for label, mu, spread, unc, avail, in_floor in _SIGNAL_GROUPS
+        },
+        "promoted_by_target": _promoted_by_target(),
+        "non_feature_columns": sorted(_NON_FEATURE_COLS),
+        "notes": (
+            "Single source of truth for the Layer 3 column contract (Story 9.4). "
+            "feature_columns lists ALL signal columns; promoted_by_target (from "
+            "stacking_weights.json) is the subset Epic 10/11 should train on."
+        ),
+    }
+    _FEATURE_COLUMNS_PATH.write_text(json.dumps(contract, indent=2, sort_keys=False) + "\n")
+    log.info("Wrote feature-column contract → %s (%d feature columns)",
+             _FEATURE_COLUMNS_PATH, len(contract["feature_columns"]))
+    return _FEATURE_COLUMNS_PATH
+
+
+def _load_feature_contract() -> list[str]:
+    """Load the contract's ordered feature columns; build it on first use if absent."""
+    if not _FEATURE_COLUMNS_PATH.exists():
+        write_feature_columns_contract()
+    contract = json.loads(_FEATURE_COLUMNS_PATH.read_text())
+    return list(contract["feature_columns"])
+
+
+def load_layer3_features_for_training(
+    target: str = "total_runs",
+    start_date: str = "2021-01-01",
+    min_games_played: int = 15,
+    env: str = "prod",
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Canonical training contract for Epic 10 (`train_totals`) / 11 (`train_h2h`).
+
+    Returns ``(X_train, y_train)`` ready for walk-forward CV:
+      * rows filtered to ``signal_completeness_score >= 0.40`` — below this floor a
+        game has fewer than 2 of the 5 core signal groups present, so the row is
+        mostly imputation and would inject noise into the conditional-mean fit;
+        0.40 matches the matrix's ``low_signal_completeness`` flag and the 9.1
+        completeness audit. Inference (below) keeps these rows and flags them
+        instead, so coverage at score time is never silently dropped.
+      * ``X`` columns are exactly ``layer3_feature_columns.json`` order — BOTH
+        targets, identifiers, game context, and completeness columns are dropped
+        (target-leakage guard). No raw park/weather/umpire/lineup columns exist
+        in the matrix to begin with (architectural, enforced by
+        ``validate_layer3_matrix``).
+    """
+    if target not in _TARGETS:
+        raise ValueError(f"target must be one of {_TARGETS}, got {target!r}")
+
+    df = load_layer3_features(
+        min_games_played=min_games_played, start_date=start_date, env=env,
+    )
+    df = df[df["signal_completeness_score"] >= _COMPLETENESS_FLOOR].reset_index(drop=True)
+
+    feature_cols = _load_feature_contract()
+    missing = [c for c in feature_cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"Matrix is missing contract feature columns: {missing}")
+
+    y = df[target].copy()
+    X = df[feature_cols].copy()  # contract order; targets/context excluded by construction
+    log.info("[training] target=%s: X=%s, y=%d (completeness >= %.2f)",
+             target, X.shape, len(y), _COMPLETENESS_FLOOR)
+    return X, y
+
+
+def load_layer3_features_for_inference(
+    game_pks: list[int],
+    env: str = "prod",
+) -> pd.DataFrame:
+    """Canonical inference contract: one Layer 3 feature row per requested game_pk.
+
+    Unlike training, NO rows are dropped — every ``game_pk`` in ``game_pks`` gets a
+    row even if some (or all) signals are missing, using the ``*_available`` flags
+    rather than completeness filtering. ``signal_completeness_score`` and
+    ``low_confidence`` are always non-null. Final scores are NOT required (today's
+    games are unplayed), so no targets are derived.
+
+    NOTE: the live wiring into ``predict_today`` (routing to the Layer 3 champion)
+    is finalized in Epic 10, when that champion artifact exists. This function
+    establishes the inference data contract Epic 10 consumes.
+    """
+    if not game_pks:
+        raise ValueError("game_pks must be a non-empty list")
+
+    features_schema, mart_schema = _schemas(env)
+    sig_cols = _all_signal_columns()
+    select_sig = ",\n            ".join(f"f.{c}" for c in sig_cols)
+    pk_list = ", ".join(str(int(pk)) for pk in game_pks)
+
+    sql = f"""
+        select
+            f.game_pk,
+            f.side,
+            {select_sig},
+            g.game_date,
+            g.game_year,
+            g.home_team,
+            g.away_team
+        from {features_schema}.feature_pregame_sub_model_signals f
+        left join {mart_schema}.mart_game_results g on g.game_pk = f.game_pk
+        where f.game_pk in ({pk_list})
+    """
+
+    log.info("[inference] loading Layer 3 signals for %d game_pk(s)", len(game_pks))
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [d[0].lower() for d in cur.description]
+        long_df = pd.DataFrame(cur.fetchall(), columns=cols)
+    finally:
+        conn.close()
+
+    # Context columns may be absent for unplayed games; ensure they exist so the
+    # shared reshape works, and add the score/winner placeholders it references.
+    for c in ("home_final_score", "away_final_score", "winning_team"):
+        if c not in long_df.columns:
+            long_df[c] = pd.NA
+    for c in _numeric_signal_columns():
+        if c in long_df.columns:
+            long_df[c] = pd.to_numeric(long_df[c], errors="coerce")
+    if "game_date" in long_df.columns:
+        long_df["game_date"] = pd.to_datetime(long_df["game_date"], errors="coerce")
+
+    out = _reshape_to_game_level(long_df) if not long_df.empty else pd.DataFrame(columns=["game_pk"])
+
+    # Guarantee one row per requested game_pk (missing → NaN signals → available=False).
+    out = out.set_index("game_pk").reindex([int(pk) for pk in game_pks]).reset_index()
+    out = _add_completeness(out)
+    out["low_confidence"] = (out["signal_completeness_score"] < _COMPLETENESS_FLOOR).astype(bool)
+
+    feature_cols = _load_feature_contract()
+    keep = ["game_pk"] + [c for c in feature_cols if c in out.columns] + \
+           ["signal_completeness_score", "low_signal_completeness", "low_confidence"]
+    log.info("[inference] returned %d rows (%d low_confidence)",
+             len(out), int(out["low_confidence"].sum()))
+    return out[keep]
 
 
 def load_layer3_features(
@@ -452,7 +675,14 @@ def main() -> None:
     parser.add_argument("--no-mlflow", action="store_true", help="Skip MLflow logging")
     parser.add_argument("--out", metavar="PATH", default=None,
                         help="Optional parquet path to persist the matrix for inspection")
+    parser.add_argument("--write-contract", action="store_true",
+                        help="Write layer3_feature_columns.json (Story 9.4) and exit "
+                             "(deterministic; no Snowflake read).")
     args = parser.parse_args()
+
+    if args.write_contract:
+        write_feature_columns_contract()
+        return
 
     df = load_layer3_features(
         min_games_played=args.min_games_played,

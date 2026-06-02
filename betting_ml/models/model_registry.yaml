@@ -399,3 +399,33 @@ total_runs:
       CV MAE 3.4008 vs market-blind champion v3 (MAE 3.5521) — 0.15 MAE
       improvement apples-to-apples. Promoted 2026-06-02 via compare_model_versions.py:
       MAE Δ −0.039, Pct_Over_Line 61.7% (healthy), verdict PROMOTE.
+
+# ---------------------------------------------------------------------------
+# Layer 3 stacked-model entries (Epic 9 Story 9.4 — INERT STUBS).
+# predict_today.py --model-source layer3 reads these. While artifact_path is
+# null the source falls back to the monolithic champions above. Epic 10 (totals)
+# and Epic 11 (h2h) populate artifact_path/feature_columns_path and flip
+# promotion_status to 'champion'.
+# ---------------------------------------------------------------------------
+layer3_totals:
+  artifact_path: null            # populated by Epic 10 (train_totals.py)
+  feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
+  stacking_weights_path: betting_ml/models/layer3/stacking_weights.json
+  target: total_runs
+  promotion_status: candidate    # -> champion once Epic 10 trains a model
+  promoted_signals: [run_env, offense, bullpen]
+  notes: >
+    Layer 3 totals stacked model. Contract + pseudo-BMA stacking weights wired in
+    Story 9.4; awaiting Epic 10 to train the champion NegBin model on the
+    promoted distributional signals.
+
+layer3_h2h:
+  artifact_path: null            # populated by Epic 11 (train_h2h.py)
+  feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
+  stacking_weights_path: betting_ml/models/layer3/stacking_weights.json
+  target: home_win
+  promotion_status: candidate    # -> champion once Epic 11 trains a model
+  promoted_signals: [offense, bullpen]
+  notes: >
+    Layer 3 head-to-head stacked model. Contract + stacking weights wired in
+    Story 9.4; awaiting Epic 11 to train the champion classifier.

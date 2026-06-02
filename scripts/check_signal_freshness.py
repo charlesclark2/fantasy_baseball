@@ -38,8 +38,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
+from datetime import date
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -52,6 +54,23 @@ log = logging.getLogger(__name__)
 
 # Completeness floor: if every recent game-side is below this, fail.
 _COMPLETENESS_FLOOR = 0.40
+
+# Story 9.4 — promoted-signal staleness observability.
+# The Layer 3 stacked model (Epics 10/11) consumes only the PROMOTED signals, so
+# their staleness is what matters for those predictions. We read the promoted set
+# from stacking_weights.json so this stays in sync with 9.3, and log a
+# non-blocking warning (+ MLflow metrics) when the freshest available signal slate
+# is more than 1 day stale. NOTE: like the coverage check, staleness is measured
+# against the latest *completed* slate, not today's scheduled games — the signal
+# generators are anchored on mart_game_results (completed games only), so this is
+# the age of the freshest slate they can produce relative to today. A true
+# scheduled-game check waits on the generator change that lets sub-models score
+# upcoming games (Epic 10+).
+_STACKING_WEIGHTS_PATH = (
+    _PROJECT_ROOT / "betting_ml" / "models" / "layer3" / "stacking_weights.json"
+)
+_MAX_PROMOTED_STALENESS_DAYS = 1
+_MLFLOW_EXPERIMENT = "layer3_signal_freshness"
 
 # (label, pivot column, in_floor) per signal group.
 # in_floor=True groups count toward the catastrophic completeness floor. matchup
@@ -75,6 +94,65 @@ def _schemas(env: str) -> tuple[str, str]:
     if env == "prod":
         return "baseball_data.betting_features", "baseball_data.betting"
     return "baseball_data.dev_betting_features", "baseball_data.dev_betting"
+
+
+def _promoted_groups() -> list[str]:
+    """Promoted signal groups across all targets, read from stacking_weights.json
+    (Story 9.3). Falls back to the known 9.2 promotions if the file is absent."""
+    if _STACKING_WEIGHTS_PATH.exists():
+        try:
+            weights = json.loads(_STACKING_WEIGHTS_PATH.read_text())
+            groups: set[str] = set()
+            for per_target in weights.get("targets", {}).values():
+                groups.update(per_target.keys())
+            if groups:
+                return sorted(groups)
+        except Exception as exc:  # noqa: BLE001 — never let a bad file break the check
+            log.warning("Could not read stacking_weights.json (%s); using fallback promoted set.", exc)
+    return ["bullpen", "offense", "run_env"]  # 9.2 promotions
+
+
+def _log_mlflow_freshness(env: str, ref_date: str, staleness_days: int,
+                          promoted: list[str], rec: dict, game_sides: int) -> None:
+    """Best-effort MLflow log of promoted-signal freshness (Story 9.4, observable,
+    never blocking — MLflow being unavailable must not fail the daily op)."""
+    try:
+        import mlflow
+        from betting_ml.utils.mlflow_utils import get_or_create_experiment
+
+        exp_id = get_or_create_experiment(_MLFLOW_EXPERIMENT)
+        with mlflow.start_run(experiment_id=exp_id, run_name=f"freshness_{ref_date}"):
+            mlflow.log_params({"env": env, "ref_date": ref_date,
+                               "promoted_groups": ",".join(promoted)})
+            mlflow.log_metric("promoted_staleness_days", staleness_days)
+            mlflow.log_metric("game_sides", game_sides)
+            for label in promoted:
+                if label in rec and game_sides:
+                    mlflow.log_metric(f"coverage__{label}", int(rec[label]) / game_sides)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("MLflow freshness logging skipped: %s", exc)
+
+
+def _check_promoted_staleness(env: str, ref_date: str, rec: dict, game_sides: int) -> None:
+    """Story 9.4: warn (non-blocking) if promoted signals are stale or incomplete,
+    and record freshness to MLflow for observability."""
+    promoted = _promoted_groups()
+    staleness_days = (date.today() - date.fromisoformat(str(ref_date))).days
+
+    incomplete = [g for g in promoted if g in rec and int(rec[g]) < game_sides]
+    if staleness_days > _MAX_PROMOTED_STALENESS_DAYS:
+        log.warning("Promoted-signal staleness: freshest slate %s is %d day(s) old "
+                    "(> %d) — Layer 3 inputs are stale for today's games.",
+                    ref_date, staleness_days, _MAX_PROMOTED_STALENESS_DAYS)
+    if incomplete:
+        log.warning("Promoted signals with partial coverage on %s: %s "
+                    "(non-blocking; Layer 3 is inert until Epic 10).",
+                    ref_date, ", ".join(incomplete))
+    if staleness_days <= _MAX_PROMOTED_STALENESS_DAYS and not incomplete:
+        log.info("Promoted signals %s fresh (%d day(s) old) and fully covered on %s.",
+                 promoted, staleness_days, ref_date)
+
+    _log_mlflow_freshness(env, str(ref_date), staleness_days, promoted, rec, game_sides)
 
 
 def main() -> None:
@@ -168,6 +246,9 @@ def main() -> None:
 
     log.info(f"Signal freshness OK: {n_ok}/{game_sides} game-sides clear the "
              f"{_COMPLETENESS_FLOOR:.0%} completeness floor on {ref_date}.")
+
+    # Story 9.4 — promoted-signal staleness + MLflow observability (non-blocking).
+    _check_promoted_staleness(args.env, ref_date, rec, game_sides)
 
 
 if __name__ == "__main__":

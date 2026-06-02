@@ -388,7 +388,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      🔄 In progress (2026-06-02)     │
-│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ⬜  9.5 ⬜  9.6 ⬜                              │
+│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ⬜  9.6 ⬜                              │
 │ Epic 10  Totals Distribution Model          🔒 Blocked on Epic 9             │
 │   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
@@ -523,7 +523,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
-| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | 🔄 2026-06-02: 9.1 ✅ matrix (11,661 games); 9.2 ✅ NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 ✅ stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003; O.3/9.6 unblocked); 9.4 next |
+| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | 🔄 2026-06-02: 9.1 ✅ matrix (11,661 games); 9.2 ✅ NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 ✅ stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003; O.3/9.6 unblocked); 9.4 ✅ contract+stacking wired into train/inference loaders + predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 next |
 | **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
 | **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
@@ -5598,24 +5598,28 @@ Acceptance criteria:
 
 ### 9.4 — Inject promoted signals into Layer 3 training pipeline
 
+**Status:** ✅ COMPLETE (2026-06-02) — Snowflake-verified: training `X=(11661, 44)`, `y=11661`, no target leak, columns == contract; inference returned one row per requested game_pk incl. a bogus pk (`low_confidence=True`, completeness 0.0); freshness on slate 2026-06-01 — promoted signals fresh (1 day old), fully covered, MLflow logged. Adds to `load_layer3_features.py`: `load_layer3_features_for_training(target, start_date, env)` (completeness ≥0.40 filter, drops **both** targets + context → `(X, y)` in contract order) and `load_layer3_features_for_inference(game_pks, env)` (no row drops; one row per requested game_pk via reindex; `signal_completeness_score` + `low_confidence` always non-null). New `betting_ml/models/layer3/layer3_feature_columns.json` — 44-column contract (4 env + 5 per-side groups × 8), built deterministically from `_SIGNAL_GROUPS` via `--write-contract` (no Snowflake), with a `promoted_by_target` block from `stacking_weights.json` (totals 20 cols, home_win 16). `predict_today.py` gains `--model-source {monolithic,layer3}` with **graceful fallback** (`_layer3_champion_ready()`/`_resolve_model_source()` → monolithic + warning while Layer 3 stubs are null). `model_registry.yaml`: inert `layer3_totals`/`layer3_h2h` stubs (`artifact_path: null`, `promotion_status: candidate`). `sub_model_registry.yaml`: `downstream_consumers` set target-accurately — run_env_v4 `[layer3_totals]` (deferred on home_win per 9.2), offense_v2 & bullpen_v2 `[layer3_totals, layer3_h2h]`. **Deviation (D1):** freshness check wired in **Dagster** (`signal_freshness_check` already runs after `dbt_sub_model_signals_rebuild` and before `predict_today_morning`), not the legacy `daily_ingestion.yml` (GH Actions path slated for 0.5.10 decommission); `check_signal_freshness.py` augmented with promoted-signal staleness + non-blocking MLflow logging (`layer3_signal_freshness`). **Deviation (D5):** `predict_today` Layer 3 *scoring* (combined_mu/sigma output columns) deferred to Epic 10 when the champion artifact exists — 9.4 wires the contract + flag + fallback.
+
 **Overview:** Wire the promoted signals and stacking weights into the training scripts for Epics 10 and 11. This story does not train any model — it establishes the canonical data-loading contract that Epic 10 (`train_totals.py`) and Epic 11 (`train_h2h.py`) will call, and updates `predict_today.py` to generate Layer 3 features at inference time.
 
 Script: Updates to `betting_ml/scripts/load_layer3_features.py` and `betting_ml/scripts/predict_today.py`
 
 Tasks:
-- [ ] Add `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` function: calls `load_layer3_features()`, filters to rows where `signal_completeness_score ≥ 0.40`, joins target column from `mart_game_results`, and returns `(X_train, y_train)` ready for walk-forward CV; document the `signal_completeness_score` filter threshold and rationale in a comment block
-- [ ] Add `load_layer3_features_for_inference(game_pks: list[int])` function: same matrix construction but for today's games using `signal_available` flags rather than dropping rows — all games get a prediction even if some signals are missing; `signal_completeness_score < 0.40` predictions get a `low_confidence` flag in output
-- [ ] Add `layer3_feature_columns.json` to `betting_ml/models/layer3/` — the canonical feature column list for the Layer 3 matrix; mirrors the pattern of `elasticnet_feature_columns.json` and the sub-model `feature_columns.json` files; consumed by both training and inference scripts
-- [ ] Update `predict_today.py` to support a `--model-source layer3` flag: when set, calls `load_layer3_features_for_inference()` instead of `load_features()` and routes to the Layer 3 champion artifact (to be populated by Epic 10); run both monolithic and Layer 3 predictions in parallel during transition
-- [ ] Update `sub_model_registry.yaml` for each promoted signal: set `downstream_consumers: ['layer3_totals', 'layer3_h2h']` on all promoted signal entries; set `promotion_status: champion` on the Layer 3 entry once Epics 10 and 11 have trained models
-- [ ] Add `feature_pregame_sub_model_signals` refresh step to `daily_ingestion.yml` immediately before `predict_today.py` — signals must be current before inference runs; add a data freshness check: if any promoted signal has `prior_age_days > 1` for a game day with scheduled games, log a warning to MLflow
+- [x] Add `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` function: calls `load_layer3_features()`, filters to rows where `signal_completeness_score ≥ 0.40`, joins target column from `mart_game_results`, and returns `(X_train, y_train)` ready for walk-forward CV; document the `signal_completeness_score` filter threshold and rationale in a comment block — *targets joined upstream by `load_layer3_features`; wrapper drops both targets + context*
+- [x] Add `load_layer3_features_for_inference(game_pks: list[int])` function: same matrix construction but for today's games using `signal_available` flags rather than dropping rows — all games get a prediction even if some signals are missing; `signal_completeness_score < 0.40` predictions get a `low_confidence` flag in output — *reindex guarantees a row per requested game_pk; final scores not required (left join)*
+- [x] Add `layer3_feature_columns.json` to `betting_ml/models/layer3/` — the canonical feature column list for the Layer 3 matrix; mirrors the pattern of `elasticnet_feature_columns.json` and the sub-model `feature_columns.json` files; consumed by both training and inference scripts — *44 cols; deterministic via `--write-contract`; verified `contract == generator`*
+- [x] Update `predict_today.py` to support a `--model-source layer3` flag — *flag + graceful fallback to monolithic added; Layer 3 **scoring** routing deferred to Epic 10 (D5) when the champion artifact exists*
+- [x] Update `sub_model_registry.yaml` for each promoted signal: set `downstream_consumers` — *target-accurate (run_env totals-only); Layer 3 `promotion_status` stays `candidate` until Epics 10/11 train models*
+- [x] Add `feature_pregame_sub_model_signals` refresh step immediately before `predict_today` + a freshness check — *implemented in **Dagster** (D1), not the legacy `daily_ingestion.yml`: `dbt_sub_model_signals_rebuild → signal_freshness_check → … → predict_today_morning`; `check_signal_freshness.py` now logs promoted-signal staleness to MLflow (non-blocking)*
 
 Acceptance criteria:
-- [ ] `load_layer3_features_for_training(target='total_runs')` returns a DataFrame with correct column names matching `layer3_feature_columns.json` — no raw feature columns present, no target leakage
-- [ ] `load_layer3_features_for_inference()` returns a row for every `game_pk` in the input list; `signal_completeness_score` and `low_confidence` columns always non-null
-- [ ] `predict_today.py --model-source layer3` runs without error in dev environment (even before Epic 10 champion exists — graceful fallback to monolithic model when Layer 3 artifact path is null in registry)
-- [ ] `layer3_feature_columns.json` exists and is referenced by both the training and inference functions — single source of truth for Layer 3 column contract
-- [ ] `daily_ingestion.yml` freshness check fires a logged warning (not a job failure) if any promoted signal is stale — non-blocking but observable
+- [x] `load_layer3_features_for_training(target='total_runs')` returns a DataFrame with correct column names matching `layer3_feature_columns.json` — no raw feature columns present, no target leakage — *Snowflake-verified: `X=(11661, 44)`, `y=11661`, no leak, columns == contract*
+- [x] `load_layer3_features_for_inference()` returns a row for every `game_pk` in the input list; `signal_completeness_score` and `low_confidence` columns always non-null — *Snowflake-verified: 6/6 rows incl. bogus pk (completeness 0.0, `low_confidence=True`); real games 0.8 (game-level needs both sides — see note)*
+- [x] `predict_today.py --model-source layer3` runs without error (graceful fallback to monolithic when Layer 3 artifact path is null) — *verified: `_layer3_champion_ready()=False → monolithic` + warning*
+- [x] `layer3_feature_columns.json` exists and is referenced by both the training and inference functions — single source of truth for Layer 3 column contract
+- [x] Freshness check fires a logged warning (not a job failure) if any promoted signal is stale — non-blocking but observable — *`signal_freshness_check` op wraps non-blocking; promoted-staleness warning + MLflow log added*
+
+*Note: inference `signal_completeness_score` is game-level (a per-side group counts as present only when BOTH sides have it), so it can read lower than the side-level coverage `check_signal_freshness.py` reports for the same slate — by design (Layer 3 needs both teams). 0.8 = 4/5 core groups, well above the 0.40 floor → `low_confidence=False`.*
 
 ---
 
@@ -5790,6 +5794,8 @@ def compute_over_prob_ci(
 
 When `p_over_ci_low > 0.55` and `p_over_ci_high > 0.55`, the entire CI is on the over side — a high-conviction over signal. When the CI straddles 0.50, confidence is low and the bet gate should not pass.
 
+> **⚠️ Carried over from Epic 9 Story 9.3 — combiner does not inflate σ with fewer/agreeing signals.** 9.3's validation found the law-of-total-variance combiner (`combine_distributional_signals`) reported `fewer signals → larger combined_sigma = False` (σ stayed flat: 4.4507 → 4.4529). Cause: it is a *weighted-average* combiner, **not** inverse-variance (precision) pooling — when the promoted signals agree on the mean, the across-model variance term `Var(μ_i)` ≈ 0, so the within-model NB-variance term dominates and is roughly constant under reweighting. **Consequence for 10.3:** the AC "low signal coverage / early-season games produce wider CIs" is **not** guaranteed by the current combiner and must be verified empirically here, not assumed. **Decision required in Epic 10:** if we want `combined_sigma` (and hence the P(over) CI) to widen when signal coverage is low, switch `combine_distributional_signals` to **precision-pooling** (`σ_combined² = 1 / Σ(wᵢ/σᵢ²)`, so fewer/noisier inputs → larger σ) and re-validate 9.3's stability checks. If empirical April-vs-August CIs already differ enough via the per-game NB `r` (dispersion grows when mu is uncertain), the weighted-average combiner may be acceptable as-is. Pick one **before** wiring the bet gate, since gate conviction keys off CI width.
+
 Tasks:
 - [ ] Implement `compute_over_under_probs()` as above in `betting_ml/utils/totals_probability.py`; handle integer lines (push) and half-point lines (no push) separately; add unit tests for both cases
 - [ ] Implement `compute_over_prob_ci()` using the delta method as above; add unit tests confirming that wider `combined_sigma` produces wider CIs
@@ -5802,7 +5808,7 @@ Acceptance criteria:
 - [ ] `totals_p_over + totals_p_under + totals_p_push = 1.0` for all games within floating point tolerance
 - [ ] Half-point line games have `totals_p_push = 0.0`
 - [ ] `totals_p_over_ci_low < totals_p_over < totals_p_over_ci_high` for all games
-- [ ] Games where `combined_sigma` is larger (early season, low signal coverage) produce wider CIs — confirm empirically on April vs. August games from the 2025 backfill
+- [ ] Games where `combined_sigma` is larger (early season, low signal coverage) produce wider CIs — confirm **empirically** on April vs. August games from the 2025 backfill. **Note (Story 9.3 finding):** the current weighted-average combiner does *not* guarantee σ grows with lower coverage; if this check fails, adopt the precision-pooling combiner described in the 10.3 overview callout rather than treating it as a pass
 - [ ] `bovada_devig_over_prob` sums to ≈ 1.0 with `bovada_devig_under_prob` (within vig rounding); confirm no vig-removal errors on spot-checked historical games
 - [ ] All 10 new output columns present in `daily_model_predictions` for every game with a Bovada line
 
