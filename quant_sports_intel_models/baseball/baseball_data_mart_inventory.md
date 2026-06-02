@@ -1,5 +1,7 @@
 # Baseball Data Mart Inventory
-## Current State Reference — As of 2026-06-02 (7.M complete)
+## Current State Reference — As of 2026-06-02 (7.M complete; sub-model signals live + orchestrated)
+
+> **Update 2026-06-02:** All six sub-model signal generators now ship champions and write signals (run_env_v4, offense_v2, starter_v1, starter_ip_v1, bullpen_v1+v2, matchup_v1) — the §6 "signal mart Missing" gaps are closed. The signal generators are wired into the Dagster `daily_ingestion_job` (Epic O.2/8.6), scoring the recently-completed game window daily. `mart_sub_model_signals` lives in `baseball_data.betting` (not `betting_ml` — corrected below).
 
 This document inventories every Snowflake table created via DDL scripts and every dbt model in the project. It is intended as a reference for understanding the current data modeling state and identifying gaps relative to the architecture described in `quant_sports_intel_models/baseball/refined_architecture_proposal.md`.
 
@@ -103,11 +105,22 @@ Parlay API is the replacement for The Odds API (hard cutover 2026-06-01). All ta
 | `mlb_line_movement_raw` | `baseball_data.parlayapi` | one row per ingestion run per event_id | `ingestion_ts`, `load_id`, `event_id`, `record_count`, `markets_captured`, `raw_json` | From `/v1/sports/baseball_mlb/line-movement`. `raw_json` contains a nested `snapshots[]` array of timestamped price changes per (source × market). |
 | `mlb_canonical_events_raw` | `baseball_data.parlayapi` | one row per ingestion run | `ingestion_ts`, `load_id`, `sport_key`, `event_count`, `raw_json` | From `/v1/sports/baseball_mlb/events/canonical`. **Only Parlay API endpoint with real per-game start times.** Response has no `event_id` — only `canonical_event_id`. Added Story 0.10. |
 
+## 1.9 Sub-Model Signal Outputs (script-managed)
+
+Written by the `betting_ml/scripts/**/generate_*_signals.py` champions (not dbt models; `CREATE TABLE IF NOT EXISTS` + MERGE / SCD-2). Refreshed daily for the recently-completed game window by the Dagster `daily_ingestion_job` signal phase (Epic O.2 / 8.6). Consumed by the `feature_pregame_sub_model_signals` PIVOT (§4).
+
+| Table | Schema | Grain | Writer | Notes |
+|---|---|---|---|---|
+| `mart_sub_model_signals` | `baseball_data.betting` | (game_pk, side, signal_name, sub_model_version) SCD-2 | `scd2_writer.py` | Long-format SCD-2 store (~757K rows). Holds run_env_v4, bullpen_v1, bullpen_v2, matchup_v1 signal rows. `is_current`, `valid_from`, `valid_to`, `computed_at`, `record_hash`. **Lives in `betting`, not `betting_ml`.** |
+| `offense_v2_signals` | `baseball_data.betting_features` | (game_pk, side, model_version) | `offense_v2/generate_offense_signals.py` | NegBin: pred_runs_mu, pred_runs_dispersion, pred_runs_raw, uncertainty. MERGE upsert. |
+| `starter_suppression_signals` | `baseball_data.betting_features` | (game_pk, side, model_version) | `starter_v1/generate_starter_signals.py` | Normal: starter_suppression_mu/sigma/signal, uncertainty. MERGE upsert. |
+| `starter_ip_signals` | `baseball_data.betting_features` | (game_pk, side, model_version) | `starter_v1/generate_starter_ip_signals.py` | NegBin (outs): starter_ip_mu, dispersion, signal, p80/p20_outs, uncertainty, is_bulk_usage. MERGE upsert. |
+
 ## 1.10 Snowflake Tasks & Procedures
 
 | Object | Type | Schedule | Purpose |
 |---|---|---|---|
-| `task_lineup_monitor` | Task + Procedure | Hourly (0 * * * * ET) | Polls for confirmed lineups; triggers dbt_staging_build.yml via GitHub Actions. |
+| `task_lineup_monitor` | Task + Procedure | Hourly (0 * * * * ET) | Polls for confirmed lineups; triggers dbt_staging_build.yml via GitHub Actions. **⚠️ MIGRATION GAP (2026-06-02): still RESUMED but superseded by the Dagster `lineup_monitor_sensor` (Epic 0.5.7).** Both write `baseball_data.config.lineup_monitor_state`; the task wins the hourly race and marks games triggered, so the sensor finds no new lineups and fires only rarely (4× since deploy). **Action: `ALTER TASK baseball_data.config.task_lineup_monitor SUSPEND;`** to let the Dagster sensor own lineup monitoring (completes 0.5.10 decommission). |
 | `proc_savant_ingestion` | Procedure | On-demand | Fetches prior-day Statcast CSV incrementally from Baseball Savant. |
 
 ---
@@ -316,7 +329,7 @@ All feature models output to `baseball_data.betting_features`. All materialize a
 | `feature_pregame_umpire_status` | (game_pk, valid_from) | stg_statsapi_umpire_snapshots (SCD-2) | ~10 | SCD-2 table for HP umpire assignments. Natural key: game_pk (one HP ump per game; no ump_position column in source). New row when umpire_name or tendency stats change. Coverage: ~2026-05-02 (Epic T.4). **Added Epic 15 Story 15.7.** |
 | `feature_pregame_umpire_features` | game_pk | stg_statsapi_umpire_game_log | ~8 | HP umpire assignment + trailing z-scores of tendency metrics (called strikes above avg, run expectancy delta, run impact, accuracy). Reads stg_statsapi_umpire_game_log directly (not re-pointed to SCD-2) — forward-only SCD-2 coverage would break historical trailing z-score computation. feature_pregame_umpire_status available for AS-OF point-in-time queries. |
 | `feature_pregame_game_features` | game_pk (master) | All feature_pregame_* tables, mart_game_results, mart_catcher_framing | ~285+ | Master pre-game feature table. Joins lineup, starter, team, odds, park, weather, umpire, cluster matchup, batter archetype matchup, H2H matchup, line movement, bookmaker disagreement, bullpen handedness/leverage, base-state splits, and public betting feature models. **Does NOT join feature_pregame_sub_model_signals** — that integration is Layer 3 (Epic 9). `has_full_data` flag selects games with complete lineups, starters with 30+ IP history, and prior-season park factors. Consumed by predict_today.py and training scripts. Bat-tracking columns added Story 2.9. EB batter posteriors (avg_eb_woba/k_pct/bb_pct/iso/uncertainty, eb_coverage_pct × home/away), EB starter posteriors (eb_xwoba_against/k_pct/bb_pct/xwoba_uncertainty × home/away), and EB bullpen quality (bp_eb_xwoba/uncertainty/coverage_pct × home/away) added to SQL (Epic 7.M, 2026-06-01) — requires `dbtf run -s feature_pregame_game_features` + `validate_feature_selection.py` re-run to propagate. |
-| `feature_pregame_sub_model_signals` | (game_pk, side) | mart_sub_model_signals (betting_ml DDL table) | dynamic | Wide-format pivot over mart_sub_model_signals. Each registered (signal_name, sub_model_version) pair becomes one column via MAX(CASE WHEN) static pivot. SCD-2 filtered to is_current = true. **Registered signal blocks (2026-06-01):** run_env_v3/v4 (run_env_mu, run_env_dispersion, run_env_signal, environment_volatility); offense_v1 (pred_runs_raw, runs_index); offense_v2 (pred_runs_mu, pred_runs_dispersion, pred_runs_raw, uncertainty); starter_v1 (starter_suppression_mu/sigma/signal, uncertainty — via direct JOIN not pivot); starter_ip_v1 (starter_ip_mu, starter_ip_dispersion, starter_ip_signal, starter_ip_p80_outs, starter_ip_p20_outs, starter_ip_uncertainty, starter_ip_is_bulk_usage — **OUTS UNITS: divide by 3.0 for innings display; keep as outs for NegBin CDF in 6D Candidate B** — via direct JOIN to starter_ip_signals); bullpen_v1 (availability_index, fatigue_signal, quality_mu/sigma/signal, high_leverage_availability_proxy, late_game_volatility_signal); bullpen_v2 (bullpen_mu, bullpen_dispersion, bullpen_fatigue_adjusted_mu, uncertainty — NegBin distributional, Epic 6D). **Added Epic 2, Story 2.1. Last updated Epic 5D, Story 5D.4 (2026-06-01).** |
+| `feature_pregame_sub_model_signals` | (game_pk, side) | mart_sub_model_signals (`baseball_data.betting`), offense_v2_signals, starter_suppression_signals, starter_ip_signals (`baseball_data.betting_features`) | dynamic | Wide-format pivot over mart_sub_model_signals + direct JOINs to the dedicated `*_signals` tables (§1.9). Each registered (signal_name, sub_model_version) pair becomes one column via MAX(CASE WHEN) static pivot. SCD-2 filtered to is_current = true. Refreshed daily by `dbt_sub_model_signals_rebuild` in the Dagster signal phase (Epic O.2). **Registered signal blocks:** run_env_v3/v4 (run_env_mu, run_env_dispersion, run_env_signal, environment_volatility); offense_v1 (pred_runs_raw, runs_index); offense_v2 (pred_runs_mu, pred_runs_dispersion, pred_runs_raw, uncertainty); starter_v1 (starter_suppression_mu/sigma/signal, uncertainty — via direct JOIN); starter_ip_v1 (starter_ip_mu, starter_ip_dispersion, starter_ip_signal, starter_ip_p80_outs, starter_ip_p20_outs, starter_ip_uncertainty, starter_ip_is_bulk_usage — **OUTS UNITS: divide by 3.0 for innings display; keep as outs for NegBin CDF in 6D Candidate B** — via direct JOIN); bullpen_v1 (availability_index, fatigue_signal, quality_mu/sigma/signal, high_leverage_availability_proxy, late_game_volatility_signal); bullpen_v2 (bullpen_mu, bullpen_dispersion, bullpen_fatigue_adjusted_mu, uncertainty — NegBin distributional, Epic 6D); **matchup_v1 (matchup_advantage_mu/sigma, matchup_volatility_signal, matchup_soft_vs_hard_delta, matchup_k_pressure_signal, matchup_power_signal — Ridge soft-mixture, Epic 8; availability-gated, null for sparse-archetype games).** **Added Epic 2, Story 2.1. Last updated Epic 8.4 (matchup block) + Epic O.2 daily refresh (2026-06-02).** |
 | `feature_pitcher_batter_h2h_matchups` | (game_pk, batter_id) | mart_pitcher_batter_history, mart_pitcher_pitch_archetype, mart_batter_vs_pitch_archetype | ~20 | Career h2h history for each batter vs today's opposing starter. PA, K%, wOBA, xwOBA with Bayesian shrinkage for low-sample pairs. |
 | `feature_pitcher_cluster_matchups` | (game_pk, batter_id) | statsapi.pitcher_clusters, statsapi.batter_clusters, mart_batter_archetype_vs_pitcher_cluster | ~10 | Batter archetype vs pitcher cluster matchup stats. Generalization when direct h2h history is sparse. 6-cluster batter taxonomy. |
 | `feature_batter_archetype_matchups` | (game_pk, batter_id) | statsapi.batter_clusters, mart_batter_archetype_vs_pitcher_cluster | ~5 | Batter cluster assignment + cluster quality (silhouette score). |
@@ -347,7 +360,7 @@ This section identifies what is missing or incomplete relative to the architectu
 
 | Gap | Status | Notes |
 |---|---|---|
-| Sub-model output table (`mart_sub_model_signals` + `feature_pregame_sub_model_signals`) | ✅ **Done** | DDL table `mart_sub_model_signals` in `baseball_data.betting_ml`. dbt wide-pivot view `feature_pregame_sub_model_signals` added. Story 2.1. |
+| Sub-model output table (`mart_sub_model_signals` + `feature_pregame_sub_model_signals`) | ✅ **Done** | Script-managed table `mart_sub_model_signals` in `baseball_data.betting` (see §1.9). dbt wide-pivot `feature_pregame_sub_model_signals` added. Story 2.1. |
 | `sub_model_registry.yaml` | ✅ **Done** | `betting_ml/sub_model_registry.yaml` — full schema + 10 entries (run_env_v1/v2/v3/v4, offense_v1/v2, starter_v1, starter_ip_v1, bullpen_v1/v2, matchup_v1). Story 2.2. Last updated Epic 6D Story 6D.4 (2026-06-01). |
 | Sub-model evaluation harness (`evaluate_sub_model.py`) | ✅ **Done** | `betting_ml/scripts/evaluate_sub_model.py` — walk-forward temporal CV, ablation comparison, promotion gate evaluation. Story 2.3. |
 | `computed_at` timestamps on feature marts | ✅ **Done** | SCD-2 columns (valid_from, valid_to, is_current, computed_at, record_hash) added to feature_pregame_lineup_features (Story 2.6) and all new feature marts (Story 2.4). |
@@ -357,7 +370,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | Gap | Status | Notes |
 |---|---|---|
 | Historical weather backfill (pre-ingestion-start) | ✅ **Done** | `observed_at_first_pitch` coverage from 2021-04-01 onward (12,469 games through 2026-05-28). Pre-Epic-T rows have NULL `weather_observation_type` (same date range, 12,073 rows). `forecast_pregame` forward-only from 2026-05-14; `forecast_intraday` from 2026-05-15. No pre-2021 data, consistent with overall training window. |
-| Run environment signal mart | **Missing** | `run_environment_signal`, `weather_run_modifier`, `umpire_run_modifier`, `environment_volatility_signal` not yet generated. |
+| Run environment signal mart | ✅ **Done** | `run_env_v4` champion (Ridge + NegBin, Epic 3D) writes `run_env_mu`, `run_env_dispersion`, `run_env_signal` to `mart_sub_model_signals`. Backfilled + daily via Dagster. Current through latest completed slate. |
 | Opponent quality controls in training dataset | **Present** | Team and starter features exist; dataset join logic needs to be defined. |
 
 ## 6.3 Offensive Quality Model (Epic 4)
@@ -368,7 +381,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | Lineup depth / entropy features | **Partial** | `lineup_depth_score` appears in `idea_notes.md` but is not confirmed in the current `feature_pregame_lineup_features` schema. |
 | Lineup injury penalty | **Present** | Injury-adjusted wOBA (`injury_adj_avg_woba_30d`, `injury_adj_avg_xwoba_30d`, `injured_player_count`) live in `feature_pregame_lineup_features` via `slot_injury` CTE (Epic 15 Story 15.3). |
 | EB batter posteriors in master feature table | ✅ **Done** | `avg_eb_woba`, `avg_eb_k_pct`, `avg_eb_bb_pct`, `avg_eb_iso`, `avg_eb_woba_uncertainty`, `eb_coverage_pct` (home + away) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
-| Offensive quality signal mart | **Missing** | `lineup_run_creation_signal`, `top_3_lineup_strength`, `lineup_uncertainty_score` not materialized as sub-model outputs. |
+| Offensive quality signal mart | ✅ **Done** | `offense_v2` champion (LightGBM + NegBin, Epic 4D) writes `pred_runs_mu`, `pred_runs_dispersion`, `pred_runs_raw`, `uncertainty` to `betting_features.offense_v2_signals` (§1.9). Backfilled + daily via Dagster. |
 
 ## 6.4 Starter Suppression Model (Epic 5)
 
@@ -377,7 +390,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | CSW% rolling | **Present** | `mart_starter_csw_rolling` added in Phase 8. In `feature_pregame_starter_features`. |
 | Arsenal drift score | **Present** | `mart_starter_pitch_mix_rolling` added in Phase 8. |
 | EB starter posteriors in master feature table | ✅ **Done** | `eb_xwoba_against`, `eb_k_pct`, `eb_bb_pct`, `eb_xwoba_uncertainty` (home_starter + away_starter) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
-| Starter suppression signal mart | **Missing** | `starter_run_suppression_signal`, `starter_expected_ip_signal` not materialized as sub-model outputs. |
+| Starter suppression signal mart | ✅ **Done** | `starter_v1` (NGBoost Normal xwOBA-against, Epic 5) → `betting_features.starter_suppression_signals`; `starter_ip_v1` (LightGBM + NegBin outs, Epic 5D) → `betting_features.starter_ip_signals` (§1.9). Both backfilled + daily via Dagster. |
 | Projected xFIP from ZiPS | **Partial** | `fg_zips_pitching_raw` is staged but columns `home_starter_proj_xfip` / `away_starter_proj_xfip` are all-NaN in production (noted in model_registry.yaml). |
 
 ## 6.5 Bullpen State Model (Epic 6)
@@ -386,8 +399,8 @@ This section identifies what is missing or incomplete relative to the architectu
 |---|---|---|
 | Leverage-weighted workload features | **Present** | `mart_bullpen_leverage` added in Phase 8. In `feature_pregame_bullpen_state_features`. |
 | EB bullpen quality in master feature table | ✅ **Done** | `bp_eb_xwoba`, `bp_eb_uncertainty`, `bp_eb_coverage_pct` (home + away) live in `feature_pregame_game_features`. Promoted via 7.M market-blind retrains (2026-06-01). |
-| Bullpen fatigue signal mart | **Missing** | `bullpen_fatigue_signal`, `high_leverage_availability_proxy` not materialized as sub-model outputs. |
-| Version 2 target (conditional on game-state model) | **Future** | No game-state leverage-context model exists yet. V2 is correctly deferred. |
+| Bullpen fatigue signal mart | ✅ **Done** | `bullpen_v1` (NGBoost xwOBA quality: availability_index, fatigue_signal, quality_mu/sigma/signal, high_leverage_availability_proxy, late_game_volatility_signal) and `bullpen_v2` (LightGBM + NegBin runs: bullpen_mu, dispersion, fatigue_adjusted_mu, uncertainty — Epic 6D) both write to `mart_sub_model_signals`. Backfilled + daily via Dagster (`--v2-only` in the daily op). |
+| Version 2 target (conditional on game-state model) | ✅ **Done** | `bullpen_v2` NegBin distributional model (Epic 6D) supersedes the deferred supervised V2; Candidate B scales by `starter_ip_p20_outs`. |
 
 ## 6.6 Matchup Model (Epic 8)
 
@@ -397,7 +410,7 @@ This section identifies what is missing or incomplete relative to the architectu
 | Pitcher archetype clusters | **Present** | `statsapi.pitcher_clusters` and `mart_pitcher_pitch_archetype` exist. |
 | Archetype definition documentation | ✅ **Done** | `quant_sports_intel_models/baseball/archetype_definitions.md` — 5 batter archetypes, 6 pitcher archetypes, per-season member counts, stability flags, matchup signals, Epic 7 requirements. Story 2.9. |
 | Bat tracking matchup feature (bat speed vs. fastball velocity) | ✅ **Done** | `lineup_avg_bat_speed`, `lineup_bat_speed_std`, `lineup_avg_swing_length`, `lineup_avg_attack_angle`, `lineup_bat_speed_vs_starter_velo` live in `feature_pregame_lineup_features`. NULL pre-2023-07-14. Story 2.9. |
-| Matchup signal mart | **Missing** | `matchup_advantage_signal`, `matchup_volatility_signal` not materialized as sub-model outputs. |
+| Matchup signal mart | ✅ **Done** | `matchup_v1` champion (Ridge soft-mixture, Epic 8) writes `matchup_advantage_mu/sigma`, `matchup_volatility_signal`, `matchup_soft_vs_hard_delta`, `matchup_k_pressure_signal`, `matchup_power_signal` to `mart_sub_model_signals` (26,068 rows through 2026-05-31; 23,045 `signal_available`). Backfilled + daily via Dagster (Epic 8.6). Availability-gated — null for sparse-archetype / early-call-up games. |
 
 ## 6.7 CLV Meta-Model (Epic 12)
 
@@ -455,11 +468,11 @@ AS-OF validation confirmed 2026-05-29 on game_pks 823384, 824280, 824360 (predic
 |---|---|---|
 | Raw data ingestion | Comprehensive. Statcast, FanGraphs, Odds API (historical), Parlay API (live, 2026+), Stats API, Action Network, weather, umpires, OAA. | Minimal — historical weather confirmed 2021+. Parlay API cutover 2026-06-01. |
 | Staging layer | Complete for all current sources including all 3 Parlay API staging models. | None — add new staging models as new sources are added. |
-| Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | Small — sub-model output marts not yet created. |
-| Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. | Medium — ZiPS features partially unused; sub-model signals not yet flowing. |
+| Rolling stats / mart layer | Very strong. Team, player, pitcher, bullpen, matchup, archetype, odds all covered. | None — sub-model output tables now created (§1.9). |
+| Feature layer (pre-game vectors) | Strong. 250+ columns. Leakage guards enforced. Sub-model signals flow into `feature_pregame_sub_model_signals`. | Medium — ZiPS features partially unused; signals not yet joined into `feature_pregame_game_features` (Layer 3 / Epic 9). |
 | Market-blind model retrains | ✅ Complete (Epic 7.M, 2026-06-01). All three targets promoted: home_win v3 (Brier 0.1985), run_diff v3 (MAE 3.1041), total_runs v4 (MAE 3.4008). 493-day backfill run. | None. |
 | Sub-model infrastructure | ✅ Complete (Epic 2). Output table, registry, eval harness, SCD-2 columns all shipped. | None — infrastructure ready for Epics 3–8. |
-| Sub-model signals (run env, offense, starter, bullpen, matchup) | Raw inputs all exist. Signal computation not done. | Medium per sub-model — no trained models yet, no output marts. Epic 3 is next. |
+| Sub-model signals (run env, offense, starter, bullpen, matchup) | ✅ All six champions trained and generating signals: run_env_v4, offense_v2, starter_v1, starter_ip_v1, bullpen_v1+v2, matchup_v1 (Epics 3D/4D/5/5D/6D/8). Orchestrated daily via Dagster (Epic O.2/8.6). | None for signal generation — next is Layer-3 integration (Epic 9): join signals into the model feature matrix + stacking weights. |
 | Archetype clustering | ✅ Exists in Snowflake. Documentation complete (`archetype_definitions.md`). Stability flags documented. | Epic 7 revalidation required before matchup_v1 training. |
 | CLV meta-model | Correctly gated. 41 CLV games. | Large time horizon — not a data gap, a data-accumulation gap. |
 | Temporal/SCD infrastructure | ✅ **Complete** — Epic 15 all 9 stories done (8 SCD-2 marts + 15.9 CLV reconstruction validation). AS-OF queries validated. Per-mart coverage table in §6.8. | Epic 16 (Sequential Prior Update) next. |
