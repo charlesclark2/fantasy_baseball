@@ -41,6 +41,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))

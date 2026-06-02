@@ -71,14 +71,18 @@ def _is_sunday() -> bool:
 
 
 def _dbt_daily_build_args() -> list[str]:
+    # `dbtf run` on most days (models only — fast, cheap); a periodic `dbtf
+    # build` (run + tests) to catch data-quality issues. The weekly Sunday pass
+    # also uses --full-refresh to correct incremental drift. Running tests every
+    # day would roughly double warehouse cost for little marginal signal, so the
+    # weekly build is the data-integrity checkpoint. NOTE: despite the op name
+    # `dbt_daily_build`, most days execute a `run`, not a `build`. Add a midweek
+    # build day here if a ~weekly test cadence proves too sparse.
     today = date.today()
     target = ["--target", "baseball_betting_and_fantasy"]
-    if today.weekday() == 6:
+    if today.weekday() == 6:  # Sunday: weekly full rebuild + full test suite
         return ["build", "--full-refresh"] + target
-    elif today.day % 2 == 1:
-        return ["build"] + target
-    else:
-        return ["run"] + target
+    return ["run"] + target
 
 
 # ── Parlay API ───────────────────────────────────────────────────────────────
