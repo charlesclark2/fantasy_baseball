@@ -1,5 +1,5 @@
 home_win:
-  artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   calibrator_last_fit_date: '2026-05-08'
   cv_brier: 0.1985
@@ -153,7 +153,7 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.1041
   deployed_date: '2026-06-02'
@@ -246,7 +246,7 @@ run_differential:
       improvement apples-to-apples. Promoted 2026-06-02 via compare_model_versions.py:
       MAE Δ −0.480, verdict PROMOTE.
 total_runs:
-  artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.4008
   deployed_date: '2026-06-02'
@@ -311,7 +311,7 @@ total_runs:
   v3_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
   v3_dist: Normal
   v3_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
-  v4_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  v4_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   v4_dist: Normal
   v4_feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
   challengers:
