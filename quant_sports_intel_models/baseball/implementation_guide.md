@@ -390,7 +390,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic 9   Signal Integration & Ablation      ✅ COMPLETE (2026-06-02)         │
 │   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
 │ Epic 10  Totals Distribution Model          🟢 UNBLOCKED (Epic 9 complete)   │
-│   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
+│   10.1 ✅  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜  10.7 ⬜                │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
 │   11.1 ⬜  11.2 ⬜  11.3 ⬜  11.4 ⬜  11.5 ⬜  11.6 ⬜  11.7 ⬜                │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -5686,20 +5686,22 @@ Acceptance criteria:
 
 ### 10.1 — Training dataset construction
 
+**Status:** ✅ COMPLETE (2026-06-02) — Snowflake-verified: `X=(11661, 44)`, `y=11661`, no target leak, columns == contract; **overdispersion var/mean = 2.26 > 1.5 → NegBin justified**; eval-line coverage **8,146/11,661 (69.8%)** — 7,772 Bovada-specific + 374 consensus fallback; `totals_v1_dataset_audit.md` written. Added to `load_layer3_features.py`: `build_totals_dataset()` (the canonical contract 10.2 calls — returns `(X, y, eval_lines, report)`, completeness ≥0.40, leakage-validated, grain-asserted one-row-per-game), `analyze_totals_target()` (mean/variance/overdispersion ratio; flags NegBin when var/mean > 1.5), `load_total_line_bovada()` (eval-only, **Bovada-preferred** closing line from `oddsapi.odds_snapshots_historical` + consensus `mart_closing_line_value` fallback, `total_line_source` per game), and `write_totals_dataset_audit()` → `ablation_results/totals_v1_dataset_audit.md`; CLI `--totals-audit`. **Key data finding:** Bovada historical totals are already ingested and **game_pk-keyed/dense (all years incl. 2023)** in `oddsapi.odds_snapshots_historical` (~66% of reg-season games) — no Odds API credits needed; the sparse 2023 in `mart_odds_outcomes` is a separate dbt-promotion gap in that mart, not an ingestion gap. **Verify-already-satisfied:** grain (9.1 reshapes to one-row-per-game → asserted, not pivoted); coverage audit (extends 9.1's). Offline-verified: overdispersion math (NegBin vs Poisson), Bovada-preferred merge (Bovada wins over consensus per game_pk), eval-line exclusion from `X`, grain uniqueness.
+
 **Overview:** Build the training dataset for the Layer 3 totals model using `load_layer3_features_for_training()` from Epic 9. The target is `total_runs = home_final_score + away_final_score` from `mart_game_results`. This is a game-level regression problem — one row per game, not per side.
 
 Tasks:
-- [ ] Call `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` — returns the Layer 3 feature matrix with `signal_completeness_score` filter applied
-- [ ] Verify the game-level grain: if the Layer 3 matrix has per-side rows (one home, one away per game), pivot to game-level before training: sum `home_pred_runs_mu + away_pred_runs_mu` as a combined run environment signal; use `run_env_mu` (game-level signal) directly
-- [ ] Add `total_line_bovada` from `mart_closing_line_value` as an evaluation-only column — never enters the training feature matrix; used only in Story 10.4 to compute edge post-inference; assert this column is absent from `X_train` via `validate_layer3_matrix()`
-- [ ] Document the training window and signal coverage in `layer3_matrix_audit.md`: row counts by season, null rates per signal, completeness score distribution
-- [ ] Confirm target distribution: compute mean, variance, and overdispersion ratio (variance / mean) for `total_runs` in the 2021–2025 training window; overdispersion ratio should exceed 1.5 — confirm NegBin is the correct likelihood family
+- [x] Call `load_layer3_features_for_training(target='total_runs', start_date='2021-01-01')` — *wrapped by `build_totals_dataset()`; completeness ≥0.40 filter applied*
+- [x] Verify the game-level grain — *matrix is already one-row-per-game (9.1 reshapes per-side → `home_*/away_*`); `build_totals_dataset` asserts `game_pk` uniqueness rather than pivoting. Engineered `total_pred_runs_mu` deferred to 10.2 feature work*
+- [x] Add `total_line_bovada` as an evaluation-only column — *`load_total_line_bovada()`: **Bovada-preferred** (closing snapshot from `oddsapi.odds_snapshots_historical`, game_pk-keyed) + consensus `mart_closing_line_value` fallback; `total_line_source` flag; asserted absent from `X`*
+- [x] Document the training window and signal coverage — *`write_totals_dataset_audit()` → `totals_v1_dataset_audit.md` (row count, overdispersion, line coverage); 9.1's `layer3_matrix_audit.md` covers per-signal null rates / completeness*
+- [x] Confirm target distribution: mean, variance, overdispersion ratio (var/mean) for `total_runs`; ratio should exceed 1.5 — *Snowflake-verified: var/mean = **2.26***
 
 Acceptance criteria:
-- [ ] `validate_layer3_matrix()` passes — no market features, no target leakage, no raw park/weather/umpire/lineup columns
-- [ ] Overdispersion ratio documented: variance / mean > 1.5 confirmed, justifying NegBin over Poisson
-- [ ] `total_line_bovada` appears as an evaluation-only column, confirmed absent from `X_train` shape
-- [ ] Training dataset row count: ≥ 3,000 regular-season games across 2021–2025 with `signal_completeness_score` ≥ 0.40
+- [x] `validate_layer3_matrix()` passes — no market features, no target leakage, no raw columns — *passed in the `--totals-audit` run*
+- [x] Overdispersion ratio documented: var/mean > 1.5 confirmed, justifying NegBin over Poisson — ***2.26*** (in `totals_v1_dataset_audit.md`)
+- [x] `total_line_bovada` is evaluation-only, confirmed absent from `X_train` — *`build_totals_dataset` raises if it appears in `X`; verified*
+- [x] Training dataset row count ≥ 3,000 regular-season games (completeness ≥ 0.40) — ***11,661 games***
 
 ---
 
@@ -5859,7 +5861,45 @@ Acceptance criteria:
 
 ---
 
-### 10.6 — Integration into daily pipeline
+### 10.6 — Champion-vs-challenger totals promotion decision
+
+**Overview:** The current production totals model — the Epic 7.M market-blind NGBoost v3 (`total_runs` champion in `model_registry.yaml`) — **has been performing decently**, so the Layer 3 totals model must be benchmarked **head-to-head against it on the same held-out games** before it can go live. Passing the standalone gates in 10.2 (MAE ≤ 3.55) and 10.4 (calibration vs. Bovada) is necessary but **not sufficient**: those never compare the two models on the same surface. This story is the explicit go/no-go gate — **10.7 (integration) only flips the production totals source if this story returns `PROMOTE`.** The default posture is conservative: the incumbent is solid, so an ambiguous result keeps it and routes the challenger to shadow mode rather than replacing it.
+
+**Tool:** `betting_ml/scripts/compare_market_blind_challengers.py` (the Story 1.4 offline comparator). This is the correct tool because the Layer 3 totals model **has no production prediction history** (it has never run in `predict_today.py`, so there are no `daily_model_predictions` rows) — `scripts/compare_model_versions.py` cannot be used until live history exists. The champion scores from `load_features()`; the Layer 3 challenger scores from `load_layer3_features_for_inference()`; both are evaluated on the **same `game_pk` set, the same out-of-sample window, and the same actual `total_runs`**.
+
+**Tasks:**
+- [ ] Extend `compare_market_blind_challengers.py` with a `--challenger-source layer3` mode for `total_runs`: champion = registry `total_runs` (NGBoost v3) via `load_features()`; challenger = `totals_v1` via `load_layer3_features_for_inference()`; inner-join on `game_pk` over a shared **walk-forward OOS window** (default 2024+, so neither model trained on the eval years); pull `total_line_bovada` from `mart_closing_line_value` for the directional/CLV checks
+- [ ] Tabulate champion vs. challenger on the identical games: **MAE**, **NLL**, **std(pred)**, **calib_80**, **Brier on `p_over`** (vs. actual *and* vs. Bovada de-vigged), and **CLV by `totals_edge` bucket** (`>+0.03` / near-zero / `<−0.03`)
+- [ ] **Directional-bias guard (standing requirement):** report `AVG(pred)` vs. `AVG(actual)` and `Pct_Pred_Over_Line` for **both** models; flag the challenger if it introduces over/under skew the champion doesn't have (`Pct_Over < 25%` or `> 75%`, or `|AVG(pred) − AVG(actual)|` materially worse than the champion's)
+- [ ] **Variance-shrinkage gate (the reason Epic 10 exists):** challenger `std(pred)` must be `≥ 1.5` **and** materially exceed the champion's (~0.77). A challenger that wins MAE but keeps shrunk variance **does not promote** — it cannot size bets or produce honest tail probabilities
+- [ ] Apply the 3-tier verdict (below); write `ablation_results/totals_champion_vs_challenger.md`; record verdict + all deltas in `model_registry.yaml` under `totals_v1.promotion_decision`
+- [ ] If verdict is `PROMOTE-WITH-MONITORING` (shadow): keep `predict_today` default totals source = monolithic, run `--model-source layer3` in parallel logging Layer 3 totals under a distinct `model_version` tag for **≥ 30 live games**, then re-run the comparison on live rows (via `compare_model_versions.py`, which now has history) before flipping
+
+**Promotion gates** (challenger − champion deltas; mirrors the Story 1.4 structure):
+
+| Metric | Promote | Promote w/ Monitoring (shadow) | Do Not Promote |
+|---|---|---|---|
+| MAE delta | ≤ 0 | 0 – +0.05 | > +0.05 |
+| NLL delta | < 0 | ≈ 0 (±0.005) | > 0 |
+| std(pred) | ≥ 1.5 **and** > champion | ≈ 1.5 boundary | < 1.5 |
+| calib_80 | ≥ 0.80 | 0.78 – 0.80 | < 0.78 |
+| Directional bias | `Pct_Over` 25–75% & `AVG(pred) ≈ AVG(actual)` | mild bias | `Pct_Over` <25%/>75% or worse than champion |
+| CLV (`edge > +0.03`) | positive, ≥ champion | positive, < champion | non-positive |
+
+**Decision rule:** `PROMOTE` only if MAE does not regress **AND** NLL improves **AND** the variance-shrinkage gate passes **AND** no new directional bias is introduced. Any single ambiguous axis → `PROMOTE-WITH-MONITORING` (shadow). A regression on MAE, NLL, or variance → `DO NOT PROMOTE` (incumbent stays). The incumbent performs decently — it is not replaced on a coin flip.
+
+**Acceptance criteria:**
+- [ ] Champion and challenger scored on the **identical `game_pk` set** and OOS window; report committed to `ablation_results/totals_champion_vs_challenger.md`
+- [ ] All six metric families reported with deltas; verdict (`PROMOTE` / `MONITOR` / `DO NOT PROMOTE`) recorded in `model_registry.yaml` under `totals_v1.promotion_decision`
+- [ ] Variance-shrinkage gate explicitly evaluated — challenger `std(pred)` reported against the champion's ~0.77 and the ≥ 1.5 bar
+- [ ] Directional-bias check run for **both** models; challenger introduces no new over/under skew (else verdict ≤ MONITOR)
+- [ ] 10.7 integration proceeds **only** on a `PROMOTE` (or after a successful shadow window); a `DO NOT PROMOTE` verdict leaves monolithic as the production totals source and is documented with the deltas that drove the call
+
+---
+
+### 10.7 — Integration into daily pipeline
+
+**Gate:** Story 10.6 returned `PROMOTE` (or a `PROMOTE-WITH-MONITORING` shadow window has since passed on live games). On a `DO NOT PROMOTE` verdict, this story does not run — monolithic remains the production totals source.
 
 **Overview:** Wire the champion totals model into `predict_today.py`, the EV Tracker dashboard, and the Dagster daily asset graph. This story makes the Layer 3 totals model the active production totals predictor.
 
@@ -5877,7 +5917,7 @@ Acceptance criteria:
 - [ ] Dagster asset materializes successfully in dev environment
 
 **Cross-story sequencing:**
-10.1 (dataset) → 10.2 (train) → 10.3 (over/under probs) → 10.4 (calibration) → 10.5 (alpha) → 10.6 (pipeline integration)
+10.1 (dataset) → 10.2 (train) → 10.3 (over/under probs) → 10.4 (calibration) → 10.5 (alpha) → 10.6 (champion-vs-challenger decision) → 10.7 (pipeline integration)
 
 ---
 
@@ -6789,7 +6829,7 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 | 7 — Archetype clustering | Clusters interpretable; labels stable year-over-year; stored in mart |
 | 8 — Matchup model | Ablation shows incremental improvement in H2H CV |
 | 9 — Signal integration | `run_env_v4` and `offense_v2` NLL gates pass on `total_runs`; stacking weights written to `stacking_weights.json`; ≥ 2 of 5 signal groups promoted; Layer 3 feature matrix validated leak-free. *(Met 2026-06-02: 3 promoted on totals — run_env/offense/bullpen; 2 on home_win — offense/bullpen.)* |
-| 10 — Totals distribution | std(pred) > 1.5; quantile calibration pass; MAE ≤ current baseline |
+| 10 — Totals distribution | std(pred) > 1.5; quantile calibration pass; MAE ≤ current baseline; **Story 10.6 head-to-head vs. the live NGBoost v3 champion returns `PROMOTE`** (MAE no-regress + NLL improve + variance-shrinkage fixed + no new directional bias) before 10.7 flips it live |
 | 11 — H2H with signals | CV Brier beats market-blind baseline; mean CLV positive over 30+ live games |
 | 12 — Meta-model | 1000+ CLV games; AUC > 0.55; positive mean CLV in holdout |
 | 13 — Temporal platform | Point-in-time joins validated; historical reconstruction matches original predictions |
