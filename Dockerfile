@@ -8,6 +8,14 @@ ENV SHELL=/bin/bash
 
 ENV DAGSTER_HOME=/app/dagster_home
 
+# Make the repo-root packages (pipeline, betting_ml) importable in-process for
+# every process the agent spawns — code server, sensor/schedule daemons, etc.
+# The project is not pip-installed, and sensors evaluate in-process (unlike the
+# subprocess ops, which insert sys.path themselves). Without this, in-process
+# `import betting_ml` raises ModuleNotFoundError during sensor evaluation
+# (e.g. clv_alert_sensor).
+ENV PYTHONPATH=/app
+
 WORKDIR /app
 
 # Copy dependency manifests first for layer caching

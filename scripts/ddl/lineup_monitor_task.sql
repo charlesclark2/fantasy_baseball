@@ -4,6 +4,14 @@
 -- Phase 5 / Card 3 — Lineup Notification Hourly Batch
 -- ============================================================
 --
+-- ⚠️ DECOMMISSIONED (2026-06-02): The hourly Snowflake task below is
+-- SUPERSEDED by the Dagster `lineup_monitor_sensor` (Epic 0.5.7). Both wrote
+-- `baseball_data.config.lineup_monitor_state`; the task won the hourly race and
+-- pre-empted the sensor, which is why the sensor fired only a handful of times.
+-- The task has been SUSPENDED in prod. The trailing RESUME is intentionally
+-- commented out so re-applying this file does NOT reintroduce the conflict.
+-- Keep this file for the stored-procedure reference only.
+--
 -- PREREQUISITES (run manually before executing this file):
 --
 --   1. EXECUTE TASK + EXECUTE MANAGED TASK privileges (ACCOUNTADMIN required,
@@ -248,7 +256,10 @@ AS
   CALL baseball_data.config.lineup_monitor_proc();
 
 -- Snowflake Tasks are created SUSPENDED by default — explicit RESUME is required.
-ALTER TASK baseball_data.config.task_lineup_monitor RESUME;
+-- DECOMMISSIONED 2026-06-02: do NOT resume. The Dagster lineup_monitor_sensor
+-- (Epic 0.5.7) is the live owner of lineup_monitor_state; resuming this task
+-- re-creates the race that suppressed the sensor. Left suspended intentionally.
+-- ALTER TASK baseball_data.config.task_lineup_monitor RESUME;
 
 
 -- ============================================================
