@@ -1,0 +1,19 @@
+[
+  "log_hard_n_pa",
+  "k_pct",
+  "bb_pct",
+  "hard_hit_pct",
+  "log_soft_pa_weight",
+  "soft_xwoba_mean",
+  "soft_woba_mean",
+  "cell_sparsity_flag",
+  "season_norm",
+  "batter_groundball_speed",
+  "batter_high_whiff",
+  "batter_patient_obp",
+  "batter_power_pull",
+  "pitcher_contact_sinker_ball",
+  "pitcher_multi_pitch_mix",
+  "pitcher_power_swing_and_miss",
+  "pitcher_soft_command"
+]

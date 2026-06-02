@@ -47,6 +47,12 @@
 --   starter_ip_signals.is_bulk_usage       → starter_ip_is_bulk_usage_v1  (TRUE when mu < 9 outs)
 --   NOTE: IP mu/p80/p20 are in OUTS — divide by 3.0 for innings-pitched display;
 --         keep as outs for NegBin CDF computations in 6D Candidate B.
+--   matchup_v1.matchup_advantage_mu        → matchup_advantage_mu_v1        (Epic 8; Ridge soft-mixture xwOBA residual; primary signal)
+--   matchup_v1.matchup_advantage_sigma     → matchup_advantage_sigma_v1     (predictive uncertainty from soft mixture)
+--   matchup_v1.matchup_volatility_signal   → matchup_volatility_signal_v1   (Shannon entropy of joint archetype distribution)
+--   matchup_v1.matchup_soft_vs_hard_delta  → matchup_soft_vs_hard_delta_v1  (soft mu − MAP-cell mu; diagnostic)
+--   matchup_v1.matchup_k_pressure_signal   → matchup_k_pressure_signal_v1   (soft-weighted expected K% across cells)
+--   matchup_v1.matchup_power_signal        → matchup_power_signal_v1        (soft-weighted expected hard-hit% across cells)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -134,10 +140,21 @@ pivoted as (
         max(case when signal_name = 'uncertainty'                 and sub_model_version = 'v2' then signal_available end) as bullpen_uncertainty_v2_available,
 
         -- ------------------------------------------------------------------
-        -- Matchup sub-model (Epic 8)
+        -- Matchup sub-model v1 (Epic 8 — Ridge + soft mixture; champion)
         -- ------------------------------------------------------------------
-        max(case when signal_name = 'matchup_advantage_signal' and sub_model_version = 'v1' then signal_value end)     as matchup_advantage_signal_v1,
-        max(case when signal_name = 'matchup_advantage_signal' and sub_model_version = 'v1' then signal_available end) as matchup_advantage_signal_v1_available,
+        max(case when signal_name = 'matchup_advantage_mu'       and sub_model_version = 'v1' then signal_value end)     as matchup_advantage_mu_v1,
+        max(case when signal_name = 'matchup_advantage_mu'       and sub_model_version = 'v1' then uncertainty end)      as matchup_advantage_mu_v1_uncertainty,
+        max(case when signal_name = 'matchup_advantage_mu'       and sub_model_version = 'v1' then signal_available end) as matchup_advantage_mu_v1_available,
+        max(case when signal_name = 'matchup_advantage_sigma'    and sub_model_version = 'v1' then signal_value end)     as matchup_advantage_sigma_v1,
+        max(case when signal_name = 'matchup_advantage_sigma'    and sub_model_version = 'v1' then signal_available end) as matchup_advantage_sigma_v1_available,
+        max(case when signal_name = 'matchup_volatility_signal'  and sub_model_version = 'v1' then signal_value end)     as matchup_volatility_signal_v1,
+        max(case when signal_name = 'matchup_volatility_signal'  and sub_model_version = 'v1' then signal_available end) as matchup_volatility_signal_v1_available,
+        max(case when signal_name = 'matchup_soft_vs_hard_delta' and sub_model_version = 'v1' then signal_value end)     as matchup_soft_vs_hard_delta_v1,
+        max(case when signal_name = 'matchup_soft_vs_hard_delta' and sub_model_version = 'v1' then signal_available end) as matchup_soft_vs_hard_delta_v1_available,
+        max(case when signal_name = 'matchup_k_pressure_signal'  and sub_model_version = 'v1' then signal_value end)     as matchup_k_pressure_signal_v1,
+        max(case when signal_name = 'matchup_k_pressure_signal'  and sub_model_version = 'v1' then signal_available end) as matchup_k_pressure_signal_v1_available,
+        max(case when signal_name = 'matchup_power_signal'       and sub_model_version = 'v1' then signal_value end)     as matchup_power_signal_v1,
+        max(case when signal_name = 'matchup_power_signal'       and sub_model_version = 'v1' then signal_available end) as matchup_power_signal_v1_available,
 
         -- ------------------------------------------------------------------
         -- Synthetic test signal (remove after 2.1 validation is confirmed)
@@ -219,9 +236,20 @@ select
     p.bullpen_uncertainty_v2,
     p.bullpen_uncertainty_v2_available,
 
-    -- Matchup signals (Epic 8)
-    p.matchup_advantage_signal_v1,
-    p.matchup_advantage_signal_v1_available,
+    -- Matchup signals v1 (Epic 8 — Ridge + soft mixture; champion)
+    p.matchup_advantage_mu_v1,
+    p.matchup_advantage_mu_v1_uncertainty,
+    p.matchup_advantage_mu_v1_available,
+    p.matchup_advantage_sigma_v1,
+    p.matchup_advantage_sigma_v1_available,
+    p.matchup_volatility_signal_v1,
+    p.matchup_volatility_signal_v1_available,
+    p.matchup_soft_vs_hard_delta_v1,
+    p.matchup_soft_vs_hard_delta_v1_available,
+    p.matchup_k_pressure_signal_v1,
+    p.matchup_k_pressure_signal_v1_available,
+    p.matchup_power_signal_v1,
+    p.matchup_power_signal_v1_available,
 
     -- Starter IP depth signals v1 (Epic 5D — LightGBM+NegBin; outs units)
     ip.starter_ip_mu                                      as starter_ip_mu_v1,

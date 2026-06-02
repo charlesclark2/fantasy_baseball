@@ -10,7 +10,15 @@ from pipeline.ops.daily_ingestion_ops import (
     dbt_lineup_feature_rebuild,
     dbt_mart_prediction_clv,
     dbt_pregame_odds_rebuild,
+    dbt_sub_model_signals_rebuild,
     dbt_umpire_feature_rebuild,
+    generate_bullpen_signals_op,
+    generate_matchup_signals_op,
+    generate_offense_signals_op,
+    generate_run_env_signals_op,
+    generate_starter_ip_signals_op,
+    generate_starter_signals_op,
+    signal_freshness_check,
     ingest_action_network,
     ingest_fangraphs_catcher_framing,
     ingest_fangraphs_hitting_leaderboard,
@@ -51,9 +59,28 @@ def daily_ingestion_job():
     s14 = compute_elo(start=s13)
     s15 = check_data_freshness(start=s14)
     s16 = dbt_daily_build(start=s15)
+    # Epic O.2 — sub-model signal generation for the recently-completed game
+    # window. Fan out from dbt_daily_build (mart_game_results + feature marts are
+    # fresh), fan in to the PIVOT rebuild, then a (non-blocking) freshness check.
+    # bullpen runs after starter_ip — it reads starter_ip_signals for v2 scaling.
+    sig_run_env    = generate_run_env_signals_op(start=s16)
+    sig_offense    = generate_offense_signals_op(start=s16)
+    sig_starter    = generate_starter_signals_op(start=s16)
+    sig_starter_ip = generate_starter_ip_signals_op(start=s16)
+    sig_bullpen    = generate_bullpen_signals_op(start=sig_starter_ip)
+    sig_matchup    = generate_matchup_signals_op(start=s16)
+    sig_rebuild    = dbt_sub_model_signals_rebuild(
+        run_env_done=sig_run_env,
+        offense_done=sig_offense,
+        starter_done=sig_starter,
+        starter_ip_done=sig_starter_ip,
+        bullpen_done=sig_bullpen,
+        matchup_done=sig_matchup,
+    )
+    sig_fresh = signal_freshness_check(start=sig_rebuild)
     # SCD-2 update: mart_odds_outcomes is now fresh; update market features and
     # rebuild feature_pregame_odds_features before the prediction step.
-    s16b = update_market_features_scd2(start=s16)
+    s16b = update_market_features_scd2(start=sig_fresh)
     s16c = dbt_pregame_odds_rebuild(start=s16b)
     # SCD-2 update: monthly_schedule is now fresh; update lineup state and
     # rebuild feature_pregame_lineup_features before the prediction step.
