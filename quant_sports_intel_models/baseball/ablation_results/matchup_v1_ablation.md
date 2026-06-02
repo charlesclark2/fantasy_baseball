@@ -1,6 +1,6 @@
 # Story 8.4 — Matchup v1 Signal Ablation Results
 
-**Run date:** 2026-06-02T09:02:31Z  
+**Run date:** 2026-06-02T09:47:12Z  
 **Script:** `betting_ml/scripts/ablation_matchup_v1_signals.py`  
 **Signal coverage:** 2021–2026 (94%+ available; 2015–2020 rows filled with neutral values: mu=0.0, volatility=1.756)  
 **CV method:** Walk-forward by season, Ridge α=1000, min_train_seasons=3  
@@ -14,13 +14,13 @@
 |---|---|---|---|
 | 2024 | 3.4219 | 3.4221 | +0.0002 |
 | 2025 | 3.6145 | 3.6141 | -0.0005 |
-| 2026 | 3.4853 | 3.4826 | -0.0027 |
-| **Mean** | **3.5072** | **3.5062** | **-0.0010** |
+| 2026 | 3.4853 | 3.4849 | -0.0004 |
+| **Mean** | **3.5072** | **3.5070** | **-0.0002** |
 
 - Folds improved: 2 / 3
 - Gate: **CLEAR**
-- `home_matchup_advantage_mu_v1` Ridge |coef| rank: #160
-- `home_matchup_volatility_signal_v1` Ridge |coef| rank: #370
+- `home_matchup_advantage_mu_v1` Ridge |coef| rank: #152
+- `home_matchup_volatility_signal_v1` Ridge |coef| rank: #571
 
 ### run_differential
 
@@ -28,13 +28,13 @@
 |---|---|---|---|
 | 2024 | 3.3872 | 3.3875 | +0.0003 |
 | 2025 | 3.5057 | 3.5061 | +0.0004 |
-| 2026 | 3.5857 | 3.5872 | +0.0015 |
+| 2026 | 3.5857 | 3.5872 | +0.0016 |
 | **Mean** | **3.4928** | **3.4936** | **+0.0007** |
 
 - Folds improved: 0 / 3
 - Gate: **CLEAR**
-- `home_matchup_advantage_mu_v1` Ridge |coef| rank: #156
-- `home_matchup_volatility_signal_v1` Ridge |coef| rank: #269
+- `home_matchup_advantage_mu_v1` Ridge |coef| rank: #255
+- `home_matchup_volatility_signal_v1` Ridge |coef| rank: #240
 
 ## Overall Gate
 

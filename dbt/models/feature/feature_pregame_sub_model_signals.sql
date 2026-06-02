@@ -47,12 +47,13 @@
 --   starter_ip_signals.is_bulk_usage       → starter_ip_is_bulk_usage_v1  (TRUE when mu < 9 outs)
 --   NOTE: IP mu/p80/p20 are in OUTS — divide by 3.0 for innings-pitched display;
 --         keep as outs for NegBin CDF computations in 6D Candidate B.
---   matchup_v1.matchup_advantage_mu        → matchup_advantage_mu_v1        (Epic 8; Ridge soft-mixture xwOBA residual; primary signal)
---   matchup_v1.matchup_advantage_sigma     → matchup_advantage_sigma_v1     (predictive uncertainty from soft mixture)
---   matchup_v1.matchup_volatility_signal   → matchup_volatility_signal_v1   (Shannon entropy of joint archetype distribution)
---   matchup_v1.matchup_soft_vs_hard_delta  → matchup_soft_vs_hard_delta_v1  (soft mu − MAP-cell mu; diagnostic)
---   matchup_v1.matchup_k_pressure_signal   → matchup_k_pressure_signal_v1   (soft-weighted expected K% across cells)
---   matchup_v1.matchup_power_signal        → matchup_power_signal_v1        (soft-weighted expected hard-hit% across cells)
+--   matchup_v1.matchup_advantage_mu           → matchup_advantage_mu_v1           (Epic 8; Ridge soft-mixture xwOBA residual; primary signal)
+--   matchup_v1.matchup_advantage_sigma        → matchup_advantage_sigma_v1        (predictive uncertainty from soft mixture)
+--   matchup_v1.matchup_volatility_signal      → matchup_volatility_signal_v1      (Shannon entropy of joint archetype distribution)
+--   matchup_v1.matchup_soft_vs_hard_delta     → matchup_soft_vs_hard_delta_v1     (soft mu − MAP-cell mu; diagnostic)
+--   matchup_v1.matchup_k_pressure_signal      → matchup_k_pressure_signal_v1      (soft-weighted expected K% across cells)
+--   matchup_v1.matchup_power_signal           → matchup_power_signal_v1           (soft-weighted expected hard-hit% across cells)
+--   matchup_v1.matchup_cell_posterior_source  → matchup_cell_posterior_source_v1  (2=sequential_current_season, 1=historical_eb, 0=marginals_only)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -153,8 +154,10 @@ pivoted as (
         max(case when signal_name = 'matchup_soft_vs_hard_delta' and sub_model_version = 'v1' then signal_available end) as matchup_soft_vs_hard_delta_v1_available,
         max(case when signal_name = 'matchup_k_pressure_signal'  and sub_model_version = 'v1' then signal_value end)     as matchup_k_pressure_signal_v1,
         max(case when signal_name = 'matchup_k_pressure_signal'  and sub_model_version = 'v1' then signal_available end) as matchup_k_pressure_signal_v1_available,
-        max(case when signal_name = 'matchup_power_signal'       and sub_model_version = 'v1' then signal_value end)     as matchup_power_signal_v1,
-        max(case when signal_name = 'matchup_power_signal'       and sub_model_version = 'v1' then signal_available end) as matchup_power_signal_v1_available,
+        max(case when signal_name = 'matchup_power_signal'            and sub_model_version = 'v1' then signal_value end)     as matchup_power_signal_v1,
+        max(case when signal_name = 'matchup_power_signal'            and sub_model_version = 'v1' then signal_available end) as matchup_power_signal_v1_available,
+        max(case when signal_name = 'matchup_cell_posterior_source'   and sub_model_version = 'v1' then signal_value end)     as matchup_cell_posterior_source_v1,
+        max(case when signal_name = 'matchup_cell_posterior_source'   and sub_model_version = 'v1' then signal_available end) as matchup_cell_posterior_source_v1_available,
 
         -- ------------------------------------------------------------------
         -- Synthetic test signal (remove after 2.1 validation is confirmed)
@@ -250,6 +253,8 @@ select
     p.matchup_k_pressure_signal_v1_available,
     p.matchup_power_signal_v1,
     p.matchup_power_signal_v1_available,
+    p.matchup_cell_posterior_source_v1,
+    p.matchup_cell_posterior_source_v1_available,
 
     -- Starter IP depth signals v1 (Epic 5D — LightGBM+NegBin; outs units)
     ip.starter_ip_mu                                      as starter_ip_mu_v1,
