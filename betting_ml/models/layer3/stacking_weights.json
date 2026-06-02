@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "env": "prod",
+    "eval_json": "layer3_signal_evaluation_20260602_151859.json",
+    "generated_at": "2026-06-02T15:43:32",
+    "min_train_seasons": 2,
+    "n_games": 11661
+  },
+  "targets": {
+    "home_win": {
+      "bullpen": {
+        "champion_version": "bullpen_v2",
+        "fold_weight_std": 0.001731,
+        "fold_weight_unstable": false,
+        "n_folds": 4,
+        "nll_score": 0.639549,
+        "verdict": "promote",
+        "weight": 0.50676
+      },
+      "offense": {
+        "champion_version": "offense_v2",
+        "fold_weight_std": 0.001731,
+        "fold_weight_unstable": false,
+        "n_folds": 4,
+        "nll_score": 0.666591,
+        "verdict": "promote",
+        "weight": 0.49324
+      }
+    },
+    "total_runs": {
+      "bullpen": {
+        "champion_version": "bullpen_v2",
+        "fold_weight_std": 0.000961,
+        "fold_weight_unstable": false,
+        "n_folds": 4,
+        "nll_score": 2.84053,
+        "verdict": "promote",
+        "weight": 0.337003
+      },
+      "offense": {
+        "champion_version": "offense_v2",
+        "fold_weight_std": 0.002263,
+        "fold_weight_unstable": false,
+        "n_folds": 4,
+        "nll_score": 2.856352,
+        "verdict": "promote",
+        "weight": 0.331712
+      },
+      "run_env": {
+        "champion_version": "run_env_v4",
+        "fold_weight_std": 0.002696,
+        "fold_weight_unstable": false,
+        "n_folds": 4,
+        "nll_score": 2.85764,
+        "verdict": "promote",
+        "weight": 0.331285
+      }
+    }
+  }
+}
