@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import joblib
 import yaml
 
 from betting_ml.utils.artifact_store import load_artifact

@@ -57,3 +57,10 @@ mlflow.db
 # Training data snapshots (large binary Parquet files — regenerated from Snowflake on demand)
 betting_ml/data/*.parquet
 betting_ml/data/**/*.parquet
+
+# Next.js frontend
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env*.local

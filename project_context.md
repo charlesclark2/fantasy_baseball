@@ -830,16 +830,16 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 
 #### Card 4.12e Results — NGBoost run_differential Hyperparameter Tuning (Grid Search)
 
-- **best_ngboost_config_run_diff:** {n_estimators: 200, dist: Normal}
-- **Best CV MAE:** 3.4724
+- **best_ngboost_config_run_diff:** {n_estimators: 500, dist: Normal}
+- **Best CV MAE:** 3.1041
 - **lognormal_viable:** false
-- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=200, dist=Normal, CV MAE=3.4724; model persisted via model_io.py as `ngboost_tuned`.
+- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=500, dist=Normal, CV MAE=3.1041; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12d Results — NGBoost total_runs Hyperparameter Tuning (Grid Search)
 
-- **best_ngboost_config_total_runs:** {n_estimators: 500, dist: LogNormal}
-- **Best CV MAE:** 3.5190
-- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=LogNormal with CV MAE=3.5190; model persisted via model_io.py as `ngboost_tuned`.
+- **best_ngboost_config_total_runs:** {n_estimators: 500, dist: Normal}
+- **Best CV MAE:** 3.4008
+- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=Normal with CV MAE=3.4008; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12c Results — XGBoost home_win Hyperparameter Tuning (Optuna TPE)
 
@@ -3646,21 +3646,11 @@ Apply a monotone uncertainty discount to the Kelly fraction at bet-sizing time, 
 
 #### XGBoost home_win — Hyperparameter Tuning Results (Optuna TPE)
 
-- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.2439 vs baseline=0.2443)
-- **Baseline Brier:** 0.2443 | **Tuned Brier:** 0.2439 | **Change:** +0.17%
-- **Best params:** max_depth=3, learning_rate=0.0450, n_estimators=394, subsample=0.841, colsample_bytree=0.601, reg_alpha=0.472, reg_lambda=1.994
-- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.2439 vs baseline=0.2443 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
+- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.1985 vs baseline=0.2459)
+- **Baseline Brier:** 0.2459 | **Tuned Brier:** 0.1985 | **Change:** +19.24%
+- **Best params:** max_depth=4, learning_rate=0.0241, n_estimators=380, subsample=0.768, colsample_bytree=0.718, reg_alpha=0.905, reg_lambda=0.912
+- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.1985 vs baseline=0.2459 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
 - **Full results:** `betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md`, `betting_ml/evaluation/tuning_results_xgb_home_win.json`
-
----
-
----
-
-### Phase 8 — Production Web Application (Card 8.G)
-
-**Prerequisite:** Streamlit MVP completes a full season of live use AND the model demonstrates positive CLV (mean h2h edge > +0.01 sustained over ≥50 games). Infrastructure investment is not warranted until the model's live value is confirmed.
-
----
 
 #### Card 8.G — Production Web Application (moved from Card 7.2)
 
