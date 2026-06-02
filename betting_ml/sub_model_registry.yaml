@@ -206,6 +206,16 @@ starter_v1:
     - starter_suppression_sigma
     - starter_suppression_signal
     - uncertainty
+  downstream_consumers: []   # Epic 9.5: deferred on both targets (below gate) — not a Layer 3 consumer yet
+  layer3_verdict: "defer (total_runs); defer (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation
+    total_runs: {verdict: defer, nll_delta: -0.002587, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: null}
+    home_win:   {verdict: defer, brier_delta: -0.000697, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: null}
+    reeval_trigger: "Epic 5D distributional retrofit ships calibrated (mu,sigma) OR Epic 10 totals attribution shows residual starter signal beyond run_env+offense+bullpen"
   promotion_status: champion
   promoted_at: '2026-05-30'
   notes: |
@@ -436,6 +446,14 @@ bullpen_v2:
     rationale: multiplicative EB correction applied after B exposure scaling
   subset_eval: '{"fatigue_thresh": 0.7, "blowout_thresh": 5, "high_fatigue": {"n": 45254, "nll": 1.877, "calib_80": 0.9241, "mean_pi_width": 4.9486}, "rested": {"n": 694, "nll": 1.9462, "calib_80": 0.9193, "mean_pi_width": 5.0216}, "blowout": {"n": 9127, "nll": 2.2768, "calib_80": 0.8304, "mean_pi_width": 5.5293}, "close_game": {"n": 36821, "nll": 1.7792, "calib_80": 0.9473, "mean_pi_width": 4.806}}'
   downstream_consumers: ['layer3_totals', 'layer3_h2h']   # Epic 9.4: promoted on total_runs (NLL −0.0292) and home_win (Brier −0.0266)
+  layer3_verdict: "promote (total_runs); promote (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation
+    total_runs: {verdict: promote, nll_delta: -0.029174, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: null}
+    home_win:   {verdict: promote, brier_delta: -0.026583, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: null}
   promotion_status: champion
   promoted_at: '2026-06-01'   # Candidate B promotion date
   trained_at: "2026-06-01"
@@ -497,7 +515,16 @@ matchup_v1:
   output_signals:
     - matchup_advantage_mu
     - matchup_advantage_sigma
-  downstream_consumers: []
+  downstream_consumers: []   # Epic 9.5: deferred on total_runs (marginal), rejected on home_win (no effect)
+  layer3_verdict: "defer (total_runs); reject (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation
+    total_runs: {verdict: defer,  nll_delta: -0.000972, fold_win_count: '3/4', wilcoxon_p: 0.625, calibration: null}
+    home_win:   {verdict: reject, brier_delta: 0.000007, fold_win_count: '0/4', wilcoxon_p: 0.125, calibration: null}
+    reeval_trigger: "total_runs: re-evaluate once Epic 8 champion has >=50 games of sequential posterior updates in matchup_cell_sequential_posteriors. home_win: re-evaluate only after a material Epic 8 architecture change (soft-assignment expansion / finer archetype cells)"
   promotion_status: champion
   promoted_at: '2026-06-02'
   notes: |
@@ -630,6 +657,14 @@ run_env_v4:
     - run_env_signal
     - uncertainty
   downstream_consumers: ['layer3_totals']   # Epic 9.4: promoted on total_runs (NLL −0.0137); deferred on home_win (9.2)
+  layer3_verdict: "promote (total_runs); defer (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation   # 9.2 run_id not persisted; eval_artifact is canonical
+    total_runs: {verdict: promote, nll_delta: -0.013689, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: 0.836}
+    home_win:   {verdict: defer,   brier_delta: -0.000251, fold_win_count: '3/4', wilcoxon_p: 0.625, calibration: 0.836}
   promotion_status: champion
   promoted_at: '2026-05-28'
   notes: |
@@ -673,6 +708,14 @@ offense_v2:
     - pred_runs_raw
     - uncertainty
   downstream_consumers: ['layer3_totals', 'layer3_h2h']   # Epic 9.4: promoted on total_runs (NLL −0.0117) and home_win (Brier −0.0133)
+  layer3_verdict: "promote (total_runs); promote (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation
+    total_runs: {verdict: promote, nll_delta: -0.011749, fold_win_count: '3/4', wilcoxon_p: 0.25, calibration: 0.829}
+    home_win:   {verdict: promote, brier_delta: -0.013349, fold_win_count: '3/4', wilcoxon_p: 0.25, calibration: 0.829}
   promotion_status: champion
   promoted_at: '2026-05-29'
   notes: |
@@ -714,7 +757,16 @@ starter_ip_v1:
     - starter_ip_p80_outs  # 80th percentile outs (optimistic depth)
     - starter_ip_p20_outs  # 20th percentile outs (pessimistic depth; key input to 6D Candidate B)
     - uncertainty          # PI width: p80_outs − p20_outs
-  downstream_consumers: []  # populated by Epic 9 promotion + Epic 6D Candidate B
+  downstream_consumers: []  # Epic 9.5: deferred on both targets (below gate); value expected via Epic 6D Candidate B bullpen integration
+  layer3_verdict: "defer (total_runs); defer (home_win)"   # Story 9.5 summary
+  layer3_evaluation:
+    evaluated_date: '2026-06-02'
+    eval_artifact: quant_sports_intel_models/baseball/ablation_results/layer3_signal_evaluation_20260602_151859.json
+    promotion_log: quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md
+    mlflow_experiment: layer3_evaluation
+    total_runs: {verdict: defer, nll_delta: -0.000967, fold_win_count: '3/4', wilcoxon_p: 0.625, calibration: null}
+    home_win:   {verdict: defer, brier_delta: -0.000902, fold_win_count: '4/4', wilcoxon_p: 0.125, calibration: null}
+    reeval_trigger: "Epic 6D Candidate B wires starter_ip_p20_outs into bullpen exposure model (value expected via interaction, not standalone)"
   promotion_status: champion
   promoted_at: '2026-06-01'
   notes: |

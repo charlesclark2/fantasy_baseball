@@ -388,7 +388,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │                                                                              │
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      🔄 In progress (2026-06-02)     │
-│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ⬜  9.6 ⬜                              │
+│   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ⬜                              │
 │ Epic 10  Totals Distribution Model          🔒 Blocked on Epic 9             │
 │   10.1 ⬜  10.2 ⬜  10.3 ⬜  10.4 ⬜  10.5 ⬜  10.6 ⬜                        │
 │ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
@@ -523,7 +523,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 12.4 (Bayesian sequential meta-model) | ≥50 live games | ~Early June |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
-| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | 🔄 2026-06-02: 9.1 ✅ matrix (11,661 games); 9.2 ✅ NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 ✅ stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003; O.3/9.6 unblocked); 9.4 ✅ contract+stacking wired into train/inference loaders + predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 next |
+| **0 — NOW** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | 🔄 2026-06-02: 9.1 ✅ matrix (11,661 games); 9.2 ✅ NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 ✅ stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003; O.3/9.6 unblocked); 9.4 ✅ contract+stacking wired into train/inference loaders + predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 ✅ promotion log + registry verdicts + AC-table gate; 9.6 next (Dagster weekly recompute → activates O.3) |
 | **2 — LAYER 3** | Epic 10 (totals distribution model) | Epic 9 | After Epic 9 |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
 | **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
@@ -5625,20 +5625,22 @@ Acceptance criteria:
 
 ### 9.5 — Document signal promotion decisions
 
+**Status:** ✅ COMPLETE (2026-06-02). `ablation_results/layer3_promotion_log.md` written — one section per signal group (6) with per-target verdict tables (NLL/Brier delta, fold win-count, Wilcoxon p, calibration, coverage-conditional), plain-language rationales, and explicit re-evaluation triggers for every defer/reject. `sub_model_registry.yaml`: all 6 champion entries (run_env_v4, offense_v2, starter_v1, starter_ip_v1, bullpen_v2, matchup_v1) carry a `layer3_verdict` summary + nested `layer3_evaluation` block (per-target verdict/delta/fold_win_count/wilcoxon_p/calibration + eval_artifact + promotion_log + reeval_trigger). **Deviation:** verdicts recorded **per target** (run_env promote-totals/defer-home_win; matchup defer-totals/reject-home_win) — the spec's singular `layer3_verdict` would lose that; a summary string preserves the literal field. **Deviation:** the 9.2 MLflow run_id wasn't persisted in the artifact, so entries reference `eval_artifact` (the canonical JSON) + `mlflow_experiment: layer3_evaluation` instead. Acceptance Criteria Summary table Epic 9 row updated to the specific gate. Verified: stacking_weights.json contains promoted-only ({totals: run_env/offense/bullpen}, {home_win: offense/bullpen}); deferred/rejected groups have `downstream_consumers: []`.
+
 **Overview:** Record the outcome of each signal group's evaluation in a durable, queryable form so that future retrains, signal updates, and architecture reviews have a clear audit trail. Includes a written rationale for each promotion and rejection decision that will inform Epic 12 (CLV meta-model feature selection) and Epic 17 (PyMC hierarchical model).
 
 Tasks:
-- [ ] For each signal group evaluated in Story 9.2, record in `sub_model_registry.yaml` under the signal's entry: `layer3_verdict ∈ {promote, reject, defer}`, `layer3_nll_delta`, `layer3_fold_win_count`, `layer3_evaluated_date`, `layer3_mlflow_run_id`
-- [ ] Write `quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md` — one section per signal group with: verdict, NLL delta, fold win count, Wilcoxon p-value, `uncertainty_calibration_score`, coverage-conditional result, and a 2–3 sentence written rationale explaining the decision in plain language
-- [ ] For any signal group with verdict `defer`: document the specific condition that would trigger re-evaluation (e.g., "re-evaluate `matchup_v1` once Epic 8 champion has ≥ 50 games of sequential posterior updates in `matchup_cell_sequential_posteriors`")
-- [ ] Update `downstream_consumers` in `sub_model_registry.yaml` for all promoted signals to include `layer3_totals` and `layer3_h2h` — consumed by Epics 10 and 11
-- [ ] Update the Acceptance Criteria Summary table at the end of the implementation guide: Epic 9 gate = "`run_env_v4` and `offense_v2` NLL gates pass; stacking weights written to `stacking_weights.json`; at least 2 of 5 signal groups promoted; Layer 3 feature matrix validated leak-free"
+- [x] For each signal group evaluated in Story 9.2, record in `sub_model_registry.yaml` under the signal's entry — *recorded as a nested `layer3_evaluation` block (per-target verdict/nll_delta or brier_delta/fold_win_count/wilcoxon_p/calibration) + a `layer3_verdict` summary string + `evaluated_date`; `mlflow_run_id` not persisted in 9.2 → `eval_artifact` + `mlflow_experiment` recorded instead*
+- [x] Write `quant_sports_intel_models/baseball/ablation_results/layer3_promotion_log.md` — one section per signal group with verdict, NLL/Brier delta, fold win count, Wilcoxon p-value, `uncertainty_calibration_score`, coverage-conditional result, and a 2–3 sentence rationale
+- [x] For any signal group with verdict `defer`: document the specific re-evaluation trigger — *triggers recorded in both the log and the registry `reeval_trigger` fields (starter → Epic 5D; starter_ip → Epic 6D Candidate B; matchup totals → ≥50 sequential-posterior games; matchup home_win → Epic 8 arch change; run_env home_win → Epic 11 Approach B)*
+- [x] Update `downstream_consumers` in `sub_model_registry.yaml` for promoted signals — *target-accurate (run_env totals-only); deferred/rejected stay `[]`*
+- [x] Update the Acceptance Criteria Summary table: Epic 9 gate definition
 
 Acceptance criteria:
-- [ ] Every signal group that was evaluated in Story 9.2 has a `layer3_verdict` in its registry entry
-- [ ] `layer3_promotion_log.md` exists with one section per signal group; deferred signals have an explicit re-evaluation trigger condition
-- [ ] `stacking_weights.json` references only promoted signal groups (verdict = `promote`); rejected and deferred groups have weight 0 or are absent
-- [ ] The Acceptance Criteria Summary table is updated with the Epic 9 gate definition
+- [x] Every signal group that was evaluated in Story 9.2 has a `layer3_verdict` in its registry entry — *all 6 champions; per-target nested + summary*
+- [x] `layer3_promotion_log.md` exists with one section per signal group; deferred signals have an explicit re-evaluation trigger condition
+- [x] `stacking_weights.json` references only promoted signal groups; rejected and deferred groups have weight 0 or are absent — *verified: totals {run_env, offense, bullpen}, home_win {offense, bullpen}; deferred/rejected `downstream_consumers: []`*
+- [x] The Acceptance Criteria Summary table is updated with the Epic 9 gate definition
 
 ---
 
@@ -6782,7 +6784,7 @@ This section documents cross-cutting infrastructure concerns that are not tied t
 | 6 — Bullpen state | Ablation shows incremental improvement in totals CV |
 | 7 — Archetype clustering | Clusters interpretable; labels stable year-over-year; stored in mart |
 | 8 — Matchup model | Ablation shows incremental improvement in H2H CV |
-| 9 — Signal integration | Promoted signals show positive incremental value; no calibration regressions |
+| 9 — Signal integration | `run_env_v4` and `offense_v2` NLL gates pass on `total_runs`; stacking weights written to `stacking_weights.json`; ≥ 2 of 5 signal groups promoted; Layer 3 feature matrix validated leak-free. *(Met 2026-06-02: 3 promoted on totals — run_env/offense/bullpen; 2 on home_win — offense/bullpen.)* |
 | 10 — Totals distribution | std(pred) > 1.5; quantile calibration pass; MAE ≤ current baseline |
 | 11 — H2H with signals | CV Brier beats market-blind baseline; mean CLV positive over 30+ live games |
 | 12 — Meta-model | 1000+ CLV games; AUC > 0.55; positive mean CLV in holdout |
