@@ -8,17 +8,17 @@ Evaluation metric: mean absolute error (MAE) across temporal CV splits (min_trai
 
 | n_estimators | Dist | CV MAE |
 |-------------|------|--------|
-| 200 | Normal | 3.4724 |
-| 500 | Normal | 3.4788 |
-| 1000 | Normal | 3.4993 |
+| 200 | Normal | 3.1284 |
+| 500 | Normal | 3.1041 |
+| 1000 | Normal | 3.1106 |
 
-**Best configuration:** n_estimators=200, dist=Normal, CV MAE=3.4724
+**Best configuration:** n_estimators=500, dist=Normal, CV MAE=3.1041
 
 ## Best NGBoost Configuration
 
-- **best_n_estimators:** 200
+- **best_n_estimators:** 500
 - **best_dist:** Normal
-- **CV MAE:** 3.4724
+- **CV MAE:** 3.1041
 
 The Normal distribution is the only viable choice for run_differential, as it supports the full real line and can model both positive (home win) and negative (away win) margins.
 

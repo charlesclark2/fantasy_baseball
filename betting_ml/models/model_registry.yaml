@@ -1,25 +1,27 @@
 home_win:
-  artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl
-  backfill_date: '2026-05-12'
+  artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+  backfill_date: '2026-06-01'
   calibrator_last_fit_date: '2026-05-08'
-  cv_brier: 0.2446
-  deployed_date: '2026-05-11'
-  ece_raw: 0.0202
+  cv_brier: 0.1985
+  deployed_date: '2026-06-02'
+  ece_raw: null
   eval_year: 2026
-  feature_columns_path: betting_ml/models/home_win/feature_columns_market_blind.json
-  features: 545
-  model_name: elasticnet
-  model_version: v2
-  notes: 'Epic 1 / Story 1.1 market-blind retrain (2026-05-11). Excludes 33 market-derived
-    columns (_MARKET_COLS_TO_EXCLUDE). 545 features vs 487 in v1. CV Brier 0.2446
-    (market-blind baseline; v1 0.2422 benefited from market circularity). Offline
-    comparison vs v1 on 2024+ (n=4,383): Brier 0.2390 vs 0.2392 (−0.0002), verdict
-    PROMOTE. Rollback: elasticnet_2026.pkl (v1, 487-feature market-inclusive set).
+  feature_columns_path: betting_ml/models/home_win/feature_columns_eb_2026.json
+  features: 369
+  model_name: xgboost_eb_enriched
+  model_version: v3
+  notes: >
+    Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02.
+    XGBoost + Platt calibration, 369 features (367 base = feature_selection.md − 7
+    market cols; + has_starter_platoon_data, is_new_venue from imputation pipeline).
+    All EB posteriors present (bp_eb/starter_eb/avg_eb) after feature_pregame_game_features
+    rebuild. CV Brier 0.1985 (leaky Platt; true OOS ~0.21–0.22). Offline comparison
+    vs v2 ElasticNet on held-out 2024+ data: Brier −0.0776, cal_bias −0.0217 (within ±0.05),
+    verdict PROMOTE. Rollback: elasticnet_market_blind_2026.pkl (v2, 545 features).
 
-    '
-  rollback_artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_2026.pkl
-  rollback_feature_columns_path: betting_ml/models/home_win/elasticnet_feature_columns.json
-  selected_at: '2026-05-11T00:00:00Z'
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl
+  rollback_feature_columns_path: betting_ml/models/home_win/feature_columns_market_blind.json
+  selected_at: '2026-06-02T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10272
   wave5_gates:
@@ -70,16 +72,53 @@ home_win:
       Promoted 2026-05-11 via compare_market_blind_challengers.py (Brier −0.0002).
   - card: 7.L2
     model_name: xgboost
-    artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+    artifact_path: null
     feature_columns_path: betting_ml/models/feature_columns.json
     features: 294
     cv_brier: 0.2439
     promoted: false
     rejection_reason: 'Elasticnet CV Brier 0.2422 beat XGBoost 0.2439 on the 487-feature
-      set. XGBoost retained as rollback artifact (v0).
+      set. XGBoost retained as rollback artifact (v0). NOTE: local artifact
+      betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl was overwritten by
+      7.M EB-enriched retrain on 2026-06-01.
 
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_xgboost_ngboost.parquet
+  - card: 7.M
+    model_name: xgboost_eb_enriched_market_blind
+    artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl
+    feature_columns_path: betting_ml/models/home_win/feature_columns_eb_2026.json
+    features: 369
+    cv_brier: 0.1985
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-06-02'
+    status: promoted
+    trained_at: '2026-06-01'
+    best_params:
+      max_depth: 4
+      learning_rate: 0.02406
+      n_estimators: 380
+      subsample: 0.7684
+      colsample_bytree: 0.7176
+      reg_alpha: 0.9047
+      reg_lambda: 0.9122
+    offline_comparison:
+      n_rows: 4654
+      seasons: [2024, 2025, 2026]
+      delta_brier: -0.0776
+      cal_bias_challenger: -0.0217
+      cal_bias_limit: 0.05
+      verdict: PROMOTE
+    notes: >
+      Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features: 374
+      from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb materialized after
+      feature_pregame_game_features rebuild). CV Brier 0.1985 (baseline 0.2459,
+      +19.24%) uses leaky Platt calibration (fit+eval on same fold — same
+      methodology as baseline). Absolute value optimistic (~0.21–0.22 true OOS).
+      Improvement driven by bullpen/starter/batter EB posteriors. Promoted 2026-06-02
+      via compare_model_versions.py: Brier −0.0776, cal_bias −0.0217 (gate ±0.05), PROMOTE.
   - card: 7.L2
     model_name: catboost
     artifact_path: null
@@ -114,28 +153,29 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_market_blind_2026.pkl
-  backfill_date: '2026-05-12'
-  cv_mae: 3.4981
-  deployed_date: '2026-05-11'
+  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+  backfill_date: '2026-06-01'
+  cv_mae: 3.1041
+  deployed_date: '2026-06-02'
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/run_differential/feature_columns_market_blind.json
-  features: 545
-  model_name: ngboost_tuned
-  model_version: v2
-  n_estimators: 200
-  notes: "Epic 1 / Story 1.3 market-blind retrain (2026-05-11). First time run_diff\
-    \ gets full Phase 8 feature store (load_features() vs prior 294-feature set).\
-    \ Excludes 33 market-derived columns including home_win_prob_consensus (was #1\
-    \ feature, imp=0.040). CV MAE 3.4981 (market-blind baseline; v1 3.4724 benefited\
-    \ from market circularity). Normal distribution only; LogNormal excluded because\
-    \ run_diff can be negative. Offline comparison vs v1 on 2024+ (n=4,383): MAE\
-    \ 3.405 vs 3.434 (\u22120.029), verdict PROMOTE. Rollback: ngboost_tuned_2026.pkl\
-    \ (v1, 294-feature market-inclusive set).\n"
-  rollback_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_tuned_2026.pkl
-  rollback_feature_columns_path: betting_ml/models/feature_columns.json
-  selected_at: '2026-05-11T00:00:00Z'
+  feature_columns_path: betting_ml/models/run_differential/feature_columns_eb_2026.json
+  features: 369
+  model_name: ngboost_eb_enriched
+  model_version: v3
+  n_estimators: 500
+  notes: >
+    Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02.
+    NGBoost Normal, n=500, 369 features (367 base = feature_selection.md − 7 market cols;
+    + has_starter_platoon_data, is_new_venue from imputation pipeline). All EB posteriors
+    present. LogNormal excluded (run_diff can be negative). CV MAE 3.1041 vs v2 champion
+    3.4981 (Δ −0.394, apples-to-apples market-blind). Offline comparison on held-out
+    2024+ data: MAE Δ −0.480, verdict PROMOTE. Rollback: ngboost_market_blind_2026.pkl
+    (v2, 545 features, S3).
+
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_market_blind_2026.pkl
+  rollback_feature_columns_path: betting_ml/models/run_differential/feature_columns_market_blind.json
+  selected_at: '2026-06-02T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10256
   wave5_gates:
@@ -144,7 +184,7 @@ run_differential:
     decision: NOT RETRAINED
     notes: >
       Model still uses 294-feature pre-Phase-8 set from feature_columns.json (7.MA
-      retrain). Phase 8 features: 0 \u2014 none of the 8.A-8.Y feature groups are in the
+      retrain). Phase 8 features: 0 — none of the 8.A-8.Y feature groups are in the
       training matrix. Market circularity: home_win_prob_consensus is the #1
       permutation-importance feature; 61% of features are exclusion candidates (noise
       ratio). Most urgent retrain at ~2026-05-22: switch to load_features() full
@@ -179,30 +219,57 @@ run_differential:
       Gate 3.4981 is the true market-blind baseline; v1 gate 3.4724 benefited from
       market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py
       (MAE −0.029).
+  - card: 7.M
+    model_name: ngboost_eb_enriched_market_blind
+    artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
+    feature_columns_path: betting_ml/models/run_differential/feature_columns_eb_2026.json
+    dist: Normal
+    n_estimators: 500
+    features: 369
+    cv_mae: 3.1041
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-06-02'
+    status: promoted
+    trained_at: '2026-06-01'
+    offline_comparison:
+      n_rows: 4654
+      seasons: [2024, 2025, 2026]
+      delta_mae: -0.480
+      verdict: PROMOTE
+    notes: >
+      Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features: 374
+      from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized).
+      LogNormal excluded (run_diff can be negative). Normal only, best n=500.
+      CV MAE 3.1041 vs market-blind champion v2 (MAE 3.4981) — 0.39 MAE
+      improvement apples-to-apples. Promoted 2026-06-02 via compare_model_versions.py:
+      MAE Δ −0.480, verdict PROMOTE.
 total_runs:
-  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
-  backfill_date: '2026-05-12'
-  cv_mae: 3.5521
-  deployed_date: '2026-05-11'
+  artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  backfill_date: '2026-06-01'
+  cv_mae: 3.4008
+  deployed_date: '2026-06-02'
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
-  features: 307
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
+  features: 369
   max_depth: 3
-  model_name: ngboost_tuned
-  model_version: v3
+  model_name: ngboost_eb_enriched
+  model_version: v4
   n_estimators: 500
-  notes: 'Epic 1 / Story 1.2 market-blind retrain (2026-05-11). Excludes 33 market-derived
-    columns + 4 noise cols. total_line_consensus removed (was #1 feature, imp=0.064).
-    CV MAE 3.5521 (market-blind baseline; v2 3.5107 benefited from market circularity).
-    Offline comparison vs v2 on 2024+ (n=4,383): MAE 3.234 vs 3.375 (−0.141),
-    Pct_Over_Line=65.4% (healthy). Verdict: PROMOTE. Rollback: ngboost_decay_weighted.pkl
-    (v2, 311-feature market-inclusive set). See total_runs_bias_diagnosis.md.
+  notes: >
+    Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02.
+    NGBoost Normal, n=500, 369 features (367 base = feature_selection.md − 7 market cols;
+    + has_starter_platoon_data, is_new_venue from imputation pipeline). All EB posteriors
+    present. CV MAE 3.4008 vs v3 champion 3.5521 (Δ −0.151, apples-to-apples market-blind).
+    Offline comparison on held-out 2024+ data: MAE Δ −0.039, Pct_Over_Line 61.7%
+    (healthy range), verdict PROMOTE. Rollback: ngboost_market_blind_2026.pkl (v3,
+    307 features, S3).
 
-    '
-  rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_decay_weighted.pkl
-  rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_v2.json
-  selected_at: '2026-05-11T00:00:00Z'
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
+  rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
+  selected_at: '2026-06-02T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10264
   wave5_gates:
@@ -244,6 +311,9 @@ total_runs:
   v3_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
   v3_dist: Normal
   v3_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
+  v4_artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+  v4_dist: Normal
+  v4_feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
   challengers:
   - card: Epic 1 / Story 1.2
     model_name: ngboost_market_blind
@@ -285,20 +355,47 @@ total_runs:
     gate_results:
       mae_q50:
         value: 3.4791
-        threshold: "\u2264 3.5107"
+        threshold: "≤ 3.5107"
         pass: true
       std_q50:
         value: 0.9325
-        threshold: "\u2265 1.5"
+        threshold: "≥ 1.5"
         pass: false
       mean_residual:
         value: -0.5951
-        threshold: "|x| \u2264 0.5"
+        threshold: "|x| ≤ 0.5"
         pass: false
-    rejection_reason: "Card 8.P \u2014 Failed std and residual gates. Both failures\
+    rejection_reason: "Card 8.P — Failed std and residual gates. Both failures\
       \ trace to the same variance-shrinkage ceiling as NGBoost; the current feature\
       \ set cannot produce sufficient prediction spread regardless of algorithm. MAE\
       \ gate passed (3.4791 beats NGBoost 3.5107), confirming LightGBM quantile has\
       \ better point accuracy. Deferred to Phase 9 when feature set is expanded. See\
       \ evaluation/quantile_regression_vs_ngboost.md.\n"
     eval_report: betting_ml/evaluation/quantile_regression_vs_ngboost.md
+  - card: 7.M
+    model_name: ngboost_eb_enriched_market_blind
+    artifact_path: betting_ml/models/total_runs/ngboost_tuned_2026.pkl
+    feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
+    dist: Normal
+    n_estimators: 500
+    features: 369
+    cv_mae: 3.4008
+    market_blind: true
+    promoted: true
+    promoted_date: '2026-06-02'
+    status: promoted
+    trained_at: '2026-06-01'
+    offline_comparison:
+      n_rows: 4654
+      seasons: [2024, 2025, 2026]
+      delta_mae: -0.039
+      pct_over_line_challenger: 61.7
+      verdict: PROMOTE
+    notes: >
+      Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features: 374
+      from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized).
+      Normal dist, n=500 (LogNormal marginally worse across both n configs).
+      CV MAE 3.4008 vs market-blind champion v3 (MAE 3.5521) — 0.15 MAE
+      improvement apples-to-apples. Promoted 2026-06-02 via compare_model_versions.py:
+      MAE Δ −0.039, Pct_Over_Line 61.7% (healthy), verdict PROMOTE.
