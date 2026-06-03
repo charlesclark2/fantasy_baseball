@@ -1147,6 +1147,73 @@ models:
         tests:
           - not_null
 
+      # ── Team sequential Bayesian beliefs (Epic 16.3) ──────────────────────────
+      - name: home_team_sequential_woba
+        description: >
+          Home team's sequential offensive belief — the off_xwoba posterior ENTERING
+          this game (prior_mu = posterior after the team's previous game, so it is
+          leakage-safe). Tracks within-season run-environment drift the static
+          rolling/EB features miss. Non-null for all 2021+ regular-season games (a
+          team's season opener carries the cold-start league prior ≈0.324).
+        tests:
+          # Populated for ~all 2021+ games; tolerates the small recency lag (recent
+          # games not yet in team_sequential_posteriors) + rare win_prob gaps
+          # (NULL home_team_won). A systematic join/abbrev break would tank this.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.97
+              config:
+                where: "game_year >= 2021"
+      - name: away_team_sequential_woba
+        description: >
+          Away team's sequential offensive belief (off_xwoba prior_mu, leakage-safe
+          pre-game). See home_team_sequential_woba.
+        tests:
+          # Populated for ~all 2021+ games; tolerates the small recency lag (recent
+          # games not yet in team_sequential_posteriors) + rare win_prob gaps
+          # (NULL home_team_won). A systematic join/abbrev break would tank this.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.97
+              config:
+                where: "game_year >= 2021"
+      - name: home_team_sequential_bullpen_xwoba
+        description: >
+          Home bullpen sequential xwOBA-against belief (prior_mu, leakage-safe). May
+          be null for the most recent games until the bullpen posterior catches up
+          (reliever identification via eb_bullpen membership lags ~3 days).
+      - name: away_team_sequential_bullpen_xwoba
+        description: >
+          Away bullpen sequential xwOBA-against belief (prior_mu). Same ~3-day lag
+          caveat as home_team_sequential_bullpen_xwoba.
+      - name: home_team_sequential_win_prob
+        description: >
+          Home team Beta-Binomial win-probability posterior entering this game
+          (prior_mu — the Pythagorean-win analogue). Non-null for 2021+ games
+          (cold-start Beta(4,4)=0.500 on the season opener).
+        tests:
+          # Populated for ~all 2021+ games; tolerates the small recency lag (recent
+          # games not yet in team_sequential_posteriors) + rare win_prob gaps
+          # (NULL home_team_won). A systematic join/abbrev break would tank this.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.97
+              config:
+                where: "game_year >= 2021"
+      - name: away_team_sequential_win_prob
+        description: >
+          Away team Beta-Binomial win-probability posterior (prior_mu). See
+          home_team_sequential_win_prob.
+        tests:
+          # Populated for ~all 2021+ games; tolerates the small recency lag (recent
+          # games not yet in team_sequential_posteriors) + rare win_prob gaps
+          # (NULL home_team_won). A systematic join/abbrev break would tank this.
+          - dbt_utils.not_null_proportion:
+              arguments:
+                at_least: 0.97
+              config:
+                where: "game_year >= 2021"
+
       - name: home_lineup_vs_away_starter_xwoba_adj
         description: >
           Weighted average of the away starter's prior-season xwOBA-against platoon splits,

@@ -284,7 +284,9 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
     data_source             VARCHAR(50),   -- 'feature_store' or 'intraday_fallback'
     qualified_bet           BOOLEAN,       -- Story 19.2: bet permission gate result
     gate_signals_met        INTEGER,       -- 0-5 gate criteria that fired
-    game_conviction_score   FLOAT          -- 0.0-1.0 weighted gate strength
+    game_conviction_score   FLOAT,         -- 0.0-1.0 weighted gate strength
+    posterior_source        VARCHAR(20),   -- Epic 16.2: game-level least-informed player-quality source {sequential|season_eb|prior_only}
+    prior_age_days          INTEGER        -- Epic 16.2: stalest (max) sequential-posterior age in days; >7 raises game_uncertainty_score
 )
 """
 
@@ -308,7 +310,8 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
     data_source,
-    qualified_bet, gate_signals_met, game_conviction_score
+    qualified_bet, gate_signals_met, game_conviction_score,
+    posterior_source, prior_age_days
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -323,9 +326,61 @@ INSERT INTO baseball_data.betting_ml.daily_model_predictions (
     %(total_line_consensus)s, %(over_prob_consensus)s,
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
     %(data_source)s,
-    %(qualified_bet)s, %(gate_signals_met)s, %(game_conviction_score)s
+    %(qualified_bet)s, %(gate_signals_met)s, %(game_conviction_score)s,
+    %(posterior_source)s, %(prior_age_days)s
 )
 """
+
+
+# Epic 16.2 — game-level posterior provenance for the scoring date. Aggregates the
+# per-player posterior_source / prior_age_days (eb_batter_posteriors_raw + the starter
+# table, written by the as-of injection in compute_*_posteriors) up to game grain:
+#   prior_age_days   = MAX over the game's batters+starters (the stalest belief; the
+#                      >7 flag raises game_uncertainty_score in the Epic 19 gate).
+#   posterior_source = least-informed source present (prior_only > season_eb >
+#                      sequential) — flags games carrying a debut/cold-start player.
+_POSTERIOR_PROVENANCE_QUERY = """
+with prov as (
+    select game_pk, posterior_source, prior_age_days
+    from baseball_data.betting.eb_batter_posteriors_raw where game_date = %(d)s
+    union all
+    select game_pk, posterior_source, prior_age_days
+    from baseball_data.betting.eb_starter_posteriors where game_date = %(d)s
+)
+select game_pk,
+    max(prior_age_days) as max_prior_age_days,
+    case when count_if(posterior_source = 'prior_only') > 0 then 'prior_only'
+         when count_if(posterior_source = 'season_eb')  > 0 then 'season_eb'
+         when count_if(posterior_source = 'sequential') > 0 then 'sequential'
+         else null end as posterior_source
+from prov
+where game_pk is not null
+group by game_pk
+"""
+
+
+def _load_posterior_provenance(target_date: str) -> dict[int, dict]:
+    """{game_pk: {prior_age_days, posterior_source}} for the scoring date (Epic 16.2).
+
+    Empty dict if the EB tables aren't yet populated for the date (graceful — the
+    columns then write NULL). Read-only; never blocks scoring."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_POSTERIOR_PROVENANCE_QUERY, {"d": target_date})
+            out: dict[int, dict] = {}
+            for gpk, max_age, src in cur.fetchall():
+                out[int(gpk)] = {
+                    "prior_age_days": int(max_age) if max_age is not None else None,
+                    "posterior_source": src,
+                }
+            return out
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [16.2] posterior provenance unavailable ({exc}); columns will be NULL.")
+        return {}
 
 
 def _write_predictions_to_snowflake(
@@ -370,6 +425,7 @@ def _write_predictions_to_snowflake(
 
     rows: list[dict] = []
     score_date = date.fromisoformat(target_date)
+    prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -451,6 +507,9 @@ def _write_predictions_to_snowflake(
             "qualified_bet":          gate_result["qualified_bet"],
             "gate_signals_met":       gate_result["gate_signals_met"],
             "game_conviction_score":  gate_result["game_conviction_score"],
+            # Epic 16.2 — game-level sequential posterior provenance
+            "posterior_source":       (prov.get(int(game_pk_val)) or {}).get("posterior_source") if game_pk_val is not None else None,
+            "prior_age_days":         (prov.get(int(game_pk_val)) or {}).get("prior_age_days") if game_pk_val is not None else None,
         }))
 
     if dry_run:
@@ -467,6 +526,9 @@ def _write_predictions_to_snowflake(
             cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
             cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")
             cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")
+            # Epic 16.2 migration — idempotent; safe on every scoring pass
+            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
+            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
 
             inserted = 0
             skipped = 0

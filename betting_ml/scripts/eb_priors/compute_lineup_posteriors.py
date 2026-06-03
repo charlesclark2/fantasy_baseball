@@ -42,10 +42,18 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.scripts.sequential_bayes.asof_lookup import (
+    load_seq_posteriors_asof, resolve_posterior_source,
+)
 
 _PRIORS_DIR = _PROJECT_ROOT / "betting_ml" / "models" / "eb_priors"
 _ZIPS_PROJ_TYPE = "zips"
 _EB_PA_THRESHOLD = 150.0
+# Epic 16.2 — batter sequential posterior chain tracks expected wOBA (xwOBA,
+# denominated in wOBA units → scale-consistent with eb_woba). Injected as a
+# PARALLEL column (eb_woba_sequential), never overwriting eb_woba.
+_SEQ_PLAYER_TYPE = "batter"
+_SEQ_METRIC = "xwoba"
 
 # ── Prior loading ─────────────────────────────────────────────────────────────
 
@@ -255,6 +263,7 @@ def _compute_row(
     zips: dict | None,
     fit_date: date,
     run_id: str,
+    seq: dict | None = None,
 ) -> dict[str, Any]:
     pa = float(rolling["pa"]) if rolling and rolling.get("pa") is not None else 0.0
     hand = (rolling.get("batter_hand") or "R") if rolling else "R"
@@ -299,6 +308,13 @@ def _compute_row(
     else:
         woba_uncertainty = None
 
+    # Epic 16.2 — as-of sequential posterior (parallel column; never overwrites eb_woba).
+    posterior_source, prior_age_days = resolve_posterior_source(seq, woba_src, game_date)
+    eb_woba_sequential = (
+        round(float(seq["posterior_mu"]), 4)
+        if seq is not None and seq.get("posterior_mu") is not None else None
+    )
+
     return {
         "game_pk":             game_pk,
         "batting_slot":        batting_slot,
@@ -312,6 +328,9 @@ def _compute_row(
         "eb_woba_uncertainty": round(woba_uncertainty, 4) if woba_uncertainty is not None else None,
         "pa_weight":           round(min(pa / _EB_PA_THRESHOLD, 1.0), 4),
         "eb_data_source":      woba_src,
+        "eb_woba_sequential":  eb_woba_sequential,
+        "posterior_source":    posterior_source,
+        "prior_age_days":      prior_age_days,
         "fit_date":            fit_date,
         "run_id":              run_id,
     }
@@ -338,6 +357,9 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             eb_woba_uncertainty  VARCHAR,
             pa_weight            VARCHAR,
             eb_data_source       VARCHAR,
+            eb_woba_sequential   VARCHAR,
+            posterior_source     VARCHAR,
+            prior_age_days       VARCHAR,
             fit_date             VARCHAR,
             run_id               VARCHAR
         )
@@ -365,13 +387,16 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             _s(r["eb_woba_uncertainty"]),
             _s(r["pa_weight"]),
             _s(r["eb_data_source"]),
+            _s(r["eb_woba_sequential"]),
+            _s(r["posterior_source"]),
+            _s(r["prior_age_days"]),
             _s(r["fit_date"]),
             _s(r["run_id"]),
         )
         for r in rows
     ]
     cur.executemany(
-        "INSERT INTO baseball_data.betting.tmp_eb_batter_posteriors VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "INSERT INTO baseball_data.betting.tmp_eb_batter_posteriors VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         data,
     )
 
@@ -392,6 +417,9 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
                 eb_woba_uncertainty::FLOAT  AS eb_woba_uncertainty,
                 pa_weight::FLOAT            AS pa_weight,
                 eb_data_source::VARCHAR(20) AS eb_data_source,
+                eb_woba_sequential::FLOAT   AS eb_woba_sequential,
+                posterior_source::VARCHAR(20) AS posterior_source,
+                prior_age_days::INTEGER     AS prior_age_days,
                 fit_date::DATE              AS fit_date,
                 run_id::VARCHAR(36)         AS run_id
             FROM baseball_data.betting.tmp_eb_batter_posteriors
@@ -409,16 +437,21 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             eb_woba_uncertainty = src.eb_woba_uncertainty,
             pa_weight           = src.pa_weight,
             eb_data_source      = src.eb_data_source,
+            eb_woba_sequential  = src.eb_woba_sequential,
+            posterior_source    = src.posterior_source,
+            prior_age_days      = src.prior_age_days,
             fit_date            = src.fit_date,
             run_id              = src.run_id
         WHEN NOT MATCHED THEN INSERT (
             game_pk, batting_slot, batter_id, season, game_date,
             eb_woba, eb_k_pct, eb_bb_pct, eb_iso, eb_woba_uncertainty,
-            pa_weight, eb_data_source, fit_date, run_id
+            pa_weight, eb_data_source, eb_woba_sequential, posterior_source, prior_age_days,
+            fit_date, run_id
         ) VALUES (
             src.game_pk, src.batting_slot, src.batter_id, src.season, src.game_date,
             src.eb_woba, src.eb_k_pct, src.eb_bb_pct, src.eb_iso, src.eb_woba_uncertainty,
-            src.pa_weight, src.eb_data_source, src.fit_date, src.run_id
+            src.pa_weight, src.eb_data_source, src.eb_woba_sequential, src.posterior_source,
+            src.prior_age_days, src.fit_date, src.run_id
         )
         """
     )
@@ -440,6 +473,7 @@ def _process_date(conn, game_date: date, priors: dict) -> int:
     batter_ids = list({str(r["batter_id"]) for r in lineups})
     rolling_map = _load_rolling_stats(conn, batter_ids, game_date, season)
     zips_map = _load_zips(conn, batter_ids, season)
+    seq_map = load_seq_posteriors_asof(conn, batter_ids, _SEQ_PLAYER_TYPE, _SEQ_METRIC, game_date, season)
 
     results = []
     for lr in lineups:
@@ -455,6 +489,7 @@ def _process_date(conn, game_date: date, priors: dict) -> int:
             zips=zips_map.get(bid),
             fit_date=fit_date,
             run_id=run_id,
+            seq=seq_map.get(bid),
         )
         results.append(row)
 
@@ -483,6 +518,7 @@ def main(game_date: date) -> None:
         batter_ids = list({str(r["batter_id"]) for r in lineups})
         rolling_map = _load_rolling_stats(conn, batter_ids, game_date, season)
         zips_map = _load_zips(conn, batter_ids, season)
+        seq_map = load_seq_posteriors_asof(conn, batter_ids, _SEQ_PLAYER_TYPE, _SEQ_METRIC, game_date, season)
 
         results = []
         for lr in lineups:
@@ -500,6 +536,7 @@ def main(game_date: date) -> None:
                 zips=zips,
                 fit_date=fit_date,
                 run_id=run_id,
+                seq=seq_map.get(bid),
             )
             results.append(row)
 
@@ -509,9 +546,13 @@ def main(game_date: date) -> None:
             sources[r["eb_data_source"]] = sources.get(r["eb_data_source"], 0) + 1
         rolling_hit = sum(1 for r in results if r["pa_weight"] > 0)
         zips_hit = sum(1 for lr in lineups if zips_map.get(str(lr["batter_id"])))
+        psrc: dict[str, int] = {}
+        for r in results:
+            psrc[r["posterior_source"]] = psrc.get(r["posterior_source"], 0) + 1
         print(f"  rolling stats found: {rolling_hit}/{len(results)}")
         print(f"  ZiPS found:          {zips_hit}/{len(results)}")
         print(f"  eb_data_source:      {sources}")
+        print(f"  posterior_source:    {psrc}  (Epic 16.2)")
 
         sample = next(
             (r for r in results if r["eb_data_source"] == "full_eb"), results[0]

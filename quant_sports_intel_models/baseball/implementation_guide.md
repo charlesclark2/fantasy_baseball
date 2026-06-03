@@ -1932,23 +1932,25 @@ dbt_daily_build (existing)
 
 **File:** `pipeline/schedules/end_of_day_schedules.py`
 
+**Status: CODE COMPLETE (2026-06-03).** Followed the repo's ops/jobs/schedules separation instead of the single-file path in the spec: ops in `pipeline/ops/end_of_day_ops.py`, job in `pipeline/jobs/end_of_day_job.py`, schedule in `pipeline/schedules/end_of_day_schedule.py`. Runtime ACs (Dagster Cloud UI, manual trigger, off-day skip, timing) are hand-off validation — see completion notes. All 3 update scripts confirmed to exist incl. Epic 8.5 matchup. Definitions construct + graph topology verified.
+
 **Tasks:**
 
-- [ ] Create `pipeline/schedules/end_of_day_schedules.py`
-- [ ] Define `update_player_posteriors_op`: runs `betting_ml/scripts/sequential_bayes/update_player_posteriors.py --date yesterday`; reads completed games from `mart_game_results` where `game_date = yesterday` and `game_state = 'Final'`; writes updated posteriors to `player_sequential_posteriors` table
-- [ ] Define `update_team_posteriors_op`: runs the team-level extension (Story 16.3); writes to `team_sequential_posteriors`
-- [ ] Define `update_matchup_cell_posteriors_op`: runs `update_matchup_cell_posteriors.py --date yesterday` (Epic 8 Story 8.5); writes to `matchup_cell_sequential_posteriors`; gate: only include if Epic 8.5 is complete
-- [ ] Define `end_of_day_job`: fan-out — all three posterior update ops run in parallel (they write to different tables); no fan-in needed
-- [ ] Define `end_of_day_schedule`: `ScheduleDefinition(job=end_of_day_job, cron_schedule="0 5 * * *")` — 05:00 UTC (01:00 EDT) daily; gives game results time to land and process before the 12:00 UTC morning pipeline starts
-- [ ] Add a games-check gate op that runs first: queries `mart_game_results` for yesterday's game count; if count = 0 (off-day), skips all posterior update ops with a `SkipReason` — avoids unnecessary Snowflake hits on off-days
-- [ ] Register in `pipeline/__init__.py`
+- [x] Create the end-of-day module (split into ops/jobs/schedules per repo convention — not the single `end_of_day_schedules.py` the spec suggested)
+- [x] Define `update_player_posteriors_op`: runs `/app/betting_ml/scripts/sequential_bayes/update_player_posteriors.py --date yesterday`; writes to `player_sequential_posteriors`. (Gate counts `mart_game_results` for yesterday with `game_type='R'` — that mart has no `game_state` column; it holds only completed games, so the count is the "Final" filter.)
+- [x] Define `update_team_posteriors_op`: runs `update_team_posteriors.py --date yesterday`; writes to `team_sequential_posteriors`. NOTE: bullpen_xwoba metric lags eb_bullpen_posteriors (off_xwoba + win_prob always update; bullpen backfills on a later run).
+- [x] Define `update_matchup_cell_posteriors_op`: runs `update_matchup_cell_posteriors.py --date yesterday` (Epic 8.5 — confirmed complete, op included).
+- [x] Define `end_of_day_job`: fan-out from the gate; in_process_executor runs them sequentially in topological order.
+- [x] Define `end_of_day_schedule`: `cron_schedule="0 5 * * *"`, name `end_of_day_posteriors`.
+- [x] Games-check gate op (`check_games_yesterday`) runs first, returns bool; downstream ops short-circuit (log + return) on an off-day → no Snowflake writes. (Ops can't emit `SkipReason` — that's a sensor concept; mirrored the repo's `check_games_today`→bool→early-return pattern instead.)
+- [x] Register in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py` (the repo's aggregation points; `pipeline/__init__.py` pulls from these).
 
-**Acceptance criteria:**
+**Acceptance criteria (runtime — HAND-OFF validation):**
 
-- [ ] `end_of_day_schedule` appears in Dagster Cloud UI
-- [ ] Manual trigger on a day with completed games: all three posterior ops produce rows in their respective tables for yesterday's `game_date` — confirmed via Snowflake MCP
-- [ ] Off-day behavior: when no games completed yesterday, all ops skip with `SkipReason` logged — no Snowflake writes, no errors
-- [ ] End-of-day job completes before 05:30 UTC — confirmed in Dagster run history; posterior updates must be available before the 12:00 UTC morning pipeline runs
+- [ ] `end_of_day_posteriors` schedule appears in Dagster Cloud UI
+- [ ] Manual trigger on a day with completed games: all three posterior ops produce rows for yesterday's `game_date` — confirm via Snowflake MCP. **KEY RISK TO CHECK: statcast/pitch data availability at 05:00 UTC.** The player/team chains read `stg_batter_pitches`; if yesterday's pitch data hasn't ingested by 05:00 UTC the ops produce 0 rows. If so, move the schedule later or add a pitch-data freshness gate.
+- [ ] Off-day behavior: gate returns False → all three ops log a skip and return — no Snowflake writes, no errors
+- [ ] End-of-day job completes before 05:30 UTC — confirm in Dagster run history; posteriors must be ready before the 12:00 UTC morning pipeline
 
 ---
 
@@ -6075,7 +6077,43 @@ Acceptance criteria:
 
 ---
 
+### 11.L — Leakage-free walk-forward sub-model signal regeneration (BLOCKER for 11.4–11.7; remediates Epic 10 totals eval)
+
+**Status (2026-06-03):** IN PROGRESS — 5 regenerators built + verified; regeneration runs handed off; Phase 2 (honest re-eval) pending.
+
+**Why this exists.** Story 11.3 (Approach B) appeared to beat the market (CV Brier 0.1943 vs market 0.2355), but the per-season fold table exposed it as an artifact: Brier ~0.184 on 2023–2025 (below any plausible market Brier — impossible for a market-blind model) then **collapsing to 0.2220 on 2026** (the only clean season; honest market 0.1967 **beats** the model). Root cause: the Layer 3 feature matrix is built from sub-model signals generated by `generate_*_signals.py`, which load the **final** sub-model artifact (trained on 2021–2025) and `model.predict(X)` over **all** backfilled games. So for 2021–2025 the features are **in-sample sub-model predictions** — leakage that Layer-3 walk-forward CV cannot catch (it is baked in upstream). Only 2026 is leakage-free (sub-models exclude it). This invalidates the 2021–2025 portion of **every** Layer 3 evaluation (Epic 9 stacking NLLs, Epic 10 totals "great-on-2023–25" numbers, Epic 11 H2H), and retroactively reframes the Epic 10 totals verdict: on clean data **neither totals nor H2H beats Bovada**.
+
+**Fix (user-approved config, 2026-06-03): full expanding-window walk-forward, per-fold Optuna re-tuning, train each sub-model from 2016 where its data supports it.** For each Layer-3 *floor* sub-model and each eval season S: train on seasons `[earliest..S-1]` (re-tuning hyperparameters per fold on inner walk-forward folds), fit the dispersion/sigma on training residuals, predict S → genuinely out-of-sample signals. Retrain only the **promoted architecture** per fold (not the full A/B/C selection) so it stays fast (the floor models are all Ridge/LightGBM, not the slow NGBoost ones). Production daily inference is **not** leaky (it scores future games), so this is scoped to the historical backfill used for training/eval; production signal generators are untouched.
+
+**Scripts** (`betting_ml/scripts/leakage_fix/regenerate_<model>_oos.py`, each reusing its trainer's own load/prepare/fit/dispersion functions; output `betting_ml/models/layer3/oos_signals/oos_signals_<model>.parquet`, grain game_pk[/side] + season):
+
+| Sub-model | Arch | r/σ | Train floor | Note |
+|---|---|---|---|---|
+| offense_v2 | LightGBM+NegBin | global r | **2016** | per-side runs; heaviest signal |
+| run_env_v4 | Ridge+NegBin (alpha grid) | global r | 2021 | weather/umpire feed caps at 2021 (no 2016); per-game |
+| bullpen_v2 | LightGBM+NegBin | global r | 2016 | grain (game_pk,pitching_team)→side via mart_game_results |
+| starter_v1 | LightGBM+Normal | σ (RMSE) | **2016** | suppression; per-side |
+| starter_ip_v1 | LightGBM+NegBin | r-by-decile | 2020 | per-side |
+
+**Ordering gotcha (bullpen):** the training parquet needs `build_bullpen_state_dataset.py --min-year 2016` **then** `compute_bullpen_availability_index.py` (Story 6.2 enrichment adds `availability_index`, which `FEATURE_COLS` requires) **then** the regenerator — build-only leaves the parquet missing that column.
+
+Tasks:
+- [x] Confirm leakage mechanism (signal generators score all games in-sample) + sub-model train spans (2021–2025) + data universe back to 2015.
+- [x] Build 5 walk-forward OOS regenerators (offense, run_env, bullpen, starter, starter_ip); offline-verify the template; import-verify the rest.
+- [ ] Run all 5 regenerations (per-fold Optuna, parquet outputs) — handed off.
+- [ ] **Phase 2:** OOS Layer 3 matrix builder joining the 5 parquets → game-level matrix with Layer-3 column names (intersection of OOS coverage = **2022–2026**, bounded by run_env's 2021 floor).
+- [ ] Re-run Story 11.3 (`train_h2h`) AND the Epic 10 totals Bayesian eval on the leakage-free matrix; record honest per-season Brier/NLL/calib vs market across 2024–2026.
+
+Acceptance criteria:
+- [ ] Each regenerated signal shows **stable** NLL/calibration across seasons with **no 2026 collapse** (the leakage signature); dispersion `r` is realistic, not a bound artifact. (run_env ✓: NLL 2.82–2.89, calib 0.81–0.84, r≈7.5 every fold incl. 2026.)
+- [ ] Leakage-free H2H 11.3 head-to-head: per-season Brier is consistent across 2024–2026 (no 2023–25 vs 2026 cliff); honest model-vs-market stated explicitly on the covered subset.
+- [ ] 11.4 champion selection and 11.7 production gate consume the **leakage-free** OOS matrix, not the contaminated production signals.
+
+---
+
 ### 11.4 — Champion selection: Approach A vs. Approach B
+
+**Gate:** Story 11.L complete — A-vs-B selection must run on the leakage-free OOS Layer 3 matrix, not the contaminated production signals.
 
 **Overview:** Compare the Approach A (derived from run distributions) and Approach B (direct classifier) winners on the same 2021–2025 holdout. The Brier score is the primary selection criterion for binary classification. ECE and CLV signal quality are tiebreakers. The winning approach becomes the `h2h_v2` champion.
 

@@ -975,6 +975,18 @@ sources:
           DDL: scripts/ddl/eb_bullpen_posteriors.sql.
           Grain: game_pk × team.
 
+      - name: team_sequential_posteriors
+        description: >
+          Team-level sequential Bayesian beliefs (Epic 16.3), updated after every
+          completed regular-season game. Written by
+          betting_ml/scripts/sequential_bayes/update_team_posteriors.py (SCD-2 MERGE).
+          metrics: off_xwoba & bullpen_xwoba (Normal-Normal), win_prob (Beta-Binomial,
+          the Pythagorean-win analogue). prior_mu is the belief ENTERING the game
+          (= posterior after the team's previous game) and is the leakage-safe
+          pre-game value consumed by feature_pregame_game_features; posterior_mu
+          includes the game's own observation (do NOT use as a pre-game feature).
+          Grain: team × metric × season × game_pk.
+
   - name: betting_ml
     database: baseball_data
     schema: betting_ml
