@@ -249,6 +249,7 @@ run_differential:
       \ Promoted 2026-06-02 via compare_model_versions.py: MAE \u0394 \u22120.480,\
       \ verdict PROMOTE.\n"
 total_runs:
+  bet_paused: true                 # totals_paused — Epic 10.6 (2026-06-02): totals NOT bettable. Both v4 AND the Layer 3 challenger score Brier > naive (0.25) on the 2026 OOS gate; persistent OVER bias (mean P(over) 0.50 vs actual 0.45) the alpha=0.70 Bovada blend cannot overcome, and dropping matchup signals did not help (regime-adaptation, not cluster-mismatch). The Epic 19 permission gate must surface NO totals bets until a totals model beats naive on the current season. Evidence: ablation_results/totals_2026_failure_analysis.md + totals_champion_vs_challenger.md.
   artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.4008
@@ -440,6 +441,27 @@ layer3_totals:
     beats_bovada: true
     sigma_ci_corr: 0.878
     report: ablation_results/totals_v1_reliability_diagram.md
+    evaluated: '2026-06-03'
+  promotion_decision:
+    story: '10.6'
+    verdict: PROMOTE_WITH_MONITORING
+    n_oos_games: 560
+    champion_surface: v4 inference-scored on 2026 OOS fold (trained 2021-2025)
+    delta_mae: -0.0656
+    delta_nll: -0.0498
+    challenger_std_mu: 1.6325
+    champion_std_mu: 1.3553
+    challenger_brier_vs_actual: 0.3091
+    champion_brier_vs_actual: 0.3129
+    brier_market_baseline: 0.2281
+    axes:
+      MAE delta: PROMOTE
+      NLL delta: PROMOTE
+      std(pred-means): PROMOTE
+      calib_80: MONITOR
+      Directional bias: PROMOTE
+      CLV (edge>+0.03): DO_NOT_PROMOTE
+    report: ablation_results/totals_champion_vs_challenger.md
     evaluated: '2026-06-03'
 layer3_h2h:
   artifact_path: null

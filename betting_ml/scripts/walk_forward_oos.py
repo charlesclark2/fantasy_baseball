@@ -110,17 +110,26 @@ def _fit_predict_fold(kind: str, params: dict, X_tr, y_tr, X_ev):
 
 
 def generate_totals_oos(env: str = "prod", kind: str | None = None,
-                        params: dict | None = None) -> pd.DataFrame:
+                        params: dict | None = None, drop_pattern: str | None = None) -> pd.DataFrame:
     """Walk-forward held-out predictions for the Layer 3 totals model.
 
     One row per game from the first held-out season onward (2021–22 are train-only
     under min_train_seasons=2). Returns: game_pk, season, oos_mu, oos_r, actual_total_runs.
+
+    ``drop_pattern`` (e.g. "matchup") drops every X column containing that substring
+    before the fold fits — a controlled ablation that reuses the champion's tuned
+    hyperparameters so only the feature set changes (Story 10.6 follow-up).
     """
     if kind is None or params is None:
         kind, params = champion_params()
 
     X, y, _eval_lines, _report, meta = build_totals_dataset(env=env, return_meta=True)
     X = coerce_numeric(X)
+    if drop_pattern:
+        dropped = [c for c in X.columns if drop_pattern.lower() in c.lower()]
+        X = X.drop(columns=dropped)
+        log.info("Dropped %d '%s' columns → %d features remain: %s",
+                 len(dropped), drop_pattern, X.shape[1], dropped)
     y_arr = y.to_numpy()
 
     folds = list(all_season_splits(meta, min_train_seasons=_MIN_TRAIN_SEASONS))
@@ -272,21 +281,28 @@ def _oos_provider(name: str):
     )
 
 
-def run(env: str = "prod") -> pd.DataFrame:
-    oos = generate_totals_oos(env=env)
+def run(env: str = "prod", drop_pattern: str | None = None, out_tag: str | None = None) -> pd.DataFrame:
+    oos = generate_totals_oos(env=env, drop_pattern=drop_pattern)
     oos_full = attach_lines_and_probs(oos, env=env)
-    _OOS_PARQUET.parent.mkdir(parents=True, exist_ok=True)
-    oos_full.to_parquet(_OOS_PARQUET, index=False)
-    log.info("Saved OOS predictions → %s (%d rows)", _OOS_PARQUET, len(oos_full))
-    write_oos_report(oos_full)
+    out_path = (_OOS_PARQUET.with_name(f"oos_predictions_totals_{out_tag}.parquet")
+                if out_tag else _OOS_PARQUET)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    oos_full.to_parquet(out_path, index=False)
+    log.info("Saved OOS predictions → %s (%d rows)", out_path, len(oos_full))
+    if not out_tag:   # only refresh the canonical v1 report for the default run
+        write_oos_report(oos_full)
     return oos_full
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Walk-forward OOS predictions for totals_v1 (Epic 10)")
+    p = argparse.ArgumentParser(description="Walk-forward OOS predictions for the Layer 3 totals model (Epic 10)")
     p.add_argument("--env", choices=["prod", "dev"], default="prod")
+    p.add_argument("--drop-pattern", default=None,
+                   help="drop X columns containing this substring (e.g. 'matchup') — controlled ablation")
+    p.add_argument("--out-tag", default=None,
+                   help="write to oos_predictions_totals_<tag>.parquet instead of the canonical v1 file")
     args = p.parse_args()
-    run(env=args.env)
+    run(env=args.env, drop_pattern=args.drop_pattern, out_tag=args.out_tag)
 
 
 if __name__ == "__main__":

@@ -362,10 +362,14 @@ def load_total_line_bovada(
 ) -> pd.DataFrame:
     """Eval-only closing total line per game_pk — Bovada-preferred (Story 10.1).
 
-    Bovada closing line = latest snapshot per game in the historical snapshot
-    store (Bovada-specific, game_pk-keyed). Games with no Bovada line fall back to
-    the consensus CLOSE_TOTAL_LINE when ``fallback_consensus`` so coverage stays
-    complete; `total_line_source` ∈ {"bovada", "consensus_fallback"} records which.
+    Bovada closing line comes from TWO Bovada-specific, game_pk-keyed sources:
+      * historical snapshot store (`odds_snapshots_historical`) — dense through 2025;
+      * the live odds mart (`mart_odds_outcomes` ⋈ `mart_game_odds_bridge`) — the
+        current season, which the historical store does NOT cover (added Story 10.6
+        when the 2026 OOS gate hit zero historical-Bovada 2026 coverage).
+    Games with no Bovada line in either source fall back to the consensus
+    CLOSE_TOTAL_LINE when ``fallback_consensus`` so coverage stays complete;
+    `total_line_source` ∈ {"bovada", "consensus_fallback"} records which.
 
     Returns columns: game_pk, total_line_bovada, over_price, under_price,
     total_line_source. This is EVALUATION-ONLY — it must never be joined into the
@@ -383,6 +387,31 @@ def load_total_line_bovada(
         select game_pk, total_line as total_line_bovada, over_price, under_price
         from snaps where rn = 1
     """
+    # Live Bovada totals (current season) — keyed by game_pk via the odds bridge.
+    # mart_odds_outcomes is long-format and carries BOTH source systems; join each
+    # row to the bridge on its source-specific event id (odds_api vs parlay_api),
+    # take the closing (latest) snapshot per game/side, then pivot Over/Under.
+    bov_live_sql = f"""
+        with raw as (
+            select b.game_pk, lower(o.outcome_name) as side,
+                   o.outcome_point, o.outcome_price_american,
+                   row_number() over (partition by b.game_pk, lower(o.outcome_name)
+                                      order by o.market_last_update desc nulls last) as rn
+            from {mart_schema}.mart_odds_outcomes o
+            join {mart_schema}.mart_game_odds_bridge b
+              on (o.source_system = 'odds_api'  and o.event_id = b.odds_api_event_id)
+              or (o.source_system = 'parlay_api' and o.event_id = b.parlay_api_event_id)
+            where lower(o.bookmaker_key) = 'bovada' and o.is_totals_market = true
+              and b.game_pk is not null
+        ),
+        closing as (select game_pk, side, outcome_point, outcome_price_american from raw where rn = 1)
+        select game_pk,
+               max(case when side = 'over'  then outcome_point end)          as total_line_bovada,
+               max(case when side = 'over'  then outcome_price_american end) as over_price,
+               max(case when side = 'under' then outcome_price_american end) as under_price
+        from closing
+        group by game_pk
+    """
     cons_sql = f"""
         select game_pk, close_total_line as total_line_bovada
         from {mart_schema}.mart_closing_line_value
@@ -394,6 +423,8 @@ def load_total_line_bovada(
         cur = conn.cursor()
         cur.execute(bov_sql)
         bov = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+        cur.execute(bov_live_sql)
+        bov_live = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
         cons = pd.DataFrame()
         if fallback_consensus:
             cur.execute(cons_sql)
@@ -401,9 +432,16 @@ def load_total_line_bovada(
     finally:
         conn.close()
 
-    bov["total_line_source"] = "bovada"
     for c in ("total_line_bovada", "over_price", "under_price"):
         bov[c] = pd.to_numeric(bov[c], errors="coerce")
+        if c in bov_live.columns:
+            bov_live[c] = pd.to_numeric(bov_live[c], errors="coerce")
+    # Historical Bovada wins where both exist (seasons are disjoint in practice);
+    # live Bovada fills the current season the historical store lacks.
+    if not bov_live.empty:
+        bov_live = bov_live[~bov_live["game_pk"].isin(set(bov["game_pk"]))]
+        bov = pd.concat([bov, bov_live], ignore_index=True)
+    bov["total_line_source"] = "bovada"
 
     if fallback_consensus and not cons.empty:
         cons["total_line_bovada"] = pd.to_numeric(cons["total_line_bovada"], errors="coerce")
