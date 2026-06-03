@@ -422,6 +422,47 @@ def load_total_line_bovada(
     return out
 
 
+def compute_across_model_sigma(df: pd.DataFrame, base_floor: float = 0.5) -> pd.Series:
+    """Epistemic uncertainty about total-runs `mu`, on the totals scale (Story 10.3).
+
+    "Across-model disagreement" (the Var(E[X|model]) term): the spread among the
+    promoted signals that *directly* estimate total runs —
+      • run_env:  ``run_env_mu_v4`` (game-level total-runs environment, ~8 runs)
+      • offense:  ``home_pred_runs_mu_v2 + away_pred_runs_mu_v2`` (per-side runs → total)
+    (bullpen/starter are latent, not direct total estimators, so they don't enter
+    the disagreement.) Plus a per-game variance floor so σ is never 0 (which would
+    collapse the P(over) CI and make the bet gate falsely over-confident); the
+    floor *grows when signal coverage is low* — fewer signals present → more
+    uncertain about the mean → wider CI:
+
+        floor² = (base_floor · (2 − signal_completeness_score))²
+        σ = sqrt( Var_across{run_env, offense_total} + floor² )
+
+    NOTE: the sub-model ``*_uncertainty`` columns are intentionally NOT used — in
+    ``feature_pregame_sub_model_signals`` they are constant sentinel placeholders
+    (run_env=10, offense=7, bullpen=6), not calibrated per-game values, so they
+    would swamp σ. Behaves correctly (high disagreement / low coverage → wider σ)
+    and complements the champion's *aleatoric* NegBin r. ``base_floor`` is tunable
+    and can be calibrated empirically in Story 10.4.
+    """
+    est = pd.DataFrame(index=df.index)
+    if "run_env_mu_v4" in df:
+        est["run_env"] = pd.to_numeric(df["run_env_mu_v4"], errors="coerce")
+    if {"home_pred_runs_mu_v2", "away_pred_runs_mu_v2"} <= set(df.columns):
+        est["offense"] = (pd.to_numeric(df["home_pred_runs_mu_v2"], errors="coerce")
+                          + pd.to_numeric(df["away_pred_runs_mu_v2"], errors="coerce"))
+    disagree_var = est.var(axis=1, ddof=1) if est.shape[1] >= 2 else pd.Series(0.0, index=df.index)
+    disagree_var = disagree_var.fillna(0.0)
+
+    if "signal_completeness_score" in df.columns:
+        completeness = pd.to_numeric(df["signal_completeness_score"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
+    else:
+        completeness = pd.Series(1.0, index=df.index)
+    floor = base_floor * (2.0 - completeness)            # base_floor at full coverage, up to 2× at 0 coverage
+
+    return (disagree_var + floor ** 2) ** 0.5
+
+
 def analyze_totals_target(y: pd.Series) -> dict:
     """Target-distribution / overdispersion check for `total_runs` (Story 10.1).
 
