@@ -1932,25 +1932,23 @@ dbt_daily_build (existing)
 
 **File:** `pipeline/schedules/end_of_day_schedules.py`
 
-**Status: CODE COMPLETE (2026-06-03).** Followed the repo's ops/jobs/schedules separation instead of the single-file path in the spec: ops in `pipeline/ops/end_of_day_ops.py`, job in `pipeline/jobs/end_of_day_job.py`, schedule in `pipeline/schedules/end_of_day_schedule.py`. Runtime ACs (Dagster Cloud UI, manual trigger, off-day skip, timing) are hand-off validation — see completion notes. All 3 update scripts confirmed to exist incl. Epic 8.5 matchup. Definitions construct + graph topology verified.
+**Status: CODE COMPLETE (2026-06-03) — REVISED from a standalone 05:00 UTC schedule to a fold-in.** The spec's standalone-schedule design is UNWORKABLE: yesterday's statcast/pitch data (`stg_batter_pitches`) only lands during the 12:00 UTC `daily_ingestion_job`'s ingest→dbt build, so a 05:00 UTC job would fire ~7h before its input exists and always find 0 pitch rows. The posterior updates are therefore folded INTO `daily_ingestion_job`, after `dbt_daily_build` (pitch data ready) and before `dbt_umpire_feature_rebuild` (which rebuilds `feature_pregame_game_features` → picks up the freshly-chained team posteriors) and `predict_today_morning`. The first standalone version (`pipeline/ops|jobs|schedules/end_of_day_*.py`) was created, pushed to dev, then removed in this revision. All 3 update scripts exist incl. Epic 8.5 matchup. DAG order + Definitions verified.
 
-**Tasks:**
+**Tasks (as built — fold-in):**
 
-- [x] Create the end-of-day module (split into ops/jobs/schedules per repo convention — not the single `end_of_day_schedules.py` the spec suggested)
-- [x] Define `update_player_posteriors_op`: runs `/app/betting_ml/scripts/sequential_bayes/update_player_posteriors.py --date yesterday`; writes to `player_sequential_posteriors`. (Gate counts `mart_game_results` for yesterday with `game_type='R'` — that mart has no `game_state` column; it holds only completed games, so the count is the "Final" filter.)
-- [x] Define `update_team_posteriors_op`: runs `update_team_posteriors.py --date yesterday`; writes to `team_sequential_posteriors`. NOTE: bullpen_xwoba metric lags eb_bullpen_posteriors (off_xwoba + win_prob always update; bullpen backfills on a later run).
-- [x] Define `update_matchup_cell_posteriors_op`: runs `update_matchup_cell_posteriors.py --date yesterday` (Epic 8.5 — confirmed complete, op included).
-- [x] Define `end_of_day_job`: fan-out from the gate; in_process_executor runs them sequentially in topological order.
-- [x] Define `end_of_day_schedule`: `cron_schedule="0 5 * * *"`, name `end_of_day_posteriors`.
-- [x] Games-check gate op (`check_games_yesterday`) runs first, returns bool; downstream ops short-circuit (log + return) on an off-day → no Snowflake writes. (Ops can't emit `SkipReason` — that's a sensor concept; mirrored the repo's `check_games_today`→bool→early-return pattern instead.)
-- [x] Register in `pipeline/jobs/__init__.py` + `pipeline/schedules/__init__.py` (the repo's aggregation points; `pipeline/__init__.py` pulls from these).
+- [x] 3 ops in `pipeline/ops/daily_ingestion_ops.py`: `update_player_posteriors_op`, `update_team_posteriors_op`, `update_matchup_cell_posteriors_op` — each runs `/app/betting_ml/scripts/sequential_bayes/update_<x>.py --date yesterday` (`_one_day_ago()`), writing to `player_/team_/matchup_cell_sequential_posteriors`.
+- [x] Wired into `daily_ingestion_job` as a linear chain `ingest_umpires_late → player → team → matchup → dbt_umpire_feature_rebuild → predict_today_morning`. Runs after `dbt_daily_build` (pitch data ready) and before the `feature_pregame_game_features` rebuild + morning predict.
+- [x] No separate schedule/job/gate: the existing 12:00 UTC `daily_ingestion_schedule` drives it. Off-days no-op gracefully inside the scripts (0 games → 0 rows; `run_single_date`→`update_for_date` produces nothing, exits 0), so no games-check gate is needed.
+- [x] `--date yesterday` is a fixed single day (NOT `_recent_completed_dates()`): the scripts are NOT idempotent per-date (re-running a chained date double-counts); a missed day recovers via `--backfill --season`.
+- [x] team `bullpen_xwoba` lags `eb_bullpen_posteriors` (off_xwoba + win_prob always update; bullpen backfills later).
+- [x] Standalone `end_of_day_*` files removed; `jobs/__init__.py` + `schedules/__init__.py` reverted.
 
 **Acceptance criteria (runtime — HAND-OFF validation):**
 
-- [ ] `end_of_day_posteriors` schedule appears in Dagster Cloud UI
-- [ ] Manual trigger on a day with completed games: all three posterior ops produce rows for yesterday's `game_date` — confirm via Snowflake MCP. **KEY RISK TO CHECK: statcast/pitch data availability at 05:00 UTC.** The player/team chains read `stg_batter_pitches`; if yesterday's pitch data hasn't ingested by 05:00 UTC the ops produce 0 rows. If so, move the schedule later or add a pitch-data freshness gate.
-- [ ] Off-day behavior: gate returns False → all three ops log a skip and return — no Snowflake writes, no errors
-- [ ] End-of-day job completes before 05:30 UTC — confirm in Dagster run history; posteriors must be ready before the 12:00 UTC morning pipeline
+- [x] DAG order verified: `…→ player → team → matchup → dbt_umpire_feature_rebuild → predict_today_morning`; Definitions construct.
+- [x] Pitch-data timing resolved by design — ops now run *after* `dbt_daily_build` builds `stg_batter_pitches`, inside the same job (the original 05:00 UTC risk is moot). Confirmed 2026-06-02 had 4,505 pitch rows / 15 games available post-ingest.
+- [ ] First scheduled `daily_ingestion_job` run after deploy: the 3 ops write rows for yesterday's `game_date` in all three tables — confirm via Snowflake MCP. **Run each posterior script at most once per date (not idempotent).**
+- [ ] Off-day behavior: on a day after an MLB off-day, the 3 ops complete with 0 rows and the job still succeeds.
 
 ---
 

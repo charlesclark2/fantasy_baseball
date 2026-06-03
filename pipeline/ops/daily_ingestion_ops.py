@@ -309,6 +309,40 @@ def signal_freshness_check(context):
         context.log.warning(f"Signal freshness check reported a problem: {e}")
 
 
+# ── Epic O.4 / 16.4 — end-of-day sequential posterior updates ────────────────
+# Advance the player / team / matchup-cell sequential-Bayes chains by one day for
+# YESTERDAY's completed games. These run INSIDE the daily job (not a separate
+# 05:00 UTC schedule) because yesterday's pitch data only lands during THIS job's
+# statcast ingest → dbt_daily_build; the updates must run after that. Placed
+# before dbt_umpire_feature_rebuild so the feature_pregame_game_features rebuild
+# there picks up the freshly-chained team posteriors.
+#
+# `--date yesterday` (a fixed single day, NOT _recent_completed_dates()): the
+# chains are strictly sequential and this job runs daily, so yesterday is the one
+# missing day. The scripts are NOT idempotent per-date (re-running a chained date
+# double-counts the observation), so a fixed single date is required; a missed day
+# is recovered via `--backfill --season`. Off-days no-op gracefully (0 games → 0
+# rows). The team bullpen_xwoba metric lags eb_bullpen_posteriors (off_xwoba +
+# win_prob still update). See project_epic16_status memory.
+
+_SEQ_DIR = "/app/betting_ml/scripts/sequential_bayes"
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_player_posteriors_op(context):
+    _run_script(context, f"{_SEQ_DIR}/update_player_posteriors.py", ["--date", _one_day_ago()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_team_posteriors_op(context):
+    _run_script(context, f"{_SEQ_DIR}/update_team_posteriors.py", ["--date", _one_day_ago()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_matchup_cell_posteriors_op(context):
+    _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py", ["--date", _one_day_ago()])
+
+
 # ── Predict phase ────────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
