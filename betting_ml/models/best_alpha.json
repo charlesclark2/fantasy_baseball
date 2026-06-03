@@ -2,5 +2,10 @@
   "best_alpha": 0.0,
   "log_loss": 0.6843094746049003,
   "run_ts": "2026-05-12T07:57:17.979544Z",
-  "source": "run_probability_layer.py"
+  "source": "run_probability_layer.py",
+  "totals_alpha": 0.7,
+  "totals_log_loss": 0.637558,
+  "totals_n_games": 4580,
+  "totals_run_ts": "2026-06-03T00:46:07.053580+00:00",
+  "totals_source": "recalibrate_totals_alpha.py (walk-forward OOS surface)"
 }
