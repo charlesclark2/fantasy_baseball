@@ -213,6 +213,26 @@ all_totals_book_prices as (
     where total_line is not null
 ),
 
+-- ─── Garbage-price guard ────────────────────────────────────────────────────
+-- Drop internally-inconsistent prices before aggregation. A real two-sided
+-- market always carries positive vig, so the two raw implied probabilities sum
+-- to > 1. Stale/erroneous opening lines violate this — e.g. game 823700
+-- (2026-06-02) had Bovada home +101 / away +1400, whose raw probs sum to 0.56
+-- (impossible negative vig); as the only sharp book that morning it forced
+-- sharp_soft_ml_spread to 0.408 and tripped the ±0.25 test. Band [1.00, 1.40]
+-- keeps real ~2–15% vig (incl. heavy two-sided juice) and excludes both
+-- negative-vig garbage and absurd one-sided lines.
+valid_h2h_book_prices as (
+    select game_pk, game_date, bookmaker_key, home_price, away_price
+    from all_h2h_book_prices
+    where (
+        (case when home_price < 0 then abs(home_price) / (abs(home_price) + 100.0)
+              else 100.0 / (home_price + 100.0) end)
+      + (case when away_price < 0 then abs(away_price) / (abs(away_price) + 100.0)
+              else 100.0 / (away_price + 100.0) end)
+    ) between 1.00 and 1.40
+),
+
 -- ─── Vig-free implied probabilities ────────────────────────────────────────
 
 h2h_vig_free as (
@@ -246,7 +266,7 @@ h2h_vig_free as (
             when 'fanduel'        then 'soft'
             else                       'neutral'
         end                                                     as tier
-    from all_h2h_book_prices
+    from valid_h2h_book_prices
 ),
 
 -- ─── Game-level aggregations ────────────────────────────────────────────────
