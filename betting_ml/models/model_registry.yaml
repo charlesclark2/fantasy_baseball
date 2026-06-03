@@ -249,7 +249,7 @@ run_differential:
       \ Promoted 2026-06-02 via compare_model_versions.py: MAE \u0394 \u22120.480,\
       \ verdict PROMOTE.\n"
 total_runs:
-  bet_paused: true                 # totals_paused — Epic 10.6 (2026-06-02): totals NOT bettable. Both v4 AND the Layer 3 challenger score Brier > naive (0.25) on the 2026 OOS gate; persistent OVER bias (mean P(over) 0.50 vs actual 0.45) the alpha=0.70 Bovada blend cannot overcome, and dropping matchup signals did not help (regime-adaptation, not cluster-mismatch). The Epic 19 permission gate must surface NO totals bets until a totals model beats naive on the current season. Evidence: ablation_results/totals_2026_failure_analysis.md + totals_champion_vs_challenger.md.
+  bet_paused: true                 # totals_paused — Epic 10.6 (2026-06-02; confirmed under a Bayesian three-layer framework 2026-06-03). On 560 shared 2026 OOS games BOTH v4 and the Layer 3 challenger FAIL Layer 1 (NLL >= prior-predictive 2.8893 — no info over the training marginal) and Layer 3 (blended Brier ~0.279 >= prior-naive 0.248 and >= market 0.228); they pass only calibration (calib_80 ~0.776). Persistent OVER bias (mean P(over) 0.51 vs actual 0.45); matchup-drop ablation ruled out cluster-mismatch (regime-adaptation). The challenger wins the head-to-head but fails the operational gate. Epic 19 gate must surface NO totals bets until a model beats BOTH the prior-predictive NLL and prior-naive Brier (ideally the market) on the current season. Evidence: ablation_results/totals_bayesian_evaluation.md + totals_2026_failure_analysis.md.
   artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.4008
