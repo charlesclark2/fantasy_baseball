@@ -123,7 +123,11 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     totals_model_prob       FLOAT,   -- NGBoost P(total > total_line_consensus)
     totals_posterior_prob   FLOAT,
     totals_edge             FLOAT,
-    totals_kelly_fraction   FLOAT
+    totals_kelly_fraction   FLOAT,
+
+    -- Epic 16.2 — game-level sequential-posterior provenance
+    posterior_source        VARCHAR(20),  -- least-informed source across the game's players
+    prior_age_days          INTEGER       -- max stale-belief age (>7 flags game_uncertainty_score)
 )
 """
 
@@ -140,7 +144,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     alpha,
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
-    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
+    totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
+    posterior_source, prior_age_days
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -153,9 +158,61 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(alpha)s,
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
-    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s
+    %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
+    %(posterior_source)s, %(prior_age_days)s
 )
 """
+
+
+# Epic 16.2 — game-level posterior provenance for the scoring date. Aggregates the
+# per-player posterior_source / prior_age_days (eb_batter_posteriors_raw + the starter
+# table, written by the as-of injection in compute_*_posteriors) up to game grain:
+#   prior_age_days   = MAX over the game's batters+starters (the stalest belief; the
+#                      >7 flag raises game_uncertainty_score in the Epic 19 gate).
+#   posterior_source = least-informed source present (prior_only > season_eb >
+#                      sequential) — flags games carrying a debut/cold-start player.
+_POSTERIOR_PROVENANCE_QUERY = """
+with prov as (
+    select game_pk, posterior_source, prior_age_days
+    from baseball_data.betting.eb_batter_posteriors_raw where game_date = %(d)s
+    union all
+    select game_pk, posterior_source, prior_age_days
+    from baseball_data.betting.eb_starter_posteriors where game_date = %(d)s
+)
+select game_pk,
+    max(prior_age_days) as max_prior_age_days,
+    case when count_if(posterior_source = 'prior_only') > 0 then 'prior_only'
+         when count_if(posterior_source = 'season_eb')  > 0 then 'season_eb'
+         when count_if(posterior_source = 'sequential') > 0 then 'sequential'
+         else null end as posterior_source
+from prov
+where game_pk is not null
+group by game_pk
+"""
+
+
+def _load_posterior_provenance(target_date: str) -> dict[int, dict]:
+    """{game_pk: {prior_age_days, posterior_source}} for the scoring date (Epic 16.2).
+
+    Empty dict if the EB tables aren't yet populated for the date (graceful — the
+    columns then write NULL). Read-only; never blocks scoring."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_POSTERIOR_PROVENANCE_QUERY, {"d": target_date})
+            out: dict[int, dict] = {}
+            for gpk, max_age, src in cur.fetchall():
+                out[int(gpk)] = {
+                    "prior_age_days": int(max_age) if max_age is not None else None,
+                    "posterior_source": src,
+                }
+            return out
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [16.2] posterior provenance unavailable ({exc}); columns will be NULL.")
+        return {}
 
 
 def _write_predictions_to_snowflake(
@@ -197,6 +254,7 @@ def _write_predictions_to_snowflake(
 
     rows: list[dict] = []
     score_date = date.fromisoformat(target_date)
+    prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -233,12 +291,15 @@ def _write_predictions_to_snowflake(
             except Exception:
                 pass
 
+        gpk_val = _s(df_today, "game_pk", i)
+        game_prov = prov.get(int(gpk_val)) if gpk_val is not None else None
+
         rows.append(_sanitize({
             "model_version":          MODEL_VERSION,
             "inserted_at":            inserted_at,
             "score_date":             score_date,
             "prediction_type":        prediction_type,
-            "game_pk":                _s(df_today, "game_pk", i),
+            "game_pk":                gpk_val,
             "game_date":              score_date,
             "game_datetime":          game_dt,
             "home_team":              _s(df_today, "home_name", i) or _s(df_today, "home_team", i),
@@ -267,6 +328,8 @@ def _write_predictions_to_snowflake(
             "totals_posterior_prob":  tot_post,
             "totals_edge":            tot_edge,
             "totals_kelly_fraction":  tot_kelly,
+            "posterior_source":       (game_prov or {}).get("posterior_source"),
+            "prior_age_days":         (game_prov or {}).get("prior_age_days"),
         }))
 
     try:
@@ -274,6 +337,10 @@ def _write_predictions_to_snowflake(
         try:
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
+            # Epic 16.2 migration — idempotent; safe on every scoring pass (CREATE IF
+            # NOT EXISTS won't add columns to a pre-existing table).
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "

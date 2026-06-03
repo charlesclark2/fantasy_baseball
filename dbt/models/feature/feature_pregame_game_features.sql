@@ -159,6 +159,30 @@ home_win_rate as (
     group by spine.game_pk
 ),
 
+-- Epic 16.3 — leakage-safe pre-game team sequential beliefs. In
+-- team_sequential_posteriors, prior_mu is the belief ENTERING the game
+-- (= posterior after the team's previous game), so a plain game_pk + team join
+-- carries NO game-G leakage (verified: prior_mu[N] == posterior_mu[N-1]). The
+-- inner qualify dedups to the latest version per (team, metric, game_pk) as
+-- insurance against SCD-2 re-runs; the outer pivot collapses the 3 metrics to
+-- one row per (game_pk, team).
+team_seq as (
+    select
+        game_pk,
+        team,
+        max(case when metric = 'off_xwoba'     then prior_mu end) as seq_off_xwoba,
+        max(case when metric = 'bullpen_xwoba' then prior_mu end) as seq_bullpen_xwoba,
+        max(case when metric = 'win_prob'      then prior_mu end) as seq_win_prob
+    from (
+        select game_pk, team, metric, prior_mu
+        from {{ source('betting', 'team_sequential_posteriors') }}
+        qualify row_number() over (
+            partition by team, metric, game_pk order by update_ts desc
+        ) = 1
+    )
+    group by game_pk, team
+),
+
 final as (
     select
 
@@ -618,6 +642,14 @@ final as (
         h_tm.bp_eb_uncertainty                  as home_bp_eb_uncertainty,
         h_tm.bp_eb_coverage_pct                 as home_bp_eb_coverage_pct,
 
+        -- ── Home team: sequential Bayesian beliefs (Epic 16.3) ────────────────
+        -- Leakage-safe pre-game prior_mu (belief entering this game). Tracks
+        -- within-season run-environment drift the static rolling/EB features miss.
+        -- NULL only on a team's season opener (no prior belief → cold-start).
+        h_seq.seq_off_xwoba                     as home_team_sequential_woba,
+        h_seq.seq_bullpen_xwoba                 as home_team_sequential_bullpen_xwoba,
+        h_seq.seq_win_prob                      as home_team_sequential_win_prob,
+
         -- ── Away team context ─────────────────────────────────────────────────
         a_tm.wins                               as away_wins,
         a_tm.losses                             as away_losses,
@@ -732,6 +764,11 @@ final as (
         a_tm.bp_eb_xwoba                        as away_bp_eb_xwoba,
         a_tm.bp_eb_uncertainty                  as away_bp_eb_uncertainty,
         a_tm.bp_eb_coverage_pct                 as away_bp_eb_coverage_pct,
+
+        -- ── Away team: sequential Bayesian beliefs (Epic 16.3) ────────────────
+        a_seq.seq_off_xwoba                     as away_team_sequential_woba,
+        a_seq.seq_bullpen_xwoba                 as away_team_sequential_bullpen_xwoba,
+        a_seq.seq_win_prob                      as away_team_sequential_win_prob,
 
         -- ── Elo team strength ratings (Card 8.D) ─────────────────────────────
         -- Pre-game snapshot from compute_elo.py. NULL until backfill is run.
@@ -1086,6 +1123,8 @@ final as (
     left join away_starter a_st on  a_st.game_pk = g.game_pk
     left join home_team h_tm    on  h_tm.game_pk = g.game_pk
     left join away_team a_tm    on  a_tm.game_pk = g.game_pk
+    left join team_seq h_seq    on  h_seq.game_pk = g.game_pk and h_seq.team = g.home_team
+    left join team_seq a_seq    on  a_seq.game_pk = g.game_pk and a_seq.team = g.away_team
     left join {{ ref('feature_pregame_park_features') }} pk
         on  pk.game_pk = g.game_pk
     left join odds od

@@ -108,6 +108,10 @@ _TOTALS_AUDIT_PATH = (
     _PROJECT_ROOT / "quant_sports_intel_models" / "baseball"
     / "ablation_results" / "totals_v1_dataset_audit.md"
 )
+_H2H_AUDIT_PATH = (
+    _PROJECT_ROOT / "quant_sports_intel_models" / "baseball"
+    / "ablation_results" / "h2h_v2_dataset_audit.md"
+)
 
 
 def _schemas(env: str) -> tuple[str, str]:
@@ -617,6 +621,246 @@ def write_totals_dataset_audit(report: dict, start_date: str) -> Path:
     _TOTALS_AUDIT_PATH.write_text("\n".join(lines) + "\n")
     log.info("Wrote totals dataset audit → %s", _TOTALS_AUDIT_PATH)
     return _TOTALS_AUDIT_PATH
+
+
+# ---------------------------------------------------------------------------
+# Epic 11 (H2H) — Story 11.1: training dataset construction
+# ---------------------------------------------------------------------------
+
+def load_devig_home_prob_bovada(
+    game_pks: list[int] | None = None,
+    env: str = "prod",
+    fallback_consensus: bool = True,
+) -> pd.DataFrame:
+    """Eval-only de-vigged closing P(home win) per game_pk — Bovada-preferred (Story 11.1).
+
+    Two sources, mirroring `load_total_line_bovada`:
+      * Bovada-specific moneyline from the live odds mart
+        (`mart_odds_outcomes` ⋈ `mart_game_odds_bridge`, ``market_key='h2h'``):
+        take the closing (latest) home and away American prices and de-vig with
+        the additive method (`h2h_probability.devig_home_prob`). Dense for
+        2021-2022 and 2024-2026; sparse for 2023.
+      * Consensus fallback (`mart_closing_line_value.close_vf_home`, already a
+        vig-free home probability) fills game_pks Bovada doesn't cover — notably
+        the 2023 Bovada-h2h gap — when ``fallback_consensus``.
+
+    Returns columns: game_pk, bovada_devig_home_prob, home_price, away_price,
+    devig_home_source ∈ {"bovada", "consensus_fallback"}. EVALUATION-ONLY — it
+    must never enter the training matrix (consumed post-inference in 11.2/11.5/11.7).
+    """
+    from betting_ml.utils.h2h_probability import devig_home_prob
+
+    _, mart_schema = _schemas(env)
+
+    # Bovada-specific h2h: closing home/away American prices per game_pk.
+    bov_sql = f"""
+        with raw as (
+            select b.game_pk,
+                   case when o.is_home_outcome then 'home'
+                        when o.is_away_outcome then 'away' end as side,
+                   o.outcome_price_american,
+                   row_number() over (
+                       partition by b.game_pk,
+                           case when o.is_home_outcome then 'home'
+                                when o.is_away_outcome then 'away' end
+                       order by o.market_last_update desc nulls last) as rn
+            from {mart_schema}.mart_odds_outcomes o
+            join {mart_schema}.mart_game_odds_bridge b
+              on (o.source_system = 'odds_api'  and o.event_id = b.odds_api_event_id)
+              or (o.source_system = 'parlay_api' and o.event_id = b.parlay_api_event_id)
+            where lower(o.bookmaker_key) = 'bovada' and o.market_key = 'h2h'
+              and b.game_pk is not null
+              and (o.is_home_outcome or o.is_away_outcome)
+        ),
+        closing as (select game_pk, side, outcome_price_american from raw where rn = 1)
+        select game_pk,
+               max(case when side = 'home' then outcome_price_american end) as home_price,
+               max(case when side = 'away' then outcome_price_american end) as away_price
+        from closing
+        group by game_pk
+    """
+    cons_sql = f"""
+        select game_pk, close_vf_home as bovada_devig_home_prob
+        from {mart_schema}.mart_closing_line_value
+        where close_vf_home is not null
+    """
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(bov_sql)
+        bov = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+        cons = pd.DataFrame()
+        if fallback_consensus:
+            cur.execute(cons_sql)
+            cons = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+    finally:
+        conn.close()
+
+    for c in ("home_price", "away_price"):
+        bov[c] = pd.to_numeric(bov[c], errors="coerce")
+    # Keep only games where BOTH sides priced; de-vig additively.
+    bov = bov[bov["home_price"].notna() & bov["away_price"].notna()].copy()
+    bov["bovada_devig_home_prob"] = [
+        devig_home_prob(h, a) for h, a in zip(bov["home_price"], bov["away_price"])
+    ]
+    bov = bov[bov["bovada_devig_home_prob"].notna()].reset_index(drop=True)
+    bov["devig_home_source"] = "bovada"
+
+    if fallback_consensus and not cons.empty:
+        cons["bovada_devig_home_prob"] = pd.to_numeric(cons["bovada_devig_home_prob"], errors="coerce")
+        cons = cons[cons["bovada_devig_home_prob"].notna()].copy()
+        cons["home_price"] = pd.NA
+        cons["away_price"] = pd.NA
+        cons["devig_home_source"] = "consensus_fallback"
+        # Bovada wins; consensus only fills game_pks Bovada doesn't cover.
+        cons = cons[~cons["game_pk"].isin(set(bov["game_pk"]))]
+        out = pd.concat([bov, cons], ignore_index=True)
+    else:
+        out = bov
+
+    if game_pks is not None:
+        want = {int(pk) for pk in game_pks}
+        out = out[out["game_pk"].isin(want)].reset_index(drop=True)
+    return out
+
+
+def analyze_h2h_target(y: pd.Series) -> dict:
+    """`home_win` base-rate check (Story 11.1).
+
+    MLB home-field advantage should put the home win rate in [0.52, 0.56];
+    outside that flags a potential data-quality issue.
+    """
+    y = pd.to_numeric(y, errors="coerce").dropna()
+    rate = float(y.mean()) if len(y) else float("nan")
+    return {
+        "n": int(y.shape[0]),
+        "base_rate": round(rate, 4),
+        "expected_range": [0.52, 0.56],
+        "in_expected_range": bool(0.52 <= rate <= 0.56),
+    }
+
+
+def build_h2h_dataset(
+    start_date: str = "2021-01-01",
+    min_games_played: int = 15,
+    env: str = "prod",
+    return_meta: bool = False,
+):
+    """Canonical Layer 3 H2H training dataset (Story 11.1).
+
+    Returns ``(X, y, eval_probs, report)`` — or ``(X, y, eval_probs, report, meta)``
+    when ``return_meta`` (``meta`` = game_pk/game_year/season/game_date aligned to
+    X/y, for walk-forward CV in 11.2/11.3):
+      * ``X``/``y`` — game-level matrix for `home_win` (completeness ≥ 0.40,
+        contract columns, no leakage), via the same filtered matrix as totals
+        (the matrix is target-agnostic — `home_win` and `total_runs` are both
+        derived from identical rows, so the signal-completeness distribution is
+        identical to the totals dataset).
+      * ``eval_probs`` — eval-only Bovada-preferred de-vigged P(home win) per kept
+        game_pk (NEVER part of X).
+      * ``report`` — leakage validation + grain + base-rate + market coverage.
+
+    This is the contract Epic 11 Stories 11.2 (Approach A) and 11.3 (Approach B) call.
+    """
+    df = load_layer3_features(min_games_played=min_games_played, start_date=start_date, env=env)
+    validation = validate_layer3_matrix(df, start_date=start_date, env=env)  # raises on leakage
+
+    df = df[df["signal_completeness_score"] >= _COMPLETENESS_FLOOR].reset_index(drop=True)
+    if not df["game_pk"].is_unique:
+        raise ValueError("Layer 3 H2H matrix is not one-row-per-game — grain violation.")
+
+    feature_cols = _load_feature_contract()
+    X = df[feature_cols].copy()
+    y = df["home_win"].astype(int).copy()
+    meta = df[["game_pk", "game_year", "season", "game_date"]].copy()
+    if "bovada_devig_home_prob" in X.columns:
+        raise ValueError("Eval-only bovada_devig_home_prob leaked into training features.")
+
+    base_rate = analyze_h2h_target(y)
+    completeness = {
+        "mean": round(float(df["signal_completeness_score"].mean()), 4),
+        "min": round(float(df["signal_completeness_score"].min()), 4),
+        "p25": round(float(df["signal_completeness_score"].quantile(0.25)), 4),
+        "median": round(float(df["signal_completeness_score"].median()), 4),
+    }
+
+    eval_probs = load_devig_home_prob_bovada(df["game_pk"].tolist(), env=env)
+    n_bovada = int((eval_probs["devig_home_source"] == "bovada").sum())
+    market_coverage = {
+        "n_games": len(df),
+        "n_with_prob": int(len(eval_probs)),
+        "n_bovada": n_bovada,
+        "n_consensus_fallback": int(len(eval_probs) - n_bovada),
+        "pct_with_prob": round(100.0 * len(eval_probs) / len(df), 1) if len(df) else 0.0,
+    }
+    report = {
+        "n_games": len(df),
+        "validation": validation,
+        "base_rate": base_rate,
+        "completeness": completeness,
+        "market_coverage": market_coverage,
+    }
+    log.info("[h2h dataset] X=%s, y=%d | home_win base_rate=%.4f (in_range=%s) | "
+             "market coverage %d/%d (%d Bovada, %d consensus)",
+             X.shape, len(y), base_rate["base_rate"], base_rate["in_expected_range"],
+             market_coverage["n_with_prob"], market_coverage["n_games"],
+             n_bovada, market_coverage["n_consensus_fallback"])
+    if return_meta:
+        return X, y, eval_probs, report, meta
+    return X, y, eval_probs, report
+
+
+def write_h2h_dataset_audit(report: dict, start_date: str) -> Path:
+    """Write h2h_v2_dataset_audit.md (Story 11.1)."""
+    _H2H_AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    br = report["base_rate"]
+    mc = report["market_coverage"]
+    cp = report["completeness"]
+    rng = br["expected_range"]
+    range_note = (
+        "_Home win rate within the expected MLB home-field-advantage band._"
+        if br["in_expected_range"]
+        else f"_⚠️ Home win rate outside [{rng[0]}, {rng[1]}] — investigate as a possible data-quality issue._"
+    )
+    lines = [
+        "# Layer 3 H2H Dataset Audit (Story 11.1)",
+        "",
+        f"- Source: `load_layer3_features_for_training(target='home_win')` / `build_h2h_dataset`, "
+        f"start_date={start_date}, completeness ≥ {_COMPLETENESS_FLOOR}.",
+        f"- Games (completeness-filtered): **{report['n_games']}**.",
+        f"- Leakage guards: target columns **0**, raw-feature violations "
+        f"**{report['validation']['raw_feature_violations']}** (validated — raises otherwise); "
+        f"`bovada_devig_home_prob` asserted absent from `X`.",
+        "",
+        "## Target — `home_win`",
+        "",
+        "| metric | value |",
+        "|---|---|",
+        f"| n | {br['n']} |",
+        f"| base rate | **{br['base_rate']}** |",
+        f"| expected range | [{rng[0]}, {rng[1]}] |",
+        f"| in expected range | **{br['in_expected_range']}** |",
+        "",
+        range_note,
+        "",
+        "## Signal completeness (identical game set to the totals dataset)",
+        "",
+        f"- mean **{cp['mean']}**, median {cp['median']}, p25 {cp['p25']}, min {cp['min']} "
+        f"(floor {_COMPLETENESS_FLOOR}). Same target-agnostic matrix rows as `build_totals_dataset`.",
+        "",
+        "## Eval-only de-vigged Bovada P(home win) coverage",
+        "",
+        f"- Games with a market prob: **{mc['n_with_prob']}/{mc['n_games']}** ({mc['pct_with_prob']}%).",
+        f"- Bovada-specific (closing h2h, additive de-vig): **{mc['n_bovada']}**.",
+        f"- Consensus fallback (`close_vf_home`): **{mc['n_consensus_fallback']}**.",
+        "",
+        "_The de-vigged home probability is evaluation-only (11.2/11.5/11.7) and never enters the training matrix._",
+        "",
+    ]
+    _H2H_AUDIT_PATH.write_text("\n".join(lines) + "\n")
+    log.info("Wrote H2H dataset audit → %s", _H2H_AUDIT_PATH)
+    return _H2H_AUDIT_PATH
 
 
 def load_layer3_features(

@@ -47,12 +47,21 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import get_snowflake_connection
+from betting_ml.scripts.sequential_bayes.asof_lookup import (
+    load_seq_posteriors_asof, resolve_posterior_source,
+)
 
 _PRIORS_DIR = _PROJECT_ROOT / "betting_ml" / "models" / "eb_priors"
 _IL_RETURN_CURRENT_STARTS_THRESHOLD = 3
 _IL_RETURN_PRIOR_STARTS_THRESHOLD = 10
 
 _METRICS = ("xwoba_against", "k_pct", "bb_pct")
+
+# Epic 16.2 — starter sequential posterior chain tracks xwOBA-against (same metric
+# as eb_xwoba_against). Injected as a PARALLEL column (eb_xwoba_against_sequential),
+# never overwriting eb_xwoba_against. Leakage-safe as-of lookup (see asof_lookup.py).
+_SEQ_PLAYER_TYPE = "starter"
+_SEQ_METRIC = "xwoba_against"
 
 
 # ── Experience band assignment ────────────────────────────────────────────────
@@ -286,6 +295,7 @@ def _compute_starter_row(
     prior_season: dict | None,
     fit_date: date,
     run_id: str,
+    seq: dict | None = None,
 ) -> dict[str, Any]:
     current_starts = int((current or {}).get("starts", 0) or 0)
     current_bf = float((current or {}).get("total_bf", 0) or 0)
@@ -364,6 +374,13 @@ def _compute_starter_row(
             return None
         return round(v, 4)
 
+    # Epic 16.2 — as-of sequential posterior (parallel column; never overwrites eb_xwoba_against).
+    posterior_source, prior_age_days = resolve_posterior_source(seq, eb_source, game_date)
+    eb_xwoba_against_sequential = (
+        _round(float(seq["posterior_mu"]))
+        if seq is not None and seq.get("posterior_mu") is not None else None
+    )
+
     return {
         "game_pk":              game_pk,
         "side":                 side,
@@ -378,6 +395,9 @@ def _compute_starter_row(
         "eb_bb_pct":            _round(eb_bb),
         "eb_xwoba_uncertainty": _round(eb_uncertainty),
         "eb_data_source":       eb_source,
+        "eb_xwoba_against_sequential": eb_xwoba_against_sequential,
+        "posterior_source":     posterior_source,
+        "prior_age_days":       prior_age_days,
         "fit_date":             fit_date,
         "run_id":               run_id,
     }
@@ -403,6 +423,9 @@ def _ensure_table(cur) -> None:
             eb_bb_pct               FLOAT,
             eb_xwoba_uncertainty    FLOAT,
             eb_data_source          VARCHAR(20),
+            eb_xwoba_against_sequential FLOAT,
+            posterior_source        VARCHAR(20),
+            prior_age_days          INTEGER,
             fit_date                DATE,
             run_id                  VARCHAR(36)
         )
@@ -432,6 +455,9 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             eb_bb_pct               VARCHAR,
             eb_xwoba_uncertainty    VARCHAR,
             eb_data_source          VARCHAR,
+            eb_xwoba_against_sequential VARCHAR,
+            posterior_source        VARCHAR,
+            prior_age_days          VARCHAR,
             fit_date                VARCHAR,
             run_id                  VARCHAR
         )
@@ -460,6 +486,9 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             _s(r["eb_bb_pct"]),
             _s(r["eb_xwoba_uncertainty"]),
             _s(r["eb_data_source"]),
+            _s(r["eb_xwoba_against_sequential"]),
+            _s(r["posterior_source"]),
+            _s(r["prior_age_days"]),
             _s(r["fit_date"]),
             _s(r["run_id"]),
         )
@@ -467,7 +496,7 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
     ]
     cur.executemany(
         "INSERT INTO baseball_data.betting.tmp_eb_starter_posteriors "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         data,
     )
 
@@ -489,6 +518,9 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
                 eb_bb_pct::FLOAT                AS eb_bb_pct,
                 eb_xwoba_uncertainty::FLOAT     AS eb_xwoba_uncertainty,
                 eb_data_source::VARCHAR(20)     AS eb_data_source,
+                eb_xwoba_against_sequential::FLOAT AS eb_xwoba_against_sequential,
+                posterior_source::VARCHAR(20)   AS posterior_source,
+                prior_age_days::INTEGER         AS prior_age_days,
                 fit_date::DATE                  AS fit_date,
                 run_id::VARCHAR(36)             AS run_id
             FROM baseball_data.betting.tmp_eb_starter_posteriors
@@ -507,18 +539,23 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
             eb_bb_pct             = src.eb_bb_pct,
             eb_xwoba_uncertainty  = src.eb_xwoba_uncertainty,
             eb_data_source        = src.eb_data_source,
+            eb_xwoba_against_sequential = src.eb_xwoba_against_sequential,
+            posterior_source      = src.posterior_source,
+            prior_age_days        = src.prior_age_days,
             fit_date              = src.fit_date,
             run_id                = src.run_id
         WHEN NOT MATCHED THEN INSERT (
             game_pk, side, pitcher_id, season, game_date,
             age_band, current_season_bf, current_season_starts,
             eb_xwoba_against, eb_k_pct, eb_bb_pct, eb_xwoba_uncertainty,
-            eb_data_source, fit_date, run_id
+            eb_data_source, eb_xwoba_against_sequential, posterior_source, prior_age_days,
+            fit_date, run_id
         ) VALUES (
             src.game_pk, src.side, src.pitcher_id, src.season, src.game_date,
             src.age_band, src.current_season_bf, src.current_season_starts,
             src.eb_xwoba_against, src.eb_k_pct, src.eb_bb_pct, src.eb_xwoba_uncertainty,
-            src.eb_data_source, src.fit_date, src.run_id
+            src.eb_data_source, src.eb_xwoba_against_sequential, src.posterior_source,
+            src.prior_age_days, src.fit_date, src.run_id
         )
         """
     )
@@ -541,6 +578,7 @@ def _process_date(conn, game_date: date, priors: dict) -> int:
     current_stats = _load_current_season_stats(conn, pitcher_ids, game_date, season)
     prior_stats = _load_prior_season_stats(conn, pitcher_ids, season)
     prior_seasons_map = _load_pitcher_prior_seasons(conn, pitcher_ids, season)
+    seq_map = load_seq_posteriors_asof(conn, pitcher_ids, _SEQ_PLAYER_TYPE, _SEQ_METRIC, game_date, season)
 
     results = []
     for s in starters:
@@ -559,6 +597,7 @@ def _process_date(conn, game_date: date, priors: dict) -> int:
             prior_season=prior_stats.get(pid),
             fit_date=fit_date,
             run_id=run_id,
+            seq=seq_map.get(pid),
         )
         results.append(row)
 
@@ -586,6 +625,7 @@ def main(game_date: date) -> None:
         current_stats = _load_current_season_stats(conn, pitcher_ids, game_date, season)
         prior_stats = _load_prior_season_stats(conn, pitcher_ids, season)
         prior_seasons_map = _load_pitcher_prior_seasons(conn, pitcher_ids, season)
+        seq_map = load_seq_posteriors_asof(conn, pitcher_ids, _SEQ_PLAYER_TYPE, _SEQ_METRIC, game_date, season)
 
         results = []
         for s in starters:
@@ -604,6 +644,7 @@ def main(game_date: date) -> None:
                 prior_season=prior_stats.get(pid),
                 fit_date=date.today(),
                 run_id=run_id,
+                seq=seq_map.get(pid),
             )
             results.append(row)
 
@@ -618,8 +659,12 @@ def main(game_date: date) -> None:
         print(f"  current_stats found: {len(current_stats)}/{len(pitcher_ids)}")
         print(f"  prior_season found:  {len(prior_stats)}/{len(pitcher_ids)}")
         print(f"  experience bands:    {band_dist}")
+        psrc: dict[str, int] = {}
+        for r in results:
+            psrc[r["posterior_source"]] = psrc.get(r["posterior_source"], 0) + 1
         print(f"  IL-return blend:     {il_returns}/{len(results)}")
         print(f"  eb_data_source:      {sources}")
+        print(f"  posterior_source:    {psrc}  (Epic 16.2)")
 
         sample = results[0]
         print(

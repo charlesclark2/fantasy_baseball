@@ -418,6 +418,15 @@ layer3_totals:
   cv_calib_80: 0.8037
   cv_std_pred: 3.7331
   promotion_status: champion
+  deployment_mode: informational_manual_review   # logs daily + visible in dashboard for MANUAL review; NOT autonomous betting (totals bet_paused). Won head-to-head (better NLL/calib/sharpness) but failed the operational gate on 2026.
+  unpause_conditions:
+    rule: challenger NLL < prior_predictive_nll AND blended Brier < prior_naive_brier, both on a rolling 60-game LIVE window (current season)
+    rolling_window_games: 60
+    prior_predictive_nll: 2.8893     # Layer 1 baseline (NegBin training marginal), totals_bayesian_evaluation.md
+    prior_naive_brier: 0.248         # Layer 3 baseline (training over-rate ~0.456 as constant)
+    market_brier_target: 0.228       # ideal additional bar (beat Bovada) before autonomous betting
+    status: not_met                  # 2026-06-03: both failed on the 2026 OOS eval (NLL 2.8928 >= 2.8893; blended Brier 0.2786 >= 0.248)
+    evidence: ablation_results/totals_bayesian_evaluation.md
   promoted_signals:
   - run_env
   - offense
@@ -463,6 +472,23 @@ layer3_totals:
       CLV (edge>+0.03): DO_NOT_PROMOTE
     report: ablation_results/totals_champion_vs_challenger.md
     evaluated: '2026-06-03'
+  leakage_free_reeval:
+    story: Leakage-fix Phase 2c
+    evaluated: '2026-06-03'
+    report: ablation_results/totals_v2_leakage_free.md
+    method: Epic 9 pseudo-BMA stacking combiner (run_env/offense/bullpen -> LTV (mu,sigma)
+      -> NB2 P(over)) on leakage-free walk-forward OOS signals; per-season vs de-vigged Bovada P(over).
+    per_season_brier:
+      '2024': {model: 0.2578, market: 0.2439, market_quality: degraded}
+      '2025': {model: 0.2508, market: 0.2480, market_quality: degraded}
+      '2026': {model: 0.3029, market: 0.2279, market_quality: credible}
+    verdict: NO_EDGE_ANY_SEASON
+    failure_mode: 'regime-adaptation (temporal): combiner mu anchored to the 2021-2025 training
+      distribution with no within-season updating mechanism (2026 mu-bar 9.06 vs actual ~8.7).
+      NOT a signal-quality failure -- sub-models are OOS-stable/calibrated on 2021-2025. Epic 16 addresses this.'
+    june_check: 'June 2026 (n=24, 2026-06-03) rebounded to 10.08 runs / 66.7% over -> May suppression
+      was TRANSIENT. Failure is bidirectional within-season volatility (Apr 9.09 / early-May 8.31 /
+      Jun 10.08), not a persistent downshift -> the fix must track swings both ways.'
 layer3_h2h:
   artifact_path: null
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
@@ -476,3 +502,41 @@ layer3_h2h:
     Story 9.4; awaiting Epic 11 to train the champion classifier.
 
     '
+  leakage_free_reeval:
+    story: Leakage-fix Phase 2b
+    evaluated: '2026-06-03'
+    report: ablation_results/h2h_v2_leakage_free.md
+    verdict: NO_EDGE
+    detail: 'Leakage fixed (model Brier stable 0.214/0.207/0.224, no 2026 collapse). 2024-25
+      Bovada h2h lines are DEGRADED (~0.24 coin-flip, see reference_bovada_h2h_line_quality) so
+      those "wins" are artifacts; on the only credible market (2026) the market beats the model
+      (0.224 vs ~0.18-0.20). Direct H2H classifier (11.3 Approach B) NOT promotable.'
+    unpause_conditions:
+      rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE window
+        (current season); same framework as totals
+      status: not_met
+layer3_architecture_finding:
+  recorded: '2026-06-03'
+  finding: 'The static sub-model -> pseudo-BMA combiner (Layer 3) stack does NOT beat a sharp
+    market on clean 2026 data for EITHER target. H2H: market beats model on 2026. Totals: combiner
+    loses every season, decisively on the credible 2026 market (0.303 vs 0.228).'
+  failure_mode: 'temporal adaptation (regime). The combiner/classifier means are anchored to the
+    2021-2025 training distribution with NO within-season updating mechanism. This is NOT a
+    signal-quality failure -- the individual sub-models are well-calibrated and OOS-stable on
+    2021-2025. It is a temporal-adaptation failure that Epic 16 is specifically designed to address.'
+  june_2026_context: 'Scoring volatility is bidirectional (Apr 9.09 -> early-May 8.31 -> Jun 10.08
+    runs/game; over-rate 57% -> 34% -> 67%). May suppression was transient. The Epic 16 mechanism
+    must track swings both ways, NOT apply a one-time downward debias.'
+  evidence:
+  - ablation_results/totals_v2_leakage_free.md
+  - ablation_results/h2h_v2_leakage_free.md
+  - ablation_results/totals_bayesian_evaluation.md
+  remedy: Epic 16 sequential posteriors (in-season Bayesian belief updating) over the static Layer 3 stack.
+  unpause_conditions_both_targets:
+    rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE window on the
+      current season (ideally also beat market) before any autonomous betting
+    status: not_met
+  operational_posture: 'totals bet_paused stays true (no autonomous totals bets); the Layer 3
+    challenger continues logging daily to daily_model_predictions and remains visible in the
+    dashboard with the MANUAL REVIEW indicator (informational input to the profitable human
+    selection process, which the automated system does not replicate).'
