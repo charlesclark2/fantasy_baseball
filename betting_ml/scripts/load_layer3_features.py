@@ -96,6 +96,19 @@ _AUDIT_PATH = (
     / "ablation_results" / "layer3_matrix_audit.md"
 )
 
+# Story 10.1 — totals dataset construction.
+# Eval-only Bovada total line: sourced from the Card 7.P2 historical snapshot
+# store (game_pk-keyed, Bovada-specific, dense 2021-2025 incl. 2023). The latest
+# snapshot per game is the closing line. Games without a Bovada line fall back to
+# the consensus CLOSE_TOTAL_LINE so eval coverage stays complete; a per-game
+# `total_line_source` flag records which. This line NEVER enters the training
+# matrix (market-blind guarantee) — it is consumed only post-inference (10.4/10.6).
+_ODDS_SNAPSHOTS = "baseball_data.oddsapi.odds_snapshots_historical"
+_TOTALS_AUDIT_PATH = (
+    _PROJECT_ROOT / "quant_sports_intel_models" / "baseball"
+    / "ablation_results" / "totals_v1_dataset_audit.md"
+)
+
 
 def _schemas(env: str) -> tuple[str, str]:
     """Return (features_schema, mart_schema) for the environment.
@@ -336,6 +349,274 @@ def load_layer3_features_for_inference(
     log.info("[inference] returned %d rows (%d low_confidence)",
              len(out), int(out["low_confidence"].sum()))
     return out[keep]
+
+
+# ---------------------------------------------------------------------------
+# Story 10.1 — totals training dataset (eval-only Bovada line + overdispersion)
+# ---------------------------------------------------------------------------
+
+def load_total_line_bovada(
+    game_pks: list[int] | None = None,
+    env: str = "prod",
+    fallback_consensus: bool = True,
+) -> pd.DataFrame:
+    """Eval-only closing total line per game_pk — Bovada-preferred (Story 10.1).
+
+    Bovada closing line comes from TWO Bovada-specific, game_pk-keyed sources:
+      * historical snapshot store (`odds_snapshots_historical`) — dense through 2025;
+      * the live odds mart (`mart_odds_outcomes` ⋈ `mart_game_odds_bridge`) — the
+        current season, which the historical store does NOT cover (added Story 10.6
+        when the 2026 OOS gate hit zero historical-Bovada 2026 coverage).
+    Games with no Bovada line in either source fall back to the consensus
+    CLOSE_TOTAL_LINE when ``fallback_consensus`` so coverage stays complete;
+    `total_line_source` ∈ {"bovada", "consensus_fallback"} records which.
+
+    Returns columns: game_pk, total_line_bovada, over_price, under_price,
+    total_line_source. This is EVALUATION-ONLY — it must never be joined into the
+    training feature matrix (10.4/10.6 consume it post-inference).
+    """
+    _, mart_schema = _schemas(env)
+
+    bov_sql = f"""
+        with snaps as (
+            select game_pk, total_line, over_price, under_price,
+                   row_number() over (partition by game_pk order by snapshot_ts desc) rn
+            from {_ODDS_SNAPSHOTS}
+            where lower(bookmaker) = 'bovada' and total_line is not null
+        )
+        select game_pk, total_line as total_line_bovada, over_price, under_price
+        from snaps where rn = 1
+    """
+    # Live Bovada totals (current season) — keyed by game_pk via the odds bridge.
+    # mart_odds_outcomes is long-format and carries BOTH source systems; join each
+    # row to the bridge on its source-specific event id (odds_api vs parlay_api),
+    # take the closing (latest) snapshot per game/side, then pivot Over/Under.
+    bov_live_sql = f"""
+        with raw as (
+            select b.game_pk, lower(o.outcome_name) as side,
+                   o.outcome_point, o.outcome_price_american,
+                   row_number() over (partition by b.game_pk, lower(o.outcome_name)
+                                      order by o.market_last_update desc nulls last) as rn
+            from {mart_schema}.mart_odds_outcomes o
+            join {mart_schema}.mart_game_odds_bridge b
+              on (o.source_system = 'odds_api'  and o.event_id = b.odds_api_event_id)
+              or (o.source_system = 'parlay_api' and o.event_id = b.parlay_api_event_id)
+            where lower(o.bookmaker_key) = 'bovada' and o.is_totals_market = true
+              and b.game_pk is not null
+        ),
+        closing as (select game_pk, side, outcome_point, outcome_price_american from raw where rn = 1)
+        select game_pk,
+               max(case when side = 'over'  then outcome_point end)          as total_line_bovada,
+               max(case when side = 'over'  then outcome_price_american end) as over_price,
+               max(case when side = 'under' then outcome_price_american end) as under_price
+        from closing
+        group by game_pk
+    """
+    cons_sql = f"""
+        select game_pk, close_total_line as total_line_bovada
+        from {mart_schema}.mart_closing_line_value
+        where close_total_line is not null
+    """
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(bov_sql)
+        bov = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+        cur.execute(bov_live_sql)
+        bov_live = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+        cons = pd.DataFrame()
+        if fallback_consensus:
+            cur.execute(cons_sql)
+            cons = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+    finally:
+        conn.close()
+
+    for c in ("total_line_bovada", "over_price", "under_price"):
+        bov[c] = pd.to_numeric(bov[c], errors="coerce")
+        if c in bov_live.columns:
+            bov_live[c] = pd.to_numeric(bov_live[c], errors="coerce")
+    # Historical Bovada wins where both exist (seasons are disjoint in practice);
+    # live Bovada fills the current season the historical store lacks.
+    if not bov_live.empty:
+        bov_live = bov_live[~bov_live["game_pk"].isin(set(bov["game_pk"]))]
+        bov = pd.concat([bov, bov_live], ignore_index=True)
+    bov["total_line_source"] = "bovada"
+
+    if fallback_consensus and not cons.empty:
+        cons["total_line_bovada"] = pd.to_numeric(cons["total_line_bovada"], errors="coerce")
+        cons["over_price"] = pd.NA
+        cons["under_price"] = pd.NA
+        cons["total_line_source"] = "consensus_fallback"
+        # Bovada wins; consensus only fills game_pks Bovada doesn't cover.
+        cons = cons[~cons["game_pk"].isin(set(bov["game_pk"]))]
+        out = pd.concat([bov, cons], ignore_index=True)
+    else:
+        out = bov
+
+    if game_pks is not None:
+        want = {int(pk) for pk in game_pks}
+        out = out[out["game_pk"].isin(want)].reset_index(drop=True)
+    return out
+
+
+def compute_across_model_sigma(df: pd.DataFrame, base_floor: float = 0.5) -> pd.Series:
+    """Epistemic uncertainty about total-runs `mu`, on the totals scale (Story 10.3).
+
+    "Across-model disagreement" (the Var(E[X|model]) term): the spread among the
+    promoted signals that *directly* estimate total runs —
+      • run_env:  ``run_env_mu_v4`` (game-level total-runs environment, ~8 runs)
+      • offense:  ``home_pred_runs_mu_v2 + away_pred_runs_mu_v2`` (per-side runs → total)
+    (bullpen/starter are latent, not direct total estimators, so they don't enter
+    the disagreement.) Plus a per-game variance floor so σ is never 0 (which would
+    collapse the P(over) CI and make the bet gate falsely over-confident); the
+    floor *grows when signal coverage is low* — fewer signals present → more
+    uncertain about the mean → wider CI:
+
+        floor² = (base_floor · (2 − signal_completeness_score))²
+        σ = sqrt( Var_across{run_env, offense_total} + floor² )
+
+    NOTE: the sub-model ``*_uncertainty`` columns are intentionally NOT used — in
+    ``feature_pregame_sub_model_signals`` they are constant sentinel placeholders
+    (run_env=10, offense=7, bullpen=6), not calibrated per-game values, so they
+    would swamp σ. Behaves correctly (high disagreement / low coverage → wider σ)
+    and complements the champion's *aleatoric* NegBin r. ``base_floor`` is tunable
+    and can be calibrated empirically in Story 10.4.
+    """
+    est = pd.DataFrame(index=df.index)
+    if "run_env_mu_v4" in df:
+        est["run_env"] = pd.to_numeric(df["run_env_mu_v4"], errors="coerce")
+    if {"home_pred_runs_mu_v2", "away_pred_runs_mu_v2"} <= set(df.columns):
+        est["offense"] = (pd.to_numeric(df["home_pred_runs_mu_v2"], errors="coerce")
+                          + pd.to_numeric(df["away_pred_runs_mu_v2"], errors="coerce"))
+    disagree_var = est.var(axis=1, ddof=1) if est.shape[1] >= 2 else pd.Series(0.0, index=df.index)
+    disagree_var = disagree_var.fillna(0.0)
+
+    if "signal_completeness_score" in df.columns:
+        completeness = pd.to_numeric(df["signal_completeness_score"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
+    else:
+        completeness = pd.Series(1.0, index=df.index)
+    floor = base_floor * (2.0 - completeness)            # base_floor at full coverage, up to 2× at 0 coverage
+
+    return (disagree_var + floor ** 2) ** 0.5
+
+
+def analyze_totals_target(y: pd.Series) -> dict:
+    """Target-distribution / overdispersion check for `total_runs` (Story 10.1).
+
+    Overdispersion ratio = variance / mean. A ratio > 1.5 means the count is
+    materially overdispersed relative to a Poisson (where variance == mean),
+    justifying the NegBin likelihood family over Poisson.
+    """
+    y = pd.to_numeric(y, errors="coerce").dropna()
+    mean = float(y.mean())
+    var = float(y.var(ddof=1))
+    ratio = var / mean if mean else float("nan")
+    return {
+        "n": int(y.shape[0]),
+        "mean": round(mean, 4),
+        "variance": round(var, 4),
+        "overdispersion_ratio": round(ratio, 4),
+        "recommend_negbin": bool(ratio > 1.5),
+    }
+
+
+def build_totals_dataset(
+    start_date: str = "2021-01-01",
+    min_games_played: int = 15,
+    env: str = "prod",
+    return_meta: bool = False,
+):
+    """Canonical Layer 3 totals training dataset (Story 10.1).
+
+    Returns ``(X, y, eval_lines, report)`` — or ``(X, y, eval_lines, report, meta)``
+    when ``return_meta`` (``meta`` = game_pk/game_year/season/game_date aligned to
+    X/y, for walk-forward CV in Story 10.2):
+      * ``X``/``y`` — game-level training matrix for `total_runs` (completeness ≥
+        0.40, contract columns, no leakage), per `load_layer3_features_for_training`.
+      * ``eval_lines`` — eval-only Bovada-preferred total line per kept game_pk
+        (NEVER part of X).
+      * ``report`` — leakage validation + grain + overdispersion + line coverage.
+
+    This is the contract Epic 10 Story 10.2 (`train_totals.py`) calls.
+    """
+    df = load_layer3_features(min_games_played=min_games_played, start_date=start_date, env=env)
+    validation = validate_layer3_matrix(df, start_date=start_date, env=env)  # raises on leakage
+
+    df = df[df["signal_completeness_score"] >= _COMPLETENESS_FLOOR].reset_index(drop=True)
+    if not df["game_pk"].is_unique:
+        raise ValueError("Layer 3 totals matrix is not one-row-per-game — grain violation.")
+
+    feature_cols = _load_feature_contract()
+    X = df[feature_cols].copy()
+    y = df["total_runs"].astype(float).copy()
+    meta = df[["game_pk", "game_year", "season", "game_date"]].copy()
+    if "total_line_bovada" in X.columns:
+        raise ValueError("Eval-only total_line_bovada leaked into training features.")
+
+    overdispersion = analyze_totals_target(y)
+    eval_lines = load_total_line_bovada(df["game_pk"].tolist(), env=env)
+    n_bovada = int((eval_lines["total_line_source"] == "bovada").sum())
+    line_coverage = {
+        "n_games": len(df),
+        "n_with_line": int(len(eval_lines)),
+        "n_bovada": n_bovada,
+        "n_consensus_fallback": int(len(eval_lines) - n_bovada),
+        "pct_with_line": round(100.0 * len(eval_lines) / len(df), 1) if len(df) else 0.0,
+    }
+    report = {
+        "n_games": len(df),
+        "validation": validation,
+        "overdispersion": overdispersion,
+        "line_coverage": line_coverage,
+    }
+    log.info("[totals dataset] X=%s, y=%d | overdispersion var/mean=%.2f (NegBin=%s) | "
+             "line coverage %d/%d (%d Bovada, %d consensus)",
+             X.shape, len(y), overdispersion["overdispersion_ratio"],
+             overdispersion["recommend_negbin"], line_coverage["n_with_line"],
+             line_coverage["n_games"], n_bovada, line_coverage["n_consensus_fallback"])
+    if return_meta:
+        return X, y, eval_lines, report, meta
+    return X, y, eval_lines, report
+
+
+def write_totals_dataset_audit(report: dict, start_date: str) -> Path:
+    """Write totals_v1_dataset_audit.md (Story 10.1)."""
+    _TOTALS_AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    od = report["overdispersion"]
+    lc = report["line_coverage"]
+    lines = [
+        "# Layer 3 Totals Dataset Audit (Story 10.1)",
+        "",
+        f"- Source: `load_layer3_features_for_training(target='total_runs')`, start_date={start_date}, completeness ≥ {_COMPLETENESS_FLOOR}.",
+        f"- Games (completeness-filtered): **{report['n_games']}**.",
+        f"- Leakage guards: target columns **0**, raw-feature violations **{report['validation']['raw_feature_violations']}** (validated — raises otherwise).",
+        "",
+        "## Target distribution — `total_runs`",
+        "",
+        "| metric | value |",
+        "|---|---|",
+        f"| n | {od['n']} |",
+        f"| mean | {od['mean']} |",
+        f"| variance | {od['variance']} |",
+        f"| overdispersion ratio (var/mean) | **{od['overdispersion_ratio']}** |",
+        f"| NegBin justified (ratio > 1.5) | **{od['recommend_negbin']}** |",
+        "",
+        "_Variance materially exceeding the mean confirms NegBin over Poisson as the likelihood family._" if od["recommend_negbin"]
+        else "_⚠️ Overdispersion ratio ≤ 1.5 — Poisson may suffice; revisit the NegBin assumption._",
+        "",
+        "## Eval-only Bovada total line coverage",
+        "",
+        f"- Games with a line: **{lc['n_with_line']}/{lc['n_games']}** ({lc['pct_with_line']}%).",
+        f"- Bovada-specific (closing snapshot): **{lc['n_bovada']}**.",
+        f"- Consensus fallback: **{lc['n_consensus_fallback']}**.",
+        "",
+        "_The total line is evaluation-only (10.4/10.6) and never enters the training matrix._",
+        "",
+    ]
+    _TOTALS_AUDIT_PATH.write_text("\n".join(lines) + "\n")
+    log.info("Wrote totals dataset audit → %s", _TOTALS_AUDIT_PATH)
+    return _TOTALS_AUDIT_PATH
 
 
 def load_layer3_features(
@@ -678,10 +959,25 @@ def main() -> None:
     parser.add_argument("--write-contract", action="store_true",
                         help="Write layer3_feature_columns.json (Story 9.4) and exit "
                              "(deterministic; no Snowflake read).")
+    parser.add_argument("--totals-audit", action="store_true",
+                        help="Build the Story 10.1 totals dataset, run the overdispersion / "
+                             "line-coverage analysis, and write totals_v1_dataset_audit.md.")
     args = parser.parse_args()
 
     if args.write_contract:
         write_feature_columns_contract()
+        return
+
+    if args.totals_audit:
+        _X, _y, _lines, report = build_totals_dataset(
+            start_date=args.start_date, min_games_played=args.min_games_played, env=args.env,
+        )
+        write_totals_dataset_audit(report, args.start_date)
+        od = report["overdispersion"]
+        log.info("Totals dataset: %d games | var/mean=%.2f (NegBin=%s) | line coverage %d/%d (%d Bovada).",
+                 report["n_games"], od["overdispersion_ratio"], od["recommend_negbin"],
+                 report["line_coverage"]["n_with_line"], report["n_games"],
+                 report["line_coverage"]["n_bovada"])
         return
 
     df = load_layer3_features(
