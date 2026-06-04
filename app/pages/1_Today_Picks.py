@@ -27,7 +27,25 @@ SELECT
     g.game_date AS stg_game_date
 FROM (
     SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
+           CASE
+               WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
+               WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
+               ELSE 'provisional_pre_lineup'
+           END AS prediction_basis,
+           -- Prefer the most lineup-aware prediction per game, NOT just the most
+           -- recently inserted: post_lineup (confirmed lineups + starter EB) beats a
+           -- pre-lineup pass, which beats an intraday-fallback (blind to lineups/
+           -- starters). Recency only breaks ties within the same basis.
+           ROW_NUMBER() OVER (
+               PARTITION BY game_pk
+               ORDER BY
+                   CASE
+                       WHEN prediction_type = 'post_lineup'                 THEN 2
+                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
+                       ELSE 1
+                   END DESC,
+                   inserted_at DESC
+           ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE score_date = '{date}'
 ) p
@@ -238,10 +256,10 @@ _STYLE_VISIBLE_COLS = [
 ]
 
 _COL_HELP = {
-    "Signal": "🟢 positive edge (moneyline or totals) + confirmed lineups  |  🟡 positive edge, lineups pending  |  ⚪ no edge in either market  |  ⛔ no odds data (Odds API gap)",
+    "Signal": "🟢 positive edge (moneyline or totals) on a lineup-confirmed prediction  |  🟡 positive edge but prediction is provisional (pre-lineup/fallback — may be blind to the confirmed starter)  |  ⚪ no edge in either market  |  ⛔ no odds data (Odds API gap)",
     "Matchup": "Away team @ Home team",
     "Game Time": "Scheduled first pitch — timezone set in sidebar",
-    "Lineups": "✓ both starting lineups confirmed  |  ⏳ lineups not yet posted",
+    "Lineups": "✅ prediction is lineup-confirmed (post-lineup re-score, accounts for confirmed starters)  |  ⏳ lineups not yet posted (provisional prediction)  |  ⚠️ lineups posted but prediction still provisional — re-score pending; do not trust the edge yet",
     "P(Over)": "Model probability of total runs exceeding the consensus over/under line",
     "Model Win%": "Blended home-win probability (50% NGBoost run-differential + 50% XGBoost classifier)",
     "Market Win%": "Market-implied home-win probability derived from consensus moneyline odds",
@@ -256,14 +274,26 @@ _COL_HELP = {
 }
 
 
-def _signal(has_odds: bool, edge: float | None, both_confirmed: bool, threshold: float) -> str:
+def _signal(has_odds: bool, edge: float | None, lineup_confirmed_pred: bool, threshold: float) -> str:
+    # 🟢 (actionable) requires the displayed prediction to be lineup-confirmed
+    # (post_lineup). A positive edge on a provisional/pre-lineup/fallback prediction
+    # is 🟡 — it may be a feature gap (e.g. scored blind to the confirmed starter).
     if not has_odds:
         return "⛔"
     if edge is None:
         return "⚪"
     if abs(edge) >= threshold:
-        return "🟢" if both_confirmed else "🟡"
+        return "🟢" if lineup_confirmed_pred else "🟡"
     return "⚪"
+
+
+def _lineup_status(prediction_basis: str, both_confirmed: bool) -> str:
+    # Reflects whether the *prediction* is lineup-aware, not just whether lineups
+    # are posted. ⚠️ flags the dangerous mismatch: lineups are out but the shown
+    # prediction is still provisional (the post_lineup re-score hasn't run).
+    if prediction_basis == "lineup_confirmed":
+        return "✅"
+    return "⚠️" if both_confirmed else "⏳"
 
 
 def _row_bg(row: pd.Series) -> list[str]:
@@ -513,11 +543,14 @@ for _, r in df.iterrows():
     has_odds = bool(r.get("has_odds", False))
     both = bool(r.get("both_confirmed", False))
 
+    basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
+    lineup_confirmed_pred = basis == "lineup_confirmed"
+
     h2h_edge = _safe_float(r.get("h2h_edge"))
     totals_edge_for_sig = _safe_float(r.get("totals_edge"))
     _all_edges = [e for e in [h2h_edge, totals_edge_for_sig] if e is not None]
     _max_abs_edge = max((abs(e) for e in _all_edges), default=None)
-    sig = _signal(has_odds, _max_abs_edge, both, edge_threshold)
+    sig = _signal(has_odds, _max_abs_edge, lineup_confirmed_pred, edge_threshold)
 
     p_over = _safe_float(r.get("p_over_ngboost"))
     kelly_capped = _safe_float(r.get("kelly_capped"))
@@ -534,7 +567,7 @@ for _, r in df.iterrows():
         "Signal": sig,
         "Matchup": matchup,
         "Game Time": _fmt_game_time(r.get("game_datetime") or r.get("stg_game_date"), selected_tz),
-        "Lineups": "✓" if both else "⏳",
+        "Lineups": _lineup_status(basis, both),
         "P(Over)": _fmt_pct(p_over) if has_odds and p_over is not None else "—",
         "Model Win%": _fmt_pct(_safe_float(r.get("calibrated_win_prob"))),
         "Market Win%": _fmt_pct(_safe_float(r.get("h2h_market_implied_prob"))) if has_odds else "—",

@@ -26,7 +26,24 @@ SELECT
     g.game_date                        AS game_datetime_utc
 FROM (
     SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
+           CASE
+               WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
+               WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
+               ELSE 'provisional_pre_lineup'
+           END AS prediction_basis,
+           -- Prefer the most lineup-aware prediction per game (post_lineup > pre-lineup
+           -- > intraday_fallback), recency only as a tiebreaker. A blind fallback pick
+           -- must never outrank a lineup-confirmed one just because it was inserted later.
+           ROW_NUMBER() OVER (
+               PARTITION BY game_pk
+               ORDER BY
+                   CASE
+                       WHEN prediction_type = 'post_lineup'                 THEN 2
+                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
+                       ELSE 1
+                   END DESC,
+                   inserted_at DESC
+           ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE score_date = '{date}'
 ) p
@@ -64,6 +81,8 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
         away = r.get("away_team", "")
         matchup = f"{away} @ {home}"
         both_confirmed = bool(r.get("both_confirmed", False))
+        prediction_basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
+        lineup_confirmed_pred = prediction_basis == "lineup_confirmed"
 
         # calibrated_win_prob is the production "model prob" for h2h — Platt-
         # recalibrated value used by predict_today.py for live edge computation.
@@ -101,10 +120,13 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
             kelly_capped = min(max(kelly_raw, 0.0), 0.10)
             kelly_exceeded_cap = kelly_raw > 0.10
 
+            # Actionable requires a LINEUP-CONFIRMED prediction, not merely posted
+            # lineups: a provisional/pre-lineup/fallback prediction can be blind to
+            # the confirmed starter, so its edge is not trustworthy for staking.
             actionable = (
                 ev > 0
                 and abs(edge) > 0.03
-                and both_confirmed
+                and lineup_confirmed_pred
                 and model_prob is not None
             )
 
@@ -125,6 +147,8 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
                 "kelly_capped": kelly_capped,
                 "kelly_exceeded_cap": kelly_exceeded_cap,
                 "both_confirmed": both_confirmed,
+                "prediction_basis": prediction_basis,
+                "lineup_confirmed_pred": lineup_confirmed_pred,
                 "actionable": actionable,
                 "total_line": total_line,
                 "inserted_at": inserted_at,
@@ -232,7 +256,7 @@ df_ev["matchup_label"] = df_ev["game_pk"].map(_game_labels)
 pending_mask = (
     (df_ev["ev"] > 0)
     & (df_ev["edge"].abs() > 0.03)
-    & (~df_ev["both_confirmed"])
+    & (~df_ev["lineup_confirmed_pred"])
     & df_ev["model_prob"].notna()
 )
 pending_rows = df_ev[pending_mask]
@@ -240,9 +264,10 @@ pending_rows = df_ev[pending_mask]
 if not pending_rows.empty:
     pending_games = pending_rows["matchup_label"].unique().tolist()
     st.warning(
-        "⚠ Lineup pending — the following games have positive EV "
-        "but lineups are not yet confirmed. Do not act until lineups "
-        "are confirmed:\n" + ", ".join(pending_games)
+        "⚠ Provisional prediction — the following games show positive EV but the "
+        "prediction is not lineup-confirmed (pre-lineup or intraday-fallback — it may "
+        "be blind to the confirmed starter). Do not act until the post-lineup re-score "
+        "lands:\n" + ", ".join(pending_games)
     )
 
 # ---------------------------------------------------------------------------

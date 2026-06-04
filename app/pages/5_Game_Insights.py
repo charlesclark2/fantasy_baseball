@@ -89,7 +89,18 @@ SELECT
     g.game_date
 FROM (
     SELECT game_pk, home_team, away_team,
-           ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
+           -- Most lineup-aware prediction per game (post_lineup > pre-lineup >
+           -- intraday_fallback); recency only breaks ties within a basis.
+           ROW_NUMBER() OVER (
+               PARTITION BY game_pk
+               ORDER BY
+                   CASE
+                       WHEN prediction_type = 'post_lineup'                 THEN 2
+                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
+                       ELSE 1
+                   END DESC,
+                   inserted_at DESC
+           ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE score_date = '{date}'
 ) p
@@ -140,10 +151,22 @@ SELECT
     calibrated_win_prob                                                      AS home_win_prob,
     h2h_market_implied_prob                                                  AS market_win_prob,
     calibrated_win_prob - h2h_market_implied_prob                            AS edge,
-    h2h_kelly_fraction                                                       AS kelly_fraction
+    h2h_kelly_fraction                                                       AS kelly_fraction,
+    CASE
+        WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
+        WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
+        ELSE 'provisional_pre_lineup'
+    END                                                                      AS prediction_basis
 FROM baseball_data.betting_ml.daily_model_predictions
 WHERE game_pk = {game_pk}
-ORDER BY inserted_at DESC
+-- Most lineup-aware prediction (post_lineup > pre-lineup > fallback), recency tiebreak.
+ORDER BY
+    CASE
+        WHEN prediction_type = 'post_lineup'                 THEN 2
+        WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
+        ELSE 1
+    END DESC,
+    inserted_at DESC
 LIMIT 1
 """
 
@@ -178,6 +201,23 @@ else:
               delta=f"{edge * 100:.1f}" if edge is not None else None,
               delta_color="normal")
     c5.metric("Kelly Fraction", _fmt_pct(kelly))
+
+    # Prediction basis — flag provisional predictions that may be blind to the
+    # confirmed starter/lineup (the case where the edge is not yet trustworthy).
+    _basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
+    if _basis == "lineup_confirmed":
+        st.caption("✅ Lineup-confirmed prediction (post-lineup re-score — accounts for confirmed starters & lineups).")
+    elif _basis == "provisional_fallback":
+        st.warning(
+            "⚠️ Provisional prediction (intraday fallback) — scored on team rolling stats only, "
+            "**blind to the confirmed starting pitcher and lineup**. The edge above may be a feature "
+            "gap, not real value. Wait for the post-lineup re-score before trusting it."
+        )
+    else:
+        st.warning(
+            "⚠️ Provisional prediction (pre-lineup) — generated before lineups were confirmed, so it "
+            "may not reflect the confirmed starter/lineup. Wait for the post-lineup re-score."
+        )
 
 st.divider()
 

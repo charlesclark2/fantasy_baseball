@@ -36,6 +36,11 @@ from betting_ml.utils.probability_layer import (
     compute_kelly,
 )
 from betting_ml.models.total_runs_trainer import p_over_line
+from betting_ml.scripts.evaluation.bayesian_model_eval import (
+    compute_bet_decision,
+    DEFAULT_TOTALS_MU_THRESHOLD,
+    DEFAULT_H2H_MAGNITUDE_THRESHOLD,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -127,7 +132,16 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
 
     -- Epic 16.2 — game-level sequential-posterior provenance
     posterior_source        VARCHAR(20),  -- least-informed source across the game's players
-    prior_age_days          INTEGER       -- max stale-belief age (>7 flags game_uncertainty_score)
+    prior_age_days          INTEGER,      -- max stale-belief age (>7 flags game_uncertainty_score)
+
+    -- Layer 4 — live selective-strategy bet attribution. Records what the Layer 4
+    -- rule would recommend for each live game; as CLV labels accumulate this is the
+    -- honest real-world OOS surface for evaluate_selective_strategy().
+    layer4_totals_decision    VARCHAR(10),  -- over / under / abstain (1.0-run threshold vs model mu)
+    layer4_totals_over_signal FLOAT,        -- pred_total_runs - total_line_consensus
+    layer4_h2h_decision       VARCHAR(10),  -- home / away / abstain
+    layer4_h2h_rule           VARCHAR(20),  -- direction_flip / magnitude / abstain
+    layer4_h2h_edge           FLOAT         -- calibrated_win_prob - h2h_market_implied_prob
 )
 """
 
@@ -145,7 +159,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     h2h_market_implied_prob, h2h_posterior_prob, h2h_edge, h2h_kelly_fraction,
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
-    posterior_source, prior_age_days
+    posterior_source, prior_age_days,
+    layer4_totals_decision, layer4_totals_over_signal,
+    layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -159,7 +175,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(h2h_market_implied_prob)s, %(h2h_posterior_prob)s, %(h2h_edge)s, %(h2h_kelly_fraction)s,
     %(total_line_consensus)s, %(over_prob_consensus)s,
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
-    %(posterior_source)s, %(prior_age_days)s
+    %(posterior_source)s, %(prior_age_days)s,
+    %(layer4_totals_decision)s, %(layer4_totals_over_signal)s,
+    %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s
 )
 """
 
@@ -283,6 +301,27 @@ def _write_predictions_to_snowflake(
         else:
             tot_edge = tot_post = tot_kelly = None
 
+        # Layer 4 — live selective-strategy attribution (what the rule recommends).
+        # Pure logging: any failure here must NEVER abort the core prediction write,
+        # so it's fully guarded and falls back to NULL on error.
+        l4_tot_decision = l4_tot_signal = l4_h2h_decision = l4_h2h_rule = l4_h2h_edge = None
+        try:
+            # Totals: model mu vs the book line at the 1.0-run threshold; abstain w/o a line.
+            l4_line = total_line_v if has_odds else None
+            l4_tot_signal = (float(loc_tot[i]) - l4_line) if l4_line is not None else None
+            l4_tot_decision, _ = compute_bet_decision(
+                "totals", model_mu=float(loc_tot[i]), total_line=l4_line,
+                totals_mu_threshold=DEFAULT_TOTALS_MU_THRESHOLD)
+            # H2H: deployed model P(home) = calibrated_win_prob vs de-vigged market home prob.
+            l4_h2h_decision, l4_h2h_rule = compute_bet_decision(
+                "h2h", model_p_home=cal_win,
+                market_p_home=(h2h_mkt_v if has_odds else None),
+                h2h_magnitude_threshold=DEFAULT_H2H_MAGNITUDE_THRESHOLD)
+            l4_h2h_edge = h2h_edge  # cal_win - h2h_mkt_v (None when no odds)
+        except Exception as _l4_exc:
+            print(f"  Warning: Layer 4 attribution failed for game index {i} "
+                  f"({_l4_exc}); logging NULLs.")
+
         raw_dt = _s(df_today, "game_datetime", i)
         game_dt: datetime | None = None
         if raw_dt is not None:
@@ -330,6 +369,11 @@ def _write_predictions_to_snowflake(
             "totals_kelly_fraction":  tot_kelly,
             "posterior_source":       (game_prov or {}).get("posterior_source"),
             "prior_age_days":         (game_prov or {}).get("prior_age_days"),
+            "layer4_totals_decision":    l4_tot_decision,
+            "layer4_totals_over_signal": l4_tot_signal,
+            "layer4_h2h_decision":       l4_h2h_decision,
+            "layer4_h2h_rule":           l4_h2h_rule,
+            "layer4_h2h_edge":           l4_h2h_edge,
         }))
 
     try:
@@ -341,6 +385,12 @@ def _write_predictions_to_snowflake(
             # NOT EXISTS won't add columns to a pre-existing table).
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
+            # Layer 4 live bet-attribution — idempotent (safe on every scoring pass).
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_decision VARCHAR(10)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_over_signal FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_decision VARCHAR(10)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_rule VARCHAR(20)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_edge FLOAT")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
