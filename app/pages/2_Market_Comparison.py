@@ -123,7 +123,23 @@ def _games_sql(date_str: str) -> str:
         c.market_bookmaker_count
     FROM (
         SELECT *,
-               ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY inserted_at DESC) AS _rn
+               CASE
+                   WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
+                   WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
+                   ELSE 'provisional_pre_lineup'
+               END AS prediction_basis,
+               -- Most lineup-aware prediction per game (post_lineup > pre-lineup >
+               -- intraday_fallback); recency only breaks ties within a basis.
+               ROW_NUMBER() OVER (
+                   PARTITION BY game_pk
+                   ORDER BY
+                       CASE
+                           WHEN prediction_type = 'post_lineup'                 THEN 2
+                           WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
+                           ELSE 1
+                       END DESC,
+                       inserted_at DESC
+               ) AS _rn
         FROM baseball_data.betting_ml.daily_model_predictions
         WHERE score_date = '{date_str}'
           AND has_odds = TRUE
