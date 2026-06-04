@@ -375,6 +375,7 @@ eb_posteriors as (
         game_pk::integer        as game_pk,
         pitcher_id::integer     as pitcher_id,
         eb_xwoba_against,
+        eb_xwoba_against_sequential,
         eb_k_pct,
         eb_bb_pct,
         eb_xwoba_uncertainty,
@@ -548,6 +549,9 @@ final as (
         -- Shrinkage toward experience-band prior; null when game has no entry
         -- (pre-2016 or pitcher not listed as a probable starter at run time).
         eb.eb_xwoba_against,
+        -- Epic 16.2 — as-of sequential xwOBA-against posterior (parallel to
+        -- eb_xwoba_against; leakage-safe, strict game_date<T at write time).
+        eb.eb_xwoba_against_sequential,
         eb.eb_k_pct,
         eb.eb_bb_pct,
         eb.eb_xwoba_uncertainty,
