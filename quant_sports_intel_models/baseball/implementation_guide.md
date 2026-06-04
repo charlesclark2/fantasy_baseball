@@ -1383,7 +1383,7 @@ Write targets by environment:
 
 # Epic FG — FanGraphs Ingestion Continuity (Cloudflare Challenge Bypass)
 
-**Status:** 🔄 NEARLY COMPLETE — opened 2026-06-02. FlareSolverr deployed and **egress-verified in prod 2026-06-02**; `hitting_leaderboard` restored (1,154 rows). FG.1 ✅, FG.2 ✅. Remaining: deploy the `requests` import fix, the ZiPS orchestration decision (FG.6), and the runbook commit (FG.5 drafted).
+**Status:** 🔄 REOPENED 2026-06-04 — the cookie-replay design regressed (403 again) and was redesigned to fetch **through** FlareSolverr (see FG.7 below). FlareSolverr deployed + egress-verified 2026-06-02; `hitting_leaderboard` restored (1,154 rows) — but by 2026-06-04 the replayed `cf_clearance` was 403ing persistently. FG.1 ✅, FG.2 ✅, FG.7 ✅ (redesign, pending prod verify). Remaining: prod-verify FG.7, the ZiPS orchestration decision (FG.6), and the runbook commit (FG.5 drafted).
 
 **Depends on:** Epic 0.5 (Dagster) for the jobs these ingests run in. No model dependency.
 
@@ -1398,9 +1398,9 @@ Write targets by environment:
 
 (`ingest_oaa.py` was migrated to Baseball Savant on 2026-06-02; `ingest_savant_park_factors.py` hits Savant and is unaffected.)
 
-**Chosen approach (decided 2026-06-02):** Self-hosted **FlareSolverr** (headless-Chromium challenge solver) as a separate Railway service. `fangraphs_client` solves the challenge once per run via FlareSolverr, harvests the `cf_clearance` cookie + user-agent, and replays both on fast `curl_cffi` requests for the actual JSON API calls. Rejected alternatives: re-sourcing (data is FanGraphs-exclusive), a managed bypass API (per-request cost + external dependency), and embedded Playwright (bloats the Dagster agent image with Chromium).
+**Chosen approach (revised 2026-06-04):** Self-hosted **FlareSolverr** (headless-Chromium challenge solver) as a separate Railway service, and `fangraphs_client` issues the **actual API GET _through_ FlareSolverr** (`cmd: request.get` on the full URL + query string), parsing the JSON back out of the rendered-HTML response. FlareSolverr's browser performs the request from its own egress IP, with its own matching TLS fingerprint, holding live clearance — the agent never touches fangraphs.com directly. Rejected alternatives: re-sourcing (data is FanGraphs-exclusive), a managed bypass API (per-request cost + external dependency), and embedded Playwright (bloats the Dagster agent image with Chromium).
 
-**Key risk — `cf_clearance` IP binding:** `cf_clearance` is bound to the solving host's egress IP **and** the returned user-agent. The Dagster agent (which replays the cookie) must share FlareSolverr's egress — on Railway, same project + region. The client re-solves once automatically on a 403; a persistent 403 *after* re-solve almost always means an agent↔FlareSolverr IP mismatch (see FG.1 acceptance criteria).
+**Superseded design (2026-06-02 → 2026-06-04): cookie replay.** The original approach harvested `cf_clearance` + user-agent from FlareSolverr and replayed them on `curl_cffi` requests *from the agent*. This is fragile in a split-service deployment: `cf_clearance` is bound to BOTH the solving host's egress IP and its user-agent/TLS fingerprint. FlareSolverr and the Dagster agent are **separate Railway services with different egress IPs**, and Railway egress is **not stable across redeploys** — so the cookie that validated on 2026-06-02 was rejected by 2026-06-04 (persistent 403 *after* a successful solve). The hardcoded `curl_cffi impersonate="chrome124"` was a second latent drift (FlareSolverr's auto-updating Chrome moves past it). Fetching through FlareSolverr removes both failure modes structurally — there is no IP or fingerprint to keep aligned. See FG.7.
 
 ---
 
@@ -1460,6 +1460,24 @@ Acceptance criteria:
 - [x] Runbook committed; on-call can restore FanGraphs ingestion from it without reading source.
 
 **Out of scope (tracked elsewhere):** recurring ZiPS/Steamer projection re-ingestion on a cadence → **Track E, Epic 25**. Epic FG covers only restoring the Cloudflare bypass for the existing ingests.
+
+---
+
+### FG.7 — Redesign: fetch through FlareSolverr (cookie-replay regression) ✅ DONE 2026-06-04 (pending prod verify)
+
+**Problem:** The FG.2 cookie-replay design 403'd again two days after it was verified working (2026-06-02 → 2026-06-04). FlareSolverr solved the challenge every time (clearance obtained, 26–29 cookies) but the replayed `cf_clearance` was rejected on every `curl_cffi` API call. Root cause: `cf_clearance` is bound to the solving host's **egress IP + user-agent/TLS fingerprint**, FlareSolverr and the Dagster agent are **separate Railway services with different (and redeploy-unstable) egress IPs**, and `impersonate="chrome124"` was hardcoded against FlareSolverr's auto-updating Chrome. The two-day lifetime is consistent with a Railway egress reassignment.
+
+**Fix:** Rewrote `scripts/utils/fangraphs_client.py` to issue the real API GET **through** FlareSolverr (`cmd: request.get` with the full URL + query string) and parse the JSON out of the rendered-HTML response (`_extract_json`: raw → `<pre>` → outermost-container fallback, HTML-unescaped). No cookie/IP/fingerprint is replayed from the agent, so both failure modes are structurally gone. `_get_session()` retained (now `impersonate="chrome"`) for the non-challenged Savant caller (`ingest_savant_park_factors.py`).
+
+Tasks:
+- [x] Route `fetch_leaderboard` + `fetch_projections` through FlareSolverr; remove cookie-harvest/replay path.
+- [x] `_extract_json` robust to raw JSON, `<pre>`-wrapped JSON, and HTML-entity-escaped bodies (unit-tested offline).
+- [x] Preserve public API + `_get_session` for the Savant caller.
+- [ ] **Prod verify:** re-run `ingest_fangraphs_hitting_leaderboard` (or the daily job) and confirm `Fetching via FlareSolverr` + non-zero row counts in the Railway logs.
+
+Acceptance criteria:
+- [x] Agent never issues a direct request to fangraphs.com; all FanGraphs traffic flows through FlareSolverr over the private network.
+- [ ] Daily `hitting_leaderboard` ingest returns rows in prod (no 403), independent of agent↔FlareSolverr egress alignment.
 
 ---
 
@@ -7696,7 +7714,7 @@ Acceptance Criteria:
 
 ### 16.5 — Production model retrain on the sequential-enriched feature matrix
 
-**Status:** ✅ FRAMEWORK COMPLETE — retrain + 2026 evaluation in progress (2026-06-04). The three production targets — `home_win` (XGBoost+Platt), `run_differential` (NGBoost Normal), `total_runs` (NGBoost) — are retrained on the full `feature_pregame_game_features` matrix now including the **10 Epic-16 sequential columns** (6 team-level from 16.3 + 2 batter-lineup `home/away_avg_eb_woba_sequential` + 2 starter `home/away_starter_eb_xwoba_against_sequential`). Each retrain is a **challenger** to its deployed champion under the Epic 7.M champion-selection framework, promoted only on the three-layer Bayesian rubric (Story 16.6). Per the model-retraining deferral, NGBoost retrains are >1hr each and run as hand-offs.
+**Status:** ✅ COMPLETE — retrain + clean 2026 evaluation done (2026-06-04); verdicts: run_diff PROMOTE, home_win register-seq-on-calibration, total_runs HOLD. The three production targets — `home_win` (XGBoost+Platt), `run_differential` (NGBoost Normal), `total_runs` (NGBoost) — are retrained on the full `feature_pregame_game_features` matrix now including the **10 Epic-16 sequential columns** (6 team-level from 16.3 + 2 batter-lineup `home/away_avg_eb_woba_sequential` + 2 starter `home/away_starter_eb_xwoba_against_sequential`). Each retrain is a **challenger** to its deployed champion under the Epic 7.M champion-selection framework, promoted only on the three-layer Bayesian rubric (Story 16.6). Per the model-retraining deferral, NGBoost retrains are >1hr each and run as hand-offs.
 
 **Prereqs built (P1–P4):**
 - [x] **dbt feature propagation:** the 10 sequential cols flow through `feature_pregame_lineup_features` (`avg_eb_woba_sequential`) and `feature_pregame_starter_features` (`eb_xwoba_against_sequential`) into `feature_pregame_game_features` (`home/away_*`). Verified populated 2021–2026.
@@ -7705,7 +7723,7 @@ Acceptance Criteria:
 - [x] **MLflow logging:** `log_search_run()` (`betting_ml/utils/mlflow_utils.py`) records every retrain to the `production_retrain` experiment with `n_features`, the `exclude_sequential` flag, CV metric, a role tag, AND the model `.pkl` + feature-contract sidecar as artifacts — every training run is now recoverable from its run (closes the gap that left the prior deployed champions un-scoreable, see 16.6).
 - [x] **Feature-contract sidecar:** each persisted model writes `feature_columns_<model_name>_<eval_year>.json` with the exact pre-imputation feature list → drift-proof scoring.
 
-**CV results (marginal/mixed — the 2026 OOS Bayesian eval in 16.6 is decisive):** `home_win` CV Brier 0.1983 (champ 0.1985, flat); `run_differential` MAE 3.0958 (champ 3.1041, slight improvement); `total_runs` MAE 3.4118 (champ 3.4008, slight worse).
+**CV results (marginal/mixed — the 2026 OOS Bayesian eval in 16.6 is decisive):** clean seq-vs-nonseq on recovered data — `home_win` seq CV Brier 0.1978 (nonseq 0.1997); `run_differential` seq MAE 3.0846 (nonseq 3.0946); `total_runs` seq MAE 3.3694 (nonseq 3.3675 — seq slightly worse).
 
 **Hand-off (each >1 min):**
 ```
@@ -7736,18 +7754,18 @@ uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequ
 
 **Output:** `ablation_results/production_bayesian_<target>.md` + `.json` (the JSON carries the `layer4_selective_strategy` block). **Run after the retrains land:** `uv run python betting_ml/scripts/evaluate_production_bayesian.py --target all`.
 
-**Result — 2026 OOS run (2026-06-04, n=646; nonseq champion baseline vs. seq challenger):**
+**Result — 2026 OOS run (2026-06-04, n=660; nonseq champion baseline vs. seq challenger; BOTH retrained clean on recovered bullpen data):**
 
 | Target | L1 | L2 | L3<naive | L3<market | L4 | challenger vs champion | **Verdict** |
 |---|:--:|:--:|:--:|:--:|:--:|:--|:--|
-| **run_differential** | ✅ both | ✅ both | n/a | n/a | n/a | NLL 2.7937<2.8076 ✅ | **PROMOTE** (v4-seq) |
-| **home_win** | ✅ both | ✅ both | ✅ both | ❌ both | ✅* | NLL 0.5951<0.6013, raw Brier 0.2042<0.2080 ✅ | **Model upgrade — posture unchanged** (v4-seq) |
-| **total_runs** | ❌ both | ✅ both | ❌ both | ❌ both | ❌ both | NLL tie, blended Brier ❌ | **DO NOT PROMOTE** (pause holds) |
+| **run_differential** | ✅ both | ✅ both | n/a | n/a | n/a | NLL 2.7612<2.7757 ✅ | **PROMOTE** (v4-seq) |
+| **home_win** | ✅ both | chal ✅ / champ ❌ | ✅ both | ❌ both | ✅ both | NLL 0.5958>0.5906 ❌, raw Brier 0.2044>0.2015 ❌ | **Register seq on CALIBRATION — posture unchanged** (v4-seq) |
+| **total_runs** | ✅ both | ✅ both | ❌ both | ❌ both | ❌ both | NLL/Brier ❌ | **DO NOT PROMOTE** (pause holds) |
 
-- **run_differential** is the clean win — passes both applicable layers and beats the champion; feeds `p_home_win_ngboost` (50% of the h2h consensus).
-- **home_win** is a strictly better *market-blind model* (NLL/ECE/raw-Brier all improve) but **neither model beats Bovada** (raw 0.204 vs market 0.181; blended==market at α=0). \*Layer 4 (after the raw-prob fix, see Story 26.2) PASSES the roi_devig gate (challenger +0.2555 @ h2h-thr 0.20, n=305) but is **selective-edge-only** — magnitude-driven (chalk; roi_110 +0.64) while direction_flip is dead (roi_110 −0.14), roi_devig is vig-free, and L3-vs-market fails. Same pattern as 26.4 on a 2nd model → not deployable; H2H evaluation-pending.
-- **total_runs** — third independent confirmation of the pause (CV → Layer-4 backtest → this harness); both models fail L1/L3/L4; the 10 sequential cols added nothing.
-- **Net:** the sequential features deliver a modest real model improvement on run_diff + home_win and nothing on totals, and **manufacture no market-beating edge** — totals pause holds, H2H evaluation-pending. Registry updated (`run_differential`/`home_win` → v4-seq; `total_runs` unchanged + pause/unpause fields); **uncommitted pending the prod prerequisite chain.**
+- **run_differential** is the clean win — beats the champion on L1 (2.7612<2.7757), both pass calibration; feeds `p_home_win_ngboost` (50% of the h2h consensus).
+- **home_win** is **NOT a discrimination upgrade on clean data** — the nonseq champion wins L1 NLL (0.5906<0.5958), raw Brier (0.2015<0.2044), and even L4 roi_devig (+0.2459 vs +0.2356). The seq challenger's *only* advantage is **calibration**: ECE 0.043 (passes the ≤0.05 gate) vs champion 0.063 (**fails** it). Seq is registered because a model failing the ECE gate shouldn't be the champion when a better-calibrated alternative exists, and calibration is the operative property for the h2h blend / live attribution. Both tie on blended L3 (==market at α=0); neither beats market; **both head-to-head gates fail**. Posture unchanged (evaluation-pending, no auto-bets). NOTE: the earlier (contaminated-run) "model upgrade" verdict was an artifact of a **bullpen-stale nonseq baseline** — corrected here on clean data.
+- **total_runs** — third independent confirmation of the pause (CV → Layer-4 backtest → this harness); both now *marginally* clear L1 (NLL ~2.857 < prior 2.8608) but fail L3 + L4; the 10 sequential cols add nothing (seq marginally worse).
+- **Net:** sequential delivers a clean win on run_diff, a **calibration-only trade-off** on home_win (not a discrimination upgrade), and nothing on totals — and **manufactures no market-beating edge**. Totals pause holds, H2H evaluation-pending. Registry updated (`run_differential` → v4-seq promote; `home_win` → v4-seq on calibration basis; `total_runs` unchanged + pause/unpause fields).
 
 **Operational posture (unchanged by this work):** `total_runs.bet_paused: true` and the H2H evaluation-pending flag stay; no automated bets; predictions continue logging with MANUAL REVIEW indicators until the un-pause condition (champion beats prior-predictive NLL AND prior-naive Brier on a rolling 60-game live window) is met.
 
@@ -7875,7 +7893,7 @@ Acceptance Criteria:
 - [x] Layer 4 runs after L1–L3 in `evaluate_production_bayesian.py` (16.6) on the same shared 2026 OOS set, per target (totals + home_win; run_diff has no market → L4 N/A).
 - [x] Adds a gate-aware `L4 selective <metric>>0 & n>=50` gate to `_gates_ngb`/`_gates_home`, and a `layer4_selective_strategy` section to both the markdown and the new JSON companion report.
 - [x] A `roi_devig` PASS carries an explicit caveat in-report: **vig-free upper bound → evaluation-pending, NOT deployable** (real book ROI is lower; the model still fails L1/L3 vs. the credible market).
-- [x] **home_win Layer 4 bug fix (2026-06-04):** `_eval_home_win` originally fed the alpha-blended posterior to `compute_bet_decision`, which at production h2h **alpha=0** equals the market → **0 bets, vacuous** by construction. Fixed to use the **raw model P(home)** (pre-blend), consistent with the 26.4 H2H surface and 26.5 live attribution — Layer 4 asks whether the model's *own* signal has edge. **Corrected result (seq challenger, 2026 OOS):** PASSES the roi_devig gate (+0.2555 @ h2h-thr 0.20, n=305) but **selective-edge-only** — the positive is **magnitude-driven** (chalk the model agrees with the market on; roi_110 +0.64) while **direction_flip is dead** (roi_110 −0.14), roi_devig is vig-free, and the model still fails L3-vs-market (raw Brier 0.204 vs 0.181). This reproduces 26.4's pattern on a second, independent model — a falsifiable hypothesis for the live real-price attribution surface (26.5), not a deployable edge.
+- [x] **home_win Layer 4 bug fix (2026-06-04):** `_eval_home_win` originally fed the alpha-blended posterior to `compute_bet_decision`, which at production h2h **alpha=0** equals the market → **0 bets, vacuous** by construction. Fixed to use the **raw model P(home)** (pre-blend), consistent with the 26.4 H2H surface and 26.5 live attribution — Layer 4 asks whether the model's *own* signal has edge. **Corrected result (clean 2026 OOS, n=660):** the seq challenger PASSES the roi_devig gate (+0.2356 @ h2h-thr 0.20, n=322) but **selective-edge-only** — the positive is **magnitude-driven** (chalk the model agrees with the market on; roi_110 +0.62) while **direction_flip is dead** (roi_110 ≈ −0.17), roi_devig is vig-free, and the model still fails L3-vs-market (raw Brier 0.2044 vs 0.1820). On clean data the **nonseq champion's L4 is actually marginally higher** (roi_devig +0.2459 @ 0.20, n=321) — underscoring this is not a seq-specific edge. Reproduces 26.4's pattern on a second, independent model — a falsifiable hypothesis for the live real-price attribution surface (26.5), not a deployable edge.
 
 ---
 

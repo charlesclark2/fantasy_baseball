@@ -364,10 +364,15 @@ def _eval_home_win(df, with_challenger: bool) -> dict:
             "mean_p": float(p.mean()),
         }
         if cov.any():
-            # Layer 4 — selective strategy on the model's blended posterior vs the
-            # de-vigged Bovada line (covered games only). Blended = deployable signal.
+            # Layer 4 — selective strategy on the model's RAW P(home) vs the de-vigged
+            # Bovada line (covered games only). Must use the raw model probability, NOT
+            # the alpha-blended posterior: at production h2h alpha=0 the blend equals the
+            # market, so a blended Layer 4 is vacuous (model==market → 0 bets). Layer 4
+            # asks whether the model's own signal has selective edge — that is the
+            # pre-blend probability (consistent with the H2H OOS surface in Epic 26.4 and
+            # the live attribution logging in 26.5, which both use the raw model prob).
             games4 = pd.DataFrame({
-                "market": "h2h", "model_p_home": blended,
+                "market": "h2h", "model_p_home": p[cov],
                 "market_p_home": mkt_p[cov], "home_win": y[cov],
             })
             rec["layer4"] = _layer4_block(games4)

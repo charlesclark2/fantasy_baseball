@@ -1,0 +1,35 @@
+{
+  "target": "run_differential",
+  "report": {
+    "target": "run_differential",
+    "n": 660,
+    "prior_nll": 2.933412732219618,
+    "prior_desc": "discretized-Normal(mu=0.042, sigma=4.482)",
+    "models": {
+      "champion": {
+        "nll": 2.7757039630435423,
+        "calib_80": 0.7681818181818182,
+        "mean_pred": -0.00765111124541216
+      },
+      "challenger": {
+        "nll": 2.76123803117559,
+        "calib_80": 0.7757575757575758,
+        "mean_pred": -0.01946795246954399
+      }
+    }
+  },
+  "gates": {
+    "champion": {
+      "L1 NLL < prior": true,
+      "L2 calib_80 in [0.75,0.85]": true
+    },
+    "challenger": {
+      "L1 NLL < prior": true,
+      "L2 calib_80 in [0.75,0.85]": true
+    },
+    "head_to_head": {
+      "challenger NLL < champion": true
+    }
+  },
+  "layer4_selective_strategy": {}
+}

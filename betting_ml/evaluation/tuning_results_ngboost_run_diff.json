@@ -5,28 +5,30 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.1284279501460097
+      "cv_mae": 3.1173534274492893
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.104099532134471
+      "cv_mae": 3.094587195258947
     },
     {
       "n_estimators": 1000,
       "dist": "Normal",
-      "cv_mae": 3.1105808748536603
+      "cv_mae": 3.0995774983900026
     }
   ],
   "best_n_estimators": 500,
   "best_dist": "Normal",
-  "best_cv_mae": 3.104099532134471,
+  "best_cv_mae": 3.094587195258947,
+  "exclude_sequential": true,
+  "mlflow_run_id": "1f09ed40a7b94a9b9b557a77c0ccae9c",
   "persisted_models": [
     {
       "target": "run_differential",
-      "model_name": "ngboost_tuned",
+      "model_name": "ngboost_nonseq",
       "eval_year": 2026,
-      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/run_differential/ngboost_tuned_2026.pkl"
+      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/run_differential/ngboost_nonseq_2026.pkl"
     }
   ]
 }
