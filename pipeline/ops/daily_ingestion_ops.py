@@ -373,11 +373,20 @@ def ingest_umpires_late(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_umpire_feature_rebuild(context):
+    # mart_bullpen_effectiveness + feature_pregame_team_features are rebuilt HERE
+    # (after compute_eb_bullpen_posteriors_op writes yesterday's EB posteriors at
+    # s17) — not just at dbt_daily_build (s16, which runs before that source exists).
+    # The mart's 7-day lookback merge-updates yesterday's row from NULL eb to the
+    # freshly-written value; the two table-materialized features then pass it through
+    # to feature_pregame_game_features.{home,away}_bp_eb_xwoba. dbt resolves build
+    # order from the ref graph. See reference_bullpen_freshness_chain.
     _run_dbt(context, [
         "build",
         "--select",
         "stg_statsapi_umpire_game_log",
         "feature_pregame_umpire_features",
+        "mart_bullpen_effectiveness",
+        "feature_pregame_team_features",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])

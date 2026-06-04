@@ -403,5 +403,11 @@ left join eb_bullpen eb
     on  cast(tg.game_pk as text) = eb.game_pk
     and tg.pitching_team         = eb.team
 {% if is_incremental() %}
-where tg.game_date > (select max(game_date) from {{ this }})
+-- 7-day lookback (not strict `> max`) so late-arriving EB bullpen posteriors merge
+-- into already-inserted rows. eb_bullpen_team_posteriors for game-date D is written
+-- by compute_bullpen_posteriors AFTER this mart first processes D (the daily op runs
+-- post-dbt_daily_build), so a strict `> max` would freeze those rows at NULL eb. The
+-- unique_key (game_pk, team_abbrev) makes the reprocess a merge-update, not a dup.
+-- Also self-heals a missed daily run within the window. See reference_bullpen_freshness_chain.
+where tg.game_date >= (select max(game_date) - interval '7 days' from {{ this }})
 {% endif %}

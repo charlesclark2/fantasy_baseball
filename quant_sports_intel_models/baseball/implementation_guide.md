@@ -4467,10 +4467,26 @@ Acceptance criteria:
 `compute_eb_bullpen_posteriors_op` in `pipeline/jobs/daily_ingestion_job.py`, sequenced after
 `ingest_umpires_late` and before `update_player/team_posteriors_op` + `dbt_umpire_feature_rebuild`.
 Before this op existed, nothing refreshed the EB bullpen posteriors on schedule: the tables froze at
-the last manual run (2026-05-28), which silently imputed both the deployed champion's
-`team_eb_bullpen_xwoba` and the Epic 16.3 team bullpen-seq feature on every live game from 5/29 on
-(off_xwoba/win_prob kept advancing, masking it). Surfaced by the Epic 16 sequential-retrain
-spot-check.
+the last manual run (2026-05-28), which broke two downstream paths from 5/29 on (off_xwoba/win_prob
+kept advancing, masking it). Surfaced by the Epic 16 sequential-retrain spot-check.
+
+The two paths behave differently and were fixed differently:
+- **Sequential bullpen** (`{home,away}_team_sequential_bullpen_xwoba`, Epic 16.3 `prior_mu`) — a
+  leakage-safe *pre-game* feature, so the stall degraded **live scoring**. Fixed by the new op +
+  `update_team_posteriors_op` + the existing `feature_pregame_game_features` rebuild in s18.
+- **EB-quality bullpen** (`{home,away}_bp_eb_xwoba`) — joined on the **same** `game_pk` in
+  `mart_bullpen_effectiveness` and computed from relievers who actually appeared, so it is
+  **retrospective** (NULL/imputed at live-predict time regardless) and the stall damaged the
+  **training record**, not live scoring. Its path (`mart_bullpen_effectiveness` →
+  `feature_pregame_team_features` → `feature_pregame_game_features`) is built at s16
+  (`dbt_daily_build`), *before* the op writes the source, so two extra changes make it current:
+  (1) `mart_bullpen_effectiveness`'s final incremental filter now uses a **7-day lookback** instead
+  of strict `> max(game_date)` so late EB posteriors merge-update already-inserted rows
+  (`unique_key = game_pk, team_abbrev`); (2) `mart_bullpen_effectiveness` +
+  `feature_pregame_team_features` were added to the s18 `dbt_umpire_feature_rebuild` `--select` so
+  they rebuild after the op. One-time recovery of the 5/29–6/02 gap required
+  `dbtf build --select mart_bullpen_effectiveness+ --full-refresh` (rebuilding only
+  `feature_pregame_game_features` missed the two upstream models).
 
 ---
 
