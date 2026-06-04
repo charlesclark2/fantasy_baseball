@@ -322,10 +322,30 @@ def signal_freshness_check(context):
 # missing day. The scripts are NOT idempotent per-date (re-running a chained date
 # double-counts the observation), so a fixed single date is required; a missed day
 # is recovered via `--backfill --season`. Off-days no-op gracefully (0 games → 0
-# rows). The team bullpen_xwoba metric lags eb_bullpen_posteriors (off_xwoba +
-# win_prob still update). See project_epic16_status memory.
+# rows).
+#
+# The team bullpen_xwoba metric depends on eb_bullpen_posteriors (reliever-PA
+# membership), which is produced by compute_bullpen_posteriors.py (Epic 6A) — NOT
+# by any sequential script. That refresh was never wired into this job, so
+# eb_bullpen_posteriors / eb_bullpen_team_posteriors went stale (last 2026-05-28)
+# while off_xwoba + win_prob kept advancing, leaving the team bullpen-seq feature
+# AND the deployed champion's team_eb_bullpen_xwoba imputed on live games. Fixed by
+# compute_eb_bullpen_posteriors_op below, which MUST run before
+# update_team_posteriors_op (bullpen branch reads it) and before the
+# dbt_umpire_feature_rebuild that rebuilds feature_pregame_game_features. The script
+# MERGE-upserts both tables, so a daily --game-date is idempotent/re-runnable.
 
 _SEQ_DIR = "/app/betting_ml/scripts/sequential_bayes"
+_EB_DIR = "/app/betting_ml/scripts/eb_priors"
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def compute_eb_bullpen_posteriors_op(context):
+    _run_script(
+        context,
+        f"{_EB_DIR}/compute_bullpen_posteriors.py",
+        ["--game-date", _one_day_ago()],
+    )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -353,11 +373,20 @@ def ingest_umpires_late(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_umpire_feature_rebuild(context):
+    # mart_bullpen_effectiveness + feature_pregame_team_features are rebuilt HERE
+    # (after compute_eb_bullpen_posteriors_op writes yesterday's EB posteriors at
+    # s17) — not just at dbt_daily_build (s16, which runs before that source exists).
+    # The mart's 7-day lookback merge-updates yesterday's row from NULL eb to the
+    # freshly-written value; the two table-materialized features then pass it through
+    # to feature_pregame_game_features.{home,away}_bp_eb_xwoba. dbt resolves build
+    # order from the ref graph. See reference_bullpen_freshness_chain.
     _run_dbt(context, [
         "build",
         "--select",
         "stg_statsapi_umpire_game_log",
         "feature_pregame_umpire_features",
+        "mart_bullpen_effectiveness",
+        "feature_pregame_team_features",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])
