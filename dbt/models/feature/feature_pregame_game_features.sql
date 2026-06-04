@@ -269,6 +269,7 @@ final as (
 
         -- ── Home lineup: Empirical Bayes batter posteriors (Epic 4A) ──────────
         h_ln.avg_eb_woba                        as home_avg_eb_woba,
+        h_ln.avg_eb_woba_sequential             as home_avg_eb_woba_sequential,
         h_ln.avg_eb_k_pct                       as home_avg_eb_k_pct,
         h_ln.avg_eb_bb_pct                      as home_avg_eb_bb_pct,
         h_ln.avg_eb_iso                         as home_avg_eb_iso,
@@ -327,6 +328,7 @@ final as (
 
         -- ── Away lineup: Empirical Bayes batter posteriors (Epic 4A) ──────────
         a_ln.avg_eb_woba                        as away_avg_eb_woba,
+        a_ln.avg_eb_woba_sequential             as away_avg_eb_woba_sequential,
         a_ln.avg_eb_k_pct                       as away_avg_eb_k_pct,
         a_ln.avg_eb_bb_pct                      as away_avg_eb_bb_pct,
         a_ln.avg_eb_iso                         as away_avg_eb_iso,
@@ -426,6 +428,7 @@ final as (
 
         -- ── Home starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         h_st.eb_xwoba_against                   as home_starter_eb_xwoba_against,
+        h_st.eb_xwoba_against_sequential        as home_starter_eb_xwoba_against_sequential,
         h_st.eb_k_pct                           as home_starter_eb_k_pct,
         h_st.eb_bb_pct                          as home_starter_eb_bb_pct,
         h_st.eb_xwoba_uncertainty               as home_starter_eb_xwoba_uncertainty,
@@ -523,6 +526,7 @@ final as (
 
         -- ── Away starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         a_st.eb_xwoba_against                   as away_starter_eb_xwoba_against,
+        a_st.eb_xwoba_against_sequential        as away_starter_eb_xwoba_against_sequential,
         a_st.eb_k_pct                           as away_starter_eb_k_pct,
         a_st.eb_bb_pct                          as away_starter_eb_bb_pct,
         a_st.eb_xwoba_uncertainty               as away_starter_eb_xwoba_uncertainty,

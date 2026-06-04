@@ -516,6 +516,7 @@ slot_eb as (
         ls.slot,
         ls.batter_id,
         eb.eb_woba,
+        eb.eb_woba_sequential,
         eb.eb_k_pct,
         eb.eb_bb_pct,
         eb.eb_iso,
@@ -534,6 +535,10 @@ eb_agg as (
         game_pk,
         home_away,
         round(avg(eb_woba),              3) as avg_eb_woba,
+        -- Epic 16.2 — lineup-mean of the as-of sequential xwOBA posterior (parallel
+        -- to avg_eb_woba; leakage-safe — eb_woba_sequential is the strict game_date<T
+        -- belief written by compute_lineup_posteriors.py).
+        round(avg(eb_woba_sequential),   3) as avg_eb_woba_sequential,
         round(avg(eb_k_pct),             3) as avg_eb_k_pct,
         round(avg(eb_bb_pct),            3) as avg_eb_bb_pct,
         round(avg(eb_iso),               3) as avg_eb_iso,
@@ -640,6 +645,7 @@ final as (
         -- NULL when posteriors not yet computed for this game_pk (run compute_lineup_posteriors.py).
         -- Do NOT coalesce to rolling stats — ablation requires true NULLs for coverage tracking.
         ea.avg_eb_woba,
+        ea.avg_eb_woba_sequential,
         ea.avg_eb_k_pct,
         ea.avg_eb_bb_pct,
         ea.avg_eb_iso,
