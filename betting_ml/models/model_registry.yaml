@@ -1,5 +1,5 @@
 home_win:
-  artifact_path: betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl  # local; S3 upload pending (run upload_artifact before prod deploy)
+  artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_tuned_2026.pkl  # uploaded 2026-06-04 (instrumented seq challenger)
   prev_artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_eb_enriched_2026.pkl  # v3 (drifted/unrecoverable binary; superseded)
   backfill_date: '2026-06-01'
   calibrator_last_fit_date: '2026-05-08'
@@ -176,7 +176,7 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl  # local; S3 upload pending (run upload_artifact before prod deploy)
+  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_tuned_2026.pkl  # uploaded 2026-06-04 (instrumented seq challenger)
   prev_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_eb_enriched_2026.pkl  # v3 (drifted/unrecoverable binary; superseded)
   backfill_date: '2026-06-01'
   cv_mae: 3.0846
