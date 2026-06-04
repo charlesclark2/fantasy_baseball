@@ -33,7 +33,11 @@ from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier
 from betting_ml.scripts.train_elasticnet_prod import _MARKET_COLS_TO_EXCLUDE
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import get_snowflake_connection, load_features
-from betting_ml.utils.feature_selection import load_retained_features
+from betting_ml.utils.feature_selection import (
+    SEQUENTIAL_POSTERIOR_FEATURES,
+    load_retained_features,
+)
+from betting_ml.utils.mlflow_utils import log_search_run
 from betting_ml.utils.model_io import save_model
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 
@@ -119,7 +123,9 @@ def _make_objective(folds: list[dict], df):
     return objective
 
 
-def run_search() -> None:
+def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) -> None:
+    model_name = "xgb_classifier_nonseq" if exclude_sequential else "xgb_classifier_tuned"
+
     print("Loading features from Snowflake...")
     df = load_features()
     print(
@@ -139,8 +145,15 @@ def run_search() -> None:
             f"WARNING: {len(missing)} retained features absent from DataFrame "
             f"(skipped): {missing[:5]}"
         )
-    print(f"Using {len(feature_cols)} features (market-blind)")
     market_removed = [f for f in retained if f in _MARKET_COLS_TO_EXCLUDE]
+    if exclude_sequential:
+        seq_removed = [f for f in feature_cols if f in set(SEQUENTIAL_POSTERIOR_FEATURES)]
+        feature_cols = [f for f in feature_cols if f not in set(SEQUENTIAL_POSTERIOR_FEATURES)]
+        print(
+            f"--exclude-sequential: dropped {len(seq_removed)} sequential cols "
+            f"→ faithful no-sequential baseline (documented champion). model_name={model_name}"
+        )
+    print(f"Using {len(feature_cols)} features (market-blind)")
     print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
 
     print("Preparing imputed CV folds...")
@@ -185,10 +198,55 @@ def run_search() -> None:
     model_path = save_model(
         xgb_clf_calibrated,
         target=TARGET,
-        model_name="xgb_classifier_tuned",
+        model_name=model_name,
         eval_year=last_eval_year,
     )
-    print(f"  home_win/xgb_classifier_tuned → {model_path}")
+    print(f"  {TARGET}/{model_name} → {model_path}")
+
+    # Feature-contract sidecar: the exact pre-imputation feature list this model
+    # was trained on, so the evaluator can faithfully reconstruct its matrix
+    # (no reliance on a global feature_selection.md that may drift).
+    cols_path = Path(model_path).with_name(f"feature_columns_{model_name}_{last_eval_year}.json")
+    with open(cols_path, "w") as f:
+        json.dump(
+            {
+                "target": TARGET,
+                "model_name": model_name,
+                "eval_year": last_eval_year,
+                "exclude_sequential": exclude_sequential,
+                "n_features": len(feature_cols),
+                "feature_cols": feature_cols,
+            },
+            f,
+            indent=2,
+        )
+    print(f"  feature contract → {cols_path}")
+
+    mlflow_run_id = log_search_run(
+        experiment="production_retrain",
+        run_name=f"{model_name}_{last_eval_year}",
+        params={
+            "target": TARGET,
+            "architecture": "xgboost_platt",
+            "model_name": model_name,
+            "exclude_sequential": exclude_sequential,
+            "n_features": len(feature_cols),
+            "n_rows": len(df),
+            "n_seasons": int(df["game_year"].nunique()),
+            "eval_year": last_eval_year,
+            "n_trials": N_TRIALS,
+            **{f"best_{k}": v for k, v in study.best_params.items()},
+        },
+        metrics={"cv_brier": tuned_brier, "baseline_brier": baseline_brier},
+        tags={
+            "sequential_enriched": str(not exclude_sequential),
+            "role": "challenger" if not exclude_sequential else "documented_champion_repro",
+        },
+        artifacts=[model_path, str(cols_path)],
+        enabled=mlflow_enabled,
+    )
+    if mlflow_run_id:
+        print(f"  MLflow run_id: {mlflow_run_id}")
 
     all_trials = [
         {"trial_number": t.number, "params": t.params, "value": t.value}
@@ -206,10 +264,12 @@ def run_search() -> None:
         "metric": "brier_score",
         "improved": improved,
         "all_trials": all_trials,
+        "exclude_sequential": exclude_sequential,
+        "mlflow_run_id": mlflow_run_id,
         "persisted_models": [
             {
                 "target": TARGET,
-                "model_name": "xgb_classifier_tuned",
+                "model_name": model_name,
                 "eval_year": last_eval_year,
                 "path": model_path,
             }
@@ -398,5 +458,8 @@ if __name__ == "__main__":
     if "--report-only" in sys.argv:
         generate_report()
     else:
-        run_search()
+        run_search(
+            exclude_sequential="--exclude-sequential" in sys.argv,
+            mlflow_enabled="--no-mlflow" not in sys.argv,
+        )
         generate_report()

@@ -51,6 +51,19 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 192,  # 8 days — weekly Sunday ingest
         "game_day_only": False,
     },
+    "baseball_data.fangraphs.fg_hitting_leaderboard_raw": {
+        "ts_col": "ingestion_ts",
+        "max_stale_hours": 36,   # daily ingest; it runs earlier in this same job, so a
+                                 # failed/skipped fetch shows as ~24h+ stale at check time.
+                                 # 36h tolerates one-off blips but catches a 2+ day outage.
+        "game_day_only": False,
+        # Non-blocking: this feeds analytics + FUTURE FANTASY, NOT the betting model —
+        # lineage dead-ends at mart_batter/pitcher_profile_summary and load_features uses
+        # zero FanGraphs hitting columns. Alert on staleness so a silent outage (e.g. the
+        # 2026-06 Cloudflare 403, or the rolling-window ingest stopping) is caught early,
+        # but never fail the betting ingest/predict job over fantasy-only data.
+        "non_blocking": True,
+    },
     "baseball_data.statsapi.umpire_game_log": {
         "ts_col": "loaded_at",
         "max_stale_hours": 48,

@@ -1,0 +1,633 @@
+{
+  "target": "home_win",
+  "report": {
+    "target": "home_win",
+    "n": 660,
+    "n_market": 621,
+    "base_rate": 0.5329006490264603,
+    "prior_nll": 0.6937192950979771,
+    "alpha": 0.0,
+    "market_brier": 0.18199693741517217,
+    "prior_naive_brier": 0.25018179081674913,
+    "market_credible": true,
+    "models": {
+      "champion": {
+        "nll": 0.5906464174780556,
+        "ece": 0.06352676122024248,
+        "calib_in_large": 0.0029313871376339673,
+        "brier_model": 0.20145893802297263,
+        "blended_brier": 0.18199693741517217,
+        "mean_p": 0.5150525992588461,
+        "layer4": {
+          "sweep": {
+            "table": [
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.05,
+                "n_bets": 546,
+                "bet_rate": 0.8792270531400966,
+                "win_rate": 0.6703296703296703,
+                "roi_110": 0.27972027972027974,
+                "roi_devig": 0.20019087590142942,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.08,
+                "n_bets": 506,
+                "bet_rate": 0.8148148148148148,
+                "win_rate": 0.6699604743083004,
+                "roi_110": 0.27901545095220986,
+                "roi_devig": 0.21234936325693307,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.1,
+                "n_bets": 478,
+                "bet_rate": 0.7697262479871175,
+                "win_rate": 0.6631799163179917,
+                "roi_110": 0.26607074933434766,
+                "roi_devig": 0.21763491668838675,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.12,
+                "n_bets": 448,
+                "bet_rate": 0.7214170692431562,
+                "win_rate": 0.65625,
+                "roi_110": 0.2528409090909091,
+                "roi_devig": 0.2208026455552796,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.15,
+                "n_bets": 400,
+                "bet_rate": 0.644122383252818,
+                "win_rate": 0.64,
+                "roi_110": 0.22181818181818183,
+                "roi_devig": 0.23145604509554307,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.2,
+                "n_bets": 321,
+                "bet_rate": 0.5169082125603864,
+                "win_rate": 0.6043613707165109,
+                "roi_110": 0.15378079864061173,
+                "roi_devig": 0.24594023694433204,
+                "reliable": true
+              }
+            ],
+            "optimal": {
+              "totals_threshold": 1.0,
+              "h2h_threshold": 0.2,
+              "n_bets": 321,
+              "bet_rate": 0.5169082125603864,
+              "win_rate": 0.6043613707165109,
+              "roi_110": 0.15378079864061173,
+              "roi_devig": 0.24594023694433204,
+              "reliable": true
+            },
+            "gate_metric": "roi_devig",
+            "min_bets_reliable": 50,
+            "markets": [
+              "h2h"
+            ]
+          },
+          "verdict": {
+            "passed": true,
+            "gate_metric": "roi_devig",
+            "optimal_totals_threshold": 1.0,
+            "optimal_h2h_threshold": 0.2,
+            "n_bets": 321,
+            "win_rate": 0.6043613707165109,
+            "roi_110": 0.15378079864061173,
+            "roi_devig": 0.24594023694433204,
+            "roi": 0.24594023694433204
+          },
+          "default": {
+            "thresholds": {
+              "totals_mu_threshold": 1.0,
+              "h2h_magnitude_threshold": 0.12
+            },
+            "n_games": 621,
+            "n_pushes": 0,
+            "bet": {
+              "n_bets": 448,
+              "wins": 294,
+              "losses": 154,
+              "win_rate": 0.65625,
+              "profit": 12460.0,
+              "roi_110": 0.2528409090909091,
+              "roi_devig": 0.2208026455552796,
+              "bet_rate": 0.7214170692431562
+            },
+            "no_bet": {
+              "n": 173,
+              "h2h_model_brier": 0.18341299895991534,
+              "h2h_market_brier": 0.18040288352393116,
+              "h2h_n": 173
+            },
+            "h2h": {
+              "n_games": 621,
+              "all_n_bets": 448,
+              "all_wins": 294,
+              "all_losses": 154,
+              "all_win_rate": 0.65625,
+              "all_profit": 12460.0,
+              "all_roi_110": 0.2528409090909091,
+              "all_roi_devig": 0.2208026455552796,
+              "direction_flip": {
+                "n_bets": 207,
+                "wins": 91,
+                "losses": 116,
+                "win_rate": 0.4396135265700483,
+                "profit": -3660.0,
+                "roi_110": -0.16073781291172595,
+                "roi_devig": 0.186782594481189
+              },
+              "magnitude": {
+                "n_bets": 241,
+                "wins": 203,
+                "losses": 38,
+                "win_rate": 0.8423236514522822,
+                "profit": 16120.0,
+                "roi_110": 0.6080724254998114,
+                "roi_devig": 0.250023187349208
+              }
+            }
+          }
+        }
+      },
+      "challenger": {
+        "nll": 0.5958047739104375,
+        "ece": 0.043014524725581316,
+        "calib_in_large": 0.0029090597478922398,
+        "brier_model": 0.20440917603368425,
+        "blended_brier": 0.18199693741517217,
+        "mean_p": 0.5150302718691043,
+        "layer4": {
+          "sweep": {
+            "table": [
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.05,
+                "n_bets": 547,
+                "bet_rate": 0.8808373590982287,
+                "win_rate": 0.6745886654478976,
+                "roi_110": 0.28785108858235003,
+                "roi_devig": 0.19709210048316167,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.08,
+                "n_bets": 492,
+                "bet_rate": 0.7922705314009661,
+                "win_rate": 0.6666666666666666,
+                "roi_110": 0.2727272727272727,
+                "roi_devig": 0.20084843822131052,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.1,
+                "n_bets": 460,
+                "bet_rate": 0.7407407407407407,
+                "win_rate": 0.6673913043478261,
+                "roi_110": 0.2741106719367589,
+                "roi_devig": 0.2129118829280984,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.12,
+                "n_bets": 437,
+                "bet_rate": 0.7037037037037037,
+                "win_rate": 0.6544622425629291,
+                "roi_110": 0.2494279176201373,
+                "roi_devig": 0.20515092547059383,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.15,
+                "n_bets": 386,
+                "bet_rate": 0.6215780998389694,
+                "win_rate": 0.6347150259067358,
+                "roi_110": 0.21172868582195006,
+                "roi_devig": 0.21216249051158176,
+                "reliable": true
+              },
+              {
+                "totals_threshold": 1.0,
+                "h2h_threshold": 0.2,
+                "n_bets": 322,
+                "bet_rate": 0.5185185185185185,
+                "win_rate": 0.6149068322981367,
+                "roi_110": 0.17391304347826086,
+                "roi_devig": 0.23562220175755694,
+                "reliable": true
+              }
+            ],
+            "optimal": {
+              "totals_threshold": 1.0,
+              "h2h_threshold": 0.2,
+              "n_bets": 322,
+              "bet_rate": 0.5185185185185185,
+              "win_rate": 0.6149068322981367,
+              "roi_110": 0.17391304347826086,
+              "roi_devig": 0.23562220175755694,
+              "reliable": true
+            },
+            "gate_metric": "roi_devig",
+            "min_bets_reliable": 50,
+            "markets": [
+              "h2h"
+            ]
+          },
+          "verdict": {
+            "passed": true,
+            "gate_metric": "roi_devig",
+            "optimal_totals_threshold": 1.0,
+            "optimal_h2h_threshold": 0.2,
+            "n_bets": 322,
+            "win_rate": 0.6149068322981367,
+            "roi_110": 0.17391304347826086,
+            "roi_devig": 0.23562220175755694,
+            "roi": 0.23562220175755694
+          },
+          "default": {
+            "thresholds": {
+              "totals_mu_threshold": 1.0,
+              "h2h_magnitude_threshold": 0.12
+            },
+            "n_games": 621,
+            "n_pushes": 0,
+            "bet": {
+              "n_bets": 437,
+              "wins": 286,
+              "losses": 151,
+              "win_rate": 0.6544622425629291,
+              "profit": 11990.0,
+              "roi_110": 0.2494279176201373,
+              "roi_devig": 0.20515092547059383,
+              "bet_rate": 0.7037037037037037
+            },
+            "no_bet": {
+              "n": 184,
+              "h2h_model_brier": 0.19035980804280128,
+              "h2h_market_brier": 0.18977974180994228,
+              "h2h_n": 184
+            },
+            "h2h": {
+              "n_games": 621,
+              "all_n_bets": 437,
+              "all_wins": 286,
+              "all_losses": 151,
+              "all_win_rate": 0.6544622425629291,
+              "all_profit": 11990.0,
+              "all_roi_110": 0.2494279176201373,
+              "all_roi_devig": 0.20515092547059383,
+              "direction_flip": {
+                "n_bets": 206,
+                "wins": 90,
+                "losses": 116,
+                "win_rate": 0.4368932038834951,
+                "profit": -3760.0,
+                "roi_110": -0.16593115622241836,
+                "roi_devig": 0.17836492932347087
+              },
+              "magnitude": {
+                "n_bets": 231,
+                "wins": 196,
+                "losses": 35,
+                "win_rate": 0.8484848484848485,
+                "profit": 15750.0,
+                "roi_110": 0.6198347107438017,
+                "roi_devig": 0.22903800428577709
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "gates": {
+    "champion": {
+      "L1 NLL < prior (base-rate)": true,
+      "L2 ECE <= 0.05": false,
+      "L3 Brier(blended) < prior-naive": true,
+      "L3 Brier(blended) < market": false,
+      "L4 selective roi_devig>0 & n>=50": true
+    },
+    "challenger": {
+      "L1 NLL < prior (base-rate)": true,
+      "L2 ECE <= 0.05": true,
+      "L3 Brier(blended) < prior-naive": true,
+      "L3 Brier(blended) < market": false,
+      "L4 selective roi_devig>0 & n>=50": true
+    },
+    "market_quality": {
+      "Bovada market Brier <= 0.235": true
+    },
+    "head_to_head": {
+      "challenger NLL < champion": false,
+      "challenger Brier(blended) < champion": false
+    }
+  },
+  "layer4_selective_strategy": {
+    "champion": {
+      "sweep": {
+        "table": [
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.05,
+            "n_bets": 546,
+            "bet_rate": 0.8792270531400966,
+            "win_rate": 0.6703296703296703,
+            "roi_110": 0.27972027972027974,
+            "roi_devig": 0.20019087590142942,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.08,
+            "n_bets": 506,
+            "bet_rate": 0.8148148148148148,
+            "win_rate": 0.6699604743083004,
+            "roi_110": 0.27901545095220986,
+            "roi_devig": 0.21234936325693307,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.1,
+            "n_bets": 478,
+            "bet_rate": 0.7697262479871175,
+            "win_rate": 0.6631799163179917,
+            "roi_110": 0.26607074933434766,
+            "roi_devig": 0.21763491668838675,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.12,
+            "n_bets": 448,
+            "bet_rate": 0.7214170692431562,
+            "win_rate": 0.65625,
+            "roi_110": 0.2528409090909091,
+            "roi_devig": 0.2208026455552796,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.15,
+            "n_bets": 400,
+            "bet_rate": 0.644122383252818,
+            "win_rate": 0.64,
+            "roi_110": 0.22181818181818183,
+            "roi_devig": 0.23145604509554307,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.2,
+            "n_bets": 321,
+            "bet_rate": 0.5169082125603864,
+            "win_rate": 0.6043613707165109,
+            "roi_110": 0.15378079864061173,
+            "roi_devig": 0.24594023694433204,
+            "reliable": true
+          }
+        ],
+        "optimal": {
+          "totals_threshold": 1.0,
+          "h2h_threshold": 0.2,
+          "n_bets": 321,
+          "bet_rate": 0.5169082125603864,
+          "win_rate": 0.6043613707165109,
+          "roi_110": 0.15378079864061173,
+          "roi_devig": 0.24594023694433204,
+          "reliable": true
+        },
+        "gate_metric": "roi_devig",
+        "min_bets_reliable": 50,
+        "markets": [
+          "h2h"
+        ]
+      },
+      "verdict": {
+        "passed": true,
+        "gate_metric": "roi_devig",
+        "optimal_totals_threshold": 1.0,
+        "optimal_h2h_threshold": 0.2,
+        "n_bets": 321,
+        "win_rate": 0.6043613707165109,
+        "roi_110": 0.15378079864061173,
+        "roi_devig": 0.24594023694433204,
+        "roi": 0.24594023694433204
+      },
+      "default": {
+        "thresholds": {
+          "totals_mu_threshold": 1.0,
+          "h2h_magnitude_threshold": 0.12
+        },
+        "n_games": 621,
+        "n_pushes": 0,
+        "bet": {
+          "n_bets": 448,
+          "wins": 294,
+          "losses": 154,
+          "win_rate": 0.65625,
+          "profit": 12460.0,
+          "roi_110": 0.2528409090909091,
+          "roi_devig": 0.2208026455552796,
+          "bet_rate": 0.7214170692431562
+        },
+        "no_bet": {
+          "n": 173,
+          "h2h_model_brier": 0.18341299895991534,
+          "h2h_market_brier": 0.18040288352393116,
+          "h2h_n": 173
+        },
+        "h2h": {
+          "n_games": 621,
+          "all_n_bets": 448,
+          "all_wins": 294,
+          "all_losses": 154,
+          "all_win_rate": 0.65625,
+          "all_profit": 12460.0,
+          "all_roi_110": 0.2528409090909091,
+          "all_roi_devig": 0.2208026455552796,
+          "direction_flip": {
+            "n_bets": 207,
+            "wins": 91,
+            "losses": 116,
+            "win_rate": 0.4396135265700483,
+            "profit": -3660.0,
+            "roi_110": -0.16073781291172595,
+            "roi_devig": 0.186782594481189
+          },
+          "magnitude": {
+            "n_bets": 241,
+            "wins": 203,
+            "losses": 38,
+            "win_rate": 0.8423236514522822,
+            "profit": 16120.0,
+            "roi_110": 0.6080724254998114,
+            "roi_devig": 0.250023187349208
+          }
+        }
+      }
+    },
+    "challenger": {
+      "sweep": {
+        "table": [
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.05,
+            "n_bets": 547,
+            "bet_rate": 0.8808373590982287,
+            "win_rate": 0.6745886654478976,
+            "roi_110": 0.28785108858235003,
+            "roi_devig": 0.19709210048316167,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.08,
+            "n_bets": 492,
+            "bet_rate": 0.7922705314009661,
+            "win_rate": 0.6666666666666666,
+            "roi_110": 0.2727272727272727,
+            "roi_devig": 0.20084843822131052,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.1,
+            "n_bets": 460,
+            "bet_rate": 0.7407407407407407,
+            "win_rate": 0.6673913043478261,
+            "roi_110": 0.2741106719367589,
+            "roi_devig": 0.2129118829280984,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.12,
+            "n_bets": 437,
+            "bet_rate": 0.7037037037037037,
+            "win_rate": 0.6544622425629291,
+            "roi_110": 0.2494279176201373,
+            "roi_devig": 0.20515092547059383,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.15,
+            "n_bets": 386,
+            "bet_rate": 0.6215780998389694,
+            "win_rate": 0.6347150259067358,
+            "roi_110": 0.21172868582195006,
+            "roi_devig": 0.21216249051158176,
+            "reliable": true
+          },
+          {
+            "totals_threshold": 1.0,
+            "h2h_threshold": 0.2,
+            "n_bets": 322,
+            "bet_rate": 0.5185185185185185,
+            "win_rate": 0.6149068322981367,
+            "roi_110": 0.17391304347826086,
+            "roi_devig": 0.23562220175755694,
+            "reliable": true
+          }
+        ],
+        "optimal": {
+          "totals_threshold": 1.0,
+          "h2h_threshold": 0.2,
+          "n_bets": 322,
+          "bet_rate": 0.5185185185185185,
+          "win_rate": 0.6149068322981367,
+          "roi_110": 0.17391304347826086,
+          "roi_devig": 0.23562220175755694,
+          "reliable": true
+        },
+        "gate_metric": "roi_devig",
+        "min_bets_reliable": 50,
+        "markets": [
+          "h2h"
+        ]
+      },
+      "verdict": {
+        "passed": true,
+        "gate_metric": "roi_devig",
+        "optimal_totals_threshold": 1.0,
+        "optimal_h2h_threshold": 0.2,
+        "n_bets": 322,
+        "win_rate": 0.6149068322981367,
+        "roi_110": 0.17391304347826086,
+        "roi_devig": 0.23562220175755694,
+        "roi": 0.23562220175755694
+      },
+      "default": {
+        "thresholds": {
+          "totals_mu_threshold": 1.0,
+          "h2h_magnitude_threshold": 0.12
+        },
+        "n_games": 621,
+        "n_pushes": 0,
+        "bet": {
+          "n_bets": 437,
+          "wins": 286,
+          "losses": 151,
+          "win_rate": 0.6544622425629291,
+          "profit": 11990.0,
+          "roi_110": 0.2494279176201373,
+          "roi_devig": 0.20515092547059383,
+          "bet_rate": 0.7037037037037037
+        },
+        "no_bet": {
+          "n": 184,
+          "h2h_model_brier": 0.19035980804280128,
+          "h2h_market_brier": 0.18977974180994228,
+          "h2h_n": 184
+        },
+        "h2h": {
+          "n_games": 621,
+          "all_n_bets": 437,
+          "all_wins": 286,
+          "all_losses": 151,
+          "all_win_rate": 0.6544622425629291,
+          "all_profit": 11990.0,
+          "all_roi_110": 0.2494279176201373,
+          "all_roi_devig": 0.20515092547059383,
+          "direction_flip": {
+            "n_bets": 206,
+            "wins": 90,
+            "losses": 116,
+            "win_rate": 0.4368932038834951,
+            "profit": -3760.0,
+            "roi_110": -0.16593115622241836,
+            "roi_devig": 0.17836492932347087
+          },
+          "magnitude": {
+            "n_bets": 231,
+            "wins": 196,
+            "losses": 35,
+            "win_rate": 0.8484848484848485,
+            "profit": 15750.0,
+            "roi_110": 0.6198347107438017,
+            "roi_devig": 0.22903800428577709
+          }
+        }
+      }
+    }
+  }
+}

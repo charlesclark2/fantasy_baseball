@@ -744,7 +744,8 @@ def main() -> None:
     def _registry_feat_cols(target: str) -> list[str]:
         path = PROJECT_ROOT / _registry[target]["feature_columns_path"]
         with open(path) as _f:
-            return json.load(_f)
+            raw = json.load(_f)
+        return raw["feature_cols"] if isinstance(raw, dict) else raw
 
     ngb_tot_dist  = _registry["total_runs"]["dist"]
     ngb_diff_dist = _registry["run_differential"]["dist"]

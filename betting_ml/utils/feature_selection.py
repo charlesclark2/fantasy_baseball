@@ -52,6 +52,26 @@ EXCLUDED_FEATURES: frozenset[str] = frozenset(
 )
 
 # Per Card 3.11: consensus odds features confirmed signal-bearing (Brier = 0.2395).
+# Epic 16 sequential posterior features — force-retained for the
+# sequential-enriched retrain. Parallel to their static counterparts
+# (avg_eb_woba, *_starter_eb_xwoba_against, team off/bullpen/win), so the
+# multicollinearity filter (r > 0.85 with the static cols) would otherwise
+# drop them. Protected = unconditionally retained. Exposed as a named tuple so
+# the production retrain can build a faithful no-sequential ("nonseq") baseline
+# — the documented 369-feature champion — by excluding exactly this set.
+SEQUENTIAL_POSTERIOR_FEATURES: tuple[str, ...] = (
+    "home_team_sequential_woba",
+    "away_team_sequential_woba",
+    "home_team_sequential_bullpen_xwoba",
+    "away_team_sequential_bullpen_xwoba",
+    "home_team_sequential_win_prob",
+    "away_team_sequential_win_prob",
+    "home_avg_eb_woba_sequential",
+    "away_avg_eb_woba_sequential",
+    "home_starter_eb_xwoba_against_sequential",
+    "away_starter_eb_xwoba_against_sequential",
+)
+
 # Retain unconditionally so they survive the near-zero-correlation filter even for
 # seasons with no odds coverage (low computed r due to 63% null rate).
 PROTECTED_FEATURES: frozenset[str] = frozenset(
@@ -64,6 +84,7 @@ PROTECTED_FEATURES: frozenset[str] = frozenset(
         "over_prob_consensus",
         "ml_consensus_std",
         "market_bookmaker_count",
+        *SEQUENTIAL_POSTERIOR_FEATURES,
     }
 )
 

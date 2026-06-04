@@ -30,7 +30,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.scripts.train_run_diff_prod import _MARKET_COLS_TO_EXCLUDE
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
-from betting_ml.utils.feature_selection import load_retained_features
+from betting_ml.utils.feature_selection import (
+    SEQUENTIAL_POSTERIOR_FEATURES,
+    load_retained_features,
+)
+from betting_ml.utils.mlflow_utils import log_search_run
 from betting_ml.utils.model_io import save_model
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 
@@ -73,8 +77,10 @@ def _prepare_folds(df, feature_cols: list[str]) -> list[dict]:
     return folds
 
 
-def run_search() -> None:
+def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) -> None:
     from ngboost import NGBRegressor
+
+    model_name = "ngboost_nonseq" if exclude_sequential else "ngboost_tuned"
 
     print("Loading features from Snowflake...")
     df = load_features()
@@ -88,8 +94,15 @@ def run_search() -> None:
     missing = [f for f in retained if f not in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
     if missing:
         print(f"WARNING: {len(missing)} retained features absent from DataFrame (skipped): {missing[:5]}")
-    print(f"Using {len(feature_cols)} features (market-blind)")
     market_removed = [f for f in retained if f in _MARKET_COLS_TO_EXCLUDE]
+    if exclude_sequential:
+        seq_removed = [f for f in feature_cols if f in set(SEQUENTIAL_POSTERIOR_FEATURES)]
+        feature_cols = [f for f in feature_cols if f not in set(SEQUENTIAL_POSTERIOR_FEATURES)]
+        print(
+            f"--exclude-sequential: dropped {len(seq_removed)} sequential cols "
+            f"→ faithful no-sequential baseline (documented champion). model_name={model_name}"
+        )
+    print(f"Using {len(feature_cols)} features (market-blind)")
     print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
 
     print("Preparing imputed CV folds...")
@@ -159,10 +172,52 @@ def run_search() -> None:
     model_path = save_model(
         ngb_best,
         target="run_differential",
-        model_name="ngboost_tuned",
+        model_name=model_name,
         eval_year=last_eval_year,
     )
-    print(f"  run_differential/ngboost_tuned → {model_path}")
+    print(f"  run_differential/{model_name} → {model_path}")
+
+    cols_path = Path(model_path).with_name(f"feature_columns_{model_name}_{last_eval_year}.json")
+    with open(cols_path, "w") as f:
+        json.dump(
+            {
+                "target": "run_differential",
+                "model_name": model_name,
+                "eval_year": last_eval_year,
+                "exclude_sequential": exclude_sequential,
+                "n_features": len(feature_cols),
+                "feature_cols": feature_cols,
+            },
+            f,
+            indent=2,
+        )
+    print(f"  feature contract → {cols_path}")
+
+    mlflow_run_id = log_search_run(
+        experiment="production_retrain",
+        run_name=f"run_differential_{model_name}_{last_eval_year}",
+        params={
+            "target": "run_differential",
+            "architecture": "ngboost_normal",
+            "model_name": model_name,
+            "exclude_sequential": exclude_sequential,
+            "n_features": len(feature_cols),
+            "n_rows": len(df),
+            "n_seasons": int(df["game_year"].nunique()),
+            "eval_year": last_eval_year,
+            "best_n_estimators": best_n_est,
+            "best_dist": best_dist_name,
+        },
+        metrics={"cv_mae": best_cv_mae},
+        tags={
+            "sequential_enriched": str(not exclude_sequential),
+            "role": "challenger" if not exclude_sequential else "documented_champion_repro",
+        },
+        artifacts=[model_path, str(cols_path)],
+        enabled=mlflow_enabled,
+    )
+    if mlflow_run_id:
+        print(f"  MLflow run_id: {mlflow_run_id}")
 
     results = {
         "target": "run_differential",
@@ -171,10 +226,12 @@ def run_search() -> None:
         "best_n_estimators": best_n_est,
         "best_dist": best_dist_name,
         "best_cv_mae": best_cv_mae,
+        "exclude_sequential": exclude_sequential,
+        "mlflow_run_id": mlflow_run_id,
         "persisted_models": [
             {
                 "target": "run_differential",
-                "model_name": "ngboost_tuned",
+                "model_name": model_name,
                 "eval_year": last_eval_year,
                 "path": model_path,
             }
@@ -316,4 +373,7 @@ if __name__ == "__main__":
     if "--report-only" in sys.argv:
         generate_report()
     else:
-        run_search()
+        run_search(
+            exclude_sequential="--exclude-sequential" in sys.argv,
+            mlflow_enabled="--no-mlflow" not in sys.argv,
+        )

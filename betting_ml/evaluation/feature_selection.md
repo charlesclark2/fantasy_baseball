@@ -389,8 +389,26 @@ features may be passed to `fit()` calls in downstream model cards.
 | `post_2022_rules` * | 0.0143 | +0.0052 | -0.0143 | -0.0126 |
 | `game_year` * | 0.0118 | -0.0112 | -0.0118 | -0.0087 |
 | `ml_consensus_std` * | 0.0030 | -0.0001 | -0.0030 | +0.0009 |
+| `home_team_sequential_woba` * | — | — | — | — |
+| `away_team_sequential_woba` * | — | — | — | — |
+| `home_team_sequential_bullpen_xwoba` * | — | — | — | — |
+| `away_team_sequential_bullpen_xwoba` * | — | — | — | — |
+| `home_team_sequential_win_prob` * | — | — | — | — |
+| `away_team_sequential_win_prob` * | — | — | — | — |
+| `home_avg_eb_woba_sequential` * | — | — | — | — |
+| `away_avg_eb_woba_sequential` * | — | — | — | — |
+| `home_starter_eb_xwoba_against_sequential` * | — | — | — | — |
+| `away_starter_eb_xwoba_against_sequential` * | — | — | — | — |
 
 _\* Protected feature — retained regardless of correlation._
+
+_Epic 16 sequential posterior features (10, marked \*) are force-retained as the
+target of the sequential-enriched retrain. They are intentionally parallel to their
+static counterparts (`avg_eb_woba`, `*_starter_eb_xwoba_against`, team off/bullpen/win)
+and would be dropped by the multicollinearity filter if `validate_feature_selection.py`
+regenerated this list — hence they are also in `PROTECTED_FEATURES` in
+`betting_ml/utils/feature_selection.py`. r-values are deferred until the feature
+matrix is rebuilt with these columns (Prereq P2)._
 
 ---
 

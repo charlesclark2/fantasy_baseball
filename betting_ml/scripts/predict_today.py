@@ -166,7 +166,8 @@ def _build_feature_matrix(
     feat_path = _registry_feature_columns_path(entry, model_tag)
 
     if feat_path is not None and feat_path.exists():
-        feature_cols = json.loads(feat_path.read_text())
+        raw_json = json.loads(feat_path.read_text())
+        feature_cols = raw_json["feature_cols"] if isinstance(raw_json, dict) else raw_json
         missing = set(feature_cols) - set(df_raw.columns)
         if missing:
             warnings.warn(

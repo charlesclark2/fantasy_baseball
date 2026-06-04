@@ -32,17 +32,20 @@ FROM (
                WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
                ELSE 'provisional_pre_lineup'
            END AS prediction_basis,
-           -- Prefer the most lineup-aware prediction per game, NOT just the most
-           -- recently inserted: post_lineup (confirmed lineups + starter EB) beats a
-           -- pre-lineup pass, which beats an intraday-fallback (blind to lineups/
-           -- starters). Recency only breaks ties within the same basis.
+           -- Priority: post_lineup (4) > morning-with-odds (3) > fallback-with-odds (2)
+           -- > morning-no-odds (1) > fallback-no-odds (0). Recency breaks ties.
+           -- Rows with odds beat same-tier rows without so a morning run that missed
+           -- Bovada lines (e.g. team-name mismatch at ingest) loses to a fallback
+           -- refresh that did pick up the odds.
            ROW_NUMBER() OVER (
                PARTITION BY game_pk
                ORDER BY
                    CASE
-                       WHEN prediction_type = 'post_lineup'                 THEN 2
-                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-                       ELSE 1
+                       WHEN prediction_type = 'post_lineup'                                          THEN 4
+                       WHEN COALESCE(data_source, '') != 'intraday_fallback' AND has_odds = TRUE     THEN 3
+                       WHEN has_odds = TRUE                                                          THEN 2
+                       WHEN COALESCE(data_source, '') != 'intraday_fallback'                        THEN 1
+                       ELSE 0
                    END DESC,
                    inserted_at DESC
            ) AS _rn
@@ -336,7 +339,7 @@ st.title(title)
 _DBT_BIN = str(Path.home() / ".local" / "bin" / "dbt")
 _DBT_DIR = str(_PROJECT_ROOT / "dbt")
 
-col_r1, col_r2 = st.columns([1, 1])
+col_r1, col_r2, col_r3 = st.columns([1, 1, 1])
 with col_r1:
     if st.button("Refresh Predictions"):
         with st.spinner("Running predict_today.py…"):
@@ -483,6 +486,31 @@ with col_r2:
                         else:
                             _date_label = "Historical odds and predictions" if _is_historical else "Lineups, odds, and predictions"
                             st.success(f"{_date_label} refreshed.")
+
+with col_r3:
+    if st.button("Score Confirmed Lineups", help="Write post_lineup predictions for today's confirmed-lineup games (🟢 source). Equivalent to the Dagster lineup-sensor job."):
+        with st.spinner("Running post-lineup score…"):
+            _r = subprocess.run(
+                ["uv", "run", "python", "scripts/predict_today.py",
+                 "--prediction-type", "post_lineup",
+                 "--date", date_str],
+                capture_output=True,
+                text=True,
+                cwd=str(_PROJECT_ROOT),
+            )
+        st.cache_data.clear()
+        if _r.returncode == 0:
+            _no_games = (
+                "No games found" in _r.stdout
+                or "No games with confirmed lineups" in _r.stdout
+            )
+            if _no_games:
+                st.warning("No confirmed lineups found — post_lineup predictions not written.")
+            else:
+                st.success("Post-lineup predictions written. Bets with confirmed lineups now show 🟢.")
+        else:
+            st.error(f"Post-lineup score failed (exit {_r.returncode})")
+            st.code(_r.stderr, language="text")
 
 # ---------------------------------------------------------------------------
 # Load data
