@@ -4,6 +4,7 @@ from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
     check_data_freshness,
     check_prediction_coverage,
+    compute_eb_bullpen_posteriors_op,
     compute_elo,
     compute_model_health,
     dbt_daily_build,
@@ -90,10 +91,16 @@ def daily_ingestion_job():
     s16d = update_lineup_state_scd2(start=s16c)
     s16e = dbt_lineup_feature_rebuild(start=s16d)
     s17 = ingest_umpires_late(start=s16e)
+    # Epic 6A — refresh yesterday's EB bullpen posteriors (eb_bullpen_posteriors +
+    # eb_bullpen_team_posteriors) BEFORE the sequential team update, whose
+    # bullpen_xwoba branch reads eb_bullpen_posteriors for reliever-PA membership,
+    # and before dbt_umpire_feature_rebuild, which rebuilds the bullpen features.
+    # Missing op was the cause of the 2026-05-29 bullpen-seq / champion-bullpen stall.
+    eb_bullpen = compute_eb_bullpen_posteriors_op(start=s17)
     # Epic O.4 / 16.4 — advance yesterday's sequential posteriors after pitch data
     # (dbt_daily_build) lands and before feature_pregame_game_features is rebuilt
     # in dbt_umpire_feature_rebuild, so it picks up the fresh team posteriors.
-    p_player  = update_player_posteriors_op(start=s17)
+    p_player  = update_player_posteriors_op(start=eb_bullpen)
     p_team    = update_team_posteriors_op(start=p_player)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
     s18 = dbt_umpire_feature_rebuild(start=p_matchup)

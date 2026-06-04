@@ -322,10 +322,30 @@ def signal_freshness_check(context):
 # missing day. The scripts are NOT idempotent per-date (re-running a chained date
 # double-counts the observation), so a fixed single date is required; a missed day
 # is recovered via `--backfill --season`. Off-days no-op gracefully (0 games → 0
-# rows). The team bullpen_xwoba metric lags eb_bullpen_posteriors (off_xwoba +
-# win_prob still update). See project_epic16_status memory.
+# rows).
+#
+# The team bullpen_xwoba metric depends on eb_bullpen_posteriors (reliever-PA
+# membership), which is produced by compute_bullpen_posteriors.py (Epic 6A) — NOT
+# by any sequential script. That refresh was never wired into this job, so
+# eb_bullpen_posteriors / eb_bullpen_team_posteriors went stale (last 2026-05-28)
+# while off_xwoba + win_prob kept advancing, leaving the team bullpen-seq feature
+# AND the deployed champion's team_eb_bullpen_xwoba imputed on live games. Fixed by
+# compute_eb_bullpen_posteriors_op below, which MUST run before
+# update_team_posteriors_op (bullpen branch reads it) and before the
+# dbt_umpire_feature_rebuild that rebuilds feature_pregame_game_features. The script
+# MERGE-upserts both tables, so a daily --game-date is idempotent/re-runnable.
 
 _SEQ_DIR = "/app/betting_ml/scripts/sequential_bayes"
+_EB_DIR = "/app/betting_ml/scripts/eb_priors"
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def compute_eb_bullpen_posteriors_op(context):
+    _run_script(
+        context,
+        f"{_EB_DIR}/compute_bullpen_posteriors.py",
+        ["--game-date", _one_day_ago()],
+    )
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

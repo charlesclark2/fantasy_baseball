@@ -391,8 +391,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
 │ Epic 10  Totals Distribution Model          🟢 UNBLOCKED (Epic 9 complete)   │
 │   10.1 ✅  10.2 ✅  10.3 ✅  10.4 ✅  10.5 ✅  10.6 ✅  10.7 🔒                │
-│ Epic 11  H2H Model Retrain                  🔒 Blocked on Epic 9             │
-│   11.1 ⬜  11.2 ⬜  11.3 ⬜  11.4 ⬜  11.5 ⬜  11.6 ⬜  11.7 ⬜                │
+│ Epic 11  H2H Model Retrain                  ⏳ Eval-pending (no edge vs mkt) │
+│   11.1 ✅  11.2 ✅  11.3 ✅  11.L ✅  11.4–11.6 ⬜  11.7 ⏳ (see Epic 26.4)  │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -415,15 +415,19 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   19.3 Backtest                      ⏳ Gate: ≥50 live CLV games             │
 │   19.4 EV Tracker update             🔒 Blocked on 19.3                      │
 │   19.5 game_conviction_score         🔒 Blocked on 19.3                      │
+│                                                                              │
+│ Epic 26  Layer 4 Selective-Strategy Eval & Live Bet Attribution              │
+│   26.1 module ✅  26.2 harness integ ✅  26.3 totals sweep ✅                │
+│   26.4 H2H roi_devig ✅  26.5 live attribution → predict_today ✅            │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ TRACK D — Advanced Bayesian Inference (after Track B sub-models complete)    │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Epic 16  Sequential Prior Update Engine     ⬜ Unblocked (5A ✅ 2026-05-31)  │
-│   (4A ✅, 5A ✅, 6A.1–6A.3 ✅ — all gates met; ready to start)              │
-│   16.1 Post-game posterior persistence ⬜  16.2 Inject into inference ⬜     │
-│   16.3 Team-level sequential beliefs ⬜                                       │
+│ Epic 16  Sequential Prior Update Engine     ✅ 16.1–16.6 (retrain in eval)   │
+│   16.1 posteriors ✅  16.2 inject ✅  16.3 team ✅  16.4 Dagster fold-in ✅  │
+│   16.5 Prod retrain (seq + nonseq champ, MLflow, sidecars) ✅ framework      │
+│   16.6 3-layer Bayesian harness ✅  (gated run pending retrains)             │
 │                                                                              │
 │ Epic 17  Posterior Distribution Propagation 🔒 Blocked on Epics 3–6 + 16    │
 │   17.1 PyMC hierarchical run scoring ⬜  17.2 Win prob from distributions ⬜  │
@@ -4448,6 +4452,26 @@ Acceptance criteria:
 - [x] Role-quality monotonicity check passes for all seasons
 - [x] `no_prior_season` role uses age-band-only prior; fallback documented
 
+> ⚠️ **Season-start operational reminder — `fit_bullpen_priors.py` is NOT wired into Dagster.**
+> It is a once-per-season manual step that writes the git-tracked
+> `betting_ml/models/eb_priors/bullpen_priors_{season}.json`. The **daily** job's
+> `compute_eb_bullpen_posteriors_op` (which refreshes `eb_bullpen_posteriors` +
+> `eb_bullpen_team_posteriors`) reads that JSON and will hard-fail if it is missing for the
+> current season. **At the start of each new season, run
+> `uv run python betting_ml/scripts/eb_priors/fit_bullpen_priors.py --season <YEAR>` and commit the
+> resulting JSON before opening day.** (Context: the daily `compute_eb_bullpen_posteriors_op` itself
+> was missing entirely until 2026-06-04 — see the 6A freshness note below — so its prior dependency
+> had never been exercised on the daily schedule.)
+
+**Daily-job dependency (added 2026-06-04):** `compute_bullpen_posteriors.py` is run daily by
+`compute_eb_bullpen_posteriors_op` in `pipeline/jobs/daily_ingestion_job.py`, sequenced after
+`ingest_umpires_late` and before `update_player/team_posteriors_op` + `dbt_umpire_feature_rebuild`.
+Before this op existed, nothing refreshed the EB bullpen posteriors on schedule: the tables froze at
+the last manual run (2026-05-28), which silently imputed both the deployed champion's
+`team_eb_bullpen_xwoba` and the Epic 16.3 team bullpen-seq feature on every live game from 5/29 on
+(off_xwoba/win_prob kept advancing, masking it). Surfaced by the Epic 16 sequential-retrain
+spot-check.
+
 ---
 
 ### 6A.2 — Compute posterior estimates per reliever-game ✅ complete
@@ -5916,7 +5940,7 @@ Acceptance criteria:
 
 ### 10.7 — Integration into daily pipeline
 
-**Status:** 🔒 BLOCKED — NOT RUNNING. **Epic 10 concluded 2026-06-02 with totals PAUSED, not promoted.** The 10.6 shadow verdict, then the post-10.6 investigation, established that **neither totals model (Layer 3 challenger nor production v4) beats naive or the market on 2026** — a persistent OVER bias against a within-season scoring regime the market-blind models can't track (regime-adaptation; the matchup-drop ablation ruled out a 7.M cluster-mismatch). `total_runs.bet_paused: true` is set in `model_registry.yaml`; the Epic 19 permission gate must surface **no totals bets** until a totals model beats naive on the current season. 10.7 does not run; v4 remains the nominal totals source but its bets are gated off. Revisit with full-season data or a recency-aware / market-anchored redesign. Evidence: `ablation_results/totals_2026_failure_analysis.md`.
+**Status:** 🔒 BLOCKED — NOT RUNNING. **Epic 10 concluded 2026-06-02 with totals PAUSED, not promoted.** The 10.6 shadow verdict, then the post-10.6 investigation, established that **neither totals model (Layer 3 challenger nor production v4) beats naive or the market on 2026** — a persistent OVER bias against a within-season scoring regime the market-blind models can't track (regime-adaptation; the matchup-drop ablation ruled out a 7.M cluster-mismatch). `total_runs.bet_paused: true` is set in `model_registry.yaml`; the Epic 19 permission gate must surface **no totals bets** until a totals model beats naive on the current season. 10.7 does not run; v4 remains the nominal totals source but its bets are gated off. Revisit with full-season data or a recency-aware / market-anchored redesign. Evidence: `ablation_results/totals_2026_failure_analysis.md`. **Reconfirmed by Epic 26.3 (Layer 4 selective strategy, 2026-06-04):** the manual 1-run rule loses at every threshold on the only leakage-free season (2026 roi_110 −4.1% @1.0; the +25–30% on 2023–25 is in-sample contamination) — the totals pause holds.
 
 **Gate:** Story 10.6 returned `PROMOTE` (or a `PROMOTE-WITH-MONITORING` shadow window has since passed on live games). On a `DO NOT PROMOTE` verdict, this story does not run — monolithic remains the production totals source. **(Resolved: 10.6 → shadow, then totals PAUSED — this story is blocked; see Status above.)**
 
@@ -6168,6 +6192,8 @@ Acceptance criteria:
 ---
 
 ### 11.7 — CLV evaluation and production gate
+
+**Status:** ⏸️ EVALUATION-PENDING (not promoted). Per 11.3/11.L the direct H2H classifier shows no edge vs. credible 2026 Bovada lines. **Epic 26.4 (Layer 4 selective strategy, 2026-06-04) reconfirmed this on a fresh leakage-free walk-forward H2H surface (`oos_predictions_h2h_v2.parquet`, priced at de-vigged fair odds):** the contrarian **direction_flip rule is dead on 2026** (win 0.399, roi_devig +0.13 vig-free upper bound), and the only positive signal — **magnitude, roi_devig +0.197** — is vig-free, small-sample (n=230), and merely the model being underconfident on chalk it agrees with the market on (not a contrarian edge). The 2024–25 "wins" are degraded-line artifacts. H2H stays evaluation-pending; the live attribution surface (Epic 26.5) on real book prices is now the gating instrument, not further backtests.
 
 **Overview:** Run live predictions for 30+ games post-promotion and compute mean CLV for H2H bets. This is the final gate before declaring `h2h_v2` the production H2H model. It mirrors the CLV gate structure from Epic 1 Story 1.7 but uses the Layer 3 model's outputs.
 
@@ -7566,7 +7592,9 @@ Acceptance Criteria:
 
 ---
 
-### 16.1 — Post-game posterior persistence
+### 16.1 — Post-game posterior persistence ✅ COMPLETE (2026-06-03)
+
+**Status:** ✅ COMPLETE. `update_player_posteriors.py` built; backfilled ALL seasons 2021–2026 (EB anchors at first appearance, then chains) to avoid train/serve skew. Player sequential posteriors land via the end-of-day op chain (see O.4 fold-in). Coverage verified: batter seq ~99.4%/98.4%, starter seq ~92%/85.6%.
 
 **Script:** `betting_ml/scripts/sequential_bayes/update_player_posteriors.py`
 
@@ -7588,7 +7616,9 @@ Acceptance Criteria:
 
 ---
 
-### 16.2 — Inject sequential posteriors into inference pipeline
+### 16.2 — Inject sequential posteriors into inference pipeline ✅ COMPLETE (2026-06-03)
+
+**Status:** ✅ COMPLETE. `posterior_source` (`sequential` | `season_eb` | `prior_only`) and `prior_age_days` added to the PRODUCTION `scripts/predict_today.py` (game-level provenance via `_load_posterior_provenance()` over the per-player posterior tables; least-informed source wins). Columns added to the `daily_model_predictions` DDL/INSERT with idempotent `ALTER … ADD COLUMN IF NOT EXISTS`. **Note:** production `predict_today` runs during the 12:00 UTC `daily_ingestion_job` (pre-lineup, `prediction_type='morning'`); the lineup-aware refresh is the sensor-triggered `post_lineup` pass — both consume the freshly-chained posteriors written earlier in the same job (O.4).
 
 **Scripts:** Update `predict_today.py` and the EB posterior compute scripts.
 
@@ -7605,7 +7635,9 @@ Acceptance Criteria:
 
 ---
 
-### 16.3 — Team-level sequential belief state
+### 16.3 — Team-level sequential belief state ✅ COMPLETE (2026-06-03)
+
+**Status:** ✅ COMPLETE. `team_sequential_posteriors` built (Normal-Normal off wOBA + bullpen xwOBA, Beta-Binomial win prob), backfilled 2021–2026. The 6 team columns (`home/away_team_sequential_woba`, `_bullpen_xwoba`, `_win_prob`) flow into `feature_pregame_game_features`. Coverage: team woba/win 100%, bullpen ~99%/92% (bullpen lags `eb_bullpen_posteriors`, backfills later). These 6 cols + the 4 player/starter cols (16.1) are the 10 sequential features consumed by the production retrain (Story 16.5).
 
 The same pattern applied to team-level rolling quality signals — team offense, bullpen ERA/xwOBA — rather than individual players. This is less granular but computationally lighter and feeds directly into the run environment and offensive quality sub-models.
 
@@ -7643,6 +7675,65 @@ Acceptance Criteria:
 - [ ] Manual trigger on a day with completed games produces rows in `player_sequential_posteriors` and `team_sequential_posteriors` for yesterday's `game_date` — confirmed via Snowflake MCP
 - [ ] Off-day trigger skips all posterior ops with a logged `SkipReason` — no Snowflake writes, no errors
 - [ ] End-of-day job completes before 05:30 UTC, leaving posteriors current before the 12:00 UTC morning pipeline runs
+
+---
+
+### 16.5 — Production model retrain on the sequential-enriched feature matrix
+
+**Status:** ✅ FRAMEWORK COMPLETE — retrain + 2026 evaluation in progress (2026-06-04). The three production targets — `home_win` (XGBoost+Platt), `run_differential` (NGBoost Normal), `total_runs` (NGBoost) — are retrained on the full `feature_pregame_game_features` matrix now including the **10 Epic-16 sequential columns** (6 team-level from 16.3 + 2 batter-lineup `home/away_avg_eb_woba_sequential` + 2 starter `home/away_starter_eb_xwoba_against_sequential`). Each retrain is a **challenger** to its deployed champion under the Epic 7.M champion-selection framework, promoted only on the three-layer Bayesian rubric (Story 16.6). Per the model-retraining deferral, NGBoost retrains are >1hr each and run as hand-offs.
+
+**Prereqs built (P1–P4):**
+- [x] **dbt feature propagation:** the 10 sequential cols flow through `feature_pregame_lineup_features` (`avg_eb_woba_sequential`) and `feature_pregame_starter_features` (`eb_xwoba_against_sequential`) into `feature_pregame_game_features` (`home/away_*`). Verified populated 2021–2026.
+- [x] **Feature allowlist:** `SEQUENTIAL_POSTERIOR_FEATURES` constant + `PROTECTED_FEATURES` (bypass the r>0.85 multicollinearity filter — they parallel the static counterparts) in `betting_ml/utils/feature_selection.py`; 10 rows added to `feature_selection.md` Retained Features → **377 market-blind features**.
+- [x] **`--exclude-sequential` flag** on all 3 search scripts (`run_xgb_home_win_search.py`, `run_ngboost_run_diff_search.py`, `run_ngboost_total_runs_search.py`): drops the 10 sequential cols → a faithful **no-sequential ("nonseq", 369-feature) baseline** saved under a distinct `model_name` (`*_nonseq`) so it never clobbers the seq challenger (`*_tuned`). The nonseq baseline is BOTH the documented-champion reproduction (16.6) AND the clean ablation baseline (only difference vs. challenger = the 10 sequential cols).
+- [x] **MLflow logging:** `log_search_run()` (`betting_ml/utils/mlflow_utils.py`) records every retrain to the `production_retrain` experiment with `n_features`, the `exclude_sequential` flag, CV metric, a role tag, AND the model `.pkl` + feature-contract sidecar as artifacts — every training run is now recoverable from its run (closes the gap that left the prior deployed champions un-scoreable, see 16.6).
+- [x] **Feature-contract sidecar:** each persisted model writes `feature_columns_<model_name>_<eval_year>.json` with the exact pre-imputation feature list → drift-proof scoring.
+
+**CV results (marginal/mixed — the 2026 OOS Bayesian eval in 16.6 is decisive):** `home_win` CV Brier 0.1983 (champ 0.1985, flat); `run_differential` MAE 3.0958 (champ 3.1041, slight improvement); `total_runs` MAE 3.4118 (champ 3.4008, slight worse).
+
+**Hand-off (each >1 min):**
+```
+uv run python betting_ml/scripts/run_xgb_home_win_search.py --exclude-sequential
+uv run python betting_ml/scripts/run_ngboost_run_diff_search.py --exclude-sequential
+uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequential
+```
+(plus the no-flag seq challengers). Then Story 16.6's harness.
+
+**Acceptance criteria:**
+- [x] 10 sequential cols materialized + populated 2021–2026 in `feature_pregame_game_features`
+- [x] Retrains run at 377 features (seq) / 369 features (nonseq) with MLflow run_id + sidecar emitted
+- [ ] 2026 three-layer Bayesian verdict reported per target (16.6) → promote/hold decision; `model_registry.yaml` updated for any promoted target; alpha re-tuned (`run_probability_layer.py`) for promoted totals/h2h
+
+---
+
+### 16.6 — Three-layer Bayesian production evaluation harness + deployed-champion contract recovery
+
+**Status:** ✅ HARNESS COMPLETE (2026-06-04) — gated run pending the 16.5 retrains. `betting_ml/scripts/evaluate_production_bayesian.py` generalizes the totals-only `evaluate_totals_bayesian.py` to all three production targets on the **2026 OOS fold**, reporting **per-target, independent** verdicts (a home_win win promotes home_win regardless of the others — never bundled).
+
+**Framework (per target):**
+- **Layer 1 — NLL vs. a prior-predictive baseline:** totals/run_diff = discretized-PMF NLL vs. a NegBin / discretized-Normal fit on the 2021–25 training marginal; home_win = log-loss vs. the Bernoulli base-rate.
+- **Layer 2 — calibration:** totals/run_diff = `calib_80` (central-80% interval coverage) gate [0.75, 0.85]; home_win = ECE + calibration-in-the-large.
+- **Layer 3 — deployable blended Brier:** alpha log-odds blend toward Bovada, vs. prior-naive AND market; home_win adds the credible-market gate (Bovada Brier ≤ 0.235).
+- **Layer 4 — selective strategy:** integrated from Epic 26 (gate-aware: totals→roi_110, h2h→roi_devig).
+
+**⚠️ Deployed-champion contract recovery (key finding, user-directed "recover deployed-champion contract"):** the deployed S3 `*_eb_enriched_2026.pkl` champion binaries have **DRIFTED from every record** — the NGBoost binary requires **≥374 features**, but the registry, `feature_columns_eb_2026.json`, `feature_selection.md`@7.M (commit `02b966d`), and MLflow all document **369** (367 base + 2 imputation indicators), and NGBoost stores no feature names → the exact 374-feature contract is **UNRECOVERABLE**. The imputation pipeline adds exactly 2 structural indicators (confirmed), so 369 is the max any documented state produces. **Resolution:** the harness champion is the **faithful 369-feature no-sequential reproduction** (the `*_nonseq` retrain from 16.5), which (a) matches the documented champion spec and (b) IS the clean ablation baseline. Both champion (`*_nonseq`) and challenger (`*_tuned`) are search-script outputs, so the harness scores them **identically** via the proven `_build_challenger_transform` contract (impute the model's own feature set → `.values`), sidestepping the stale-`json` reindex bug that produced the original "index 373 out of bounds" error. This is precisely why 16.5 now mandates MLflow + sidecar logging on every run.
+
+**Output:** `ablation_results/production_bayesian_<target>.md` + `.json` (the JSON carries the `layer4_selective_strategy` block). **Run after the retrains land:** `uv run python betting_ml/scripts/evaluate_production_bayesian.py --target all`.
+
+**Result — 2026 OOS run (2026-06-04, n=646; nonseq champion baseline vs. seq challenger):**
+
+| Target | L1 | L2 | L3<naive | L3<market | L4 | challenger vs champion | **Verdict** |
+|---|:--:|:--:|:--:|:--:|:--:|:--|:--|
+| **run_differential** | ✅ both | ✅ both | n/a | n/a | n/a | NLL 2.7937<2.8076 ✅ | **PROMOTE** (v4-seq) |
+| **home_win** | ✅ both | ✅ both | ✅ both | ❌ both | ✅* | NLL 0.5951<0.6013, raw Brier 0.2042<0.2080 ✅ | **Model upgrade — posture unchanged** (v4-seq) |
+| **total_runs** | ❌ both | ✅ both | ❌ both | ❌ both | ❌ both | NLL tie, blended Brier ❌ | **DO NOT PROMOTE** (pause holds) |
+
+- **run_differential** is the clean win — passes both applicable layers and beats the champion; feeds `p_home_win_ngboost` (50% of the h2h consensus).
+- **home_win** is a strictly better *market-blind model* (NLL/ECE/raw-Brier all improve) but **neither model beats Bovada** (raw 0.204 vs market 0.181; blended==market at α=0). \*Layer 4 (after the raw-prob fix, see Story 26.2) PASSES the roi_devig gate (challenger +0.2555 @ h2h-thr 0.20, n=305) but is **selective-edge-only** — magnitude-driven (chalk; roi_110 +0.64) while direction_flip is dead (roi_110 −0.14), roi_devig is vig-free, and L3-vs-market fails. Same pattern as 26.4 on a 2nd model → not deployable; H2H evaluation-pending.
+- **total_runs** — third independent confirmation of the pause (CV → Layer-4 backtest → this harness); both models fail L1/L3/L4; the 10 sequential cols added nothing.
+- **Net:** the sequential features deliver a modest real model improvement on run_diff + home_win and nothing on totals, and **manufacture no market-beating edge** — totals pause holds, H2H evaluation-pending. Registry updated (`run_differential`/`home_win` → v4-seq; `total_runs` unchanged + pause/unpause fields); **uncommitted pending the prod prerequisite chain.**
+
+**Operational posture (unchanged by this work):** `total_runs.bet_paused: true` and the H2H evaluation-pending flag stay; no automated bets; predictions continue logging with MANUAL REVIEW indicators until the un-pause condition (champion beats prior-predictive NLL AND prior-naive Brier on a rolling 60-game live window) is met.
 
 ---
 
@@ -7739,6 +7830,77 @@ Acceptance Criteria:
 - [ ] `bayesian_kelly_fraction` appears in `daily_model_predictions` for all games with a PyMC posterior
 - [ ] Sanity check: `bayesian_kelly_fraction` is lower than `kelly_fraction` for games where the posterior is wide (high uncertainty should shrink Kelly sizing)
 - [ ] `bayesian_kelly_fraction` displayed on EV Tracker page alongside existing Kelly columns
+
+---
+
+# Epic 26 — Layer 4 Selective-Strategy Evaluation & Live Bet Attribution
+
+**Goal:** Formalize the manual betting rules that have been profitable in practice and measure whether a model finds genuine edge **on the subset of games where a bet is triggered**, rather than across all games indiscriminately. Layer 4 is **additive** — it does NOT replace the three-layer Bayesian framework (Epic 16.6): a model still needs L1 (prior-predictive NLL) and L2 (calibration) to be promotable. A model that fails L1/L3 but passes L4 is flagged **"selective-edge-only"** — useful for manual selection, NOT automated deployment; a model passing all four layers is deployable at the optimal threshold.
+
+**Betting rules.** *Totals:* bet over when `model_mu − total_line > threshold`, under when `< −threshold`, abstain inside the band (default 1.0 run; sweep [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]). *H2H (two distinct rules, evaluated separately):* **direction_flip** — bet the model's favored team when model and market disagree on the favorite; **magnitude** — bet the model's favorite when they agree on direction but `|model_p − market_p| > threshold` (default 0.12; sweep [0.05, 0.08, 0.10, 0.12, 0.15, 0.20]).
+
+---
+
+### 26.1 — Reusable selective-strategy module ✅ COMPLETE (2026-06-04)
+
+**Module:** `betting_ml/scripts/evaluation/bayesian_model_eval.py` — pure/importable (numpy/pandas only, no Snowflake), runs identically on a stored OOS parquet AND on live `daily_model_predictions`.
+
+- [x] `compute_bet_decision()` → `(bet_decision ∈ {over,under,home,away,abstain}, rule_type ∈ {totals,direction_flip,magnitude,abstain})`.
+- [x] `evaluate_selective_strategy()` → bet/no-bet split, `n_bets`/`win_rate`/`roi_110`/`bet_rate`, totals over/under breakdown, H2H flip-vs-magnitude breakdown, and the no-bet analysis (model vs. market Brier on abstains + the `|μ−line|<0.5` uncertainty-zone fraction).
+- [x] `sweep_thresholds()` (full grid) + `layer4_verdict()` (PASS = gate metric > 0 AND `n_bets ≥ 50`; sub-50 rows flagged ⚠️ unreliable).
+- [x] **Gate-metric asymmetry (`gate_metric_for`):** **totals gate on `roi_110`** (totals settle at -110 on both sides in the vast majority of cases — flat -110 is faithful); **H2H gates on `roi_devig`** (each bet priced at its de-vigged fair odds). Flat -110 *inflates* favorite/chalk bets (which pay < +100) and *deflates* underdog bets (which pay > +100), so it structurally misprices moneylines. `roi_devig` is 0 under a perfectly-calibrated market → a positive value means the bet side beat its own market price = genuine selection edge, **but vig-free (an optimistic upper bound on realized book ROI)**.
+
+**Acceptance criteria:** [x] pure functions unit-checked on toy inputs (decision rules, sweep sums, roi math); [x] runs on both parquet and live-prediction frames.
+
+---
+
+### 26.2 — Integrate Layer 4 into the production Bayesian harness ✅ COMPLETE (2026-06-04)
+
+- [x] Layer 4 runs after L1–L3 in `evaluate_production_bayesian.py` (16.6) on the same shared 2026 OOS set, per target (totals + home_win; run_diff has no market → L4 N/A).
+- [x] Adds a gate-aware `L4 selective <metric>>0 & n>=50` gate to `_gates_ngb`/`_gates_home`, and a `layer4_selective_strategy` section to both the markdown and the new JSON companion report.
+- [x] A `roi_devig` PASS carries an explicit caveat in-report: **vig-free upper bound → evaluation-pending, NOT deployable** (real book ROI is lower; the model still fails L1/L3 vs. the credible market).
+- [x] **home_win Layer 4 bug fix (2026-06-04):** `_eval_home_win` originally fed the alpha-blended posterior to `compute_bet_decision`, which at production h2h **alpha=0** equals the market → **0 bets, vacuous** by construction. Fixed to use the **raw model P(home)** (pre-blend), consistent with the 26.4 H2H surface and 26.5 live attribution — Layer 4 asks whether the model's *own* signal has edge. **Corrected result (seq challenger, 2026 OOS):** PASSES the roi_devig gate (+0.2555 @ h2h-thr 0.20, n=305) but **selective-edge-only** — the positive is **magnitude-driven** (chalk the model agrees with the market on; roi_110 +0.64) while **direction_flip is dead** (roi_110 −0.14), roi_devig is vig-free, and the model still fails L3-vs-market (raw Brier 0.204 vs 0.181). This reproduces 26.4's pattern on a second, independent model — a falsifiable hypothesis for the live real-price attribution surface (26.5), not a deployable edge.
+
+---
+
+### 26.3 — Totals Layer 4 OOS sweep + contamination finding ✅ COMPLETE (2026-06-04)
+
+Ran on `oos_predictions_totals_v1.parquet` (the Layer-3 NegBin combiner OOS surface). **Finding: the 1-run rule's apparent profitability is in-sample leakage, not edge.** Season-by-season `roi_110` at the 1.0-run threshold:
+
+| Season | @1.0 roi_110 | win | verdict |
+|---|---:|---:|:--|
+| 2023 / 2024 / 2025 (contaminated) | +0.25 / +0.30 / +0.30 | ~0.66–0.68 | ✅ (leakage-inflated) |
+| **2026 (only leakage-free season)** | **−0.041** | **0.502** | **❌ FAIL at every threshold** |
+
+2026 loses at every threshold (−1.9% to −9.3%, win 0.475–0.514 < the -110 breakeven 0.524); no-bet 2026 model Brier (0.2512) is *worse* than market (0.2429). This is the in-sample-leakage signature (brilliant on the years scored in-sample, collapses on the one held-out season) and **confirms the totals pause**. (The 2026 under-only slice is +13.4% but n=133, post-hoc, fragile.) Report: `ablation_results/layer4_selective_strategy.md`.
+
+---
+
+### 26.4 — H2H leakage-free OOS surface + roi_devig findings ✅ COMPLETE (2026-06-04)
+
+**Generator:** `betting_ml/scripts/leakage_fix/build_h2h_oos_parquet.py` mirrors the totals walk-forward (`build_oos_matrix` + the `train_h2h` lightgbm Approach-B winner, refit per fold), persisting `betting_ml/models/layer3/oos_predictions_h2h_v2.parquet` (seasons **2024–2026** — `build_oos_matrix` floor makes 2024 the first eval fold; 2023 not producible leakage-free) with `model_p_home_raw`, `market_devig_home`, `home_win`, and `model_p_home_blended`.
+
+**⚠️ Production h2h alpha = 0.0**, so `compute_posterior(model, market, 0)` == market exactly → a "blended posterior at production alpha" is **degenerate** (zero bets, zero edge). The degeneracy is itself a finding: the *deployed* H2H signal is already pure market. So the Layer-4 signal is the model's **raw** P(home); the alpha-0 blend is kept in the parquet for transparency only.
+
+**Findings (`roi_devig`, the honest gate):**
+- **direction_flip is DEAD on the credible 2026 market** — win 0.399, `roi_110` −0.238, `roi_devig` +0.13 (vig-free upper bound, within the vig margin), n=233. The contrarian hypothesis fails.
+- **magnitude is marginal** — `roi_devig` +0.197, n=230, but vig-free + small-sample + on chalk the model *agrees* with the market on (model underconfident on favorites, NOT a contrarian edge). `roi_110` had inflated it to +0.544 — the -110-on-favorites artifact.
+- **Degraded-baseline contamination extends to H2H:** `roi_devig` collapses +0.42/+0.55 (degraded 2024–25 Bovada lines, near-flat) → +0.13/+0.20 (sharp 2026). Consistent with the leakage-free Brier eval (market beats model on the only credible season).
+
+**Posture:** H2H stays **evaluation-pending** — unlike totals (which fails outright in 2026), H2H is marginal-positive at fair odds, but the lone signal is vig-free/small-sample and the contrarian flip is dead. Not deployable; no un-pause.
+
+---
+
+### 26.5 — Live bet-attribution logging in predict_today.py ✅ COMPLETE (2026-06-04, deployed)
+
+Adds 5 columns to `daily_model_predictions` recording **what the Layer 4 rule would recommend for each live game** — creating a genuine OOS Layer-4 surface from live production data as CLV labels accumulate. After 50+ live games, `evaluate_selective_strategy()` runs directly on `daily_model_predictions` with **real book prices** (not assumed -110) — the only instrument that can settle the magnitude question, and **the most informative tool in the system at this stage** (more than any further backtest).
+
+- [x] `layer4_totals_decision` (over/under/abstain @ 1.0-run threshold vs. model mu), `layer4_totals_over_signal` (`pred_total_runs − total_line_consensus`), `layer4_h2h_decision` (home/away/abstain), `layer4_h2h_rule` (direction_flip/magnitude/abstain), `layer4_h2h_edge` (`calibrated_win_prob − h2h_market_implied_prob`).
+- [x] Imports `compute_bet_decision` from 26.1 (single source of truth — same rules as the backtest). DDL/INSERT (40/40 placeholder parity) + idempotent `ALTER … ADD COLUMN IF NOT EXISTS`.
+- [x] **Pure logging, fully `try/except`-guarded** — a Layer 4 failure logs NULLs and can never abort the core prediction write.
+- [x] **Verified on dev (2026-06-04):** 9 games, all 5 cols populate, rule-consistent (all 3 totals bets `under` with negative signal; both h2h bets `direction_flip`), 0 threshold violations, no NULLs leaking for line-having games. Deployed to prod via Railway build + manual Dagster code-location deploy (the new `betting_ml/scripts/evaluation/` package is the hard import dependency).
+
+**Acceptance criteria:** [x] all 5 columns non-null for games with Bovada lines; [x] `over_signal` sign matches decision; [x] no bet inside the ±1.0 band; [x] same code runs in both the morning op and the `post_lineup` sensor pass.
 
 ---
 
