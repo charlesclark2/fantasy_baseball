@@ -7860,3 +7860,47 @@ models:
       Single-row summary view over mart_clv_labeled_games. Canonical gate
       threshold tracker for Epic 12. live_total_count is the authoritative
       count checked against the 50/100/200/500/1000-game gates.
+
+  # ============================================================================
+  # mart_pipeline_status  (A1.3)
+  # ============================================================================
+  - name: mart_pipeline_status
+    description: >
+      View over baseball_data.betting_ml.pipeline_status. One row per game day
+      summarising the daily pipeline run: when it started, when predictions
+      completed, signal quality score, games scored vs. scheduled, and
+      pipeline_status ∈ {complete, partial, failed}. The derived is_fresh flag
+      is TRUE when pipeline_status = complete and predict_today_complete_ts is
+      within the last 6 hours. Queried by the Streamlit app to decide whether
+      to show a freshness warning banner.
+
+    columns:
+      - name: run_date
+        description: Calendar date of the pipeline run.
+        tests: [not_null, unique]
+
+      - name: pipeline_status
+        description: "complete, partial, or failed."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [complete, partial, failed]
+
+      - name: is_fresh
+        description: >
+          TRUE when pipeline_status = complete and predict_today_complete_ts
+          is within 6 hours of current UTC time.
+        tests: [not_null]
+
+      - name: signal_completeness_score
+        description: >
+          Average completeness fraction (0–1) over the five floor signal groups
+          on the latest completed game slate. Mirrors the value computed by
+          check_signal_freshness.py.
+
+      - name: n_games_scored
+        description: Distinct game_pks with predictions in daily_model_predictions for this run_date.
+
+      - name: n_qualified_bets
+        description: Rows where qualified_bet = TRUE in daily_model_predictions for this run_date.
