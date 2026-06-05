@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     inserted_at             TIMESTAMP_NTZ  NOT NULL,
     score_date              DATE           NOT NULL,
     prediction_type         VARCHAR(20),
+    lineup_confirmed        BOOLEAN,
 
     -- Game identifiers
     game_pk                 INTEGER,
@@ -147,7 +148,7 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
 
 _INSERT_PREDICTION = f"""
 INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
-    model_version, inserted_at, score_date, prediction_type,
+    model_version, inserted_at, score_date, prediction_type, lineup_confirmed,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
     has_odds,
@@ -163,7 +164,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     layer4_totals_decision, layer4_totals_over_signal,
     layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge
 ) VALUES (
-    %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s,
+    %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
     %(home_team)s, %(away_team)s, %(home_team_abbrev)s, %(away_team_abbrev)s,
     %(has_odds)s,
@@ -238,6 +239,7 @@ def _write_predictions_to_snowflake(
     target_date: str,
     inserted_at: datetime,
     prediction_type: str,
+    lineup_confirmed: bool,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -338,6 +340,7 @@ def _write_predictions_to_snowflake(
             "inserted_at":            inserted_at,
             "score_date":             score_date,
             "prediction_type":        prediction_type,
+            "lineup_confirmed":       lineup_confirmed,
             "game_pk":                gpk_val,
             "game_date":              score_date,
             "game_datetime":          game_dt,
@@ -381,16 +384,25 @@ def _write_predictions_to_snowflake(
         try:
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
-            # Epic 16.2 migration — idempotent; safe on every scoring pass (CREATE IF
-            # NOT EXISTS won't add columns to a pre-existing table).
+            # Idempotent column migrations — safe on every scoring pass.
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
-            # Layer 4 live bet-attribution — idempotent (safe on every scoring pass).
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_decision VARCHAR(10)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_over_signal FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_decision VARCHAR(10)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_rule VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_edge FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS lineup_confirmed BOOLEAN")
+            # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
+            # delete existing rows for this date+type before inserting so re-runs
+            # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
+            if lineup_confirmed:
+                cur.execute(
+                    f"DELETE FROM {_ML_SCHEMA}.daily_model_predictions "
+                    f"WHERE score_date = %(d)s AND prediction_type = %(pt)s",
+                    {"d": target_date, "pt": prediction_type},
+                )
+                print(f"  Deleted existing {prediction_type} rows for {target_date} (overwrite)")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
@@ -683,6 +695,16 @@ def _parse_args() -> argparse.Namespace:
         default="morning",
         help="Label written to prediction_type column (default: morning)",
     )
+    parser.add_argument(
+        "--lineup-confirmed",
+        action="store_true",
+        default=False,
+        help=(
+            "Mark predictions as lineup_confirmed=True and overwrite any existing "
+            "rows for today's prediction_type before inserting. Use when lineups "
+            "are confirmed (post-lineup re-run via lineup_monitor_sensor)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -964,6 +986,7 @@ def main() -> None:
         target_date=target_date,
         inserted_at=run_ts,
         prediction_type=args.prediction_type,
+        lineup_confirmed=args.lineup_confirmed,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
         loc_tot=loc_tot,
