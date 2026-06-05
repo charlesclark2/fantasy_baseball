@@ -114,3 +114,98 @@ cannot overcome, and neither totals model beats naive or the market on 2026.
 **DECISION (2026-06-02): pause totals.** Do not promote either model; set `totals_paused = true` on
 the bet permission gate; redirect to Epic 11 (H2H). Revisit totals with full-season data or a
 recency-aware / market-anchored redesign — not before.
+
+## 8. Recency-adaptation diagnostic — FAIL (4th independent confirmation, 2026-06-04)
+
+After Epic 16 (sequential posteriors) completed, we re-opened the question raised in §6/§7: could the
+sequential/recency architecture **rescue** Layer 3 totals by making the run-environment signal
+regime-adaptive (so it tracks the within-2026 down-shift the static model missed)? Run as a **diagnostic
+with a pre-committed kill criterion**, no build work permitted until the criterion was assessed.
+
+**Pre-committed kill criterion (locked before any code):** PASS only if some recency scheme — trailing-N
+games (N∈{5,10,15,20}) or EW decay (λ∈{0.85,0.90,0.95}) — reliably pulls the run-env estimate **below
+8.80 by ~game-20 of May 2026 while the static training-era signal stays above 9.00**. If every scheme is
+still ≥8.80 at that point, FAIL → close Epic 10, pivot to Epic 17.
+
+**Method:** MCP analytical check on existing data only (no retrain). `baseball_data.betting.mart_game_results`
+(actual total = home+away final score) ⋈ `baseball_data.betting_features.feature_pregame_sub_model_signals`
+(`run_env_mu_v4`), 2026 regular season. Computed league-wide trailing-N and EW recency means of actual total
+runs through the season; sampled at May 10 / 20 / 30.
+
+**Ground truth (2026):** monthly actual mean total — Mar 8.62 / **Apr 9.09** / **May 8.61** / Jun 9.54.
+Static `run_env_mu_v4` mean — Mar 8.69 / **Apr 8.66** / **May 8.88** / Jun 9.02. (Corroborates §3: run_env
+2026 mean 8.83, −0.23σ vs train 8.99 — the signal tracked *down*, it was never the high component.)
+
+**Recency estimates as of start of checkpoint day** (May truth = 8.61; ±0.3 band [8.31, 8.91]):
+
+| Estimate | May 10 | May 20 (decision) | May 30 |
+|---|---:|---:|---:|
+| Trailing-5  | 5.80 | 8.00 | 9.80 |
+| Trailing-10 | 5.40 | 8.40 | 9.80 |
+| Trailing-15 | 5.80 | 9.80 | 9.60 |
+| Trailing-20 | 7.15 | 9.25 | 10.30 |
+| EW λ=0.85 | 6.94 | 9.05 | 9.99 |
+| EW λ=0.90 | 7.48 | 9.27 | 9.90 |
+| EW λ=0.95 | 8.05 | 9.48 | 9.52 |
+| Static run_env (recent mean) | 9.04 | 9.04 | 9.21 |
+
+**KILL-CRITERION RESULT: FAIL.** Three independent grounds:
+
+1. **Premise falsified — run_env is not the over-predicting component.** `run_env_mu_v4` averages 8.66
+   (Apr) / 8.88 (May), already near truth and below 9.00 monthly. The "9.06 over-prediction" was the
+   **combiner** μ̄ (run_env + offense + bullpen via LTV), not run_env. A sequential/recency run_env cannot
+   fix a totals over-prediction it does not cause.
+2. **The schemes that momentarily read <8.80 at May 20 (trail-5 8.00, trail-10 8.40) are noise, not
+   tracking** — those same schemes read 5.40–5.80 on May 10 (3+ runs low) and 9.80 on May 30 (1.2 high).
+   They cross *through* the truth; they do not track it. All longer/EW schemes are 9.0–9.5 at May 20.
+3. **The regime move is below the noise floor.** April→May shift = **0.48 runs**; short-window recency
+   swings **4+ runs** across two-week spans and weekly actual spans 8.05–9.60 (1.55). No window length
+   filters the noise while preserving a 0.48-run signal — long windows reproduce the static seasonal mean
+   (no adaptation), short windows are pure noise. The market wins by being a far lower-variance estimator,
+   not by adapting faster. (Robust to the "game-20" interpretation: if it meant the 20th game of May ≈ May 1,
+   the windows are full of high late-April games → even more clearly >8.80.)
+
+**DECISION (2026-06-04): Epic 10 formally CLOSED.** This is the **fourth** independent confirmation that the
+totals architecture cannot out-adapt the market on within-season regime (after: §6 regime-bias root cause,
+§7 matchup-drop ablation, and the leakage-free combiner re-eval). Sequential/recency patching of the static
+combiner is rejected — the regime-adaptation problem requires a fundamentally different inference approach.
+Effort moves to **Epic 17 (PyMC hierarchical / full-Bayesian layer)** as the next architectural investment
+for totals. Diagnostic recorded as Story 10.8 in `implementation_guide.md`.
+
+## 9. Sequential sub-model enrichment — HOLD / no change (Epic 16B gate, 2026-06-04)
+
+Epic 16B retrained the three Layer 3 sub-models (offense_v2 run_diff, bullpen_v2, starter_v1 + starter_ip_v1)
+against sequential/Empirical-Bayes features (Epic 16) to test whether per-team recency signals close the +0.40
+mean bias reported in §8. Gate criterion: **mean combined-μ ≤ 8.85 on May-2026 → PASS (proceed to full Layer 3
+re-eval, 16B.6); > 8.85 → FAIL → Epic 17 confirmed.**
+
+**Retrain verdicts (all HOLD NONSEQ):**
+
+| Sub-model | Target | Sequential gate | Verdict |
+|---|---|---|---|
+| offense_v2 | run_diff | seq NLL did not beat nonseq | HOLD |
+| bullpen_v2 | both sub-models | seq NLL did not beat nonseq | HOLD |
+| starter_v1 | xwoba_against | seq NLL Δ = −0.0005 (worse) | HOLD |
+| starter_ip_v1 | outs_recorded | seq NLL Δ = −0.0013 (worse) | HOLD |
+
+All canonical `.pkl` models remain at their non-sequential versions. Stacking weights recomputed from
+the unchanged signals (total_runs: bullpen 0.337 / offense 0.332 / run_env 0.331 — near-equal thirds).
+
+**16B.5 gate result (diagnose_16b5_gate.py, in-sample Poisson GLM, May-2026, 419 games):**
+
+| Metric | Value |
+|---|---:|
+| mean combined-μ | **9.0135** |
+| mean actual | 8.6086 |
+| mean bias | +0.4049 |
+| Gate (≤ 8.85) | **FAIL** |
+
+Per-signal GLM-predicted means (May-2026): bullpen 9.30 / offense 8.88 / run_env 8.86.
+All-2026 mean combined-μ: 9.0065 (actual 8.9384).
+
+**DECISION (2026-06-04): Epic 16B → HOLD on all sub-models. 16B.6 skipped. Epic 17 confirmed.**
+The sequential posteriors (EB anchored + chained) add noise at the margin; no sub-model's sequential
+challenger cleared its NLL gate, so the Layer 3 signal set is unchanged from pre-16B. The +0.40
+mean bias on May-2026 is intact, confirming this is the **fifth** independent measurement showing the
+combiner overestimates scoring relative to what materialised. Epic 17 (PyMC hierarchical / full-Bayesian
+layer) is the designated next step.

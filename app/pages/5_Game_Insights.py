@@ -7,9 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
@@ -89,15 +86,16 @@ SELECT
     g.game_date
 FROM (
     SELECT game_pk, home_team, away_team,
-           -- Most lineup-aware prediction per game (post_lineup > pre-lineup >
-           -- intraday_fallback); recency only breaks ties within a basis.
+           -- post_lineup (4) > morning+odds (3) > fallback+odds (2) > morning-no-odds (1) > fallback-no-odds (0)
            ROW_NUMBER() OVER (
                PARTITION BY game_pk
                ORDER BY
                    CASE
-                       WHEN prediction_type = 'post_lineup'                 THEN 2
-                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-                       ELSE 1
+                       WHEN prediction_type = 'post_lineup'                                          THEN 4
+                       WHEN COALESCE(data_source, '') != 'intraday_fallback' AND has_odds = TRUE     THEN 3
+                       WHEN has_odds = TRUE                                                          THEN 2
+                       WHEN COALESCE(data_source, '') != 'intraday_fallback'                        THEN 1
+                       ELSE 0
                    END DESC,
                    inserted_at DESC
            ) AS _rn
@@ -142,6 +140,45 @@ away_team_name: str = _row.get("away_team_name") or _row.get("away_team", "Away"
 st.divider()
 
 # ===========================================================================
+# Game Status (score if Final or Live)
+# ===========================================================================
+
+_GAME_STATE_SQL = """
+SELECT
+    abstract_game_state,
+    detailed_state,
+    home_score,
+    away_score,
+    game_date
+FROM baseball_data.betting.stg_statsapi_games
+WHERE game_pk = {game_pk}
+LIMIT 1
+"""
+
+
+@st.cache_data(ttl=60)
+def load_game_state(game_pk: int) -> pd.DataFrame:
+    df = run_query(_GAME_STATE_SQL.format(game_pk=game_pk))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+_gs_df = load_game_state(game_pk)
+if not _gs_df.empty:
+    _gs = _gs_df.iloc[0]
+    _state = str(_gs.get("abstract_game_state") or "")
+    if _state in ("Final", "Live"):
+        _hs = _gs.get("home_score")
+        _as = _gs.get("away_score")
+        _detail = str(_gs.get("detailed_state") or _state)
+        _score_str = f"{home_team_name} **{_hs}** — {away_team_name} **{_as}**"
+        if _state == "Final":
+            st.success(f"🏁 Final: {_score_str}")
+        else:
+            st.info(f"🔴 Live ({_detail}): {_score_str}")
+
+# ===========================================================================
 # Section 1 — Prediction Summary
 # ===========================================================================
 
@@ -159,12 +196,13 @@ SELECT
     END                                                                      AS prediction_basis
 FROM baseball_data.betting_ml.daily_model_predictions
 WHERE game_pk = {game_pk}
--- Most lineup-aware prediction (post_lineup > pre-lineup > fallback), recency tiebreak.
 ORDER BY
     CASE
-        WHEN prediction_type = 'post_lineup'                 THEN 2
-        WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-        ELSE 1
+        WHEN prediction_type = 'post_lineup'                                          THEN 4
+        WHEN COALESCE(data_source, '') != 'intraday_fallback' AND has_odds = TRUE     THEN 3
+        WHEN has_odds = TRUE                                                          THEN 2
+        WHEN COALESCE(data_source, '') != 'intraday_fallback'                        THEN 1
+        ELSE 0
     END DESC,
     inserted_at DESC
 LIMIT 1
@@ -218,6 +256,111 @@ else:
             "⚠️ Provisional prediction (pre-lineup) — generated before lineups were confirmed, so it "
             "may not reflect the confirmed starter/lineup. Wait for the post-lineup re-score."
         )
+
+st.divider()
+
+# ===========================================================================
+# Bovada Lines (latest pre-game snapshot only)
+# ===========================================================================
+
+_BOVADA_LINES_SQL = """
+WITH pre_game AS (
+    SELECT
+        o.market_key,
+        o.outcome_name,
+        o.outcome_price_american,
+        o.outcome_point,
+        o.is_home_outcome,
+        o.is_away_outcome,
+        o.ingestion_ts
+    FROM baseball_data.betting.mart_odds_outcomes o
+    JOIN baseball_data.betting.stg_statsapi_games g
+        ON g.home_team_name = o.home_team
+        AND g.away_team_name = o.away_team
+        AND g.official_date = o.commence_date
+    WHERE g.game_pk = {game_pk}
+      AND o.bookmaker_key = 'bovada'
+      AND o.ingestion_ts::TIMESTAMP_NTZ < g.game_date::TIMESTAMP_NTZ
+)
+SELECT
+    market_key,
+    outcome_name,
+    outcome_price_american,
+    outcome_point,
+    is_home_outcome,
+    is_away_outcome,
+    ingestion_ts
+FROM pre_game
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY market_key, outcome_name
+    ORDER BY ingestion_ts DESC
+) = 1
+ORDER BY market_key, is_home_outcome DESC
+"""
+
+
+@st.cache_data(ttl=300)
+def load_bovada_lines(game_pk: int) -> pd.DataFrame:
+    df = run_query(_BOVADA_LINES_SQL.format(game_pk=game_pk))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+def _fmt_american(v) -> str:
+    if v is None:
+        return "N/A"
+    try:
+        n = int(v)
+        return f"+{n}" if n > 0 else str(n)
+    except (TypeError, ValueError):
+        return "N/A"
+
+
+st.subheader("Bovada Lines")
+_bov_df = load_bovada_lines(game_pk)
+
+if _bov_df.empty:
+    st.caption("No pre-game Bovada lines found for this game.")
+else:
+    _h2h = _bov_df[_bov_df["market_key"] == "h2h"]
+    _tot = _bov_df[_bov_df["market_key"] == "totals"]
+
+    _bov_col1, _bov_col2 = st.columns(2)
+
+    with _bov_col1:
+        st.markdown("**Moneyline (H2H)**")
+        if _h2h.empty:
+            st.caption("Not available.")
+        else:
+            _home_row = _h2h[_h2h["is_home_outcome"] == True]
+            _away_row = _h2h[_h2h["is_home_outcome"] == False]
+            _home_ml = _fmt_american(_home_row.iloc[0]["outcome_price_american"]) if not _home_row.empty else "N/A"
+            _away_ml = _fmt_american(_away_row.iloc[0]["outcome_price_american"]) if not _away_row.empty else "N/A"
+            _snap_ts = _h2h["ingestion_ts"].max()
+            mc1, mc2 = st.columns(2)
+            mc1.metric(home_team_name, _home_ml)
+            mc2.metric(away_team_name, _away_ml)
+            if _snap_ts is not None:
+                st.caption(f"Snapshot: {pd.Timestamp(_snap_ts).strftime('%Y-%m-%d %H:%M')} UTC")
+
+    with _bov_col2:
+        st.markdown("**Total Runs (O/U)**")
+        if _tot.empty:
+            st.caption("Not available.")
+        else:
+            _over_row  = _tot[_tot["outcome_name"].str.lower() == "over"]
+            _under_row = _tot[_tot["outcome_name"].str.lower() == "under"]
+            _line      = _over_row.iloc[0]["outcome_point"] if not _over_row.empty else None
+            _over_ml   = _fmt_american(_over_row.iloc[0]["outcome_price_american"]) if not _over_row.empty else "N/A"
+            _under_ml  = _fmt_american(_under_row.iloc[0]["outcome_price_american"]) if not _under_row.empty else "N/A"
+            _snap_ts   = _tot["ingestion_ts"].max()
+            tc1, tc2, tc3 = st.columns(3)
+            tc1.metric("Line", f"{_line}" if _line is not None else "N/A")
+            tc2.metric("Over", _over_ml)
+            tc3.metric("Under", _under_ml)
+            if _snap_ts is not None:
+                st.caption(f"Snapshot: {pd.Timestamp(_snap_ts).strftime('%Y-%m-%d %H:%M')} UTC")
 
 st.divider()
 
@@ -695,8 +838,10 @@ def _resolve_feature_cols_for(target: str) -> list[str]:
             if not p.is_absolute():
                 p = _PROJECT_ROOT / p
             if p.exists():
-                return json.loads(p.read_text())
-    return json.loads(_FEATURE_COLS_PATH.read_text())
+                data = json.loads(p.read_text())
+                return data["feature_cols"] if isinstance(data, dict) else data
+    data = json.loads(_FEATURE_COLS_PATH.read_text())
+    return data["feature_cols"] if isinstance(data, dict) else data
 
 
 @st.cache_resource
@@ -755,55 +900,373 @@ def _build_feature_df(raw_df: pd.DataFrame, feature_cols: list[str]) -> pd.DataF
     return pd.DataFrame([row], columns=feature_cols)
 
 
-def _render_waterfall(explainer, X_df: pd.DataFrame, title: str) -> None:
+# ---------------------------------------------------------------------------
+# Feature label + formatting helpers for the key-drivers panel
+# ---------------------------------------------------------------------------
+
+_FEATURE_LABELS: dict[str, str] = {
+    # Home starter
+    "home_starter_stuff_plus":             "Home SP: Stuff+",
+    "home_starter_proj_fip":               "Home SP: Projected FIP",
+    "home_starter_fastball_stuff_plus":    "Home SP: Fastball Stuff+",
+    "home_starter_eb_k_pct":               "Home SP: K% (Bayes)",
+    "home_starter_trailing_ra9_30g":       "Home SP: RA/9 (30g)",
+    "home_starter_eb_xwoba_against":       "Home SP: xwOBA Against (Bayes)",
+    "home_starter_trailing_fip_30g":       "Home SP: FIP (30g)",
+    "home_starter_k_pct_30d":              "Home SP: K% (30d)",
+    "home_starter_xwoba_against_30d":      "Home SP: xwOBA Against (30d)",
+    "home_starter_whip_30d":               "Home SP: WHIP (30d)",
+    "home_starter_csw_pct_season":         "Home SP: CSW% (Season)",
+    "home_starter_bb_pct_30d":             "Home SP: BB% (30d)",
+    "home_starter_hard_hit_pct_30d":       "Home SP: Hard Hit% (30d)",
+    # Away starter
+    "away_starter_stuff_plus":             "Away SP: Stuff+",
+    "away_starter_proj_fip":               "Away SP: Projected FIP",
+    "away_starter_fastball_stuff_plus":    "Away SP: Fastball Stuff+",
+    "away_starter_eb_k_pct":               "Away SP: K% (Bayes)",
+    "away_starter_trailing_ra9_30g":       "Away SP: RA/9 (30g)",
+    "away_starter_eb_xwoba_against":       "Away SP: xwOBA Against (Bayes)",
+    "away_starter_trailing_fip_30g":       "Away SP: FIP (30g)",
+    "away_starter_k_pct_30d":              "Away SP: K% (30d)",
+    "away_starter_xwoba_against_30d":      "Away SP: xwOBA Against (30d)",
+    "away_starter_csw_pct_season":         "Away SP: CSW% (Season)",
+    "away_starter_bb_pct_30d":             "Away SP: BB% (30d)",
+    "away_starter_hard_hit_pct_30d":       "Away SP: Hard Hit% (30d)",
+    # Home offense
+    "home_off_xwoba_30d":                  "Home Off: xwOBA (30d)",
+    "home_off_runs_per_game_30d":          "Home Off: R/G (30d)",
+    "home_off_xwoba_std":                  "Home Off: xwOBA (season, z)",
+    "home_off_runs_per_game_std":          "Home Off: R/G (season, z)",
+    "home_off_xwoba_7d":                   "Home Off: xwOBA (7d)",
+    "home_off_xwoba_14d":                  "Home Off: xwOBA (14d)",
+    "home_off_hard_hit_pct_std":           "Home Off: Hard Hit% (season, z)",
+    "home_off_bb_pct_std":                 "Home Off: BB% (season, z)",
+    # Away offense
+    "away_off_xwoba_30d":                  "Away Off: xwOBA (30d)",
+    "away_off_runs_per_game_30d":          "Away Off: R/G (30d)",
+    "away_off_xwoba_std":                  "Away Off: xwOBA (season, z)",
+    "away_off_runs_per_game_std":          "Away Off: R/G (season, z)",
+    "away_off_xwoba_7d":                   "Away Off: xwOBA (7d)",
+    "away_off_xwoba_14d":                  "Away Off: xwOBA (14d)",
+    "away_off_hard_hit_pct_std":           "Away Off: Hard Hit% (season, z)",
+    "away_off_bb_pct_std":                 "Away Off: BB% (season, z)",
+    # Bullpen
+    "home_bp_eb_xwoba":                    "Home Bullpen: xwOBA (Bayes)",
+    "home_bp_xwoba_against_30d":           "Home Bullpen: xwOBA Against (30d)",
+    "home_bp_xwoba_against_14d":           "Home Bullpen: xwOBA Against (14d)",
+    "home_bp_k_pct_30d":                   "Home Bullpen: K% (30d)",
+    "home_bp_k_pct_14d":                   "Home Bullpen: K% (14d)",
+    "home_bp_whiff_rate_30d":              "Home Bullpen: Whiff% (30d)",
+    "home_bp_innings_pitched_14d":         "Home Bullpen: IP (14d)",
+    "home_bp_bb_pct_30d":                  "Home Bullpen: BB% (30d)",
+    "away_bp_eb_xwoba":                    "Away Bullpen: xwOBA (Bayes)",
+    "away_bp_xwoba_against_30d":           "Away Bullpen: xwOBA Against (30d)",
+    "away_bp_xwoba_against_14d":           "Away Bullpen: xwOBA Against (14d)",
+    "away_bp_k_pct_30d":                   "Away Bullpen: K% (30d)",
+    "away_bp_k_pct_14d":                   "Away Bullpen: K% (14d)",
+    "away_bp_whiff_rate_30d":              "Away Bullpen: Whiff% (30d)",
+    "away_bp_innings_pitched_14d":         "Away Bullpen: IP (14d)",
+    "away_bp_bb_pct_30d":                  "Away Bullpen: BB% (30d)",
+    # Lineup matchup
+    "home_lineup_vs_away_starter_xwoba_adj":  "Home Lineup vs Away SP: xwOBA",
+    "away_lineup_vs_home_starter_xwoba_adj":  "Away Lineup vs Home SP: xwOBA",
+    "home_lineup_xwoba_vs_starter_archetype": "Home Lineup vs SP Archetype: xwOBA",
+    "away_lineup_xwoba_vs_starter_archetype": "Away Lineup vs SP Archetype: xwOBA",
+    "home_lineup_avg_xwoba_vs_cluster":       "Home Lineup vs SP Cluster: xwOBA",
+    "away_lineup_avg_xwoba_vs_cluster":       "Away Lineup vs SP Cluster: xwOBA",
+    "home_lineup_vs_away_starter_k_pct_adj":  "Home Lineup vs Away SP: K%",
+    "away_lineup_vs_home_starter_k_pct_adj":  "Away Lineup vs Home SP: K%",
+    # Sequential / team-level
+    "home_team_sequential_win_prob":       "Home Team: Sequential Win Prob",
+    "away_team_sequential_win_prob":       "Away Team: Sequential Win Prob",
+    "home_team_sequential_woba":           "Home Team: Sequential wOBA",
+    "away_team_sequential_woba":           "Away Team: Sequential wOBA",
+    "home_team_sequential_bullpen_xwoba":  "Home Bullpen: Sequential xwOBA",
+    "away_team_sequential_bullpen_xwoba":  "Away Bullpen: Sequential xwOBA",
+    "home_team_oaa_blended":               "Home Defense: OAA",
+    "away_team_oaa_prior_season":          "Away Defense: OAA",
+    # Game-level
+    "elo_diff":                            "ELO Differential (Home − Away)",
+    "park_run_factor_3yr":                 "Park Run Factor (3yr)",
+    "pythagorean_win_exp_diff":            "Pythagorean Win Exp Diff",
+    "total_line_movement":                 "Total Line Movement",
+    "total_line_std":                      "Total Line (Implied)",
+    # Weather
+    "humidity_pct":                        "Humidity",
+    "wind_speed_mph":                      "Wind Speed",
+    "temp_f":                              "Temperature",
+}
+
+
+@st.cache_resource
+def _load_feature_descriptions() -> dict[str, str]:
+    """Parse all dbt models/feature schema.yml files and return col→description."""
+    import glob
+    import yaml as _yaml
+    desc: dict[str, str] = {}
+    pattern = str(_PROJECT_ROOT / "dbt" / "models" / "**" / "*.yml")
+    for path in glob.glob(pattern, recursive=True):
+        if "dbt_packages" in path:
+            continue
+        try:
+            schema = _yaml.safe_load(open(path))
+            if not schema:
+                continue
+            for model in schema.get("models", []):
+                for col in model.get("columns", []):
+                    if col.get("description"):
+                        desc[col["name"].lower()] = col["description"]
+        except Exception:
+            pass
+    return desc
+
+
+_ENTITY_TOKENS = {
+    "bp":      "Bullpen",
+    "off":     "Offense",
+    "starter": "SP",
+    "lineup":  "Lineup",
+    "team":    "Team",
+    "pit":     "Pitching",
+    "avg":     "Lineup Avg",
+    "vs":      "vs",
+}
+_STAT_TOKENS = {
+    "xwoba":   "xwOBA",
+    "woba":    "wOBA",
+    "fip":     "FIP",
+    "ra9":     "RA/9",
+    "whip":    "WHIP",
+    "era":     "ERA",
+    "csw":     "CSW",
+    "oaa":     "OAA",
+    "elo":     "ELO",
+    "iso":     "ISO",
+    "ops":     "OPS",
+    "eb":      "Bayes",
+    "proj":    "Proj",
+    "adj":     "Adj",
+    "pct":     "%",
+    "std":     "(z-score)",
+}
+
+
+def _prettify_feature_name(name: str) -> str:
+    """Token-aware prettifier: home_bp_eb_uncertainty → 'Home Bullpen: Bayes Uncertainty'."""
+    parts = name.split("_")
+    if not parts:
+        return name
+
+    side = ""
+    idx = 0
+    if parts[0] in ("home", "away"):
+        side = parts[0].title()
+        idx = 1
+
+    entity = ""
+    if idx < len(parts) and parts[idx] in _ENTITY_TOKENS:
+        entity = _ENTITY_TOKENS[parts[idx]]
+        idx += 1
+
+    tokens = parts[idx:]
+    expanded: list[str] = []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        # Multi-token patterns
+        if t == "k" and i + 1 < len(tokens) and tokens[i + 1] == "pct":
+            expanded.append("K%"); i += 2; continue
+        if t == "bb" and i + 1 < len(tokens) and tokens[i + 1] == "pct":
+            expanded.append("BB%"); i += 2; continue
+        if t == "hard" and i + 1 < len(tokens) and tokens[i + 1] == "hit":
+            if i + 2 < len(tokens) and tokens[i + 2] == "pct":
+                expanded.append("Hard Hit%"); i += 3
+            else:
+                expanded.append("Hard Hit"); i += 2
+            continue
+        if t == "stuff" and i + 1 < len(tokens) and tokens[i + 1] == "plus":
+            expanded.append("Stuff+"); i += 2; continue
+        if t == "runs" and i + 1 < len(tokens) and tokens[i + 1] == "per" and i + 2 < len(tokens) and tokens[i + 2] == "game":
+            expanded.append("R/G"); i += 3; continue
+        if t == "win" and i + 1 < len(tokens) and tokens[i + 1] in ("prob", "exp"):
+            expanded.append(f"Win {tokens[i+1].title()}"); i += 2; continue
+        # Time windows
+        if t in ("30d", "14d", "7d", "30g", "3yr"):
+            expanded.append(f"({t})"); i += 1; continue
+        if t == "season":
+            expanded.append("(Season)"); i += 1; continue
+        # Stat tokens
+        expanded.append(_STAT_TOKENS.get(t, t.title()))
+        i += 1
+
+    stat_str = " ".join(expanded)
+    prefix = f"{side} {entity}".strip() if (side or entity) else ""
+    return f"{prefix}: {stat_str}" if prefix and stat_str else (prefix or stat_str or name)
+
+
+def _get_feature_label(name: str) -> str:
+    return _FEATURE_LABELS.get(name, _prettify_feature_name(name))
+
+
+def _format_feature_value(name: str, val: float) -> str:
+    if val is None or (isinstance(val, float) and val != val):
+        return "N/A"
+    n = name.lower()
+    if any(x in n for x in ("k_pct", "bb_pct", "whiff_rate", "csw_pct", "hard_hit_pct", "swing_pct", "contact_pct")):
+        return f"{val * 100:.1f}%"
+    if "humidity" in n:
+        return f"{val:.0f}%"
+    if "temp" in n:
+        return f"{val:.0f}°F"
+    if "wind" in n:
+        return f"{val:.0f} mph"
+    if any(x in n for x in ("xwoba", "woba", "iso")):
+        return f"{val:.3f}"
+    if "stuff_plus" in n:
+        return f"{val:.0f}"
+    if any(x in n for x in ("fip", "ra9", "whip")):
+        return f"{val:.2f}"
+    if "runs_per_game" in n or "run_factor" in n:
+        return f"{val:.2f}"
+    if "innings_pitched" in n or n.endswith("_ip"):
+        return f"{val:.1f}"
+    if "win_prob" in n or "win_exp" in n:
+        return f"{val:.3f}"
+    if "line" in n:
+        return f"{val:.1f}"
+    if "elo" in n:
+        return f"{val:+.0f}" if "diff" in n else f"{val:.0f}"
+    if n.endswith("_std") or n.endswith("_z"):
+        return f"{val:+.2f}σ"
+    return f"{val:.3f}"
+
+
+def _compute_shap_drivers(
+    explainer,
+    X_df: pd.DataFrame,
+    coverage: float = 0.75,
+    min_drivers: int = 3,
+    max_drivers: int = 10,
+) -> "pd.DataFrame | None":
+    """Compute SHAP values and return the top drivers as a DataFrame.
+
+    Walks down the |SHAP|-sorted list until cumulative impact reaches
+    `coverage` of the total, clamped to [min_drivers, max_drivers].
+    """
     try:
-        # Permutation/Exact explainers need at least 2*n_features+1 evals;
-        # Tree/Linear explainers ignore this kwarg.
         n_features = X_df.shape[1]
         try:
             sv = explainer(X_df, max_evals=2 * n_features + 64)
         except TypeError:
             sv = explainer(X_df)
-        fig, _ = plt.subplots()
-        shap.plots.waterfall(sv[0], max_display=10, show=False)
-        fig = plt.gcf()
-        st.markdown(f"**{title}**")
-        st.pyplot(fig)
-        plt.close(fig)
-    except Exception as exc:
-        st.warning(f"SHAP waterfall unavailable for {title}: {exc}")
+
+        exp = sv[0]
+        df = pd.DataFrame({
+            "feature":       list(exp.feature_names),
+            "shap_value":    exp.values,
+            "feature_value": exp.data,
+        })
+        df["abs_shap"] = df["shap_value"].abs()
+        df = df.sort_values("abs_shap", ascending=False).reset_index(drop=True)
+
+        total_abs = df["abs_shap"].sum()
+        cumulative = 0.0
+        cutoff = min_drivers
+        for i, row in df.iterrows():
+            cumulative += row["abs_shap"]
+            if i + 1 >= min_drivers and cumulative / total_abs >= coverage:
+                cutoff = i + 1
+                break
+            if i + 1 >= max_drivers:
+                cutoff = max_drivers
+                break
+
+        return df.head(cutoff)
+    except Exception:
+        return None
 
 
-st.subheader("SHAP Feature Importance")
+def _render_key_drivers(
+    explainer,
+    X_df: pd.DataFrame,
+    model_label: str,
+    pos_label: str,
+    neg_label: str,
+) -> None:
+    st.markdown(f"**{model_label}**")
+    drivers = _compute_shap_drivers(explainer, X_df)
+    if drivers is None or drivers.empty:
+        st.caption("Driver analysis unavailable for this game.")
+        return
+
+    feat_descs = _load_feature_descriptions()
+
+    for _, row in drivers.iterrows():
+        feat = row["feature"]
+        shap_val = float(row["shap_value"])
+        feat_val = row["feature_value"]
+        label = _get_feature_label(feat)
+        val_str = _format_feature_value(feat, float(feat_val))
+        direction = pos_label if shap_val > 0 else neg_label
+        arrow = "↑" if shap_val > 0 else "↓"
+        color = "#2ecc71" if shap_val > 0 else "#e74c3c"
+        impact = f"{arrow} {abs(shap_val):.3f}"
+
+        # Tooltip: first sentence of schema.yml description, or nothing
+        raw_desc = feat_descs.get(feat, "")
+        tooltip = raw_desc.split(".")[0].strip() if raw_desc else ""
+        # Escape quotes so they don't break the HTML title attribute
+        tooltip_attr = f' title="{tooltip}"' if tooltip else ""
+
+        label_html = (
+            f'<span style="flex:2;font-size:0.84rem;cursor:default;'
+            f'border-bottom:1px dotted #666;"{tooltip_attr}>{label}</span>'
+            if tooltip else
+            f'<span style="flex:2;font-size:0.84rem;">{label}</span>'
+        )
+
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;'
+            f'padding:5px 10px;margin-bottom:3px;border-radius:5px;background:rgba(255,255,255,0.04);">'
+            f'{label_html}'
+            f'<span style="flex:1;text-align:center;font-size:0.84rem;color:#aaa;">{val_str}</span>'
+            f'<span style="flex:1;text-align:right;font-size:0.84rem;font-weight:600;color:{color};">'
+            f'{impact} {direction}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+st.subheader("What's Driving This Pick?")
 st.caption(
-    "SHAP (SHapley Additive exPlanations) shows which features pushed this game's prediction "
-    "above or below the model's baseline. Bars to the right increase the predicted probability "
-    "(or total runs); bars to the left decrease it. The width reflects the feature's magnitude "
-    "of influence for this specific game — not its overall importance across all games."
+    "The features with the greatest influence on this game's prediction, ranked by SHAP impact. "
+    "Only features accounting for the most significant share of the model's decision are shown — "
+    "green (↑) pushes toward the listed outcome, red (↓) pushes against it. "
+    "The impact score is in the model's output space (log-odds for home win; expected runs for total)."
 )
 
 raw_feat_df = load_full_feature_vector(game_pk, date_str)
 
 if raw_feat_df.empty:
-    st.warning("No feature data found for this game — SHAP section skipped.")
+    st.warning("No feature data found for this game — driver analysis skipped.")
 else:
-    shap_col1, shap_col2 = st.columns(2)
+    driver_col1, driver_col2 = st.columns(2)
 
-    with shap_col1:
+    with driver_col1:
         try:
             hw_explainer, hw_feature_cols = get_home_win_explainer()
             X_hw = _build_feature_df(raw_feat_df, hw_feature_cols)
-            _render_waterfall(hw_explainer, X_hw, "Home Win Model")
+            _render_key_drivers(hw_explainer, X_hw, "Home Win Model", "→ Home Win", "→ Away Win")
         except Exception as exc:
-            st.warning(f"Home Win SHAP explainer failed to load: {exc}")
+            st.warning(f"Home Win driver analysis failed: {exc}")
 
-    with shap_col2:
+    with driver_col2:
         try:
             tr_explainer, tr_feature_cols = get_total_runs_explainer()
             X_tr = _build_feature_df(raw_feat_df, tr_feature_cols)
-            _render_waterfall(tr_explainer, X_tr, "Total Runs Model")
+            _render_key_drivers(tr_explainer, X_tr, "Total Runs Model", "→ Over", "→ Under")
         except Exception as exc:
-            st.warning(f"Total Runs SHAP explainer failed to load: {exc}")
+            st.warning(f"Total Runs driver analysis failed: {exc}")
 
 st.divider()
 
@@ -913,3 +1376,106 @@ with form_col2:
             st.info("No prior games found for this team.")
         else:
             st.dataframe(away_form, width='stretch', hide_index=True)
+
+st.divider()
+
+# ===========================================================================
+# Section 5 — Model Accuracy for These Teams (last 20 scored games)
+# ===========================================================================
+
+_TEAM_MODEL_ACCURACY_SQL = """
+WITH best_pred AS (
+    SELECT
+        game_pk,
+        pred_total_runs,
+        calibrated_win_prob,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY
+                CASE
+                    WHEN prediction_type = 'post_lineup'                                          THEN 4
+                    WHEN COALESCE(data_source, '') != 'intraday_fallback' AND has_odds = TRUE     THEN 3
+                    WHEN has_odds = TRUE                                                          THEN 2
+                    WHEN COALESCE(data_source, '') != 'intraday_fallback'                        THEN 1
+                    ELSE 0
+                END DESC,
+                inserted_at DESC
+        ) AS rn
+    FROM baseball_data.betting_ml.daily_model_predictions
+),
+team_games AS (
+    SELECT
+        g.home_score + g.away_score                                                     AS actual_total,
+        p.pred_total_runs,
+        CASE WHEN g.home_score > g.away_score THEN 1 ELSE 0 END                        AS home_won,
+        CASE WHEN p.calibrated_win_prob > 0.5  THEN 1 ELSE 0 END                       AS model_picked_home
+    FROM baseball_data.betting.stg_statsapi_games g
+    JOIN best_pred p ON g.game_pk = p.game_pk AND p.rn = 1
+    WHERE (g.home_team_id = {team_id} OR g.away_team_id = {team_id})
+      AND g.abstract_game_state = 'Final'
+      AND g.home_score IS NOT NULL
+      AND g.away_score IS NOT NULL
+      AND p.pred_total_runs IS NOT NULL
+      AND p.calibrated_win_prob IS NOT NULL
+    ORDER BY g.game_date DESC
+    LIMIT 20
+)
+SELECT
+    COUNT(*)                                                                            AS games,
+    ROUND(AVG(CASE WHEN home_won = model_picked_home THEN 1.0 ELSE 0.0 END) * 100, 1) AS win_acc_pct,
+    ROUND(AVG(ABS(pred_total_runs - actual_total)), 2)                                 AS total_runs_mae
+FROM team_games
+"""
+
+
+@st.cache_data(ttl=600)
+def load_team_model_accuracy(team_id: int) -> pd.DataFrame:
+    df = run_query(_TEAM_MODEL_ACCURACY_SQL.format(team_id=team_id))
+    if not df.empty:
+        df.columns = [c.lower() for c in df.columns]
+    return df
+
+
+def _render_team_accuracy(team_name: str, team_id: int | None) -> None:
+    st.markdown(f"**{team_name}**")
+    if team_id is None:
+        st.caption("Team ID unavailable.")
+        return
+    acc_df = load_team_model_accuracy(team_id)
+    if acc_df.empty:
+        st.caption("Not enough data.")
+        return
+    r = acc_df.iloc[0]
+    games = int(r["games"]) if r.get("games") is not None else 0
+    if games == 0:
+        st.caption("No scored games found.")
+        return
+    win_acc   = _safe_float(r.get("win_acc_pct"))
+    total_mae = _safe_float(r.get("total_runs_mae"))
+    ma1, ma2, ma3 = st.columns(3)
+    ma1.metric(
+        "Win Pick Acc",
+        f"{win_acc:.1f}%" if win_acc is not None else "N/A",
+        help="% of games where the model picked the correct winner (home_win_prob > 0.5 vs actual), last 20 scored games.",
+    )
+    ma2.metric(
+        "Total Runs MAE",
+        f"{total_mae:.2f}" if total_mae is not None else "N/A",
+        help="Mean absolute error of the model's total runs prediction vs actual, last 20 scored games.",
+    )
+    ma3.metric(
+        "Sample (n)",
+        str(games),
+        help="Number of games with model predictions and final scores used in the calculation.",
+    )
+
+
+st.subheader("Model Accuracy — These Teams (Last 20 Games)")
+
+acc_col1, acc_col2 = st.columns(2)
+
+with acc_col1:
+    _render_team_accuracy(home_team_name, home_team_id)
+
+with acc_col2:
+    _render_team_accuracy(away_team_name, away_team_id)

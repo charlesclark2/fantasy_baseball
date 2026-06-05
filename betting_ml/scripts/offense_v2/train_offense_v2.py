@@ -1,5 +1,6 @@
 """
 train_offense_v2.py — Epic 4D, Stories 4D.1 / 4D.2
+                       Epic 16B, Story 16B.1 (--seq mode)
 
 Three-candidate NegBin distributional comparison for per-side runs scored:
 
@@ -16,10 +17,24 @@ Gates (all must pass to promote):
 Winner is Optuna-tuned (objective = mean CV NLL, same 8 folds).
 Champion becomes offense_v2; offense_v1 deprecated on promotion.
 
+--seq mode (Epic 16B.1): two-candidate comparison
+  Candidate nonseq — current offense_v2 champion (LightGBM+NegBin, no seq features)
+  Candidate seq    — sequential-enriched challenger (adds avg_eb_woba_sequential +
+                     posterior_source OHE with explicit __NA__ cold-start level)
+
+  Prerequisite: dbtf run -s feature_pregame_lineup_features must be run first so
+  that the posterior_source column is materialized in the feature mart.
+
+  Gate: challenger must beat champion on BOTH NLL AND calib_80 to be promoted.
+  Negative result (hold champion) is recorded in sub_model_registry.yaml + MLflow.
+
 Usage:
     uv run python betting_ml/scripts/offense_v2/train_offense_v2.py
     uv run python betting_ml/scripts/offense_v2/train_offense_v2.py --no-promote
     uv run python betting_ml/scripts/offense_v2/train_offense_v2.py --dry-run
+    uv run python betting_ml/scripts/offense_v2/train_offense_v2.py --seq
+    uv run python betting_ml/scripts/offense_v2/train_offense_v2.py --seq --no-promote
+    uv run python betting_ml/scripts/offense_v2/train_offense_v2.py --seq --dry-run
 """
 
 from __future__ import annotations
@@ -60,6 +75,7 @@ from betting_ml.scripts.offense_v1.train_offense_v1 import (
     prepare_fold,
     NUMERIC_FEATURES,
     _CAT_FEATURE,
+    _TARGET,
     _EXCLUDE_EVAL_YEAR,
     _compute_impute_means,
     _apply_impute,
@@ -103,6 +119,258 @@ _REGISTRY_PATH   = _PROJECT_ROOT / "betting_ml" / "sub_model_registry.yaml"
 _ARTIFACT_S3_URI = "s3://baseball-betting-ml-artifacts/sub_models/offense_v2.pkl"
 
 _MLFLOW_EXPERIMENT = "offense_v2"
+
+# ---------------------------------------------------------------------------
+# Epic 16B.1 — Sequential challenger constants and helpers
+# ---------------------------------------------------------------------------
+
+# Extends the nonseq feature set with the sequential posterior estimate.
+# avg_eb_woba_sequential is NULL for pre-2021 rows; imputed to training mean.
+NUMERIC_FEATURES_SEQ: list[str] = NUMERIC_FEATURES + ["avg_eb_woba_sequential"]
+
+# All possible posterior_source values. __NA__ covers NULL (pre-2021) and
+# any novel cold-start level seen only at serve time.
+_PS_LEVELS = ["sequential", "season_eb", "prior_only", "__NA__"]
+_PS_OHE_COLS = [f"ps_{lvl}" for lvl in _PS_LEVELS]
+
+# Champion NLL/calib_80 thresholds (from current offense_v2 sub_model_registry.yaml).
+# The seq challenger must beat BOTH to be promoted.
+_NONSEQ_CHAMPION_NLL     = 2.484
+_NONSEQ_CHAMPION_CALIB80 = 0.80  # registry gate floor; actual champion value verified at train time
+
+_SEQ_QUERY = """
+SELECT
+    lf.game_pk,
+    lf.game_date,
+    lf.game_year,
+    lf.side,
+    lf.avg_eb_woba,
+    lf.avg_eb_k_pct,
+    lf.avg_eb_bb_pct,
+    lf.avg_eb_iso,
+    lf.avg_eb_woba_uncertainty,
+    lf.eb_coverage_pct,
+    lf.avg_woba_30d,
+    lf.avg_k_pct_30d,
+    lf.avg_bb_pct_30d,
+    lf.avg_woba_std,
+    lf.avg_k_pct_std,
+    lf.avg_bb_pct_std,
+    lf.avg_xwoba_30d,
+    lf.avg_hard_hit_pct_30d,
+    lf.avg_barrel_pct_30d,
+    lf.avg_whiff_rate_30d,
+    lf.avg_chase_rate_30d,
+    lf.avg_xwoba_std,
+    lf.avg_hard_hit_pct_std,
+    lf.avg_barrel_pct_std,
+    lf.lineup_avg_bat_speed,
+    lf.lineup_bat_speed_std,
+    lf.lineup_avg_swing_length,
+    lf.lineup_avg_attack_angle,
+    lf.lineup_bat_speed_vs_starter_velo,
+    lf.avg_zips_wrc_plus,
+    lf.avg_zips_woba_proxy,
+    lf.avg_zips_k_pct,
+    lf.avg_zips_iso,
+    lf.zips_coverage_pct,
+    lf.lhb_count,
+    lf.rhb_count,
+    lf.has_full_lineup,
+    lf.lineup_depth_score,
+    lf.lineup_entropy,
+    lf.lineup_rookie_count,
+    lf.lineup_rookie_pa_share,
+    lf.injured_player_count,
+    lf.injury_adj_avg_woba_30d,
+    lf.injury_adj_avg_xwoba_30d,
+    lf.catcher_framing_runs,
+    lf.catcher_defensive_runs,
+    lf.avg_woba_vs_lhp,
+    lf.avg_xwoba_vs_lhp,
+    lf.avg_k_pct_vs_lhp,
+    lf.avg_bb_pct_vs_lhp,
+    lf.avg_hard_hit_pct_vs_lhp,
+    lf.avg_woba_vs_rhp,
+    lf.avg_xwoba_vs_rhp,
+    lf.avg_k_pct_vs_rhp,
+    lf.avg_bb_pct_vs_rhp,
+    lf.avg_hard_hit_pct_vs_rhp,
+    lf.lineup_woba_vs_starter_archetype,
+    lf.lineup_xwoba_vs_starter_archetype,
+    lf.lineup_k_pct_vs_starter_archetype,
+    lf.lineup_iso_vs_starter_archetype,
+    lf.lineup_archetype_pa_coverage,
+    lf.starter_pitch_archetype,
+    lf.avg_eb_woba_sequential,
+    lf.posterior_source,
+    CASE
+        WHEN lf.side = 'home' THEN gr.home_final_score
+        ELSE gr.away_final_score
+    END AS runs_scored
+FROM baseball_data.betting_features.feature_pregame_lineup_features lf
+JOIN baseball_data.betting.mart_game_results gr
+    ON gr.game_pk = lf.game_pk
+WHERE gr.game_type = 'R'
+  AND gr.home_final_score IS NOT NULL
+ORDER BY lf.game_date, lf.game_pk, lf.side
+"""
+
+
+def load_data_seq() -> pd.DataFrame:
+    """Load training data including sequential posterior columns (Epic 16B.1).
+
+    Requires feature_pregame_lineup_features to have been rebuilt after the
+    16B.1 dbt model update (dbtf run -s feature_pregame_lineup_features).
+    """
+    from betting_ml.utils.data_loader import get_snowflake_connection
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_SEQ_QUERY)
+        cols = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    df = pd.DataFrame(rows, columns=cols)
+    for col in df.select_dtypes(include=["object"]).columns:
+        if col in (_CAT_FEATURE, "posterior_source"):
+            continue
+        try:
+            df[col] = pd.to_numeric(df[col])
+        except (ValueError, TypeError):
+            pass
+    df["has_full_lineup"] = df["has_full_lineup"].astype(float)
+    df = df.sort_values("game_date").reset_index(drop=True)
+
+    # Validate that posterior_source column landed (requires post-16B.1 dbt rebuild)
+    if "posterior_source" not in df.columns:
+        raise RuntimeError(
+            "posterior_source column missing from feature_pregame_lineup_features. "
+            "Run: dbtf run -s feature_pregame_lineup_features  before running --seq."
+        )
+    seq_coverage = df["avg_eb_woba_sequential"].notna().mean()
+    ps_dist = df["posterior_source"].value_counts(dropna=False).to_dict()
+    print(f"  avg_eb_woba_sequential non-null coverage: {seq_coverage:.1%}")
+    print(f"  posterior_source distribution: {ps_dist}")
+    return df
+
+
+def _compute_impute_means_seq(train: pd.DataFrame) -> dict[str, float]:
+    """Compute imputation means for NUMERIC_FEATURES_SEQ (includes avg_eb_woba_sequential)."""
+    means: dict[str, float] = {}
+    for col in NUMERIC_FEATURES_SEQ:
+        m = train[col].mean()
+        means[col] = float(m) if not np.isnan(m) else 0.0
+    return means
+
+
+def _ohe_posterior_source(
+    train: pd.DataFrame,
+    eval_: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """OHE posterior_source with explicit __NA__ level for NULLs and cold-starts."""
+    train = train.copy()
+    eval_ = eval_.copy()
+    train["posterior_source"] = train["posterior_source"].fillna("__NA__")
+    eval_["posterior_source"] = eval_["posterior_source"].fillna("__NA__")
+
+    train_dummies = pd.get_dummies(train["posterior_source"], prefix="ps", dtype=float)
+    # Ensure all 4 known levels are always present (training fold may miss some)
+    for col in _PS_OHE_COLS:
+        if col not in train_dummies.columns:
+            train_dummies[col] = 0.0
+    train_dummies = train_dummies[_PS_OHE_COLS]
+
+    eval_dummies = pd.get_dummies(eval_["posterior_source"], prefix="ps", dtype=float)
+    for col in _PS_OHE_COLS:
+        if col not in eval_dummies.columns:
+            eval_dummies[col] = 0.0
+    eval_dummies = eval_dummies[_PS_OHE_COLS]
+
+    train_out = pd.concat([train.reset_index(drop=True), train_dummies.reset_index(drop=True)], axis=1)
+    eval_out  = pd.concat([eval_.reset_index(drop=True), eval_dummies.reset_index(drop=True)], axis=1)
+    return train_out, eval_out, _PS_OHE_COLS
+
+
+def prepare_fold_seq(
+    df: pd.DataFrame,
+    train_idx,
+    eval_idx,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict, list[str], list[str]]:
+    """Seq-enriched fold preparation for Epic 16B.1.
+
+    Adds avg_eb_woba_sequential to NUMERIC_FEATURES and OHEs both
+    starter_pitch_archetype and posterior_source (with __NA__ cold-start level).
+    """
+    train = df.loc[train_idx].copy()
+    eval_ = df.loc[eval_idx].copy()
+
+    impute_means = _compute_impute_means_seq(train)
+    train = _apply_impute(train, impute_means)
+    eval_ = _apply_impute(eval_,  impute_means)
+
+    # OHE starter_pitch_archetype (same pattern as v1)
+    train, eval_, arch_cols = _ohe_archetype(train, eval_)
+
+    # OHE posterior_source with __NA__ for NULLs / cold-starts
+    train, eval_, ps_cols = _ohe_posterior_source(train, eval_)
+
+    all_ohe_cols = arch_cols + ps_cols
+    all_feat_cols = NUMERIC_FEATURES_SEQ + all_ohe_cols
+    X_train = train[all_feat_cols].to_numpy(dtype=float)
+    y_train = train[_TARGET].to_numpy(dtype=float)
+    X_eval  = eval_[all_feat_cols].to_numpy(dtype=float)
+    y_eval  = eval_[_TARGET].to_numpy(dtype=float)
+
+    return X_train, y_train, X_eval, y_eval, impute_means, all_ohe_cols, all_feat_cols
+
+
+def _train_final_model_seq(
+    df: pd.DataFrame,
+    winner_type: str,
+    tuned_params: dict,
+) -> tuple[object, np.ndarray, np.ndarray, dict, list[str], list[str]]:
+    """Train final seq model on all complete seasons (excl. partial 2026)."""
+    import lightgbm as lgb
+
+    train = df[df["game_year"] != _EXCLUDE_EVAL_YEAR].copy()
+    impute_means = _compute_impute_means_seq(train)
+    train = _apply_impute(train, impute_means)
+
+    # OHE starter_pitch_archetype
+    train_dummies_arch = pd.get_dummies(train[_CAT_FEATURE], prefix="archetype", dtype=float)
+    arch_cols = sorted(train_dummies_arch.columns.tolist())
+    train = pd.concat([train.reset_index(drop=True), train_dummies_arch.reset_index(drop=True)], axis=1)
+
+    # OHE posterior_source with __NA__
+    train["posterior_source"] = train["posterior_source"].fillna("__NA__")
+    train_dummies_ps = pd.get_dummies(train["posterior_source"], prefix="ps", dtype=float)
+    for col in _PS_OHE_COLS:
+        if col not in train_dummies_ps.columns:
+            train_dummies_ps[col] = 0.0
+    train_dummies_ps = train_dummies_ps[_PS_OHE_COLS]
+    train = pd.concat([train.reset_index(drop=True), train_dummies_ps.reset_index(drop=True)], axis=1)
+
+    all_ohe_cols = arch_cols + _PS_OHE_COLS
+    feat_cols = NUMERIC_FEATURES_SEQ + all_ohe_cols
+    X_all = train[feat_cols].to_numpy(dtype=float)
+    y_all = train["runs_scored"].to_numpy(dtype=float)
+
+    params = {
+        **{k: v for k, v in tuned_params.items()},
+        "objective":    "mae",
+        "random_state": _OPTUNA_SEED,
+        "verbose":      -1,
+    }
+    if "n_estimators" not in params:
+        params["n_estimators"] = _LGBM_INIT_PARAMS["n_estimators"]
+    model = lgb.LGBMRegressor(**params)
+    model.fit(X_all, y_all)
+
+    return model, X_all, y_all, impute_means, all_ohe_cols, feat_cols
 
 
 # ---------------------------------------------------------------------------
@@ -209,23 +477,34 @@ def _cv_ngboost(df: pd.DataFrame, folds: list[tuple]) -> tuple[float, float, flo
 # Candidate B — LightGBM + NegBin (global r from residuals)
 # ---------------------------------------------------------------------------
 
-def _cv_lgbm_negbin(df: pd.DataFrame, folds: list[tuple], lgbm_params: dict | None = None) -> tuple[float, float, float, float, list[dict]]:
+def _cv_lgbm_negbin(
+    df: pd.DataFrame,
+    folds: list[tuple],
+    lgbm_params: dict | None = None,
+    prepare_fn=None,
+    label: str = "B",
+) -> tuple[float, float, float, float, list[dict]]:
     """Walk-forward CV for LightGBM conditional mean + global NegBin r.
 
     Returns (nll, mae, std_pred, calib_80, fold_records).
+
+    prepare_fn: fold preparation callable — defaults to prepare_fold (nonseq).
+                Pass prepare_fold_seq for the seq challenger.
+    label: display label for the candidate header line.
     """
     import lightgbm as lgb
 
+    _prepare = prepare_fn or prepare_fold
     params = lgbm_params or _LGBM_INIT_PARAMS
     fold_records: list[dict] = []
     all_mu: list[np.ndarray] = []
     all_y:  list[np.ndarray] = []
 
-    print(f"\n── Candidate B: LightGBM+NegBin walk-forward CV ({len(folds)} folds) ────")
+    print(f"\n── Candidate {label}: LightGBM+NegBin walk-forward CV ({len(folds)} folds) ────")
     print(f"  {'Fold':>4}  {'Eval':>6}  {'NLL':>7}  {'MAE':>6}  {'calib80':>8}  {'r':>6}  {'std_pred':>9}  {'BestIter':>9}")
 
     for i, (train_idx, eval_idx) in enumerate(folds, 1):
-        X_tr, y_tr, X_ev, y_ev, _, _, _ = prepare_fold(df, train_idx, eval_idx)
+        X_tr, y_tr, X_ev, y_ev, _, _, _ = _prepare(df, train_idx, eval_idx)
         eval_year = int(df.loc[eval_idx, "game_year"].mode()[0])
 
         try:
@@ -400,8 +679,10 @@ def _print_gate_summary(
 # Optuna tuning of winner
 # ---------------------------------------------------------------------------
 
-def _make_optuna_objective(winner_type: str, df: pd.DataFrame, folds: list[tuple]):
+def _make_optuna_objective(winner_type: str, df: pd.DataFrame, folds: list[tuple], prepare_fn=None):
     import lightgbm as lgb
+
+    _prepare = prepare_fn or prepare_fold
 
     def objective(trial) -> float:
         if winner_type == "lgbm":
@@ -420,7 +701,7 @@ def _make_optuna_objective(winner_type: str, df: pd.DataFrame, folds: list[tuple
             }
             fold_nlls: list[float] = []
             for train_idx, eval_idx in folds:
-                X_tr, y_tr, X_ev, y_ev, _, _, _ = prepare_fold(df, train_idx, eval_idx)
+                X_tr, y_tr, X_ev, y_ev, _, _, _ = _prepare(df, train_idx, eval_idx)
                 model = lgb.LGBMRegressor(**params)
                 model.fit(X_tr, y_tr)
                 mu_tr = np.clip(model.predict(X_tr), _MIN_MU, None)
@@ -437,7 +718,7 @@ def _make_optuna_objective(winner_type: str, df: pd.DataFrame, folds: list[tuple
             minibatch_frac = trial.suggest_float("minibatch_frac", 0.5, 1.0)
             fold_nlls = []
             for train_idx, eval_idx in folds:
-                X_tr, y_tr, X_ev, y_ev, _, _, _ = prepare_fold(df, train_idx, eval_idx)
+                X_tr, y_tr, X_ev, y_ev, _, _, _ = _prepare(df, train_idx, eval_idx)
                 ngb = NGBRegressor(
                     Dist=Normal,
                     n_estimators=n_estimators,
@@ -456,11 +737,17 @@ def _make_optuna_objective(winner_type: str, df: pd.DataFrame, folds: list[tuple
     return objective
 
 
-def _tune_winner(winner_type: str, df: pd.DataFrame, folds: list[tuple], initial_nll: float) -> tuple[dict, float]:
+def _tune_winner(
+    winner_type: str,
+    df: pd.DataFrame,
+    folds: list[tuple],
+    initial_nll: float,
+    prepare_fn=None,
+) -> tuple[dict, float]:
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    objective = _make_optuna_objective(winner_type, df, folds)
+    objective = _make_optuna_objective(winner_type, df, folds, prepare_fn=prepare_fn)
     study = optuna.create_study(
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=_OPTUNA_SEED),
@@ -798,17 +1085,319 @@ def train(promote: bool = True, dry_run: bool = False) -> str:
     return mlflow_run_id
 
 
+# ---------------------------------------------------------------------------
+# Epic 16B.1 — Sequential challenger training pipeline
+# ---------------------------------------------------------------------------
+
+def _update_registry_seq(
+    nonseq_nll: float,
+    nonseq_calib: float,
+    seq_nll: float,
+    seq_calib: float,
+    seq_tuned_nll: float,
+    seq_negbin_r: float,
+    verdict: str,
+    mlflow_run_id: str,
+) -> None:
+    """Update the offense_v2 registry block with the 16B.1 seq challenger result."""
+    import re
+    import datetime
+
+    text = _REGISTRY_PATH.read_text()
+    today = datetime.date.today().isoformat()
+
+    verdict_line = (
+        f"PROMOTED — seq challenger NLL {seq_nll:.4f} < nonseq {nonseq_nll:.4f} AND "
+        f"calib_80 {seq_calib:.3f} ≥ {_CALIB_80_GATE}."
+        if verdict == "promote"
+        else f"HOLD — seq challenger did not beat nonseq champion on both NLL ({seq_nll:.4f} vs {nonseq_nll:.4f}) "
+             f"and calib_80 ({seq_calib:.3f} vs {nonseq_calib:.3f}). Champion unchanged."
+    )
+
+    seq_block = f"""
+  seq_challenger_16b1:
+    run_date: '{today}'
+    mlflow_run_id: {mlflow_run_id}
+    nonseq_champion_nll: {round(nonseq_nll, 4)}
+    nonseq_champion_calib_80: {round(nonseq_calib, 3)}
+    seq_challenger_cv_nll: {round(seq_nll, 4)}
+    seq_challenger_tuned_nll: {round(seq_tuned_nll, 4)}
+    seq_challenger_calib_80: {round(seq_calib, 3)}
+    seq_challenger_negbin_r: {round(seq_negbin_r, 4)}
+    features_added: [avg_eb_woba_sequential, posterior_source_ohe]
+    verdict: {verdict}
+    verdict_detail: |
+      {verdict_line}"""
+
+    # Append seq_challenger_16b1 sub-block inside offense_v2 block (before next top-level key)
+    pattern = r"(^offense_v2:.*?)(^(?!\s)|\Z)"
+    match = re.search(pattern, text, flags=re.MULTILINE | re.DOTALL)
+    if match:
+        insertion_point = match.end(1)
+        new_text = text[:insertion_point].rstrip() + "\n" + seq_block + "\n\n" + text[insertion_point:]
+        _REGISTRY_PATH.write_text(new_text)
+        print(f"  Updated offense_v2 seq_challenger_16b1 in {_REGISTRY_PATH.relative_to(_PROJECT_ROOT)}")
+    else:
+        # Fallback: append at end
+        _REGISTRY_PATH.write_text(text.rstrip() + "\n" + seq_block + "\n")
+        print("  [WARN] offense_v2 block not found; appended seq result to end of registry")
+
+
+def train_seq(promote: bool = True, dry_run: bool = False) -> str:
+    """Epic 16B.1 — Sequential sub-model enrichment for offense_v2.
+
+    Runs a two-candidate comparison:
+      - nonseq champion: current offense_v2 (NUMERIC_FEATURES, no seq columns)
+      - seq challenger:  adds avg_eb_woba_sequential + posterior_source OHE
+
+    Gate: challenger promoted only if NLL < nonseq champion NLL AND calib_80 ≥ gate.
+    Negative result (hold) is recorded in registry + MLflow.
+
+    Prerequisite: dbtf run -s feature_pregame_lineup_features  (adds posterior_source column)
+    """
+    print("=== EPIC 16B.1 — OFFENSE_V2 SEQUENTIAL CHALLENGER (LightGBM+NegBin) ===\n")
+    print("Loading data from Snowflake (includes avg_eb_woba_sequential, posterior_source)...")
+    df = load_data_seq()
+    print(f"  Loaded {len(df):,} rows × {df.shape[1]} cols "
+          f"({df['game_year'].min():.0f}–{df['game_year'].max():.0f})")
+
+    folds = get_cv_folds(df)
+    eval_years = [int(df.loc[ev, "game_year"].mode()[0]) for _, ev in folds]
+    print(f"  CV folds: {len(folds)} (eval years {eval_years[0]}–{eval_years[-1]})")
+    print(f"  Nonseq features: {len(NUMERIC_FEATURES)} numeric + OHE {_CAT_FEATURE}")
+    print(f"  Seq features:    {len(NUMERIC_FEATURES_SEQ)} numeric + OHE [{_CAT_FEATURE}, posterior_source]")
+    print(f"  Champion thresholds: NLL={_NONSEQ_CHAMPION_NLL}  calib_80≥{_NONSEQ_CHAMPION_CALIB80}")
+
+    # ── MLflow setup ──────────────────────────────────────────────────────────
+    get_or_create_experiment(_MLFLOW_EXPERIMENT)
+    mlflow.set_experiment(_MLFLOW_EXPERIMENT)
+
+    with mlflow.start_run(run_name=f"seq_16b1_{date.today()}") as mlflow_run:
+        mlflow_run_id = mlflow_run.info.run_id
+        mlflow.log_params({
+            "epic":               "16B.1",
+            "n_rows":             len(df),
+            "n_folds":            len(folds),
+            "eval_years":         str(eval_years),
+            "nonseq_champ_nll":   _NONSEQ_CHAMPION_NLL,
+            "calib_80_gate":      _CALIB_80_GATE,
+            "optuna_probe":       _OPTUNA_PROBE_TRIALS,
+            "optuna_full":        _OPTUNA_FULL_TRIALS,
+            "seq_features_added": "avg_eb_woba_sequential,posterior_source",
+        })
+
+        # ── Candidate nonseq: reproduce champion on this dataset ──────────────
+        print("\n" + "=" * 72)
+        print("Step 1/4 — Nonseq champion CV (current offense_v2 feature set)")
+        print("=" * 72)
+        ns_nll, ns_mae, ns_std, ns_calib, ns_folds = _cv_lgbm_negbin(
+            df, folds, label="nonseq",
+        )
+        mlflow.log_metrics({
+            "nonseq_cv_nll": ns_nll, "nonseq_cv_mae": ns_mae,
+            "nonseq_calib_80": ns_calib, "nonseq_std_pred": ns_std,
+        })
+        print(f"\n  Nonseq champion: NLL={ns_nll:.4f}  calib_80={ns_calib:.3f}  "
+              f"(registry champion NLL={_NONSEQ_CHAMPION_NLL})")
+
+        # ── Candidate seq: sequential-enriched challenger ─────────────────────
+        print("\n" + "=" * 72)
+        print("Step 2/4 — Seq challenger CV (+ avg_eb_woba_sequential + posterior_source OHE)")
+        print("=" * 72)
+        seq_nll, seq_mae, seq_std, seq_calib, seq_folds = _cv_lgbm_negbin(
+            df, folds, label="seq", prepare_fn=prepare_fold_seq,
+        )
+        mlflow.log_metrics({
+            "seq_cv_nll": seq_nll, "seq_cv_mae": seq_mae,
+            "seq_calib_80": seq_calib, "seq_std_pred": seq_std,
+        })
+
+        # ── Gate assessment ───────────────────────────────────────────────────
+        print("\n" + "=" * 72)
+        print("Step 3/4 — 16B.1 Gate assessment")
+        print("=" * 72)
+        nll_delta   = ns_nll - seq_nll      # positive = seq is better
+        calib_delta = seq_calib - ns_calib  # positive = seq is better
+
+        def glyph(ok: bool) -> str:
+            return "✅" if ok else "❌"
+
+        seq_beats_nll    = seq_nll   < ns_nll
+        seq_beats_calib  = seq_calib >= _CALIB_80_GATE
+        both_gates_pass  = seq_beats_nll and seq_beats_calib
+
+        print(f"  {'Gate':<36} {'Threshold':>12}  {'nonseq':>8}  {'seq':>8}  {'Pass':>6}")
+        print(f"  {'-'*36}  {'-'*12}  {'-'*8}  {'-'*8}  {'-'*6}")
+        print(f"  {'NLL (seq < nonseq)':<36} {'<' + f'{ns_nll:.4f}':>12}  "
+              f"{ns_nll:>8.4f}  {seq_nll:>8.4f}  {glyph(seq_beats_nll):>6}  "
+              f"(Δ {nll_delta:+.4f})")
+        print(f"  {'calib_80':<36} {'≥' + f'{_CALIB_80_GATE:.2f}':>12}  "
+              f"{ns_calib:>8.3f}  {seq_calib:>8.3f}  {glyph(seq_beats_calib):>6}  "
+              f"(Δ {calib_delta:+.3f})")
+        print()
+        print(f"  Both gates pass: {'YES → PROMOTE SEQ CHALLENGER' if both_gates_pass else 'NO → HOLD NONSEQ CHAMPION'}")
+
+        verdict = "promote" if both_gates_pass else "hold"
+        mlflow.log_params({"seq_verdict": verdict})
+        mlflow.log_metrics({
+            "nll_delta_nonseq_minus_seq": nll_delta,
+            "calib_delta_seq_minus_nonseq": calib_delta,
+        })
+
+        if dry_run:
+            print("\n[DRY RUN] Skipping Optuna tuning and artifact save.")
+            return mlflow_run_id
+
+        # ── Optuna-tune the winner ────────────────────────────────────────────
+        print("\n" + "=" * 72)
+        if verdict == "promote":
+            print("Step 4/4 — Optuna-tune SEQ challenger (winner)")
+            winner_nll    = seq_nll
+            winner_pfn    = prepare_fold_seq
+            winner_label  = "seq"
+        else:
+            print("Step 4/4 — Optuna-tune NONSEQ champion (no promotion)")
+            winner_nll    = ns_nll
+            winner_pfn    = None  # defaults to prepare_fold
+            winner_label  = "nonseq"
+        print("=" * 72)
+
+        tuned_params, tuned_nll = _tune_winner(
+            "lgbm", df, folds, winner_nll, prepare_fn=winner_pfn,
+        )
+        mlflow.log_params({f"tuned_{k}": v for k, v in tuned_params.items()})
+        mlflow.log_metrics({"tuned_cv_nll": tuned_nll})
+
+        # ── Train final model ─────────────────────────────────────────────────
+        print(f"\n── Training final {winner_label} LightGBM+NegBin model on 2015–2025 ────")
+        if verdict == "promote":
+            final_model, X_all, y_all, impute_means, ohe_cols, feat_cols = (
+                _train_final_model_seq(df, "lgbm", tuned_params)
+            )
+        else:
+            final_model, X_all, y_all, impute_means, ohe_cols, feat_cols = (
+                _train_final_model(df, "lgbm", tuned_params)
+            )
+
+        mu_all        = np.clip(final_model.predict(X_all), _MIN_MU, None)
+        global_r      = _fit_negbin_r(y_all, mu_all)
+        in_sample_nll = _negbin_nll(y_all, mu_all, global_r)
+        in_sample_mae = float(np.mean(np.abs(mu_all - y_all)))
+        target_mean   = float(y_all.mean())
+        target_std    = float(y_all.std())
+
+        print(f"  In-sample NLL:       {in_sample_nll:.4f}")
+        print(f"  In-sample MAE:       {in_sample_mae:.4f}")
+        print(f"  Walk-forward CV NLL: {winner_nll:.4f}")
+        print(f"  Fitted NegBin r:     {global_r:.4f}")
+
+        mlflow.log_metrics({
+            "final_insample_nll": in_sample_nll,
+            "final_insample_mae": in_sample_mae,
+            "final_negbin_r":     global_r,
+        })
+
+        # ── Save artifact ─────────────────────────────────────────────────────
+        artifact = {
+            "model":              final_model,
+            "model_type":         "lgbm",
+            "negbin_r":           global_r,
+            "feature_names":      feat_cols,
+            "ohe_categories":     ohe_cols,
+            "impute_means":       impute_means,
+            "target_mean":        target_mean,
+            "target_std":         target_std,
+            "min_mu":             _MIN_MU,
+            "cv_nll":             winner_nll,
+            "cv_mae":             seq_mae if verdict == "promote" else ns_mae,
+            "tuned_params":       tuned_params,
+            "tuned_cv_nll":       tuned_nll,
+            "seq_challenger_nll":  seq_nll,
+            "seq_challenger_calib": seq_calib,
+            "nonseq_champion_nll": ns_nll,
+            "nonseq_champion_calib": ns_calib,
+            "cv_fold_records":    seq_folds if verdict == "promote" else ns_folds,
+            "epic":               "16B.1",
+            "verdict":            verdict,
+            "seq_features_added": ["avg_eb_woba_sequential", "posterior_source"],
+        }
+
+        _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        artifact_path = _OUTPUT_DIR / f"offense_v2_seq_{date.today()}.pkl"
+        joblib.dump(artifact, artifact_path)
+        print(f"\nArtifact saved → {artifact_path.relative_to(_PROJECT_ROOT)}")
+
+        if promote and verdict == "promote":
+            upload_artifact(artifact_path, _ARTIFACT_S3_URI)
+            # Also write to the canonical offense_v2.pkl path (serving path)
+            canonical_path = _OUTPUT_DIR / "offense_v2.pkl"
+            joblib.dump(artifact, canonical_path)
+            print(f"  Canonical artifact updated → {canonical_path.relative_to(_PROJECT_ROOT)}")
+        elif promote and verdict == "hold":
+            print("  Seq gate not passed — skipping S3 upload (nonseq champion unchanged)")
+
+        mlflow.log_artifact(str(artifact_path))
+        mlflow.set_tag("sub_model_registry_key", "offense_v2")
+        mlflow.set_tag("epic", "16B.1")
+        print(f"  MLflow run_id: {mlflow_run_id}")
+
+        # ── Registry ─────────────────────────────────────────────────────────
+        if promote:
+            _update_registry_seq(
+                nonseq_nll=ns_nll,
+                nonseq_calib=ns_calib,
+                seq_nll=seq_nll,
+                seq_calib=seq_calib,
+                seq_tuned_nll=tuned_nll,
+                seq_negbin_r=global_r,
+                verdict=verdict,
+                mlflow_run_id=mlflow_run_id,
+            )
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print("\n" + "=" * 72)
+    print(f"Epic 16B.1 result: {verdict.upper()}")
+    print(f"  nonseq champion: NLL={ns_nll:.4f}  calib_80={ns_calib:.3f}")
+    print(f"  seq challenger:  NLL={seq_nll:.4f}  calib_80={seq_calib:.3f}  "
+          f"(Δ NLL {nll_delta:+.4f}  Δ calib {calib_delta:+.3f})")
+    print(f"  Tuned NLL ({winner_label}): {tuned_nll:.4f}")
+    print(f"  MLflow experiment: {_MLFLOW_EXPERIMENT}  run_id: {mlflow_run_id}")
+
+    if verdict == "promote":
+        print("\n16B.1 PROMOTED. Next steps (16B.4 regeneration):")
+        print("  1. Re-run generate_offense_signals.py against the seq artifact")
+        print("     to refresh feature_pregame_sub_model_signals")
+        print("  2. Continue to 16B.2 (bullpen retrain) and 16B.3 (starter retrain)")
+        print("  3. After 16B.1–16B.3 complete → run 16B.4 (OOS regen + stacking weights)")
+    else:
+        print("\n16B.1 HOLD. Nonseq champion unchanged.")
+        print("  Record this result; continue 16B.2/16B.3 regardless (per spec).")
+        print("  The combined-μ gate (16B.5) will assess the full picture after all retrains.")
+
+    return mlflow_run_id
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Epic 4D — train offense_v2 (NegBin distributional)")
+    parser = argparse.ArgumentParser(description="Epic 4D / 16B.1 — train offense_v2")
+    parser.add_argument("--seq", action="store_true",
+                        help="Epic 16B.1: sequential challenger comparison (nonseq vs seq). "
+                             "Requires dbtf run -s feature_pregame_lineup_features first.")
     parser.add_argument("--no-promote", action="store_true",
                         help="Skip S3 upload and registry update")
     parser.add_argument("--dry-run", action="store_true",
                         help="Run CV only — skip Optuna, artifact save, and registry")
     args = parser.parse_args()
-    train(
-        promote=not args.no_promote,
-        dry_run=args.dry_run,
-    )
+
+    if args.seq:
+        train_seq(
+            promote=not args.no_promote,
+            dry_run=args.dry_run,
+        )
+    else:
+        train(
+            promote=not args.no_promote,
+            dry_run=args.dry_run,
+        )
 
 
 if __name__ == "__main__":

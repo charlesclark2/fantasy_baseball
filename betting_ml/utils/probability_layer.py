@@ -153,6 +153,14 @@ def tune_alpha(
 
 _REGISTRY_PATH = Path(__file__).resolve().parents[2] / "betting_ml" / "sub_model_registry.yaml"
 
+# Bullpen OOD gate — training distribution parameters fitted on 2022-2025 data.
+# Source: betting_ml/models/bayesian/signal_scalers.joblib → 'opp_bullpen_mu' scaler.
+# These are fixed and must not be recomputed from live data.
+# Update only after bullpen_v2 retrain clears Story 17.0 OOD gate (z ≤ ±1.0σ on 2026).
+_BULLPEN_OOD_TRAINING_MEAN  = 1.423189   # mean(bullpen_mu across 2022-2025 opp sides)
+_BULLPEN_OOD_TRAINING_STD   = 0.496120   # std(bullpen_mu across 2022-2025 opp sides)
+_BULLPEN_OOD_THRESHOLD_SIGMA = 1.5       # |z| > 1.5 → OOD flag; blocks totals bets
+
 _DEFAULT_GATE_CONFIG: dict[str, Any] = {
     "min_criteria_met": 3,
     "criteria": {
@@ -249,6 +257,41 @@ def _eval_prior_fresh(row: dict, threshold_days: int) -> float:
         return 0.0
 
 
+def _eval_bullpen_ood_gate(
+    row: dict,
+) -> tuple[float | None, float | None, bool]:
+    """Compute bullpen OOD z-scores and flag for home and away teams.
+
+    Returns (z_home, z_away, is_ood) where is_ood=True when either team's
+    bullpen_mu deviates > _BULLPEN_OOD_THRESHOLD_SIGMA from the 2022-2025
+    training distribution. Returns (None, None, False) when signals are absent.
+
+    Args:
+        row: prediction_row with optional keys bullpen_mu_home, bullpen_mu_away.
+
+    Returns:
+        (bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood)
+    """
+    mu_home = row.get("bullpen_mu_home")
+    mu_away = row.get("bullpen_mu_away")
+
+    if mu_home is None and mu_away is None:
+        return None, None, False
+
+    def _z(mu: float | None) -> float | None:
+        if mu is None:
+            return None
+        return (float(mu) - _BULLPEN_OOD_TRAINING_MEAN) / _BULLPEN_OOD_TRAINING_STD
+
+    z_home = _z(mu_home)
+    z_away = _z(mu_away)
+
+    is_ood = (z_home is not None and abs(z_home) > _BULLPEN_OOD_THRESHOLD_SIGMA) or \
+             (z_away is not None and abs(z_away) > _BULLPEN_OOD_THRESHOLD_SIGMA)
+
+    return z_home, z_away, is_ood
+
+
 def compute_bet_permission(
     game_pk: str,
     prediction_row: dict[str, Any],
@@ -260,16 +303,23 @@ def compute_bet_permission(
     considered "fired" (counts toward gate_signals_met) when its strength > 0.
     game_conviction_score is the equal-weighted mean across all five criteria.
 
+    Bullpen OOD gate (Epic 19 / Story 17.1b): if either team's bullpen_mu deviates
+    > 1.5σ from the 2022-2025 training distribution, qualified_bet is forced False
+    regardless of criterion votes. This is a hard veto, not a criterion vote — it
+    fires when the bullpen signal is outside the model's reliable operating range.
+    Requires prediction_row to contain bullpen_mu_home and bullpen_mu_away.
+
     Args:
         game_pk: Game identifier (used for logging only).
         prediction_row: Dict of scored fields from predict_today.py (pred_total_runs,
-            total_line_consensus, etc.). Missing fields are treated as criterion=False.
+            total_line_consensus, bullpen_mu_home, bullpen_mu_away, etc.). Missing
+            fields are treated as criterion=False / OOD gate absent.
         gate_config: Optional override for gate thresholds and min_criteria_met.
             If None, loaded from sub_model_registry.yaml bet_gate block.
 
     Returns:
         {
-            "qualified_bet": bool,          # gate_signals_met >= min_criteria_met
+            "qualified_bet": bool,          # gate_signals_met >= min_criteria_met AND NOT bullpen_signal_ood
             "gate_signals_met": int,        # 0–5
             "game_conviction_score": float, # 0.0–1.0 (equal-weighted mean strength)
             "gate_detail": {
@@ -279,6 +329,9 @@ def compute_bet_permission(
                 "market_disagreement_visible": bool,
                 "prior_fresh": bool,
             },
+            "bullpen_z_score_home": float | None,
+            "bullpen_z_score_away": float | None,
+            "bullpen_signal_ood": bool,
         }
     """
     if gate_config is None:
@@ -323,9 +376,14 @@ def compute_bet_permission(
     game_conviction_score = round(sum(strengths[k] for k in _CRITERIA_ORDER) / len(_CRITERIA_ORDER), 4)
     qualified_bet = gate_signals_met >= min_met
 
+    # Bullpen OOD gate — hard veto regardless of criterion votes (Story 17.1b / Epic 19)
+    bullpen_z_home, bullpen_z_away, bullpen_ood = _eval_bullpen_ood_gate(prediction_row)
+    if bullpen_ood:
+        qualified_bet = False
+
     logger.debug(
-        "game_pk=%s gate_signals_met=%d/%d conviction=%.4f qualified=%s",
-        game_pk, gate_signals_met, min_met, game_conviction_score, qualified_bet,
+        "game_pk=%s gate_signals_met=%d/%d conviction=%.4f bullpen_ood=%s qualified=%s",
+        game_pk, gate_signals_met, min_met, game_conviction_score, bullpen_ood, qualified_bet,
     )
 
     return {
@@ -333,4 +391,7 @@ def compute_bet_permission(
         "gate_signals_met": gate_signals_met,
         "game_conviction_score": game_conviction_score,
         "gate_detail": gate_detail,
+        "bullpen_z_score_home": round(bullpen_z_home, 4) if bullpen_z_home is not None else None,
+        "bullpen_z_score_away": round(bullpen_z_away, 4) if bullpen_z_away is not None else None,
+        "bullpen_signal_ood": bullpen_ood,
     }

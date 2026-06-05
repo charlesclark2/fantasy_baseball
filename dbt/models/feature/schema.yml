@@ -491,6 +491,16 @@ models:
         tests:
           - not_null
 
+      - name: posterior_source
+        description: >
+          Least-informed-wins aggregation of per-slot posterior_source from
+          eb_batter_posteriors_raw across all 9 lineup slots. Values: 'sequential'
+          (all slots have in-season sequential updates), 'season_eb' (≥1 slot is
+          early-season EB only), 'prior_only' (≥1 slot has no in-season PA).
+          NULL for pre-2021 games (no sequential backfill). Used as an OHE feature
+          in the Epic 16B.1 seq-challenger retrain; NULL maps to __NA__ in the
+          trainer. (Epic 16B.1)
+
       - name: n_power_pull
         description: >
           Count of lineup slots assigned to the power_pull batter archetype (prior season).
@@ -749,6 +759,15 @@ models:
           prior-season starts; estimate is 50% current-season EB posterior + 50% prior-season
           observed rate.
           'full_eb': standard EB posterior with prior shrinkage applied to current-season data.
+
+      - name: posterior_source
+        description: >
+          Per-pitcher sequential posterior source from eb_starter_posteriors.
+          Values: 'sequential' (in-season sequential updates applied), 'season_eb'
+          (early-season EB only, no sequential update yet), 'prior_only' (no in-season
+          appearances; estimate equals prior). NULL for pre-2021 games (no sequential
+          backfill). Used as an OHE feature in the Epic 16B.3 seq-challenger retrain;
+          NULL maps to __NA__ in the trainer. (Epic 16B.3)
 
       - name: starter_pitcher_archetype
         description: >
@@ -1549,6 +1568,1035 @@ models:
           Away catcher FRP. Same construction as home_catcher_defensive_runs. Card 8.K.
         tests:
           - not_null
+
+      # ── Away team — lineup batting quality (Statcast/EB) ────────────────────────
+      - name: away_avg_barrel_pct_std
+        description: Away lineup average barrel rate, season-to-date (all PA before game_date). Decimal (e.g. 0.07 = 7%).
+
+      - name: away_avg_bb_pct_30d
+        description: Away lineup average walk rate over the trailing 30 days. Decimal.
+
+      - name: away_avg_bb_pct_std
+        description: Away lineup average walk rate, season-to-date. Decimal.
+
+      - name: away_avg_bb_pct_vs_lhp
+        description: Away lineup average walk rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_bb_pct_vs_rhp
+        description: Away lineup average walk rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_chase_rate_30d
+        description: Away lineup average chase rate (swings on pitches outside the zone) over the trailing 30 days. Decimal.
+
+      - name: away_avg_eb_bb_pct
+        description: Away lineup Empirical Bayes posterior walk rate (shrinks per-batter raw BB% toward league prior). Decimal.
+
+      - name: away_avg_eb_iso
+        description: Away lineup Empirical Bayes posterior isolated power (ISO = SLG - AVG), shrunk toward league prior. Decimal.
+
+      - name: away_avg_eb_woba
+        description: Away lineup Empirical Bayes posterior wOBA, shrunk toward league prior. Decimal.
+
+      - name: away_avg_eb_woba_sequential
+        description: Away lineup sequential Bayesian posterior wOBA entering this game, updated game-by-game within season. Leakage-safe. Decimal.
+
+      - name: away_avg_hard_hit_pct_std
+        description: Away lineup average hard-hit rate (exit velo ≥ 95 mph), season-to-date. Decimal.
+
+      - name: away_avg_hard_hit_pct_vs_lhp
+        description: Away lineup average hard-hit rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_hard_hit_pct_vs_rhp
+        description: Away lineup average hard-hit rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_k_pct_std
+        description: Away lineup average strikeout rate, season-to-date. Decimal.
+
+      - name: away_avg_k_pct_vs_lhp
+        description: Away lineup average strikeout rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_k_pct_vs_rhp
+        description: Away lineup average strikeout rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_whiff_rate_30d
+        description: Away lineup average swing-and-miss rate over the trailing 30 days. Decimal.
+
+      - name: away_avg_woba_30d
+        description: Away lineup average wOBA over the trailing 30 days. Decimal.
+
+      - name: away_avg_woba_std
+        description: Away lineup average wOBA, season-to-date. Decimal.
+
+      - name: away_avg_woba_vs_lhp
+        description: Away lineup average wOBA vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_woba_vs_rhp
+        description: Away lineup average wOBA vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_xwoba_30d
+        description: Away lineup average xwOBA over the trailing 30 days. Decimal.
+
+      - name: away_avg_xwoba_std
+        description: Away lineup average xwOBA, season-to-date. Decimal.
+
+      - name: away_avg_xwoba_vs_lhp
+        description: Away lineup average xwOBA vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: away_avg_xwoba_vs_rhp
+        description: Away lineup average xwOBA vs right-handed pitchers (prior season platoon split). Decimal.
+
+      # ── Away bullpen ──────────────────────────────────────────────────────────────
+      - name: away_bp_bb_pct_14d
+        description: Away bullpen walk rate over the trailing 14 days. Decimal.
+
+      - name: away_bp_bb_pct_30d
+        description: Away bullpen walk rate over the trailing 30 days. Decimal.
+
+      - name: away_bp_eb_coverage_pct
+        description: Away bullpen Empirical Bayes coverage percentage — fraction of bullpen innings covered by pitchers with enough data to receive a reliable EB estimate.
+
+      - name: away_bp_eb_uncertainty
+        description: Away bullpen Empirical Bayes posterior standard deviation (higher = less confident, closer to prior). Stub/placeholder; see reference note on sub-model uncertainty columns.
+
+      - name: away_bp_eb_xwoba
+        description: Away bullpen Empirical Bayes posterior xwOBA-against, shrunk toward league prior. Decimal.
+
+      - name: away_bp_innings_pitched_14d
+        description: Total innings pitched by the away bullpen over the trailing 14 days (workload proxy). Decimal.
+
+      - name: away_bp_innings_pitched_30d
+        description: Total innings pitched by the away bullpen over the trailing 30 days. Decimal.
+
+      - name: away_bp_k_pct_14d
+        description: Away bullpen strikeout rate over the trailing 14 days. Decimal.
+
+      - name: away_bp_k_pct_30d
+        description: Away bullpen strikeout rate over the trailing 30 days. Decimal.
+
+      - name: away_bp_whiff_rate_14d
+        description: Away bullpen swing-and-miss rate over the trailing 14 days. Decimal.
+
+      - name: away_bp_whiff_rate_30d
+        description: Away bullpen swing-and-miss rate over the trailing 30 days. Decimal.
+
+      - name: away_bp_xwoba_against_14d
+        description: Away bullpen xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: away_bp_xwoba_against_30d
+        description: Away bullpen xwOBA allowed over the trailing 30 days. Decimal.
+
+      # ── Away team context / situational ──────────────────────────────────────────
+      - name: away_bullpen_pitches_prev_7d
+        description: Total pitches thrown by the away bullpen in the 7 days before game_date (cumulative workload proxy). Integer.
+
+      - name: away_closer_used_prev_1d
+        description: Flag (1/0) indicating the away team's closer pitched the day before game_date.
+
+      - name: away_closer_used_prev_2d
+        description: Flag (1/0) indicating the away team's closer pitched within 2 days before game_date.
+
+      - name: away_consecutive_away_games
+        description: Length of the away team's current continuous road trip entering this game (number of consecutive away games). Null when not applicable.
+
+      - name: away_elo
+        description: Away team Elo rating entering this game (~1500 = league average; higher is stronger).
+
+      - name: away_games_back
+        description: Away team's games behind the division leader in the standings as of the day before game_date.
+
+      - name: away_high_leverage_used_prev_2d
+        description: Flag (1/0) indicating the away team used a high-leverage reliever in the 2 days before game_date.
+
+      - name: away_injured_player_count
+        description: Count of away team players on the injured list (IL) as of game_date.
+
+      # ── Away lineup archetypes / Statcast swing metrics ───────────────────────────
+      - name: away_lineup_archetype_pa_coverage
+        description: Fraction of away lineup slots (0–1) that have a prior-season plate-appearance archetype cluster assignment.
+
+      - name: away_lineup_avg_attack_angle
+        description: Away lineup average bat attack angle in degrees (Statcast), averaged across all 9 batters in the confirmed lineup.
+
+      - name: away_lineup_avg_bat_speed
+        description: Away lineup average Statcast bat speed in mph, averaged across all 9 batters.
+
+      - name: away_lineup_avg_swing_length
+        description: Away lineup average Statcast swing length, averaged across all 9 batters.
+
+      - name: away_lineup_bat_speed_vs_starter_velo
+        description: Away lineup average bat speed minus the home starter's average fastball velocity (mph); positive means batters are faster than the starter's heater.
+
+      - name: away_lineup_iso_vs_starter_archetype
+        description: Away lineup isolated power (ISO) against the home starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: away_lineup_k_pct_vs_starter_archetype
+        description: Away lineup strikeout rate against the home starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: away_lineup_woba_vs_starter_archetype
+        description: Away lineup wOBA against the home starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: away_lineup_xwoba_vs_starter_archetype
+        description: Away lineup xwOBA against the home starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: away_n_high_whiff
+        description: Count of away lineup batters classified as "high-whiff" archetype based on prior-season Statcast profile.
+
+      - name: away_n_no_label
+        description: Count of away lineup batters without a prior-season archetype cluster label (new players, limited data).
+
+      - name: away_n_patient_obp
+        description: Count of away lineup batters classified as "patient OBP" archetype (high walk rate, disciplined approach).
+
+      - name: away_n_power_pull
+        description: Count of away lineup batters classified as "power pull" archetype (high pull rate, power-oriented swing).
+
+      # ── Away team offense rolling ──────────────────────────────────────────────────
+      - name: away_off_barrel_pct_30d
+        description: Away team offense barrel rate over the trailing 30 days. Decimal.
+
+      - name: away_off_bb_pct_30d
+        description: Away team offense walk rate over the trailing 30 days. Decimal.
+
+      - name: away_off_bb_pct_7d
+        description: Away team offense walk rate over the trailing 7 days. Decimal.
+
+      - name: away_off_bb_pct_std
+        description: Away team offense walk rate, season-to-date. Decimal.
+
+      - name: away_off_hard_hit_pct_7d
+        description: Away team offense hard-hit rate over the trailing 7 days. Decimal.
+
+      - name: away_off_hard_hit_pct_std
+        description: Away team offense hard-hit rate, season-to-date. Decimal.
+
+      - name: away_off_k_pct_30d
+        description: Away team offense strikeout rate over the trailing 30 days. Decimal.
+
+      - name: away_off_k_pct_7d
+        description: Away team offense strikeout rate over the trailing 7 days. Decimal.
+
+      - name: away_off_k_pct_std
+        description: Away team offense strikeout rate, season-to-date. Decimal.
+
+      - name: away_off_runs_per_game_30d
+        description: Away team runs scored per game over the trailing 30 days.
+
+      - name: away_off_runs_per_game_std
+        description: Away team runs scored per game, season-to-date.
+
+      - name: away_off_woba_14d
+        description: Away team offense wOBA over the trailing 14 days. Decimal.
+
+      - name: away_off_woba_7d
+        description: Away team offense wOBA over the trailing 7 days. Decimal.
+
+      - name: away_off_xwoba_14d
+        description: Away team offense xwOBA over the trailing 14 days. Decimal.
+
+      - name: away_off_xwoba_30d
+        description: Away team offense xwOBA over the trailing 30 days. Decimal.
+
+      - name: away_off_xwoba_7d
+        description: Away team offense xwOBA over the trailing 7 days. Decimal.
+
+      - name: away_off_xwoba_std
+        description: Away team offense xwOBA, season-to-date. Decimal.
+
+      # ── Away team pitching staff rolling ──────────────────────────────────────────
+      - name: away_pit_barrel_pct_30d
+        description: Away team pitching staff barrel rate allowed over the trailing 30 days. Decimal.
+
+      - name: away_pit_bb_pct_30d
+        description: Away team pitching staff walk rate over the trailing 30 days. Decimal.
+
+      - name: away_pit_bb_pct_7d
+        description: Away team pitching staff walk rate over the trailing 7 days. Decimal.
+
+      - name: away_pit_bb_pct_std
+        description: Away team pitching staff walk rate, season-to-date. Decimal.
+
+      - name: away_pit_hard_hit_pct_30d
+        description: Away team pitching staff hard-hit rate allowed over the trailing 30 days. Decimal.
+
+      - name: away_pit_hard_hit_pct_7d
+        description: Away team pitching staff hard-hit rate allowed over the trailing 7 days. Decimal.
+
+      - name: away_pit_hard_hit_pct_std
+        description: Away team pitching staff hard-hit rate allowed, season-to-date. Decimal.
+
+      - name: away_pit_k_pct_30d
+        description: Away team pitching staff strikeout rate over the trailing 30 days. Decimal.
+
+      - name: away_pit_k_pct_7d
+        description: Away team pitching staff strikeout rate over the trailing 7 days. Decimal.
+
+      - name: away_pit_k_pct_std
+        description: Away team pitching staff strikeout rate, season-to-date. Decimal.
+
+      - name: away_pit_woba_against_14d
+        description: Away team pitching staff wOBA allowed over the trailing 14 days. Decimal.
+
+      - name: away_pit_woba_against_30d
+        description: Away team pitching staff wOBA allowed over the trailing 30 days. Decimal.
+
+      - name: away_pit_woba_against_7d
+        description: Away team pitching staff wOBA allowed over the trailing 7 days. Decimal.
+
+      - name: away_pit_woba_against_std
+        description: Away team pitching staff wOBA allowed, season-to-date. Decimal.
+
+      - name: away_pit_xwoba_against_14d
+        description: Away team pitching staff xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: away_pit_xwoba_against_30d
+        description: Away team pitching staff xwOBA allowed over the trailing 30 days. Decimal.
+
+      - name: away_pit_xwoba_against_7d
+        description: Away team pitching staff xwOBA allowed over the trailing 7 days. Decimal.
+
+      - name: away_pit_xwoba_against_std
+        description: Away team pitching staff xwOBA allowed, season-to-date. Decimal.
+
+      - name: away_pit_xwoba_7d_minus_30d
+        description: Away pitching staff xwOBA allowed (7-day) minus xwOBA allowed (30-day); positive means recent form is worse than the 30-day trend.
+
+      # ── Away team standings / expected wins ───────────────────────────────────────
+      - name: away_pythagorean_residual_season
+        description: Away team actual win% minus Pythagorean expected win% for the season to date; positive = outperforming run differential (luck/clutch indicator).
+
+      - name: away_pythagorean_win_exp
+        description: Away team Pythagorean expected win percentage based on season runs scored and allowed to date.
+
+      # ── Away starting pitcher ──────────────────────────────────────────────────────
+      - name: away_starter_appearances_30d
+        description: Number of appearances (starts) by the away starter in the trailing 30 days.
+
+      - name: away_starter_avg_fastball_velo
+        description: Away starter average fastball velocity in mph (trailing Statcast data).
+
+      - name: away_starter_barrel_pct_14d
+        description: Away starter barrel rate allowed over the trailing 14 days. Decimal.
+
+      - name: away_starter_barrel_pct_30d
+        description: Away starter barrel rate allowed over the trailing 30 days. Decimal.
+
+      - name: away_starter_barrel_pct_7d
+        description: Away starter barrel rate allowed over the trailing 7 days. Decimal.
+
+      - name: away_starter_barrel_pct_std
+        description: Away starter barrel rate allowed, season-to-date. Decimal.
+
+      - name: away_starter_batter_chase_rate_30d
+        description: Away starter opponent chase rate (swings on pitches outside the zone) over the trailing 30 days. Decimal.
+
+      - name: away_starter_batter_chase_rate_7d
+        description: Away starter opponent chase rate over the trailing 7 days. Decimal.
+
+      - name: away_starter_batter_chase_rate_std
+        description: Away starter opponent chase rate, season-to-date. Decimal.
+
+      - name: away_starter_bb_pct_14d
+        description: Away starter walk rate over the trailing 14 days. Decimal.
+
+      - name: away_starter_bb_pct_30d
+        description: Away starter walk rate over the trailing 30 days. Decimal.
+
+      - name: away_starter_bb_pct_std
+        description: Away starter walk rate, season-to-date. Decimal.
+
+      - name: away_starter_bb_pct_vs_lhb
+        description: Away starter walk rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_bb_pct_vs_rhb
+        description: Away starter walk rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_changeup_stuff_plus
+        description: Away starter Stuff+ score for the changeup (100 = league average; higher is better for pitcher).
+
+      - name: away_starter_csw_pct_3start
+        description: Away starter called strikes + whiffs per total pitches (CSW%) over the last 3 starts. Decimal.
+
+      - name: away_starter_eb_bb_pct
+        description: Away starter Empirical Bayes posterior walk rate, shrunk toward league prior. Decimal.
+
+      - name: away_starter_eb_k_pct
+        description: Away starter Empirical Bayes posterior strikeout rate, shrunk toward league prior. Decimal.
+
+      - name: away_starter_eb_xwoba_against
+        description: Away starter Empirical Bayes posterior xwOBA-against, shrunk toward league prior. Decimal.
+
+      - name: away_starter_eb_xwoba_against_sequential
+        description: Away starter sequential Bayesian posterior xwOBA-against entering this game, updated game-by-game within season. Leakage-safe. Decimal.
+
+      - name: away_starter_eb_xwoba_uncertainty
+        description: Away starter Empirical Bayes posterior standard deviation for xwOBA-against (higher = less confident, closer to prior).
+
+      - name: away_starter_fip_ra9_gap
+        description: Away starter FIP minus RA/9; positive means allowing fewer runs than FIP predicts (may reflect defense or sequencing luck).
+
+      - name: away_starter_hard_hit_pct_14d
+        description: Away starter hard-hit rate allowed over the trailing 14 days. Decimal.
+
+      - name: away_starter_hard_hit_pct_30d
+        description: Away starter hard-hit rate allowed over the trailing 30 days. Decimal.
+
+      - name: away_starter_hard_hit_pct_7d
+        description: Away starter hard-hit rate allowed over the trailing 7 days. Decimal.
+
+      - name: away_starter_hard_hit_pct_std
+        description: Away starter hard-hit rate allowed, season-to-date. Decimal.
+
+      - name: away_starter_k_pct_vs_lhb
+        description: Away starter strikeout rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_k_pct_vs_rhb
+        description: Away starter strikeout rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_pitcher_id
+        description: MLB player ID for the away team's starting pitcher (MLBAM ID).
+
+      - name: away_starter_proj_fip
+        description: Away starter projected FIP (forward-looking FIP estimate based on component rates).
+
+      - name: away_starter_slider_stuff_plus
+        description: Away starter Stuff+ score for the slider (100 = league average; higher is better for pitcher).
+
+      - name: away_starter_stuff_plus
+        description: Away starter overall Stuff+ score across all pitch types (100 = league average; higher is better for pitcher).
+
+      - name: away_starter_trailing_fip_30g
+        description: Away starter trailing FIP over the last 30 games started.
+
+      - name: away_starter_trailing_ra9_30g
+        description: Away starter trailing runs allowed per 9 innings over the last 30 games started.
+
+      - name: away_starter_whiff_rate_14d
+        description: Away starter swing-and-miss rate over the trailing 14 days. Decimal.
+
+      - name: away_starter_whiff_rate_std
+        description: Away starter swing-and-miss rate, season-to-date. Decimal.
+
+      - name: away_starter_whiff_rate_vs_lhb
+        description: Away starter swing-and-miss rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_whiff_rate_vs_rhb
+        description: Away starter swing-and-miss rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_xwoba_7d_minus_std
+        description: Away starter xwOBA-against (7-day) minus xwOBA-against (season-to-date); positive means recent form is worse than season average.
+
+      - name: away_starter_xwoba_against_14d
+        description: Away starter xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: away_starter_xwoba_against_30d
+        description: Away starter xwOBA allowed over the trailing 30 days. Decimal.
+
+      - name: away_starter_xwoba_against_7d
+        description: Away starter xwOBA allowed over the trailing 7 days. Decimal.
+
+      - name: away_starter_xwoba_against_std
+        description: Away starter xwOBA allowed, season-to-date. Decimal.
+
+      - name: away_starter_xwoba_vs_lhb
+        description: Away starter xwOBA allowed vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: away_starter_xwoba_vs_rhb
+        description: Away starter xwOBA allowed vs right-handed batters (prior season platoon split). Decimal.
+
+      # ── Away team defense / standings ─────────────────────────────────────────────
+      - name: away_team_oaa_prior_season
+        description: Away team Outs Above Average (OAA) from the prior season (0 = league average; positive = above-average defense).
+
+      # ── Away vs handedness / situational splits ───────────────────────────────────
+      - name: away_vs_lhp_bb_pct_30d
+        description: Away lineup walk rate vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_lhp_hard_hit_pct_30d
+        description: Away lineup hard-hit rate vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_lhp_slugging_30d
+        description: Away lineup slugging percentage vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_lhp_woba_std
+        description: Away lineup wOBA vs left-handed pitchers, season-to-date. Decimal.
+
+      - name: away_vs_lhp_xwoba_30d
+        description: Away lineup xwOBA vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_lhp_xwoba_std
+        description: Away lineup xwOBA vs left-handed pitchers, season-to-date. Decimal.
+
+      - name: away_vs_rhp_slugging_30d
+        description: Away lineup slugging percentage vs right-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_rhp_woba_std
+        description: Away lineup wOBA vs right-handed pitchers, season-to-date. Decimal.
+
+      - name: away_vs_rhp_woba_30d
+        description: Away lineup wOBA vs right-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: away_vs_lhp_woba_30d
+        description: Away lineup wOBA vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      # ── Away RISP / clutch situational ────────────────────────────────────────────
+      - name: away_woba_against_with_risp_30d
+        description: Away pitching staff wOBA allowed with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: away_woba_against_with_runners_on_30d
+        description: Away pitching staff wOBA allowed with runners on base over the trailing 30 days. Decimal.
+
+      - name: away_woba_with_risp_30d
+        description: Away team offense wOBA with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: away_xwoba_with_risp_30d
+        description: Away team offense xwOBA with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: away_xwoba_with_runners_on_30d
+        description: Away team offense xwOBA with runners on base over the trailing 30 days. Decimal.
+
+      - name: away_wins
+        description: Away team season win total as of the day before game_date.
+
+      # ── Game-level differential ────────────────────────────────────────────────────
+      - name: elo_diff
+        description: Home team Elo rating minus away team Elo rating; positive values favor the home team.
+
+      # ── Home team — lineup batting quality (Statcast/EB) ─────────────────────────
+      - name: home_avg_barrel_pct_std
+        description: Home lineup average barrel rate, season-to-date (all PA before game_date). Decimal.
+
+      - name: home_avg_bb_pct_30d
+        description: Home lineup average walk rate over the trailing 30 days. Decimal.
+
+      - name: home_avg_bb_pct_std
+        description: Home lineup average walk rate, season-to-date. Decimal.
+
+      - name: home_avg_bb_pct_vs_lhp
+        description: Home lineup average walk rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_bb_pct_vs_rhp
+        description: Home lineup average walk rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_chase_rate_30d
+        description: Home lineup average chase rate (swings on pitches outside the zone) over the trailing 30 days. Decimal.
+
+      - name: home_avg_eb_bb_pct
+        description: Home lineup Empirical Bayes posterior walk rate, shrunk toward league prior. Decimal.
+
+      - name: home_avg_eb_iso
+        description: Home lineup Empirical Bayes posterior isolated power (ISO), shrunk toward league prior. Decimal.
+
+      - name: home_avg_eb_woba
+        description: Home lineup Empirical Bayes posterior wOBA, shrunk toward league prior. Decimal.
+
+      - name: home_avg_eb_woba_sequential
+        description: Home lineup sequential Bayesian posterior wOBA entering this game, updated game-by-game within season. Leakage-safe. Decimal.
+
+      - name: home_avg_hard_hit_pct_std
+        description: Home lineup average hard-hit rate (exit velo ≥ 95 mph), season-to-date. Decimal.
+
+      - name: home_avg_hard_hit_pct_vs_lhp
+        description: Home lineup average hard-hit rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_hard_hit_pct_vs_rhp
+        description: Home lineup average hard-hit rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_k_pct_std
+        description: Home lineup average strikeout rate, season-to-date. Decimal.
+
+      - name: home_avg_k_pct_vs_lhp
+        description: Home lineup average strikeout rate vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_k_pct_vs_rhp
+        description: Home lineup average strikeout rate vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_whiff_rate_30d
+        description: Home lineup average swing-and-miss rate over the trailing 30 days. Decimal.
+
+      - name: home_avg_woba_30d
+        description: Home lineup average wOBA over the trailing 30 days. Decimal.
+
+      - name: home_avg_woba_std
+        description: Home lineup average wOBA, season-to-date. Decimal.
+
+      - name: home_avg_woba_vs_lhp
+        description: Home lineup average wOBA vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_woba_vs_rhp
+        description: Home lineup average wOBA vs right-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_xwoba_30d
+        description: Home lineup average xwOBA over the trailing 30 days. Decimal.
+
+      - name: home_avg_xwoba_std
+        description: Home lineup average xwOBA, season-to-date. Decimal.
+
+      - name: home_avg_xwoba_vs_lhp
+        description: Home lineup average xwOBA vs left-handed pitchers (prior season platoon split). Decimal.
+
+      - name: home_avg_xwoba_vs_rhp
+        description: Home lineup average xwOBA vs right-handed pitchers (prior season platoon split). Decimal.
+
+      # ── Home vs away differential features ───────────────────────────────────────
+      - name: home_away_bp_xwoba_against_30d_pct_diff
+        description: Percentage difference in 30-day bullpen xwOBA-against between home and away teams; (home - away) / mean(home, away). Positive = home bullpen allowing more contact quality.
+
+      - name: home_away_injury_adj_avg_woba_30d_pct_diff
+        description: Percentage difference in injury-adjusted 30-day lineup wOBA between home and away teams; (home - away) / mean(home, away).
+
+      - name: home_away_off_k_pct_30d_pct_diff
+        description: Percentage difference in 30-day offense strikeout rate between home and away teams; (home - away) / mean(home, away).
+
+      - name: home_away_off_woba_30d_pct_diff
+        description: Percentage difference in 30-day offense wOBA between home and away teams; (home - away) / mean(home, away).
+
+      - name: home_away_off_xwoba_30d_pct_diff
+        description: Percentage difference in 30-day offense xwOBA between home and away teams; (home - away) / mean(home, away).
+
+      - name: home_away_starter_k_pct_std_pct_diff
+        description: Percentage difference in season-to-date starter strikeout rate between home and away starters; (home - away) / mean(home, away).
+
+      - name: home_away_starter_xwoba_against_std_pct_diff
+        description: Percentage difference in season-to-date starter xwOBA-against between home and away starters; (home - away) / mean(home, away).
+
+      # ── Home bullpen ──────────────────────────────────────────────────────────────
+      - name: home_bp_bb_pct_14d
+        description: Home bullpen walk rate over the trailing 14 days. Decimal.
+
+      - name: home_bp_bb_pct_30d
+        description: Home bullpen walk rate over the trailing 30 days. Decimal.
+
+      - name: home_bp_eb_coverage_pct
+        description: Home bullpen Empirical Bayes coverage percentage — fraction of bullpen innings covered by pitchers with enough data for a reliable EB estimate.
+
+      - name: home_bp_eb_uncertainty
+        description: Home bullpen Empirical Bayes posterior standard deviation (higher = less confident, closer to prior). Stub/placeholder; see reference note on sub-model uncertainty columns.
+
+      - name: home_bp_eb_xwoba
+        description: Home bullpen Empirical Bayes posterior xwOBA-against, shrunk toward league prior. Decimal.
+
+      - name: home_bp_hard_hit_pct_14d
+        description: Home bullpen hard-hit rate allowed over the trailing 14 days. Decimal.
+
+      - name: home_bp_hard_hit_pct_30d
+        description: Home bullpen hard-hit rate allowed over the trailing 30 days. Decimal.
+
+      - name: home_bp_innings_pitched_30d
+        description: Total innings pitched by the home bullpen over the trailing 30 days. Decimal.
+
+      - name: home_bp_k_pct_14d
+        description: Home bullpen strikeout rate over the trailing 14 days. Decimal.
+
+      - name: home_bp_k_pct_30d
+        description: Home bullpen strikeout rate over the trailing 30 days. Decimal.
+
+      - name: home_bp_whiff_rate_14d
+        description: Home bullpen swing-and-miss rate over the trailing 14 days. Decimal.
+
+      - name: home_bp_whiff_rate_30d
+        description: Home bullpen swing-and-miss rate over the trailing 30 days. Decimal.
+
+      - name: home_bp_xwoba_against_14d
+        description: Home bullpen xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: home_bp_xwoba_against_30d
+        description: Home bullpen xwOBA allowed over the trailing 30 days. Decimal.
+
+      # ── Home team context / situational ──────────────────────────────────────────
+      - name: home_closer_used_prev_2d
+        description: Flag (1/0) indicating the home team's closer pitched within 2 days before game_date.
+
+      - name: home_elo
+        description: Home team Elo rating entering this game (~1500 = league average; higher is stronger).
+
+      - name: home_games_back
+        description: Home team's games behind the division leader in standings as of the day before game_date.
+
+      - name: home_injured_player_count
+        description: Count of home team players on the injured list (IL) as of game_date.
+
+      - name: home_injury_adj_avg_woba_30d
+        description: Home lineup 30-day wOBA adjusted for injured player replacements; substitutes replacement-level wOBA for IL batters. Decimal.
+
+      - name: home_lhb_count
+        description: Count of left-handed batters in the home team's confirmed lineup.
+
+      # ── Home lineup archetypes / Statcast swing metrics ──────────────────────────
+      - name: home_lineup_archetype_pa_coverage
+        description: Fraction of home lineup slots (0–1) that have a prior-season plate-appearance archetype cluster assignment.
+
+      - name: home_lineup_avg_attack_angle
+        description: Home lineup average bat attack angle in degrees (Statcast), averaged across all 9 batters.
+
+      - name: home_lineup_avg_bat_speed
+        description: Home lineup average Statcast bat speed in mph, averaged across all 9 batters.
+
+      - name: home_lineup_avg_swing_length
+        description: Home lineup average Statcast swing length, averaged across all 9 batters.
+
+      - name: home_lineup_bat_speed_vs_starter_velo
+        description: Home lineup average bat speed minus the away starter's average fastball velocity (mph); positive means batters are faster than the starter's heater.
+
+      - name: home_lineup_iso_vs_starter_archetype
+        description: Home lineup isolated power (ISO) against the away starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: home_lineup_k_pct_vs_starter_archetype
+        description: Home lineup strikeout rate against the away starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: home_lineup_woba_vs_starter_archetype
+        description: Home lineup wOBA against the away starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: home_lineup_xwoba_vs_starter_archetype
+        description: Home lineup xwOBA against the away starter's pitcher archetype cluster (prior season). Decimal.
+
+      - name: home_n_no_label
+        description: Count of home lineup batters without a prior-season archetype cluster label (new players, limited data).
+
+      - name: home_n_patient_obp
+        description: Count of home lineup batters classified as "patient OBP" archetype (high walk rate, disciplined approach).
+
+      - name: home_n_power_pull
+        description: Count of home lineup batters classified as "power pull" archetype (high pull rate, power-oriented swing).
+
+      # ── Home team offense rolling ─────────────────────────────────────────────────
+      - name: home_off_barrel_pct_30d
+        description: Home team offense barrel rate over the trailing 30 days. Decimal.
+
+      - name: home_off_bb_pct_30d
+        description: Home team offense walk rate over the trailing 30 days. Decimal.
+
+      - name: home_off_bb_pct_7d
+        description: Home team offense walk rate over the trailing 7 days. Decimal.
+
+      - name: home_off_bb_pct_std
+        description: Home team offense walk rate, season-to-date. Decimal.
+
+      - name: home_off_hard_hit_pct_7d
+        description: Home team offense hard-hit rate over the trailing 7 days. Decimal.
+
+      - name: home_off_hard_hit_pct_std
+        description: Home team offense hard-hit rate, season-to-date. Decimal.
+
+      - name: home_off_k_pct_30d
+        description: Home team offense strikeout rate over the trailing 30 days. Decimal.
+
+      - name: home_off_k_pct_7d
+        description: Home team offense strikeout rate over the trailing 7 days. Decimal.
+
+      - name: home_off_k_pct_std
+        description: Home team offense strikeout rate, season-to-date. Decimal.
+
+      - name: home_off_runs_per_game_14d
+        description: Home team runs scored per game over the trailing 14 days.
+
+      - name: home_off_runs_per_game_30d
+        description: Home team runs scored per game over the trailing 30 days.
+
+      - name: home_off_runs_per_game_7d
+        description: Home team runs scored per game over the trailing 7 days.
+
+      - name: home_off_runs_per_game_std
+        description: Home team runs scored per game, season-to-date.
+
+      - name: home_off_xwoba_14d
+        description: Home team offense xwOBA over the trailing 14 days. Decimal.
+
+      - name: home_off_xwoba_30d
+        description: Home team offense xwOBA over the trailing 30 days. Decimal.
+
+      - name: home_off_xwoba_7d
+        description: Home team offense xwOBA over the trailing 7 days. Decimal.
+
+      - name: home_off_xwoba_std
+        description: Home team offense xwOBA, season-to-date. Decimal.
+
+      # ── Home team pitching staff rolling ──────────────────────────────────────────
+      - name: home_pit_barrel_pct_30d
+        description: Home team pitching staff barrel rate allowed over the trailing 30 days. Decimal.
+
+      - name: home_pit_bb_pct_30d
+        description: Home team pitching staff walk rate over the trailing 30 days. Decimal.
+
+      - name: home_pit_bb_pct_7d
+        description: Home team pitching staff walk rate over the trailing 7 days. Decimal.
+
+      - name: home_pit_bb_pct_std
+        description: Home team pitching staff walk rate, season-to-date. Decimal.
+
+      - name: home_pit_hard_hit_pct_30d
+        description: Home team pitching staff hard-hit rate allowed over the trailing 30 days. Decimal.
+
+      - name: home_pit_hard_hit_pct_7d
+        description: Home team pitching staff hard-hit rate allowed over the trailing 7 days. Decimal.
+
+      - name: home_pit_hard_hit_pct_std
+        description: Home team pitching staff hard-hit rate allowed, season-to-date. Decimal.
+
+      - name: home_pit_k_pct_30d
+        description: Home team pitching staff strikeout rate over the trailing 30 days. Decimal.
+
+      - name: home_pit_k_pct_7d
+        description: Home team pitching staff strikeout rate over the trailing 7 days. Decimal.
+
+      - name: home_pit_k_pct_std
+        description: Home team pitching staff strikeout rate, season-to-date. Decimal.
+
+      - name: home_pit_woba_against_14d
+        description: Home team pitching staff wOBA allowed over the trailing 14 days. Decimal.
+
+      - name: home_pit_woba_against_30d
+        description: Home team pitching staff wOBA allowed over the trailing 30 days. Decimal.
+
+      - name: home_pit_woba_against_7d
+        description: Home team pitching staff wOBA allowed over the trailing 7 days. Decimal.
+
+      - name: home_pit_woba_against_std
+        description: Home team pitching staff wOBA allowed, season-to-date. Decimal.
+
+      - name: home_pit_xwoba_against_14d
+        description: Home team pitching staff xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: home_pit_xwoba_against_30d
+        description: Home team pitching staff xwOBA allowed over the trailing 30 days. Decimal.
+
+      - name: home_pit_xwoba_against_7d
+        description: Home team pitching staff xwOBA allowed over the trailing 7 days. Decimal.
+
+      - name: home_pit_xwoba_against_std
+        description: Home team pitching staff xwOBA allowed, season-to-date. Decimal.
+
+      - name: home_pit_xwoba_7d_minus_30d
+        description: Home pitching staff xwOBA allowed (7-day) minus xwOBA allowed (30-day); positive means recent form is worse than the 30-day trend.
+
+      # ── Home team standings / expected wins ───────────────────────────────────────
+      - name: home_pythagorean_residual_season
+        description: Home team actual win% minus Pythagorean expected win% for the season to date; positive = outperforming run differential (luck/clutch indicator).
+
+      - name: home_pythagorean_win_exp
+        description: Home team Pythagorean expected win percentage based on season runs scored and allowed to date.
+
+      # ── Home starting pitcher ──────────────────────────────────────────────────────
+      - name: home_starter_appearances_30d
+        description: Number of appearances (starts) by the home starter in the trailing 30 days.
+
+      - name: home_starter_avg_fastball_velo
+        description: Home starter average fastball velocity in mph (trailing Statcast data).
+
+      - name: home_starter_barrel_pct_14d
+        description: Home starter barrel rate allowed over the trailing 14 days. Decimal.
+
+      - name: home_starter_barrel_pct_30d
+        description: Home starter barrel rate allowed over the trailing 30 days. Decimal.
+
+      - name: home_starter_barrel_pct_7d
+        description: Home starter barrel rate allowed over the trailing 7 days. Decimal.
+
+      - name: home_starter_barrel_pct_std
+        description: Home starter barrel rate allowed, season-to-date. Decimal.
+
+      - name: home_starter_batter_chase_rate_30d
+        description: Home starter opponent chase rate (swings on pitches outside the zone) over the trailing 30 days. Decimal.
+
+      - name: home_starter_batter_chase_rate_7d
+        description: Home starter opponent chase rate over the trailing 7 days. Decimal.
+
+      - name: home_starter_batter_chase_rate_std
+        description: Home starter opponent chase rate, season-to-date. Decimal.
+
+      - name: home_starter_bb_pct_14d
+        description: Home starter walk rate over the trailing 14 days. Decimal.
+
+      - name: home_starter_bb_pct_30d
+        description: Home starter walk rate over the trailing 30 days. Decimal.
+
+      - name: home_starter_bb_pct_std
+        description: Home starter walk rate, season-to-date. Decimal.
+
+      - name: home_starter_bb_pct_vs_lhb
+        description: Home starter walk rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_bb_pct_vs_rhb
+        description: Home starter walk rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_changeup_stuff_plus
+        description: Home starter Stuff+ score for the changeup (100 = league average; higher is better for pitcher).
+
+      - name: home_starter_csw_pct_3start
+        description: Home starter called strikes + whiffs per total pitches (CSW%) over the last 3 starts. Decimal.
+
+      - name: home_starter_eb_bb_pct
+        description: Home starter Empirical Bayes posterior walk rate, shrunk toward league prior. Decimal.
+
+      - name: home_starter_eb_k_pct
+        description: Home starter Empirical Bayes posterior strikeout rate, shrunk toward league prior. Decimal.
+
+      - name: home_starter_eb_xwoba_against
+        description: Home starter Empirical Bayes posterior xwOBA-against, shrunk toward league prior. Decimal.
+
+      - name: home_starter_eb_xwoba_against_sequential
+        description: Home starter sequential Bayesian posterior xwOBA-against entering this game, updated game-by-game within season. Leakage-safe. Decimal.
+
+      - name: home_starter_eb_xwoba_uncertainty
+        description: Home starter Empirical Bayes posterior standard deviation for xwOBA-against (higher = less confident, closer to prior).
+
+      - name: home_starter_fip_ra9_gap
+        description: Home starter FIP minus RA/9; positive means allowing fewer runs than FIP predicts (may reflect defense or sequencing luck).
+
+      - name: home_starter_hard_hit_pct_14d
+        description: Home starter hard-hit rate allowed over the trailing 14 days. Decimal.
+
+      - name: home_starter_hard_hit_pct_30d
+        description: Home starter hard-hit rate allowed over the trailing 30 days. Decimal.
+
+      - name: home_starter_hard_hit_pct_7d
+        description: Home starter hard-hit rate allowed over the trailing 7 days. Decimal.
+
+      - name: home_starter_hard_hit_pct_std
+        description: Home starter hard-hit rate allowed, season-to-date. Decimal.
+
+      - name: home_starter_k_pct_vs_lhb
+        description: Home starter strikeout rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_k_pct_vs_rhb
+        description: Home starter strikeout rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_pitcher_id
+        description: MLB player ID for the home team's starting pitcher (MLBAM ID).
+
+      - name: home_starter_proj_fip
+        description: Home starter projected FIP (forward-looking FIP estimate based on component rates).
+
+      - name: home_starter_slider_stuff_plus
+        description: Home starter Stuff+ score for the slider (100 = league average; higher is better for pitcher).
+
+      - name: home_starter_stuff_plus
+        description: Home starter overall Stuff+ score across all pitch types (100 = league average; higher is better for pitcher).
+
+      - name: home_starter_trailing_fip_30g
+        description: Home starter trailing FIP over the last 30 games started.
+
+      - name: home_starter_trailing_ra9_30g
+        description: Home starter trailing runs allowed per 9 innings over the last 30 games started.
+
+      - name: home_starter_whiff_rate_14d
+        description: Home starter swing-and-miss rate over the trailing 14 days. Decimal.
+
+      - name: home_starter_whiff_rate_std
+        description: Home starter swing-and-miss rate, season-to-date. Decimal.
+
+      - name: home_starter_whiff_rate_vs_lhb
+        description: Home starter swing-and-miss rate vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_whiff_rate_vs_rhb
+        description: Home starter swing-and-miss rate vs right-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_xwoba_7d_minus_std
+        description: Home starter xwOBA-against (7-day) minus xwOBA-against (season-to-date); positive means recent form is worse than season average.
+
+      - name: home_starter_xwoba_against_14d
+        description: Home starter xwOBA allowed over the trailing 14 days. Decimal.
+
+      - name: home_starter_xwoba_against_30d
+        description: Home starter xwOBA allowed over the trailing 30 days. Decimal.
+
+      - name: home_starter_xwoba_against_7d
+        description: Home starter xwOBA allowed over the trailing 7 days. Decimal.
+
+      - name: home_starter_xwoba_against_std
+        description: Home starter xwOBA allowed, season-to-date. Decimal.
+
+      - name: home_starter_xwoba_vs_lhb
+        description: Home starter xwOBA allowed vs left-handed batters (prior season platoon split). Decimal.
+
+      - name: home_starter_xwoba_vs_rhb
+        description: Home starter xwOBA allowed vs right-handed batters (prior season platoon split). Decimal.
+
+      # ── Home team defense / standings ─────────────────────────────────────────────
+      - name: home_team_oaa_blended
+        description: Home team Outs Above Average (OAA) blended across prior season and current season data (0 = league average; positive = above-average defense).
+
+      # ── Home vs handedness / situational splits ───────────────────────────────────
+      - name: home_vs_lhp_bb_pct_30d
+        description: Home lineup walk rate vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: home_vs_lhp_hard_hit_pct_30d
+        description: Home lineup hard-hit rate vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: home_vs_lhp_slugging_30d
+        description: Home lineup slugging percentage vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: home_vs_lhp_woba_std
+        description: Home lineup wOBA vs left-handed pitchers, season-to-date. Decimal.
+
+      - name: home_vs_lhp_xwoba_30d
+        description: Home lineup xwOBA vs left-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: home_vs_lhp_xwoba_std
+        description: Home lineup xwOBA vs left-handed pitchers, season-to-date. Decimal.
+
+      - name: home_vs_rhp_slugging_30d
+        description: Home lineup slugging percentage vs right-handed pitchers over the trailing 30 days. Decimal.
+
+      - name: home_vs_rhp_woba_std
+        description: Home lineup wOBA vs right-handed pitchers, season-to-date. Decimal.
+
+      # ── Home RISP / clutch situational ────────────────────────────────────────────
+      - name: home_woba_against_with_risp_30d
+        description: Home pitching staff wOBA allowed with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: home_woba_against_with_runners_on_30d
+        description: Home pitching staff wOBA allowed with runners on base over the trailing 30 days. Decimal.
+
+      - name: home_woba_with_risp_30d
+        description: Home team offense wOBA with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: home_xwoba_with_risp_30d
+        description: Home team offense xwOBA with runners in scoring position over the trailing 30 days. Decimal.
+
+      - name: home_xwoba_with_runners_on_30d
+        description: Home team offense xwOBA with runners on base over the trailing 30 days. Decimal.
+
+      # ── Park / venue / odds context ───────────────────────────────────────────────
+      - name: is_new_venue
+        description: Flag (1/0) indicating the game is at a venue that opened this season; no prior-season park factor history available.
+
+      - name: over_american
+        description: American-format moneyline odds for the over on the total runs market (e.g. -110). Null when no pre-game odds snapshot is available.
+
+      - name: under_american
+        description: American-format moneyline odds for the under on the total runs market (e.g. -110). Null when no pre-game odds snapshot is available.
+
+      # ── Pythagorean differential ──────────────────────────────────────────────────
+      - name: pythagorean_win_exp_diff
+        description: Home team Pythagorean expected win% minus away team Pythagorean expected win%; positive favors the home team.
+
+      # ── Remaining starter / platoon / data-availability columns ─────────────────
+      - name: home_starter_k_pct_30d
+        description: Home starter's 30-day rolling strikeout rate (K/batters faced) ending strictly before game_date. Null for debut pitchers or early-season games with insufficient history.
+      - name: away_starter_k_pct_30d
+        description: Away starter's 30-day rolling strikeout rate (K/batters faced) ending strictly before game_date. Null for debut pitchers or early-season games with insufficient history.
+      - name: home_starter_fastball_stuff_plus
+        description: Home starter's Stuff+ score for their fastball (four-seam or sinker; 100 = league average, higher is better for the pitcher). Null when no Stuff+ data is available.
+      - name: away_starter_fastball_stuff_plus
+        description: Away starter's Stuff+ score for their fastball (100 = league average). Null when no Stuff+ data is available.
+      - name: home_starter_curveball_stuff_plus
+        description: Home starter's Stuff+ score for their curveball (100 = league average). Null when the pitcher does not throw a curveball or Stuff+ data is unavailable.
+      - name: away_starter_curveball_stuff_plus
+        description: Away starter's Stuff+ score for their curveball (100 = league average). Null when the pitcher does not throw a curveball or Stuff+ data is unavailable.
+      - name: home_starter_csw_pct_season
+        description: Home starter's season-to-date called-strike-plus-whiff rate (CSW%; pitches ending in a called strike or swinging strike / total pitches). Null for debut starters with no current-season appearances.
+      - name: away_starter_csw_pct_season
+        description: Away starter's season-to-date CSW% (called strikes + whiffs / total pitches). Null for debut starters with no current-season appearances.
+      - name: away_starter_bb_pct_7d
+        description: Away starter's 7-day rolling walk rate (BB/batters faced) ending strictly before game_date. Short window captures recent control trends. Null for debut pitchers or early-season games.
+      - name: away_starter_days_rest
+        description: Days since the away starter's most recent prior start. Uses starts only; relief appearances do not reset the clock. Null for debut starters or their first appearance in the dataset.
+      - name: away_starter_fastball_pct
+        description: Away starter's percentage of pitches that are fastballs (four-seam + sinker / total pitches), season-to-date. Null when no Statcast pitch-type data is available.
+      - name: away_vs_lhp_k_pct_30d
+        description: Away lineup's 30-day rolling strikeout rate (K/PA) vs left-handed pitchers ending strictly before game_date. Null when no away batters have plate appearances vs LHP in the rolling window.
+      - name: has_starter_platoon_data
+        description: True when both home and away starters have prior-season xwOBA-against platoon splits (vs LHB and vs RHB) available. False when either starter is a debut or first-season pitcher with no prior-season data; used to flag whether the platoon-adjusted lineup features are populated.
 
   - name: feature_pregame_odds_features
     description: >

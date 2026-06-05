@@ -177,6 +177,13 @@ offense_v1:
     Ablation artifact: models/sub_models/offense_v1/ablation_game_signals_20260528T225937Z.json
 
 starter_v1:
+  seq_challenger_16b3:
+    verdict: HOLD_NONSEQ
+    nonseq_nll: -0.9884
+    seq_nll: -0.988
+    delta_nll: 0.0005
+    mlflow_run_id: 56195e51485a44e5ad1fc28eb07b1fc4
+
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/starter_v1.pkl
   feature_columns_path: models/sub_models/starter_v1/feature_columns.json
   mlflow_run_id: 97d74e462c3b47eda5c73397860f5db0
@@ -489,6 +496,35 @@ bullpen_v2:
     EB features (eb_bullpen_xwoba, eb_bullpen_uncertainty, eb_bullpen_coverage_pct) retained in bullpen_v2.
     bullpen_fatigue_adjusted_mu retained as primary signal for Epic 9 integration.
     Ablation JSON: models/sub_models/bullpen_v2/ablation_eb_bullpen_20260601T053223.json
+  epic_16b2_seq_verdict: |
+    Epic 16B.2 (2026-06-04) — sequential challenger REJECTED. nonseq NLL=1.8912 vs seq NLL=1.8913
+    (Δ=−0.0001, nonseq wins). calib_80: nonseq=0.9236 seq=0.9225. Sequential feature
+    team_sequential_bullpen_xwoba adds no signal beyond EB posterior already in FEATURE_COLS.
+    MLflow run_id: 118bf698065946e6ae6062c601f0ef75 (experiment: bullpen_6D).
+    Champion bullpen_v2.pkl unchanged. No bullpen_v2_seq.pkl produced.
+
+  ood_gate:
+    # Bullpen OOD gate — active 2026-06-05 (Story 17.1b / Epic 19).
+    # Fires when either team's bullpen_mu deviates > ood_threshold_sigma from
+    # the 2022-2025 training distribution. Blocks totals bets (qualified_bet=False)
+    # regardless of other criterion votes. Gate active until bullpen_v2 retrain
+    # clears Story 17.0 gate (2026 z-score ≤ ±1.0σ on 2026 data).
+    training_mean: 1.423189      # mean(opp_bullpen_mu) across 2022-2025 training rows
+    training_std: 0.496120       # std(opp_bullpen_mu) across 2022-2025 training rows
+    ood_threshold_sigma: 1.5     # |z| > 1.5 → OOD flag (|bullpen_mu - mean| > 0.744)
+    # Derived thresholds (informational):
+    upper_threshold: 2.167369    # training_mean + 1.5 * training_std
+    lower_threshold: 0.679009    # training_mean - 1.5 * training_std
+    source: |
+      Parameters extracted from betting_ml/models/bayesian/signal_scalers.joblib
+      (scaler key: 'opp_bullpen_mu', fitted on 2022-2025 training rows).
+      Motivation: May-2026 bullpen_mu mean z-shift = +0.2882σ (all 2026 games);
+      +0.2882σ × beta_bullpen 0.191 ≈ +0.055/side = +0.11 total runs = entire
+      May kill criterion overshoot. Gate prevents betting when signal is OOD.
+    retrain_gate: |
+      Update training_mean/std/thresholds after bullpen retrain (Story 17.0)
+      once the retrained model produces 2026 z-scores within ±1.0σ of the
+      new training distribution.
 
 matchup_v1:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/matchup_v1.pkl
@@ -723,7 +759,28 @@ offense_v2:
     Winner: LightGBM+NegBin. CV NLL 2.4840, CV MAE 2.4594.
     Trained 2026-05-29. Promoted to champion — LightGBM+NegBin CV NLL 2.4840 beats GLM floor; all gates pass.
 
+  seq_challenger_16b1:
+    run_date: '2026-06-04'
+    mlflow_run_id: 7300ba4a3e5e42a2b166e4933a40bd37
+    nonseq_champion_nll: 2.4847
+    nonseq_champion_calib_80: 0.822
+    seq_challenger_cv_nll: 2.485
+    seq_challenger_tuned_nll: 2.4814
+    seq_challenger_calib_80: 0.822
+    seq_challenger_negbin_r: 3.5033
+    features_added: [avg_eb_woba_sequential, posterior_source_ohe]
+    verdict: hold
+    verdict_detail: |
+      HOLD — seq challenger did not beat nonseq champion on both NLL (2.4850 vs 2.4847) and calib_80 (0.822 vs 0.822). Champion unchanged.
+
 starter_ip_v1:
+  seq_challenger_16b3:
+    verdict: HOLD_NONSEQ
+    nonseq_nll: 2.7244
+    seq_nll: 2.7257
+    delta_nll: 0.0013
+    mlflow_run_id: 37b35a0a7a0343f3a583b57c5a2053db
+
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/starter_ip_v1.pkl
   feature_columns_path: models/sub_models/starter_v1/ip_feature_columns.json
   mlflow_run_id: 1510cd3ce8294808bd33ac8623194d88

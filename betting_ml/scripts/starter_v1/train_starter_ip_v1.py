@@ -131,6 +131,16 @@ CAT_FEATURES: list[str] = [
 TARGET = "outs_recorded"
 
 # ---------------------------------------------------------------------------
+# Epic 16B.3 — sequential challenger constants
+# ---------------------------------------------------------------------------
+
+NUMERIC_FEATURES_SEQ: list[str] = NUMERIC_FEATURES + ["eb_xwoba_against_sequential"]
+_PS_LEVELS    = ["sequential", "season_eb", "prior_only", "__NA__"]
+_PS_OHE_COLS  = [f"ps_{lvl}" for lvl in _PS_LEVELS]
+_NONSEQ_CHAMPION_NLL = 2.7196
+_NONSEQ_CHAMPION_C80 = 0.80
+
+# ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
@@ -201,6 +211,42 @@ def load_data(min_year: int = _MIN_YEAR) -> pd.DataFrame:
     df[TARGET] = df[TARGET].astype(int)
     df["is_bulk_usage"] = df["is_bulk_usage"].astype(bool)
     return df.sort_values("game_date").reset_index(drop=True)
+
+
+_SEQ_QUERY = _QUERY.replace(
+    "    f.eb_xwoba_against, f.eb_xwoba_uncertainty,",
+    "    f.eb_xwoba_against, f.eb_xwoba_uncertainty,\n    f.eb_xwoba_against_sequential,\n    f.posterior_source,",
+)
+
+
+def load_data_seq(min_year: int = _MIN_YEAR) -> pd.DataFrame:
+    """Load training data with sequential EB features for Epic 16B.3."""
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_SEQ_QUERY.format(min_year=min_year))
+        cols = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    df = pd.DataFrame(rows, columns=cols)
+    df["game_date"] = pd.to_datetime(df["game_date"])
+    df["game_year"] = df["game_year"].astype(int)
+    df[TARGET] = df[TARGET].astype(int)
+    df["is_bulk_usage"] = df["is_bulk_usage"].astype(bool)
+    df = df.sort_values("game_date").reset_index(drop=True)
+
+    if "posterior_source" not in df.columns:
+        raise RuntimeError(
+            "posterior_source missing from feature_pregame_starter_features. "
+            "Run: dbtf run -s feature_pregame_starter_features"
+        )
+
+    seq_cov = df["eb_xwoba_against_sequential"].notna().mean()
+    ps_dist = df["posterior_source"].value_counts(dropna=False).to_dict()
+    print(f"  eb_xwoba_against_sequential non-null coverage: {seq_cov:.1%}")
+    print(f"  posterior_source distribution: {ps_dist}")
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +331,63 @@ def prepare_fold(
     y_eval  = eval_[TARGET].to_numpy(dtype=int)
 
     return X_train, y_train, X_eval, y_eval, impute_means, ohe_cols, all_feat_cols
+
+
+def _compute_impute_means_seq(train: pd.DataFrame) -> dict[str, float]:
+    means: dict[str, float] = {}
+    for col in NUMERIC_FEATURES_SEQ:
+        if col in train.columns:
+            m = train[col].mean()
+            means[col] = float(m) if not np.isnan(m) else 0.0
+    return means
+
+
+def _ohe_posterior_source(
+    train: pd.DataFrame,
+    eval_: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    """OHE posterior_source with all 4 levels guaranteed present in every fold."""
+    train = train.copy()
+    eval_ = eval_.copy()
+    train["posterior_source"] = train["posterior_source"].fillna("__NA__")
+    eval_["posterior_source"] = eval_["posterior_source"].fillna("__NA__")
+
+    t_d = pd.get_dummies(train["posterior_source"], prefix="ps", dtype=float)
+    e_d = pd.get_dummies(eval_["posterior_source"],  prefix="ps", dtype=float)
+    for col in _PS_OHE_COLS:
+        if col not in t_d.columns:
+            t_d[col] = 0.0
+        if col not in e_d.columns:
+            e_d[col] = 0.0
+    t_d = t_d[_PS_OHE_COLS]
+    e_d = e_d[_PS_OHE_COLS]
+
+    train_out = pd.concat([train.reset_index(drop=True), t_d.reset_index(drop=True)], axis=1)
+    eval_out  = pd.concat([eval_.reset_index(drop=True), e_d.reset_index(drop=True)], axis=1)
+    return train_out, eval_out, _PS_OHE_COLS
+
+
+def prepare_fold_seq(
+    df: pd.DataFrame, train_idx, eval_idx
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict, list[str], list[str]]:
+    """Like prepare_fold but includes eb_xwoba_against_sequential + posterior_source OHE."""
+    train = df.loc[train_idx].copy()
+    eval_ = df.loc[eval_idx].copy()
+
+    impute_means = _compute_impute_means_seq(train)
+    train = _apply_impute(train, impute_means)
+    eval_ = _apply_impute(eval_,  impute_means)
+
+    train, eval_, ohe_cols = _ohe_cats(train, eval_)
+    train, eval_, ps_cols  = _ohe_posterior_source(train, eval_)
+
+    all_feat_cols = NUMERIC_FEATURES_SEQ + ohe_cols + ps_cols
+    X_train = train[all_feat_cols].to_numpy(dtype=float)
+    y_train = train[TARGET].to_numpy(dtype=int)
+    X_eval  = eval_[all_feat_cols].to_numpy(dtype=float)
+    y_eval  = eval_[TARGET].to_numpy(dtype=int)
+
+    return X_train, y_train, X_eval, y_eval, impute_means, ohe_cols + ps_cols, all_feat_cols
 
 
 # ---------------------------------------------------------------------------
@@ -372,8 +475,12 @@ def cv_lgbm(
     df: pd.DataFrame,
     folds: list[tuple],
     params: dict | None = None,
+    prepare_fn=None,
+    label: str = "A",
 ) -> tuple[float, float, float, float, list[dict], list[str]]:
     import lightgbm as lgb
+
+    _prepare = prepare_fn or prepare_fold
 
     default_params = dict(
         num_leaves=63, learning_rate=0.05, min_child_samples=20,
@@ -385,11 +492,11 @@ def cv_lgbm(
     fold_records:   list[dict] = []
     all_feat_names: list[str]  = []
 
-    print(f"\n── A-LightGBM + NegBin r ({len(folds)} folds) ─────────────────────────")
+    print(f"\n── {label}-LightGBM + NegBin r ({len(folds)} folds) ─────────────────────────")
     print(f"  {'Fold':>4}  {'Eval':>6}  {'NLL':>7}  {'MAE':>6}  {'calib80':>8}  {'std_pred':>9}  {'mean_r':>7}")
 
     for i, (train_idx, eval_idx) in enumerate(folds, 1):
-        X_tr, y_tr, X_ev, y_ev, _, _, feat_cols = prepare_fold(df, train_idx, eval_idx)
+        X_tr, y_tr, X_ev, y_ev, _, _, feat_cols = _prepare(df, train_idx, eval_idx)
         eval_year = int(df.loc[eval_idx, "game_year"].mode()[0])
         if not all_feat_names:
             all_feat_names = feat_cols
@@ -767,9 +874,12 @@ def tune_winner(
     folds: list[tuple],
     n_probe: int,
     n_full: int,
+    prepare_fn=None,
 ) -> tuple[dict, float]:
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    _prepare = prepare_fn or prepare_fold
 
     def objective(trial) -> float:
         if winner_type == "lgbm":
@@ -785,7 +895,7 @@ def tune_winner(
             }
             fold_nlls: list[float] = []
             for tr_idx, ev_idx in folds:
-                X_tr, y_tr, X_ev, y_ev, _, _, _ = prepare_fold(df, tr_idx, ev_idx)
+                X_tr, y_tr, X_ev, y_ev, _, _, _ = _prepare(df, tr_idx, ev_idx)
                 model = lgb.LGBMRegressor(**params)
                 model.fit(X_tr, y_tr.astype(float))
                 mu_tr = np.clip(model.predict(X_tr), _MU_CLIP_MIN, _MU_CLIP_MAX)
@@ -802,7 +912,7 @@ def tune_winner(
             alpha = trial.suggest_float("alpha", 0.01, 1000.0, log=True)
             fold_nlls_r: list[float] = []
             for tr_idx, ev_idx in folds:
-                X_tr, y_tr, X_ev, y_ev, _, _, _ = prepare_fold(df, tr_idx, ev_idx)
+                X_tr, y_tr, X_ev, y_ev, _, _, _ = _prepare(df, tr_idx, ev_idx)
                 pipe = Pipeline([("scaler", StandardScaler()), ("ridge", Ridge(alpha=alpha))])
                 pipe.fit(X_tr, y_tr.astype(float))
                 mu_tr = np.clip(pipe.predict(X_tr), _MU_CLIP_MIN, _MU_CLIP_MAX)
@@ -1031,6 +1141,213 @@ def update_registry(
 
 
 # ---------------------------------------------------------------------------
+# Epic 16B.3 — seq challenger final model + registry
+# ---------------------------------------------------------------------------
+
+def _prepare_full_dataset_seq(
+    df: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray, dict, list[str], list[str]]:
+    """Like _prepare_full_dataset but uses NUMERIC_FEATURES_SEQ + posterior_source OHE."""
+    impute_means = _compute_impute_means_seq(df)
+    train = _apply_impute(df.copy(), impute_means)
+
+    dummies_list, all_ohe_cols = [], []
+    for cat in CAT_FEATURES:
+        if cat not in train.columns:
+            continue
+        d = pd.get_dummies(train[cat].fillna("__NA__"), prefix=cat, dtype=float)
+        ohe_cols = sorted(d.columns.tolist())
+        d = d.reindex(columns=ohe_cols, fill_value=0.0)
+        dummies_list.append(d)
+        all_ohe_cols.extend(ohe_cols)
+
+    ps = pd.get_dummies(train["posterior_source"].fillna("__NA__"), prefix="ps", dtype=float)
+    for col in _PS_OHE_COLS:
+        if col not in ps.columns:
+            ps[col] = 0.0
+    ps = ps[_PS_OHE_COLS]
+    dummies_list.append(ps)
+    all_ohe_cols.extend(_PS_OHE_COLS)
+
+    train = pd.concat(
+        [train.reset_index(drop=True)] + [d.reset_index(drop=True) for d in dummies_list], axis=1
+    )
+    all_feat_cols = NUMERIC_FEATURES_SEQ + all_ohe_cols
+    X = train[all_feat_cols].to_numpy(dtype=float)
+    y = train[TARGET].to_numpy(dtype=int)
+    return X, y, impute_means, all_ohe_cols, all_feat_cols
+
+
+def _update_registry_seq_ip(verdict: str, nonseq_nll: float, seq_nll: float, mlflow_run_id: str | None) -> None:
+    import re
+    text = _REGISTRY_PATH.read_text()
+    run_id = mlflow_run_id or "null"
+    delta  = round(seq_nll - nonseq_nll, 4)
+    block = (
+        f"\n  seq_challenger_16b3:\n"
+        f"    verdict: {verdict}\n"
+        f"    nonseq_nll: {round(nonseq_nll, 4)}\n"
+        f"    seq_nll: {round(seq_nll, 4)}\n"
+        f"    delta_nll: {delta}\n"
+        f"    mlflow_run_id: {run_id}\n"
+    )
+    match = re.search(r"^starter_ip_v1:", text, re.MULTILINE)
+    if match:
+        insert_pos = match.end()
+        new_text = text[:insert_pos] + block + text[insert_pos:]
+        _REGISTRY_PATH.write_text(new_text)
+        print(f"  Appended seq_challenger_16b3 to starter_ip_v1 in registry")
+    else:
+        print("  [WARN] starter_ip_v1 not found in registry; seq sub-block not written")
+
+
+def train_seq(promote: bool = True, dry_run: bool = False) -> str:
+    """Epic 16B.3 — nonseq vs seq two-candidate comparison for starter_ip_v1."""
+    print("=" * 72)
+    print("EPIC 16B.3 — STARTER_IP_V1 SEQUENTIAL CHALLENGER (LightGBM+NegBin)")
+    print("=" * 72)
+
+    print("\nLoading data from Snowflake (includes eb_xwoba_against_sequential, posterior_source)...")
+    df = load_data_seq(min_year=_MIN_YEAR)
+    print(f"  Loaded {len(df):,} rows × {df.shape[1]} cols "
+          f"({int(df['game_year'].min())}–{int(df['game_year'].max())})")
+    print(f"  Target: mean={df[TARGET].mean():.2f}  std={df[TARGET].std():.2f}")
+
+    optuna_folds = get_optuna_folds(df)
+    all_folds    = get_all_folds(df)
+    print(f"  CV folds: {len(all_folds)} (eval years "
+          f"{[int(df.loc[ev,'game_year'].mode()[0]) for _,ev in all_folds]})")
+    print(f"  Nonseq features: {len(NUMERIC_FEATURES)} numeric + OHE {CAT_FEATURES}")
+    print(f"  Seq features:    {len(NUMERIC_FEATURES_SEQ)} numeric + OHE {CAT_FEATURES + ['posterior_source']}")
+    print(f"  Champion thresholds: NLL={_NONSEQ_CHAMPION_NLL}  calib_80≥{_NONSEQ_CHAMPION_C80}")
+
+    if dry_run:
+        print("\n  [--dry-run] Exiting before training.")
+        return "dry_run"
+
+    mlflow.set_experiment("starter_ip_v1")
+    get_or_create_experiment("starter_ip_v1")
+
+    with mlflow.start_run(run_name=f"16B3_seq_{date.today()}") as mlflow_run:
+        mlflow_run_id = mlflow_run.info.run_id
+
+        print("\n" + "=" * 72)
+        print("Step 1/4 — Nonseq champion CV (current starter_ip_v1 feature set)")
+        print("=" * 72)
+        ns_nll, ns_mae, ns_c80, ns_std, ns_folds, _ = cv_lgbm(
+            df, all_folds, prepare_fn=None, label="nonseq"
+        )
+        mlflow.log_metric("nonseq_cv_nll", ns_nll)
+        mlflow.log_metric("nonseq_cv_calib80", ns_c80)
+        print(f"\n  Nonseq champion: NLL={ns_nll:.4f}  calib_80={ns_c80:.3f}  "
+              f"(registry champion NLL={_NONSEQ_CHAMPION_NLL})")
+
+        print("\n" + "=" * 72)
+        print("Step 2/4 — Seq challenger CV (+ eb_xwoba_against_sequential + posterior_source OHE)")
+        print("=" * 72)
+        sq_nll, sq_mae, sq_c80, sq_std, sq_folds, _ = cv_lgbm(
+            df, all_folds, prepare_fn=prepare_fold_seq, label="seq"
+        )
+        mlflow.log_metric("seq_cv_nll", sq_nll)
+        mlflow.log_metric("seq_cv_calib80", sq_c80)
+
+        print("\n" + "=" * 72)
+        print("Step 3/4 — 16B.3 Gate assessment")
+        print("=" * 72)
+        nll_pass  = sq_nll < ns_nll
+        c80_pass  = sq_c80 >= _NONSEQ_CHAMPION_C80
+        both_pass = nll_pass and c80_pass
+        print(f"  {'Gate':<40} {'Threshold':>12}  {'nonseq':>8}  {'seq':>8}  {'Pass'}")
+        print(f"  {'-'*40}  {'-'*12}  {'-'*8}  {'-'*8}  {'------'}")
+        print(f"  {'NLL (seq < nonseq)':<40} {f'<{ns_nll:.4f}':>12}  {ns_nll:.4f}  {sq_nll:.4f}  "
+              f"{'✅' if nll_pass else '❌'}  (Δ {sq_nll - ns_nll:+.4f})")
+        print(f"  {'calib_80':<40} {f'≥{_NONSEQ_CHAMPION_C80:.2f}':>12}  {ns_c80:.3f}  {sq_c80:.3f}  "
+              f"{'✅' if c80_pass else '❌'}  (Δ {sq_c80 - ns_c80:+.3f})")
+        verdict = "PROMOTE_SEQ" if both_pass else "HOLD_NONSEQ"
+        print(f"\n  Both gates pass: {'YES' if both_pass else 'NO'} → {verdict.replace('_', ' ')}")
+        mlflow.log_params({"verdict": verdict, "nll_gate": nll_pass, "c80_gate": c80_pass})
+
+        print("\n" + "=" * 72)
+        winner_label = "SEQ challenger" if both_pass else "NONSEQ champion"
+        print(f"Step 4/4 — Optuna-tune {winner_label}")
+        print("=" * 72)
+        winner_prepare = prepare_fold_seq if both_pass else None
+        best_params, tuned_nll = tune_winner(
+            "lgbm", df, optuna_folds,
+            n_probe=10, n_full=50,
+            prepare_fn=winner_prepare,
+        )
+        mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
+        mlflow.log_metric("tuned_cv_nll", tuned_nll)
+
+        winner_folds = sq_folds if both_pass else ns_folds
+
+        if both_pass:
+            X, y, impute_means, ohe_cols, feat_cols = _prepare_full_dataset_seq(df)
+        else:
+            X, y, impute_means, ohe_cols, feat_cols = _prepare_full_dataset(df)
+
+        import lightgbm as lgb
+        final_params = {**best_params, "objective": "regression_l1", "random_state": 42, "verbose": -1}
+        model = lgb.LGBMRegressor(**final_params)
+        model.fit(X, y.astype(float))
+        _print_feature_importance(model, feat_cols)
+
+        mu_all = np.clip(model.predict(X), _MU_CLIP_MIN, _MU_CLIP_MAX)
+        r_by_decile, interior_edges = fit_negbin_r_by_decile(y, mu_all)
+        mean_r = float(np.mean(list(r_by_decile.values())))
+        print(f"\n  Final LightGBM trained on {len(y):,} rows  mean_r: {mean_r:.3f}")
+
+        artifact = {
+            "model":              model,
+            "model_type":         "lgbm",
+            "r_by_decile":        r_by_decile,
+            "interior_edges":     interior_edges,
+            "impute_means":       impute_means,
+            "ohe_categories":     ohe_cols,
+            "feature_names":      feat_cols,
+            "ip_feature_columns": feat_cols,
+            "cv_nll":      round(float(np.mean([r["nll"]     for r in winner_folds])), 4),
+            "cv_mae":      round(float(np.mean([r["mae"]      for r in winner_folds])), 4),
+            "cv_calib_80": round(float(np.mean([r["calib_80"] for r in winner_folds])), 4),
+            "cv_folds":    len(winner_folds),
+            "cv_fold_records": winner_folds,
+            "mu_clip_min": _MU_CLIP_MIN,
+            "mu_clip_max": _MU_CLIP_MAX,
+            "n_deciles":   _N_DECILES,
+            "trained_date": date.today().isoformat(),
+            "target":      TARGET,
+            "distribution_family": "negbin_nb2",
+            "seq_mode":    both_pass,
+        }
+
+        _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        dated_path = _OUTPUT_DIR / f"starter_ip_v1_seq_{date.today()}.pkl"
+        joblib.dump(artifact, dated_path)
+        print(f"\n  Saved dated artifact → {dated_path.relative_to(_PROJECT_ROOT)}")
+        mlflow.log_artifact(str(dated_path))
+
+        if both_pass and promote:
+            canonical = _OUTPUT_DIR / "starter_ip_v1.pkl"
+            joblib.dump(artifact, canonical)
+            print(f"  Promoted → {canonical.relative_to(_PROJECT_ROOT)}")
+            upload_artifact(canonical, _ARTIFACT_S3)
+
+        _update_registry_seq_ip(verdict, ns_nll, sq_nll, mlflow_run_id)
+
+        print("\n" + "=" * 72)
+        print(f"16B.3 STARTER_IP_V1 VERDICT: {verdict.replace('_', ' ')}")
+        if both_pass:
+            print(f"  Seq challenger PROMOTED (NLL {sq_nll:.4f} < {ns_nll:.4f}, calib_80 {sq_c80:.3f})")
+        else:
+            print(f"  Nonseq champion holds (seq NLL {sq_nll:.4f} vs nonseq {ns_nll:.4f})")
+        print(f"  MLflow run_id: {mlflow_run_id}")
+        print("=" * 72)
+
+    return mlflow_run_id
+
+
+# ---------------------------------------------------------------------------
 # Main training orchestration
 # ---------------------------------------------------------------------------
 
@@ -1226,17 +1543,22 @@ def main() -> None:
     parser.add_argument("--dry-run",      action="store_true", help="Load data and validate folds only")
     parser.add_argument("--min-year",     type=int, default=_MIN_YEAR,
                         help=f"Training start year (default: {_MIN_YEAR})")
+    parser.add_argument("--seq",          action="store_true",
+                        help="Epic 16B.3: run nonseq vs seq two-candidate comparison")
     args = parser.parse_args()
 
-    train(
-        promote=not args.no_promote,
-        skip_glm=args.skip_glm,
-        force_winner=args.force_winner,
-        optuna_probe=args.optuna_probe,
-        optuna_full=args.optuna_full,
-        dry_run=args.dry_run,
-        min_year=args.min_year,
-    )
+    if args.seq:
+        train_seq(promote=not args.no_promote, dry_run=args.dry_run)
+    else:
+        train(
+            promote=not args.no_promote,
+            skip_glm=args.skip_glm,
+            force_winner=args.force_winner,
+            optuna_probe=args.optuna_probe,
+            optuna_full=args.optuna_full,
+            dry_run=args.dry_run,
+            min_year=args.min_year,
+        )
 
 
 if __name__ == "__main__":

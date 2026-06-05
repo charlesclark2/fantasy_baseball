@@ -520,7 +520,8 @@ slot_eb as (
         eb.eb_k_pct,
         eb.eb_bb_pct,
         eb.eb_iso,
-        eb.eb_woba_uncertainty
+        eb.eb_woba_uncertainty,
+        eb.posterior_source
     from lineup_slots ls
     left join {{ source('betting', 'eb_batter_posteriors_raw') }} eb
         on  eb.game_pk      = ls.game_pk::varchar
@@ -545,7 +546,17 @@ eb_agg as (
         round(avg(eb_woba_uncertainty),  4) as avg_eb_woba_uncertainty,
         round(
             count(case when eb_woba is not null then 1 end)::float / 9.0
-        , 3)                               as eb_coverage_pct
+        , 3)                               as eb_coverage_pct,
+        -- Epic 16B.1 — least-informed-wins aggregation across 9 slots.
+        -- Informativeness order: sequential > season_eb > prior_only.
+        -- A single prior_only slot makes the whole side prior_only, etc.
+        -- NULL (no EB data, pre-2021) propagates as NULL → trainer maps to __NA__.
+        case
+            when count(case when posterior_source = 'prior_only' then 1 end) > 0 then 'prior_only'
+            when count(case when posterior_source = 'season_eb'  then 1 end) > 0 then 'season_eb'
+            when count(case when posterior_source = 'sequential' then 1 end) > 0 then 'sequential'
+            else null
+        end                                as posterior_source
     from slot_eb
     group by game_pk, home_away
 ),
@@ -651,6 +662,9 @@ final as (
         ea.avg_eb_iso,
         ea.avg_eb_woba_uncertainty,
         coalesce(ea.eb_coverage_pct, 0.0)                           as eb_coverage_pct,
+        -- Epic 16B.1 — least-informed-wins side-level posterior quality label.
+        -- NULL for pre-2021 games (no sequential backfill); trainer maps to __NA__.
+        ea.posterior_source,
 
         -- Prior-season batter archetype distribution (Story 7.4)
         -- Count of lineup slots assigned to each batter archetype (prior season).

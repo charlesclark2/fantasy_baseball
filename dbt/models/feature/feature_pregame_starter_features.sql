@@ -379,7 +379,8 @@ eb_posteriors as (
         eb_k_pct,
         eb_bb_pct,
         eb_xwoba_uncertainty,
-        eb_data_source
+        eb_data_source,
+        posterior_source
     from baseball_data.betting.eb_starter_posteriors
 ),
 
@@ -556,6 +557,8 @@ final as (
         eb.eb_bb_pct,
         eb.eb_xwoba_uncertainty,
         eb.eb_data_source,
+        -- Epic 16B.3 — per-pitcher posterior source label; NULL pre-2021.
+        eb.posterior_source,
 
         -- ── Prior-season pitcher archetype label (Story 7.4) ─────────────────
         -- NULL for rookies or pitchers not in the prior-season cluster table.

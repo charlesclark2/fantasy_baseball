@@ -1,0 +1,22 @@
+{
+  "model": "diagnostic \u2014 beta_bullpen_2026_discount added",
+  "diagnostics": {
+    "divergences": 25,
+    "max_rhat": 1.04,
+    "min_ess_bulk": 123.0
+  },
+  "kill_criterion": {
+    "n_games": 380,
+    "ppm": 9.267426644736842,
+    "actual_mean": 8.68421052631579,
+    "bias": 0.5832161184210527,
+    "threshold": 8.81,
+    "passed": false,
+    "beta_bullpen_2026_discount_mean": -0.22688457190450764,
+    "beta_bullpen_2026_discount_p3": -0.4086521804757752,
+    "beta_bullpen_2026_discount_p97": -0.0312833830423389,
+    "hdi_entirely_negative": true,
+    "effective_beta_bullpen_2026": 0.1476849305806209,
+    "delta_2026_mean": -0.0061153820825837445
+  }
+}

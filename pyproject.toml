@@ -33,6 +33,10 @@ dependencies = [
     "dagster-snowflake",
     "boto3>=1.34",
     "mlflow>=2.13",
+    "pymc>=5.0",
+    "arviz>=0.18",
+    "h5netcdf>=1.3",
+    "h5py>=3.11",
 ]
 
 [build-system]
