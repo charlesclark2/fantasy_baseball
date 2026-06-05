@@ -204,6 +204,21 @@ function Navbar() {
           </Button>
         </div>
       </div>
+      {/* Sub-nav */}
+      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
+        <Link
+          href="/dashboard"
+          className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+        >
+          Dashboard
+        </Link>
+        <Link
+          href="/performance"
+          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          Performance
+        </Link>
+      </div>
     </nav>
   )
 }
