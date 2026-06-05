@@ -3,14 +3,15 @@ import subprocess
 import sys
 from datetime import date, timedelta
 
-from dagster import In, Nothing, Out, op
+from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
 
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
 
 
-def _run_script(context, script: str, args: list[str] | None = None) -> None:
+def _run_script(context, script: str, args: list[str] | None = None) -> str:
+    """Run a Python script and return its stdout. Raises on non-zero exit."""
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
     cmd = [sys.executable, path] + (args or [])
     context.log.info(f"Running: {' '.join(cmd)}")
@@ -21,6 +22,7 @@ def _run_script(context, script: str, args: list[str] | None = None) -> None:
         context.log.warning(result.stderr)
     if result.returncode != 0:
         raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
+    return result.stdout or ""
 
 
 def _run_dbt(context, args: list[str]) -> None:
@@ -294,19 +296,32 @@ def dbt_sub_model_signals_rebuild(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def signal_freshness_check(context):
-    # Runs after dbt_sub_model_signals_rebuild (which refreshes
-    # feature_pregame_sub_model_signals) and before predict_today_morning.
-    # NON-BLOCKING: Story 9.4 wired the Layer 3 signal contract + stacking
-    # weights, but predict_today still defaults to --model-source monolithic
-    # (Layer 3 stays inert until Epic 10/11 register a champion), so a signal gap
-    # must not block predictions. The script logs promoted-signal staleness to
-    # MLflow and still exits non-zero only on catastrophic loss; we log that as a
-    # warning rather than raising. Flip to blocking (drop the try/except) once
-    # Epic 10 makes --model-source layer3 the active prediction path.
-    try:
-        _run_script(context, "check_signal_freshness.py", ["--env", _target_env()])
-    except Exception as e:
-        context.log.warning(f"Signal freshness check reported a problem: {e}")
+    # A1.3: Now blocking for run_env and offense signals. check_signal_freshness.py
+    # exits non-zero if either required signal has zero coverage on the latest
+    # completed slate — that propagates as an exception here and fails the op,
+    # preventing predict_today_morning from running on stale/missing inputs.
+    # Secondary signals (starter, bullpen, matchup) remain non-blocking in the script.
+    stdout = _run_script(context, "check_signal_freshness.py", ["--env", _target_env()])
+    for line in stdout.splitlines():
+        if line.startswith("[METRIC] signal_completeness_score="):
+            try:
+                score = float(line.split("=", 1)[1])
+                context.add_output_metadata({"signal_completeness_score": MetadataValue.float(score)})
+            except ValueError:
+                pass
+
+
+@failure_hook
+def signal_freshness_failure_hook(context: HookContext) -> None:
+    """Email-style alert when signal_freshness_check blocks the daily pipeline."""
+    if context.op.name != "signal_freshness_check":
+        return
+    context.log.error(
+        "[ALERT] signal_freshness_check FAILED — minimum required signals (run_env or offense) "
+        f"are absent for today's completed slate. predict_today_morning will not run. "
+        "Manual intervention required before game time. "
+        "Check generate_run_env_signals_op and generate_offense_signals_op in the Dagster UI."
+    )
 
 
 # ── Epic O.4 / 16.4 — end-of-day sequential posterior updates ────────────────
@@ -395,6 +410,12 @@ def dbt_umpire_feature_rebuild(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def predict_today_morning(context):
     _run_script(context, "predict_today.py", ["--prediction-type", "morning"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_pipeline_status(context):
+    """Upsert today's pipeline run summary into pipeline_status after predict_today_morning."""
+    _run_script(context, "update_pipeline_status.py")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

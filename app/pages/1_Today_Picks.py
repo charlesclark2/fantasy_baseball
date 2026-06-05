@@ -69,6 +69,19 @@ WHERE p._rn = 1
 ORDER BY p.home_team ASC
 """
 
+_PIPELINE_STATUS_SQL = """
+SELECT
+    pipeline_status,
+    predict_today_complete_ts,
+    lineup_confirmed_complete_ts,
+    signal_completeness_score,
+    n_games_scored,
+    n_qualified_bets,
+    is_fresh
+FROM baseball_data.betting.mart_pipeline_status
+WHERE run_date = '{date}'
+"""
+
 _OUTCOMES_SQL = """
 SELECT
     game_pk,
@@ -336,6 +349,40 @@ is_today = selected_date == datetime.date.today()
 title = "Today's Picks" if is_today else f"{selected_date.strftime('%B %d, %Y')} Picks"
 st.title(title)
 
+# Pipeline freshness banner — only shown for today's date.
+if is_today:
+    try:
+        _ps_df = run_query(_PIPELINE_STATUS_SQL.format(date=date_str))
+        if _ps_df.empty:
+            st.warning(
+                "Pipeline status unknown — no pipeline_status row for today. "
+                "The daily pipeline may not have run yet or may have failed before completing predictions."
+            )
+        else:
+            _ps = {c.lower(): v for c, v in zip(_ps_df.columns, _ps_df.iloc[0])}
+            _status = _ps.get("pipeline_status", "")
+            _is_fresh = bool(_ps.get("is_fresh", False))
+            _complete_ts = _ps.get("predict_today_complete_ts")
+            _sig_score = _ps.get("signal_completeness_score")
+            if _status == "failed":
+                st.error(
+                    f"Pipeline failed — predictions could not be generated today. "
+                    f"Check the Dagster daily_ingestion_job for errors."
+                )
+            elif not _is_fresh:
+                _age_note = (
+                    f" (last updated: {_complete_ts})" if _complete_ts else ""
+                )
+                st.warning(
+                    f"Predictions updating{_age_note} — "
+                    f"status: **{_status}**, "
+                    f"games scored: {_ps.get('n_games_scored', '?')}, "
+                    f"signal score: {f'{_sig_score:.0%}' if _sig_score is not None else '?'}. "
+                    f"Picks shown may be incomplete or stale."
+                )
+    except Exception:
+        pass  # Never let the banner crash the page.
+
 _DBT_BIN = str(Path.home() / ".local" / "bin" / "dbt")
 _DBT_DIR = str(_PROJECT_ROOT / "dbt")
 
@@ -402,8 +449,9 @@ with col_r2:
             _ingest_steps = [
                 ("Lineups", ["uv", "run", "python", "ingest_statsapi.py", "schedule",
                              "--start-date", _prior_month_str], _scripts_dir),
-                ("Odds events", ["uv", "run", "python", "odds_api_ingestion.py", "events"], _scripts_dir),
-                ("Odds lines", ["uv", "run", "python", "odds_api_ingestion.py", "odds"], _scripts_dir),
+                ("Odds events", ["uv", "run", "python", "parlay_api_ingestion.py", "events"], _scripts_dir),
+                ("Odds lines", ["uv", "run", "python", "parlay_api_ingestion.py", "odds"], _scripts_dir),
+                ("Odds line movement", ["uv", "run", "python", "parlay_api_ingestion.py", "line-movement"], _scripts_dir),
             ]
 
         _failed = False
@@ -439,7 +487,7 @@ with col_r2:
                 # order. dbt resolves exact execution order from the DAG.
                 _dbt_select = " ".join([
                     "stg_statsapi_lineups", "stg_statsapi_lineups_wide",
-                    "stg_oddsapi_events", "stg_oddsapi_odds",
+                    "stg_parlayapi_canonical_events", "stg_parlayapi_odds", "stg_parlayapi_line_movement",
                     "mart_odds_events", "mart_odds_outcomes",
                     "mart_team_season_record",
                     "mart_starting_pitcher_game_log",
@@ -491,9 +539,13 @@ with col_r3:
     if st.button("Score Confirmed Lineups", help="Write post_lineup predictions for today's confirmed-lineup games (🟢 source). Equivalent to the Dagster lineup-sensor job."):
         with st.spinner("Running post-lineup score…"):
             _r = subprocess.run(
-                ["uv", "run", "python", "scripts/predict_today.py",
+                ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
                  "--prediction-type", "post_lineup",
-                 "--date", date_str],
+                 "--date", date_str,
+                 "--model-tag", "prod",
+                 "--home-win-tag", "v3",
+                 "--total-runs-tag", "v3",
+                 "--run-diff-tag", "v3"],
                 capture_output=True,
                 text=True,
                 cwd=str(_PROJECT_ROOT),

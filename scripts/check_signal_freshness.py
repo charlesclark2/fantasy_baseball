@@ -222,7 +222,7 @@ def main() -> None:
                     f"(off-day, or signals not yet generated for this slate).")
         return
 
-    # Per-group zero-coverage warnings (non-fatal).
+    # Per-group zero-coverage warnings (non-fatal for secondary signals).
     for label, _, in_floor in _SIGNAL_GROUPS:
         n = int(rec[label])
         status = "OK" if n == game_sides else ("WARN" if n > 0 else "MISSING")
@@ -236,6 +236,26 @@ def main() -> None:
             log.info(msg + " — partial coverage expected (availability-gated)")
         else:
             log.info(msg)
+
+    # Emit completeness score for Dagster metadata (before any exit so it appears in logs).
+    avg_completeness = float(rec["avg_completeness"])
+    print(f"[METRIC] signal_completeness_score={avg_completeness:.4f}")
+
+    # A1.3 blocking gate: run_env and offense are the minimum required signals.
+    # If either has zero coverage on the latest completed slate, predict_today must
+    # not run — it would produce predictions with NULL sub-model inputs.
+    missing_critical = []
+    if int(rec["run_env"]) == 0:
+        missing_critical.append("run_env")
+    if int(rec["offense"]) == 0:
+        missing_critical.append("offense")
+    if missing_critical:
+        log.error(
+            f"BLOCKING: minimum required signals absent on {ref_date}: "
+            f"{', '.join(missing_critical)}. predict_today will not run until "
+            f"these signals are present. Check signal generator logs."
+        )
+        sys.exit(1)
 
     # Catastrophic-loss guard: every game-side below the completeness floor.
     n_ok = int(rec["n_ok"])

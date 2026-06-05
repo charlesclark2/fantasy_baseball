@@ -20,6 +20,8 @@ from pipeline.ops.daily_ingestion_ops import (
     generate_starter_ip_signals_op,
     generate_starter_signals_op,
     signal_freshness_check,
+    signal_freshness_failure_hook,
+    update_pipeline_status,
     update_player_posteriors_op,
     update_team_posteriors_op,
     update_matchup_cell_posteriors_op,
@@ -44,7 +46,7 @@ from pipeline.ops.daily_ingestion_ops import (
 )
 
 
-@job(executor_def=in_process_executor)
+@job(executor_def=in_process_executor, hooks={signal_freshness_failure_hook})
 def daily_ingestion_job():
     s1 = ingest_parlay_events()
     s2 = ingest_parlay_canonical_events(start=s1)
@@ -105,7 +107,8 @@ def daily_ingestion_job():
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
     s18 = dbt_umpire_feature_rebuild(start=p_matchup)
     s19 = predict_today_morning(start=s18)
-    s20 = check_prediction_coverage(start=s19)
+    s19b = update_pipeline_status(start=s19)
+    s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
     s22 = compute_model_health(start=s21)
     backfill_prediction_log(start=s22)
