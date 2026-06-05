@@ -156,9 +156,10 @@ _REGISTRY_PATH = Path(__file__).resolve().parents[2] / "betting_ml" / "sub_model
 # Bullpen OOD gate — training distribution parameters fitted on 2022-2025 data.
 # Source: betting_ml/models/bayesian/signal_scalers.joblib → 'opp_bullpen_mu' scaler.
 # These are fixed and must not be recomputed from live data.
-# Update only after bullpen_v2 retrain clears Story 17.0 OOD gate (z ≤ ±1.0σ on 2026).
-_BULLPEN_OOD_TRAINING_MEAN  = 1.423189   # mean(bullpen_mu across 2022-2025 opp sides)
-_BULLPEN_OOD_TRAINING_STD   = 0.496120   # std(bullpen_mu across 2022-2025 opp sides)
+# Updated 2026-06-05 (Story 17.0-retune): bullpen_v2 retrained on 2021-2026 window;
+# scaler refit on new 2022-2025 signal rows. 2026 mean z=+0.30 (was +0.34).
+_BULLPEN_OOD_TRAINING_MEAN  = 2.145507   # mean(bullpen_mu across 2022-2025 opp sides)
+_BULLPEN_OOD_TRAINING_STD   = 0.684726   # std(bullpen_mu across 2022-2025 opp sides)
 _BULLPEN_OOD_THRESHOLD_SIGMA = 1.5       # |z| > 1.5 → OOD flag; blocks totals bets
 
 _DEFAULT_GATE_CONFIG: dict[str, Any] = {
