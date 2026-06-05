@@ -75,3 +75,37 @@ So we did the disciplined thing: we **fixed the data, retrained both versions fr
 - **Home win:** momentum version adopted for its better calibration; still evaluation-only, no betting change.
 - **Total runs:** unchanged and still paused.
 - **The strategic read:** in-season momentum awareness improves our models slightly but is **not** a path to beating the market. The search for genuine betting edge continues elsewhere — and we now have a cleaner, better-monitored data foundation to conduct that search on.
+
+---
+
+## The Follow-On Experiment (Epic 16B): Could Momentum Help at a Lower Level?
+
+After Epic 16 wrapped up, we asked one more question before moving on: **what if the momentum signals help the building blocks, not the final model?**
+
+Here's the distinction. The models tested in Epic 16 are the "top floor" — they make the final over/under or win-probability call. But they're built on top of three smaller **sub-models** that estimate things like bullpen quality, offensive output, and starting pitcher impact. Each of those sub-models was originally trained on season-long averages. We wondered: even if momentum didn't help the top floor directly, would it sharpen these individual building blocks and close the gap that way?
+
+### The Experiment
+
+We retrained all four sub-models using the new momentum features from Epic 16 and ran a strict side-by-side: momentum vs. no-momentum, same training setup, same evaluation criteria. **A sub-model could only adopt the momentum version if it was measurably more accurate.** Otherwise it stayed as-is.
+
+### The Result: No Improvement Anywhere
+
+All four sub-models — offense, bullpen, starting pitcher quality, and starting pitcher workload — were **unchanged or marginally worse** with the momentum features. The margin was tiny in every case (essentially a rounding error), but the direction was consistent: the existing season-average versions were at least as good, and in some cases slightly better.
+
+This isn't surprising in hindsight. The Bayesian "season-average" estimates these sub-models use are already designed to update intelligently as more games accumulate — they're not as static as a naive average. The additional momentum layer didn't add information the sub-models weren't already capturing.
+
+### The Gate Test: Is the Bias Closed?
+
+We had one final check. Even if no individual sub-model improved, maybe the collective effect was enough? We measure our totals system against a concrete threshold: if the combined model's average prediction for May 2026 games is above **8.85 runs**, we know the system still has the same structural over-prediction problem and needs a more fundamental redesign. Below 8.85 and we'd keep investigating.
+
+**The result: 9.01 runs average, well above the threshold.** The same +0.40-run over-prediction that was diagnosed in Epic 10 is still present, unchanged by anything we tried in Epic 16 or 16B.
+
+This is now the **fifth independent measurement** confirming the same problem. That's actually a useful kind of certainty — we're not going in circles, we've genuinely exhausted a category of solutions.
+
+### What This Means
+
+The totals model's bias isn't a data-freshness problem, a feature-engineering problem, or a "we just need more momentum" problem. It appears to require a **fundamentally different mathematical approach** — one that can learn within a single season, not just across historical seasons. That's the focus of the next phase of work.
+
+- **All sub-models:** unchanged. No momentum version was promoted.
+- **Total runs:** still paused. The over-prediction gap is confirmed at every layer.
+- **What's next:** a new architecture (Epic 17) that learns from how this season is going in real time, not just how past seasons went.

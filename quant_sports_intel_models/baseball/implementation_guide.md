@@ -482,8 +482,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A0.2 Cognito auth ✅ (2026-06-04)                                          │
 │   A0.3 FastAPI/Lambda ⬜  (after A0.2; can overlap A0.0)                    │
 │   A0.4 Next.js frontend ⬜  (after A0.0 + A0.3; target July 4)             │
-│   A0.5 Push notifications ⬜  (after A0.4; target July 11)                  │
-│   A0.6 Stripe billing ⬜  (after A0.4; target July 18)                      │
+│   A0.5 Brand identity & comms ⬜  (after A0.1; before beta launch)          │
+│   A0.6 Push notifications ⬜  (after A0.4; target July 11)                  │
+│   A0.7 Stripe billing ⬜  (after A0.4; target July 18)                      │
 │                                                                              │
 │ Epic A1  Pipeline SLA & Reliability         ⏳ In Progress                   │
 │   GATE for beta launch — complete before app is shared with beta testers     │
@@ -9133,10 +9134,11 @@ Acceptance criteria:
 - A0.0 + A0.1 + A0.2: Start immediately (week of 2026-05-30)
 - A0.3: After A0.2 (can overlap with A0.0)
 - A0.4: After A0.0 + A0.3 both complete; target complete July 4
-- A0.5: After A0.4; target July 11
-- A0.6: After A0.4; target July 18
+- A0.5: After A0.1; before beta launch (can overlap A0.0 and A0.3)
+- A0.6: After A0.4; target July 11
+- A0.7: After A0.4; target July 18
 
-**Beta milestone:** A0.1–A0.4 complete → beta testers onboarded July 5–10. A0.5 live before All-Star break (July 11). A0.6 ready to flip to paid at All-Star break (July 18).
+**Beta milestone:** A0.1–A0.5 complete → beta testers onboarded July 5–10. A0.6 live before All-Star break (July 11). A0.7 ready to flip to paid at All-Star break (July 18).
 
 ---
 
@@ -9481,7 +9483,80 @@ Acceptance criteria:
 
 ---
 
-### A0.5 — Push Notification System (AWS SNS + Lambda)
+### A0.5 — Brand Identity & Communications Setup
+
+**Overview:** Establish the foundational brand assets and communication infrastructure for Credence Sports before beta testers interact with the product. This story produces the logo, sets up a professional email address, and ensures every outbound touchpoint — from the login page mailto link to future notification emails — comes from a credible, consistent identity. Should be completed before the first beta tester is onboarded.
+
+**Dependencies:** A0.1 complete (domain registered) — required for email setup. Blocks A1.7 (SES sending domain verification requires a working email identity).
+
+#### Logo Generation
+
+Tasks:
+- [ ] Generate primary logo using an AI image tool (Midjourney, DALL-E, or Adobe Firefly) — see prompt guidance below
+- [ ] Produce the following logo variants and export as SVG where possible, PNG fallback:
+  - `logo-full.svg` — wordmark + icon, horizontal layout, dark background
+  - `logo-icon.svg` — icon only, for favicons and small contexts
+  - `logo-wordmark.svg` — text only, no icon, matches the nav bar treatment v0 generated
+  - `logo-full-light.svg` — inverted version for any light background contexts
+- [ ] Place all logo files in `frontend/public/brand/`
+- [ ] Replace the v0-generated text wordmark in the nav bar and login card with `<Image>` component using `logo-wordmark.svg` — keep the emerald/white color treatment
+- [ ] Update `frontend/public/favicon.ico` with the icon variant — use a 32×32 PNG converted via favicon.io
+- [ ] Update `frontend/src/app/layout.tsx` metadata: set `title`, `description`, and `og:image` using the full logo
+
+#### Email Setup
+
+Tasks:
+- [ ] Create a Google Workspace account for credencesports.com — $6/user/month Business Starter tier is sufficient for beta
+- [ ] Add the required DNS records (MX, SPF, DKIM, DMARC) to the Route 53 hosted zone — Google Workspace setup wizard generates these automatically; add them as records in Route 53
+- [ ] Create the following mailboxes:
+  - `hello@credencesports.com` — primary contact, linked from login page mailto and footer
+  - `noreply@credencesports.com` — outbound notifications and system emails (used by SES in A1.7)
+  - `charlie@credencesports.com` — personal Credence Sports address
+- [ ] Verify credencesports.com as a sending identity in AWS SES (us-east-1) — required for A1.7. SES domain verification adds a TXT record to Route 53; request production access at the same time to exit SES sandbox
+- [ ] Update the `mailto:hello@credencesports.com` link on the login page to confirm the mailbox is live and receiving before beta launch
+- [ ] Add email signature to `charlie@credencesports.com`:
+  ```
+  Charlie Clark
+  Credence Sports | Penumbra Partners
+  charlie@credencesports.com
+  credencesports.com
+  ```
+
+#### Logo Design Direction
+
+The logo should communicate precision, quantitative rigor, and sports — without looking like a generic sportsbook. Penumbra Partners' shadow/light theme is the aesthetic anchor.
+
+**Starting prompt (Midjourney or DALL-E):**
+```
+Minimalist sports analytics logo for 'Credence Sports'.
+Icon concept: a probability distribution curve or credible
+interval bar rendered as a clean geometric mark — think
+a thin horizontal bar with a subtle bell curve above it,
+or an arc representing a confidence interval. Dark background
+#0a0a0a, emerald green #10b981 as the primary accent color.
+No text in the icon. Clean, modern, data-forward aesthetic.
+SVG-friendly — no gradients, maximum 3 colors.
+Style reference: Bloomberg, Robinhood, early Stripe.
+```
+
+Alternative icon directions worth exploring:
+- A stylized C constructed from a probability arc
+- A prior → posterior arrow motif (two overlapping distributions with an arrow)
+- A credible interval bracket `[——|——]` as a geometric mark
+
+Acceptance criteria:
+- [ ] Logo files exist in `frontend/public/brand/` in all four variants
+- [ ] Favicon updated — Credence Sports icon appears in browser tab
+- [ ] Nav bar and login card use SVG logo asset, not v0-generated text wordmark
+- [ ] `hello@credencesports.com` is live and receiving email — verified by sending a test from an external address
+- [ ] DNS records for Google Workspace (MX, SPF, DKIM, DMARC) are active in Route 53 — verified via MXToolbox
+- [ ] SES domain verification complete for credencesports.com in us-east-1 — status shows Verified in SES console
+- [ ] SES production access requested (exits sandbox) — approved by AWS
+- [ ] `aws_resources.md` updated with SES identity ARN and Google Workspace MX records
+
+---
+
+### A0.6 — Push Notification System (AWS SNS + Lambda)
 
 **Overview:** When Dagster completes the daily prediction run and `qualified_bet = true` games exist, publish an SNS notification that delivers browser push notifications and email alerts to subscribed users. Eliminates the "run Streamlit manually and check" workflow.
 
@@ -9511,7 +9586,7 @@ Acceptance criteria:
 
 ---
 
-### A0.6 — Stripe Subscription Billing
+### A0.7 — Stripe Subscription Billing
 
 **Overview:** Beta testers pay nothing — they're invited users with `beta_tester` Cognito group. Stripe is integrated for post-beta paid subscriptions. The integration is built during beta so it's ready to flip on, not a last-minute scramble. Keep Stripe in test mode during beta — no real charges.
 
@@ -9541,12 +9616,13 @@ Acceptance criteria:
 A0.0 UX/UI Design & Wireframing   — START IMMEDIATELY (1 week)
 A0.1 Domain + SSL                 — START IMMEDIATELY (parallel; 48hr DNS gate)
 A0.2 Cognito auth                 — START IMMEDIATELY (parallel with A0.1)
+A0.5 Brand identity & comms       — After A0.1; can overlap A0.0 and A0.3; before beta launch
      ↓
 A0.3 FastAPI/Lambda               — After A0.2; can start before A0.0 complete
      ↓
 A0.4 Next.js frontend             — After A0.0 + A0.3 both complete (target July 4)
      ↙              ↘
-A0.5 Push notifs              A0.6 Stripe billing
+A0.6 Push notifs              A0.7 Stripe billing
 (target July 11)              (target July 18)
 ```
 
@@ -9683,7 +9759,7 @@ A0.5 Push notifs              A0.6 Stripe billing
 
 ### A1.7 — Prediction Notification Delivery (Email + SMS)
 
-**Overview:** When `predict_today_op` completes and writes new rows to `daily_model_predictions`, users who have opted into notifications should receive an alert via email and/or SMS. Notifications are triggered by a Dagster sensor that watches for new qualified predictions and fans out to an SNS topic, which routes to SES (email) and SNS SMS subscriptions respectively. This is intentionally lightweight for beta — no templating engine, no preference center UI yet (that comes in A0.5). The goal is to get signal to users as fast as possible after the model runs.
+**Overview:** When `predict_today_op` completes and writes new rows to `daily_model_predictions`, users who have opted into notifications should receive an alert via email and/or SMS. Notifications are triggered by a Dagster sensor that watches for new qualified predictions and fans out to an SNS topic, which routes to SES (email) and SNS SMS subscriptions respectively. This is intentionally lightweight for beta — no templating engine, no preference center UI yet (that comes in A0.6). The goal is to get signal to users as fast as possible after the model runs.
 
 **Notification trigger:** A new row in `daily_model_predictions` where `qualified_bet = true` and `lineup_confirmed = true` (if the lineup confirmation re-run from A1.2 is complete), or `qualified_bet = true` (fallback if lineup confirmation is not yet live).
 
@@ -9827,7 +9903,7 @@ A1.6 Scheduler reliability   — within 2 days of A1.3 (FM-5 is root cause of on
 A1.5 Alerting & monitoring ──┐
 A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
      ↓
-A1.7 Prediction notification delivery — after A1.5 (shares SNS/DynamoDB infra with A0.5; can be built in parallel with A0.3)
+A1.7 Prediction notification delivery — after A1.5; requires A0.5 SES verification complete (shares SNS/DynamoDB infra with A0.6; can be built in parallel with A0.3)
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```
