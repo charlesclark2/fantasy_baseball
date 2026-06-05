@@ -269,9 +269,7 @@ export default function PickDetailPage() {
           </div>
 
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart
-              margin={{ top: 8, right: 8, left: -16, bottom: 0 }}
-            >
+            <AreaChart margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
               <XAxis
                 dataKey="runs"
@@ -288,8 +286,10 @@ export default function PickDetailPage() {
                 tick={{ fill: "#6b7280", fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
-                width={36}
+                tickFormatter={(v) => `${(v * 100).toFixed(1)}%`}
+                domain={[0, 0.12]}
+                ticks={[0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12]}
+                width={44}
               />
               <Tooltip content={<DistributionTooltip />} />
 
