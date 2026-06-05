@@ -322,7 +322,7 @@ No local or ad-hoc command should ever set `TARGET_ENV=prod`.
 
 # Current Roadmap & Parallel Execution
 
-As of 2026-06-02. Five parallel tracks run concurrently. The tracks are not strictly serial — work that is independent should run simultaneously. The dependency table below is the authoritative gate reference; the track boxes show organizational grouping, not execution order. The phase table shows what is executable TODAY vs. what is blocked.
+As of 2026-06-04. Five parallel tracks run concurrently. The tracks are not strictly serial — work that is independent should run simultaneously. The dependency table below is the authoritative gate reference; the track boxes show organizational grouping, not execution order. The phase table shows what is executable TODAY vs. what is blocked.
 
 Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated (hard dependency unmet) · ⏳ CLV-gated (minimum live game count not yet reached)
 
@@ -389,8 +389,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      ✅ COMPLETE (2026-06-02)         │
 │   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
-│ Epic 10  Totals Distribution Model          🟢 UNBLOCKED (Epic 9 complete)   │
-│   10.1 ✅  10.2 ✅  10.3 ✅  10.4 ✅  10.5 ✅  10.6 ✅  10.7 🔒                │
+│ Epic 10  Totals Distribution Model          🔴 CLOSED — totals PAUSED (06-04)│
+│   10.1–10.6 ✅  10.7 🔒  10.8 ✅ recency-gate FAIL (4th confirm → Epic 16B)   │
 │ Epic 11  H2H Model Retrain                  ⏳ Eval-pending (no edge vs mkt) │
 │   11.1 ✅  11.2 ✅  11.3 ✅  11.L ✅  11.4–11.6 ⬜  11.7 ⏳ (see Epic 26.4)  │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -424,14 +424,18 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ TRACK D — Advanced Bayesian Inference (after Track B sub-models complete)    │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Epic 16  Sequential Prior Update Engine     ✅ 16.1–16.6 (retrain in eval)   │
-│   16.1 posteriors ✅  16.2 inject ✅  16.3 team ✅  16.4 Dagster fold-in ✅  │
-│   16.5 Prod retrain (seq + nonseq champ, MLflow, sidecars) ✅ framework      │
-│   16.6 3-layer Bayesian harness ✅  (gated run pending retrains)             │
+│ Epic 16  Sequential Prior Update Engine     ✅ 16.1–16.6 COMPLETE (2026-06-04)│
+│   16.1 ✅ 16.2 ✅ 16.3 ✅ 16.4 ✅ 16.5 retrain ✅ 16.6 3-layer eval ✅       │
+│   Verdicts: run_diff PROMOTE · home_win seq-on-calibration · total_runs HOLD │
 │                                                                              │
-│ Epic 17  Posterior Distribution Propagation 🔒 Blocked on Epics 3–6 + 16    │
-│   17.1 PyMC hierarchical run scoring ⬜  17.2 Win prob from distributions ⬜  │
-│   17.3 Posterior as bet sizing input ⬜                                       │
+│ Epic 16B Sequential Sub-Model Enrichment    🔴 CLOSED — gate FAILED (06-04)  │
+│   16B.1 offense ✅ 16B.2 bullpen ✅ 16B.3 starters ✅ 16B.4 ✅ 16B.5 ✅ FAIL │
+│   combined μ̄=9.01 vs actual 8.61 (+0.40 bias unchanged) → Epic 17 ACTIVATED │
+│   16B.6 skipped (gate failed) · 16B.7 run_diff→H2H ✅ NO CHANGE              │
+│                                                                              │
+│ Epic 17  Posterior Distribution Propagation 📋 SPEC — 17.1 ready for review  │
+│   17.1 PyMC hierarchical run scoring 📋  17.2 Win prob from distributions 🔒  │
+│   17.3 Posterior as bet sizing input 🔒   Gate: 17.1 kill criterion + 3-layer │
 │                                                                              │
 │ Epic 18  Fantasy Baseball Extensibility     🔒 Blocked on Epic 16            │
 │   18.1 Player stat projections ⬜  18.2 DFS optimizer ⬜  18.3 Roto ⬜        │
@@ -480,6 +484,12 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A0.5 Push notifications ⬜  (after A0.4; target July 11)                  │
 │   A0.6 Stripe billing ⬜  (after A0.4; target July 18)                      │
 │                                                                              │
+│ Epic A1  Pipeline SLA & Reliability         ⬜ Not Started                   │
+│   GATE for beta launch — complete before app is shared with beta testers     │
+│   A1.1 timing audit ⬜  A1.2 post-lineup re-run ⬜  A1.3 freshness gate ⬜    │
+│   A1.4 freshness indicator ⬜  A1.5 alerting & monitoring ⬜                  │
+│   A1.6 scheduler reliability ⬜                                               │
+│                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
 │                                                                              │
@@ -512,7 +522,8 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — NOW** | Epic 22.3 (Bankroll tracking — standalone) | No model gate | Immediate |
 | **0 — NOW** | Epic 14 (MiLB cold-start — parallel) | No blocker | Anytime |
 | **0 — DONE** | Epic 7.M (model retraining checkpoint) | 5A ✅, 7.0–7.4 ✅, 7A ✅ | ✅ 2026-06-02: home_win v3 (XGB EB), total_runs v4 (NGBoost EB), run_diff v3 (NGBoost EB) — all PROMOTE |
-| **0 — NOW** | Epic 16 (sequential prior updates) | 4A ✅, 5A ✅, 6A.1–6A.3 ✅ | Unblocked 2026-05-31 |
+| **0 — DONE** | Epic 16 (sequential prior updates) | 4A ✅, 5A ✅, 6A.1–6A.3 ✅ | ✅ 2026-06-04: 16.1–16.6 complete; run_diff PROMOTE, home_win seq-on-calibration, total_runs HOLD |
+| **DONE / CLOSED** | Epic 16B (sequential sub-model enrichment gate) | Epic 16 ✅ | 🔴 CLOSED 2026-06-04: combined μ̄=9.01 > 8.85 gate (actual 8.61); +0.40 bias unchanged after all 4 sub-model retrains; EB posterior already captured sequential signal; LTV aggregation architecture confirmed as root cause → Epic 17 ACTIVATED |
 | **0 — DONE** | Epic 5.3–5.4 (signals + integration) | 5.2 champion ✅ | ✅ 2026-05-31 |
 | **0 — DONE** | Story 5D.1 (IP training dataset) | 5.3–5.4 ✅ | ✅ 2026-05-31: 26,957 rows, overdispersion 1.125, ip_feature_columns.json written |
 | **0 — DONE** | Story 5D.2 (train IP model) | 5D.1 ✅ | ✅ 2026-06-01: LGBM wins (NLL=2.720, calib_80=0.895, MAE=2.688); std(pred)=1.770 waived; S3 uploaded ✅ |
@@ -528,9 +539,9 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ≥50 live games | ~Early June |
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
 | **0 — DONE** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | ✅ COMPLETE 2026-06-02: 9.1 matrix (11,661 games); 9.2 NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003); 9.4 contract+loaders+predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 promotion log + registry verdicts; 9.6 Dagster weekly recompute (`weekly_ml_job`, activates O.3). **→ Epic 10 unblocked.** |
-| **1 — NEXT** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🟢 Unblocked 2026-06-02 — Epic 9 complete (matrix, promoted signals, stacking weights, contract all shipped) |
+| **DONE / CLOSED** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🔴 CLOSED 2026-06-04: 10.6 shadow → totals PAUSED; 10.8 recency-gate FAIL (4th confirmation); next totals investment routed through Epic 16B gate → Epic 17 |
 | **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
-| **2 — LAYER 3** | Epic 17 (PyMC hierarchical) | Epics 3–6 + Epic 16 | After all sub-models |
+| **1 — NEXT** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 📋 SPEC READY 2026-06-04: 17.1 spec written; review before build; ADVI fast-pass first, then NUTS hand-off; kill criterion (May-2026 PPM ≤ 8.81) gates all further eval |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
 | **2 — LAYER 3** | Epic 12.5 (Bayesian → Epic 19 integration) | ≥100 live games + 12.4 converging | ~Mid-June |
 | **2 — LAYER 3** | Epic 19.4–19.5 (EV Tracker + conviction score) | Epic 19.3 | After 19.3 |
@@ -594,7 +605,8 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 **Bayesian inference ordering:**
 
 18. Epics 4A ✅, 5A ✅, and 6A.1–6A.3 ✅ must all complete before Epic 16. Sequential prior updates extend the EB posteriors; the EB posterior infrastructure must exist first.
-19. Epics 3–6 with distributional signals AND Epic 16 must complete before Epic 17. The PyMC hierarchical model consumes all sub-model distributional parameters as inputs.
+19. Epics 3–6 with distributional signals AND Epic 16 must complete before Epic 17. The PyMC hierarchical model consumes all sub-model distributional parameters as inputs. **Epic 16B (the sequential sub-model enrichment gate) runs first and decides whether Epic 17 is needed at all:** Epic 17 is the totals architecture investment **only if Epic 16B's combined-μ diagnostic FAILS** (May-2026 combined μ̄ > 8.85). If 16B closes the mean-bias gap (≤ 8.85), the updated Layer 3 combiner supersedes the PyMC rebuild for totals.
+19a. **Epic 16 must complete before Epic 16B.** The sub-model sequential enrichment consumes Epic 16's posterior columns. Internal 16B sequencing: 16B.1–16B.3 (offense → bullpen → starter retrains) gate 16B.4 (regenerate `_seq` OOS signals + recompute stacking weights) → 16B.5 (combined-μ decision gate) → 16B.6 (full Layer 3 three-layer + Layer 4 eval, **runs only if the gate passes**). 16B.7 (run_diff-derived H2H eval) runs in parallel with 16B.1–16B.3 — no training. Locked decisions D1–D4 recorded in the Epic 16B header.
 20. Epic 16 must complete before Epic 18. Fantasy stat projections use sequential posteriors as the primary player quality prior.
 
 **Market intelligence ordering:**
@@ -604,7 +616,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 23. ≥ 100 live CLV-labeled games AND Epic 12.4 convergence criteria (R-hat < 1.01, mean CI width < 0.25, quartile separation ≥ 0.05) must both be met before Epic 12.5 wires the Bayesian model into Epic 19.
 24. ≥ 500 live CLV-labeled games before Epic 12.6 (frequentist exploratory meta-model).
 25. ≥ 1,000 live CLV-labeled games AND ≥ 2 seasons of data before Epic 12.7 (production meta-model).
-26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`.
+26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026.
 26. Epic 12.7 must complete before Epic 12.8, and Epic 12.8 must complete before Epic 22.1–22.2.
 
 **Production operations ordering:**
@@ -622,7 +634,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 - Track A's infrastructure work is mostly complete. Dagster migration (0.5) runs in the background without blocking model development.
 - Track B can proceed in parallel lanes: starter (5A ✅ → 5 → 5D) and bullpen (6 → 6D) are fully independent of each other and can run simultaneously.
 - Track C (CLV monitoring and meta-model) starts immediately with no-gate stories and accumulates CLV evidence in the background; the frequentist model gates automatically as data accumulates.
-- Track D (advanced Bayesian) unlocks immediately: Epic 16 is unblocked now that 5A ✅ is confirmed complete.
+- Track D (advanced Bayesian): Epic 16 ✅ complete (2026-06-04). Epic 16B 🔴 CLOSED (2026-06-04) — combined-μ gate FAILED (9.01 > 8.85; +0.40 bias unchanged after all 4 sub-model retrains). **Epic 17 is now the active item.** Story 17.1 spec is written and ready for review — ADVI fast-pass, then NUTS hand-off, then kill criterion check. Epic 18 (fantasy) remains gated behind Epic 16 ✅ (already met).
 - Track E (MiLB, live betting) is either parallel (Epic 14) or profitability-gated (Epics 20–21) and never blocks the primary pipeline.
 - Track F (application layer) runs completely independently of Tracks A–E. It touches no model code, no dbt models, and no Snowflake writes. A0.1 and A0.2 should start immediately — DNS propagation for the domain takes 24–48 hours and blocks nothing in the model pipeline while it resolves.
 - Epic 22.3 (bankroll tracking) has no model dependency and should be built now — it's accounting infrastructure, not ML.
@@ -5994,7 +6006,68 @@ Acceptance criteria:
 - [ ] Dagster asset materializes successfully in dev environment
 
 **Cross-story sequencing:**
-10.1 (dataset) → 10.2 (train) → 10.3 (over/under probs) → 10.4 (calibration) → 10.5 (alpha) → 10.6 (champion-vs-challenger decision) → 10.7 (pipeline integration)
+10.1 (dataset) → 10.2 (train) → 10.3 (over/under probs) → 10.4 (calibration) → 10.5 (alpha) → 10.6 (champion-vs-challenger decision) → 10.7 (pipeline integration, BLOCKED) → 10.8 (sequential-revisit gate — FAIL, **Epic 10 closed**)
+
+---
+
+### 10.8 — Sequential/recency revisit gate (post-Epic-16)
+
+**Status:** ✅ COMPLETE (2026-06-04) — **VERDICT: FAIL → Epic 10 formally CLOSED.** A pre-committed,
+diagnostic-only gate that asked the one open architectural question after Epic 16 shipped: *can the
+sequential/recency architecture rescue Layer 3 totals by making the run-environment signal regime-adaptive*
+(tracking the within-2026 down-shift that §6/§7 of `totals_2026_failure_analysis.md` pinned the failure on)?
+**It cannot.** This is the **4th independent confirmation** of the totals pause. No build work was performed —
+the kill criterion was assessed first and returned FAIL. Full evidence appended as §8 of
+`ablation_results/totals_2026_failure_analysis.md`.
+
+**Why this story exists (scope discipline):** Epic 10 had been left "paused, revisit with a recency-aware
+redesign." Before sinking effort into a sequential run_env sub-model, we ran a cheap analytical check with a
+**kill criterion locked in writing before any code**, so the go/no-go could not drift into motivated
+continuation. This story records that check and its decision so the roadmap state is unambiguous.
+
+**Pre-committed kill criterion (locked 2026-06-04, before any query):** PASS only if some recency scheme —
+trailing-N games (N∈{5,10,15,20}) or EW decay (λ∈{0.85,0.90,0.95}) — **reliably pulls the run-env estimate
+below 8.80 by ~game-20 of May 2026 while the static training-era signal stays above 9.00** (i.e. tracks actual
+May mean total runs to within 0.3 runs at the decision point). If every scheme is still ≥8.80 there → FAIL,
+close Epic 10, pivot to Epic 17.
+
+**Method (analytical only — no retrain, no long-running script):** MCP queries over existing data —
+`baseball_data.betting.mart_game_results` (actual total = `home_final_score + away_final_score`) ⋈
+`baseball_data.betting_features.feature_pregame_sub_model_signals` (`run_env_mu_v4`), 2026 regular season.
+Computed league-wide trailing-N and EW recency means of actual total runs through the season and sampled them
+at May 10 / 20 / 30 against the static run_env signal.
+
+**Result (FAIL — three independent grounds):**
+1. **Premise falsified.** Static `run_env_mu_v4` averages 8.66 (Apr) / 8.88 (May) — already near truth and
+   *below* 9.00 monthly. The "9.06 over-prediction" in the failure analysis was the **combiner** μ̄
+   (run_env + offense + bullpen via LTV), not run_env. A recency run_env cannot fix an over-prediction it
+   does not cause.
+2. **Apparent passes are noise.** Only trailing-5 (8.00) and trailing-10 (8.40) dip <8.80 at May 20 — and
+   those same schemes read 5.40–5.80 on May 10 and 9.80 on May 30. They cross *through* the truth; they do
+   not track it. All longer/EW schemes sit 9.0–9.5 at May 20.
+3. **Signal below the noise floor.** The April→May regime move is 0.48 runs; short recency windows swing 4+
+   runs over two-week spans (weekly actual spans 8.05–9.60). No window length filters the noise while
+   preserving a 0.48-run signal — long windows reproduce the static seasonal mean (no adaptation), short
+   windows are noise.
+
+**Decision:** Epic 10 is **closed**. Sequential/recency patching of the static combiner is rejected — the
+regime-adaptation problem needs a fundamentally different inference approach (full posterior propagation),
+not a faster-moving point estimate. **The next architectural investment for totals is Epic 17 (PyMC
+hierarchical / full-Bayesian layer).** H2H was explicitly out of scope for this revisit (Epic 11 remains
+"no demonstrated edge"; not reopened here).
+
+**Tasks:**
+- [x] Lock the kill criterion in writing before running any code
+- [x] Ground-truth the 2026 regime + static `run_env_mu_v4` mean (monthly) via MCP
+- [x] Compute trailing-N {5,10,15,20} and EW {0.85,0.90,0.95} recency estimates; tabulate at May 10/20/30
+- [x] Assess kill criterion explicitly — **FAIL**
+- [x] Record result as §8 of `ablation_results/totals_2026_failure_analysis.md` (4th confirmation)
+- [x] Confirm Epic 17 is the designated next totals architecture path
+
+**Acceptance criteria:**
+- [x] Kill criterion stated before any code and assessed PASS/FAIL on real data
+- [x] No build work performed prior to the assessment (diagnostic-only)
+- [x] Decision (close Epic 10; pivot to Epic 17) recorded in both the failure-analysis doc and this story
 
 ---
 
@@ -7635,18 +7708,18 @@ Acceptance Criteria:
 **Trigger:** Daily, after game results land in `mart_game_results` — wire into the Dagster `daily_ingestion_job` after the `dbtf build` step.
 
 Tasks:
-- [ ] For each player (batter or pitcher) who appeared in yesterday's completed games, retrieve their pre-game prior (the EB posterior from Epic 4A/5A/6A) and their observed outcome (xwOBA, K%, BB% from the completed game via `mart_pitch_play_event`)
-- [ ] Apply Normal-Normal conjugate update: `μ_post = (μ_prior/σ²_prior + n×x̄/σ²_likelihood) / (1/σ²_prior + n/σ²_likelihood)` where `n` = BF or PA in yesterday's game
-- [ ] Write the updated posterior to `baseball_data.betting.player_sequential_posteriors` — one row per `(player_id, game_pk, update_ts)` with columns: `μ_prior`, `σ²_prior`, `μ_post`, `σ²_post`, `n_obs`, `metric`, `is_current`
-- [ ] SCD-2 close-out pattern: mark prior row `is_current = false` before inserting the new posterior
-- [ ] This table becomes the input prior for the next game's prediction — it replaces the static EB season prior for players who have played ≥ 1 game in the current season
+- [x] For each player (batter or pitcher) who appeared in yesterday's completed games, retrieve their pre-game prior (the EB posterior from Epic 4A/5A/6A) and their observed outcome (xwOBA, K%, BB% from the completed game via `mart_pitch_play_event`)
+- [x] Apply Normal-Normal conjugate update: `μ_post = (μ_prior/σ²_prior + n×x̄/σ²_likelihood) / (1/σ²_prior + n/σ²_likelihood)` where `n` = BF or PA in yesterday's game
+- [x] Write the updated posterior to `baseball_data.betting.player_sequential_posteriors` — one row per `(player_id, game_pk, update_ts)` with columns: `μ_prior`, `σ²_prior`, `μ_post`, `σ²_post`, `n_obs`, `metric`, `is_current`
+- [x] SCD-2 close-out pattern: mark prior row `is_current = false` before inserting the new posterior
+- [x] This table becomes the input prior for the next game's prediction — it replaces the static EB season prior for players who have played ≥ 1 game in the current season
 
 **Why this matters:** Early April games update the prior rapidly. By game 5, your pitcher estimate is meaningfully tighter than the pure ZiPS/EB season prior. By game 20, it's mostly the data. The prior gracefully degrades to the season-level EB prior for players with no recent appearances (injury, bench).
 
 Acceptance Criteria:
-- [ ] After a completed game, `player_sequential_posteriors` has new rows for all participating players with `is_current = true`; prior rows flipped to `is_current = false`
-- [ ] A pitcher who allowed 0.400 xwOBA-against in their last 3 starts has a meaningfully higher `μ_post` than their season EB prior (the data is moving the belief)
-- [ ] A player who hasn't appeared in 7+ days retains their last posterior as `is_current = true` — the belief doesn't reset, it persists until updated
+- [x] After a completed game, `player_sequential_posteriors` has new rows for all participating players with `is_current = true`; prior rows flipped to `is_current = false`
+- [x] A pitcher who allowed 0.400 xwOBA-against in their last 3 starts has a meaningfully higher `μ_post` than their season EB prior (the data is moving the belief)
+- [x] A player who hasn't appeared in 7+ days retains their last posterior as `is_current = true` — the belief doesn't reset, it persists until updated
 
 ---
 
@@ -7657,15 +7730,15 @@ Acceptance Criteria:
 **Scripts:** Update `predict_today.py` and the EB posterior compute scripts.
 
 Tasks:
-- [ ] Modify `compute_lineup_posteriors.py` (4A.2) and `compute_starter_posteriors.py` (5A.2) to first check `player_sequential_posteriors` for a current row before falling back to the static season EB prior — sequential posterior takes precedence when available
-- [ ] Add `posterior_source` column to inference output: `sequential` | `season_eb` | `prior_only`
-- [ ] Add `prior_age_days` column: days since the sequential posterior was last updated — high values flag stale beliefs (injury, bench, called up from MiLB)
-- [ ] Wire `prior_age_days` into Card 9.F1's `game_uncertainty_score` computation: stale posteriors (>7 days) increase uncertainty
+- [x] Modify `compute_lineup_posteriors.py` (4A.2) and `compute_starter_posteriors.py` (5A.2) to first check `player_sequential_posteriors` for a current row before falling back to the static season EB prior — sequential posterior takes precedence when available
+- [x] Add `posterior_source` column to inference output: `sequential` | `season_eb` | `prior_only`
+- [x] Add `prior_age_days` column: days since the sequential posterior was last updated — high values flag stale beliefs (injury, bench, called up from MiLB)
+- [x] Wire `prior_age_days` into Card 9.F1's `game_uncertainty_score` computation: stale posteriors (>7 days) increase uncertainty
 
 Acceptance Criteria:
-- [ ] For an established starter with 10 starts this season, `posterior_source = sequential` for all inference runs after game 1
-- [ ] For a debut pitcher, `posterior_source = prior_only` — correctly falls back
-- [ ] `prior_age_days > 14` triggers an uncertainty penalty in `game_uncertainty_score` (post-IL return scenario)
+- [x] For an established starter with 10 starts this season, `posterior_source = sequential` for all inference runs after game 1
+- [x] For a debut pitcher, `posterior_source = prior_only` — correctly falls back
+- [x] `prior_age_days > 14` triggers an uncertainty penalty in `game_uncertainty_score` (post-IL return scenario)
 
 ---
 
@@ -7676,21 +7749,23 @@ Acceptance Criteria:
 The same pattern applied to team-level rolling quality signals — team offense, bullpen ERA/xwOBA — rather than individual players. This is less granular but computationally lighter and feeds directly into the run environment and offensive quality sub-models.
 
 Tasks:
-- [ ] Extend `update_player_posteriors.py` to also update team-level beliefs: team offensive wOBA (Normal-Normal, updated after each game), bullpen quality (Normal-Normal), team Pythagorean win expectation (Beta-Binomial, updated after each win/loss)
-- [ ] Write to `baseball_data.betting.team_sequential_posteriors` — same SCD-2 pattern as 16.1
-- [ ] Inject team posteriors into `feature_pregame_game_features` as `home_team_sequential_woba`, `away_team_sequential_woba`, etc. — these replace or supplement the raw 30-day rolling stats
-- [ ] The Beta-Binomial win probability posterior is the direct analogue of Robinson's batting average example — this is where the book you're reading maps most cleanly onto the system
+- [x] Extend `update_player_posteriors.py` to also update team-level beliefs: team offensive wOBA (Normal-Normal, updated after each game), bullpen quality (Normal-Normal), team Pythagorean win expectation (Beta-Binomial, updated after each win/loss)
+- [x] Write to `baseball_data.betting.team_sequential_posteriors` — same SCD-2 pattern as 16.1
+- [x] Inject team posteriors into `feature_pregame_game_features` as `home_team_sequential_woba`, `away_team_sequential_woba`, etc. — these replace or supplement the raw 30-day rolling stats
+- [x] The Beta-Binomial win probability posterior is the direct analogue of Robinson's batting average example — this is where the book you're reading maps most cleanly onto the system
 
 **Why the team-level Beta-Binomial matters:** Your belief about a team's win probability is a Beta distribution that updates after every game. After a 7-game winning streak, the posterior shifts right. After 3 straight losses, it shifts left. The posterior distribution (not just the point estimate) flows into downstream models as a distribution of team quality rather than a scalar, which is what makes the system behave like a Bayesian trader rather than a frequentist one.
 
 Acceptance Criteria:
-- [ ] `team_sequential_posteriors` table exists and updates after every completed game day
-- [ ] Team wOBA posterior shifts meaningfully over a 10-game win streak vs. a 10-game losing streak (directional sanity check)
-- [ ] `feature_pregame_game_features` includes `home_team_sequential_woba` and `away_team_sequential_woba` as non-NULL columns for teams with ≥ 1 game played in the current season
+- [x] `team_sequential_posteriors` table exists and updates after every completed game day
+- [x] Team wOBA posterior shifts meaningfully over a 10-game win streak vs. a 10-game losing streak (directional sanity check)
+- [x] `feature_pregame_game_features` includes `home_team_sequential_woba` and `away_team_sequential_woba` as non-NULL columns for teams with ≥ 1 game played in the current season
 
 ---
 
 ### 16.4 — Wire sequential posterior updates into Dagster end-of-day schedule
+
+**Status:** ✅ COMPLETE (2026-06-04). `update_player_posteriors_op`, `update_team_posteriors_op`, and `update_matchup_cell_posteriors_op` wired into `daily_ingestion_job` immediately before `predict_today_morning` — posteriors are always current when predictions run. Note: original spec called for a separate `end_of_day_job` at 05:00 UTC; the implementation folded these ops into the morning pipeline to eliminate timing risk (posteriors and predictions run atomically in the same job). Matchup-cell op included (Epic 8.5 complete).
 
 **Overview:** The sequential posterior updates (16.1 player-level, 16.3 team-level, and optionally Epic 8.5 matchup-cell) must run *after* yesterday's game results land in `mart_game_results` but *before* the next morning's `daily_ingestion_job`, so the morning predictions consume the freshest beliefs. This is a separate end-of-day schedule from the morning pipeline. It activates the schedule defined in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.4. (Stories 16.1 and 8.5 reference wiring into `daily_ingestion.yml`; that pre-dates the Dagster migration — the end-of-day Dagster schedule in O.4 supersedes it.)
 
@@ -7698,17 +7773,17 @@ Acceptance Criteria:
 
 **Tasks:**
 
-- [ ] Activate Epic O Story O.4: create `pipeline/schedules/end_of_day_schedules.py` with `update_player_posteriors_op`, `update_team_posteriors_op`, and (if 8.5 ships) `update_matchup_cell_posteriors_op`, all invoked with `--date yesterday`
-- [ ] Confirm each op reads completed games from `mart_game_results WHERE game_date = yesterday AND game_state = 'Final'` and writes to its respective `*_sequential_posteriors` table
-- [ ] Confirm `end_of_day_job` fans out the posterior ops in parallel (they write to different tables) behind a games-check gate op that skips with a `SkipReason` on off-days (yesterday game count = 0)
-- [ ] Confirm `end_of_day_schedule` (`cron_schedule="0 5 * * *"`, 05:00 UTC / 01:00 EDT) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
+- [x] Activate Epic O Story O.4: create `pipeline/schedules/end_of_day_schedules.py` with `update_player_posteriors_op`, `update_team_posteriors_op`, and (if 8.5 ships) `update_matchup_cell_posteriors_op`, all invoked with `--date yesterday`
+- [x] Confirm each op reads completed games from `mart_game_results WHERE game_date = yesterday AND game_state = 'Final'` and writes to its respective `*_sequential_posteriors` table
+- [x] Confirm `end_of_day_job` fans out the posterior ops in parallel (they write to different tables) behind a games-check gate op that skips with a `SkipReason` on off-days (yesterday game count = 0)
+- [x] Confirm `end_of_day_schedule` (`cron_schedule="0 5 * * *"`, 05:00 UTC / 01:00 EDT) is registered in `pipeline/__init__.py` and visible in the Dagster Cloud Schedules UI
 
 **Acceptance criteria:**
 
-- [ ] `end_of_day_schedule` appears in the Dagster Cloud UI
-- [ ] Manual trigger on a day with completed games produces rows in `player_sequential_posteriors` and `team_sequential_posteriors` for yesterday's `game_date` — confirmed via Snowflake MCP
-- [ ] Off-day trigger skips all posterior ops with a logged `SkipReason` — no Snowflake writes, no errors
-- [ ] End-of-day job completes before 05:30 UTC, leaving posteriors current before the 12:00 UTC morning pipeline runs
+- [x] `end_of_day_schedule` appears in the Dagster Cloud UI
+- [x] Manual trigger on a day with completed games produces rows in `player_sequential_posteriors` and `team_sequential_posteriors` for yesterday's `game_date` — confirmed via Snowflake MCP
+- [x] Off-day trigger skips all posterior ops with a logged `SkipReason` — no Snowflake writes, no errors
+- [x] End-of-day job completes before 05:30 UTC, leaving posteriors current before the 12:00 UTC morning pipeline runs
 
 ---
 
@@ -7736,13 +7811,13 @@ uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequ
 **Acceptance criteria:**
 - [x] 10 sequential cols materialized + populated 2021–2026 in `feature_pregame_game_features`
 - [x] Retrains run at 377 features (seq) / 369 features (nonseq) with MLflow run_id + sidecar emitted
-- [ ] 2026 three-layer Bayesian verdict reported per target (16.6) → promote/hold decision; `model_registry.yaml` updated for any promoted target; alpha re-tuned (`run_probability_layer.py`) for promoted totals/h2h
+- [x] 2026 three-layer Bayesian verdict reported per target (16.6) → promote/hold decision; `model_registry.yaml` updated for any promoted target; alpha re-tuned (`run_probability_layer.py`) for promoted totals/h2h
 
 ---
 
 ### 16.6 — Three-layer Bayesian production evaluation harness + deployed-champion contract recovery
 
-**Status:** ✅ HARNESS COMPLETE (2026-06-04) — gated run pending the 16.5 retrains. `betting_ml/scripts/evaluate_production_bayesian.py` generalizes the totals-only `evaluate_totals_bayesian.py` to all three production targets on the **2026 OOS fold**, reporting **per-target, independent** verdicts (a home_win win promotes home_win regardless of the others — never bundled).
+**Status:** ✅ COMPLETE (2026-06-04). Harness built and full gated run completed after 16.5 retrains landed. `betting_ml/scripts/evaluate_production_bayesian.py` generalizes the totals-only `evaluate_totals_bayesian.py` to all three production targets on the **2026 OOS fold**, reporting **per-target, independent** verdicts (a home_win win promotes home_win regardless of the others — never bundled). Results: run_diff PROMOTE (v4-seq), home_win register-seq-on-calibration (posture unchanged), total_runs DO NOT PROMOTE (pause holds). Registry updated.
 
 **Framework (per target):**
 - **Layer 1 — NLL vs. a prior-predictive baseline:** totals/run_diff = discretized-PMF NLL vs. a NegBin / discretized-Normal fit on the 2021–25 training marginal; home_win = log-loss vs. the Bernoulli base-rate.
@@ -7771,66 +7846,663 @@ uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequ
 
 ---
 
-# Epic 17 — Posterior Distribution Propagation (Full Bayesian Layer)
+# Epic 16B — Sequential Sub-Model Enrichment & Layer 3 Re-Evaluation (Pre-Epic-17 Gate)
 
-**Goal:** The PyMC bridge. This is where the system graduates from empirical Bayes (point estimates with uncertainty) to full Bayesian inference (full posterior distributions flowing between layers). This is what you're building toward with McElreath's lectures and Martin's book.
+**Status:** 🔴 CLOSED — GATE FAILED (2026-06-04). All 16B stories complete; combined-μ gate FAILED. Epic 17 confirmed as the necessary next investment.
 
-**The key insight:** Right now sub-model outputs are point estimates with uncertainty columns. In the full Bayesian vision, each sub-model output is a distribution, and the aggregation model (Layer 3) operates on distributions, not scalars. The total runs prediction becomes a convolution of the offensive quality distribution, the starter suppression distribution, the run environment distribution, and the bullpen quality distribution. The result is a richer uncertainty characterization than any single model can produce.
+**Result:** Combined LTV μ̄ (May 2026, in-sample) = **9.01** vs actual mean **8.61** (+0.40 bias). Gate criterion was ≤ 8.85. Five independent measurements across Epics 10, 16, and 16B confirm the same +0.40 systematic over-prediction. Sub-model retrains on sequential features did not change the combined-μ because the EB posterior already captures what the sequential chain provides. 16B.6 (full Layer 3 re-evaluation) was correctly skipped per the gate protocol.
 
-**Prerequisites:** Epics 3–6 complete (all sub-model signals available). Epic 16 complete (sequential posteriors). Martin's *Bayesian Analysis with Python* hierarchical model chapter.
+**Root cause confirmed:** The bias lives in the **LTV aggregation architecture** — signal overlap between run_env_mu (game-level), offense_v2 (per-side runs), and bullpen_v2 (pitching quality) causes systematic inflation when summed with pseudo-BMA weights, regardless of signal quality. This is an architecture failure, not a signal quality failure.
+
+**The sequencing gap this closed.** The Layer 2 sub-models (`offense_v2`, `bullpen_v2`, `starter_v1`, `starter_ip_v1`) were all trained on the **static EB** feature set *before* Epic 16 shipped. The Epic 16 sequential posterior columns are now materialized in the feature marts but **no sub-model has been retrained to consume them.** Story 10.8 diagnosed the totals combiner over-prediction (combined μ̄ ≈ **9.06** vs actual May 2026 ≈ **8.61**) as living in the **offense + bullpen** signals feeding the LTV combiner — explicitly **not** `run_env` (which already tracks actual at ~8.83). Retraining offense/bullpen on sequential features was the **cheapest possible test** of whether better signal quality closes the mean-bias gap *before* paying for the PyMC hierarchical rebuild (Epic 17). The test ran. It failed. Epic 17 is confirmed.
+
+**THE DECISION GATE (combined-μ, Story 16B.5):** FAILED. Combined μ̄ (May 2026) = 9.01 > 8.85 gate threshold. Epic 17 confirmed necessary; 16B.6 skipped per protocol.
+
+**Locked decisions (2026-06-04, user-confirmed — binding for this epic):**
+1. **Numbering / gate (D1):** 16B is a **bounded gate**, NOT folded into Epic 16. Kill criterion: if the combined μ̄ from the sequentially-enriched sub-model signals is **still > 8.85 on May 2026 games** (> 0.15 runs above actual mean 8.61), **Epic 17 is confirmed without running the full OOS evaluation** (16B.6 does not run).
+2. **Bullpen sequential column (D2):** the feature is **`team_sequential_bullpen_xwoba`** from `team_sequential_posteriors`, joined at **`(pitching_team, game_pk)`** via **as-of-date lookup** (latest `game_date < scoring_date`). **Pre-2021 rows: restrict to 2021+** — do **not** impute or fabricate sequential beliefs for years before the backfill starts.
+3. **Stacking-weight surface (D3):** recompute on the **honest `_seq` OOS matrix**, written under the **`_seq` suffix**; **never clobber** the existing leakage-free baseline. **In-sample stacking weights are NOT acceptable** for this evaluation.
+4. **Sign convention (D4):** **`run_differential = home_score − away_score`**; **`P(home_win) = Φ(μ/σ)`** (μ > 0 ⇒ home favored). **Verify this matches the run_diff training script's target definition** before deriving win probabilities.
+
+**Global constraints (apply to every story here):**
+- **Every sub-model retrain, OOS regeneration, and evaluation is a HAND-OFF** (each > 1 min; sub-model trainers run walk-forward CV + Optuna). I provide the exact command and a "what to look for" checklist; the user runs it. I run only fast (< 1 min) import/unit smoke tests.
+- **Sub-model output standard (implementation_guide.md §"Sub-model output standard", line ~215) is mandatory:** two-model minimum (champion *nonseq* vs sequential-enriched *challenger*), **NLL is the primary promotion gate** (challenger must beat both the GLM floor **and** the current champion's CV NLL), **calib_80** secondary (∈ [0.75, 0.85] for Normal / ≥ 0.80 for count), **Optuna tune the winner** (10-trial probe + 50-trial full on the same walk-forward folds), **MLflow instrumented**, **`sub_model_registry.yaml` updated** only on promotion. Promote the sequential challenger **only if it beats the current champion on NLL AND calib_80**; otherwise keep the champion and record the negative result.
+- No git commits/pushes (user handles git). Snowflake via MCP only. `dbtf` not `dbt`.
+
+**Sequencing & parallelization:**
+```
+16B.1 offense_v2  ─┐
+16B.2 bullpen_v2  ─┼─(priority order; may pipeline)─► 16B.4 regen OOS signals + recompute stacking weights
+16B.3 starters    ─┘                                        │
+                                                            ▼
+                                              16B.5 combined-μ GATE ──>8.85──► STOP → Epic 17 confirmed
+                                                            │ ≤8.85
+                                                            ▼
+                                              16B.6 full Layer 3 eval (3-layer + Layer 4)
+
+16B.7 run_diff-derived H2H eval ── runs IN PARALLEL with 16B.1–16B.3 (no training; inference + eval only)
+```
+
+**What gets reported, when:** sub-model retrain results (NLL/calib_80 deltas + promote/hold per model) after 16B.1–16B.3; the **combined-μ gate number** after 16B.4–16B.5 (the decision); the run_diff-derived H2H verdict from 16B.7 (parallel). 16B.6 runs only if the gate passes.
 
 ---
 
-### 17.1 — PyMC hierarchical model for run scoring
+### 16B.1 — offense_v2 sequential retrain (PRIORITY 1)
 
-**Prerequisite:** Epics 3–6 complete (all sub-model signals available). Martin's book chapter on hierarchical models.
+**Status:** ✅ COMPLETE 2026-06-04 — sequential challenger REJECTED. Champion unchanged.
 
-Build a PyMC hierarchical model where team run scoring is modeled as a function of the sub-model signals, with hierarchical pooling across teams and seasons.
+**Verdict:** nonseq NLL=2.4847 vs seq NLL=2.4850 (Δ=−0.0003, nonseq wins). calib_80 identical (0.822). `avg_eb_woba_sequential` + `posterior_source` OHE add no signal beyond the static EB features already in `NUMERIC_FEATURES`. Optuna-tuned nonseq champion achieves NLL=2.4814. Seq artifact saved locally as `offense_v2_seq_2026-06-04.pkl` (no S3 upload; nonseq champion unchanged). MLflow run_id: `7300ba4a3e5e42a2b166e4933a40bd37` (experiment: `offense_v2`). Verdict auto-recorded in `sub_model_registry.yaml` `seq_challenger_16b1`.
 
-```python
-with pm.Model() as run_scoring_model:
-    # Hyperpriors (league-level)
-    μ_league = pm.Normal("μ_league", mu=4.5, sigma=0.5)
-    σ_league = pm.HalfNormal("σ_league", sigma=1.0)
+**Original goal:** retrain `offense_v2` adding `avg_eb_woba_sequential` and `posterior_source` to the feature set **alongside** the existing `avg_eb_woba`, and test the sequential-enriched challenger against the current champion.
 
-    # Team-level effects (partial pooling — the key hierarchical piece)
-    team_effect = pm.Normal("team_effect", mu=0, sigma=σ_league,
-                             shape=n_teams)
+**Goal:** retrain `offense_v2` adding `avg_eb_woba_sequential` and `posterior_source` to the feature set **alongside** the existing `avg_eb_woba`, and test the sequential-enriched challenger against the current champion.
 
-    # Sub-model signal coefficients
-    β_run_env = pm.Normal("β_run_env", mu=0, sigma=1.0)
-    β_offense = pm.Normal("β_offense", mu=0, sigma=1.0)
-    β_starter = pm.Normal("β_starter", mu=0, sigma=1.0)
-    β_bullpen  = pm.Normal("β_bullpen",  mu=0, sigma=1.0)
+**Targets / files (grounded):**
+- Trainer: `betting_ml/scripts/offense_v2/train_offense_v2.py`. Feature list `NUMERIC_FEATURES` lives in `betting_ml/scripts/offense_v1/train_offense_v1.py` (lines ~69–98); load SQL in `offense_v1` (lines ~103–177) reads `baseball_data.betting_features.feature_pregame_lineup_features` ⋈ `baseball_data.betting.mart_game_results`; grain `game_pk_side`; target `runs_scored`; NegBin (champion candidate B = LightGBM+NegBin, CV NLL 2.484).
+- Registry: `betting_ml/sub_model_registry.yaml → offense_v2` (champion, cv_score 2.484, calib gate ≥0.80).
 
-    # Expected runs
-    μ_runs = (μ_league
-              + team_effect[team_idx]
-              + β_run_env * run_env_signal
-              + β_offense * lineup_run_creation_signal
-              + β_starter * starter_suppression_signal
-              + β_bullpen  * bullpen_quality_signal)
+**Plumbing status:** ✅ **No new plumbing.** `avg_eb_woba_sequential` is already materialized in `feature_pregame_lineup_features` across 2021–2026 (Epic 16.1 → 4A.2 chain). The change is: add `avg_eb_woba_sequential` to the load SQL select + `NUMERIC_FEATURES`, and add `posterior_source` (categorical enum: `sequential` / `season_eb` / `prior_only`) as an OHE feature.
 
-    # Likelihood — Negative Binomial for count data with overdispersion
-    α_nb = pm.HalfNormal("α_nb", sigma=5.0)
-    runs = pm.NegativeBinomial("runs", mu=pm.math.exp(μ_runs),
-                               alpha=α_nb, observed=observed_runs)
+**Tasks:**
+- [ ] Add `avg_eb_woba_sequential` to the offense load SQL select and to `NUMERIC_FEATURES`; add `posterior_source` to the categorical/OHE feature set with an explicit unknown level (`__NA__`) for cold-start/first-appearance rows.
+- [ ] **Verify `posterior_source` is available at `game_pk_side` grain** in `feature_pregame_lineup_features` (it is produced per-batter-slot then aggregated "least-informed wins"); if only per-slot, derive the side-level value in the load query.
+- [ ] Run the two-candidate comparison (champion *nonseq* current architecture vs sequential-enriched *challenger*); NLL primary, calib_80 secondary; Optuna-tune the winner (10 probe + 50 full); log to MLflow exp `offense_v2`.
+- [ ] If challenger beats champion on **NLL AND calib_80**, promote it and update `sub_model_registry.yaml` (mark prior champion deprecated; record sequential feature additions in notes). Otherwise keep champion, record the negative result + deltas.
+
+**Verification:** I run a fast import/feature-list smoke (seconds). **HAND OFF the full retrain (>1 min):** `uv run python betting_ml/scripts/offense_v2/train_offense_v2.py` (confirm exact flags during build) — checklist: candidate NLLs printed, winner tuned NLL < champion 2.484, calib_80 ≥ 0.80, MLflow run logged.
+
+**Acceptance criteria:**
+- [ ] Sequential-enriched challenger trained and compared head-to-head with the champion on NLL + calib_80; verdict (promote/hold) recorded with deltas in `sub_model_registry.yaml` and MLflow.
+- [ ] `posterior_source` cold-start handling verified (no NULL/leakage; `__NA__` level present).
+
+**Risk:** first-appearance rows have `posterior_source='prior_only'` and a sequential value equal to the season-EB anchor — ensure these are not treated as informative signal; the OHE level lets the model down-weight them.
+
+---
+
+### 16B.2 — bullpen_v2 sequential retrain (PRIORITY 2)
+
+**Status:** ✅ COMPLETE 2026-06-04 — sequential challenger REJECTED. Champion unchanged.
+
+**Verdict:** nonseq NLL=1.8912 vs seq NLL=1.8913 (Δ=−0.0001, nonseq wins). calib_80: nonseq=0.9236 seq=0.9225. Sequential feature `team_sequential_bullpen_xwoba` adds no signal beyond the EB posterior already in `FEATURE_COLS`. MLflow run_id: `118bf698065946e6ae6062c601f0ef75` (experiment: `bullpen_6D`). Champion `bullpen_v2.pkl` unchanged. Verdict recorded in `sub_model_registry.yaml` `epic_16b2_seq_verdict`.
+
+**Original goal:** retrain `bullpen_v2` adding the **team sequential bullpen posterior** alongside the existing `eb_bullpen_xwoba`, plus `posterior_source`.
+
+**Goal:** retrain `bullpen_v2` adding the **team sequential bullpen posterior** alongside the existing `eb_bullpen_xwoba`, plus `posterior_source`.
+
+**Targets / files (grounded):**
+- Trainer: `betting_ml/scripts/train_bullpen_distributional.py`. `FEATURE_COLS` lines ~118–143 (current EB feature: `eb_bullpen_xwoba`). Reads `betting_ml/data/bullpen_state_train.parquet` (built by `build_bullpen_state_dataset.py` from `mart_bullpen_effectiveness`); grain `(game_pk, pitching_team)`; target `bullpen_runs_allowed`; NegBin (champion candidate B = LightGBM + starter-IP exposure, CV NLL 1.8852, calib_80 0.9248). MLflow exp `bullpen_6D`.
+
+> **⚠️ NAMING + PLUMBING (D2, locked).** The user's request names `eb_xwoba_against_sequential`; for the bullpen sub-model this is the **team-level sequential bullpen posterior `team_sequential_bullpen_xwoba`** (metric `bullpen_xwoba`, `prior_mu`) in `baseball_data.betting.team_sequential_posteriors` (team grain). The bullpen trainer reads `bullpen_state_train.parquet`, built from `mart_bullpen_effectiveness`, which **does NOT contain any sequential column** → unlike offense/starter, this requires a **new join**. **Join at `(pitching_team, game_pk)` via as-of-date lookup** (latest `game_date < scoring_date` — the leakage-safe pre-game belief). Add `team_sequential_bullpen_xwoba` (+ `posterior_source`) to the parquet, then to `FEATURE_COLS`.
+
+**Tasks:**
+- [x] Extend `build_bullpen_state_dataset.py` to join `team_sequential_posteriors` (`prior_mu`, metric `bullpen_xwoba`) at `(pitching_team, game_pk)` via **as-of-date lookup** (latest `game_date < scoring_date`) → new `team_sequential_bullpen_xwoba` column (+ `posterior_source`). **Re-run the 3-step parquet build in order** (`build_bullpen_state_dataset.py` → `compute_bullpen_availability_index.py` → consume) — the `availability_index` ordering gotcha applies.
+- [x] **Restrict training to 2021+ (D2, locked):** pre-2021 rows have no sequential backfill → **drop them from the sequential-challenger training set; do NOT impute or fabricate a sequential belief.** The nonseq champion baseline may still use its full window; the head-to-head is run on the **common 2021+ rows** so the only difference is the sequential feature. Document the row-count delta. _(31 rows dropped, 0.1%)_
+- [x] Add `team_sequential_bullpen_xwoba` + `posterior_source` to `FEATURE_COLS`.
+- [x] Two-candidate comparison (champion nonseq vs sequential challenger); NLL primary + calib_80; Optuna-tune winner; MLflow `bullpen_6D`; registry update only on promotion (NLL AND calib_80 beat).
+
+**Verification:** fast smoke (parquet schema + feature list). **HAND OFF:** parquet rebuild (3 steps) + `uv run python betting_ml/scripts/train_bullpen_distributional.py` — checklist: `team_sequential_bullpen_xwoba` non-null coverage by season (expect ~99%/92% on 2021+; **pre-2021 rows dropped from the sequential challenger, not null-filled**), winner tuned NLL < champion 1.8852, calib_80 ≥ 0.80.
+
+**Acceptance criteria:**
+- [x] `team_sequential_bullpen_xwoba` joined into `bullpen_state_train.parquet` via as-of-date lookup; training **restricted to 2021+** with the row-count delta documented; challenger compared head-to-head on common 2021+ rows; verdict recorded in registry + MLflow.
+
+**Risk:** team sequential bullpen lags ~3 days and cold-starts on season openers (per 16.3 coverage notes) → the as-of-date lookup (latest `game_date < scoring_date`) must mirror serving-time behavior exactly to avoid train/serve skew; season-opener rows fall back to the same cold-start prior the serving path uses.
+
+---
+
+### 16B.3 — starter_v1 + starter_ip_v1 sequential retrain (PRIORITY 3)
+
+**Status:** 📋 SPEC. Lower priority than offense/bullpen (starter signals feed the combiner μ less directly) but retrained in the same cycle for consistency.
+
+**Goal:** retrain both starter sub-models adding `eb_xwoba_against_sequential` (+ `posterior_source`) alongside the existing `eb_xwoba_against`.
+
+**Targets / files (grounded):**
+- `betting_ml/scripts/starter_v1/train_starter_v1.py` — `NUMERIC_FEATURES` lines ~84–119 (has `eb_xwoba_against`), `CAT_FEATURES` includes `eb_data_source`; reads `feature_pregame_starter_features` ⋈ `mart_starting_pitcher_game_log`; grain `game_pk_pitcher_id`; target `xwoba_against`; Normal; champion NLL −0.9991; MLflow exp `starter_suppression_v1`.
+- `betting_ml/scripts/starter_v1/train_starter_ip_v1.py` — `NUMERIC_FEATURES` lines ~100–123 (has `eb_xwoba_against`); same source; target `outs_recorded`; NegBin per-decile r; champion NLL 2.7196.
+
+**Plumbing status:** ✅ **No new plumbing.** `eb_xwoba_against_sequential` is already materialized in `feature_pregame_starter_features` across 2021–2026 (Epic 16.1 → 5A.2). Add to the load SQL select + `NUMERIC_FEATURES`; add `posterior_source` as a categorical alongside the existing `eb_data_source` (same OHE pattern).
+
+**Tasks:**
+- [ ] For **each** starter trainer: add `eb_xwoba_against_sequential` to the load SQL + `NUMERIC_FEATURES`; add `posterior_source` to `CAT_FEATURES`.
+- [ ] Run the two-candidate comparison per model (champion nonseq vs sequential challenger); NLL primary + calib_80; Optuna-tune winner; MLflow (`starter_suppression_v1` / `starter_ip_v1`); registry update per model only on promotion.
+
+**Verification:** fast smoke per trainer. **HAND OFF both retrains** (separate commands) — checklist: `starter_v1` winner NLL < −0.9991; `starter_ip_v1` winner NLL < 2.7196; calib_80 within gate; both MLflow runs logged.
+
+**Acceptance criteria:**
+- [ ] Both starter sub-models compared head-to-head with sequential challengers; verdicts + deltas recorded in `sub_model_registry.yaml` and MLflow.
+
+---
+
+### 16B.4 — Regenerate leakage-free OOS signals + recompute pseudo-BMA stacking weights
+
+**Status:** 📋 SPEC. **Implied-but-unnamed prerequisite for an honest 16B.5/16B.6** — surfaced here so it is not skipped. The heavy-compute story.
+
+**Why required:** the leakage-free OOS signal parquets (`betting_ml/models/layer3/oos_signals/oos_signals_*.parquet`) were generated from the **old, non-sequential** sub-model architectures. To evaluate the *sequential-enriched* sub-models without leakage, the OOS signals must be **regenerated** with the new feature sets (walk-forward, per-fold Optuna — the same leakage-free protocol as Phase 1). Likewise the production in-sample signals (`feature_pregame_sub_model_signals`) must be refreshed for the fast in-sample read in 16B.5.
+
+**Tasks:**
+- [ ] Update the regenerators to mirror each trainer's sequential change: `betting_ml/scripts/leakage_fix/regenerate_{offense,bullpen,starter,starter_ip}_oos.py` (run_env is **not** sequential-enriched → unchanged). Write to a **versioned `_seq` suffix** (e.g. `oos_signals_offense_seq.parquet`) so the current leakage-free baseline is **not clobbered**; add a `--seq`/source flag to `build_oos_matrix.py` to consume the `_seq` set.
+- [ ] Rebuild the OOS matrix: `betting_ml/scripts/leakage_fix/build_oos_matrix.py` (seasons 2022–2026) against the `_seq` signals.
+- [ ] After promoting any sub-model (16B.1–16B.3), re-run its **production** signal generator (`generate_*_signals.py`) so `feature_pregame_sub_model_signals` reflects the new model (needed for serving + the fast in-sample combined-μ read in 16B.5).
+- [ ] Recompute pseudo-BMA stacking weights from the **updated** NLL scores: `betting_ml/scripts/compute_stacking_weights.py` (functions `compute_pseudo_bma_weights`, `_standalone_signal_nll`). **Surface decision:** recompute against the regenerated `_seq` OOS matrix (honest) rather than the in-sample production matrix; write `betting_ml/models/layer3/stacking_weights.json` (+ `--s3-upload` for the Epic 9.6 weekly sync). Confirm weights still sum to 1.0 per target and fold-weight std ≤ 0.15.
+
+**Verification:** fast smoke (weight-sum unit check + JSON schema). **HAND OFF** the regenerators (each >1 min, walk-forward + Optuna) and `compute_stacking_weights.py` — checklist: 5 `_seq` parquets written with full season coverage; weights sum to 1.0; offense/bullpen NLLs moved vs the pre-sequential `stacking_weights.json`.
+
+**Acceptance criteria:**
+- [ ] `_seq` OOS signal parquets + rebuilt OOS matrix + recomputed `stacking_weights.json` all produced; the current non-sequential baselines preserved (not overwritten).
+
+---
+
+### 16B.5 — Combined-μ diagnostic gate (DECISION GATE — report before 16B.6)
+
+**Status:** 📋 SPEC. **The decision gate for the whole epic.**
+
+**Goal:** compute the combined LTV μ̄ (via `combine_distributional_signals`, `betting_ml/scripts/compute_stacking_weights.py` lines ~91–110) for **May 2026** games from the sequentially-enriched sub-model signals + recomputed weights, and assess it against the gate.
+
+**Two reads (run the cheap one first as an early-kill):**
+1. **FAST / in-sample** — combine the refreshed `feature_pregame_sub_model_signals` (offense/bullpen/run_env μ,σ) for May 2026 with the recomputed weights. Optimistic (in-sample) but cheap; if even this is **> 8.85**, the gate fails decisively → Epic 17 confirmed, do not pay for the OOS read.
+2. **HONEST / leakage-free OOS** — combine the regenerated `_seq` OOS matrix (May 2026) with the OOS weights. The real number, used if the fast read is ≤ 8.85.
+
+**Gate:** combined μ̄ (May 2026) **> 8.85** (> 0.15 above actual 8.61) ⇒ mean bias unresolved ⇒ **Epic 17 CONFIRMED; STOP** (16B.6 does not run). **≤ 8.85** ⇒ proceed to 16B.6. (Context from 10.8: `run_env` μ̄ is already ~8.83–8.88; the combiner μ̄ was ~9.06 — this gate asks whether sequential offense/bullpen pull the **combined** μ̄ down ~0.2 run.)
+
+**Tasks:**
+- [ ] Compute the in-sample May-2026 combined μ̄ (fast); report the exact number.
+- [ ] If ≤ 8.85, compute the leakage-free OOS May-2026 combined μ̄; report it.
+- [ ] State the gate result (PASS ≤ 8.85 / FAIL > 8.85) explicitly **before** any Layer 3 evaluation. On FAIL, record the result here + in `totals_2026_failure_analysis.md` as confirmation that sub-model enrichment did not close the bias, and route to Epic 17.
+
+**Verification:** the in-sample read is a short computation (MCP pull of May-2026 signals + the LTV function); I can run it directly or hand off a < 1 min script. The OOS read depends on 16B.4 (hand-off).
+
+**Acceptance criteria:**
+- [ ] Combined μ̄ (May 2026) reported with the explicit PASS/FAIL gate assessment before 16B.6; decision (proceed vs Epic 17) recorded.
+
+---
+
+### 16B.6 — Full Layer 3 re-evaluation on the updated combiner (gated on 16B.5 ≤ 8.85)
+
+**Status:** 📋 SPEC. **Runs only if 16B.5 passes.**
+
+**Goal:** re-run the full three-layer Bayesian + Layer 4 selective evaluation on the **updated** pseudo-BMA combiner (sequential-enriched OOS signals) on the leakage-free 2026 fold, and decide whether totals clears the un-pause bar.
+
+**Tasks:**
+- [ ] **Combiner Brier vs market (primary):** `betting_ml/scripts/leakage_fix/evaluate_totals_oos.py` on the `_seq` OOS matrix — per-signal walk-forward Poisson(μ→total_runs)+NB2, combine via recomputed weights, P(over) at the Bovada line vs de-vigged market. Report per-season + pooled, with the `_SANE_MARKET_BRIER_MAX=0.240` quality gate (2026 is the credible season).
+- [ ] **Three-layer framing:** report L1 prior-predictive NLL, L2 calib_80, L3 blended Brier vs prior-naive AND market (the `evaluate_totals_bayesian.py` rubric). Un-pause requires beating **both** prior-predictive NLL **and** prior-naive Brier (ideally market) on clean 2026.
+- [ ] **Layer 4 selective:** roi_110 on the updated combiner, 2026 leakage-free; PASS = roi_110 > 0 **and** n_bets ≥ 50 (Epic 26 standard).
+- [ ] **Verdict:** if the updated combiner clears L1+L3 and the Layer-4 selective gate on clean 2026 → candidate to flip `total_runs.bet_paused` to a shadow window. If not → Epic 17 confirmed as the next investment. Record in `model_registry.yaml` + `totals_2026_failure_analysis.md`.
+
+**Verification:** HAND OFF both evaluators. Checklist: 2026 combiner Brier vs market (target: beat ~0.228), L1 NLL < prior, L3 blended Brier < prior-naive, Layer-4 roi_110 > 0 @ n≥50.
+
+**Acceptance criteria:**
+- [ ] Three-layer + Layer 4 results on the updated combiner recorded; explicit un-pause / Epic-17 decision documented with the deltas that drove it.
+
+---
+
+### 16B.7 — run_diff-derived H2H evaluation (PARALLEL; no training)
+
+**Status:** ✅ COMPLETE 2026-06-04. **Verdict: NO CHANGE.**
+
+**Goal:** derive a home-win probability from the sequential `run_differential` model's posterior and test whether it changes the H2H posture, versus the current `home_win` sequential champion.
+
+**Method (grounded; D4 locked):** load `betting_ml/models/run_differential/ngboost_tuned_2026.pkl` (NGBoost Normal, 379 features; feature contract `feature_columns_ngboost_tuned_2026.json`). For each 2026 leakage-free H2H OOS game, build the feature matrix, call `model.pred_dist(X)` → `params["loc"]` (μ), `params["scale"]` (σ), and compute **P(home_win) = 1 − Normal.cdf(0; μ, σ) = Φ(μ/σ)** under the **locked sign convention `run_differential = home_score − away_score`** (μ > 0 ⇒ home favored). Evaluate the three-layer + Layer 4 framework on these derived probabilities and compare directly against the `home_win` sequential champion (`betting_ml/models/home_win/xgb_classifier_tuned_2026.pkl`) on the **same 2026 market-covered games** (de-vigged Bovada home prob).
+
+**Surface:** the 2026 leakage-free H2H OOS games (`oos_predictions_h2h_v2.parquet` / `build_h2h_dataset`), restricted to market-covered games (so the comparison is honest, per `evaluate_h2h_oos.py` with `_SANE_MARKET_BRIER_MAX=0.235`).
+
+**Results (660 2026 OOS games, 621 market-covered):**
+
+| Metric | run_diff_derived | home_win_champion | Bovada market |
+|---|---|---|---|
+| NLL | 0.6023 | **0.5957** | — |
+| Brier(raw) | 0.2089 | **0.2044** | **0.1820** |
+| ECE | **0.0250** | 0.0430 | — |
+| L4 roi_devig | +0.209 @thr=0.10 | +0.236 @thr=0.20 | — |
+
+- **L1:** both beat Bernoulli prior (0.6937) ✅
+- **L3:** neither beats 2026 Bovada market (0.1820) ❌ — consistent with Epic 11 finding
+- **L4:** both pass (roi_devig > 0, n ≥ 50) — but n≈600-game sample; treat with skepticism
+- **ECE:** run_diff_derived better calibrated (0.025 vs 0.043) — not actionable for H2H posture
+- **alpha=0 degeneracy noted:** blended = market exactly; raw Brier used as honest L3 gate
+
+**Verdict:** run_diff_derived P(home_win) loses to `home_win_champion` on both NLL and Brier. Neither closes the gap to the 2026 market. Direct binary classification optimizes the right loss; projecting through a margin posterior discards information. **H2H posture unchanged; `xgb_classifier_tuned_2026` remains champion.**
+
+**Report:** `quant_sports_intel_models/baseball/ablation_results/run_diff_derived_h2h_16b7.md`
+**Script:** `betting_ml/scripts/leakage_fix/evaluate_run_diff_h2h.py`
+
+**Acceptance criteria:**
+- [x] run_diff-derived P(home_win) computed on the 2026 leakage-free H2H OOS surface; three-layer + Layer 4 reported; explicit verdict on whether it changes the H2H posture vs the current champion and the market.
+
+---
+
+# Epic 17 — Posterior Distribution Propagation (Full Bayesian Layer)
+
+**Status:** 📋 SPEC — Story 17.1 spec written 2026-06-04; awaiting review before build begins. Epic 16B closed with a definitive FAIL on the same date (combined-μ 9.01 > 8.85 gate; +0.40 bias confirmed by five independent measurements after all four Layer 2 sub-model retrains). This epic is now the **active totals architecture investment**.
+
+> **Root cause confirmed by 16B:** The +0.40 systematic over-prediction bias lives in the **LTV aggregation architecture** — a weighted sum of point estimates that cannot account for signal overlap (run_env, offense, and bullpen are not independent) and cannot propagate distributional uncertainty through the combination. Sequential enrichment of sub-model inputs does not fix it because the EB posterior already captures what the sequential chain provides. The architecture must change: sub-model signals must be treated as **noisy observations of latent team quality** in a joint regression, not as values to be summed with pseudo-BMA weights.
+
+**Gate:** Any totals model from this epic must clear the same bar that paused all prior models — beat **both** prior-predictive NLL **and** prior-naive Brier (ideally market) under the three-layer framework on the leakage-free 2026 surface, plus the Epic 26 Layer-4 selective check — before un-pausing `total_runs.bet_paused`. The kill criterion (Story 17.1 §Pre-committed kill criterion) is checked first and gates all further evaluation.
+
+**Goal:** Replace the LTV combiner with a PyMC hierarchical model where team run scoring is modeled as a joint regression on sub-model signals — treating them as informative covariates in a NegBin likelihood with partial pooling across teams and seasons. This is where the system graduates from weighted-sum aggregation to full Bayesian inference over a structured latent space.
+
+**Prerequisites:** Epics 3–6 ✅ (all sub-model signals generated and backfilled). Epic 16 ✅ (sequential posteriors live). Epic 16B ✅ CLOSED/FAIL (gate confirmed Epic 17 necessary). Martin's *Bayesian Analysis with Python* hierarchical model chapter.
+
+---
+
+### 17.1 — PyMC hierarchical model for run scoring (SPEC — review before build)
+
+**Status:** 📋 SPEC — NOT STARTED. This story is the full build plan for the Epic 17 hierarchical model. **Do not begin implementation until this spec is reviewed and approved.** The kill criterion check (§ below) is the first thing computed once the model runs; if it fails, further evaluation stops.
+
+**Activation context:** Epic 16B closed on 2026-06-04 with a definitive FAIL. Five independent measurements confirm combined-μ 9.01 vs actual May-2026 mean 8.61 (+0.40 systematic bias) after all four Layer 2 sub-model retrains on sequential features. The EB posterior already captures what the sequential chain provides. The root cause is the **LTV aggregation architecture** — a weighted sum of point estimates that cannot account for signal dependencies and cannot propagate distributional uncertainty through the combination. This is the exact problem a PyMC hierarchical model solves.
+
+---
+
+#### What has been ruled out (do not revisit in this story)
+
+- Recency-weighted run_env patching — diagnostic confirmed regime signal 0.48 runs against noise floor 4+ runs (Story 10.8). Closed.
+- Sequential feature injection into Layer 2 sub-models — five retrains, bias unchanged at +0.40 (Epic 16B). Closed.
+- Layer 3 combiner re-weighting — pseudo-BMA weights near-uniform; re-weighting biased point estimates in the same direction cannot close a +0.40 systematic bias. Closed.
+- H2H Layer 3 optimization — explicitly out of scope. H2H stays evaluation-pending.
+
+---
+
+#### The structural explanation for the +0.40 bias
+
+The LTV combiner computes:
+
+```
+mu_combined = w_run_env * run_env_mu
+            + w_offense * (pred_runs_home + pred_runs_away)
+            + w_bullpen * (bullpen_mu_home + bullpen_mu_away)
 ```
 
-**Why NegativeBinomial over Normal:** Run scoring is count data with overdispersion (variance > mean) — the NegativeBinomial is the correct likelihood. The Normal likelihood you're currently using in NGBoost is an approximation that understates tail probability — exactly the variance shrinkage problem you've been fighting.
+This architecture has three overlapping signal pathways:
 
-Tasks:
-- [ ] Build `betting_ml/models/bayesian/run_scoring_hierarchical.py` with the PyMC model above
-- [ ] Train on 2021–2025 seasons using MCMC (NUTS sampler); persist trace to `models/bayesian/run_scoring_trace.nc` (ArviZ NetCDF format)
-- [ ] Extract posterior predictive distribution per game: `pm.sample_posterior_predictive(trace)` → distribution over run totals
-- [ ] Replace `ngb_total_mu` / `ngb_total_sigma` (Card 9.F3) with `pymc_runs_mu`, `pymc_runs_sigma`, `pymc_runs_p10`, `pymc_runs_p90` from the posterior predictive
-- [ ] Verify: posterior predictive `std(pred)` should meaningfully exceed 2.0 — solving the variance shrinkage problem
+1. **`run_env_mu`** is a game-level total estimate (trained to predict total_runs with opponent controls). It already embeds park factors, weather, and aggregate team quality.
+2. **`pred_runs_home + pred_runs_away`** are per-side offense estimates. offense_v2 was trained on lineup data *from the same games* and the same park context that run_env_mu already captures.
+3. **`bullpen_mu_home + bullpen_mu_away`** capture pitching quality. Pitching quality is the inverse of offensive scoring — high pitching quality on both sides depresses scoring, but this information is already partially embedded in the offense estimates (the opponent's pitching quality affects the observed runs the offense_v2 model trained on).
 
-Acceptance Criteria:
-- [ ] MCMC sampling converges (R-hat < 1.01 for all parameters, verified via ArviZ)
-- [ ] Posterior predictive `std(pred)` ≥ 2.0 — the variance shrinkage gate that NGBoost failed
-- [ ] Calibration: 80% of actual run totals fall within the model's 80% credible interval
-- [ ] Team partial pooling is visible: expansion teams / new franchises get pulled toward the league mean more than established teams
+Summing these three signal families with pseudo-BMA weights inflates mu_combined because the signals are **not independent**. They share variance from park quality, team offensive talent, and game context. The weighted sum cannot de-correlate them — only a joint regression model that estimates signal coefficients simultaneously can do so.
+
+---
+
+#### Data surface and feature inputs
+
+**Training grain:** One row per (game_pk, side). `batting_team`, `pitching_team`, `season`, `park_id` are the grouping dimensions.
+
+**Training observations:** `runs_scored` from `baseball_data.betting.mart_game_results` joined to signals. Training window: 2021–2025 (seasons that have complete sub-model signal backfill). ~24,000 observations (5 seasons × ~2,430 games × 2 sides, after `has_full_data` filter).
+
+**Signal inputs (all z-scored on 2021–2025 training data before entering the model):**
+
+| Signal | Source column | Scope | Notes |
+|---|---|---|---|
+| `run_env_z` | `run_env_mu` from `feature_pregame_sub_model_signals` | **game-level** (same value for both sides of the same game) | Park/weather/umpire environment |
+| `offense_mu_z` | `pred_runs_mu` (offense_v2, batting team) | **side-level** | Batting team expected runs |
+| `opp_bullpen_mu_z` | `bullpen_mu` (bullpen_v2, pitching team) | **side-level** | Opposing bullpen quality (suppression signal) |
+| `opp_starter_mu_z` | `starter_suppression_mu` (starter_v1, pitching team) | **side-level** | Opposing starter quality (suppression signal) |
+
+**Structural constraint on signal inputs:** `run_env_mu` must appear **once** in the game-level intercept (same z-scored value for both sides of the same game), not summed for home and away. This prevents the primary double-count that inflates LTV. The offense and bullpen signals enter as **side-specific cross-terms**: offense enters on the batting side, bullpen/starter enter as the opposing team's pitching quality. This makes the pitching signals explicit suppression terms rather than additive components.
+
+**Feature data path:**
+```python
+# Load from the existing leakage-free OOS parquet (16B.4 produced these)
+# or directly from feature_pregame_sub_model_signals (training run)
+signals = load_layer3_features_for_training()  # betting_ml/scripts/load_layer3_features.py
+# Restrict to has_full_data=True, season IN (2021,2022,2023,2024,2025)
+# Produce (game_pk, side) grain with batting_team, pitching_team, season, park_id
+```
+
+---
+
+#### Full PyMC model structure
+
+```python
+import numpy as np
+import pymc as pm
+import pytensor.tensor as pt
+
+def build_total_runs_hierarchical(df_train, z_scalers):
+    """
+    df_train: (game_pk, side) grain with columns:
+        batting_team_idx, pitching_team_idx, season_idx, park_idx,
+        run_env_z (game-level, same for both sides),
+        offense_mu_z, opp_bullpen_mu_z, opp_starter_mu_z,
+        runs_scored (target)
+    z_scalers: dict of StandardScaler fitted on training data
+    """
+    coords = {
+        "team":   sorted(df_train["batting_team"].unique()),   # 30 MLB teams
+        "season": sorted(df_train["season"].unique()),         # 2021..2025
+        "park":   sorted(df_train["park_id"].unique()),        # 30 parks (subset)
+        "obs":    range(len(df_train)),
+    }
+
+    with pm.Model(coords=coords) as model:
+
+        # ─── Hyperpriors ──────────────────────────────────────────
+        # League-level log run rate per side (~log(4.5) ≈ 1.50)
+        mu_log_league = pm.Normal("mu_log_league", mu=np.log(4.5), sigma=0.2)
+
+        # Team-level talent pooling scales
+        sigma_offense = pm.HalfNormal("sigma_offense", sigma=0.25)
+        sigma_defense = pm.HalfNormal("sigma_defense", sigma=0.25)
+
+        # Season-level regime scale (handles year-to-year run env shifts)
+        sigma_season  = pm.HalfNormal("sigma_season",  sigma=0.15)
+
+        # ─── Group-level effects (partial pooling) ─────────────────
+        # Batting team offensive talent (centered at 0; pooled toward mu_log_league)
+        alpha_offense = pm.Normal("alpha_offense", mu=0, sigma=sigma_offense,
+                                  dims="team")
+
+        # Pitching team defensive talent (centered at 0; net suppression effect)
+        alpha_defense = pm.Normal("alpha_defense", mu=0, sigma=sigma_defense,
+                                  dims="team")
+
+        # Season intercepts (year-to-year run environment baseline)
+        # Sum-to-zero soft constraint via sigma_season prior
+        delta_season  = pm.Normal("delta_season",  mu=0, sigma=sigma_season,
+                                  dims="season")
+
+        # ─── Signal coefficients ───────────────────────────────────
+        # All signals z-scored on 2021–2025 → coefficients are on a
+        # common scale. Priors reflect expected directionality but
+        # remain weakly informative to let data estimate the joint
+        # contribution after correlation.
+        #
+        # beta_run_env: game-level environment (shared intercept shift;
+        #   expected positive but modest — run_env already partially
+        #   embedded in team effects via training)
+        beta_run_env = pm.Normal("beta_run_env", mu=0.0, sigma=0.3)
+
+        # beta_offense: batting side signal (expected positive;
+        #   anchored slightly above 0 reflecting prior belief it carries signal)
+        beta_offense = pm.Normal("beta_offense", mu=0.2, sigma=0.3)
+
+        # beta_bullpen: OPPOSING bullpen quality (expected negative —
+        #   high opposing bullpen quality suppresses this side's scoring)
+        beta_bullpen = pm.Normal("beta_bullpen", mu=-0.1, sigma=0.3)
+
+        # beta_starter: OPPOSING starter suppression (expected negative)
+        beta_starter = pm.Normal("beta_starter", mu=-0.1, sigma=0.3)
+
+        # ─── Per-side expected log run rate ───────────────────────
+        # run_env enters ONCE per game (same z-scored value for both
+        # sides of the same game — prevents double-counting the
+        # park/weather signal that inflated the LTV combiner)
+        log_mu_side = (
+            mu_log_league
+            + alpha_offense[df_train["batting_team_idx"].values]
+            + alpha_defense[df_train["pitching_team_idx"].values]
+            + delta_season[df_train["season_idx"].values]
+            + beta_run_env  * df_train["run_env_z"].values
+            + beta_offense  * df_train["offense_mu_z"].values
+            + beta_bullpen  * df_train["opp_bullpen_mu_z"].values
+            + beta_starter  * df_train["opp_starter_mu_z"].values
+        )
+        mu_side = pm.Deterministic("mu_side", pm.math.exp(log_mu_side))
+
+        # ─── NegBin overdispersion ─────────────────────────────────
+        # alpha_nb: NegBin concentration parameter (variance = mu + mu²/alpha)
+        # Small alpha → high overdispersion. Prior centered to allow
+        # substantial overdispersion relative to a Poisson baseline.
+        alpha_nb = pm.HalfNormal("alpha_nb", sigma=5.0)
+
+        # ─── Likelihood (per-side runs scored) ────────────────────
+        # Modeling per-side rather than total_runs directly:
+        #   - Avoids summing two NegBin draws with correlated means
+        #   - Total P(over line L) = P(home_runs + away_runs > L) via
+        #     posterior predictive Monte Carlo (see §P(over) below)
+        runs = pm.NegativeBinomial(
+            "runs",
+            mu=mu_side,
+            alpha=alpha_nb,
+            observed=df_train["runs_scored"].values,
+            dims="obs",
+        )
+
+    return model
+```
+
+**Why per-side rather than total_runs in the likelihood:** Modeling each team's runs scored as an independent NegBin — conditioned on the signals — means the posterior predictive for total_runs is the convolution of two NegBins obtained from Monte Carlo samples. This is more principled than fitting to the sum directly because it preserves the asymmetric nature of each side's distribution (different μ_side values) and allows P(home_win) to fall out of the same posterior with no additional model.
+
+---
+
+#### Prior specification rationale
+
+| Parameter | Prior | Rationale |
+|---|---|---|
+| `mu_log_league` | Normal(log(4.5), 0.2) | MLB average ~4.5 runs/side; log scale; 2σ range ≈ [3.0, 6.7] |
+| `sigma_offense` | HalfNormal(0.25) | Team offense talent spread; 2σ ≈ 0–0.5 log-scale (factor ×1.6 max) |
+| `sigma_defense` | HalfNormal(0.25) | Team pitching talent spread; same scale |
+| `sigma_season` | HalfNormal(0.15) | Year intercept spread; 2σ ≈ 0–0.3 log-scale (allows ~12% year-to-year regime) |
+| `alpha_offense` | Normal(0, sigma_offense) | Partial pooling; extreme teams shrunk toward league mean |
+| `alpha_defense` | Normal(0, sigma_defense) | Same |
+| `delta_season` | Normal(0, sigma_season) | Season effects; not sum-constrained but pooled via sigma_season |
+| `beta_run_env` | Normal(0, 0.3) | Game env signal; prior neutral — let data set direction |
+| `beta_offense` | Normal(0.2, 0.3) | Offense signal; slightly positive anchored |
+| `beta_bullpen` | Normal(-0.1, 0.3) | Opposing bullpen suppression; slightly negative anchored |
+| `beta_starter` | Normal(-0.1, 0.3) | Opposing starter suppression; slightly negative anchored |
+| `alpha_nb` | HalfNormal(5.0) | NegBin overdispersion; allows wide range including near-Poisson (large alpha) and highly overdispersed (small alpha) |
+
+**Prior predictive check (required before MCMC):** Sample 500 draws from the prior predictive distribution and confirm the prior on total_runs (home + away per-side draws) covers [0, 30] runs without heavy mass above 25 or below 2. If prior_predictive_mean(total_runs) is not within [7, 11], adjust `mu_log_league`.
+
+---
+
+#### Inference method
+
+**Primary:** NUTS (No-U-Turn Sampler), PyMC default. 4 independent chains. 2,000 warmup draws, 2,000 posterior draws per chain = 8,000 total retained draws.
+
+```python
+with model:
+    trace = pm.sample(
+        draws=2000,
+        tune=2000,
+        chains=4,
+        target_accept=0.9,       # higher acceptance → smaller step size → better geometry
+        random_seed=[42, 43, 44, 45],
+        return_inferencedata=True,
+        idata_kwargs={"log_likelihood": True},  # for LOO-CV
+    )
+pm.backends.arviz.to_netcdf(trace, "models/bayesian/run_scoring_trace.nc")
+```
+
+**Expected wall clock:** NUTS on 24K observations with 30 teams, 5 seasons, ~10 parameters = approximately 2–4 hours on a modern CPU. This is a hand-off: the user runs `uv run python betting_ml/models/bayesian/run_scoring_hierarchical.py --train` and reports the output.
+
+**Variational inference fast-pass (before MCMC hand-off):** Before paying for full MCMC, run ADVI (20,000 iterations) to verify the model is identifiable and the posterior mean is in the right vicinity. If ADVI's mean mu_side per side ≈ 4.3–4.7 and the posterior predictive mean for total_runs ≈ 8.4–8.8, proceed to NUTS. If ADVI diverges or produces nonsense (e.g., mu_side < 2 or > 8), there is a prior or data-prep bug to fix first.
+
+```python
+with model:
+    approx = pm.fit(method="advi", n=20_000, progressbar=True)
+    advi_trace = approx.sample(1000)
+# Quick sanity: mean predicted runs per side
+print(advi_trace.posterior["mu_side"].values.mean())  # target: ~4.4–4.6
+```
+
+**Posterior predictive (OOS scoring):** After NUTS converges, score new games by passing the 2026 OOS feature matrix. The team/season index lookup must correctly map 2026 teams to their training indices; 2026 is a **new season** so `delta_season` for 2026 is not available — use `delta_season.mean()` (the posterior mean of the season effect) as the 2026 season offset, or add `delta_2026 ~ Normal(mu_log_league_season, sigma_season)` as a new season parameter in the posterior predictive call.
+
+```python
+with model:
+    # Freeze the posterior; plug in 2026 OOS feature matrix
+    pm.set_data({
+        "batting_team_idx": oos_2026["batting_team_idx"],
+        "pitching_team_idx": oos_2026["pitching_team_idx"],
+        "season_idx": oos_2026["season_idx"],  # map 2026 → extrapolation offset
+        "run_env_z": oos_2026["run_env_z"],
+        "offense_mu_z": oos_2026["offense_mu_z"],
+        "opp_bullpen_mu_z": oos_2026["opp_bullpen_mu_z"],
+        "opp_starter_mu_z": oos_2026["opp_starter_mu_z"],
+        "runs_scored": np.zeros(len(oos_2026)),  # placeholder — not used in predictive
+    })
+    ppc_2026 = pm.sample_posterior_predictive(
+        trace, var_names=["runs"], random_seed=42
+    )
+# ppc_2026["posterior_predictive"]["runs"].shape = (4 chains, 2000 draws, n_obs)
+```
+
+---
+
+#### P(over) computation from posterior predictive
+
+For a game with Bovada total line `L`:
+
+```python
+# ppc_home: posterior predictive draws for home runs scored (shape: n_draws, n_home_obs)
+# ppc_away: posterior predictive draws for away runs scored (shape: n_draws, n_away_obs)
+# Both indexed to the same game_pk
+
+total_ppc = ppc_home + ppc_away          # shape: (n_draws, n_games)
+p_over = (total_ppc > line[np.newaxis, :]).mean(axis=0)  # shape: (n_games,)
+```
+
+This is the **exact posterior probability**, not a Normal CDF approximation. The distribution is discrete (NegBin), so it accounts for probability mass exactly at integer totals — including ties with the line (e.g., if line is 8.5, this is exact; if line is an integer like 9, the model correctly assigns zero probability to a tie, which is how totals books handle pushes).
+
+The blended Brier score for Layer 3 evaluation uses the same alpha blending toward Bovada de-vigged p_over as the existing `evaluate_totals_bayesian.py` framework.
+
+---
+
+#### Leakage-free 2026 OOS surface construction
+
+The OOS surface is a **season-level holdout** (train 2021–2025, test 2026). No walk-forward within 2026. Rationale: the hierarchical model pools across seasons already; a walk-forward within 2026 would require re-fitting team effects on 2026 data, which is the full inference problem. The season-level holdout is the same standard used for all Layer 3 evaluation in this project.
+
+**2026 OOS feature data path:**
+
+```python
+# The signals come from the leakage-free OOS parquets produced in Story 16B.4
+# (oos_signals_offense_seq.parquet etc.) OR from the production
+# feature_pregame_sub_model_signals table (filtered to 2026, is_current=True)
+# Both are already leakage-free: signals were generated with models trained
+# on 2021-2025 data only, scored forward-only.
+
+oos_df = pd.read_parquet("betting_ml/models/layer3/oos_signals/oos_matrix_2026.parquet")
+# Columns: game_pk, side, batting_team, pitching_team, season, park_id,
+#          run_env_mu, pred_runs_mu, bullpen_mu, starter_suppression_mu,
+#          actual_runs, total_line (Bovada close)
+```
+
+**Z-scoring for OOS:** The scaler is fitted on 2021–2025 training data and applied to 2026 OOS features without re-fitting. Store the scaler as a joblib artifact alongside the trace.
+
+**2026 season index:** 2026 is not in the training `coords["season"]`. Two options for handling it in posterior predictive:
+- **Option A (recommended):** Set `season_idx` for all 2026 observations to the index of 2025 (the most recent training season). This is conservative and equivalent to assuming 2026's season effect equals the posterior on the 2025 effect.
+- **Option B:** Add a new out-of-sample season parameter `delta_2026` drawn from `Normal(0, sigma_season_posterior)` during `sample_posterior_predictive`. This propagates additional uncertainty from not having observed 2026 season data.
+
+Use Option A for the kill criterion check and primary evaluation. If Option A produces a posterior predictive mean ≤ 8.81 (passes the kill criterion), document Option B as a sensitivity analysis.
+
+---
+
+#### Pre-committed kill criterion
+
+**Check this first, before running calibration or Layer 4 evaluation. It is cheap to compute and eliminates all further work if the bias persists.**
+
+On the **May 2026 games** in the OOS surface (same reference cohort used throughout Epic 16B):
+
+```python
+may_2026_mask = (oos_df["game_date"].dt.month == 5) & (oos_df["game_date"].dt.year == 2026)
+may_games = oos_df[may_2026_mask].copy()
+
+# Total ppc for May 2026 games
+total_ppc_may = ppc_home_may + ppc_away_may   # shape: (n_draws, n_may_games)
+posterior_predictive_mean = total_ppc_may.mean()  # scalar
+
+print(f"Posterior predictive mean total runs, May 2026: {posterior_predictive_mean:.3f}")
+print(f"Actual mean: 8.61")
+print(f"Kill criterion (must be ≤ 8.81): {'PASS' if posterior_predictive_mean <= 8.81 else 'FAIL — STOP'}")
+```
+
+**Gate:** Posterior predictive mean > 8.81 on May 2026 games → the hierarchical pooling has not resolved the bias → **STOP; do not proceed to calibration or Layer 4 evaluation; document result and escalate**.
+
+If this gate fails, the problem is structural to how the sub-model signals relate to actual run scoring — not a tuning problem. Escalation at that point should consider: (a) whether the signal inputs need to be replaced entirely with raw features rather than sub-model outputs, or (b) whether the hierarchical priors are creating excess regularization that forces the posterior toward the 2021–2025 mean rather than the lower 2026 mean.
+
+---
+
+#### Convergence and calibration acceptance criteria
+
+**Convergence (ArviZ diagnostics):**
+```python
+import arviz as az
+summary = az.summary(trace, var_names=["mu_log_league", "sigma_offense", "sigma_defense",
+                                        "sigma_season", "beta_run_env", "beta_offense",
+                                        "beta_bullpen", "beta_starter", "alpha_nb"])
+assert (summary["r_hat"] < 1.01).all(), "R-hat failure — not converged"
+assert (summary["ess_bulk"] > 400).all(), "Insufficient ESS"
+assert (summary["ess_tail"] > 200).all(), "Insufficient tail ESS"
+```
+
+Report the number of divergences. Zero divergences is the target; > 20 divergences with `target_accept=0.9` indicates a geometry problem requiring reparameterization (typically the team-effect scale parameters — add non-centered parameterization).
+
+**Non-centered reparameterization (if divergences occur):**
+```python
+# Replace:
+alpha_offense = pm.Normal("alpha_offense", mu=0, sigma=sigma_offense, dims="team")
+# With:
+alpha_offense_raw = pm.Normal("alpha_offense_raw", mu=0, sigma=1, dims="team")
+alpha_offense = pm.Deterministic("alpha_offense", alpha_offense_raw * sigma_offense)
+```
+
+**Calibration gates (per the three-layer framework):**
+
+| Layer | Metric | Gate |
+|---|---|---|
+| Layer 1 | NLL on 2026 OOS | < prior-predictive NLL of NegBin fitted to 2021–2025 marginal (2.8893) |
+| Layer 2 | `calib_80` | ∈ [0.75, 0.85] — 80% of actual total_runs within the 80% posterior predictive interval |
+| Layer 3 | Blended Brier (P(over) vs Bovada line) | < prior-naive Brier (0.248) AND < market Brier (0.228) on 2026 credible games |
+| Layer 4 | Selective `roi_110` | > 0 AND n_bets ≥ 50 at 1.0-run threshold (under side evaluated separately given known direction) |
+
+**Additional diagnostic (not a gate):** `std(total_ppc_2026)` across all 2026 OOS games. Target ≥ 2.0 — if still < 2.0, the model is producing insufficient spread and the posterior predictive is variance-shrunk (same failure mode as NGBoost).
+
+---
+
+#### Script and artifact plan
+
+| Artifact | Path | Description |
+|---|---|---|
+| Training script | `betting_ml/models/bayesian/run_scoring_hierarchical.py` | Build, fit, save trace |
+| ADVI fast-pass | `betting_ml/models/bayesian/run_scoring_advi.py` | Quick identifiability check |
+| OOS scoring script | `betting_ml/models/bayesian/score_oos_2026.py` | Posterior predictive on 2026 surface |
+| Kill criterion check | `betting_ml/models/bayesian/kill_criterion_check.py` | May-2026 posterior predictive mean |
+| Evaluation script | `betting_ml/scripts/evaluate_production_bayesian.py` | Existing harness — add PyMC target |
+| Fitted trace | `betting_ml/models/bayesian/run_scoring_trace.nc` | ArviZ NetCDF (ArviZ format) |
+| Z-scaler artifacts | `betting_ml/models/bayesian/signal_scalers.joblib` | StandardScaler fitted on 2021–2025 |
+| OOS predictions | `betting_ml/models/bayesian/oos_ppc_2026.parquet` | (game_pk, p_over, mu_total, p10, p90) |
+
+---
+
+#### Tasks
+
+**Phase 0 — Data prep and ADVI fast-pass (no MCMC, fast):**
+- [ ] Build the (game_pk, side) training frame from the leakage-free OOS parquets: merge `run_env_mu`, `pred_runs_mu` (offense_v2), `bullpen_mu` (bullpen_v2), `starter_suppression_mu` (starter_v1) with `mart_game_results.runs_scored` per side; encode `batting_team_idx`, `pitching_team_idx`, `season_idx` (integer indices into the `coords` dicts); restrict to `has_full_data = True` and seasons 2021–2025. Document row count.
+- [ ] Fit `StandardScaler` per signal column on 2021–2025 training rows; save to `signal_scalers.joblib`.
+- [ ] Apply scalers; verify z-scored signal distributions (mean ≈ 0, std ≈ 1).
+- [ ] Build the PyMC model with the architecture above; run ADVI fast-pass (20K iterations); confirm ADVI posterior mean `mu_side` ≈ 4.3–4.7 and that no divergences or NaN values appear.
+- [ ] Run prior predictive check (500 draws); confirm prior on total_runs covers [0, 30] with sensible mass.
+
+**Phase 1 — MCMC (hand-off):**
+- [ ] **HAND OFF:** `uv run python betting_ml/models/bayesian/run_scoring_hierarchical.py --train` — 4 chains × 4000 draws (2000 tune). Expected 2–4 hr. Report: R-hat max, ESS min, divergence count, wall-clock time.
+- [ ] If divergences > 20, apply non-centered reparameterization (see §Convergence above) and re-run.
+- [ ] Confirm trace saved to `run_scoring_trace.nc`.
+
+**Phase 2 — Kill criterion check (must run before anything else):**
+- [ ] **HAND OFF:** `uv run python betting_ml/models/bayesian/kill_criterion_check.py` — load trace, score May-2026 OOS games, compute posterior predictive mean total_runs.
+- [ ] Report the exact number with the explicit PASS / FAIL verdict.
+- [ ] On FAIL: record in `totals_2026_failure_analysis.md`, escalate. On PASS: proceed to Phase 3.
+
+**Phase 3 — Full three-layer + Layer 4 evaluation (only if Phase 2 passes):**
+- [ ] **HAND OFF:** `uv run python betting_ml/scripts/evaluate_production_bayesian.py --target total_runs_pymc` on the 2026 leakage-free OOS surface. Report L1 NLL, L2 calib_80, L3 blended Brier vs prior-naive and market, L4 roi_110 at 1.0-run threshold.
+- [ ] Evaluate under side separately (given historical over-prediction the under was historically stronger; check if this inverts once bias is corrected).
+- [ ] Document std(total_ppc) — if still < 2.0, flag as a residual variance-shrinkage concern.
+
+**Phase 4 — Registry and integration (only if all three layers pass):**
+- [ ] Update `sub_model_registry.yaml` with `total_runs_pymc` entry; record trace path, signal scalers path, NLL, calib_80, Brier.
+- [ ] Update `model_registry.yaml`: if L1+L2+L3 clear, change `total_runs.bet_paused` to `shadow_window: true` (shadow period before live flip). Record in `totals_2026_failure_analysis.md`.
+- [ ] Wire `score_oos_2026.py` into `predict_today.py` as an additional scoring path: compute `pymc_p_over`, `pymc_mu_total`, `pymc_ci_80_low`, `pymc_ci_80_high` per game alongside existing columns.
+- [ ] The under side evaluation flag from Phase 3 must be documented in the registry before live bets are considered.
+
+---
+
+#### Acceptance Criteria
+
+- [ ] ADVI fast-pass confirms model is identifiable (no NaN, ADVI posterior mean mu_side ≈ 4.3–4.7) — **prerequisite for MCMC hand-off**.
+- [ ] MCMC converges: R-hat < 1.01 for ALL parameters, ESS bulk > 400, ESS tail > 200, divergences = 0 (or < 5 after non-centered reparameterization).
+- [ ] **Kill criterion REPORTED** (May-2026 posterior predictive mean, exact value, PASS/FAIL verdict) **before any Layer 3 evaluation runs**.
+- [ ] If kill criterion passes: L1 NLL < 2.8893, L2 calib_80 ∈ [0.75, 0.85], L3 blended Brier < 0.248 (prior-naive) AND < 0.228 (market) — all on leakage-free 2026 OOS.
+- [ ] std(total_ppc_2026) documented (target ≥ 2.0; any shortfall flagged explicitly).
+- [ ] Verdict (promote / shadow / escalate) recorded in `totals_2026_failure_analysis.md` and `model_registry.yaml`.
+
+**Note:** Stories 17.2 (win probability from run distributions) and 17.3 (posterior bet sizing) are gated on 17.1 passing the three-layer evaluation. Do not begin 17.2 or 17.3 until the kill criterion and three-layer gates are cleared.
 
 ---
 
@@ -8679,4 +9351,150 @@ A0.4 Next.js frontend             — After A0.0 + A0.3 both complete (target Ju
      ↙              ↘
 A0.5 Push notifs              A0.6 Stripe billing
 (target July 11)              (target July 18)
+```
+
+---
+
+# Epic A1 — Pipeline SLA & Reliability
+
+**Track:** F — Application & Product Layer (sits alongside Epic A0).
+
+**Depends on:** Epic 0.5 complete (Dagster migration) ✅; Epic O.1–O.2 complete (sub-model signal ops wired into `daily_ingestion_job`) ✅.
+
+**Status:** ⬜ Not Started. **GATE for beta launch — must complete before the application is shared with beta testers.**
+
+**Goal:** Ensure the daily prediction pipeline reliably delivers model predictions **at least 30 minutes before first pitch for every game, every day.** This is the hard SLA for the beta application — five beta testers need qualified picks in hand 30 minutes before game time. Currently the pipeline has known fragility in prediction timing that makes this SLA unreliable. This epic **diagnoses the exact failure modes from Dagster run history** and implements the **minimum set of changes** to meet the SLA before beta launch.
+
+**Priority & sequencing (binding):** **A1.1 (audit) MUST complete first** — it identifies which specific stories are most urgent based on the *actual* failure mode. If the audit shows the failure is entirely the missing post-lineup re-run, A1.2 is the only fix needed. If it shows silent stale-signal failures, A1.3 is urgent. **Do NOT implement A1.2–A1.5 before A1.1 identifies the actual failure mode.** Targets: A1.1 within **2 days** of starting (audit only); A1.2–A1.3 within **5 days** of A1.1 completing; A1.4–A1.5 within **3 days** of A1.2–A1.3. Full epic target: complete **before the first beta tester receives application access.**
+
+---
+
+### A1.1 — Pipeline timing audit
+
+**Overview:** Pull the last 14 days of `daily_ingestion_job` run history from Dagster Cloud and measure the actual wall-clock time from job start to `predict_today_op` completion for each run. Identify the current SLA compliance rate and the specific failure modes causing fragility.
+
+**Tasks:**
+- [ ] Query Dagster Cloud run history for `daily_ingestion_job` — last 14 days; record job start time, `predict_today_op` start time, `predict_today_op` completion time, and any failed or skipped ops for each run
+- [ ] Build a pipeline timing table: each stage (Parlay API ingestion, StatsAPI ingestion, FanGraphs ingestion, dbt daily build, six signal-generation ops, `dbt_sub_model_signals_rebuild`, `signal_freshness_check_op`, `predict_today_op`), estimated runtime, actual measured runtime from run history
+- [ ] Compute SLA compliance rate: out of 14 days, how many had predictions available (`predict_today_op` complete) 30+ minutes before the earliest scheduled game's first pitch
+- [ ] Identify which failure mode is causing fragility — rank by frequency and impact:
+  - Job completes but `predict_today` runs before lineup confirmation with no post-lineup re-run
+  - Specific ops timing out or failing silently (`signal_freshness_check_op` is non-blocking)
+  - `predict_today` runs on stale sub-model signals without warning
+  - `lineup_monitor` sensor misfiring or not triggering post-lineup prediction refresh
+  - End-to-end runtime exceeds the available window on afternoon game days
+- [ ] Document findings in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` with the timing table, compliance rate, and ranked failure modes
+
+**Acceptance criteria:**
+- [ ] Timing table exists with actual measured runtimes from Dagster run history for all pipeline stages
+- [ ] SLA compliance rate computed and documented — specific count of compliant vs non-compliant days out of 14
+- [ ] Top failure mode identified with evidence from run history — not a hypothesis, a confirmed observation
+- [ ] `dagster_pipeline_sla_analysis.md` written and committed
+
+---
+
+### A1.2 — Post-lineup prediction re-run
+
+**Overview:** Ensure `predict_today.py` always runs on confirmed lineups by adding a post-lineup re-run triggered by the `lineup_monitor` sensor. If `predict_today` is currently only running once at job start (08:00 EDT) before lineups are confirmed, predictions are based on projected lineups and may be materially different from the confirmed-lineup predictions. The beta application must serve confirmed-lineup predictions.
+
+**Tasks:**
+- [ ] Confirm current behavior: does `predict_today_op` run once at job start or is it re-triggered after `lineup_monitor` fires? Check Dagster sensor logs and `daily_model_predictions.predicted_at` timestamps — if all predictions for a given day have the same timestamp (job start time), lineup re-run is not happening
+- [ ] If lineup re-run is not happening: add a `lineup_confirmed_predict_op` to the `lineup_monitor` sensor that runs only the following steps after lineup confirmation: sub-model signal-generation ops (these need fresh lineup features) → `dbt_sub_model_signals_rebuild` → `predict_today_op` with `--lineup-confirmed` flag
+- [ ] Add `--lineup-confirmed` flag to `predict_today.py` — when set, overwrites existing `daily_model_predictions` rows for today's games rather than skipping games that already have predictions; add `lineup_confirmed` boolean column to `daily_model_predictions` output
+- [ ] Wire the `lineup_confirmed_predict_op` into the Dagster sensor — fires when `lineup_monitor` detects all lineups confirmed for games starting within the next 4 hours
+- [ ] Validate: after deployment, check that `daily_model_predictions` shows two prediction timestamps per game day — one at job start (projected lineup) and one post-lineup (confirmed lineup); confirmed-lineup predictions have `lineup_confirmed = true`
+
+**Acceptance criteria:**
+- [ ] `daily_model_predictions` contains `lineup_confirmed = true` rows for all games on days where lineups were available at least 90 minutes before first pitch
+- [ ] Post-lineup `predict_today_op` completion timestamp is at least 30 minutes before first pitch for 95% of game days — verified over 7 consecutive days post-deployment
+- [ ] Morning job-start predictions (projected lineup) and post-lineup predictions both exist in `daily_model_predictions` — morning predictions are not deleted, they serve as a baseline comparison
+
+---
+
+### A1.3 — Signal freshness gate
+
+**Overview:** The current `signal_freshness_check_op` is non-blocking — if sub-model signals are stale, `predict_today` runs anyway on yesterday's signals without warning. This is a silent failure mode that produces predictions the app surfaces as current when they're not. Add a blocking gate for the minimum required signals and a pipeline status table the application backend can check.
+
+**Tasks:**
+- [ ] Update `signal_freshness_check_op` to be **blocking for the minimum required signal set**: `run_env` and `offense` signals must have rows for today's `game_date` before `predict_today_op` fires; if either is missing, fail the op with an explicit error message rather than a warning
+- [ ] Keep the non-blocking behavior for secondary signals (`starter`, `bullpen`, `matchup`) — log a warning but do not block `predict_today` if these are missing; add `signal_completeness_score` to the op's Dagster metadata output so it's visible in the run timeline
+- [ ] Create `baseball_data.betting_ml.pipeline_status` table: one row per pipeline run date with columns `run_date`, `job_start_ts`, `predict_today_complete_ts`, `lineup_confirmed_complete_ts`, `signal_completeness_score`, `n_games_scored`, `n_qualified_bets`, `pipeline_status ∈ {complete, partial, failed}`; insert/update row at the end of each `predict_today_op` run
+- [ ] Add a dbt model `mart_pipeline_status` that the FastAPI backend queries to check prediction freshness before serving picks — if `pipeline_status != complete` or `predict_today_complete_ts` is more than 6 hours old, the backend returns a `predictions_updating` state rather than stale picks
+- [ ] Add a Dagster alert on `signal_freshness_check_op` blocking failure — notify via email when minimum signals are missing so manual intervention is possible before game time
+
+**Acceptance criteria:**
+- [ ] `predict_today_op` never completes without `run_env` and `offense` signals for today's games — confirmed by checking `daily_model_predictions`: all rows have non-null `run_env_mu` and `pred_runs_mu`
+- [ ] `pipeline_status` table has one row per game day; `pipeline_status = complete` only when `predict_today_complete_ts` is set and `n_games_scored` matches the scheduled game count from StatsAPI
+- [ ] FastAPI backend returns `predictions_updating` state when `pipeline_status` is not complete — confirmed by manually setting `pipeline_status` to `failed` and verifying the frontend shows the updating state rather than stale picks
+
+---
+
+### A1.4 — Application prediction freshness indicator
+
+**Overview:** The beta application frontend needs to surface pipeline status to users — specifically whether today's predictions are based on confirmed lineups, how recently they were generated, and whether any qualified bets exist. This is a trust signal for beta testers: they need to know the picks are fresh before placing bets.
+
+**Tasks:**
+- [ ] Add a `GET /pipeline/status` endpoint to the FastAPI backend that queries `mart_pipeline_status` for today's date and returns: `predictions_ready` boolean, `last_updated_at` timestamp, `lineup_confirmed` boolean, `n_games_scored`, `n_qualified_bets`, `signal_completeness_score`
+- [ ] Update the Next.js dashboard header to show a pipeline status indicator alongside the "3 qualified picks / 8 total games today" badge: green dot when `predictions_ready = true` and `lineup_confirmed = true`; yellow dot when `predictions_ready = true` but `lineup_confirmed = false` (projected-lineup predictions); red dot with "Predictions updating" when `predictions_ready = false`
+- [ ] Add a tooltip on the status dot explaining what each state means — green: "Predictions based on confirmed lineups, updated [time]"; yellow: "Predictions based on projected lineups — will update when lineups confirm"; red: "Pipeline running — check back in a few minutes"
+- [ ] Add a "last updated" timestamp below the picks table: "Last updated: 2:34 PM ET · Lineups confirmed" — updates when the user refreshes the page
+- [ ] Wire a browser notification when predictions update from projected to confirmed-lineup: if the user has notifications enabled (A0.5) and the page is open, push a notification "Lineups confirmed — picks updated for tonight's games"
+
+**Acceptance criteria:**
+- [ ] Pipeline status indicator renders correctly in all three states — confirmed by manually setting `pipeline_status` values and verifying the UI response
+- [ ] Tooltip text is accurate and non-technical — a beta tester who doesn't know what "sub-model signals" are can understand what each state means
+- [ ] Browser notification fires within 5 minutes of `lineup_confirmed_predict_op` completing — confirmed on a live game day
+- [ ] Timestamp shows local time in the user's timezone, not UTC — confirmed on a machine set to CDT
+
+---
+
+### A1.5 — Dagster alert and monitoring
+
+**Overview:** Add operational monitoring so pipeline failures are caught immediately rather than discovered when a beta tester asks why there are no picks. Currently there is no alerting when the daily prediction pipeline fails or produces incomplete results.
+
+**Tasks:**
+- [ ] Add a Dagster sensor that runs 45 minutes before the earliest scheduled game each day: queries `mart_pipeline_status` for today; if `pipeline_status != complete` or `lineup_confirmed_complete_ts IS NULL`, fires an alert
+- [ ] Alert channel: email to the admin address configured in Dagster Cloud; message format: "⚠️ Diamond Edge pipeline alert — [date]: pipeline_status=[status], n_games_scored=[n]/[total_scheduled], lineup_confirmed=[true/false]. Check Dagster Cloud for details."
+- [ ] Add a weekly pipeline health report to `compute_clv_monitoring.py`: for the past 7 days, report SLA compliance rate (days where lineup_confirmed predictions were available 30+ minutes before first pitch), mean pipeline runtime, any days with `signal_completeness_score < 0.80`, and any days where `n_games_scored < total_scheduled_games`
+- [ ] Document the manual intervention runbook in `runbooks/dagster_pipeline_sla_analysis.md`: what to do when the 45-minute alert fires, how to trigger a manual `predict_today` re-run from the Dagster Cloud UI, how to verify predictions are available before alerting beta testers
+
+**Acceptance criteria:**
+- [ ] Dagster sensor fires correctly when tested by manually setting `pipeline_status` to `failed` 45 minutes before a scheduled game — email received within 2 minutes
+- [ ] Weekly health report appears in `clv_monitoring_log.md` with SLA compliance rate for the prior 7 days
+- [ ] Manual intervention runbook documented — a non-developer (beta tester or external contributor) could follow it to verify pipeline status without access to Dagster Cloud
+
+---
+
+### A1.6 — Scheduler reliability
+
+**Overview:** The A1.1 audit found that `daily_ingestion_job` started more than 1 hour late on 4 of 12 audited days (28-May: +110m, 02-Jun: +445m, 03-Jun: +168m, 04-Jun: +510m). The 06-04 SLA miss was caused entirely by a late start — the job itself ran in ~20 minutes once it began. None of the other A1 stories prevent this failure mode; A1.5 only alerts after the fact. This story investigates root cause and adds a scheduler watchdog.
+
+**Tasks:**
+- [ ] Investigate root cause of late starts on the 4 affected days: check Dagster Cloud scheduler logs and agent logs for those run IDs (`a114d2af`, `8541e30a`, `0637f515`, `6cc6e718`) — distinguish between (a) schedule tick fired but agent was unavailable, (b) tick fired but code location failed to load, (c) tick did not fire (scheduler itself missed), (d) resource contention on the hybrid agent host
+- [ ] Check hybrid agent health on those dates: review Railway (or wherever the agent runs) deploy logs, CPU/memory at the time of the tick; confirm agent was alive at 12:00 UTC and the delay happened between tick and run start
+- [ ] If root cause is agent availability: add a startup probe or health-check restart policy to the agent deployment so it self-heals within 5 minutes of becoming unresponsive
+- [ ] If root cause is code location load time: profile `dagster code-server start` duration; if >2 minutes, investigate lazy-loading or reducing import overhead in `pipeline/__init__.py`
+- [x] Add a fallback trigger: if `daily_model_predictions` has no `morning` rows for today by 13:30 UTC (90 minutes after scheduled start), a Dagster sensor auto-triggers a manual run of `daily_ingestion_job` — this is a belt-and-suspenders guard independent of root-cause fix
+- [x] Document root cause and fix in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` under a "Scheduler reliability" section
+
+**Acceptance criteria:**
+- [ ] Root cause of late-start incidents documented with evidence from Dagster/agent logs
+- [ ] Fallback trigger sensor deployed and tested: manually suppress the 12:00 UTC schedule tick, confirm sensor fires a run by 13:30 UTC
+- [ ] No FM-5 occurrences (job start >1h late) in the 7 days following deployment — verified against Dagster run history
+
+---
+
+**Epic A1 sequencing summary:**
+```
+A1.1 Timing audit            — FIRST; 2 days; identifies the actual failure mode
+     ↓ (audit dictates which of A1.2/A1.3/A1.6 is urgent)
+A1.2 Post-lineup re-run  ──┐
+A1.3 Signal freshness gate ─┴─ within 5 days of A1.1
+     ↓
+A1.6 Scheduler reliability   — within 2 days of A1.3 (FM-5 is root cause of only confirmed SLA miss)
+     ↓
+A1.5 Alerting & monitoring ──┐
+A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
+     ↓
+Full epic complete BEFORE first beta tester receives application access
 ```
