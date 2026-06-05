@@ -343,7 +343,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic FG   FanGraphs Cloudflare Bypass       🔄 Nearly done (2026-06-02)      │
 │   FG.1 deploy ✅  FG.2 client ✅  FG.3 ✅(daily)  FG.4 ✅  FG.5 drafted       │
 │ Epic 23   Model Drift & Signal Decay        ⬜ Not Started                  │
-│   Gate: ≥1 full month of production predictions with Epics 10–11 live       │
+│   Gate: ≥1 month production predictions (Epic 10 paused · 11 closed →       │
+│          deferred until Epic 17 produces a live-scoreable model)             │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -391,8 +392,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
 │ Epic 10  Totals Distribution Model          🔴 CLOSED — totals PAUSED (06-04)│
 │   10.1–10.6 ✅  10.7 🔒  10.8 ✅ recency-gate FAIL (4th confirm → Epic 16B)   │
-│ Epic 11  H2H Model Retrain                  ⏳ Eval-pending (no edge vs mkt) │
-│   11.1 ✅  11.2 ✅  11.3 ✅  11.L ✅  11.4–11.6 ⬜  11.7 ⏳ (see Epic 26.4)  │
+│ Epic 11  H2H Model Retrain                  🔴 CLOSED — no edge vs market    │
+│   11.1 ✅  11.2 ✅  11.3 ✅  11.L ✅  11.4–11.6 ⏭ skipped  11.7 🔴 (06-04) │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -475,20 +476,21 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ TRACK F — Application & Product Layer                                        │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ Epic A0  AWS Application Foundation         ⬜ START IMMEDIATELY             │
+│ Epic A0  AWS Application Foundation         ⏳ In Progress                   │
 │   A0.0 UI/UX Design & Wireframing ⬜  (1 week; gates A0.4)                  │
-│   A0.1 Domain + SSL ⬜  (START NOW — 48hr DNS propagation gate)              │
-│   A0.2 Cognito auth ⬜  (START NOW — parallel with A0.1)                    │
+│   A0.1 Domain + SSL ✅ (2026-06-04)                                          │
+│   A0.2 Cognito auth ✅ (2026-06-04)                                          │
 │   A0.3 FastAPI/Lambda ⬜  (after A0.2; can overlap A0.0)                    │
 │   A0.4 Next.js frontend ⬜  (after A0.0 + A0.3; target July 4)             │
 │   A0.5 Push notifications ⬜  (after A0.4; target July 11)                  │
 │   A0.6 Stripe billing ⬜  (after A0.4; target July 18)                      │
 │                                                                              │
-│ Epic A1  Pipeline SLA & Reliability         ⬜ Not Started                   │
+│ Epic A1  Pipeline SLA & Reliability         ⏳ In Progress                   │
 │   GATE for beta launch — complete before app is shared with beta testers     │
-│   A1.1 timing audit ⬜  A1.2 post-lineup re-run ⬜  A1.3 freshness gate ⬜    │
-│   A1.4 freshness indicator ⬜  A1.5 alerting & monitoring ⬜                  │
-│   A1.6 scheduler reliability ⬜                                               │
+│   A1.1 timing audit ✅  A1.2 post-lineup re-run ⏳ (7-day validation)        │
+│   A1.3 freshness gate ✅  A1.4 freshness indicator ⬜                         │
+│   A1.5 alerting & monitoring ✅ (2 live ACs pending)  A1.6 scheduler ✅      │
+│   A1.7 prediction notification delivery (email + SMS) ⬜                     │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -540,8 +542,8 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — NOW (URGENT)** | Epic FG (FanGraphs Cloudflare bypass) | No gate — production outage | 🔄→✅ 2026-06-02: FlareSolverr deployed + egress-verified in prod; `hitting_leaderboard` restored (1,154 rows). FG.1/FG.2 ✅, FG.4 ✅, FG.5 runbook drafted. Remaining: deploy `requests`-import fix; ZiPS cadence → Track E (Epic 25) |
 | **0 — DONE** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | ✅ COMPLETE 2026-06-02: 9.1 matrix (11,661 games); 9.2 NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003); 9.4 contract+loaders+predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 promotion log + registry verdicts; 9.6 Dagster weekly recompute (`weekly_ml_job`, activates O.3). **→ Epic 10 unblocked.** |
 | **DONE / CLOSED** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🔴 CLOSED 2026-06-04: 10.6 shadow → totals PAUSED; 10.8 recency-gate FAIL (4th confirmation); next totals investment routed through Epic 16B gate → Epic 17 |
-| **2 — LAYER 3** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | After Epic 9 |
-| **1 — NEXT** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 📋 SPEC READY 2026-06-04: 17.1 spec written; review before build; ADVI fast-pass first, then NUTS hand-off; kill criterion (May-2026 PPM ≤ 8.81) gates all further eval |
+| **DONE / CLOSED** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | 🔴 CLOSED 2026-06-04: no edge vs. 2026 Bovada market (2026 market Brier 0.1967 beats model 0.2220); 11.4–11.6 skipped; H2H deferred to Epic 26.5 live attribution gate |
+| **1 — NEXT** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 🔴 GATED 2026-06-04: v1 NUTS PPM=8.8607 (−0.051 miss); v2 abandoned; 17.1b diagnostics: bullpen drift confirmed (beta_discount HDI entirely negative), discount fails kill criterion; gated on bullpen sub-model retrain before next NUTS run |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
 | **2 — LAYER 3** | Epic 12.5 (Bayesian → Epic 19 integration) | ≥100 live games + 12.4 converging | ~Mid-June |
 | **2 — LAYER 3** | Epic 19.4–19.5 (EV Tracker + conviction score) | Epic 19.3 | After 19.3 |
@@ -1332,7 +1334,7 @@ Write targets by environment:
 - [ ] Epic 6 — `train_bullpen_state.py`: add MLflow instrumentation at authoring time; experiment name `bullpen_state_v1`
 - [ ] Epic 8 — `train_matchup.py`: add MLflow instrumentation at authoring time; experiment name `matchup_v1`
 - [ ] Epic 10 — `train_totals.py`: add MLflow instrumentation at authoring time; experiment name `totals_v1`
-- [ ] Epic 11 — `train_h2h.py`: add MLflow instrumentation at authoring time; experiment name `h2h_v2`
+- [~] Epic 11 — `train_h2h.py`: add MLflow instrumentation at authoring time; experiment name `h2h_v2` — SKIPPED (Epic 11 closed 2026-06-04; H2H deferred to Epic 26.5)
 - [x] Add MLflow instrumentation requirement to each future training Story: see Epic 5.2, 6.3, 8, 10, 11 (note added inline below; I.2 pattern is the template)
 
 **Note (2026-05-28):** `mlflow_utils.py` and the I.2 instrumentation pattern are in place. All future training scripts must follow the I.2 pattern at authoring time. The per-epic tasks above will be checked off as each model epic ships.
@@ -6073,6 +6075,8 @@ hierarchical / full-Bayesian layer).** H2H was explicitly out of scope for this 
 
 # Epic 11 — H2H Model Retrain with Sub-Model Signals
 
+**Status: 🔴 CLOSED (2026-06-04) — no edge vs. 2026 Bovada market. Stories 11.4–11.6 skipped. H2H promotion deferred to Epic 26.5 live attribution gate.**
+
 **Depends on:** Epic 1 complete (market-blind v2 elasticnet is the baseline to beat). Epic 9 complete (Layer 3 feature matrix with stacking weights available). Epic 10 complete (per-side run distributions available from `offense_v2` for the derived win probability approach).
 
 **Goal:** Build a Layer 3 H2H model that outputs a calibrated probability distribution over home win, then compares that distribution to Bovada's de-vigged moneyline implied probability to identify edge. Two approaches are required: (A) derive win probability from the joint per-side NegBin run distributions via Monte Carlo — the principled Bayesian route — and (B) train a direct binary classifier on the Layer 3 feature matrix. The better approach becomes the champion. Neither approach may use market features in training.
@@ -6300,7 +6304,7 @@ Acceptance criteria:
 
 ### 11.7 — CLV evaluation and production gate
 
-**Status:** ⏸️ EVALUATION-PENDING (not promoted). Per 11.3/11.L the direct H2H classifier shows no edge vs. credible 2026 Bovada lines. **Epic 26.4 (Layer 4 selective strategy, 2026-06-04) reconfirmed this on a fresh leakage-free walk-forward H2H surface (`oos_predictions_h2h_v2.parquet`, priced at de-vigged fair odds):** the contrarian **direction_flip rule is dead on 2026** (win 0.399, roi_devig +0.13 vig-free upper bound), and the only positive signal — **magnitude, roi_devig +0.197** — is vig-free, small-sample (n=230), and merely the model being underconfident on chalk it agrees with the market on (not a contrarian edge). The 2024–25 "wins" are degraded-line artifacts. H2H stays evaluation-pending; the live attribution surface (Epic 26.5) on real book prices is now the gating instrument, not further backtests.
+**Status:** 🔴 CLOSED (2026-06-04). Per 11.3/11.L the direct H2H classifier shows no edge vs. credible 2026 Bovada lines. **Epic 26.4 (Layer 4 selective strategy, 2026-06-04) reconfirmed this on a fresh leakage-free walk-forward H2H surface (`oos_predictions_h2h_v2.parquet`, priced at de-vigged fair odds):** the contrarian **direction_flip rule is dead on 2026** (win 0.399, roi_devig +0.13 vig-free upper bound), and the only positive signal — **magnitude, roi_devig +0.197** — is vig-free, small-sample (n=230), and merely the model being underconfident on chalk it agrees with the market on (not a contrarian edge). The 2024–25 "wins" are degraded-line artifacts. **Stories 11.4–11.6 are skipped** — there is no champion to select, wire, or calibrate. **Epic 11 is closed; H2H promotion is deferred** until the live attribution surface (Epic 26.5) on real book prices accumulates enough games to revisit.
 
 **Overview:** Run live predictions for 30+ games post-promotion and compute mean CLV for H2H bets. This is the final gate before declaring `h2h_v2` the production H2H model. It mirrors the CLV gate structure from Epic 1 Story 1.7 but uses the Layer 3 model's outputs.
 
@@ -8071,7 +8075,7 @@ uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequ
 
 # Epic 17 — Posterior Distribution Propagation (Full Bayesian Layer)
 
-**Status:** 📋 SPEC — Story 17.1 spec written 2026-06-04; awaiting review before build begins. Epic 16B closed with a definitive FAIL on the same date (combined-μ 9.01 > 8.85 gate; +0.40 bias confirmed by five independent measurements after all four Layer 2 sub-model retrains). This epic is now the **active totals architecture investment**.
+**Status:** 🔴 GATED — Story 17.1 built and run 2026-06-04 (v1 NUTS PPM=8.8607, v2 PPM=9.3720); Story 17.1b diagnostics complete 2026-06-04 (bullpen drift confirmed; discount FAILS kill criterion). **Epic 17 is gated on bullpen sub-model retrain** before the next NUTS run. Epic 16B closed with a definitive FAIL on the same date (combined-μ 9.01 > 8.85 gate; +0.40 bias confirmed by five independent measurements after all four Layer 2 sub-model retrains). This epic remains the **active totals architecture investment**.
 
 > **Root cause confirmed by 16B:** The +0.40 systematic over-prediction bias lives in the **LTV aggregation architecture** — a weighted sum of point estimates that cannot account for signal overlap (run_env, offense, and bullpen are not independent) and cannot propagate distributional uncertainty through the combination. Sequential enrichment of sub-model inputs does not fix it because the EB posterior already captures what the sequential chain provides. The architecture must change: sub-model signals must be treated as **noisy observations of latent team quality** in a joint regression, not as values to be summed with pseudo-BMA weights.
 
@@ -8083,9 +8087,79 @@ uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --exclude-sequ
 
 ---
 
+### 17.0 — Bullpen sub-model retrain (HARD PREREQUISITE for next NUTS run) 🔴 ACTIVE
+
+**Status:** 🔴 ACTIVE — Not started. This story is a hard gate: the next NUTS run (Story 17.1 Phase 1) must not be scheduled until this story closes.
+
+**Context:** Story 17.1b diagnostics (2026-06-04) confirmed that the May-2026 NUTS kill criterion failure (PPM=8.8607, +0.051 over 8.81) is driven almost entirely by a +0.2882σ OOD shift in `bullpen_mu` between the 2022-2025 training distribution and 2026 data. `beta_bullpen` × +0.2882σ ≈ +0.055 runs/side = +0.11 total runs = the entire overshoot. Correcting the OOD shift is sufficient to pass the kill criterion under the v1 NUTS architecture (delta_2025 as 2026 proxy).
+
+#### Investigation required (before retrain)
+
+The +0.2882σ shift could arise from two distinct causes requiring different fixes:
+
+**Hypothesis A — Metric drift:** The raw bullpen runs allowed per game actually increased in 2026 (real-world change: softer bullpens, more offense in 2026). If so, the training data for the retrain should include 2026 games and the scaler should be re-fitted to include 2026.
+
+**Hypothesis B — Feature distribution shift:** The input features to bullpen_v2 (EB priors, rolling xwOBA, workload signals) shifted in 2026 without corresponding real-world run-scoring changes. In that case, the bullpen_mu values are miscalibrated from feature drift, not from actual performance change.
+
+To distinguish: run the following diagnostic (local, < 1 min):
+```python
+import pandas as pd
+df = pd.read_parquet("betting_ml/models/layer3/oos_signals/oos_signals_bullpen.parquet")
+print(df.groupby("season")["bullpen_mu"].mean())
+```
+If `bullpen_mu` mean in 2026 is materially higher than 2022-2025, also check:
+```python
+import joblib
+import numpy as np
+from betting_ml.models.bayesian.run_scoring_advi import _load_game_results, _expand_to_sides
+games = _load_game_results([2022, 2023, 2024, 2025, 2026])
+sides = _expand_to_sides(games)
+print(sides.groupby("season")["runs_scored"].mean())
+```
+If actual `runs_scored` did NOT increase in 2026 but `bullpen_mu` did → Hypothesis B (feature drift); the retrain must also address the feature distribution, not just retrain on 2026 targets.
+
+**Document the result** of this investigation as part of this story before proceeding to the retrain.
+
+#### Retrain specification
+
+**Objective:** Retrained bullpen_v2 must produce 2026 game outputs with `bullpen_mu` z-score (relative to new training distribution) within ±1.0σ of the training distribution mean.
+
+**Measurable kill criterion:** After retrain, run `betting_ml/scripts/audit/diagnose_nuts_bias.py` (updated for new scaler). The mean z-score of `opp_bullpen_mu` on 2026 data must satisfy `|mean_z_2026| ≤ 1.0`.
+
+**Retrain approach:**
+- Extend the training window to include 2026 completed games (through the retrain date)
+- Re-fit all StandardScaler parameters on the extended training set (2022-2026 data through latest complete date)
+- Re-run walk-forward CV with 2026 as an evaluation fold
+- Apply the same promotion gate as the current champion: NegBin NLL < 1.8852 AND calib_80 ≥ 0.80
+
+**After retrain:**
+- Update `ood_gate.training_mean`, `ood_gate.training_std`, and `ood_gate.upper_threshold` / `lower_threshold` in `sub_model_registry.yaml` under `bullpen_v2`
+- Update `_BULLPEN_OOD_TRAINING_MEAN` and `_BULLPEN_OOD_TRAINING_STD` constants in `betting_ml/utils/probability_layer.py`
+- Re-run `betting_ml/scripts/audit/diagnose_nuts_bias.py` to confirm OOD gate passes
+- Re-generate OOS signal parquets (`betting_ml/scripts/generate_bullpen_signals.py` or equivalent) with the new model artifact
+- Proceed to Story 17.1 Phase 1 (NUTS re-run with updated signals)
+
+**Tasks:**
+- [ ] Run bullpen_mu vs actual runs_scored diagnostic to classify Hypothesis A vs B; document result here
+- [ ] Retrain bullpen_v2 on extended window (2022-2026); confirm NegBin NLL < 1.8852, calib_80 ≥ 0.80
+- [ ] Verify 2026 mean z-score of `opp_bullpen_mu` ≤ ±1.0σ using new scaler — the explicit OOD gate pass
+- [ ] Update `sub_model_registry.yaml` ood_gate parameters and promote new artifact
+- [ ] Update `_BULLPEN_OOD_TRAINING_MEAN` / `_BULLPEN_OOD_TRAINING_STD` in `probability_layer.py`
+- [ ] Re-generate OOS signal parquets with new bullpen_v2 artifact for all 2022-2026 seasons
+- [ ] Close story and hand off to Story 17.1 Phase 1
+
+**Acceptance Criteria:**
+- [ ] Hypothesis A vs B documented (investigation result recorded here)
+- [ ] Retrained bullpen_v2 champion: NegBin NLL < 1.8852, calib_80 ≥ 0.80
+- [ ] **OOD gate passes: mean z-score of `opp_bullpen_mu` on 2026 data ≤ ±1.0σ** (pre-committed, measurable)
+- [ ] `sub_model_registry.yaml` ood_gate block updated with new training parameters
+- [ ] `probability_layer.py` constants updated
+
+---
+
 ### 17.1 — PyMC hierarchical model for run scoring (SPEC — review before build)
 
-**Status:** 📋 SPEC — NOT STARTED. This story is the full build plan for the Epic 17 hierarchical model. **Do not begin implementation until this spec is reviewed and approved.** The kill criterion check (§ below) is the first thing computed once the model runs; if it fails, further evaluation stops.
+**Status:** 🔴 GATED — Built and run 2026-06-04. v1 NUTS (delta_2025 as 2026 proxy): May-2026 PPM=8.8607 — FAIL (+0.051). v2 attempt (Mar+Apr 2026 calibration window): May-2026 PPM=9.3720 — FAIL (+0.562, worse). v2 approach abandoned. Story 17.1b diagnostics (2026-06-04): bullpen drift confirmed; Epic 17 formally gated on bullpen sub-model retrain. See Story 17.1b below for full diagnostic record.
 
 **Activation context:** Epic 16B closed on 2026-06-04 with a definitive FAIL. Five independent measurements confirm combined-μ 9.01 vs actual May-2026 mean 8.61 (+0.40 systematic bias) after all four Layer 2 sub-model retrains on sequential features. The EB posterior already captures what the sequential chain provides. The root cause is the **LTV aggregation architecture** — a weighted sum of point estimates that cannot account for signal dependencies and cannot propagate distributional uncertainty through the combination. This is the exact problem a PyMC hierarchical model solves.
 
@@ -8503,6 +8577,72 @@ alpha_offense = pm.Deterministic("alpha_offense", alpha_offense_raw * sigma_offe
 - [ ] Verdict (promote / shadow / escalate) recorded in `totals_2026_failure_analysis.md` and `model_registry.yaml`.
 
 **Note:** Stories 17.2 (win probability from run distributions) and 17.3 (posterior bet sizing) are gated on 17.1 passing the three-layer evaluation. Do not begin 17.2 or 17.3 until the kill criterion and three-layer gates are cleared.
+
+---
+
+### 17.1b — Bullpen discount + monthly PPM diagnostics ✅ COMPLETE (2026-06-04)
+
+**Status:** ✅ COMPLETE — Diagnostics run; Epic 17 formally gated on bullpen sub-model retrain.
+
+**Purpose:** After the v2 NUTS kill criterion failure (PPM=9.3720), two diagnostics were run before any architectural decision to distinguish: (A) whether the +0.2882σ bullpen OOD shift is the specific mechanism — and whether a learned discount interaction term can fix it; (B) whether the May-2026 failure is month-specific or a uniform 2026 problem.
+
+**Diagnostic A — Monthly PPM breakdown (v1-like: delta_2025 for all 2026 rows):**
+
+Script: `betting_ml/scripts/audit/diagnose_monthly_ppm.py`
+
+| Month | Games | PPM | Actual | Bias | Result |
+|-------|-------|-----|--------|------|--------|
+| March | 74 | 8.3889 | 8.5676 | −0.18 | PASS |
+| April | 359 | 8.7163 | 9.1365 | −0.42 | PASS |
+| May | 380 | 8.8601 | 8.6842 | +0.18 | FAIL |
+| June | — | — | — | — | too few (8 games) |
+
+Failure is **May-specific**. The model correctly prices run scoring in March and April. This supports an OOD gate interpretation (Epic 19): something specific to the May-2026 environment (bullpen OOD, run-scoring regime shift) is causing the overshoot.
+
+**Diagnostic B — Bullpen 2026 discount (NUTS with interaction term):**
+
+Script: `betting_ml/scripts/audit/nuts_bullpen_discount_diagnostic.py`
+
+Added `beta_bullpen_2026_discount ~ Normal(0, 0.5)` so that the effective bullpen coefficient for 2026 rows = `beta_bullpen × (1 + beta_bullpen_2026_discount × is_2026)`.
+
+| Parameter | Mean | 94% HDI | HDI entirely negative? |
+|-----------|------|---------|------------------------|
+| `beta_bullpen_2026_discount` | −0.2269 | [−0.4087, −0.0313] | **YES** |
+| `beta_bullpen` (base) | +0.1910 | [+0.182, +0.200] | — |
+| Effective 2026 beta_bullpen | 0.1477 | — | — |
+| `delta_2026` (joint posterior) | −0.0061 | [−0.077, +0.062] | — |
+
+May-2026 PPM **with discount**: **9.2674 — FAIL** (threshold 8.81, overshoot +0.457).
+
+Convergence note: 25 divergences (below 160 tolerance), R-hat 1.04 for `sigma_defense`, ESS 123 for `sigma_defense`. The `beta_bullpen_2026_discount` posterior itself has good ESS (1965) and R-hat 1.00 — its estimate is reliable. The `sigma_defense` non-convergence is a known funnel pathology for near-zero hierarchical variances and does not invalidate the discount posterior.
+
+**Findings:**
+
+1. **Bullpen drift confirmed.** `beta_bullpen_2026_discount` HDI is entirely negative — the model learns from Mar+Apr 2026 data that the bullpen signal predicts fewer runs per unit z-score in 2026 than in 2022–2025. The mechanism is real and quantifiable.
+
+2. **Discount alone is insufficient.** Even reducing beta_bullpen by 22.7% (from 0.191 to 0.148), the PPM stays at 9.2674. The v2 calibration window is a compounding problem: delta_2026 learned from Mar+Apr ≈ 0 (vs delta_2025 = −0.077), adding a ~+0.48 run shift to the season baseline that the discount cannot offset simultaneously.
+
+3. **v2 calibration window abandoned.** The Mar+Apr 2026 calibration window made PPM WORSE (9.372 vs v1's 8.861) because early-2026 run scoring was near-normal (April actual mean = 9.14 — high-scoring, not representative of May's 8.68). Teaching the model "2026 is normal" via Mar+Apr is incorrect for May. Revert to v1 approach (delta_2025 as 2026 proxy) in all future NUTS runs.
+
+4. **Quantified path to kill criterion.** With v1 mapping, May PPM = 8.8601 (+0.050 overshoot). The bullpen z-shift (+0.2882σ × beta_bullpen 0.191) contributes ≈ +0.055 per side = +0.11 total — which is the entire overshoot. Correcting the bullpen OOD is sufficient to pass.
+
+**Architectural decision:**
+
+- **Gate Epic 17 on bullpen sub-model retrain.** The retrain must address the +0.2882σ z-shift (2026 bullpen raw values are OOD relative to the 2022–2025 scaler). Once the bullpen sub-model includes 2026 data, re-run the v1 NUTS and check kill criterion.
+- **OOD gate (Epic 19)** remains a valid risk management overlay for the live model — flag games where `opp_bullpen_mu_z > 1.5σ` as `bullpen_signal_ood = true` — but cannot substitute for the retrain since the entire May-2026 is affected.
+- The "discount interaction" approach is a diagnostic tool only; do not incorporate into any production or registry path.
+- The v1 architecture (delta_2025 as 2026 proxy, no calibration window) is confirmed as the correct base. ADVI and all prior v1 NUTS results remain valid evidence.
+
+**Diagnostic artifacts:**
+
+| Artifact | Path |
+|----------|------|
+| Monthly PPM script | `betting_ml/scripts/audit/diagnose_monthly_ppm.py` |
+| Discount NUTS script | `betting_ml/scripts/audit/nuts_bullpen_discount_diagnostic.py` |
+| Diagnostic trace | `betting_ml/models/bayesian/nuts_trace_diag.nc` |
+| Discount summary JSON | `betting_ml/models/bayesian/nuts_summary_diag.json` |
+
+**Next action:** Bullpen sub-model retrain targeting the 2026 OOD shift. After retrain, re-run v1 NUTS (`run_scoring_nuts.py`) with updated bullpen signals and report May-2026 PPM vs 8.81 kill criterion.
 
 ---
 
@@ -9149,15 +9289,58 @@ Acceptance criteria:
 
 ---
 
+#### US-010 — EV Tracker & Kelly Sizer
+*As a bettor, I want to see every market for today's games with EV calculations and Kelly-sized stake recommendations so that I can make informed sizing decisions across all markets, not just the pre-filtered qualified ones.*
+
+- [ ] Page has a bankroll input at the top; all stake suggestions update dynamically when bankroll changes
+- [ ] Table shows ALL markets for the selected date (not just qualified bets), with columns: Game, Market, Side, Model%, Bovada%, Edge, EV, Raw Kelly%, Capped Kelly%, Suggested Stake ($)
+- [ ] Qualified markets (edge > threshold, Kelly > 0) are visually distinguished from non-qualifying rows
+- [ ] Date selector defaults to today but allows browsing historical dates
+- [ ] American odds and decimal odds both visible (or user-togglable)
+- [ ] Clicking "Log Bet" on any row pre-fills the bet log form (US-011) with that market's details
+
+**v0 prompt:**
+> "Create a Next.js EV tracker page for a baseball analytics app. Top row: a 'Bankroll' number input ($1,000 default) and a date picker. Below: a data table with columns — Game (e.g. 'HOU @ NYM'), Market ('Totals Over 8.5'), Model% (58.3%, green if edge > 0), Bovada% (54.1%, gray), Edge (+4.2%, green/red), EV (+3.1%, green/red), Raw Kelly% (8.4%), Capped Kelly% (5.0%), Stake ($50.00). Rows where Edge > 0 have a subtle green left border and a small 'Log Bet' button in the last column. Rows where Edge ≤ 0 are muted/gray. A summary bar above the table shows 'X qualified · Y total markets'. Dark mode. shadcn/ui Table, Input."
+
+---
+
+#### US-011 — Log a Bet
+*As a bettor, I want to record the bets I actually place and track their outcomes so that I can compare my real results against the model's predictions.*
+
+- [ ] Bet log form fields: date, game (dropdown from today's scheduled games), market type, side (home/away/over/under), actual odds placed, stake ($), notes (optional)
+- [ ] Form pre-fills when navigated from a "Log Bet" click in the EV tracker (US-010)
+- [ ] Bet history table shows all logged bets: date, game, market, side, stake, odds, status (Open / Won / Lost / Push), P&L
+- [ ] Settled bets summary: Total Wagered, Net P&L, ROI, Win Rate — updates as bets are settled
+- [ ] Settling a bet: a "Mark Result" button on each open bet row opens an inline form (Won / Lost / Push + actual payout)
+
+**v0 prompt:**
+> "Create a Next.js bet log page with two sections. Top section 'Log a Bet': a form with fields — Date (date picker, default today), Game (select dropdown: 'HOU @ NYM 7:10 PM ET'), Market (select: Totals Over 8.5 / Home ML / Away ML / Totals Under), Side (auto-filled from market), Odds (American format: e.g. -110), Stake ($, number input), Notes (text, optional). A 'Save Bet' button. Bottom section 'Bet History': a table with columns — Date, Game, Market, Odds, Stake, Status badge (green 'Won' / red 'Lost' / gray 'Open' / yellow 'Push'), P&L. Above the table: 3 summary stat tiles — 'Net P&L: +$182', 'ROI: +8.4%', 'Win Rate: 54.3%'. Each open bet row has a 'Settle' button that opens an inline result selector. Dark mode. shadcn/ui Table, Form, Badge, Select."
+
+---
+
+#### US-012 — Market Comparison *(lower priority — currently Bovada-only)*
+*As an analyst, I want to compare model probabilities against multiple bookmakers side by side so that I can identify the best available line when a bet qualifies.*
+
+> **Note:** This page is lower priority for beta since all edge detection currently targets Bovada. Build after US-001 through US-011 are complete.
+
+- [ ] Table shows today's games with model probability alongside available bookmaker lines (Bovada, Pinnacle where available)
+- [ ] Highlights which bookmaker offers the best line for each model-favored side
+- [ ] Bovada vs. Pinnacle disagreement flagged as a sharp-money signal
+
+**v0 prompt:**
+> "Create a Next.js market comparison page for a baseball analytics app. A table with columns — Game, Market, Model% (58.3%), Bovada (54.1%, +4.2% edge highlighted green), Pinnacle (55.0%, +3.3%), Best Line (badge: 'Bovada'). Rows where model has a positive edge against at least one book show a green left border. A 'Sharp Signal' badge appears when Pinnacle implied% differs from Bovada by > 2%. Date picker at top. Dark mode. shadcn/ui Table, Badge."
+
+---
+
 Tasks:
-- [ ] Run US-001 through US-009 prompts through v0.dev; iterate each to visual satisfaction
+- [ ] Run US-001 through US-012 prompts through v0.dev; iterate each to visual satisfaction; US-012 can be deferred until US-001–US-011 are complete
 - [ ] Copy finalized components into `app/frontend/src/components/`
 - [ ] Document final design decisions in `app/frontend/DESIGN.md` — color tokens, typography scale, component inventory, page-level layout decisions with rationale; include mobile layout spec for Dashboard (390px viewport / iPhone 15 Pro width)
-- [ ] Create component inventory from the 9 user stories: PicksTable, ProbabilityBar, ConvictionBadge, ConvictionBreakdownTable, SignalIconGrid, StatTile, PLCurve, DistributionChart, SubModelBreakdown, AdminStatusCard — this becomes the A0.4 implementation checklist
+- [ ] Create component inventory from the 12 user stories: PicksTable, ProbabilityBar, ConvictionBadge, ConvictionBreakdownTable, SignalIconGrid, StatTile, PLCurve, DistributionChart, SubModelBreakdown, AdminStatusCard, EVTrackerTable, KellySizerPanel, BetLogForm, BetHistoryTable, MarketComparisonTable — this becomes the A0.4 implementation checklist
 - [ ] Conduct a 30-minute review with at least one prospective beta tester on US-002 (dashboard) before A0.4 begins — their feedback on the picks table layout is more valuable than any designer opinion
 
 Acceptance criteria:
-- [ ] All 9 user story components exist in `app/frontend/src/components/` with placeholder data
+- [ ] All 12 user story components exist in `app/frontend/src/components/` with placeholder data (US-012 components can be stubbed)
 - [ ] Design tokens documented in `DESIGN.md` with hex values, type scale, and component vocabulary
 - [ ] At least one prospective beta tester has reviewed the dashboard wireframe and provided written feedback
 - [ ] Component inventory list exists and maps to A0.4 implementation checklist
@@ -9167,40 +9350,44 @@ Acceptance criteria:
 
 ### A0.1 — Domain, SSL, and Hosted Zone
 
+**Status: ✅ COMPLETE (2026-06-04)**
+
 **Overview:** Register a domain and configure Route 53 as the DNS provider. SSL via AWS Certificate Manager (free). This is the first thing to do because DNS propagation takes 24–48 hours and blocks nothing while it resolves.
 
 **Naming note:** Choose a name that doesn't expose the algorithm (e.g. not "mlbbettingmodel.com"). Brand it as a sports analytics subscription service.
 
 Tasks:
-- [ ] Register domain via Route 53 or transfer existing domain
-- [ ] Create hosted zone in Route 53
-- [ ] Request SSL certificate via AWS Certificate Manager (ACM) in `us-east-1` (required for CloudFront) — wildcard cert covering `*.yourdomain.com` and `yourdomain.com`
-- [ ] Document domain and certificate ARN in `infrastructure/aws_resources.md`
+- [x] Register domain via Route 53 or transfer existing domain
+- [x] Create hosted zone in Route 53
+- [x] Request SSL certificate via AWS Certificate Manager (ACM) in `us-east-1` (required for CloudFront) — wildcard cert covering `*.yourdomain.com` and `yourdomain.com`
+- [x] Document domain and certificate ARN in `infrastructure/aws_resources.md`
 
 Acceptance criteria:
-- [ ] Domain resolves (even to a placeholder page) within 48 hours of setup
-- [ ] ACM certificate issued and validated via DNS (Route 53 auto-validation)
-- [ ] `aws_resources.md` documents all resource ARNs for reproducibility
+- [x] Domain resolves (even to a placeholder page) within 48 hours of setup
+- [x] ACM certificate issued and validated via DNS (Route 53 auto-validation)
+- [x] `aws_resources.md` documents all resource ARNs for reproducibility
 
 ---
 
 ### A0.2 — Cognito User Pool (Authentication)
 
+**Status: ✅ COMPLETE (2026-06-04)**
+
 **Overview:** AWS Cognito handles authentication — user signup, login, JWT token issuance, and password management. Free up to 50,000 monthly active users. Beta users get invited via Cognito admin-created accounts; self-signup is disabled until launch.
 
 Tasks:
-- [ ] Create Cognito User Pool with email as username; require email verification
-- [ ] Configure password policy: minimum 8 characters, require number and special character
-- [ ] Create Cognito App Client (no secret — for browser-based auth flow via Cognito Hosted UI)
-- [ ] Configure user groups: `beta_tester`, `subscriber`, `admin` — beta users assigned `beta_tester` at invite time
-- [ ] Disable self-signup — admin-only user creation during beta; enable self-signup with Stripe integration at launch
-- [ ] Document User Pool ID and App Client ID in `infrastructure/aws_resources.md`
-- [ ] Test: create one test user, confirm login flow via Cognito Hosted UI, confirm JWT token issued
+- [x] Create Cognito User Pool with email as username; require email verification
+- [x] Configure password policy: minimum 8 characters, require number and special character
+- [x] Create Cognito App Client (no secret — for browser-based auth flow via Cognito Hosted UI)
+- [x] Configure user groups: `beta_tester`, `subscriber`, `admin` — beta users assigned `beta_tester` at invite time
+- [x] Disable self-signup — admin-only user creation during beta; enable self-signup with Stripe integration at launch
+- [x] Document User Pool ID and App Client ID in `infrastructure/aws_resources.md`
+- [x] Test: create one test user, confirm login flow via Cognito Hosted UI, confirm JWT token issued
 
 Acceptance criteria:
-- [ ] Test user can log in and receive a valid JWT token
-- [ ] Self-signup is blocked — only admin-created accounts can authenticate
-- [ ] `beta_tester` group exists and is assignable via AWS console
+- [x] Test user can log in and receive a valid JWT token
+- [x] Self-signup is blocked — only admin-created accounts can authenticate
+- [x] `beta_tester` group exists and is assignable via AWS console
 
 ---
 
@@ -9215,16 +9402,20 @@ Acceptance criteria:
 GET  /health                  — liveness check (no auth required)
 GET  /picks/today             — today's qualified bets with conviction scores
 GET  /picks/history           — historical picks with outcomes and CLV
+GET  /picks/ev                — all markets for a given date with EV + Kelly calculations (not just qualified); accepts ?date= param; drives /ev-tracker page
 GET  /performance/summary     — fund-level P&L, win rate, mean CLV
 GET  /performance/by-model    — breakdown by model version and signal group
 GET  /alerts/preferences      — get user's notification preferences
 PUT  /alerts/preferences      — update notification preferences
 POST /auth/refresh            — refresh JWT token via Cognito
+POST /bets                    — log a new bet (game_pk, market_type, side, odds_american, stake, notes); writes to baseball_data.betting_ml.user_bets
+GET  /bets                    — bet history; accepts optional ?date= filter; returns all logged bets with status + P&L
+GET  /bets/summary            — settled P&L rollup: total_wagered, net_pnl, roi, win_rate
 ```
 
 All endpoints except `/health` require a valid Cognito JWT token in the `Authorization` header. API Gateway validates the token against the Cognito User Pool before the Lambda handler is called — no auth code in the FastAPI app itself.
 
-**Snowflake role:** Read-only role scoped to `baseball_data.betting_ml` and `baseball_data.betting` schemas. Never write from the backend.
+**Snowflake role:** Read-only role for all SELECT queries. `POST /bets` requires INSERT access to `baseball_data.betting_ml.user_bets` only — scope the write grant narrowly; never grant broader write access to the backend role.
 
 Tasks:
 - [ ] Create `app/backend/` directory at repo root; add `main.py`, `routers/`, `models/`, `services/`
@@ -9253,11 +9444,15 @@ Acceptance criteria:
 
 **Pages:**
 - `/login` — Cognito Hosted UI redirect; handles JWT callback
-- `/dashboard` — today's picks with conviction scores and CI visualizations
+- `/dashboard` — today's qualified picks with conviction scores and CI visualizations
+- `/ev-tracker` — all markets for today (or selected date) with EV, Kelly%, and bankroll-adjusted stake suggestions; "Log Bet" action per row links to `/bets`
+- `/bets` — bet log form + history table; pre-fills from EV tracker; settled P&L summary
 - `/performance` — fund P&L chart, win rate, CLV trend, model version breakdown
-- `/picks/[game_pk]` — pick detail drill-down
+- `/picks/[game_pk]` — pick detail drill-down with run distribution, sub-model signals, gate criteria
+- `/market-comparison` — *(lower priority)* multi-bookmaker line comparison; build after core pages
 - `/settings` — notification preferences (email, browser push)
 - `/subscribe` — Stripe Checkout paywall (shown to unauthenticated non-beta users post-launch)
+- `/admin` — system health dashboard (Dagster status, signal freshness, CLV label count)
 - `/` → redirect to `/dashboard` if authenticated, `/login` if not
 
 Tasks:
@@ -9267,6 +9462,8 @@ Tasks:
 - [ ] Configure `@tanstack/react-query` as the data fetching layer — wraps all API Gateway calls with caching, loading states, and background refetch; set `staleTime: 5 * 60 * 1000` (5 minutes) as default cache window for picks data
 - [ ] Implement Cognito auth flow: redirect to Cognito Hosted UI on unauthenticated access; handle the authorization code callback; **store JWT in memory only (not localStorage — security requirement)**; refresh token via `/auth/refresh` on expiry
 - [ ] Build Dashboard page: fetch `GET /picks/today`; display as picks table per A0.0 wireframe — one row per qualified bet with game matchup, market type, model probability, Bovada line, conviction score, CI bar visualization, signal icon grid, and collapsible "Why this pick?" panel
+- [ ] Build EV Tracker page (`/ev-tracker`): fetch `GET /picks/ev`; bankroll input drives stake column; qualified rows visually distinguished; "Log Bet" button on each row navigates to `/bets` with query params pre-filling the form
+- [ ] Build Bet Log page (`/bets`): fetch `GET /bets` for history table and `GET /bets/summary` for stat tiles; form submits `POST /bets`; inline "Settle" action on open bets; accepts query params `game_pk`, `market_type`, `side` from EV tracker link
 - [ ] Build Performance page: fetch `GET /performance/summary` and `GET /performance/by-model`; render P&L curve using Recharts LineChart, win rate stat tile, mean CLV by signal group; tabbed breakdown per A0.0 wireframe
 - [ ] Build S3 bucket for static hosting (separate from the ML artifact bucket); configure for static website hosting
 - [ ] Create CloudFront distribution: origin = S3 bucket; viewer protocol = HTTPS only; attach ACM certificate from A0.1; configure `index.html` as default root and error page (required for client-side routing)
@@ -9374,22 +9571,22 @@ A0.5 Push notifs              A0.6 Stripe billing
 **Overview:** Pull the last 14 days of `daily_ingestion_job` run history from Dagster Cloud and measure the actual wall-clock time from job start to `predict_today_op` completion for each run. Identify the current SLA compliance rate and the specific failure modes causing fragility.
 
 **Tasks:**
-- [ ] Query Dagster Cloud run history for `daily_ingestion_job` — last 14 days; record job start time, `predict_today_op` start time, `predict_today_op` completion time, and any failed or skipped ops for each run
-- [ ] Build a pipeline timing table: each stage (Parlay API ingestion, StatsAPI ingestion, FanGraphs ingestion, dbt daily build, six signal-generation ops, `dbt_sub_model_signals_rebuild`, `signal_freshness_check_op`, `predict_today_op`), estimated runtime, actual measured runtime from run history
-- [ ] Compute SLA compliance rate: out of 14 days, how many had predictions available (`predict_today_op` complete) 30+ minutes before the earliest scheduled game's first pitch
-- [ ] Identify which failure mode is causing fragility — rank by frequency and impact:
+- [x] Query Dagster Cloud run history for `daily_ingestion_job` — last 14 days; record job start time, `predict_today_op` start time, `predict_today_op` completion time, and any failed or skipped ops for each run
+- [x] Build a pipeline timing table: each stage (Parlay API ingestion, StatsAPI ingestion, FanGraphs ingestion, dbt daily build, six signal-generation ops, `dbt_sub_model_signals_rebuild`, `signal_freshness_check_op`, `predict_today_op`), estimated runtime, actual measured runtime from run history
+- [x] Compute SLA compliance rate: out of 14 days, how many had predictions available (`predict_today_op` complete) 30+ minutes before the earliest scheduled game's first pitch
+- [x] Identify which failure mode is causing fragility — rank by frequency and impact:
   - Job completes but `predict_today` runs before lineup confirmation with no post-lineup re-run
   - Specific ops timing out or failing silently (`signal_freshness_check_op` is non-blocking)
   - `predict_today` runs on stale sub-model signals without warning
   - `lineup_monitor` sensor misfiring or not triggering post-lineup prediction refresh
   - End-to-end runtime exceeds the available window on afternoon game days
-- [ ] Document findings in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` with the timing table, compliance rate, and ranked failure modes
+- [x] Document findings in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` with the timing table, compliance rate, and ranked failure modes
 
 **Acceptance criteria:**
-- [ ] Timing table exists with actual measured runtimes from Dagster run history for all pipeline stages
-- [ ] SLA compliance rate computed and documented — specific count of compliant vs non-compliant days out of 14
-- [ ] Top failure mode identified with evidence from run history — not a hypothesis, a confirmed observation
-- [ ] `dagster_pipeline_sla_analysis.md` written and committed
+- [x] Timing table exists with actual measured runtimes from Dagster run history for all pipeline stages
+- [x] SLA compliance rate computed and documented — specific count of compliant vs non-compliant days out of 14
+- [x] Top failure mode identified with evidence from run history — not a hypothesis, a confirmed observation; FM-5 (transient op failures) root cause confirmed from Dagster Cloud tick history
+- [x] `dagster_pipeline_sla_analysis.md` written and committed
 
 ---
 
@@ -9416,16 +9613,16 @@ A0.5 Push notifs              A0.6 Stripe billing
 **Overview:** The current `signal_freshness_check_op` is non-blocking — if sub-model signals are stale, `predict_today` runs anyway on yesterday's signals without warning. This is a silent failure mode that produces predictions the app surfaces as current when they're not. Add a blocking gate for the minimum required signals and a pipeline status table the application backend can check.
 
 **Tasks:**
-- [ ] Update `signal_freshness_check_op` to be **blocking for the minimum required signal set**: `run_env` and `offense` signals must have rows for today's `game_date` before `predict_today_op` fires; if either is missing, fail the op with an explicit error message rather than a warning
-- [ ] Keep the non-blocking behavior for secondary signals (`starter`, `bullpen`, `matchup`) — log a warning but do not block `predict_today` if these are missing; add `signal_completeness_score` to the op's Dagster metadata output so it's visible in the run timeline
-- [ ] Create `baseball_data.betting_ml.pipeline_status` table: one row per pipeline run date with columns `run_date`, `job_start_ts`, `predict_today_complete_ts`, `lineup_confirmed_complete_ts`, `signal_completeness_score`, `n_games_scored`, `n_qualified_bets`, `pipeline_status ∈ {complete, partial, failed}`; insert/update row at the end of each `predict_today_op` run
-- [ ] Add a dbt model `mart_pipeline_status` that the FastAPI backend queries to check prediction freshness before serving picks — if `pipeline_status != complete` or `predict_today_complete_ts` is more than 6 hours old, the backend returns a `predictions_updating` state rather than stale picks
-- [ ] Add a Dagster alert on `signal_freshness_check_op` blocking failure — notify via email when minimum signals are missing so manual intervention is possible before game time
+- [x] Update `signal_freshness_check_op` to be **blocking for the minimum required signal set**: `run_env` and `offense` signals must have rows for today's `game_date` before `predict_today_op` fires; if either is missing, fail the op with an explicit error message rather than a warning
+- [x] Keep the non-blocking behavior for secondary signals (`starter`, `bullpen`, `matchup`) — log a warning but do not block `predict_today` if these are missing; add `signal_completeness_score` to the op's Dagster metadata output so it's visible in the run timeline
+- [x] Create `baseball_data.betting_ml.pipeline_status` table: one row per pipeline run date with columns `run_date`, `job_start_ts`, `predict_today_complete_ts`, `lineup_confirmed_complete_ts`, `signal_completeness_score`, `n_games_scored`, `n_qualified_bets`, `pipeline_status ∈ {complete, partial, failed}`; insert/update row at the end of each `predict_today_op` run
+- [x] Add a dbt model `mart_pipeline_status` that the FastAPI backend queries to check prediction freshness before serving picks — if `pipeline_status != complete` or `predict_today_complete_ts` is more than 6 hours old, the backend returns a `predictions_updating` state rather than stale picks
+- [x] Add a Dagster alert on `signal_freshness_check_op` blocking failure — notify via email when minimum signals are missing so manual intervention is possible before game time
 
 **Acceptance criteria:**
-- [ ] `predict_today_op` never completes without `run_env` and `offense` signals for today's games — confirmed by checking `daily_model_predictions`: all rows have non-null `run_env_mu` and `pred_runs_mu`
-- [ ] `pipeline_status` table has one row per game day; `pipeline_status = complete` only when `predict_today_complete_ts` is set and `n_games_scored` matches the scheduled game count from StatsAPI
-- [ ] FastAPI backend returns `predictions_updating` state when `pipeline_status` is not complete — confirmed by manually setting `pipeline_status` to `failed` and verifying the frontend shows the updating state rather than stale picks
+- [x] `predict_today_op` never completes without `run_env` and `offense` signals for today's games — confirmed by checking `daily_model_predictions`: all rows have non-null `run_env_mu` and `pred_runs_mu`
+- [x] `pipeline_status` table has one row per game day; `pipeline_status = complete` only when `predict_today_complete_ts` is set and `n_games_scored` matches the scheduled game count from StatsAPI
+- [x] FastAPI backend returns `predictions_updating` state when `pipeline_status` is not complete — confirmed by manually setting `pipeline_status` to `failed` and verifying the frontend shows the updating state rather than stale picks
 
 ---
 
@@ -9484,6 +9681,140 @@ A0.5 Push notifs              A0.6 Stripe billing
 
 ---
 
+### A1.7 — Prediction Notification Delivery (Email + SMS)
+
+**Overview:** When `predict_today_op` completes and writes new rows to `daily_model_predictions`, users who have opted into notifications should receive an alert via email and/or SMS. Notifications are triggered by a Dagster sensor that watches for new qualified predictions and fans out to an SNS topic, which routes to SES (email) and SNS SMS subscriptions respectively. This is intentionally lightweight for beta — no templating engine, no preference center UI yet (that comes in A0.5). The goal is to get signal to users as fast as possible after the model runs.
+
+**Notification trigger:** A new row in `daily_model_predictions` where `qualified_bet = true` and `lineup_confirmed = true` (if the lineup confirmation re-run from A1.2 is complete), or `qualified_bet = true` (fallback if lineup confirmation is not yet live).
+
+**Architecture:**
+```
+predict_today_op completes
+        ↓
+Dagster sensor: prediction_notification_sensor
+  — polls daily_model_predictions every 5 min after 08:00 EDT
+  — fires when new qualified_bet = true rows appear that haven't been notified
+        ↓
+Lambda: credence-prod-lambda-notification-dispatcher
+  — reads qualified predictions from Snowflake
+  — formats email and SMS payloads
+  — publishes to SNS topic: credence-prod-sns-qualified-bets
+        ↓
+SNS Topic: credence-prod-sns-qualified-bets
+  ├── SES subscription → email delivery
+  └── SNS SMS subscription → text message delivery
+```
+
+Notification preferences are stored in DynamoDB (`credence-prod-dynamo-push-subscriptions`) keyed on `user_id` (Cognito sub), with fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `email_notifications` | bool | |
+| `sms_notifications` | bool | |
+| `phone_number` | str | E.164 format, e.g. `+14145550123` |
+| `notification_email` | str | May differ from login email |
+| `min_edge_threshold` | float | Only notify on picks above this edge — default 0.0 (all qualified bets) |
+| `notified_game_pks` | list[str] | Deduplication — don't re-notify on lineup-confirmed re-run if already notified on projected |
+
+**Dagster Sensor**
+
+File: `pipeline/sensors/prediction_notification_sensor.py`
+
+The sensor runs every 5 minutes after `predict_today_op` is known to have fired. It queries `daily_model_predictions` for today's qualified bets and compares against `pipeline_notifications_log` (see below) to find un-notified games. If new qualified bets exist, it triggers `credence-prod-lambda-notification-dispatcher` via boto3.
+
+```python
+# Pseudocode — sensor logic
+@sensor(job=notification_dispatch_job, minimum_interval_seconds=300)
+def prediction_notification_sensor(context):
+    new_qualified = query_snowflake("""
+        SELECT p.game_pk, p.game_date, p.market_type,
+               p.model_prob, p.edge, p.game_conviction_score,
+               p.win_prob_ci_low, p.win_prob_ci_high
+        FROM baseball_data.betting_ml.daily_model_predictions p
+        LEFT JOIN baseball_data.betting_ml.pipeline_notifications_log n
+            ON p.game_pk = n.game_pk AND n.notification_type = 'prediction'
+        WHERE p.game_date = CURRENT_DATE
+          AND p.qualified_bet = true
+          AND n.game_pk IS NULL  -- not yet notified
+    """)
+    if new_qualified:
+        yield RunRequest(run_key=f"notify_{date.today()}",
+                        run_config={"predictions": new_qualified})
+```
+
+**Notification Lambda**
+
+Resource name: `credence-prod-lambda-notification-dispatcher`
+File: `app/notifications/dispatcher.py`
+
+Responsibilities:
+- Pull user notification preferences from DynamoDB for all users in `beta_tester` and `subscriber` Cognito groups
+- Filter by each user's `min_edge_threshold`
+- Format email and SMS payloads per prediction
+- Publish to SNS for email; send SMS directly via SNS `publish()` for text messages
+- Write a row to `pipeline_notifications_log` for each `game_pk` notified — prevents duplicate delivery
+
+Email payload (SES via SNS):
+```
+Subject: Credence Sports — New Pick: [Away Team] @ [Home Team]
+
+Today's qualified bet has been identified by the model.
+
+Game: [Away] @ [Home] — [Game Time] ET
+Market: [Moneyline / Total]
+Model Edge: +[X.X]%
+Conviction Score: [X.XX] / 1.0
+Win Probability: [XX.X]% ([CI_LOW]% – [CI_HIGH]%)
+
+Log in to view full analysis and place your bet.
+credencesports.com
+```
+
+SMS payload:
+```
+Credence Sports: New pick — [Away] @ [Home] [Time]ET
+Market: [ML/Total] | Edge: +X.X% | Conviction: X.XX
+credencesports.com
+```
+
+**Snowflake Logging Table**
+
+Table: `baseball_data.betting_ml.pipeline_notifications_log`
+
+| Column | Type | Description |
+|---|---|---|
+| `notification_id` | VARCHAR | UUID — primary key |
+| `game_pk` | INTEGER | Game identifier |
+| `game_date` | DATE | Game date |
+| `notification_type` | VARCHAR | `prediction`, `result`, `alert` |
+| `channel` | VARCHAR | `email`, `sms` |
+| `user_id` | VARCHAR | Cognito sub |
+| `notified_at` | TIMESTAMP_TZ | When notification was dispatched |
+| `payload_hash` | VARCHAR | MD5 of payload — deduplication |
+| `status` | VARCHAR | `sent`, `failed`, `suppressed` |
+
+**Tasks:**
+- [ ] Create `pipeline/sensors/prediction_notification_sensor.py` — sensor polls every 5 minutes; triggers notification dispatch when new unnotified qualified bets exist in `daily_model_predictions`
+- [ ] Create `pipeline_notifications_log` table in `baseball_data.betting_ml` schema via dbt model or raw DDL; add to `schema.yml` with tests on `notification_id` uniqueness and `status` accepted values
+- [ ] Create `app/notifications/dispatcher.py` — Lambda handler that reads DynamoDB preferences, formats payloads, publishes to SNS, and writes to `pipeline_notifications_log`
+- [ ] Create SNS topic `credence-prod-sns-qualified-bets` in `us-east-1`; configure SES email subscription and SMS subscription
+- [ ] Verify SES sending domain for `credencesports.com` in `us-east-1` — request production access if still in sandbox (sandbox limits to verified addresses only)
+- [ ] Create Lambda function `credence-prod-lambda-notification-dispatcher` in `us-east-1`; set environment variables: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY`, `SNOWFLAKE_ROLE`, `DYNAMO_TABLE_NAME`, `SNS_TOPIC_ARN`
+- [ ] Add `min_edge_threshold` and `notified_game_pks` fields to DynamoDB `credence-prod-dynamo-push-subscriptions` table schema
+- [ ] Wire sensor into `pipeline/repository.py` so it's registered with Dagster Cloud
+- [ ] Add `notification_email` and `phone_number` fields to Cognito user attributes — set as mutable, not required; populated via `PUT /alerts/preferences` endpoint in A0.3
+- [ ] Write integration test: trigger sensor manually against a seeded `daily_model_predictions` row; verify SNS message published, DynamoDB preference filtering respected, and `pipeline_notifications_log` row written with `status = sent`
+
+**Acceptance criteria:**
+- [ ] When a new `qualified_bet = true` row appears in `daily_model_predictions`, subscribed users receive an email within 10 minutes of `predict_today_op` completing
+- [ ] SMS is delivered within 10 minutes for users with `sms_notifications = true` and a valid `phone_number`
+- [ ] Users with `min_edge_threshold = 0.05` do not receive notifications for picks with `edge < 0.05`
+- [ ] No duplicate notifications delivered for the same `game_pk` — verified by `pipeline_notifications_log` deduplication
+- [ ] `pipeline_notifications_log` contains a row for every notification attempt with accurate `status`
+- [ ] SES is out of sandbox mode before any non-verified email address receives a notification
+
+---
+
 **Epic A1 sequencing summary:**
 ```
 A1.1 Timing audit            — FIRST; 2 days; identifies the actual failure mode
@@ -9495,6 +9826,8 @@ A1.6 Scheduler reliability   — within 2 days of A1.3 (FM-5 is root cause of on
      ↓
 A1.5 Alerting & monitoring ──┐
 A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
+     ↓
+A1.7 Prediction notification delivery — after A1.5 (shares SNS/DynamoDB infra with A0.5; can be built in parallel with A0.3)
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```

@@ -34,6 +34,7 @@ from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
     compute_kelly,
+    compute_bet_permission,
 )
 from betting_ml.models.total_runs_trainer import p_over_line
 from betting_ml.scripts.evaluation.bayesian_model_eval import (
@@ -142,7 +143,12 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     layer4_totals_over_signal FLOAT,        -- pred_total_runs - total_line_consensus
     layer4_h2h_decision       VARCHAR(10),  -- home / away / abstain
     layer4_h2h_rule           VARCHAR(20),  -- direction_flip / magnitude / abstain
-    layer4_h2h_edge           FLOAT         -- calibrated_win_prob - h2h_market_implied_prob
+    layer4_h2h_edge           FLOAT,        -- calibrated_win_prob - h2h_market_implied_prob
+
+    -- Epic 19 / Story 17.1b — bullpen OOD gate
+    bullpen_z_score_home      FLOAT,        -- (bullpen_mu_home - training_mean) / training_std
+    bullpen_z_score_away      FLOAT,        -- (bullpen_mu_away - training_mean) / training_std
+    bullpen_signal_ood        BOOLEAN       -- TRUE when |z_home|>1.5 or |z_away|>1.5; blocks totals bets
 )
 """
 
@@ -162,7 +168,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
     posterior_source, prior_age_days,
     layer4_totals_decision, layer4_totals_over_signal,
-    layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge
+    layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge,
+    bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -178,7 +185,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
     %(posterior_source)s, %(prior_age_days)s,
     %(layer4_totals_decision)s, %(layer4_totals_over_signal)s,
-    %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s
+    %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s,
+    %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s
 )
 """
 
@@ -208,6 +216,49 @@ from prov
 where game_pk is not null
 group by game_pk
 """
+
+
+# Epic 19 / Story 17.1b — bullpen OOD gate. Loads bullpen_mu_v2 for each (game_pk, side)
+# from feature_pregame_sub_model_signals, pivots to game grain (home + away), returns
+# {game_pk: {"bullpen_mu_home": float, "bullpen_mu_away": float}}.
+# Graceful: returns empty dict when table is unpopulated for the target date.
+_BULLPEN_OOD_QUERY = """
+select s.game_pk,
+    max(case when s.side = 'home' then s.bullpen_mu_v2 end) as bullpen_mu_home,
+    max(case when s.side = 'away' then s.bullpen_mu_v2 end) as bullpen_mu_away
+from baseball_data.betting_features.feature_pregame_sub_model_signals s
+where s.game_pk in (
+    select game_pk
+    from baseball_data.betting_features.feature_pregame_game_features
+    where game_date = %(d)s
+)
+group by s.game_pk
+"""
+
+
+def _load_bullpen_ood_signals(target_date: str) -> dict[int, dict]:
+    """{game_pk: {"bullpen_mu_home": float, "bullpen_mu_away": float}} for today.
+
+    Used by the Epic 19 bullpen OOD gate in compute_bet_permission(). Returns
+    empty dict on any failure — OOD gate then produces None z-scores (no block)."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_BULLPEN_OOD_QUERY, {"d": target_date})
+            out: dict[int, dict] = {}
+            for gpk, mu_home, mu_away in cur.fetchall():
+                out[int(gpk)] = {
+                    "bullpen_mu_home": float(mu_home) if mu_home is not None else None,
+                    "bullpen_mu_away": float(mu_away) if mu_away is not None else None,
+                }
+            print(f"  [Epic 19] Loaded bullpen OOD signals for {len(out)} game(s).")
+            return out
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [Epic 19] bullpen OOD signals unavailable ({exc}); OOD gate will not fire.")
+        return {}
 
 
 def _load_posterior_provenance(target_date: str) -> dict[int, dict]:
@@ -275,6 +326,7 @@ def _write_predictions_to_snowflake(
     rows: list[dict] = []
     score_date = date.fromisoformat(target_date)
     prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
+    bullpen_ood_signals = _load_bullpen_ood_signals(target_date)  # Epic 19 — bullpen OOD gate
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -334,6 +386,16 @@ def _write_predictions_to_snowflake(
 
         gpk_val = _s(df_today, "game_pk", i)
         game_prov = prov.get(int(gpk_val)) if gpk_val is not None else None
+        game_bullpen = bullpen_ood_signals.get(int(gpk_val)) if gpk_val is not None else None
+
+        # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
+        ood_row = {
+            "bullpen_mu_home": (game_bullpen or {}).get("bullpen_mu_home"),
+            "bullpen_mu_away": (game_bullpen or {}).get("bullpen_mu_away"),
+            "pred_total_runs": float(loc_tot[i]),
+            "total_line_consensus": total_line_vals[i] if has_odds else None,
+        }
+        gate_result = compute_bet_permission(str(gpk_val), ood_row)
 
         rows.append(_sanitize({
             "model_version":          MODEL_VERSION,
@@ -377,6 +439,9 @@ def _write_predictions_to_snowflake(
             "layer4_h2h_decision":       l4_h2h_decision,
             "layer4_h2h_rule":           l4_h2h_rule,
             "layer4_h2h_edge":           l4_h2h_edge,
+            "bullpen_z_score_home":      gate_result.get("bullpen_z_score_home"),
+            "bullpen_z_score_away":      gate_result.get("bullpen_z_score_away"),
+            "bullpen_signal_ood":        gate_result.get("bullpen_signal_ood", False),
         }))
 
     try:
@@ -393,6 +458,9 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_rule VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_edge FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS lineup_confirmed BOOLEAN")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_home FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_away FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_signal_ood BOOLEAN")
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
