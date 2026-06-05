@@ -9470,15 +9470,15 @@ A0.5 Push notifs              A0.6 Stripe billing
 **Overview:** The A1.1 audit found that `daily_ingestion_job` started more than 1 hour late on 4 of 12 audited days (28-May: +110m, 02-Jun: +445m, 03-Jun: +168m, 04-Jun: +510m). The 06-04 SLA miss was caused entirely by a late start — the job itself ran in ~20 minutes once it began. None of the other A1 stories prevent this failure mode; A1.5 only alerts after the fact. This story investigates root cause and adds a scheduler watchdog.
 
 **Tasks:**
-- [ ] Investigate root cause of late starts on the 4 affected days: check Dagster Cloud scheduler logs and agent logs for those run IDs (`a114d2af`, `8541e30a`, `0637f515`, `6cc6e718`) — distinguish between (a) schedule tick fired but agent was unavailable, (b) tick fired but code location failed to load, (c) tick did not fire (scheduler itself missed), (d) resource contention on the hybrid agent host
-- [ ] Check hybrid agent health on those dates: review Railway (or wherever the agent runs) deploy logs, CPU/memory at the time of the tick; confirm agent was alive at 12:00 UTC and the delay happened between tick and run start
-- [ ] If root cause is agent availability: add a startup probe or health-check restart policy to the agent deployment so it self-heals within 5 minutes of becoming unresponsive
-- [ ] If root cause is code location load time: profile `dagster code-server start` duration; if >2 minutes, investigate lazy-loading or reducing import overhead in `pipeline/__init__.py`
+- [x] Investigate root cause of late starts on the 4 affected days: confirmed schedule ticks fired at 12:00 UTC on all 4 dates; jobs started immediately (~2 min after tick); "late starts" in A1.1 audit were manual re-run timestamps, not scheduler delays — FM-A/B/C/D all ruled out; actual cause was transient op failures (`ingest_umpires_late` 5/28, signal gen 6/2 code bug, `dbt_pregame_odds_rebuild` test 6/3 code bug, `ingest_weather` Open-Meteo 502/timeout 6/4)
+- [x] Check hybrid agent health on those dates: agent was alive (6/4 job started 12:02:50 UTC, 2.5 min after tick); no agent availability issue
+- [x] If root cause is agent availability: N/A — ruled out; root cause is transient op failures; soft-fail pattern applied instead
+- [x] If root cause is code location load time: N/A — ruled out
 - [x] Add a fallback trigger: if `daily_model_predictions` has no `morning` rows for today by 13:30 UTC (90 minutes after scheduled start), a Dagster sensor auto-triggers a manual run of `daily_ingestion_job` — this is a belt-and-suspenders guard independent of root-cause fix
 - [x] Document root cause and fix in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` under a "Scheduler reliability" section
 
 **Acceptance criteria:**
-- [ ] Root cause of late-start incidents documented with evidence from Dagster/agent logs
+- [x] Root cause of late-start incidents documented with evidence from Dagster/agent logs — transient op failures (not scheduler/agent); see `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md` A1.6 section
 - [ ] Fallback trigger sensor deployed and tested: manually suppress the 12:00 UTC schedule tick, confirm sensor fires a run by 13:30 UTC
 - [ ] No FM-5 occurrences (job start >1h late) in the 7 days following deployment — verified against Dagster run history
 

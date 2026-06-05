@@ -123,7 +123,13 @@ def ingest_statsapi_schedule(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_weather(context):
-    _run_script(context, "ingest_weather.py", ["--date", _today()])
+    # Open-Meteo is an external free API that occasionally returns 502/timeout.
+    # Weather is not on the critical path to predict_today_morning — soft-fail
+    # so a transient outage doesn't require a full manual re-run of the job.
+    try:
+        _run_script(context, "ingest_weather.py", ["--date", _today()])
+    except Exception as e:
+        context.log.warning(f"Weather ingest failed (non-fatal, predictions will run without weather): {e}")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -383,7 +389,12 @@ def update_matchup_cell_posteriors_op(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_umpires_late(context):
     # Retry after dbt-build (~10–11 AM ET) when assignments are reliably posted.
-    _run_script(context, "ingest_umpires.py", ["--date", _today()])
+    # Soft-fail: umpire data is not on the critical path; a transient API error
+    # should not require a full manual re-run of the job.
+    try:
+        _run_script(context, "ingest_umpires.py", ["--date", _today()])
+    except Exception as e:
+        context.log.warning(f"Late umpire ingest failed (non-fatal): {e}")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

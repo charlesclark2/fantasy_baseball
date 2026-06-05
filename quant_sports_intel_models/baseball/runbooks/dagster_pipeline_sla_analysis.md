@@ -146,76 +146,24 @@ dbt_daily_build failed in 1 of 12 runs.
 
 ## A1.6 — Scheduler Reliability
 
-### FM-5 late-start incidents
+### Root cause: transient op failures, not scheduler or agent issues
 
-All 4 late-start runs eventually **succeeded** — the job body ran in ~20 minutes once it started. Root cause is in the time between the 12:00 UTC schedule tick and actual run start, not in op performance.
+**Confirmed 2026-06-04.** Schedule ticks fired at 12:00 UTC on all 4 affected dates ("1 run requested" in tick history). The 6/4 job started at `12:02:50 UTC` — the agent was alive and the scheduler worked correctly. FM-A, FM-B, FM-C, and FM-D are all ruled out.
 
-| Date | Run ID | Scheduled | Actual start | Delay |
-|------|---------|-----------|-------------|-------|
-| 2026-05-28 | `a114d2af` | 12:00 UTC | 13:50 UTC | +110m |
-| 2026-06-02 | `8541e30a` | 12:00 UTC | 19:25 UTC | +445m |
-| 2026-06-03 | `0637f515` | 12:00 UTC | 14:48 UTC | +168m |
-| 2026-06-04 | `6cc6e718` | 12:00 UTC | 20:30 UTC | +510m |
+The A1.1 audit used first `daily_model_predictions` insertion timestamp as "job start time." On failure days, those timestamps came from **manual re-runs** triggered hours after the original 12:00 UTC run failed. The audit misread re-run start times as scheduler delays.
 
-### Root cause investigation steps
+| Date | 12:00 UTC run | Actual failure | Manual re-run time |
+|------|--------------|----------------|-------------------|
+| 2026-05-28 | `a5715172` FAILED | `ingest_umpires_late` — transient API error | 13:50 UTC |
+| 2026-06-02 | `902858b5` FAILED | signal generation — code bug (fixed) | 19:25 UTC |
+| 2026-06-03 | `3dee7c7e` FAILED | `dbt_pregame_odds_rebuild` test — code bug (fixed) | 14:48 UTC |
+| 2026-06-04 | `fa76530b` FAILED | `ingest_weather` — Open-Meteo 502/timeout (all 9 fetches) | 20:30 UTC |
 
-**Step 1 — Confirm whether schedule ticks fired at 12:00 UTC**
+The 6/2 and 6/3 failures legitimately required code fixes before re-running. The 5/28 and 6/4 failures were pure transient external API outages that should not have killed the job.
 
-In Dagster Cloud UI:
-1. Automations → Schedules → `daily_ingestion_schedule`
-2. Click "Tick history"
-3. For each of the 4 dates, find the 12:00 UTC tick. Check its status:
-   - `SUCCESS` → tick fired and run was requested; delay is post-tick (FM-A or FM-C)
-   - `SKIPPED` → tick fired but was suppressed (paused schedule or run already in flight)
-   - **missing entirely** → scheduler miss (FM-B); file a Dagster Cloud support ticket
+### Fix: soft-fail `ingest_weather` and `ingest_umpires_late` (deployed — A1.6)
 
-**Step 2 — Measure tick-to-run-start gap**
-
-If a tick shows `SUCCESS`, click it to expand. It will show the "Run ID" that was created and the exact timestamp the run transitioned from `QUEUED` to `STARTED`. If QUEUED→STARTED gap is:
-- **>5 min**: agent was unavailable to dequeue the run → FM-A
-- **<1 min**: agent was alive; look at first-op start time (FM-C or FM-D)
-
-**Step 3 — Check agent health on those dates (Railway)**
-
-1. Open Railway → your Dagster agent service → Deployments tab
-2. Filter around 11:45–12:15 UTC for each affected date
-3. Look for:
-   - Container restart events (OOM kill = FM-A resource issue)
-   - Deploy events that caused downtime during the tick window
-   - Health-check failure logs
-4. Check CPU/memory metrics at 12:00 UTC on each date
-
-**Step 4 — Code location load time (if FM-C suspected)**
-
-Only relevant if tick fired and QUEUED→STARTED was <1 min but first op was slow. Time locally:
-```bash
-time python -c "import pipeline"
-```
-If >30 seconds, profile with:
-```bash
-python -X importtime -c "import pipeline" 2>&1 | sort -t= -k2 -rn | head -20
-```
-
-### FM classification (fill in after steps above)
-
-| Run ID | Tick fired? | QUEUED→STARTED | FM class | Evidence | Action |
-|--------|------------|----------------|----------|----------|--------|
-| `a114d2af` | | | | | |
-| `8541e30a` | | | | | |
-| `0637f515` | | | | | |
-| `6cc6e718` | | | | | |
-
-### Fix: Railway agent self-heal policy (apply if FM-A confirmed)
-
-Option A — Health-check restart (recommended):
-1. Railway → agent service → Settings → Health Checks
-2. Set: Interval=60s, Timeout=10s, Unhealthy threshold=3 → restart
-
-Option B — Pre-emptive daily restart:
-Add a Railway cron that restarts the agent at 11:55 UTC daily (5 min before the Dagster schedule tick):
-```
-55 11 * * * railway restart <service-name>
-```
+`ingest_umpires_early` already catches exceptions and logs a warning — the same pattern is now applied to `ingest_weather` and `ingest_umpires_late` in `pipeline/ops/daily_ingestion_ops.py`. Weather data and umpire assignments are not on the critical path to `predict_today_morning`; a transient API failure now logs a warning and lets the job continue rather than requiring a full manual re-run.
 
 ### Fix: Watchdog sensor (deployed — A1.6)
 
