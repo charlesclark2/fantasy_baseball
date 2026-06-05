@@ -7,7 +7,7 @@ const geist = Geist({ subsets: ['latin'] })
 const geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Diamond Edge - Baseball Betting Analytics',
+  title: 'Credence Sports - Bayesian Baseball Analytics',
   description: 'AI-powered baseball betting picks and analytics',
   icons: {
     icon: [
