@@ -375,6 +375,133 @@ def _section_timing(df: pd.DataFrame) -> tuple[str, dict]:
 
 
 # ---------------------------------------------------------------------------
+# Section 8 — Pipeline health (A1.5)
+# ---------------------------------------------------------------------------
+
+_PIPELINE_HEALTH_QUERY = """
+WITH games_per_day AS (
+    SELECT official_date,
+           MIN(CONVERT_TIMEZONE('UTC', game_date)) AS earliest_first_pitch_utc,
+           COUNT(*)                                AS n_scheduled
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE game_type = 'R'
+      AND official_date >= DATEADD('day', -7, CURRENT_DATE())
+    GROUP BY official_date
+),
+ps AS (
+    SELECT run_date,
+           predict_today_complete_ts,
+           lineup_confirmed_complete_ts,
+           pipeline_status,
+           n_games_scored,
+           signal_completeness_score,
+           job_start_ts
+    FROM baseball_data.betting_ml.pipeline_status
+    WHERE run_date >= DATEADD('day', -7, CURRENT_DATE())
+)
+SELECT
+    g.official_date,
+    g.n_scheduled,
+    g.earliest_first_pitch_utc,
+    ps.predict_today_complete_ts,
+    ps.lineup_confirmed_complete_ts,
+    ps.pipeline_status,
+    ps.n_games_scored,
+    ps.signal_completeness_score,
+    DATEDIFF('minute', ps.predict_today_complete_ts,
+             g.earliest_first_pitch_utc)                    AS minutes_before_first_pitch
+FROM games_per_day g
+LEFT JOIN ps ON ps.run_date = g.official_date
+ORDER BY g.official_date DESC
+"""
+
+
+def _load_pipeline_health() -> pd.DataFrame:
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(_PIPELINE_HEALTH_QUERY)
+        cols = [d[0].lower() for d in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    df = pd.DataFrame(rows, columns=cols)
+    df["official_date"] = pd.to_datetime(df["official_date"]).dt.date
+    for col in ("n_scheduled", "n_games_scored"):
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+    df["signal_completeness_score"] = pd.to_numeric(
+        df["signal_completeness_score"], errors="coerce"
+    )
+    df["minutes_before_first_pitch"] = pd.to_numeric(
+        df["minutes_before_first_pitch"], errors="coerce"
+    )
+    return df
+
+
+def _section_pipeline_health() -> tuple[str, dict]:
+    """7-day pipeline SLA health report."""
+    try:
+        df = _load_pipeline_health()
+    except Exception as exc:
+        return f"### 8. Pipeline Health (last 7 days)\n\n_Could not load: {exc}_\n", {}
+
+    if df.empty:
+        return "### 8. Pipeline Health (last 7 days)\n\n_No pipeline_status rows in last 7 days._\n", {}
+
+    n_days = len(df)
+    sla_threshold = 30  # minutes before first pitch
+
+    sla_met = int(
+        ((df["minutes_before_first_pitch"] >= sla_threshold) &
+         (df["pipeline_status"] == "complete")).sum()
+    )
+    sla_pct = sla_met / n_days if n_days > 0 else 0.0
+
+    complete_days = int((df["pipeline_status"] == "complete").sum())
+    low_signal_days = int((df["signal_completeness_score"] < 0.80).sum())
+    short_scored_days = int(
+        (df["n_games_scored"] < df["n_scheduled"]).sum()
+    )
+
+    runtimes = df["minutes_before_first_pitch"].dropna()
+    mean_lead = float(runtimes.mean()) if len(runtimes) > 0 else float("nan")
+
+    lines = [
+        "### 8. Pipeline Health (last 7 days)",
+        "",
+        f"| Metric | Value |",
+        f"|--------|-------|",
+        f"| Days audited | {n_days} |",
+        f"| SLA compliance (≥30 min before first pitch) | **{sla_met}/{n_days} ({sla_pct:.0%})** |",
+        f"| Days pipeline_status = complete | {complete_days}/{n_days} |",
+        f"| Days signal_completeness < 0.80 | {low_signal_days} |",
+        f"| Days n_games_scored < scheduled | {short_scored_days} |",
+        f"| Mean prediction lead (min before first pitch) | {mean_lead:.0f} min |",
+        "",
+        "| Date | Status | Scored/Sched | Signal | Lead (min) | SLA |",
+        "|------|--------|-------------|--------|-----------|-----|",
+    ]
+    for _, row in df.iterrows():
+        status = row["pipeline_status"] or "missing"
+        scored = f"{row['n_games_scored']}/{row['n_scheduled']}"
+        sig = f"{row['signal_completeness_score']:.2f}" if pd.notna(row["signal_completeness_score"]) else "—"
+        lead = f"{row['minutes_before_first_pitch']:.0f}" if pd.notna(row["minutes_before_first_pitch"]) else "—"
+        sla_icon = "✅" if (pd.notna(row["minutes_before_first_pitch"]) and
+                            row["minutes_before_first_pitch"] >= sla_threshold and
+                            status == "complete") else "❌"
+        lines.append(f"| {row['official_date']} | {status} | {scored} | {sig} | {lead} | {sla_icon} |")
+
+    metrics = {
+        "pipeline_sla_pct_7d": round(sla_pct, 4),
+        "pipeline_complete_days_7d": complete_days,
+        "pipeline_low_signal_days_7d": low_signal_days,
+        "pipeline_short_scored_days_7d": short_scored_days,
+        "pipeline_mean_lead_min_7d": round(mean_lead, 1) if not np.isnan(mean_lead) else 0.0,
+    }
+    return "\n".join(lines), metrics
+
+
+# ---------------------------------------------------------------------------
 # Log writing
 # ---------------------------------------------------------------------------
 
@@ -388,6 +515,7 @@ def _build_entry(df: pd.DataFrame, run_date: date) -> tuple[str, dict]:
         _section_bookmaker_disagreement(df),
         _section_public_betting(df),
         _section_timing(df),
+        _section_pipeline_health(),
     ]
 
     header = (
