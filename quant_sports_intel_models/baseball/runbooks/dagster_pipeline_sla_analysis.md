@@ -204,3 +204,94 @@ Based on this audit, the following stories are most urgent:
 | 2026-06-02 | 19:15:35 UTC | 19:46:31 UTC | 8541e30a… | SUCCESS |
 | 2026-06-03 | 14:51:24 UTC | 16:46:44 UTC | 0637f515… | SUCCESS |
 | 2026-06-04 | 20:00:54 UTC | 20:46:57 UTC | 6cc6e718… | SUCCESS |
+
+---
+
+## A1.5 — Manual Intervention Runbook
+
+This section is written for non-developers (beta testers, external contributors). No Dagster Cloud access is required for most steps.
+
+---
+
+### Step 1 — Check pipeline status without Dagster
+
+**Option A: Streamlit app status banner**
+Open the Diamond Edge app. If a yellow/red banner appears at the top of the page, the pipeline did not complete successfully. The banner shows `pipeline_status`, games scored, and whether lineup predictions are available.
+
+**Option B: Quick SQL check (if you have Snowflake access)**
+```sql
+SELECT run_date, pipeline_status, n_games_scored, lineup_confirmed_complete_ts,
+       predict_today_complete_ts, signal_completeness_score
+FROM baseball_data.betting_ml.pipeline_status
+WHERE run_date = CURRENT_DATE()
+ORDER BY run_date DESC;
+```
+- `pipeline_status = 'complete'` → predictions are available
+- `pipeline_status = 'partial'` → some games may be missing predictions
+- `pipeline_status = 'failed'` or no row → pipeline did not run
+
+---
+
+### Step 2 — Verify predictions exist for today's games
+
+```sql
+SELECT score_date, prediction_type, COUNT(DISTINCT game_pk) AS games
+FROM baseball_data.betting_ml.daily_model_predictions
+WHERE score_date = CURRENT_DATE()
+GROUP BY score_date, prediction_type;
+```
+Expect rows for `prediction_type = 'morning'` (and `post_lineup` if lineups are confirmed).
+If no rows: the pipeline failed and needs a manual re-run (Step 4).
+
+---
+
+### Step 3 — Interpret the `pregame_alert_sensor` email
+
+When the `pregame_alert_sensor` fires, you receive an email from Dagster Cloud with subject "Sensor tick failed: pregame_alert_sensor". The body contains:
+
+```
+⚠️ Diamond Edge pipeline alert — YYYY-MM-DD:
+pipeline_status=<status>, n_games_scored=<n>/<total>,
+lineup_confirmed=<true/false>.
+Check Dagster Cloud for details.
+```
+
+| `pipeline_status` | Action |
+|---|---|
+| `missing` | Pipeline never started — trigger manual run (Step 4) |
+| `failed` | Pipeline started but failed — check Dagster Cloud for the failing op (Step 4) |
+| `partial` | Pipeline ran but fewer games scored than expected — may self-resolve; check app |
+| `complete`, `lineup_confirmed=false` | Morning predictions present; lineup re-run not yet triggered — monitor, usually self-resolves within 1–2 hours |
+
+---
+
+### Step 4 — Trigger a manual re-run from Dagster Cloud
+
+> Requires Dagster Cloud access (admin). If you are a beta tester without access, contact the admin.
+
+1. Log into Dagster Cloud → **Runs** tab
+2. Find the most recent `daily_ingestion_job` run. If it shows `FAILURE`, click into it to identify the failing op.
+3. If the failure is a **transient error** (API timeout, Snowflake connection blip):
+   - Click **Re-execute** on the failed run
+   - Select "Re-execute from failure" to skip already-completed ops
+4. If the failure requires a **code fix**: fix the code, deploy, then trigger a fresh run:
+   - Automations → Schedules → `daily_ingestion_schedule` → **Launch run** (manual trigger)
+5. Monitor the new run. Once it completes, re-run the SQL in Step 2 to confirm predictions loaded.
+
+---
+
+### Step 5 — After a successful re-run
+
+Once predictions are confirmed:
+1. Refresh the Streamlit app — the status banner should clear.
+2. If beta testers were waiting, notify them that predictions are now available.
+3. Note the incident date and cause in the table in the "A1.6 Scheduler Reliability" section above.
+
+---
+
+### When to escalate
+
+Escalate to the admin if:
+- The re-run also fails
+- The failure is in `predict_today_morning`, `dbt_daily_build`, or a sequential posterior op
+- `pipeline_status` shows `failed` and `signal_completeness_score < 0.60`

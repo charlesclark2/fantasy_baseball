@@ -1,6 +1,7 @@
 from pipeline.sensors.lineup_monitor_sensor import lineup_monitor_sensor
 from pipeline.sensors.morning_watchdog_sensor import morning_watchdog_sensor
+from pipeline.sensors.pregame_alert_sensor import pregame_alert_sensor
 from pipeline.sensors.pregame_snapshot_sensor import pregame_snapshot_sensor
 from pipeline.sensors.clv_alert_sensor import clv_alert_sensor
 
-all_sensors = [lineup_monitor_sensor, morning_watchdog_sensor, pregame_snapshot_sensor, clv_alert_sensor]
+all_sensors = [lineup_monitor_sensor, morning_watchdog_sensor, pregame_alert_sensor, pregame_snapshot_sensor, clv_alert_sensor]

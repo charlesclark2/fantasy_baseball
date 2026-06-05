@@ -9453,15 +9453,15 @@ A0.5 Push notifs              A0.6 Stripe billing
 **Overview:** Add operational monitoring so pipeline failures are caught immediately rather than discovered when a beta tester asks why there are no picks. Currently there is no alerting when the daily prediction pipeline fails or produces incomplete results.
 
 **Tasks:**
-- [ ] Add a Dagster sensor that runs 45 minutes before the earliest scheduled game each day: queries `mart_pipeline_status` for today; if `pipeline_status != complete` or `lineup_confirmed_complete_ts IS NULL`, fires an alert
-- [ ] Alert channel: email to the admin address configured in Dagster Cloud; message format: "⚠️ Diamond Edge pipeline alert — [date]: pipeline_status=[status], n_games_scored=[n]/[total_scheduled], lineup_confirmed=[true/false]. Check Dagster Cloud for details."
-- [ ] Add a weekly pipeline health report to `compute_clv_monitoring.py`: for the past 7 days, report SLA compliance rate (days where lineup_confirmed predictions were available 30+ minutes before first pitch), mean pipeline runtime, any days with `signal_completeness_score < 0.80`, and any days where `n_games_scored < total_scheduled_games`
-- [ ] Document the manual intervention runbook in `runbooks/dagster_pipeline_sla_analysis.md`: what to do when the 45-minute alert fires, how to trigger a manual `predict_today` re-run from the Dagster Cloud UI, how to verify predictions are available before alerting beta testers
+- [x] Add a Dagster sensor that runs 45 minutes before the earliest scheduled game each day: queries `mart_pipeline_status` for today; if `pipeline_status != complete` or `lineup_confirmed_complete_ts IS NULL`, fires an alert
+- [x] Alert channel: email to the admin address configured in Dagster Cloud; message format: "⚠️ Diamond Edge pipeline alert — [date]: pipeline_status=[status], n_games_scored=[n]/[total_scheduled], lineup_confirmed=[true/false]. Check Dagster Cloud for details."
+- [x] Add a weekly pipeline health report to `compute_clv_monitoring.py`: for the past 7 days, report SLA compliance rate (days where lineup_confirmed predictions were available 30+ minutes before first pitch), mean pipeline runtime, any days with `signal_completeness_score < 0.80`, and any days where `n_games_scored < total_scheduled_games`
+- [x] Document the manual intervention runbook in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md`: what to do when the 45-minute alert fires, how to trigger a manual `predict_today` re-run from the Dagster Cloud UI, how to verify predictions are available before alerting beta testers
 
 **Acceptance criteria:**
 - [ ] Dagster sensor fires correctly when tested by manually setting `pipeline_status` to `failed` 45 minutes before a scheduled game — email received within 2 minutes
 - [ ] Weekly health report appears in `clv_monitoring_log.md` with SLA compliance rate for the prior 7 days
-- [ ] Manual intervention runbook documented — a non-developer (beta tester or external contributor) could follow it to verify pipeline status without access to Dagster Cloud
+- [x] Manual intervention runbook documented — a non-developer (beta tester or external contributor) could follow it to verify pipeline status without access to Dagster Cloud
 
 ---
 
