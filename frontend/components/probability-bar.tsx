@@ -68,21 +68,23 @@ export function ProbabilityBar({
         </div>
       )}
 
-      {/* Above-bar labels: "Model" and "Market" */}
-      <div className="relative h-5 mb-1 text-[10px]">
-        <span
-          className="absolute -translate-x-1/2 text-white font-semibold"
-          style={{ left: toPos(modelProb) }}
-        >
-          Model
-        </span>
-        <span
-          className="absolute -translate-x-1/2 text-gray-500"
-          style={{ left: toPos(marketProb) }}
-        >
-          Market
-        </span>
-      </div>
+      {/* Above-bar labels: "Model" and "Market" — only when showLabels is true */}
+      {showLabels && (
+        <div className="relative h-5 mb-1 text-[10px]">
+          <span
+            className="absolute -translate-x-1/2 text-white font-semibold"
+            style={{ left: toPos(modelProb) }}
+          >
+            Model
+          </span>
+          <span
+            className="absolute -translate-x-1/2 text-gray-500"
+            style={{ left: toPos(marketProb) }}
+          >
+            Market
+          </span>
+        </div>
+      )}
 
       {/* Bar track */}
       <div className="relative h-3 w-full rounded-full bg-[#262626]">
@@ -146,10 +148,12 @@ export function ProbabilityBar({
       )}
 
       {/* Axis endpoints */}
-      <div className="mt-2 flex justify-between text-[9px] text-gray-600">
-        <span>{fmt(rangeMin)}</span>
-        <span>{fmt(rangeMax)}</span>
-      </div>
+      {showLabels && (
+        <div className="mt-2 flex justify-between text-[9px] text-gray-600">
+          <span>{fmt(rangeMin)}</span>
+          <span>{fmt(rangeMax)}</span>
+        </div>
+      )}
     </div>
   )
 }
