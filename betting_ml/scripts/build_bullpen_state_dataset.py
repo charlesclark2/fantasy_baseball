@@ -1,5 +1,5 @@
 """
-build_bullpen_state_dataset.py — Epic 6.1
+build_bullpen_state_dataset.py — Epic 6.1 / 16B.2
 
 Assembles the training dataset for the Epic 6 bullpen state model.
 
@@ -21,6 +21,10 @@ Features (all pre-game, no leakage):
   EB posteriors — mart_bullpen_effectiveness (via Epic 6A.3):
     eb_bullpen_xwoba, eb_bullpen_uncertainty, eb_bullpen_coverage_pct
 
+  Sequential posterior (Epic 16B.2) — team_sequential_posteriors:
+    team_sequential_bullpen_xwoba  (as-of-date: latest game_date < scoring_date)
+    posterior_source               (1 if sequential posterior available, else 0)
+
 Target (post-game, computed from pitch data):
   actual_bullpen_xwoba — game-level xwOBA against for the team's relievers
   in the current game. Used as the training target for Story 6.3 (bullpen
@@ -31,6 +35,9 @@ Note: the bullpen availability index (Story 6.2) will be computed from
 workload columns and merged into this dataset before 6.3 training.
 
 Training window: 2016+ (EB posterior coverage starts 2016).
+  Epic 16B.2 sequential retrain: use --min-year 2021 (sequential posteriors
+  only backfilled to 2021+; pre-2021 rows will have NULL team_sequential_bullpen_xwoba).
+
 Requires: dbtf build --select mart_bullpen_workload --full-refresh
           (to pick up the new bullpen_ip_prev_3d column from 6.1)
           dbtf build --select feature_pregame_team_features
@@ -146,6 +153,23 @@ effectiveness AS (
         eb_bullpen_coverage_pct
     FROM baseball_data.betting.mart_bullpen_effectiveness
     WHERE game_year >= {min_year}
+),
+
+-- ── Sequential bullpen posterior — as-of-date via interval join ─────────────
+-- Snowflake does not support LEFT JOIN LATERAL with this correlated subquery
+-- type. Window-function workaround: for each (team, game_date) posterior row
+-- compute the validity interval [valid_from, valid_until]. A game on date G
+-- uses the posterior where valid_from < G <= valid_until (valid_from is
+-- post-game so strictly-before is leakage-safe; valid_until is also post-game,
+-- so the game played on that date may still use the prior-period posterior).
+seq_intervals AS (
+    SELECT
+        team,
+        game_date                                                              AS valid_from,
+        LEAD(game_date) OVER (PARTITION BY team ORDER BY game_date)           AS valid_until,
+        posterior_mu
+    FROM baseball_data.betting.team_sequential_posteriors
+    WHERE metric = 'bullpen_xwoba'
 )
 
 SELECT
@@ -190,7 +214,13 @@ SELECT
     -- ── Empirical Bayes (Epic 6A.3) ──────────────────────────────────────────
     e.eb_bullpen_xwoba,
     e.eb_bullpen_uncertainty,
-    e.eb_bullpen_coverage_pct
+    e.eb_bullpen_coverage_pct,
+
+    -- ── Sequential bullpen posterior (Epic 16B.2) ───────────────────────────
+    -- As-of-date: latest posterior updated BEFORE this game (leakage-safe).
+    -- NULL for pre-2021 games and season openers before first observation.
+    si.posterior_mu                                           AS team_sequential_bullpen_xwoba,
+    CASE WHEN si.posterior_mu IS NOT NULL THEN 1 ELSE 0 END  AS posterior_source
 
 FROM actual_xwoba ax
 LEFT JOIN workload w
@@ -199,6 +229,10 @@ LEFT JOIN workload w
 LEFT JOIN effectiveness e
     ON  ax.game_pk       = e.game_pk
     AND ax.pitching_team = e.pitching_team
+LEFT JOIN seq_intervals si
+    ON  si.team      = ax.pitching_team
+    AND ax.game_date > si.valid_from
+    AND (si.valid_until IS NULL OR ax.game_date <= si.valid_until)
 
 ORDER BY ax.game_date, ax.game_pk, ax.pitching_team
 """
@@ -210,6 +244,7 @@ def _print_coverage(df: pd.DataFrame) -> None:
     print(f"  target actual_bullpen_xwoba: mean={df['actual_bullpen_xwoba'].mean():.3f}, "
           f"std={df['actual_bullpen_xwoba'].std():.3f}")
 
+    has_seq = "team_sequential_bullpen_xwoba" in df.columns
     print("\n  Coverage by year:")
     for yr, grp in df.groupby("game_year"):
         n = len(grp)
@@ -217,9 +252,11 @@ def _print_coverage(df: pd.DataFrame) -> None:
         ip3d_fill = grp["bullpen_ip_prev_3d"].notna().mean()
         xwoba30_fill = grp["xwoba_against_30d"].notna().mean()
         target_fill = grp["actual_bullpen_xwoba"].notna().mean()
+        seq_fill = grp["team_sequential_bullpen_xwoba"].notna().mean() if has_seq else float("nan")
+        seq_str = f"  seq={seq_fill:.3f}" if has_seq else ""
         print(f"    {int(yr)}: n={n:4d}  eb={eb_fill:.3f}  "
               f"ip_3d={ip3d_fill:.3f}  xwoba_30d={xwoba30_fill:.3f}  "
-              f"target={target_fill:.3f}")
+              f"target={target_fill:.3f}{seq_str}")
 
     print("\n  Null rates for key columns:")
     key_cols = [
@@ -227,8 +264,11 @@ def _print_coverage(df: pd.DataFrame) -> None:
         "eb_bullpen_xwoba", "eb_bullpen_uncertainty", "eb_bullpen_coverage_pct",
         "bullpen_ip_prev_1d", "bullpen_ip_prev_2d", "bullpen_ip_prev_3d",
         "xwoba_against_14d", "xwoba_against_30d",
+        "team_sequential_bullpen_xwoba",
     ]
     for col in key_cols:
+        if col not in df.columns:
+            continue
         null_pct = df[col].isna().mean() * 100
         print(f"    {col:<35s} {null_pct:5.1f}% null")
 

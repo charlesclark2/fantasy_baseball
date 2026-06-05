@@ -109,7 +109,9 @@ _LGBM_LR        = 0.05
 _LGBM_LEAVES    = 31
 
 # Candidate B benchmark: Candidate A tuned CV NLL (recent 5 folds) — B must beat this
-_CAND_B_BENCHMARK_NLL = 1.8940
+_CAND_B_BENCHMARK_NLL  = 1.8940
+_NONSEQ_CHAMPION_NLL   = 1.8852   # Candidate B (promoted 2026-05-31); recent-5-fold on 2016+
+_SEQ_MIN_YEAR          = 2021     # D2 locked: sequential posteriors backfilled 2021+ only
 
 _IP_SIGNALS_TABLE = "baseball_data.betting_features.starter_ip_signals"
 
@@ -141,6 +143,15 @@ FEATURE_COLS = [
     "high_leverage_used_prev_2d",
     "closer_used_prev_1d",
 ]
+
+# Epic 16B.2: sequential enrichment adds 2 features (restricted to 2021+)
+FEATURE_COLS_SEQ = FEATURE_COLS + [
+    "team_sequential_bullpen_xwoba",
+    "posterior_source",
+]
+
+_ARTIFACT_PATH_SEQ  = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "bullpen_v2_seq.pkl"
+_ARTIFACT_S3_URI_SEQ = "s3://baseball-betting-ml-artifacts/sub_models/bullpen_v2_seq.pkl"
 
 
 # ── Snowflake data fetch ───────────────────────────────────────────────────────
@@ -253,19 +264,21 @@ def _prepare_fold(
     df: pd.DataFrame,
     train_seasons: list[int],
     test_season: int,
+    feature_cols: list[str] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, dict]:
     """Split data into train/test arrays; median-impute from training fold."""
+    cols = feature_cols if feature_cols is not None else FEATURE_COLS
     tr = df[df[_YEAR_COL].isin(train_seasons)].copy()
     te = df[df[_YEAR_COL] == test_season].copy()
 
-    impute_vals = {col: float(tr[col].median()) for col in FEATURE_COLS}
-    for col in FEATURE_COLS:
+    impute_vals = {col: float(tr[col].median()) for col in cols}
+    for col in cols:
         tr[col] = tr[col].fillna(impute_vals[col])
         te[col] = te[col].fillna(impute_vals[col])
 
-    X_tr = tr[FEATURE_COLS].to_numpy(dtype=float)
+    X_tr = tr[cols].to_numpy(dtype=float)
     y_tr = tr[_TARGET_COL].to_numpy(dtype=float)
-    X_te = te[FEATURE_COLS].to_numpy(dtype=float)
+    X_te = te[cols].to_numpy(dtype=float)
     y_te = te[_TARGET_COL].to_numpy(dtype=float)
 
     return X_tr, y_tr, X_te, y_te, impute_vals
@@ -495,12 +508,14 @@ def _fetch_starter_ip_p20(min_year: int) -> pd.DataFrame:
 def _walk_forward_cv_candidate_b(
     df: pd.DataFrame,
     tuned_params: dict,
+    feature_cols: list[str] | None = None,
 ) -> tuple[float, float, float, float, list[dict]]:
     """Candidate B recent-5-fold CV: same LightGBM as A, plus IP-depth exposure scaling.
 
     mu_adj = mu_base × (27 - starter_ip_p20_outs) / fold_avg_bullpen_outs
     Falls back to scale=1.0 for rows where p20 is null.
     Matches the _OPTUNA_RECENT_FOLDS=5 window used to produce the 1.8940 A benchmark.
+    feature_cols: override the global FEATURE_COLS (used by 16B.2 seq comparison).
     """
     from lightgbm import LGBMRegressor
 
@@ -513,18 +528,20 @@ def _walk_forward_cv_candidate_b(
 
     fold_records: list[dict] = []
 
+    cols = feature_cols if feature_cols is not None else FEATURE_COLS
+
     for train_seasons, test_season in folds:
         tr_df = df[df[_YEAR_COL].isin(train_seasons)].copy()
         te_df = df[df[_YEAR_COL] == test_season].copy()
 
-        impute_vals = {col: float(tr_df[col].median()) for col in FEATURE_COLS}
-        for col in FEATURE_COLS:
+        impute_vals = {col: float(tr_df[col].median()) for col in cols}
+        for col in cols:
             tr_df[col] = tr_df[col].fillna(impute_vals[col])
             te_df[col] = te_df[col].fillna(impute_vals[col])
 
-        X_tr = tr_df[FEATURE_COLS].to_numpy(dtype=float)
+        X_tr = tr_df[cols].to_numpy(dtype=float)
         y_tr = tr_df[_TARGET_COL].to_numpy(dtype=float)
-        X_te = te_df[FEATURE_COLS].to_numpy(dtype=float)
+        X_te = te_df[cols].to_numpy(dtype=float)
         y_te = te_df[_TARGET_COL].to_numpy(dtype=float)
 
         p20_tr = tr_df["starter_ip_p20_outs"].to_numpy(dtype=float)
@@ -903,7 +920,7 @@ def _print_subset_eval(subset: dict) -> None:
 
 # ── Optuna tuning ─────────────────────────────────────────────────────────────
 
-def _make_optuna_objective(df: pd.DataFrame):
+def _make_optuna_objective(df: pd.DataFrame, feature_cols: list[str] | None = None):
     seasons = sorted(df[_YEAR_COL].unique())
     n_folds = min(_OPTUNA_RECENT_FOLDS, len(seasons) - 1)
     folds   = [(seasons[:i], seasons[i]) for i in range(len(seasons) - n_folds, len(seasons))]
@@ -919,7 +936,9 @@ def _make_optuna_objective(df: pd.DataFrame):
 
         fold_nlls = []
         for train_seasons, test_season in folds:
-            X_tr, y_tr, X_te, y_te, _ = _prepare_fold(df, list(train_seasons), test_season)
+            X_tr, y_tr, X_te, y_te, _ = _prepare_fold(
+                df, list(train_seasons), test_season, feature_cols=feature_cols
+            )
             lgb = LGBMRegressor(
                 n_estimators=n_est, learning_rate=lr, num_leaves=leaves,
                 min_child_samples=min_cs, subsample=sub, colsample_bytree=colsub,
@@ -935,11 +954,15 @@ def _make_optuna_objective(df: pd.DataFrame):
     return objective
 
 
-def _tune_winner(df: pd.DataFrame, initial_nll: float) -> tuple[dict, float]:
+def _tune_winner(
+    df: pd.DataFrame,
+    initial_nll: float,
+    feature_cols: list[str] | None = None,
+) -> tuple[dict, float]:
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    objective = _make_optuna_objective(df)
+    objective = _make_optuna_objective(df, feature_cols=feature_cols)
     study = optuna.create_study(
         direction="minimize",
         sampler=optuna.samplers.TPESampler(seed=_OPTUNA_SEED),
@@ -1296,6 +1319,228 @@ def train(promote: bool = True, min_year: int = _MIN_YEAR_DEFAULT) -> str:
     return mlflow_run_id
 
 
+# ── Epic 16B.2 — sequential challenger comparison ─────────────────────────────
+
+def _run_seq_comparison(promote: bool) -> None:
+    """Epic 16B.2: compare nonseq champion vs sequential challenger on 2021+ rows.
+
+    Both candidates use Candidate B architecture (LightGBM + starter-IP exposure).
+    Challenger adds team_sequential_bullpen_xwoba + posterior_source (2 features).
+    Training restricted to 2021+ (D2 locked: no sequential backfill pre-2021).
+    Head-to-head on common 2021+ rows; NLL primary + calib_80 gate.
+    Winner Optuna-tuned; registry updated only on seq promotion (both gates pass).
+    """
+    print(f"\n{'='*72}")
+    print("Epic 16B.2 — bullpen_v2 sequential challenger comparison")
+    print(f"  nonseq champion NLL benchmark: {_NONSEQ_CHAMPION_NLL} (Cand B, 2016+, recent 5 folds)")
+    print(f"  sequential challenger: +team_sequential_bullpen_xwoba +posterior_source")
+    print(f"  common evaluation window: {_SEQ_MIN_YEAR}+")
+    print(f"{'='*72}")
+
+    if not _ARTIFACT_PATH.exists():
+        print(f"ERROR: {_ARTIFACT_PATH} not found. Run without --seq first to build champion.")
+        import sys; sys.exit(1)
+
+    champion_artifact = joblib.load(_ARTIFACT_PATH)
+    tuned_params = champion_artifact.get("tuned_params", {})
+    if not tuned_params:
+        print("WARNING: No tuned_params in champion pkl — using default LightGBM params")
+        tuned_params = {
+            "n_estimators":      _LGBM_N_EST,
+            "learning_rate":     _LGBM_LR,
+            "num_leaves":        _LGBM_LEAVES,
+            "min_child_samples": 20,
+        }
+    print(f"  Champion tuned params (shared for fair comparison): {tuned_params}")
+
+    # Load parquet + Snowflake target, restrict to 2021+
+    df_base = _load_data(_SEQ_MIN_YEAR)
+    ip_df   = _fetch_starter_ip_p20(_SEQ_MIN_YEAR)
+
+    df = df_base.merge(
+        ip_df[["game_pk", "pitching_team", "starter_ip_p20_outs"]],
+        on=["game_pk", "pitching_team"],
+        how="left",
+    )
+
+    # Seq df: drop rows where sequential posterior is null (cold starts / pre-seq backfill gap)
+    if "team_sequential_bullpen_xwoba" not in df.columns:
+        print("ERROR: team_sequential_bullpen_xwoba not in parquet. "
+              "Rebuild with: uv run python betting_ml/scripts/build_bullpen_state_dataset.py --min-year 2021")
+        import sys; sys.exit(1)
+
+    df_seq = df[df["team_sequential_bullpen_xwoba"].notna()].copy()
+    df_nonseq = df.copy()  # keep all 2021+ rows; seq cols ignored
+
+    n_nonseq = len(df_nonseq)
+    n_seq    = len(df_seq)
+    n_dropped = n_nonseq - n_seq
+    print(f"\n  Dataset: nonseq={n_nonseq:,} rows  seq={n_seq:,} rows  "
+          f"dropped (null seq)={n_dropped:,} ({n_dropped/n_nonseq:.1%})")
+
+    mlflow.set_experiment("bullpen_6D")
+    get_or_create_experiment("bullpen_6D")
+
+    with mlflow.start_run(run_name=f"16B2_seq_comparison_{date.today()}") as mlflow_run:
+        mlflow_run_id = mlflow_run.info.run_id
+
+        mlflow.log_params({
+            "story":                 "16B.2",
+            "seq_min_year":          _SEQ_MIN_YEAR,
+            "n_nonseq_rows":         n_nonseq,
+            "n_seq_rows":            n_seq,
+            "n_dropped_null_seq":    n_dropped,
+            "nonseq_benchmark_nll":  _NONSEQ_CHAMPION_NLL,
+            "seq_n_features":        len(FEATURE_COLS_SEQ),
+            "nonseq_n_features":     len(FEATURE_COLS),
+            **{f"shared_{k}": v for k, v in tuned_params.items()},
+        })
+
+        # ── Nonseq champion on 2021+ rows ─────────────────────────────────────
+        print(f"\n[1/2] Nonseq champion — Candidate B on {n_nonseq:,} rows ({_SEQ_MIN_YEAR}+), "
+              f"{len(FEATURE_COLS)} features")
+        ns_nll, ns_mae, ns_calib, ns_r, ns_folds = _walk_forward_cv_candidate_b(
+            df_nonseq, tuned_params, feature_cols=FEATURE_COLS
+        )
+        mlflow.log_metrics({
+            "nonseq_cv_nll":    ns_nll,
+            "nonseq_cv_mae":    ns_mae,
+            "nonseq_calib_80":  ns_calib,
+            "nonseq_mean_r":    ns_r,
+        })
+        print(f"  Nonseq NLL={ns_nll:.4f}  MAE={ns_mae:.4f}  calib_80={ns_calib:.4f}  r={ns_r:.4f}")
+
+        # ── Sequential challenger on 2021+ rows (null seq rows dropped) ────────
+        print(f"\n[2/2] Sequential challenger — Candidate B on {n_seq:,} rows, "
+              f"{len(FEATURE_COLS_SEQ)} features (+seq)")
+        sq_nll, sq_mae, sq_calib, sq_r, sq_folds = _walk_forward_cv_candidate_b(
+            df_seq, tuned_params, feature_cols=FEATURE_COLS_SEQ
+        )
+        mlflow.log_metrics({
+            "seq_cv_nll":    sq_nll,
+            "seq_cv_mae":    sq_mae,
+            "seq_calib_80":  sq_calib,
+            "seq_mean_r":    sq_r,
+        })
+        print(f"  Seq NLL={sq_nll:.4f}  MAE={sq_mae:.4f}  calib_80={sq_calib:.4f}  r={sq_r:.4f}")
+
+        # ── Verdict ────────────────────────────────────────────────────────────
+        delta_nll  = ns_nll - sq_nll   # positive = seq wins
+        seq_wins   = sq_nll < ns_nll and sq_calib >= _CALIB_80_GATE
+
+        print(f"\n{'='*72}")
+        print("16B.2 seq vs nonseq gate comparison")
+        print(f"{'='*72}")
+        print(f"  Nonseq NLL (2021+):    {ns_nll:.4f}")
+        print(f"  Seq NLL (2021+):       {sq_nll:.4f}  "
+              f"(Δ nonseq−seq = {delta_nll:+.4f})  "
+              f"{'← SEQ WINS' if delta_nll > 0 else '← NONSEQ WINS'}")
+        print(f"  Seq calib_80:          {sq_calib:.4f}  "
+              f"{'≥ 0.80 ✓' if sq_calib >= _CALIB_80_GATE else '< 0.80 ✗'}")
+        print(f"  Verdict: {'SEQ CHALLENGER PROMOTED' if seq_wins else 'NONSEQ CHAMPION RETAINED'}")
+
+        mlflow.log_metrics({
+            "delta_nll_nonseq_minus_seq": delta_nll,
+        })
+        mlflow.set_tag("verdict", "seq_wins" if seq_wins else "nonseq_wins")
+        mlflow.set_tag("sub_model_registry_key", "bullpen_v2")
+        mlflow.set_tag("story", "16B.2")
+
+        if not seq_wins:
+            print(f"\n  Sequential feature did NOT improve NLL or calib_80. "
+                  f"bullpen_v2 champion unchanged.")
+            print(f"  Log this verdict in sub_model_registry.yaml bullpen_v2.notes manually.")
+            print(f"  MLflow run_id: {mlflow_run_id}")
+            return
+
+        # ── Seq wins: Optuna-tune on seq features ──────────────────────────────
+        print(f"\n{'='*72}")
+        print("Optuna tuning — sequential challenger (FEATURE_COLS_SEQ)")
+        print(f"{'='*72}")
+
+        tuned_seq_params, tuned_seq_nll = _tune_winner(
+            df_seq, sq_nll, feature_cols=FEATURE_COLS_SEQ
+        )
+
+        mlflow.log_params({f"seq_tuned_{k}": v for k, v in tuned_seq_params.items()})
+        mlflow.log_metrics({"seq_tuned_cv_nll": tuned_seq_nll})
+
+        # ── Final seq model on all 2021+ seq rows ──────────────────────────────
+        print(f"\nBuilding final sequential model on {n_seq:,} rows...")
+        from lightgbm import LGBMRegressor
+
+        impute_vals_seq = {col: float(df_seq[col].median()) for col in FEATURE_COLS_SEQ}
+        df_seq_final = df_seq.copy()
+        for col in FEATURE_COLS_SEQ:
+            df_seq_final[col] = df_seq_final[col].fillna(impute_vals_seq[col])
+
+        p20_all = df_seq_final["starter_ip_p20_outs"].to_numpy(dtype=float)
+        valid   = ~np.isnan(p20_all)
+        league_avg_bullpen_outs = float(np.mean(27.0 - p20_all[valid])) if valid.any() else 12.0
+
+        X_all = df_seq_final[FEATURE_COLS_SEQ].to_numpy(dtype=float)
+        y_all = df_seq_final[_TARGET_COL].to_numpy(dtype=float)
+
+        final_model = LGBMRegressor(random_state=_OPTUNA_SEED, verbose=-1, **tuned_seq_params)
+        final_model.fit(X_all, y_all)
+
+        mu_base_all = np.clip(final_model.predict(X_all), 1e-6, None)
+        scale_all   = np.where(np.isnan(p20_all), 1.0,
+                               (27.0 - p20_all) / max(league_avg_bullpen_outs, 1e-3))
+        mu_adj_all  = np.clip(mu_base_all * scale_all, 1e-6, None)
+        final_r_seq = _fit_negbin_r(y_all, mu_adj_all)
+
+        in_sample_nll = _negbin_nll(y_all, mu_adj_all, final_r_seq)
+        in_sample_cal = _negbin_calib_80(y_all, mu_adj_all, final_r_seq)
+
+        print(f"  Final r:           {final_r_seq:.4f}")
+        print(f"  In-sample NLL:     {in_sample_nll:.4f}")
+        print(f"  In-sample calib:   {in_sample_cal:.4f}")
+
+        mlflow.log_metrics({
+            "seq_final_r":          final_r_seq,
+            "seq_insample_nll":     in_sample_nll,
+            "seq_insample_calib":   in_sample_cal,
+        })
+
+        artifact_seq = {
+            "model":                    final_model,
+            "model_type":               "lgbm",
+            "distribution_family":      "negbin",
+            "feature_cols":             FEATURE_COLS_SEQ,
+            "impute_vals":              impute_vals_seq,
+            "r":                        final_r_seq,
+            "candidate":                "B_seq",
+            "league_avg_bullpen_outs":  league_avg_bullpen_outs,
+            "cv_nll":                   sq_nll,
+            "cv_mae":                   sq_mae,
+            "cv_calib_80":              sq_calib,
+            "cv_mean_r":                sq_r,
+            "tuned_cv_nll":             tuned_seq_nll,
+            "tuned_params":             tuned_seq_params,
+            "nonseq_nll_2021plus":      ns_nll,
+            "delta_nll":                delta_nll,
+            "seq_min_year":             _SEQ_MIN_YEAR,
+            "cv_fold_records":          sq_folds,
+            "story":                    "16B.2",
+        }
+        _ARTIFACT_PATH_SEQ.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(artifact_seq, _ARTIFACT_PATH_SEQ)
+        print(f"\n  Seq artifact saved → {_ARTIFACT_PATH_SEQ.relative_to(_PROJECT_ROOT)}")
+
+        if promote:
+            upload_artifact(_ARTIFACT_PATH_SEQ, _ARTIFACT_S3_URI_SEQ)
+            mlflow.log_artifact(str(_ARTIFACT_PATH_SEQ))
+
+        print(f"\n=== 16B.2 DONE — seq challenger promoted ===")
+        print(f"  seq NLL {sq_nll:.4f} → tuned {tuned_seq_nll:.4f}  "
+              f"calib_80={sq_calib:.4f}  r={final_r_seq:.4f}")
+        print(f"  Artifact: {_ARTIFACT_PATH_SEQ.relative_to(_PROJECT_ROOT)}")
+        print(f"  MLflow run_id: {mlflow_run_id}")
+        print(f"\nNext: update sub_model_registry.yaml bullpen_v2 notes with 16B.2 result "
+              f"and row-count delta (dropped={n_dropped:,} / {n_dropped/n_nonseq:.1%}).")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -1326,8 +1571,20 @@ def main() -> None:
             f"(NLL={_CAND_B_BENCHMARK_NLL}); requires bullpen_v2.pkl from a prior --candidate a run."
         ),
     )
+    parser.add_argument(
+        "--seq",
+        action="store_true",
+        help=(
+            "Epic 16B.2: compare nonseq champion vs sequential challenger on 2021+ rows. "
+            "Requires rebuilt bullpen_state_train.parquet (with team_sequential_bullpen_xwoba) "
+            "and bullpen_v2.pkl (existing champion). "
+            "Saves bullpen_v2_seq.pkl only if seq NLL < nonseq NLL AND calib_80 >= 0.80."
+        ),
+    )
     args = parser.parse_args()
-    if args.candidate == "b":
+    if args.seq:
+        _run_seq_comparison(promote=not args.no_promote)
+    elif args.candidate == "b":
         _evaluate_candidate_b(promote=not args.no_promote, min_year=args.min_year)
     else:
         train(promote=not args.no_promote, min_year=args.min_year)
