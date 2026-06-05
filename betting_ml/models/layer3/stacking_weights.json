@@ -2,58 +2,58 @@
   "meta": {
     "env": "prod",
     "eval_json": "layer3_signal_evaluation_20260602_151859.json",
-    "generated_at": "2026-06-02T15:43:32",
+    "generated_at": "2026-06-04T21:27:04",
     "min_train_seasons": 2,
-    "n_games": 11661
+    "n_games": 11690
   },
   "targets": {
     "home_win": {
       "bullpen": {
         "champion_version": "bullpen_v2",
-        "fold_weight_std": 0.001731,
+        "fold_weight_std": 0.002172,
         "fold_weight_unstable": false,
         "n_folds": 4,
-        "nll_score": 0.639549,
+        "nll_score": 0.637911,
         "verdict": "promote",
-        "weight": 0.50676
+        "weight": 0.507209
       },
       "offense": {
         "champion_version": "offense_v2",
-        "fold_weight_std": 0.001731,
+        "fold_weight_std": 0.002172,
         "fold_weight_unstable": false,
         "n_folds": 4,
-        "nll_score": 0.666591,
+        "nll_score": 0.66675,
         "verdict": "promote",
-        "weight": 0.49324
+        "weight": 0.492791
       }
     },
     "total_runs": {
       "bullpen": {
         "champion_version": "bullpen_v2",
-        "fold_weight_std": 0.000961,
+        "fold_weight_std": 0.000934,
         "fold_weight_unstable": false,
         "n_folds": 4,
-        "nll_score": 2.84053,
+        "nll_score": 2.838781,
         "verdict": "promote",
-        "weight": 0.337003
+        "weight": 0.337178
       },
       "offense": {
         "champion_version": "offense_v2",
-        "fold_weight_std": 0.002263,
+        "fold_weight_std": 0.002328,
         "fold_weight_unstable": false,
         "n_folds": 4,
-        "nll_score": 2.856352,
+        "nll_score": 2.85554,
         "verdict": "promote",
-        "weight": 0.331712
+        "weight": 0.331575
       },
       "run_env": {
         "champion_version": "run_env_v4",
-        "fold_weight_std": 0.002696,
+        "fold_weight_std": 0.002565,
         "fold_weight_unstable": false,
         "n_folds": 4,
-        "nll_score": 2.85764,
+        "nll_score": 2.856528,
         "verdict": "promote",
-        "weight": 0.331285
+        "weight": 0.331247
       }
     }
   }

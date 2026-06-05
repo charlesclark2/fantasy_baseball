@@ -133,17 +133,19 @@ def _create_temp_table(cur: Any, temp_table: str) -> None:
     """)
 
 
+_LOAD_CHUNK_SIZE = 50_000
+
+
 def _load_temp_table(cur: Any, rows: list[dict[str, Any]], temp_table: str) -> None:
-    cur.executemany(
-        f"""
+    sql = f"""
         INSERT INTO {temp_table} VALUES (
             %(game_pk)s, %(side)s, %(signal_name)s, %(sub_model_name)s,
             %(sub_model_version)s, %(signal_value)s, %(uncertainty)s,
             %(signal_available)s, %(input_feature_hash)s, %(record_hash)s
         )
-        """,
-        rows,
-    )
+        """
+    for i in range(0, len(rows), _LOAD_CHUNK_SIZE):
+        cur.executemany(sql, rows[i : i + _LOAD_CHUNK_SIZE])
 
 
 def _close_changed_rows(cur: Any, target_table: str, temp_table: str, now: datetime) -> int:
