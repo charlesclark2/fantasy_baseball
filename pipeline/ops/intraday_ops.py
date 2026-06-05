@@ -136,3 +136,22 @@ def intraday_schedule_capture(context: OpExecutionContext) -> None:
         "--end-date", _today(),
         "--capture-reason", "intraday_gameday",
     ])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def intraday_lineup_rebuild(context: OpExecutionContext) -> None:
+    """Rebuild lineup staging models so lineup_monitor_sensor sees confirmed lineups.
+
+    stg_statsapi_lineups[_wide] are TABLE materializations — they only reflect
+    data as of the last dbt run. intraday_schedule_capture refreshes the raw
+    monthly_schedule source every 30 min, but without this rebuild the sensor
+    always queries a stale table built at 12:00 UTC morning.
+    """
+    _run_dbt(context, [
+        "run",
+        "--select",
+        "stg_statsapi_lineups",
+        "stg_statsapi_lineups_wide",
+        "stg_statsapi_probable_pitchers",
+        "--target", "baseball_betting_and_fantasy",
+    ])

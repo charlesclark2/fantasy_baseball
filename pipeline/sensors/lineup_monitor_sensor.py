@@ -58,8 +58,10 @@ def lineup_monitor_sensor(context: SensorEvaluationContext):
         return
 
     context.log.info(f"New lineups confirmed for game_pks: {game_pks}")
+    # No run_key: deduplication is already handled by lineup_monitor_state in
+    # Snowflake. Using run_key here would prevent pitcher-change re-triggers,
+    # since the game_pks string would be identical to the original lineup trigger.
     yield RunRequest(
-        run_key=f"lineup_{game_pks}",
         run_config={
             "ops": {
                 "lineup_predict": {

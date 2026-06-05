@@ -2,6 +2,7 @@ from dagster import in_process_executor, job
 
 from pipeline.ops.intraday_ops import (
     check_games_today,
+    intraday_lineup_rebuild,
     intraday_schedule_capture,
     intraday_weather_capture,
     odds_snapshot_dbt_rebuild,
@@ -23,4 +24,5 @@ def intraday_weather_job():
 
 @job(executor_def=in_process_executor)
 def intraday_schedule_job():
-    intraday_schedule_capture()
+    done = intraday_schedule_capture()
+    intraday_lineup_rebuild(start=done)
