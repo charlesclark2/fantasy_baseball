@@ -1,0 +1,54 @@
+{
+  "nuts_settings": {
+    "draws": 4000,
+    "tune": 2000,
+    "chains": 4,
+    "target_accept": 0.9
+  },
+  "calibration_window": {
+    "n_calib_obs": 866,
+    "n_calib_games": 433,
+    "months": [
+      3,
+      4
+    ]
+  },
+  "diagnostics": {
+    "divergences": 2,
+    "max_rhat": 1.01,
+    "min_ess_bulk": 594.0,
+    "rhat_ok": false
+  },
+  "mu_log_league_implied_per_side": 4.323726993171116,
+  "coefficients": {
+    "beta_run_env": {
+      "mean": 0.0510524518237644,
+      "sign_ok": true
+    },
+    "beta_offense": {
+      "mean": 0.030204153625606057,
+      "sign_ok": true
+    },
+    "beta_bullpen": {
+      "mean": 0.18835887436380785,
+      "sign_ok": true
+    },
+    "beta_starter": {
+      "mean": 0.042522859247925475,
+      "sign_ok": true
+    }
+  },
+  "kill_criterion": {
+    "n_games": 380,
+    "ppm": 9.37198125,
+    "actual_mean": 8.68421052631579,
+    "bias": 0.6877707236842099,
+    "threshold": 8.81,
+    "passed": false,
+    "delta_2026_mean": -0.014030742844301839,
+    "delta_2026_hdi_low": -0.0844113384931481,
+    "delta_2026_hdi_high": 0.05796705591115649,
+    "delta_2026_hdi_excludes_zero": false,
+    "season_run_shift_total": -0.12048299365521409
+  }
+}

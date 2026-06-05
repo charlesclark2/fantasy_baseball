@@ -16,10 +16,14 @@ venv/
 # Marimo session state (large JSON files with hash strings that trigger GitHub secret scanning)
 exploratory_data_analysis/__marimo__/
 
-# Trained model artifacts — all .pkl files stored in S3 (baseball-betting-ml-artifacts).
+# Trained model artifacts — all .pkl and .joblib files stored in S3 (baseball-betting-ml-artifacts).
 # Artifact paths in model_registry.yaml and sub_model_registry.yaml are S3 URIs.
 # To untrack existing committed pkls: git rm --cached betting_ml/models/**/*.pkl
 betting_ml/models/**/*.pkl
+betting_ml/models/**/*.joblib
+
+# PyMC / ArviZ NUTS trace files (NetCDF4 binary, ~100 MB each — regenerated each inference run)
+betting_ml/models/bayesian/*.nc
 
 # Model evaluation artifacts (large binary fold data — regenerated each retrain, not tracked in git)
 betting_ml/evaluation/model_evaluation/*.parquet
