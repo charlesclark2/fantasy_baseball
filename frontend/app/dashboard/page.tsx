@@ -218,6 +218,12 @@ function Navbar() {
         >
           Performance
         </Link>
+        <Link
+          href="/settings"
+          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          Settings
+        </Link>
       </div>
     </nav>
   )

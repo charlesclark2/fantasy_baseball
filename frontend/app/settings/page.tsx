@@ -90,7 +90,7 @@ export default function SettingsPage() {
             </Button>
           </div>
         </div>
-        {/* Sub-nav — neither tab active on settings */}
+        {/* Sub-nav — Settings active */}
         <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
           <Link
             href="/dashboard"
@@ -103,6 +103,12 @@ export default function SettingsPage() {
             className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
           >
             Performance
+          </Link>
+          <Link
+            href="/settings"
+            className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+          >
+            Settings
           </Link>
         </div>
       </nav>
