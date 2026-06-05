@@ -319,11 +319,19 @@ function QualifiedPicksTable() {
   return (
     <div className="mx-auto max-w-6xl px-4">
       {/* Section heading */}
-      <div className="mb-4 flex items-center gap-2">
-        <h2 className="text-base font-semibold text-white">Today&apos;s Picks</h2>
-        <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold px-2 py-0.5">
-          {picks.length}
-        </Badge>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold text-white">Today&apos;s Picks</h2>
+          <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold px-2 py-0.5">
+            {picks.length}
+          </Badge>
+        </div>
+        <Link
+          href="/ev-tracker"
+          className="text-xs font-medium text-[#10b981] hover:text-[#059669] transition-colors"
+        >
+          EV Tracker &rarr;
+        </Link>
       </div>
 
       {/* Scrollable table wrapper */}

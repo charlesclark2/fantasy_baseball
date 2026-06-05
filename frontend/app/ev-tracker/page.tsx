@@ -90,6 +90,13 @@ function usd(v: number) {
   return `$${v.toFixed(2)}`
 }
 
+function americanOdds(bovadaProb: number): string {
+  if (bovadaProb >= 0.5) {
+    return String(Math.round(-(bovadaProb / (1 - bovadaProb)) * 100))
+  }
+  return `+${Math.round(((1 - bovadaProb) / bovadaProb) * 100)}`
+}
+
 function computeRow(m: (typeof MOCK_DATA.markets)[0]): ComputedRow {
   const edge = m.modelProb - m.bovadaProb
   const ev = m.modelProb * (1 / m.bovadaProb - 1) - (1 - m.modelProb)
@@ -244,8 +251,7 @@ export default function EVTrackerPage() {
   }
 
   function handleBankrollChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = parseFloat(e.target.value)
-    setBankroll(isNaN(val) ? 0 : val)
+    setBankroll(Number(e.target.value))
   }
 
   function buildLogBetUrl(row: ComputedRow) {
@@ -374,7 +380,12 @@ export default function EVTrackerPage() {
                     Model% <SortIcon col="modelProb" sortKey={sortKey} sortDir={sortDir} />
                   </TableHead>
                   <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("bovadaProb")}>
-                    Bovada% <SortIcon col="bovadaProb" sortKey={sortKey} sortDir={sortDir} />
+                    <span className="block">BOOK%</span>
+                    <span className="block text-[10px] font-normal text-gray-600 normal-case tracking-normal">Bovada</span>
+                    <SortIcon col="bovadaProb" sortKey={sortKey} sortDir={sortDir} />
+                  </TableHead>
+                  <TableHead className={cn(thCls, "text-right")}>
+                    Line
                   </TableHead>
                   <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("edge")}>
                     Edge <SortIcon col="edge" sortKey={sortKey} sortDir={sortDir} />
@@ -438,9 +449,14 @@ export default function EVTrackerPage() {
                         {pctRaw(row.modelProb)}
                       </TableCell>
 
-                      {/* Bovada% */}
+                      {/* Bovada% / BOOK% */}
                       <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
                         {pctRaw(row.bovadaProb)}
+                      </TableCell>
+
+                      {/* Line */}
+                      <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
+                        {americanOdds(row.bovadaProb)}
                       </TableCell>
 
                       {/* Edge */}
