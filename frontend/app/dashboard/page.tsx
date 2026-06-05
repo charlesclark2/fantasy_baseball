@@ -427,15 +427,15 @@ function NonQualifiedSection() {
   return (
     <div className="mx-auto max-w-6xl px-4">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <button className="flex w-full items-center gap-2 text-left group">
-            <span className="text-sm text-gray-500">
-              Non-Qualified Games ({games.length})
-            </span>
-            <ChevronDown
-              className="h-4 w-4 text-gray-600 transition-transform duration-200 group-data-[state=open]:rotate-180"
-            />
-          </button>
+        <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
+          <span className="text-sm text-gray-500">
+            Non-Qualified Games ({games.length})
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 text-gray-600 transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 overflow-x-auto rounded-xl border border-[#262626] opacity-50">
