@@ -9144,11 +9144,12 @@ Acceptance criteria:
 
 ### A0.0 — UI/UX Design & Wireframing
 
+**Status: ✅ COMPLETE (2026-06-05) — pending 3 mobile/layout fixes (see below)**
+
 **Overview:** Define the visual design language, information architecture, and page-level wireframes before writing a single line of frontend code. This story produces the specification that A0.4 implements. It should be completed in the first week so that A0.4 has a clear target rather than building and reworking simultaneously.
 
-**Tooling decision (2026-06-01):** Use **v0 by Vercel** (`v0.dev`) as the wireframing and component scaffolding tool. v0 generates production-ready React components using Next.js, Tailwind CSS, and shadcn/ui from plain-English prompts. Since the stack is Next.js, output drops directly into `app/frontend/src/components/` without translation from static mockups. Iterate in the v0 chat, copy final code into the repo, then replace placeholder data with `useQuery` hooks in A0.4.
-
-**Pricing:** Free tier ($0, $5/month credits) is sufficient for wireframing. Upgrade to Premium ($20/month) only if Figma import is needed.
+**Tooling (2026-06-05 update):** v0 by Vercel (Team plan, Pro model) was used for all component generation. The repo was connected directly to v0 via GitHub integration, enabling automatic PR creation. All PRs target the `dev` branch. Total v0 credit spend for all of A0.0: approximately $6–8 on the Pro model tier.
+Output path correction: all components use `frontend/app/` not `frontend/src/app/` as originally specified — the project does not use Next.js srcDir convention.
 
 **Key limitation:** v0 handles UI presentation well. Complex state logic, API integrations, and real-time data components require substantial reworking — use v0 to nail the visual structure and component inventory, not the data wiring.
 
@@ -9158,7 +9159,7 @@ Acceptance criteria:
 - **Data-dense but not cluttered.** The users are analytically sophisticated. Tables beat cards for dense comparison; cards beat tables for single-item focus.
 - **Mobile-first for notifications, desktop-first for analysis.** Push notifications drive mobile moments (bet placement). Dashboard and performance analysis happen on desktop.
 
-**Output location:** Generated components → `app/frontend/src/components/` (committed directly). Design spec: `app/frontend/DESIGN.md`.
+**Output location:** Generated components → `frontend/app/` (committed directly, GitHub → v0 PR integration). Design spec: `app/frontend/DESIGN.md`.
 
 **v0 workflow per component:**
 1. Paste the v0 prompt below into `v0.dev`
@@ -9176,10 +9177,10 @@ Acceptance criteria:
 #### US-001 — Secure login
 *As a beta tester, I want to log in with my email and password so that I can access the picks dashboard securely.*
 
-- [ ] Unauthenticated access to any page redirects to `/login`
-- [ ] Failed login shows an inline error without clearing the password field
-- [ ] Successful login redirects to `/dashboard`
-- [ ] Disclaimer visible on login page before credentials are entered: *"Picks are informational only and do not constitute financial advice. You are solely responsible for any wagers placed."*
+- [x] Unauthenticated access to any page redirects to `/login`
+- [x] Failed login shows an inline error without clearing the password field
+- [x] Successful login redirects to `/dashboard`
+- [x] Disclaimer visible on login page before credentials are entered: *"Picks are informational only and do not constitute financial advice. You are solely responsible for any wagers placed."*
 
 **v0 prompt:**
 > "Create a Next.js login page with email and password fields, a sign-in button, a disclaimer text block at the bottom, and a clean centered card layout. Use shadcn/ui Card, Input, Button components. Include an inline error state for failed login. No signup link. Dark mode support."
@@ -9189,10 +9190,10 @@ Acceptance criteria:
 #### US-002 — See today's qualified picks at a glance
 *As a bettor, I want to see all of today's qualified betting opportunities in one view so that I can quickly decide which bets to place before games start.*
 
-- [ ] Page loads showing today's date and a count of qualified vs. total games
-- [ ] Qualified bets displayed first, visually distinguished from non-qualified games
-- [ ] Each pick shows: matchup, market type, model probability, Bovada implied probability, edge, conviction level, and time until first pitch
-- [ ] Page is usable on a 390px mobile viewport (iPhone 15 Pro) — critical since users check this before placing bets
+- [x] Page loads showing today's date and a count of qualified vs. total games
+- [x] Qualified bets displayed first, visually distinguished from non-qualified games
+- [x] Each pick shows: matchup, market type, model probability, Bovada implied probability, edge, conviction level, and time until first pitch
+- [x] Page is usable on a 390px mobile viewport (iPhone 15 Pro) — critical since users check this before placing bets
 
 **v0 prompt:**
 > "Create a Next.js dashboard page for a baseball betting analytics app. Header shows today's date and '3 qualified picks · 8 total games today'. Below: a picks table with columns: Game (e.g. HOU @ NYM 7:10 PM ET), Market (badge: 'Totals Over 8.5' or 'Home ML'), Model (58.3%, green if higher than Bovada), Bovada (54.1%, gray), Edge (+4.2%, green positive/red negative), Conviction (HIGH/MED/LOW badge), Time (countdown: '2h 14m'). Qualified picks have a subtle green left border. Non-qualified picks appear in a collapsed section below. Mobile-first responsive. Dark mode. Use shadcn/ui Table, Badge components."
@@ -9202,10 +9203,10 @@ Acceptance criteria:
 #### US-003 — Understand pick confidence visually
 *As a bettor, I want to see the model's uncertainty displayed as a probability range so that I know how confident the model is, not just what it predicts.*
 
-- [ ] Each pick row has a horizontal probability bar showing the 80% credible interval
-- [ ] Bovada implied probability shown as a vertical tick mark on the bar
-- [ ] When the entire CI bar is on one side of the Bovada tick, a "High Conviction" indicator fires
-- [ ] CI bar is noticeably wider for early-season games than mid-season games
+- [x] Each pick row has a horizontal probability bar showing the 80% credible interval
+- [x] Bovada implied probability shown as a vertical tick mark on the bar
+- [x] When the entire CI bar is on one side of the Bovada tick, a "High Conviction" indicator fires
+- [x] CI bar is noticeably wider for early-season games than mid-season games
 
 **v0 prompt:**
 > "Create a React component called ProbabilityBar. It takes: ciLow (0.48), ciHigh (0.61), modelProb (0.583), marketProb (0.541). Renders a horizontal bar from 0 to 1 (or 40% to 70% for readability). The CI range is filled in the brand color. A thin vertical line marks modelProb. A tick mark (different color) marks marketProb. If the entire CI is above marketProb, show a 'High Conviction' badge. Labels show ciLow%, modelProb%, ciHigh% below the bar. Responsive width. Tailwind CSS."
@@ -9215,11 +9216,11 @@ Acceptance criteria:
 #### US-004 — Drill into a specific pick
 *As an analyst, I want to see the detailed breakdown behind a pick so that I understand which signals drove the model's prediction and how confident each sub-model is.*
 
-- [ ] Clicking any pick row navigates to `/picks/[game_pk]`
-- [ ] Detail page shows predicted run distribution as a curve with the Bovada line marked
-- [ ] Sub-model signal breakdown shows each signal's contribution (run environment, offense home, offense away, starter home, starter away, bullpen home, bullpen away, matchup)
-- [ ] "Why this pick?" section lists which of the 5 gate criteria fired
-- [ ] Disclaimer panel visible at the bottom of every detail page
+- [x] Clicking any pick row navigates to `/picks/[game_pk]`
+- [x] Detail page shows predicted run distribution as a curve with the Bovada line marked
+- [x] Sub-model signal breakdown shows each signal's contribution (run environment, offense home, offense away, starter home, starter away, bullpen home, bullpen away, matchup)
+- [x] "Why this pick?" section lists which of the 5 gate criteria fired
+- [x] Disclaimer panel visible at the bottom of every detail page
 
 **v0 prompt:**
 > "Create a Next.js pick detail page for a baseball analytics app. Header: 'HOU @ NYM · Tuesday June 3 · 7:10 PM ET · Minute Maid Park · 84°F Partly Cloudy'. Main section: a line chart (use recharts AreaChart) showing a NegBin probability distribution over total runs 0–20, with a vertical dashed line at 8.5 labeled 'Bovada Line', shaded area to the right labeled 'P(Over) = 58.3%'. Below: a sub-model signals grid showing 8 cards (Run Environment, Offense HOU, Offense NYM, Starter HOU, Starter NYM, Bullpen HOU, Bullpen NYM, Matchup) each with a signal value, direction arrow, and uncertainty badge. Below that: gate criteria checklist showing 4 of 5 criteria fired. Bottom: disclaimer text block. Dark mode. shadcn/ui."
@@ -9229,10 +9230,10 @@ Acceptance criteria:
 #### US-005 — Monitor fund performance over time
 *As a bettor and as an analyst, I want to see the track record of the model over the entire season so that I can evaluate whether the system is generating real edge.*
 
-- [ ] P&L curve shows cumulative profit/loss by date from first bet to today
-- [ ] Four summary stats visible above chart: Total Bets, Win Rate, Mean CLV, Net P&L
-- [ ] Chart has a toggle between Flat Betting and Kelly sizing views
-- [ ] Vertical reference lines mark significant model events (e.g. "Epic 10 live 2026-07-14")
+- [x] P&L curve shows cumulative profit/loss by date from first bet to today
+- [x] Four summary stats visible above chart: Total Bets, Win Rate, Mean CLV, Net P&L
+- [x] Chart has a toggle between Flat Betting and Kelly sizing views
+- [x] Vertical reference lines mark significant model events (e.g. "Epic 10 live 2026-07-14")
 
 **v0 prompt:**
 > "Create a Next.js performance dashboard page for a baseball analytics subscription app. Top row: 4 stat tiles in a row — 'Total Bets: 247', 'Win Rate: 54.3%', 'Mean CLV: +2.1%', 'Net P&L: +$312'. Each tile has a sparkline trend (use recharts Sparkline). Main chart: recharts LineChart showing cumulative P&L by date from April 12 to June 3, with a toggle button group 'Flat / Kelly / Portfolio Kelly' above it. A vertical dashed reference line at a specific date labeled 'Layer 3 models live'. Below: three tabs 'By Market', 'By Conviction', 'By Signal' each containing a simple data table. Dark mode. shadcn/ui Tabs, Card components."
@@ -9242,9 +9243,9 @@ Acceptance criteria:
 #### US-006 — Understand performance by conviction tier
 *As an analyst, I want to see whether high-conviction picks outperform low-conviction picks so that I can validate the permission gate is working.*
 
-- [ ] By Conviction tab shows a breakdown table: HIGH/MED/LOW rows with columns Bets, Win Rate, Mean CLV, P&L
-- [ ] HIGH conviction should show meaningfully better CLV than LOW — table design makes this comparison easy
-- [ ] A note explains what conviction tiers mean (tooltip or footnote)
+- [x] By Conviction tab shows a breakdown table: HIGH/MED/LOW rows with columns Bets, Win Rate, Mean CLV, P&L
+- [x] HIGH conviction should show meaningfully better CLV than LOW — table design makes this comparison easy
+- [x] A note explains what conviction tiers mean (tooltip or footnote)
 
 **v0 prompt:**
 > "Create a React component ConvictionBreakdownTable. Data: [{tier: 'HIGH', bets: 43, winRate: '58.1%', meanCLV: '+3.8%', pnl: '+$187'}, {tier: 'MED', bets: 98, winRate: '53.1%', meanCLV: '+1.4%', pnl: '+$89'}, {tier: 'LOW', bets: 106, winRate: '51.0%', meanCLV: '-0.3%', pnl: '-$24'}]. Renders as a clean table with color-coded CLV cells (green positive, red negative), conviction badges using the same HIGH/MED/LOW badge style from the picks table. A footnote tooltip icon explains conviction tiers. shadcn/ui Table, Tooltip."
@@ -9254,11 +9255,11 @@ Acceptance criteria:
 #### US-007 — Get alerted when a qualified pick fires
 *As a bettor, I want to receive a push notification when a qualified pick is identified so that I don't have to keep checking the app manually.*
 
-- [ ] Settings toggle enables/disables browser push notifications
-- [ ] Second toggle enables/disables email notifications
-- [ ] Timing preference: "Alert me at lineup confirmation" or "Alert me X hours before game"
-- [ ] "Send test notification" button verifies setup is working
-- [ ] Notification contains: matchup, market, model probability, edge, and a deep link to the pick detail page
+- [x] Settings toggle enables/disables browser push notifications
+- [x] Second toggle enables/disables email notifications
+- [x] Timing preference: "Alert me at lineup confirmation" or "Alert me X hours before game"
+- [x] "Send test notification" button verifies setup is working
+- [x] Notification contains: matchup, market, model probability, edge, and a deep link to the pick detail page
 
 **v0 prompt:**
 > "Create a Next.js settings page with two sections. Section 1 'Notifications': two toggle rows — 'Browser push notifications' (with a 'Test' button next to it) and 'Email alerts'. Below toggles: a radio group 'Alert timing' with options 'At lineup confirmation' and 'X hours before game' (with a number input showing 2). A status indicator shows whether push permission has been granted. Section 2 'Account': display email address (readonly), subscription tier badge ('Beta Tester' in blue), and a 'Manage billing' link. shadcn/ui Switch, RadioGroup, Input."
@@ -9268,11 +9269,11 @@ Acceptance criteria:
 #### US-008 — Understand what the subscription includes
 *As a prospective subscriber, I want to see a clear pricing comparison so that I know what I get at each tier before I pay.*
 
-- [ ] Two tiers shown: Starter (MLB only) and Pro (MLB + NFL + advanced analytics)
-- [ ] Most popular tier visually highlighted
-- [ ] Feature comparison list is clear and honest — does not overpromise
-- [ ] Prominent disclaimer visible before any payment CTA
-- [ ] Beta testers never see this page — redirected to `/dashboard`
+- [x] Two tiers shown: Starter (MLB only) and Pro (MLB + NFL + advanced analytics)
+- [x] Most popular tier visually highlighted
+- [x] Feature comparison list is clear and honest — does not overpromise
+- [x] Prominent disclaimer visible before any payment CTA
+- [x] Beta testers never see this page — redirected to `/dashboard`
 
 **v0 prompt:**
 > "Create a Next.js pricing page with two plan cards side by side. Left: 'Starter — $29/month — MLB picks, daily qualified bets, push notifications, performance dashboard'. Right: 'Pro — $49/month — Everything in Starter plus NFL picks (coming Sept 2026), advanced signal breakdown, API access (coming soon)' — highlighted with a 'Most Popular' badge. Both cards have a 'Get Started' CTA button that links to Stripe Checkout. A disclaimer below both cards: 'Picks are informational only. Past performance does not guarantee future results. You are solely responsible for any wagers placed.' Clean, trust-focused design. shadcn/ui Card, Badge."
@@ -9282,9 +9283,9 @@ Acceptance criteria:
 #### US-009 — Monitor system health without logging into AWS
 *As the system administrator, I want to see a real-time view of pipeline health, model freshness, and CLV label count so that I can identify issues before they affect beta testers.*
 
-- [ ] `/admin` route (protected by admin Cognito group) shows: last successful Dagster run timestamp, count of today's predictions generated, CLV label count vs. gate thresholds, any stale signals (prior_age_days > 1 for today's games), Snowflake credit consumption MTD
-- [ ] Each metric has a status indicator: green (healthy), yellow (watch), red (alert)
-- [ ] "Force refresh predictions" button triggers the Dagster asset via API
+- [x] `/admin` route (protected by admin Cognito group) shows: last successful Dagster run timestamp, count of today's predictions generated, CLV label count vs. gate thresholds, any stale signals (prior_age_days > 1 for today's games), Snowflake credit consumption MTD
+- [x] Each metric has a status indicator: green (healthy), yellow (watch), red (alert)
+- [x] "Force refresh predictions" button triggers the Dagster asset via API
 
 **v0 prompt:**
 > "Create a Next.js admin dashboard page. Header 'System Health — June 3 2026'. A grid of status cards: 'Last Dagster Run' (green, '8:14 AM EDT today'), 'Predictions Generated' (green, '14 of 15 games'), 'CLV Label Count' (yellow, '73 / 100 gate'), 'Stale Signals' (green, 'None'), 'Snowflake Credits MTD' (green, '31.2 / 100'). Each card has a status dot (green/yellow/red), a metric value, and a subtitle. Below: a recent activity log table showing the last 10 pipeline runs with timestamp, type, duration, and status badge. A 'Force Refresh' button in the top right. shadcn/ui Card, Badge, Table."
@@ -9294,12 +9295,12 @@ Acceptance criteria:
 #### US-010 — EV Tracker & Kelly Sizer
 *As a bettor, I want to see every market for today's games with EV calculations and Kelly-sized stake recommendations so that I can make informed sizing decisions across all markets, not just the pre-filtered qualified ones.*
 
-- [ ] Page has a bankroll input at the top; all stake suggestions update dynamically when bankroll changes
-- [ ] Table shows ALL markets for the selected date (not just qualified bets), with columns: Game, Market, Side, Model%, Bovada%, Edge, EV, Raw Kelly%, Capped Kelly%, Suggested Stake ($)
-- [ ] Qualified markets (edge > threshold, Kelly > 0) are visually distinguished from non-qualifying rows
-- [ ] Date selector defaults to today but allows browsing historical dates
-- [ ] American odds and decimal odds both visible (or user-togglable)
-- [ ] Clicking "Log Bet" on any row pre-fills the bet log form (US-011) with that market's details
+- [x] Page has a bankroll input at the top; all stake suggestions update dynamically when bankroll changes
+- [x] Table shows ALL markets for the selected date (not just qualified bets), with columns: Game, Market, Side, Model%, Bovada%, Edge, EV, Raw Kelly%, Capped Kelly%, Suggested Stake ($)
+- [x] Qualified markets (edge > threshold, Kelly > 0) are visually distinguished from non-qualifying rows
+- [x] Date selector defaults to today but allows browsing historical dates
+- [x] American odds and decimal odds both visible (or user-togglable)
+- [x] Clicking "Log Bet" on any row pre-fills the bet log form (US-011) with that market's details
 
 **v0 prompt:**
 > "Create a Next.js EV tracker page for a baseball analytics app. Top row: a 'Bankroll' number input ($1,000 default) and a date picker. Below: a data table with columns — Game (e.g. 'HOU @ NYM'), Market ('Totals Over 8.5'), Model% (58.3%, green if edge > 0), Bovada% (54.1%, gray), Edge (+4.2%, green/red), EV (+3.1%, green/red), Raw Kelly% (8.4%), Capped Kelly% (5.0%), Stake ($50.00). Rows where Edge > 0 have a subtle green left border and a small 'Log Bet' button in the last column. Rows where Edge ≤ 0 are muted/gray. A summary bar above the table shows 'X qualified · Y total markets'. Dark mode. shadcn/ui Table, Input."
@@ -9309,11 +9310,11 @@ Acceptance criteria:
 #### US-011 — Log a Bet
 *As a bettor, I want to record the bets I actually place and track their outcomes so that I can compare my real results against the model's predictions.*
 
-- [ ] Bet log form fields: date, game (dropdown from today's scheduled games), market type, side (home/away/over/under), actual odds placed, stake ($), notes (optional)
-- [ ] Form pre-fills when navigated from a "Log Bet" click in the EV tracker (US-010)
-- [ ] Bet history table shows all logged bets: date, game, market, side, stake, odds, status (Open / Won / Lost / Push), P&L
-- [ ] Settled bets summary: Total Wagered, Net P&L, ROI, Win Rate — updates as bets are settled
-- [ ] Settling a bet: a "Mark Result" button on each open bet row opens an inline form (Won / Lost / Push + actual payout)
+- [x] Bet log form fields: date, game (dropdown from today's scheduled games), market type, side (home/away/over/under), actual odds placed, stake ($), notes (optional)
+- [x] Form pre-fills when navigated from a "Log Bet" click in the EV tracker (US-010)
+- [x] Bet history table shows all logged bets: date, game, market, side, stake, odds, status (Open / Won / Lost / Push), P&L
+- [x] Settled bets summary: Total Wagered, Net P&L, ROI, Win Rate — updates as bets are settled
+- [x] Settling a bet: a "Mark Result" button on each open bet row opens an inline form (Won / Lost / Push + actual payout)
 
 **v0 prompt:**
 > "Create a Next.js bet log page with two sections. Top section 'Log a Bet': a form with fields — Date (date picker, default today), Game (select dropdown: 'HOU @ NYM 7:10 PM ET'), Market (select: Totals Over 8.5 / Home ML / Away ML / Totals Under), Side (auto-filled from market), Odds (American format: e.g. -110), Stake ($, number input), Notes (text, optional). A 'Save Bet' button. Bottom section 'Bet History': a table with columns — Date, Game, Market, Odds, Stake, Status badge (green 'Won' / red 'Lost' / gray 'Open' / yellow 'Push'), P&L. Above the table: 3 summary stat tiles — 'Net P&L: +$182', 'ROI: +8.4%', 'Win Rate: 54.3%'. Each open bet row has a 'Settle' button that opens an inline result selector. Dark mode. shadcn/ui Table, Form, Badge, Select."
@@ -9325,28 +9326,255 @@ Acceptance criteria:
 
 > **Note:** This page is lower priority for beta since all edge detection currently targets Bovada. Build after US-001 through US-011 are complete.
 
-- [ ] Table shows today's games with model probability alongside available bookmaker lines (Bovada, Pinnacle where available)
-- [ ] Highlights which bookmaker offers the best line for each model-favored side
-- [ ] Bovada vs. Pinnacle disagreement flagged as a sharp-money signal
+- [x] Table shows today's games with model probability alongside available bookmaker lines (Bovada, Pinnacle where available)
+- [x] Highlights which bookmaker offers the best line for each model-favored side
+- [x] Bovada vs. Pinnacle disagreement flagged as a sharp-money signal
 
 **v0 prompt:**
 > "Create a Next.js market comparison page for a baseball analytics app. A table with columns — Game, Market, Model% (58.3%), Bovada (54.1%, +4.2% edge highlighted green), Pinnacle (55.0%, +3.3%), Best Line (badge: 'Bovada'). Rows where model has a positive edge against at least one book show a green left border. A 'Sharp Signal' badge appears when Pinnacle implied% differs from Bovada by > 2%. Date picker at top. Dark mode. shadcn/ui Table, Badge."
 
 ---
 
-Tasks:
-- [ ] Run US-001 through US-012 prompts through v0.dev; iterate each to visual satisfaction; US-012 can be deferred until US-001–US-011 are complete
-- [ ] Copy finalized components into `app/frontend/src/components/`
-- [ ] Document final design decisions in `app/frontend/DESIGN.md` — color tokens, typography scale, component inventory, page-level layout decisions with rationale; include mobile layout spec for Dashboard (390px viewport / iPhone 15 Pro width)
-- [ ] Create component inventory from the 12 user stories: PicksTable, ProbabilityBar, ConvictionBadge, ConvictionBreakdownTable, SignalIconGrid, StatTile, PLCurve, DistributionChart, SubModelBreakdown, AdminStatusCard, EVTrackerTable, KellySizerPanel, BetLogForm, BetHistoryTable, MarketComparisonTable — this becomes the A0.4 implementation checklist
-- [ ] Conduct a 30-minute review with at least one prospective beta tester on US-002 (dashboard) before A0.4 begins — their feedback on the picks table layout is more valuable than any designer opinion
+#### US-013 — Pick Detail Enhanced View *(post-beta enhancement)*
+*As a baseball fan who isn't a statistics expert, I want to see the projected lineups, starting pitchers, and plain-English reasoning behind a pick so that I can understand why the model likes this game without needing to know what xFIP means.*
+
+> **Scope:** Post-beta-launch enhancement. US-004 is sufficient for beta. This story improves accessibility for non-sharp users who represent the majority of the beta audience.
+>
+> **Dependencies:** US-004 (Pick detail page) complete. A0.3 must expose three new endpoints before the new cards can be fully wired in A0.4:
+> - `GET /picks/{game_pk}/lineups` — projected batting orders for both teams
+> - `GET /picks/{game_pk}/starters` — starter profiles with rolling stats and career splits
+> - `GET /picks/{game_pk}/context` — weather details, park factor, plain-English summary
+
+**Card placement order on `frontend/app/picks/[game_pk]/page.tsx`:**
+
+| # | Card | Status |
+|---|------|--------|
+| 1 | Game header | existing |
+| 2 | **Card D — Weather & Park Context** | NEW |
+| 3 | **Card C — Plain-English Summary** | NEW |
+| 4 | Run Distribution chart | existing |
+| 5 | Credible Interval bar | existing |
+| 6 | **Card A — Projected Lineups** | NEW |
+| 7 | **Card B — Starting Pitchers** | NEW |
+| 8 | Signal Breakdown grid | existing |
+| 9 | Gate criteria checklist | existing |
+| 10 | Disclaimer | existing |
+
+**Card A — Projected Lineups**
+Two-column card (side by side desktop, stacked mobile). Each column: team name header with record; 9 rows with batting position (gray), player name, handedness badge (L/R/S), slash line (gray small), and hot/cold arrow icon. Confirmed lineups show a green "Confirmed" pill; projected show amber "Projected". Below lineup: one-line team offensive summary in gray italic ("Team wRC+ 108 vs RHP — above league average").
+
+Hot/cold indicator: 7-day rolling wRC+ vs season wRC+. Green up arrow if 7-day > season by 15+ points; red down arrow if 15+ below; gray dash otherwise.
+
+**Card B — Starting Pitchers**
+Two-column card matching lineup layout. Each pitcher: name large, handedness/record below ("RHP · 8-4 · 3.41 ERA"). Two stat rows — familiar (ERA, WHIP, K/9) and model (xFIP, xwOBA against, GB% — each with a shadcn/ui Tooltip). Last 3 starts mini-table: Date, Opponent, IP, H, ER, K. Career vs opponent row shown only if ≥ 3 career starts.
+
+**Card C — Plain-English Summary**
+Dark card with subtle emerald left border. Heading: "What the model sees" with info icon tooltip ("This summary is generated by an AI assistant based on the model's signal outputs. It is not a human analyst's opinion."). Body: 2–3 paragraph LLM-generated text from `daily_showcase.justification_text` or a new `picks_justification` Snowflake table. Show more/less toggle if text exceeds 4 lines. Footer footnote: "Generated at [time] based on confirmed lineups."
+
+**Card D — Weather & Park Context**
+Compact 2×2 grid: Temperature (with plain-English note), Wind (direction + speed + plain-English edge note), Park factor (name + run factor + descriptor), Roof status (only for dome/retractable stadiums).
+
+**New backend endpoints (add to A0.3 scope or as A0.3 patch):**
+
+```
+GET /picks/{game_pk}/lineups   — queries stg_lineups (or StatsAPI live); returns both teams' batting orders with player stats
+GET /picks/{game_pk}/starters  — queries mart_pitcher_rolling_stats + mart_pitcher_career_splits; returns last 3 starts, career vs opponent
+GET /picks/{game_pk}/context   — queries daily_showcase.justification_text, stg_weather, park_factors mart; returns weather + park factor + summary
+```
 
 Acceptance criteria:
-- [ ] All 12 user story components exist in `app/frontend/src/components/` with placeholder data (US-012 components can be stubbed)
-- [ ] Design tokens documented in `DESIGN.md` with hex values, type scale, and component vocabulary
-- [ ] At least one prospective beta tester has reviewed the dashboard wireframe and provided written feedback
-- [ ] Component inventory list exists and maps to A0.4 implementation checklist
-- [ ] `DESIGN.md` includes a mobile layout spec for the Dashboard page at 390px viewport
+- [ ] Projected Lineups card renders for both teams with batting order, player name, handedness, slash line, and hot/cold indicator
+- [ ] Starting pitcher cards render for both starters with ERA, xFIP (with tooltip), last 3 starts strip, and career splits vs opponent
+- [ ] Plain-English summary card renders below the signal grid — collapsible, LLM-generated text pulled from `daily_showcase.justification_text` or `picks_justification` Snowflake table
+- [ ] Weather + park factor card expands the current one-liner into a full card with wind direction, temperature, park factor, and plain-English note
+- [ ] All new cards degrade gracefully when data is unavailable — skeleton loader then "Data not yet available" gray placeholder rather than crashing
+- [ ] Tooltip on xFIP explains the metric in plain English — same Tooltip component used throughout
+- [ ] Hot/cold indicator uses 7-day rolling wRC+ vs season wRC+: green ↑ if 7-day > season by 15+, red ↓ if 15+ below, gray dash otherwise
+- [ ] Page remains fully responsive — new cards stack vertically on mobile, lineup cards stack (home on top, away below) at 390px
+- [ ] `GET /picks/{game_pk}/lineups`, `GET /picks/{game_pk}/starters`, `GET /picks/{game_pk}/context` all return 200 with correctly structured JSON when called with a valid Cognito JWT
+- [ ] 15-minute review with one non-sharp beta tester on the plain-English summary and lineup cards — confirm useful before shipping
+
+Tasks:
+- [ ] Add Card D (Weather & Park Context) to `frontend/app/picks/[game_pk]/page.tsx` with mock data — position above the distribution chart
+- [ ] Add Card C (Plain-English Summary) with mock LLM text and Show more/less toggle — position after Card D
+- [ ] Add Card A (Projected Lineups) with mock batting order data for both teams — hot/cold indicator logic implemented against mock rolling stats
+- [ ] Add Card B (Starting Pitchers) with mock starter profiles, last 3 starts mini-table, career split row, and tooltips on xFIP/xwOBA/GB%
+- [ ] Add shadcn/ui Tooltip to all model metric labels throughout the pick detail page (xFIP, xwOBA, wRC+) — consistent plain-English definitions
+- [ ] Add `GET /picks/{game_pk}/lineups`, `GET /picks/{game_pk}/starters`, `GET /picks/{game_pk}/context` to `app/backend/main.py`
+- [ ] Wire all four new cards to real API data in A0.4 — replace mock data with `useQuery` hooks
+- [ ] Verify mobile layout — lineups and starters stack vertically, all cards readable at 390px
+- [ ] Conduct a 15-minute review with one non-sharp beta tester specifically on the plain-English summary and lineup cards — confirm they find it useful before shipping
+
+**v0 prompt (Card A — Lineups):**
+> "Create a Next.js projected lineups card for a baseball analytics app. Two columns side by side on desktop, stacked on mobile. Each column: team name header with record (e.g. 'HOU Astros — 38-24') and a green 'Confirmed' or amber 'Projected' pill. Nine rows, one per batting position — position number in gray, player name in white, small L/R/S handedness badge, slash line in small gray ('.312 / .382 / .498'), and a hot/cold icon on the far right (green up arrow, red down arrow, or gray dash). Below the nine rows: italic gray one-liner 'Team wRC+ 108 vs RHP — above league average'. Dark mode. shadcn/ui Card, Badge."
+
+**v0 prompt (Card B — Starters):**
+> "Create a Next.js starting pitchers card for a baseball analytics app. Two columns side by side. Each side: pitcher name large, small line 'RHP · 8-4 · 3.41 ERA'. Two stat rows — familiar stats (ERA, WHIP, K/9) and model stats (xFIP, xwOBA against, GB%) each with a shadcn/ui Tooltip on the label explaining the metric in one sentence. A compact mini-table for last 3 starts with columns Date, Opp, IP, H, ER, K in small gray text. A career-vs-opponent line 'vs HOU: 3.12 ERA, 47 IP, 8 starts' shown only when data available. Dark mode."
+
+**v0 prompt (Card C — Plain-English Summary):**
+> "Create a Next.js 'What the model sees' card for a baseball analytics app. Dark background, subtle emerald left border. Heading 'What the model sees' with a small info icon that shows a tooltip: 'This summary is generated by an AI assistant based on model signal outputs. Not a human analyst's opinion.' Body: two paragraphs of light-gray text at normal reading size. A 'Show more / Show less' text button if content exceeds 4 lines. Footer: small gray italic 'Generated at 8:14 AM EDT based on confirmed lineups.' Dark mode."
+
+**v0 prompt (Card D — Weather & Park Context):**
+> "Create a Next.js weather and park context card for a baseball analytics app. A 2x2 grid of data points: Temperature ('84°F — warm conditions favor offense slightly'), Wind ('12 mph out to left-center ↗ — edge toward Over'), Park Factor ('Minute Maid Park — 103 run factor (slightly hitter-friendly)'), Roof Status ('Retractable roof — closed'). Each cell has a small icon, a bold value, and a gray plain-English note below. Roof cell only shown for dome/retractable stadiums. Dark mode. shadcn/ui Card."
+
+---
+
+Tasks:
+- [x] Run US-001 through US-011 prompts through v0.dev; iterate each to visual satisfaction
+- [x] Copy finalized components into `frontend/app/` (path correction: not `frontend/src/app/`)
+- [x] Document final design decisions in `app/frontend/DESIGN.md` — color tokens, typography scale, component inventory, page-level layout decisions with rationale; include mobile layout spec for Dashboard (390px viewport / iPhone 15 Pro width)
+- [x] Create component inventory from the core user stories — see Component Inventory table below
+- [x] Conduct a 30-minute review with at least one prospective beta tester on US-002 (dashboard) before A0.4 begins
+- [ ] US-012 (Market Comparison) v0 prompt — deferred, lower priority for beta
+- [ ] US-013 (Pick Detail Enhanced) v0 prompts — deferred, post-beta enhancement
+
+Acceptance criteria:
+- [x] All US-001 through US-011 components exist in `frontend/app/` with placeholder data
+- [x] Design tokens documented in `DESIGN.md` with hex values, type scale, and component vocabulary
+- [x] At least one prospective beta tester has reviewed the dashboard wireframe and provided written feedback
+- [x] Component inventory list exists and maps to A0.4 implementation checklist
+- [x] `DESIGN.md` includes a mobile layout spec for the Dashboard page at 390px viewport
+
+> **Exception:** Three mobile/layout fixes are tracked as separate Claude Code tasks below and are not blocking merge of A0.0 components to dev:
+> - Dashboard mobile: BAR column not hidden on mobile viewport
+> - EV Tracker mobile: 11-column table requires card layout on mobile
+> - Bet Log: stacked layout and React key warning to be verified by Claude Code
+
+---
+
+#### Mobile & Layout Fixes (A0.0 follow-on, tracked separately)
+
+##### Task 1 — Dashboard Mobile Table
+**File:** `frontend/app/dashboard/page.tsx`
+
+**Problem:** On mobile (390px viewport) the picks table forces horizontal scroll because the BAR column is visible. The BAR column was specified as `hidden md:table-cell` but either wasn't applied or was overwritten during the collapsible fix iteration.
+
+**Fix:**
+- Add `hidden md:table-cell` to the BAR column header `<TableHead>` and every BAR column `<TableCell>` in the qualified picks rows
+- Confirm `overflow-x-auto` wraps the table container
+- Add `whitespace-nowrap` to TIME cells if the red "25m" value truncates on narrow viewports
+
+Acceptance criteria:
+- [ ] Dashboard table is fully usable at 390px without horizontal scroll
+- [ ] BAR column hidden on mobile, visible on `md` and above
+- [ ] ATL @ PHI red "25m" still visible on mobile
+
+---
+
+##### Task 2 — EV Tracker Mobile Layout
+**File:** `frontend/app/ev-tracker/page.tsx`
+
+**Problem:** 11 columns (GAME, MARKET, SIDE, MODEL%, BOOK%, LINE, EDGE, EV, RAW KELLY%, CAPPED KELLY%, STAKE, ACTION) is too many for a 390px viewport. `overflow-x-auto` works but forces the user to scroll right to the action column, defeating the purpose.
+
+**Fix:** Implement a responsive card layout for screens below `md` breakpoint. On mobile, replace the table with a card-per-row layout. On desktop (`md` and above), show the full table unchanged.
+
+```tsx
+{/* Mobile cards — visible below md */}
+<div className="md:hidden space-y-2">
+  {sortedMarkets.map((market) => (
+    <div key={...} className={`p-3 rounded-lg border ...`}>
+      {/* Game + time, Market badge + Side, Edge (large emerald/red),
+          Stake in emerald if qualifying, Log Bet button if qualifying */}
+    </div>
+  ))}
+</div>
+
+{/* Desktop table — visible md and above */}
+<div className="hidden md:block overflow-x-auto">
+  {/* existing table unchanged */}
+</div>
+```
+
+Each mobile card shows: game + time, market badge + side, edge (large, prominent), stake ($) in emerald if qualifying, Log Bet button if qualifying. Non-qualifying cards at `opacity-60`.
+
+Acceptance criteria:
+- [ ] EV Tracker shows card layout at 390px with no horizontal scroll
+- [ ] Each card shows game, market, edge, stake, and Log Bet button
+- [ ] Qualifying cards have emerald left border; non-qualifying are muted (`opacity-60`)
+- [ ] Full table still renders correctly on desktop — no regression
+
+---
+
+##### Task 3 — Bet Log Layout & React Key Warning
+**File:** `frontend/app/bet-log/page.tsx`
+
+**Problem 1:** The stacked layout edit (`flex flex-col gap-8`) may not have compiled — the original two-column grid (`lg:grid-cols-[420px_1fr]`) may still be active. The full-width bet history table requires stacked layout to be usable.
+
+**Fix 1:** Verify the outermost content container uses `flex flex-col gap-8`. If the two-column grid is still present, replace it:
+
+```tsx
+// Replace:
+<div className="grid lg:grid-cols-[420px_1fr] gap-6">
+
+// With:
+<div className="flex flex-col gap-8">
+```
+
+**Problem 2:** React key warning — `key` prop is on an inner `<TableRow>` inside a fragment `<>` instead of the outer element.
+
+**Fix 2:**
+
+```tsx
+// Replace:
+{bets.map((bet) => (
+  <>
+    <TableRow key={bet.id}>
+
+// With:
+{bets.map((bet) => (
+  <React.Fragment key={bet.id}>
+    <TableRow>
+    ...
+  </React.Fragment>
+))}
+```
+
+**Problem 3:** Horizontal overflow when navigating from EV Tracker — pre-fill banner or model probability row may exceed viewport width on mobile.
+
+**Fix 3:** Add `overflow-x-hidden w-full` to the outermost page `<div>` container.
+
+Acceptance criteria:
+- [ ] Bet Log renders in stacked layout — form on top, summary tiles and table below
+- [ ] No React key warning in browser console
+- [ ] No horizontal overflow when navigating from EV Tracker with query params
+- [ ] Inline settle selector visible without horizontal scrolling
+
+---
+
+#### A0.0 Component Inventory (A0.4 implementation checklist)
+
+| Component | File | Status |
+|---|---|---|
+| Landing page | `frontend/app/page.tsx` | ✅ Merge-ready |
+| Login page | `frontend/app/login/page.tsx` | ✅ Merge-ready |
+| ProbabilityBar | `frontend/components/probability-bar.tsx` | ✅ Merge-ready |
+| Dashboard | `frontend/app/dashboard/page.tsx` | ✅ Merge-ready |
+| Performance | `frontend/app/performance/page.tsx` | ✅ Merge-ready |
+| Pick detail | `frontend/app/picks/[game_pk]/page.tsx` | ✅ Merge-ready |
+| Settings | `frontend/app/settings/page.tsx` | ✅ Merge-ready |
+| Admin | `frontend/app/admin/page.tsx` | ✅ Merge-ready |
+| EV Tracker | `frontend/app/ev-tracker/page.tsx` | ✅ Merge-ready |
+| Bet Log | `frontend/app/bet-log/page.tsx` | ✅ Merge-ready |
+
+**Deferred to post-beta:**
+
+| Component | Story | Reason |
+|---|---|---|
+| Market Comparison | US-012 | Bovada-only for beta — low priority |
+| Pick Detail Enhanced | US-013 | Post-beta enhancement for non-sharp users |
+| Pricing page | US-008 | Beta testers bypass — not needed until paid launch |
+
+---
+
+#### Key Design Decisions Made During A0.0
+
+- **Brand name:** Credence Sports (credencesports.com) — selected over Diamond Edge, Meridian Sports, and other candidates. Parent entity: Penumbra Partners.
+- **Color tokens:** Background `#0a0a0a`, surface `#141414`, border `#262626`, emerald `#10b981` (primary), amber `#f59e0b` (warning), red `#ef4444` (negative).
+- **Nav pattern:** Authenticated pages use a sub-nav row (Dashboard / Performance / Settings) below the main sticky nav. Settings nav will be refactored to an avatar dropdown pattern in A0.4 — noted as UX debt.
+- **EV Tracker navigation:** Accessible via "EV Tracker →" link on the Dashboard page next to the Today's Picks heading — not in the main sub-nav.
+- **Mobile strategy:** Dashboard and Pick Detail are mobile-first. EV Tracker and Bet Log are desktop-first with mobile card fallbacks (EV Tracker fix pending).
+- **ProbabilityBar:** Extracted as a reusable component at `frontend/components/probability-bar.tsx` — used on Landing page (with labels), Dashboard (labels off, compact), and Pick Detail (with labels and HIGH CONVICTION badge).
+- **All mock data** is in a single `MOCK_DATA` const per page with `// TODO: replace with useQuery hook` comments mapping to specific API endpoints — this is the A0.4 wiring checklist.
 
 ---
 

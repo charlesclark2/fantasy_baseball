@@ -14,41 +14,41 @@
     ]
   },
   "diagnostics": {
-    "divergences": 2,
-    "max_rhat": 1.01,
-    "min_ess_bulk": 594.0,
-    "rhat_ok": false
+    "divergences": 0,
+    "max_rhat": 1.0,
+    "min_ess_bulk": 1562.0,
+    "rhat_ok": true
   },
-  "mu_log_league_implied_per_side": 4.323726993171116,
+  "mu_log_league_implied_per_side": 4.360429709240381,
   "coefficients": {
     "beta_run_env": {
-      "mean": 0.0510524518237644,
+      "mean": 0.049709558627879784,
       "sign_ok": true
     },
     "beta_offense": {
-      "mean": 0.030204153625606057,
+      "mean": 0.03083588518285684,
       "sign_ok": true
     },
     "beta_bullpen": {
-      "mean": 0.18835887436380785,
+      "mean": 0.1723270952972742,
       "sign_ok": true
     },
     "beta_starter": {
-      "mean": 0.042522859247925475,
+      "mean": 0.04713617899841542,
       "sign_ok": true
     }
   },
   "kill_criterion": {
     "n_games": 380,
-    "ppm": 9.37198125,
+    "ppm": 9.302297861842105,
     "actual_mean": 8.68421052631579,
-    "bias": 0.6877707236842099,
+    "bias": 0.6180873355263152,
     "threshold": 8.81,
     "passed": false,
-    "delta_2026_mean": -0.014030742844301839,
-    "delta_2026_hdi_low": -0.0844113384931481,
-    "delta_2026_hdi_high": 0.05796705591115649,
+    "delta_2026_mean": -0.002404506138235729,
+    "delta_2026_hdi_low": -0.10223265636498806,
+    "delta_2026_hdi_high": 0.09479877866318429,
     "delta_2026_hdi_excludes_zero": false,
-    "season_run_shift_total": -0.12048299365521409
+    "season_run_shift_total": -0.02094416971911528
   }
 }
