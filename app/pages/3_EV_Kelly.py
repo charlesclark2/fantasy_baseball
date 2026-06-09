@@ -14,45 +14,40 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_execute, run_query
+from app.utils.prediction_status import (
+    DEDUP_PRIORITY_CASE,
+    PREDICTION_BASIS_CASE,
+    is_confirmed,
+)
 
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
 
-_PICKS_SQL = """
+# f-string injects the shared basis/dedup CASEs (app.utils.prediction_status) so
+# classification and per-game row selection are identical to every other page;
+# {{date}} stays literal for the later .format(date=...).
+_PICKS_SQL = f"""
 SELECT
     p.*,
     COALESCE(l.both_confirmed, FALSE) AS both_confirmed,
     g.game_date                        AS game_datetime_utc
 FROM (
     SELECT *,
-           CASE
-               WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
-               WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
-               ELSE 'provisional_pre_lineup'
-           END AS prediction_basis,
-           -- Prefer the most lineup-aware prediction per game (post_lineup > pre-lineup
-           -- > intraday_fallback), recency only as a tiebreaker. A blind fallback pick
-           -- must never outrank a lineup-confirmed one just because it was inserted later.
+           {PREDICTION_BASIS_CASE} AS prediction_basis,
            ROW_NUMBER() OVER (
                PARTITION BY game_pk
-               ORDER BY
-                   CASE
-                       WHEN prediction_type = 'post_lineup'                 THEN 2
-                       WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-                       ELSE 1
-                   END DESC,
-                   inserted_at DESC
+               ORDER BY {DEDUP_PRIORITY_CASE} DESC, inserted_at DESC
            ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
-    WHERE score_date = '{date}'
+    WHERE score_date = '{{date}}'
 ) p
 LEFT JOIN (
     SELECT
         game_pk,
         COUNT(DISTINCT home_away) = 2 AS both_confirmed
     FROM baseball_data.betting.stg_statsapi_lineups_wide
-    WHERE official_date = '{date}'
+    WHERE official_date = '{{date}}'
     GROUP BY game_pk
 ) l ON p.game_pk = l.game_pk
 LEFT JOIN (
@@ -82,7 +77,7 @@ def load_ev_data(date_str: str) -> pd.DataFrame:
         matchup = f"{away} @ {home}"
         both_confirmed = bool(r.get("both_confirmed", False))
         prediction_basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
-        lineup_confirmed_pred = prediction_basis == "lineup_confirmed"
+        lineup_confirmed_pred = is_confirmed(prediction_basis)
 
         # calibrated_win_prob is the production "model prob" for h2h — Platt-
         # recalibrated value used by predict_today.py for live edge computation.

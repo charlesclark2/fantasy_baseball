@@ -15,6 +15,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
+from app.utils.prediction_status import DEDUP_PRIORITY_CASE, PREDICTION_BASIS_CASE
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -123,22 +124,12 @@ def _games_sql(date_str: str) -> str:
         c.market_bookmaker_count
     FROM (
         SELECT *,
-               CASE
-                   WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
-                   WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
-                   ELSE 'provisional_pre_lineup'
-               END AS prediction_basis,
-               -- Most lineup-aware prediction per game (post_lineup > pre-lineup >
-               -- intraday_fallback); recency only breaks ties within a basis.
+               {PREDICTION_BASIS_CASE} AS prediction_basis,
+               -- Shared dedup priority (app.utils.prediction_status) — identical
+               -- across all pages so the same row is selected per game everywhere.
                ROW_NUMBER() OVER (
                    PARTITION BY game_pk
-                   ORDER BY
-                       CASE
-                           WHEN prediction_type = 'post_lineup'                 THEN 2
-                           WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-                           ELSE 1
-                       END DESC,
-                       inserted_at DESC
+                   ORDER BY {DEDUP_PRIORITY_CASE} DESC, inserted_at DESC
                ) AS _rn
         FROM baseball_data.betting_ml.daily_model_predictions
         WHERE score_date = '{date_str}'
@@ -175,7 +166,15 @@ def _game_filter(event_id: str | None, home_team: str, away_team: str, date_str:
     """
     if event_id:
         return f"event_id = '{event_id}'"
-    return f"home_team = '{home_team}' AND away_team = '{away_team}' AND commence_date = '{date_str}'"
+    # A's name mismatch: StatsAPI "Athletics" vs odds feed "Oakland Athletics".
+    # Normalize both the column and the value so A's odds match on the name
+    # fallback (mart_odds_events carries no current A's events → event_id is null
+    # for them, so this path is what A's games hit). Durable fix: Epic A1.9.
+    _h_col = "(CASE WHEN home_team ILIKE '%Athletics' THEN 'Athletics' ELSE home_team END)"
+    _a_col = "(CASE WHEN away_team ILIKE '%Athletics' THEN 'Athletics' ELSE away_team END)"
+    _h = "Athletics" if home_team.strip().endswith("Athletics") else home_team
+    _a = "Athletics" if away_team.strip().endswith("Athletics") else away_team
+    return f"{_h_col} = '{_h}' AND {_a_col} = '{_a}' AND commence_date = '{date_str}'"
 
 
 @st.cache_data(ttl=300)

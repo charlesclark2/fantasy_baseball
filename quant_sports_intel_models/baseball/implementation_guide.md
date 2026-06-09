@@ -10171,7 +10171,13 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 
 ### A1.9 — Canonical team dimension for cross-source joins
 
-**Overview:** Today's odds-match (intraday path) and `mart_game_odds_bridge` join games to odds events by **team name**, which breaks on cross-source name drift — most visibly the Athletics ("Athletics" in the MLB Stats API vs "Oakland Athletics" in the Parlay odds feed), which silently dropped all odds for MIL@ATH on 2026-06-08. A band-aid (`_normalize_team_name` + a hardcoded alias dict in `data_loader.py`) is in place. The durable fix is a single canonical team dimension keyed on the unambiguous MLB `team_id`, used by every cross-source join, retiring string matching.
+**Overview:** Many cross-source joins match games to odds by **team name**, which breaks on name drift — most visibly the Athletics ("Athletics" in the MLB Stats API vs "Oakland Athletics" in the Parlay odds feed). The durable fix is a single canonical team dimension keyed on the unambiguous MLB `team_id`, used by every cross-source join, retiring string matching.
+
+**Known band-aided sites (each collapses "… Athletics" → "Athletics"; A1.9 must consolidate ALL of these into the canonical resolver and delete the band-aids):**
+- `betting_ml/utils/data_loader.py::_load_todays_odds` / `_normalize_team_name` + `_TEAM_NAME_ALIASES` (intraday assembly odds — fixed 2026-06-08)
+- `app/pages/5_Game_Insights.py::_BOVADA_LINES_SQL` join `g.home_team_name = o.home_team` (Bovada lines were empty for all A's games — fixed 2026-06-09 with an inline `ILIKE '%Athletics'` CASE)
+- `app/pages/2_Market_Comparison.py::_game_filter` name fallback against `mart_odds_outcomes` (A's `event_id` is null because the legacy `mart_odds_events` carries no current A's events → name fallback was failing — fixed 2026-06-09)
+- `mart_game_odds_bridge` odds-event → game join (still name-based; re-spine on `team_id`)
 
 **Tasks:**
 - [ ] Extend `ref_teams` (already has `team_id`, `team_abbrev`, `canonical_abbrev`, `is_legacy_abbrev`) into the single source of truth for name↔id↔abbrev resolution across all feeds; add any missing odds-feed display-name variants (e.g. "Oakland Athletics", "Sacramento Athletics") as alias rows or a companion `ref_team_name_aliases` seed keyed on `team_id`

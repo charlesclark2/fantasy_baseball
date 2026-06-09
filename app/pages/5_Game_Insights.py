@@ -268,8 +268,14 @@ WITH pre_game AS (
         o.ingestion_ts
     FROM baseball_data.betting.mart_odds_outcomes o
     JOIN baseball_data.betting.stg_statsapi_games g
-        ON g.home_team_name = o.home_team
-        AND g.away_team_name = o.away_team
+        -- A's name mismatch: StatsAPI reports "Athletics" while the odds feed
+        -- still says "Oakland Athletics", which silently dropped all Bovada lines
+        -- for A's games. Collapse any "… Athletics" to "Athletics" on both sides
+        -- of the join. (Durable team_id-based fix tracked as Epic A1.9.)
+        ON (CASE WHEN g.home_team_name ILIKE '%Athletics' THEN 'Athletics' ELSE g.home_team_name END)
+           = (CASE WHEN o.home_team ILIKE '%Athletics' THEN 'Athletics' ELSE o.home_team END)
+        AND (CASE WHEN g.away_team_name ILIKE '%Athletics' THEN 'Athletics' ELSE g.away_team_name END)
+           = (CASE WHEN o.away_team ILIKE '%Athletics' THEN 'Athletics' ELSE o.away_team END)
         AND g.official_date = o.commence_date
     WHERE g.game_pk = {game_pk}
       AND o.bookmaker_key = 'bovada'
