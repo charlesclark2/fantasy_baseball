@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
+from app.utils.prediction_status import basis_message, is_confirmed, lineup_status_emoji
 
 # ---------------------------------------------------------------------------
 # Queries
@@ -304,12 +306,9 @@ def _signal(has_odds: bool, edge: float | None, lineup_confirmed_pred: bool, thr
 
 
 def _lineup_status(prediction_basis: str, both_confirmed: bool) -> str:
-    # Reflects whether the *prediction* is lineup-aware, not just whether lineups
-    # are posted. ⚠️ flags the dangerous mismatch: lineups are out but the shown
-    # prediction is still provisional (the post_lineup re-score hasn't run).
-    if prediction_basis == "lineup_confirmed":
-        return "✅"
-    return "⚠️" if both_confirmed else "⏳"
+    # Shared with Game Insights et al. via app.utils.prediction_status so the
+    # status semantics stay identical across pages.
+    return lineup_status_emoji(prediction_basis, both_confirmed)
 
 
 def _row_bg(row: pd.Series) -> list[str]:
@@ -538,17 +537,24 @@ with col_r2:
 with col_r3:
     if st.button("Score Confirmed Lineups", help="Write post_lineup predictions for today's confirmed-lineup games (🟢 source). Equivalent to the Dagster lineup-sensor job."):
         with st.spinner("Running post-lineup score…"):
+            # Mirrors the Dagster lineup-sensor job (pipeline/ops/sensor_ops.py::lineup_predict):
+            # scripts/predict_today.py is the production scorer that supports --prediction-type /
+            # --lineup-confirmed. (betting_ml/scripts/predict_today.py is the multi-version
+            # backfill/eval tool and does NOT accept --prediction-type — calling it here was the bug.)
+            # Write to PROD: the Today's Picks page reads baseball_data.betting_ml
+            # (prod), so the scorer must write there too — otherwise the button
+            # silently lands in betting_ml_dev and the page never updates.
+            # scripts/predict_today.py keys its write schema off TARGET_ENV
+            # (unset → betting_ml_dev; "prod" → betting_ml).
             _r = subprocess.run(
-                ["uv", "run", "python", "betting_ml/scripts/predict_today.py",
+                ["uv", "run", "python", "scripts/predict_today.py",
                  "--prediction-type", "post_lineup",
-                 "--date", date_str,
-                 "--model-tag", "prod",
-                 "--home-win-tag", "v3",
-                 "--total-runs-tag", "v3",
-                 "--run-diff-tag", "v3"],
+                 "--lineup-confirmed",
+                 "--date", date_str],
                 capture_output=True,
                 text=True,
                 cwd=str(_PROJECT_ROOT),
+                env={**os.environ, "TARGET_ENV": "prod"},
             )
         st.cache_data.clear()
         if _r.returncode == 0:
@@ -696,6 +702,7 @@ st.subheader("Recommended Bets")
 st.caption(f"Games with |edge| ≥ {edge_threshold:.0%}. Moneyline edge is from the home team's perspective; negative edge = bet away.")
 
 bet_rows = []
+_provisional_bet_matchups: list[str] = []
 
 for _, r in df.iterrows():
     if not bool(r.get("has_odds", False)):
@@ -703,7 +710,11 @@ for _, r in df.iterrows():
 
     matchup = f"{r['away_team']} @ {r['home_team']}"
     both = bool(r.get("both_confirmed", False))
-    lineup_icon = "✓" if both else "⏳"
+    # Status reflects whether the PREDICTION is lineup-confirmed (consistent with
+    # the picks table and Game Insights) — not merely whether lineups are posted.
+    _bet_basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
+    lineup_icon = lineup_status_emoji(_bet_basis, both)
+    _bet_is_provisional = not is_confirmed(_bet_basis)
 
     h2h_edge = _safe_float(r.get("h2h_edge"))
     if h2h_edge is not None and abs(h2h_edge) >= edge_threshold:
@@ -737,6 +748,8 @@ for _, r in df.iterrows():
             "Kelly%": kelly_str,
             "Lineups": lineup_icon,
         })
+        if _bet_is_provisional and matchup not in _provisional_bet_matchups:
+            _provisional_bet_matchups.append(matchup)
 
     totals_edge = _safe_float(r.get("totals_edge"))
     if totals_edge is not None and abs(totals_edge) >= edge_threshold:
@@ -767,12 +780,28 @@ for _, r in df.iterrows():
             "Kelly%": t_kelly_str,
             "Lineups": lineup_icon,
         })
+        if _bet_is_provisional and matchup not in _provisional_bet_matchups:
+            _provisional_bet_matchups.append(matchup)
+
+if _provisional_bet_matchups:
+    st.warning(
+        "⚠️ "
+        + str(len(_provisional_bet_matchups))
+        + " recommended bet(s) are on **provisional (pre-lineup) predictions** — "
+        "these may be blind to the confirmed starter/lineup, so the edge isn't yet "
+        "trustworthy. Wait for the post-lineup re-score before betting. Affected: "
+        + ", ".join(_provisional_bet_matchups)
+        + ". (Open Game Insights for the per-game detail.)"
+    )
 
 if bet_rows:
     df_bets = pd.DataFrame(bet_rows)
 
     def _bet_row_style(row: pd.Series) -> list[str]:
-        confirmed = row.get("Lineups") == "✓"
+        # Green only when the PREDICTION is lineup-confirmed (✅). Lineups posted
+        # but prediction still provisional (⚠️) or not posted (⏳) stay amber —
+        # the edge isn't trustworthy until the post-lineup re-score.
+        confirmed = row.get("Lineups") == "✅"
         bg = "background-color: #c6efce; color: #1e4620" if confirmed else "background-color: #ffeb9c; color: #3d2b00"
         return [bg] * len(row)
 
@@ -783,7 +812,7 @@ if bet_rows:
         "Edge": "Model probability minus market-implied probability for the recommended side",
         "EV": "Expected value per unit wagered at current odds",
         "Kelly%": "Suggested bet size as % of bankroll (capped at 10%)",
-        "Lineups": "✓ lineups confirmed  |  ⏳ lineups pending — wait for confirmation before betting",
+        "Lineups": "✅ prediction is lineup-confirmed (post-lineup re-score)  |  ⚠️ lineups posted but prediction still provisional — re-score pending, edge not yet trustworthy  |  ⏳ lineups not posted yet (provisional)",
     }
 
     st.dataframe(

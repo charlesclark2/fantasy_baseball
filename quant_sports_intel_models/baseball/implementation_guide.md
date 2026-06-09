@@ -390,10 +390,14 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ ── Signal Integration (Layer 3) ────────────────────────────────────────── │
 │ Epic 9   Signal Integration & Ablation      ✅ COMPLETE (2026-06-02)         │
 │   9.1 ✅  9.2 ✅  9.3 ✅  9.4 ✅  9.5 ✅  9.6 ✅                              │
-│ Epic 10  Totals Distribution Model          🔴 CLOSED — totals PAUSED (06-04)│
-│   10.1–10.6 ✅  10.7 🔒  10.8 ✅ recency-gate FAIL (4th confirm → Epic 16B)   │
-│ Epic 11  H2H Model Retrain                  🔴 CLOSED — no edge vs market    │
-│   11.1 ✅  11.2 ✅  11.3 ✅  11.L ✅  11.4–11.6 ⏭ skipped  11.7 🔴 (06-04) │
+│ Epic 10  Totals Distribution Model          🔁 REOPENED 06-05 (calibration) │
+│   10.1–10.8 ✅  10.9 isotonic/conformal ⬜  10.10 QRF challenger ⬜          │
+│ Epic 11  H2H Model Retrain                  🔁 superseded by Epic 28 (06-05) │
+│   11.1–11.7 closed → reopened as Epic 28                                     │
+│ Epic 27  Within-Season Env State Signal     ⬜ NEW 06-05 (totals unblock)    │
+│   27.1 Kalman latent · 27.2 signals · 27.3 re-open gate · 27.4 OAA · 27.5 GB/FB×park │
+│ Epic 28  H2H Edge Recovery & Magnitude Val  ⬜ NEW 06-05                     │
+│   28.1 alpha-recal · 28.2 ensemble · 28.3 magnitude-kill · 28.4 features · 28.5 Bradley-Terry │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -409,6 +413,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   12.6 Frequentist exploratory model ⏳ Gate: ≥500 live games (~mid-July)    │
 │   12.7 Production meta-model         ⏳ Gate: ≥1,000 games + ≥2 seasons      │
 │   12.8 Risk and portfolio layer       🔒 Blocked on 12.7                     │
+│   12.10 Betfair exchange sharp-money  ⬜ NEW 06-05 (Arch Review)             │
 │                                                                              │
 │ Epic 19  Bet Permission Gate                                                 │
 │   19.1 Gate criteria defined         ✅ Complete (2026-05-29)                │
@@ -416,6 +421,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   19.3 Backtest                      ⏳ Gate: ≥50 live CLV games             │
 │   19.4 EV Tracker update             🔒 Blocked on 19.3                      │
 │   19.5 game_conviction_score         🔒 Blocked on 19.3                      │
+│   19.6 VAE holistic OOD gate          ⬜ NEW 06-05 (Arch Review)             │
 │                                                                              │
 │ Epic 26  Layer 4 Selective-Strategy Eval & Live Bet Attribution              │
 │   26.1 module ✅  26.2 harness integ ✅  26.3 totals sweep ✅                │
@@ -434,9 +440,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   combined μ̄=9.01 vs actual 8.61 (+0.40 bias unchanged) → Epic 17 ACTIVATED │
 │   16B.6 skipped (gate failed) · 16B.7 run_diff→H2H ✅ NO CHANGE              │
 │                                                                              │
-│ Epic 17  Posterior Distribution Propagation 📋 SPEC — 17.1 ready for review  │
-│   17.1 PyMC hierarchical run scoring 📋  17.2 Win prob from distributions 🔒  │
-│   17.3 Posterior as bet sizing input 🔒   Gate: 17.1 kill criterion + 3-layer │
+│ Epic 17  Posterior Distribution Propagation 🔴 CLOSED 2026-06-05             │
+│   17.1 NegBin NUTS v1/v2/v3 all FAIL kill criterion (PPM 8.86→9.28, thr 8.81)│
+│   Re-open: (a) full 2026 season data · (b) Epic 27 env-state signal (NEW 06-05)│
 │                                                                              │
 │ Epic 18  Fantasy Baseball Extensibility     🔒 Blocked on Epic 16            │
 │   18.1 Player stat projections ⬜  18.2 DFS optimizer ⬜  18.3 Roto ⬜        │
@@ -492,6 +498,11 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A1.3 freshness gate ✅  A1.4 freshness indicator ⬜                         │
 │   A1.5 alerting & monitoring ✅ (2 live ACs pending)  A1.6 scheduler ✅      │
 │   A1.7 prediction notification delivery (email + SMS) ⬜                     │
+│   Live feature-pipeline (added 06-09):                                       │
+│   A1.8 intraday lineup+starter+EB overlay 🟡 (prototype on prod; hardening)  │
+│   A1.9 canonical team dim ⬜  A1.10 feature-coverage gate 🟡 (1 task left)    │
+│   A1.11 schedule-spined feature pipeline ⬜ (durable; gated on A1.10)        │
+│   A1.12 prod-write correctness (target + overwrite scope) ⬜                 │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -544,7 +555,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic 9 (signal integration + stacking weights) | 3D ✅, 4D ✅, 5D ✅, 6D ✅ — all gates met | ✅ COMPLETE 2026-06-02: 9.1 matrix (11,661 games); 9.2 NLL eval — promote totals={run_env,offense,bullpen}, home_win={offense,bullpen}; 9.3 stacking weights (near-uniform by design; bullpen edges ahead; fold-std≤0.003); 9.4 contract+loaders+predict_today --model-source (Snowflake-verified; X=11661×44 no-leak); 9.5 promotion log + registry verdicts; 9.6 Dagster weekly recompute (`weekly_ml_job`, activates O.3). **→ Epic 10 unblocked.** |
 | **DONE / CLOSED** | Epic 10 (totals distribution model) | Epic 9 ✅ | 🔴 CLOSED 2026-06-04: 10.6 shadow → totals PAUSED; 10.8 recency-gate FAIL (4th confirmation); next totals investment routed through Epic 16B gate → Epic 17 |
 | **DONE / CLOSED** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | 🔴 CLOSED 2026-06-04: no edge vs. 2026 Bovada market (2026 market Brier 0.1967 beats model 0.2220); 11.4–11.6 skipped; H2H deferred to Epic 26.5 live attribution gate |
-| **1 — NEXT** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 🔴 GATED 2026-06-04: v1 NUTS PPM=8.8607 (−0.051 miss); v2 abandoned; 17.1b diagnostics: bullpen drift confirmed (beta_discount HDI entirely negative), discount fails kill criterion; gated on bullpen sub-model retrain before next NUTS run |
+| **DONE / CLOSED** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 🔴 CLOSED 2026-06-05: Jensen+rolling final NUTS v3 PPM=9.2819 — 7th independent confirmation; NegBin log-link structural Jensen floor (β_bullpen=0.172, floor=8.87) > threshold 8.81; beta_rolling≈0 (within-season regime signal not learnable). Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
 | **2 — LAYER 3** | Epic 12.5 (Bayesian → Epic 19 integration) | ≥100 live games + 12.4 converging | ~Mid-June |
 | **2 — LAYER 3** | Epic 19.4–19.5 (EV Tracker + conviction score) | Epic 19.3 | After 19.3 |
@@ -557,6 +568,13 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **4 — LATE SEASON** | Epic 21 (live signal generation) | Epic 20 complete | After 20 |
 | **4 — LATE SEASON** | Epic 24 (player prop layer) | 4A ✅ + 5A ✅ + 16 + 18.1 | After Epic 18 |
 | **4 — LATE SEASON** | Epic 13 (temporal platform) | Phase 10 | Offseason 2026 |
+| **0 — NOW (Arch Review 06-05)** | Story 9.7 (uncertainty stubs), 28.1 (H2H alpha re-cal), 28.2 (run_diff×classifier ensemble) | No gate — eval-only, no retrain | Immediate |
+| **0 — NOW (Arch Review 06-05)** | Story 28.3 (magnitude live-tracking + kill criterion) | Epic 26.5 attribution live ✅ (live n=0 today) | Accrual → ~Sep/Oct 2026 |
+| **1 — NEXT (Arch Review)** | Story 10.9 (isotonic/conformal calib), Story 6.6 (reliever availability), Story 28.4 (H2H features) | Story 9.7 + matrix retrain | After Tier 0 |
+| **1 — NEXT (Arch Review)** | Epic 27.1–27.2 (within-season env state signal + backfill) | Epics 3–6 ✅; Epic 17 re-open (b) | THE totals lever |
+| **2 — ARCH (Arch Review)** | Epic 27.3 (totals re-open gate), 27.4 (OAA), 27.5 (GB/FB×park), Story 10.10 (QRF) | Epic 27.2 backfill (R31) | Gated on 27.2 |
+| **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), Story 12.10 (Betfair) | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
+| **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
 
 ## CLV Game Count Gate Tracker
 
@@ -619,7 +637,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 23. ≥ 100 live CLV-labeled games AND Epic 12.4 convergence criteria (R-hat < 1.01, mean CI width < 0.25, quartile separation ≥ 0.05) must both be met before Epic 12.5 wires the Bayesian model into Epic 19.
 24. ≥ 500 live CLV-labeled games before Epic 12.6 (frequentist exploratory meta-model).
 25. ≥ 1,000 live CLV-labeled games AND ≥ 2 seasons of data before Epic 12.7 (production meta-model).
-26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026.
+26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. **Epic 17 CLOSED 2026-06-05 (Story 17.1):** PyMC NegBin hierarchical NUTS exhausted three variants (v1 PPM=8.8607, v2 abandoned, v3 Jensen+rolling PPM=9.2819) — all failed kill criterion ≤8.81; structural Jensen floor at β_bullpen=0.172 is 8.87 (above threshold); beta_rolling posterior≈0 (within-season regime shift not learnable from current signals); 7th independent confirmation. Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026.
 26. Epic 12.7 must complete before Epic 12.8, and Epic 12.8 must complete before Epic 22.1–22.2.
 
 **Production operations ordering:**
@@ -637,7 +655,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 - Track A's infrastructure work is mostly complete. Dagster migration (0.5) runs in the background without blocking model development.
 - Track B can proceed in parallel lanes: starter (5A ✅ → 5 → 5D) and bullpen (6 → 6D) are fully independent of each other and can run simultaneously.
 - Track C (CLV monitoring and meta-model) starts immediately with no-gate stories and accumulates CLV evidence in the background; the frequentist model gates automatically as data accumulates.
-- Track D (advanced Bayesian): Epic 16 ✅ complete (2026-06-04). Epic 16B 🔴 CLOSED (2026-06-04) — combined-μ gate FAILED (9.01 > 8.85; +0.40 bias unchanged after all 4 sub-model retrains). **Epic 17 is now the active item.** Story 17.1 spec is written and ready for review — ADVI fast-pass, then NUTS hand-off, then kill criterion check. Epic 18 (fantasy) remains gated behind Epic 16 ✅ (already met).
+- Track D (advanced Bayesian): Epic 16 ✅ complete (2026-06-04). Epic 16B 🔴 CLOSED (2026-06-04) — combined-μ gate FAILED (9.01 > 8.85; +0.40 bias unchanged after all 4 sub-model retrains). **Epic 17 🔴 CLOSED 2026-06-05** — PyMC NegBin NUTS exhausted all three architectural variants (v1 PPM=8.8607, v2 abandoned, v3 Jensen+rolling PPM=9.2819); structural Jensen floor β²σ²/2 at β_bullpen=0.172 yields floor 8.87 > threshold 8.81; beta_rolling posterior≈0 confirms within-season regime shift is not learnable from available sub-model signals; 7th independent confirmation. Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. Epic 18 (fantasy) remains gated behind Epic 16 ✅ (already met).
 - Track E (MiLB, live betting) is either parallel (Epic 14) or profitability-gated (Epics 20–21) and never blocks the primary pipeline.
 - Track F (application layer) runs completely independently of Tracks A–E. It touches no model code, no dbt models, and no Snowflake writes. A0.1 and A0.2 should start immediately — DNS propagation for the domain takes 24–48 hours and blocks nothing in the model pipeline while it resolves.
 - Epic 22.3 (bankroll tracking) has no model dependency and should be built now — it's accounting infrastructure, not ML.
@@ -10119,6 +10137,131 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 
 ---
 
+## Epic A1 — Live Feature-Pipeline Stories (added 2026-06-09)
+
+**Why this cluster exists:** Investigation on 2026-06-08/09 (the SEA@BAL "no post-lineup score" and MIL@ATH "no odds" incidents) uncovered a structural defect upstream of the SLA work: **the pregame feature store never contains today's not-yet-played games**, so every live prediction silently runs on a degraded fallback. Root cause: `feature_pregame_game_features`, `feature_pregame_team_features`, `feature_pregame_odds_features`, and `mart_game_odds_bridge` all spine on `mart_game_results`, which is built from `stg_batter_pitches` (pitch-derived → completed games only). The team rolling marts (`mart_team_rolling_offense`, …) likewise have no row for today. With no spine row for today's games, `load_todays_features` falls through to `load_todays_features_via_statsapi` (`data_source='intraday_fallback'`) **every day** — which historically loaded **team rolling stats only**, discarding confirmed lineups, probable starters, EB batter/pitcher posteriors (Epics 4A/5A/6A), sequential beliefs (Epic 16), and Layer-2 sub-model signals. **Net effect: the deployed model's live feature set did not match its backtested feature set.** A1.8 ships the contained fix (already prototyped to prod 2026-06-09); A1.9–A1.12 harden it and A1.11 is the durable architectural replacement. Relates to [[reference_submodel_uncertainty_placeholders]] (overlaid EB columns are real, not the placeholder stubs) and the Bovada edge-detection target [[reference_bovada_h2h_moneyline]].
+
+**Sequencing (binding):** A1.8 (done, harden) → A1.10 (observability — proves A1.8 works and makes any regression visible) → A1.9 (canonical team dim — retires the band-aid) → A1.12 (write-target correctness) → A1.11 (durable re-spine — large, gated; supersedes A1.8 when complete). A1.11 must NOT start before A1.10's coverage gate exists, or a botched re-spine of the core training marts would be undetectable.
+
+---
+
+### A1.8 — Intraday feature assembly: lineup + starter + EB overlay
+
+**Overview:** Enrich the intraday assembly (`load_todays_features_via_statsapi`) so that, in addition to carrying forward each team's most-recent completed-game row (correct for rolling/standings/bullpen columns), it overlays **today's actual lineup and starter feature rows** — which ARE forward-looking (`feature_pregame_lineup_features` and `feature_pregame_starter_features` are spined on the SCD-2 lineup state / probable pitchers and contain today's games). These marts carry the EB batter/pitcher posteriors inline, so the overlay restores the confirmed lineup, the probable starter, and the Bayesian posteriors to the live feature set. A working prototype was deployed to prod on 2026-06-09.
+
+**Tasks:**
+- [x] Add `_load_todays_lineup_starter(conn, target_date)` to `betting_ml/utils/data_loader.py` — returns today's lineup + starter rows keyed by `(game_pk, side)`, prefixed to match `feature_pregame_game_features` aliases (lineup col `C` → `{side}_C`; starter col `C` → `{side}_starter_C`; exclude meta cols `{game_pk, game_date, game_year, side}`)
+- [x] Overlay in the assembly row loop with a **non-null-only overwrite** so the overlay strictly adds information (never replaces a carried-forward value with NULL); log `[Epic A1] Enriched N game-side(s)`
+- [x] Correct the now-false `[WARN] … lineup features unavailable … team rolling stats only` log line to describe the carry-forward + overlay behavior accurately
+- [x] Verify on prod: predictions move vs the pre-overlay run (confirmed 2026-06-09 — e.g. CIN@SD classifier 70.9%→63.7%) and `Enriched 56 game-side(s)` matches the 26 lineup + 30 starter sides present that day
+- [x] **Harden — handedness adjustments**: recompute `{home,away}_lineup_vs_{away,home}_starter_{xwoba,k_pct,bb_pct}_adj` in Python (`_platoon_weighted` + `_enrich_row_with_today` in `data_loader.py`) from the overlaid lineup counts + opposing-starter splits. **H2H matchup block deferred to A1.11** — `feature_pitcher_batter_h2h_matchups` is completed-game-spined (0 rows for today), so it cannot be overlaid until the re-spine
+- [x] **Add a unit test** (`betting_ml/tests/test_intraday_assembly.py`) asserting: (a) overlaid `*_avg_eb_woba` / `*_starter_eb_xwoba_against` equal the lineup/starter mart values, not carried-forward; (b) a NULL today-value does not overwrite a non-null carried-forward value; (c) prefix mapping excludes meta cols / no team-level collision; (d) handedness recompute correct. Includes an `ast.walk` import-guard test (not string search). 16/16 pass
+- [x] **Validated against real Snowflake credentials** ([[feedback_test_before_deploy]]) — `predict_today.py --prediction-type post_lineup --lineup-confirmed --date 2026-06-09 --no-log-snowflake`: `Enriched 57 game-side(s)`, no schema errors, all 15 games scored (refactor into `_enrich_row_with_today` verified end-to-end 2026-06-09)
+
+**Acceptance criteria:**
+- [ ] For a game with a confirmed lineup today, the assembled row's `home_avg_eb_woba`, `away_avg_eb_woba`, `home_starter_eb_xwoba_against`, `away_starter_eb_xwoba_against` equal the corresponding `feature_pregame_lineup_features` / `feature_pregame_starter_features` values for that `game_pk` — confirmed by a direct query diff, not by inspection
+- [ ] Games whose lineups are not yet confirmed are unaffected (overlay no-ops; carried-forward values retained) — no NULLs introduced where a carried-forward value existed
+- [ ] The handedness-adjustment and H2H columns are populated from today's data (not imputed) for confirmed-lineup games
+- [ ] Unit test passes in CI; the real-credentials dry-run is recorded in the PR description
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (the Development Workflow section is the canonical standard, and Epic A1 → "Live Feature-Pipeline Stories" → A1.8 is your story). The intraday feature assembly in `betting_ml/utils/data_loader.py` (`load_todays_features_via_statsapi` + `_load_todays_lineup_starter`) already overlays today's lineup + starter feature rows (incl. EB posteriors) onto the carried-forward team row; your job is to finish the hardening tasks: overlay the inline-derived lineup-vs-starter handedness adjustment columns and the pitcher-batter H2H matchup block (both now have today's data), add the unit test, and validate against real Snowflake credentials before merge. Use `dbtf` (not `dbt`) and `mcp__snowflake__run_snowflake_query` for any Snowflake lookups. Do not commit or push — hand the branch back for the user to commit.
+
+---
+
+### A1.9 — Canonical team dimension for cross-source joins
+
+**Overview:** Today's odds-match (intraday path) and `mart_game_odds_bridge` join games to odds events by **team name**, which breaks on cross-source name drift — most visibly the Athletics ("Athletics" in the MLB Stats API vs "Oakland Athletics" in the Parlay odds feed), which silently dropped all odds for MIL@ATH on 2026-06-08. A band-aid (`_normalize_team_name` + a hardcoded alias dict in `data_loader.py`) is in place. The durable fix is a single canonical team dimension keyed on the unambiguous MLB `team_id`, used by every cross-source join, retiring string matching.
+
+**Tasks:**
+- [ ] Extend `ref_teams` (already has `team_id`, `team_abbrev`, `canonical_abbrev`, `is_legacy_abbrev`) into the single source of truth for name↔id↔abbrev resolution across all feeds; add any missing odds-feed display-name variants (e.g. "Oakland Athletics", "Sacramento Athletics") as alias rows or a companion `ref_team_name_aliases` seed keyed on `team_id`
+- [ ] Re-spine `mart_game_odds_bridge`'s odds-event → game join on `team_id` (resolve both the StatsAPI team and the odds-feed team name to `team_id` via the canonical dimension) instead of normalized name strings; preserve the existing doubleheader `game_pk` disambiguation
+- [ ] Replace the inline `_load_todays_odds` name-tuple match in `data_loader.py` with a `team_id`-based join, and **delete** the `_normalize_team_name` / `_TEAM_NAME_ALIASES` band-aid once the canonical path is verified
+- [ ] Add a dbt test asserting every active MLB `team_id` resolves to exactly one canonical abbrev and that no odds-feed event for a scheduled game fails to map to a `game_pk` (a "team unmapped" failing test, scoped to the current season)
+- [ ] Backfill-verify: re-run the bridge for a date range including an Athletics home game and confirm `has_odds = true` for those games
+
+**Acceptance criteria:**
+- [ ] No game on the current schedule with odds present in `mart_odds_outcomes` has `has_odds = false` due to a name mismatch — verified by a query that left-joins scheduled games to bridged odds and asserts zero unmatched where outcomes exist
+- [ ] `_normalize_team_name` and `_TEAM_NAME_ALIASES` are removed from `data_loader.py`; a test using `ast.walk` confirms they are no longer referenced
+- [ ] The Athletics (and any relocated/renamed franchise) map correctly across StatsAPI, Parlay/Bovada odds, and Action Network feeds — confirmed for a live Athletics game
+- [ ] dbt test for one-canonical-abbrev-per-team_id passes under `dbtf build`
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (Development Workflow + Epic A1 → "Live Feature-Pipeline Stories" → A1.9). Cross-source team joins currently match on team name and break on franchise name drift (the Athletics: "Athletics" vs "Oakland Athletics"), which silently dropped odds for MIL@ATH on 2026-06-08. A temporary `_normalize_team_name`/`_TEAM_NAME_ALIASES` band-aid lives in `betting_ml/utils/data_loader.py`. Build the durable fix: make `ref_teams` (which already has `team_id`/`canonical_abbrev`/`is_legacy_abbrev`) the canonical resolver, re-spine `mart_game_odds_bridge` and the intraday odds match on `team_id`, then delete the band-aid. Edge/CLV/market comparison targets Bovada specifically ([[project_target_bookmaker]]). Use `dbtf` and `mcp__snowflake__run_snowflake_query`; do not commit or push.
+
+---
+
+### A1.10 — Intraday feature-source coverage gate & observability
+
+**Overview:** The fallback path was a *silent, permanent* degradation — `data_source='intraday_fallback'` rows are written every day and nothing flags that live predictions aren't using the full feature store. This story makes the feature-source path observable and gated, so A1.8's enrichment is verifiable and any regression (including a future re-spine in A1.11) is caught immediately.
+
+**Tasks:**
+- [x] Ensure every `daily_model_predictions` row carries an accurate `data_source` (`feature_store` | `intraday_assembly` | `intraday_fallback`) and a `feature_coverage_score` (fraction of 6 feature blocks populated: lineup, starter, team-rolling, bullpen-EB, sequential, odds) — computed per-row in `predict_today.py` (`_feature_coverage_score` + `_FEATURE_COVERAGE_BLOCKS`); `data_source` stamped per-game in `data_loader.py`; both added to the table via `ALTER … ADD COLUMN IF NOT EXISTS` + the INSERT
+- [x] Extend `check_prediction_coverage.py` to count expected games from the **schedule** (`stg_statsapi_games`, not the empty feature mart — that bug made the check a silent daily no-op), summarize the feature-source breakdown for the latest row per game, and emit `[METRIC] feature_coverage_score=` for Dagster metadata
+- [x] Non-blocking alert when predictions are served via `intraday_fallback` (>0 games) or mean `feature_coverage_score` drops below threshold — via `log.warning` in `check_prediction_coverage.py` (surfaces in the Dagster op logs). Threshold set to **0.70** (below the `intraday_assembly` ~0.77 steady-state, so it fires on regression not daily). A dedicated email `failure_hook` can be added if alerting beyond logs is wanted
+- [ ] Record the coverage score per run in `pipeline_status` (A1.3 table) so the app/backend and weekly health report (A1.5) can surface it — **remaining** (needs `update_pipeline_status.py` + a column add)
+- [x] Document the three `data_source` states and what each implies for prediction quality in `runbooks/dagster_pipeline_sla_analysis.md`
+- [x] **Validated end-to-end on prod 2026-06-09:** all 15 games tagged `intraday_assembly`, `feature_coverage_score` avg 0.767 (min 0.667, max 1.0); coverage check reports `feature_store=0 intraday_assembly=15 intraday_fallback=0`, emits `[METRIC] feature_coverage_score=0.7668`, no false warn. Unit tests in `betting_ml/tests/test_feature_coverage.py` (4) + `test_intraday_assembly.py` (16) all pass
+
+**Acceptance criteria:**
+- [ ] Today's prediction rows have a non-null `data_source` and `feature_coverage_score`; a query can report, per day, which path served predictions
+- [ ] `check_prediction_coverage.py` fails (or alerts, per chosen severity) when a confirmed-lineup game is scored without its lineup features — verified by temporarily pointing the assembly at a date with confirmed lineups and a forced-empty overlay
+- [ ] The weekly health report shows `feature_coverage_score` and the count of `intraday_fallback`-served days for the prior 7 days
+- [ ] Threshold and states documented in `runbooks/dagster_pipeline_sla_analysis.md`
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (Development Workflow + Epic A1 → "Live Feature-Pipeline Stories" → A1.10). Live predictions can silently fall back to a degraded feature set (`data_source='intraday_fallback'`) with no alert. Make the feature-source path observable: stamp `data_source` + a `feature_coverage_score` on every `daily_model_predictions` row, extend `check_prediction_coverage.py` to assert per-block coverage for today's slate, alert on regressions, and surface the score in `pipeline_status` + the weekly health report. This gate MUST exist before A1.11 (re-spine) starts. Use `dbtf` and `mcp__snowflake__run_snowflake_query`; do not commit or push.
+
+---
+
+### A1.11 — Durable fix: schedule-spined pregame feature pipeline
+
+**Overview:** The architectural replacement for the intraday assembly (A1.8). Re-spine the pregame feature pipeline on the **schedule** (`stg_statsapi_games`, which is forward-looking through season end) rather than on `mart_game_results` (pitch-derived), so the feature store itself contains today's not-yet-played games with full features attached. This is a multi-mart cascade and must be done non-destructively and verified on dev before promotion. **Large; gated on A1.10.** When complete and validated, the intraday assembly (A1.8) becomes a true exception path used only on data outages.
+
+**Tasks:**
+- [ ] Map the full spine cascade rooted in `mart_game_results`: `mart_game_odds_bridge`, `feature_pregame_team_features`, `feature_pregame_odds_features`, `feature_pregame_game_features`, and the rolling marts that have no today row (`mart_team_rolling_offense`, `mart_team_rolling_pitching`, `mart_team_vs_pitcher_hand`, `mart_team_pythagorean_rolling`, `mart_team_season_record`, `mart_bullpen_workload`, `mart_bullpen_effectiveness`, `mart_team_schedule_context`, `mart_team_fielding_oaa`, …). Determine which need a scheduled "as-of-today" row vs. which can be carried forward by an as-of join
+- [ ] Introduce a non-destructive **schedule spine**: each affected model's game-list CTE becomes `UNION ALL` of completed regular-season games (`mart_game_results`, unchanged) + scheduled-not-yet-played games (`stg_statsapi_games` where `game_type='R'` and `game_pk NOT IN (select game_pk from mart_game_results)`), resolving team abbrevs via `ref_teams` (A1.9) on `team_id`. Existing historical rows must be byte-for-byte unchanged
+- [ ] Confirm leakage guards hold for unplayed games: every rolling/EB/sequential join must use `< official_date` (strict) so a scheduled spine row aggregates only prior games; add a leakage test asserting no feature for a scheduled game references same-day or future data
+- [ ] Build the cascade to the **dev** target first (`dev_betting_features`); verify today's full slate appears in `feature_pregame_game_features` with non-null lineup/starter/team/odds blocks and `has_full_data` set appropriately for confirmed-lineup games
+- [ ] Flip `load_todays_features` to use the `feature_store` path (it already prefers it); confirm `data_source='feature_store'` for today's games and that `feature_coverage_score` (A1.10) ≥ the intraday assembly's score with no regression in any block
+- [ ] Promote to prod (`dbtf build` via the `baseball_betting_and_fantasy` target) only after a row-count + feature-parity diff vs. the current production tables shows historical rows unchanged and today's games added
+- [ ] Decommission path: once `feature_store` reliably serves today for 7 consecutive days (per A1.10 metric), mark the intraday assembly (A1.8) as the outage-only fallback in code comments and the runbook
+
+**Acceptance criteria:**
+- [ ] `feature_pregame_game_features` contains every scheduled regular-season game for today with lineup/starter/team/odds feature blocks populated (subject to lineup confirmation) — verified on prod
+- [ ] Historical (completed-game) rows are unchanged by the re-spine — verified by a full-table checksum/row-count diff before vs. after on dev, and a spot diff on prod
+- [ ] A leakage test proves no scheduled-game feature uses same-day-or-later source data
+- [ ] Live predictions log `data_source='feature_store'` with `feature_coverage_score` ≥ the A1.8 assembly baseline for 7 consecutive days
+- [ ] `--full-refresh` rebuild behavior is verified per [[feedback_dbtf_incremental_fullrefresh]] (drop manually before rebuild if any incremental key values change)
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (Development Workflow + Epic A1 → "Live Feature-Pipeline Stories" → A1.11). This is the durable replacement for the A1.8 intraday assembly: re-spine the pregame feature pipeline on the forward-looking schedule (`stg_statsapi_games`) instead of the pitch-derived `mart_game_results`, so the feature store itself holds today's not-yet-played games. It is a multi-mart cascade (`mart_game_odds_bridge`, `feature_pregame_team_features`, `feature_pregame_odds_features`, `feature_pregame_game_features`, and the rolling marts) — do it as a non-destructive `UNION ALL` (completed games unchanged + scheduled games added), build to the **dev** target and verify today's full slate with no historical-row drift and no leakage BEFORE promoting to prod. A1.9 (canonical team dim) and A1.10 (coverage gate) must be complete first. Use `dbtf` (note its `--full-refresh` does MERGE not DROP+CREATE, [[feedback_dbtf_incremental_fullrefresh]]) and `mcp__snowflake__run_snowflake_query`; hand off any rebuild that runs >1 min for the user to run ([[feedback_no_long_running_scripts]]); do not commit or push.
+
+---
+
+### A1.12 — Production-write correctness (write target + overwrite scope)
+
+**Overview:** Three foot-guns surfaced during the 2026-06-08/09 incidents. (1) **Write-target mismatch:** `predict_today.py` keys its write schema off `TARGET_ENV` (unset → `betting_ml_dev`; `prod` → `betting_ml`), but the Streamlit Today's Picks page reads `betting_ml` (prod). The "Score Confirmed Lineups" button, run from a local/dev Streamlit, silently wrote to `betting_ml_dev` while the page read prod — so clicks appeared to do nothing. Band-aided by forcing `TARGET_ENV=prod` in the button's subprocess `env`. (2) **Overwrite scope:** the post-lineup "delete then insert (overwrite)" is **date-scoped, not game-pk-scoped** — running `predict_today.py --game-pks X` deletes ALL of today's `post_lineup` rows and writes back only game X, silently wiping the rest. (3) **Lineup-confirmation was never enforced (FIXED 2026-06-09):** the `--lineup-confirmed` filter targeted `home_lineup_slot_1`/`away_lineup_slot_1` columns that exist in NEITHER the feature store nor the assembly, so it silently no-op'd — every scheduled game was written as `post_lineup` with `lineup_confirmed=true`, including games with no posted lineup (e.g. ATH/MIL 824999 showed "confirmed" on Today's Picks while Game Insights showed no lineup). Compounded by the assembly carrying forward a **stale** `has_full_lineup=true` from each team's last game.
+
+**Tasks:**
+- [x] **Enforce real lineup confirmation (FIXED 2026-06-09):** filter on `home/away_has_full_lineup` (which exists in both paths) instead of the nonexistent `*_lineup_slot_1`; gate on `--lineup-confirmed` so the morning projected run is unaffected (`scripts/predict_today.py`). In the intraday assembly, force `home/away_has_full_lineup` from whether today's lineup was overlaid, overriding the stale carry-forward (`data_loader.py::_enrich_row_with_today`). Result on 2026-06-09: post_lineup slate 15 → 13 (dropped 824999 ATH/MIL with no lineup + 824347 COL/CHC with only the home lineup); 0 false-confirmed rows remain in prod. Unit tests added in `betting_ml/tests/test_intraday_assembly.py` (19 pass)
+- [ ] Centralize `TARGET_ENV` → schema resolution in one helper imported by both the scorer and the Streamlit/app read path, so a single source decides dev vs prod and the read/write targets cannot diverge; remove the comment that says "Never set TARGET_ENV=prod locally" or reconcile it with the now-sanctioned button behavior
+- [ ] Make the Streamlit "Score Confirmed Lineups" (and "Refresh") buttons' write target explicit and correct (replace the `env={**os.environ, "TARGET_ENV": "prod"}` band-aid with the centralized resolver + an explicit prod-write confirmation/label in the UI)
+- [ ] Scope the post-lineup overwrite DELETE to the `--game-pks` filter when one is supplied (delete only the targeted game_pks' `post_lineup` rows), so a single-game re-score never wipes the rest of the slate
+- [ ] Audit the "Refresh" button: confirm it no longer calls `betting_ml/scripts/predict_today.py` (the multi-version backfill tool, which writes `prediction_type=NULL`) for live scoring — it should use `scripts/predict_today.py` with an explicit `--prediction-type`, matching the Dagster lineup sensor
+- [ ] Add a regression test: `predict_today.py --game-pks X` leaves other games' `post_lineup` rows intact for the date
+
+**Acceptance criteria:**
+- [ ] A single source resolves the prediction read/write schema; a test (`ast.walk` over `scripts/predict_today.py` and the app read path) confirms neither hardcodes a schema string independent of the resolver
+- [ ] Clicking "Score Confirmed Lineups" from the app writes to the same schema the page reads, with no manual `TARGET_ENV` plumbing — verified end-to-end
+- [ ] `predict_today.py --game-pks X` deletes/overwrites only game X's rows for the date; all other games' `post_lineup` rows are preserved — verified by the regression test
+- [ ] No `prediction_type=NULL` rows are produced by any UI button path
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (Development Workflow + Epic A1 → "Live Feature-Pipeline Stories" → A1.12). Two production-write foot-guns need fixing: (1) `predict_today.py` resolves its write schema from `TARGET_ENV` (dev vs `betting_ml`/prod) while the Streamlit Today's Picks page reads prod — a local button click silently wrote to dev; it's currently band-aided by forcing `TARGET_ENV=prod` in the button subprocess. Centralize the schema resolution so read/write targets can't diverge. (2) The post-lineup overwrite DELETE is date-scoped, so `--game-pks X` wipes every other game's `post_lineup` rows for the date — scope the DELETE to the supplied game-pks. Add the regression test. Per repo policy the user handles all git commits/pushes ([[feedback_no_git_commits]]) — do not commit or push.
+
+---
+
 **Epic A1 sequencing summary:**
 ```
 A1.1 Timing audit            — FIRST; 2 days; identifies the actual failure mode
@@ -10132,6 +10275,734 @@ A1.5 Alerting & monitoring ──┐
 A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
      ↓
 A1.7 Prediction notification delivery — after A1.5; requires A0.5 SES verification complete (shares SNS/DynamoDB infra with A0.6; can be built in parallel with A0.3)
+
+Live feature-pipeline cluster (added 2026-06-09; parallel to A1.4–A1.7):
+A1.8 Intraday lineup+starter+EB overlay — DONE (prototype on prod); hardening tasks open
+     ↓
+A1.10 Feature-coverage gate & observability — proves A1.8, guards A1.11
+     ↓
+A1.9 Canonical team dim — retires the name-match band-aid
+     ↓
+A1.12 Production-write correctness (target + overwrite scope)
+     ↓
+A1.11 Schedule-spined feature pipeline — durable re-spine; gated on A1.10; supersedes A1.8
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```
+
+---
+
+# Architecture Review Roadmap — Epics 27–28 + Cross-Epic Stories (added 2026-06-05)
+
+**Source:** Senior-architect review of the totals (Dimensions 1–6) and H2H (Dimension 7) systems
+following the seven independent confirmations that the static sub-model stack cannot beat the 2026
+Bovada totals market, and the H2H "no edge vs. credible 2026 market" closure (Epic 11). This section
+synthesizes that review into a single prioritized backlog, places each item into a home epic, and
+specifies every item as a story with tasks + acceptance criteria. Two **new epics** are created
+(27 — totals unblock; 28 — H2H edge recovery); the remaining items are **cross-epic stories** tagged
+`[Home: Epic X]` for placement into the existing epic.
+
+## Synthesized prioritized roadmap (ranked by impact ÷ effort)
+
+| # | Story | Home | Addresses | Effort | Impact | Eval w/o retrain? |
+|---|---|---|---|---|---|---|
+| **TIER 0 — immediate, no retraining (this week)** ||||||
+| 1 | Fix `*_uncertainty` placeholder stubs | 9.7 | Broken epistemic propagation (consts 10/7/6) — every CI/conviction read runs on stubs | Low | **High** | ✅ (signal regen, no model retrain) |
+| 2 | Alpha re-cal on sequential `home_win` champion | 28.1 | Deployed α=0 is stale (Epic 1.7-era); could change the H2H blend | Low | Med | ✅ |
+| 3 | run_diff × classifier ensemble + disagreement gate | 28.2 | Two independent H2H estimators; disagreement = conviction | Low | Med | ✅ |
+| 4 | Magnitude live-tracking + pre-committed kill criterion | 28.3 | The one live H2H signal is unconfirmed on real prices (live n=0 today) | Low | **High (decisive)** | ✅ (live accrual) |
+| **TIER 1 — high value, moderate effort** ||||||
+| 5 | Isotonic + conformal post-calibration on Layer-3 P(over)/P(home) | 10.9 | §4 tail over-confidence (0.895→0.378), persists OOS; α-blend only half-fixed | Low | Med-High | ✅ |
+| 6 | Within-season scoring-environment state signal (Kalman) | 27.1–27.3 | THE totals lever — Epic 17 re-open criterion (b) | High | **High** | ❌ |
+| 7 | Reliever top-3 leverage availability vector | 6.6 | Orthogonal close-game signal (totals + H2H) | Med | Med | ❌ (logs ingested) |
+| 8 | H2H travel/fatigue + starter×opp-offense interaction | 28.4 | H2H-specific win-prob drivers absent from the totals matrix | Low-Med | Med | ❌ (data free) |
+| 9 | Defensive quality (OAA / sprint speed) orthogonal signal | 27.4 | No fielding info in any sub-model; passes Story-3.Z compression test | Med | Med | ❌ (Savant pipe exists) |
+| **TIER 2 — architecture / new data** ||||||
+| 10 | Quantile-regression-forest Layer-3 challenger | 10.10 | §10 Jensen log-link floor (β=0.172 → 8.87) — no `exp()` parameterization | Med | Med | ❌ |
+| 11 | Hierarchical Bayesian Bradley-Terry H2H model | 28.5 | Likelihood matches binary outcome; no Jensen floor; H2H reopen architecture | High | **High** | ❌ |
+| 12 | VAE holistic OOD gate (replace per-signal z>1.5) | 19.6 | May-2026 +0.2882σ bullpen drift slipped the per-signal gate | Med | Med | ❌ |
+| 13 | Betfair exchange sharp-money feed | 12.10 | Money-weighted sharp signal for the CLV meta-model | Med | Med | ❌ (new integration) |
+| 14 | GB/FB-pitcher × granular-park interaction | 27.5 | Real interaction the additive Layer-2 models can't represent | Med | Med | ❌ |
+| 15 | Park-type hierarchical prior | 3A.3 | Cold-start non-standard venues borrow from type cluster, not global mean | Low-Med | Low-Med | ❌ |
+| 16 | Aging-curve EB prior (continuous) | 5A.6 | Cold-start rookies / veteran decline detection | Med | Low-Med | ❌ |
+
+**Icebox (Tier 3 — create Trello cards, no full spec yet):** pitch-heatmap CNN starter embedding
+(route to Epic 24 props / Epic 18 fantasy — wrong target for totals); Beta-Binomial prior-strength
+calibration to line movement (Epic 16 follow-on); hierarchical home-field advantage (fold into 28.5);
+per-team-dispersion NegBin (Epic 17 refinement — low odds, floor re-emerges via `mu_log_league`);
+lineup GNN (~7,300 samples too thin); pitch-mix Dirichlet-Multinomial (σ_interaction=0.0033 — signal
+absent); manager decision-quality feature (sourcing hard); clutch/leverage-weighted wOBA (Clutch
+barely self-predicts); survival within-game win-prob (gated on Epic 20/21 profitability).
+
+## Track placement summary
+
+- **Track B (Sub-Model Pipeline → Layer 3):** Epic 27 (NEW); Epic 28 (NEW, supersedes closed Epic 11);
+  Epic 10 REOPENED (10.9 calibration, 10.10 QRF); Story 9.7; Story 6.6; Story 3A.3; Story 5A.6.
+- **Track C (Market Intelligence & Betting Decisions):** Story 12.10 (Betfair → Epic 12); Story 19.6
+  (VAE OOD → Epic 19); Story 28.3 cross-links Epic 26 live attribution.
+- **Track D (Advanced Bayesian):** Epic 17 re-open criterion (b) is satisfied by **Epic 27** —
+  Epic 27 is the totals-unblock prerequisite that gates any future Epic 17 NUTS re-run.
+
+## New dependency rules (append to "Complete Dependency Rules")
+
+- **R31.** Epic 27 (within-season environment signal) must produce a backfilled signal AND pass its
+  own re-open gate (27.3) before any Epic 17 NUTS re-run is scheduled. This is the operational form of
+  Epic 17 re-open criterion (b).
+- **R32.** Story 28.3 (magnitude kill criterion) gates H2H deployment with non-zero alpha: no
+  automated H2H bets until either 28.1 yields α>0 with a Brier improvement OR 28.3 confirms the
+  magnitude signal on ≥150 fresh real-priced settled bets.
+- **R33.** Stories 6.6 (reliever availability) and 27.4 (defense) are shared signals consumed by both
+  Epic 27 (totals) and Epic 28 (H2H); regenerate their signal tables before either epic's eval gate.
+
+---
+
+# Epic 27 — Within-Season Scoring-Environment State Signal
+
+**Status:** ⬜ NEW (2026-06-05). **Track B.** This is the formal answer to **Epic 17 re-open criterion
+(b)**: *"A new signal type — not a new model architecture — is the unblocking condition."*
+
+**Goal:** Produce a **low-variance, recursively-updated estimate of the current within-season run-
+scoring environment** (league-level and per-team) as a new sub-model signal. The totals_2026_failure_
+analysis (§8) established the binding constraint precisely: the April→May regime move was 0.48 runs
+while every trailing-N / EW recency window swung 4+ runs over two-week spans — *"the market wins by
+being a far lower-variance estimator, not by adapting faster."* A Kalman / state-space filter is the
+low-variance estimator the market implicitly maintains; this epic builds it. Also expands the signal
+set with two orthogonal-to-the-matrix signals (defense, GB/FB×park interaction) that pass the
+Story-3.Z faithful-compression test by construction.
+
+**Prerequisites:** Epics 3–6 ✅ (sub-model signals). Epic 17 CLOSED ✅ (re-open criterion (b) registered).
+
+**Re-open framing:** Epic 27 does NOT un-pause totals on its own. It produces the signal; **Story 27.3
+re-runs the Epic 17 NUTS (or the Layer-3 combiner) with the new signal against the same pre-committed
+kill criterion (May-2026 PPM ≤ 8.81 / L1<2.8893 / L3<0.248 & <0.228).** Pass → shadow window; fail →
+totals stays paused and the conclusion is that the environment is not learnable even with a low-variance
+state, escalating to re-open criterion (a) (full-2026-season `delta_2026`).
+
+---
+
+### 27.1 — State-space (Kalman) within-season environment latent
+
+**Goal:** Fit a Kalman / local-level state-space model over the within-season run-scoring environment —
+one latent league-level state and per-team offensive/pitching environment states — that updates after
+every completed game and is, by construction, lower-variance than any fixed-window recency estimator.
+
+**Tasks:**
+- [ ] Build `betting_ml/models/state_space/fit_env_state.py`: a local-level (random-walk) Kalman filter
+  on daily league mean total runs, with the process-noise variance `Q` and observation-noise variance
+  `R` fit by MLE on 2021–2025 (so the filter learns the *true* regime-drift-to-noise ratio rather than
+  assuming a window length). Emit a per-date filtered state `env_league_state` + its variance.
+- [ ] Extend to per-team offensive and pitching environment latents (30 teams × 2) with partial pooling
+  toward the league state (shrinkage = team process-noise / (team + league)).
+- [ ] Validate against the §8 ground truth: the filtered league state must track the monthly actual
+  means (Mar 8.62 / Apr 9.09 / May 8.61 / Jun 10.08) with materially lower two-week variance than
+  trailing-10 (which swung 5.40→9.80 across May).
+- [ ] Leakage guard: the state used to score game on date T uses only games with `game_date < T`.
+
+**Acceptance criteria:**
+- [ ] Filtered `env_league_state` two-week rolling std on 2026 is < 50% of the trailing-10 estimator's
+  (the §8 noise-floor problem is the kill condition for a naive window; the filter must beat it).
+- [ ] On May 2026, `env_league_state` sits below 8.81 at the May-20 checkpoint while the static
+  `run_env_mu_v4` mean stays ~8.88 — i.e., the filter resolves the regime the recency windows could not.
+- [ ] MLE-fit `Q`, `R` documented; leakage guard verified on 5 spot-checked dates.
+
+---
+
+### 27.2 — Environment-state signal generation, backfill, and feature-mart wiring
+
+**Goal:** Emit the 27.1 state as a daily sub-model signal following the Epic O canonical contract.
+
+**Tasks:**
+- [ ] `betting_ml/scripts/generate_env_state_signals.py` with the standard `--date`/`--backfill`/`--env`/
+  `--dry-run` flag contract; emit `env_league_state_mu`, `env_league_state_sigma`,
+  `env_team_off_state`, `env_team_pitch_state` per (game_pk, side).
+- [ ] Backfill 2021–2026; idempotent via SCD-2 record_hash.
+- [ ] Add columns to `feature_pregame_sub_model_signals`; `dbtf build --select feature_pregame_sub_model_signals`.
+- [ ] Wire `generate_env_state_signals_op` into `daily_ingestion_job` (Epic O pattern, completed-game window).
+
+**Acceptance criteria:**
+- [ ] Signal non-null for ≥99% of 2021–2026 regular-season game-sides; `env_league_state` centered near
+  the season mean each year.
+- [ ] Op appears in `daily_ingestion_job` downstream of `dbt_daily_build`; freshness check reports it.
+- [ ] `--dry-run` prints row counts without writes.
+
+---
+
+### 27.3 — Totals re-open gate (re-run Epic 17 NUTS / Layer-3 with the env state)
+
+**Goal:** With the env-state signal live, re-run the totals architecture against the pre-committed kill
+criterion. This is the decision gate — it does not assume success.
+
+**Tasks:**
+- [ ] Add `env_league_state` (+ team states) as a regressor to the Epic 17 PyMC NegBin model
+  (`run_scoring_nuts.py`) replacing/augmenting the non-informative `rolling_league_runs_14d`
+  (β_rolling≈0); OR add it to the Layer-3 combiner as a recency-aware mean offset.
+- [ ] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
+- [ ] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
+
+**Acceptance criteria:**
+- [ ] **Kill criterion reported first:** May-2026 PPM with PASS (≤8.81) / FAIL verdict, before any further eval.
+- [ ] On PASS: L1 NLL < 2.8893, L2 calib_80 ∈ [0.75,0.85], L3 blended Brier < 0.248 AND < 0.228; record
+  shadow-window decision in `model_registry.yaml` + `totals_2026_failure_analysis.md` (§11).
+- [ ] On FAIL: record as the 8th confirmation; conclude the environment is not learnable even with a
+  low-variance state and escalate to re-open criterion (a) (full-2026 `delta_2026`, ~Oct 2026).
+
+---
+
+### 27.4 — Defensive quality (OAA / sprint speed) orthogonal signal
+
+**Goal:** Add a fielding-quality signal — absent from every current sub-model — using the Savant OAA
+pipe already migrated (`ingest_oaa.py`, 2026-06-02). Orthogonal to offense/bullpen/starter by construction.
+
+**Tasks:**
+- [ ] Build a team defensive-quality rolling feature (OAA, sprint speed) in a feature mart; EB-smooth low-sample.
+- [ ] Ablate as a Layer-3 signal on both `total_runs` and `home_win` (NLL/Brier delta vs current matrix);
+  gate per the Sub-model output standard.
+- [ ] If it clears, generate a `defense_quality` signal and wire into `feature_pregame_sub_model_signals`.
+
+**Acceptance criteria:**
+- [ ] Defensive feature non-null ≥95% of 2021–2026 game-sides; orthogonality confirmed (|corr| < 0.3 with
+  existing signal mus).
+- [ ] Ablation delta documented for both targets; promote/defer verdict recorded with re-eval trigger.
+
+---
+
+### 27.5 — GB/FB-pitcher × granular-park interaction term
+
+**Goal:** Model the interaction the additive Layer-2 models cannot — a fly-ball starter in a HR park
+suppresses runs differently than a ground-ball starter — using the granular park factors already built
+in Story 3A.2 (`mart_park_factors_granular`).
+
+**Tasks:**
+- [ ] Derive starter batted-ball profile (GB%/FB%) from Statcast; construct `fb_pct × eb_hr_factor` and
+  `gb_pct × eb_so_factor` interaction features.
+- [ ] Add to `run_env_v4` and/or `starter_v1` feature sets; retrain challenger; gate on NLL.
+
+**Acceptance criteria:**
+- [ ] Interaction features non-null ≥90% of rows; challenger NLL vs champion documented (promote only on
+  NLL + calib_80 beat per Sub-model output standard).
+
+---
+
+# Epic 28 — H2H Edge Recovery & Magnitude Validation
+
+**Status:** ⬜ NEW (2026-06-05). **Track B.** Supersedes the CLOSED Epic 11.
+
+**Goal:** Get the H2H moneyline model to a state where it beats the credible 2026 Bovada market
+(Brier ~0.18–0.20) and/or deploys a confirmed selective edge at non-zero alpha. The leakage-free eval
+showed model Brier 0.224 vs market 0.180 (no edge); direction_flip is dead (39.9% win on 2026); the
+**magnitude** signal is the one survivor (roi_devig +0.197 on 2026) but is vig-free, declining, and has
+a **live sample of zero settled bets** (attribution began 2026-06-04). Unlike totals, H2H has no Jensen
+floor and no within-season-environment dependency — its failure is signal-quality/calibration, which
+features + a better-matched likelihood can address.
+
+**Prerequisites:** Epic 9 ✅ (Layer-3 matrix). Epic 26 ✅ (Layer-4 + live attribution). run_diff seq
+champion promoted ✅.
+
+---
+
+### 28.1 — Alpha re-calibration on the sequential `home_win` champion (IMMEDIATE, no retrain)
+
+**Goal:** The deployed α=0 was fit in Epic 1.7 on the original elasticnet models. The sequential XGBoost
+champion has different raw outputs and better ECE (0.043). Re-run the alpha grid on its raw predictions.
+
+**Tasks:**
+- [ ] `betting_ml/scripts/alpha_recal_h2h_seq.py`: load `oos_predictions_h2h_v2.parquet`, season 2026,
+  market-covered; pull the seq champion raw `model_p_home_win`, de-vigged `market_devig_home`, outcome.
+- [ ] Grid α∈[0.0..1.0] (step 0.1) via `run_probability_layer.tune_alpha` (same log-odds blend the totals
+  path used); objective = log-loss. Write best to `best_alpha.json` key `h2h_seq_alpha`.
+- [ ] If α>0: recompute the magnitude `|model_p − market_p|` gap and Layer-4 attribution against the new
+  **blended** probabilities (currently measured on raw model probs).
+
+**Acceptance criteria:**
+- [ ] Alpha grid log-loss table documented; `h2h_seq_alpha` written.
+- [ ] Interpretation recorded: α=0 ⇒ market mirror (deploy only via selective path); α>0 ⇒ blended value
+  exists and 28.3 must re-measure magnitude on the new blend.
+
+---
+
+### 28.2 — run_diff × classifier ensemble + disagreement gate (IMMEDIATE, no retrain)
+
+**Goal:** 16B.7 showed the run_diff-derived `Φ(μ/σ)` loses standalone; the untested piece is the
+ensemble of the two genuinely-independent estimators and their disagreement as a conviction signal.
+
+**Tasks:**
+- [ ] `betting_ml/scripts/h2h_ensemble_eval.py`: merge the direct-classifier p (`oos_predictions_h2h_v2`)
+  with the run_diff-derived p (16B.7 output) on game_pk; sweep mix weight w∈{0,0.25,0.5,0.75,1.0}.
+- [ ] Three-layer eval (L1 NLL vs Bernoulli(0.54), L2 ECE/calib_80, L3 raw Brier vs market 0.182) per w.
+- [ ] Test `|p_classifier − p_run_diff|` as a NEW abstain/conviction gate via
+  `bayesian_model_eval.normalize_h2h_frame` + `sweep_thresholds`.
+
+**Acceptance criteria:**
+- [ ] Ensemble three-layer table per w documented; best w recorded (even if none beats market — the
+  disagreement gate is the deliverable).
+- [ ] Disagreement-gated subset Brier vs market reported; adopt as conviction filter if it tightens the
+  magnitude subset.
+
+---
+
+### 28.3 — Magnitude live-tracking + pre-committed kill criterion (DECISIVE)
+
+**Goal:** The magnitude signal is the only live positive. Stand up real-book tracking and a pre-committed
+kill criterion so the 2026 deployment question is answered on data, not the optimistic vig-free number.
+
+**Context (live state, queried 2026-06-05):** attribution began 2026-06-04; the only slate logged is
+7 abstains + 2 direction_flips, **0 magnitude, 0 settled.** Statistical power is NOT the constraint
+(per-bet roi_devig sd≈0.58 ⇒ only ~15–24 bets distinguish +0.197 from 0); the constraints are vig-free
+optimism, in-sample threshold selection, and real favorite-side vig.
+
+**Tasks:**
+- [ ] Confirm `predict_today` logs `layer4_h2h_rule='magnitude'`, the model & market probs, and the
+  **actual Bovada moneyline odds taken** (not de-vig) for every magnitude trigger.
+- [ ] Build a settled-bet monitor over `daily_model_predictions` (joins CLV/result) computing real-book
+  ROI at actual odds + 95% CI, and the magnitude-subset model Brier vs market Brier.
+- [ ] Register the kill criterion in `model_registry.yaml` under `home_win`.
+
+**Acceptance criteria (pre-committed kill criterion):**
+- [ ] **CONFIRM** only when ≥150 fresh post-2026-06-04 settled magnitude bets show 95% lower-CI real-book
+  ROI > 0 **AND** magnitude-subset model Brier < market Brier on those games.
+- [ ] **KILL** if at n=150 the 95% lower-CI real-book ROI ≤ 0, OR an early tripwire fires (real-book win
+  rate below actual-odds break-even over the first 50 settled magnitude bets).
+- [ ] Until CONFIRM: `automated_bets: false`, magnitude is manual-review/informational only.
+
+---
+
+### 28.4 — H2H-specific features: travel/fatigue + starter×opp-offense interaction
+
+**Goal:** The `home_win` model reuses the totals (run-volume) matrix. Add the two highest-ROI H2H-specific
+features and retrain, targeting a credible-2026 Brier in the sharp band (≤~0.195).
+
+**Tasks:**
+- [ ] Travel/fatigue features from StatsAPI schedule + geocoded park coords: travel distance, time-zone
+  delta, 3rd-consecutive-road-game flag, getaway-day flag (all leakage-free, data already present).
+- [ ] `starter_suppression_mu × opp pred_runs_mu` interaction term (both signals already in matrix; the
+  additive model can't represent the product) and `σ` of run_diff as a conviction feature.
+- [ ] Retrain the `home_win` challenger (seq + new features) on the leakage-free matrix; evaluate on the
+  credible 2026 surface.
+
+**Acceptance criteria:**
+- [ ] New features non-null ≥95% of rows; orthogonality of travel features confirmed.
+- [ ] **Confirmation gate:** credible-2026 model Brier ≤ 0.195 (enters the 0.18–0.20 sharp band) to
+  justify a non-zero blend alpha; if not met, document the residual gap and route to 28.5.
+
+---
+
+### 28.5 — Hierarchical Bayesian Bradley-Terry H2H model (reopen architecture)
+
+**Goal:** Replace XGBoost classification with the likelihood actually shaped like the problem — a
+paired-comparison model with hierarchical team strength and team-specific home-field advantage. No
+Jensen floor (logit link, no count aggregation), so unlike totals there is no structural ceiling.
+
+**Tasks:**
+- [ ] PyMC hierarchical Bradley-Terry: `P(home win) = σ(s_home − s_away + hfa_home)`, `s_team` partially
+  pooled, `hfa_team ~ Normal(league_hfa, σ_hfa)`; sub-model signals (offense_v2, bullpen_v2, starter_v1,
+  run_diff μ/σ) enter as covariates on team strength.
+- [ ] Train 2021–2025, score leakage-free 2026 OOS; three-layer + Layer-4 eval vs the XGBoost champion
+  and the market on the same games (hand-off; NUTS 1–2 hr).
+- [ ] Fold in the hierarchical HFA (icebox item) and the Beta-Binomial prior-strength calibration as the
+  team-strength prior.
+
+**Acceptance criteria:**
+- [ ] Convergence (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered reparam).
+- [ ] Head-to-head vs XGBoost champion on credible 2026: report L1 NLL, L2 ECE/calib_80, L3 Brier vs
+  market 0.182; promote only if it beats both the champion AND closes toward the market.
+
+---
+
+## Cross-Epic Stories (place into the tagged home epic)
+
+### Story 9.7 — Replace placeholder `*_uncertainty` columns with real PI widths  `[Home: Epic 9]`
+
+**Goal:** Story 10.3 discovered (and `reference_submodel_uncertainty_placeholders` records) that
+`run_env_uncertainty=10`, `offense=7`, `bullpen=6` are **constant sentinels**, not calibrated values —
+the entire epistemic-uncertainty propagation through Layer 3 (CIs, `game_uncertainty_score`, bet-gate
+conviction) runs on stubs. Replace them with NLL-derived 80% predictive-interval widths.
+
+**Tasks:**
+- [ ] In each `generate_*_signals.py`, compute `uncertainty` = per-game 80% PI width from the model's own
+  predictive distribution (`nbinom.ppf(0.9,…) − nbinom.ppf(0.1,…)` for NegBin; `2·1.28·σ` for Normal),
+  replacing the constant.
+- [ ] Backfill 2021–2026; rebuild `feature_pregame_sub_model_signals`.
+- [ ] Re-verify the Layer-3 `combined_sigma` and the P(over) CI widths now vary with per-game uncertainty
+  (the Story 9.3 / 10.3 "σ flat under reweighting" symptom).
+
+**Acceptance criteria:**
+- [ ] No sub-model signal has a constant `uncertainty` column; per-game variance confirmed (std > 0).
+- [ ] `combined_sigma` and P(over) CI widths now widen on low-coverage / high-disagreement games
+  (the AC that Story 9.3 reported `False` should now pass or be re-explained).
+- [ ] `reference_submodel_uncertainty_placeholders` memory updated/retired.
+
+### Story 10.9 — Isotonic + conformal post-calibration on Layer-3 P(over)/P(home)  `[Home: Epic 10, REOPENED]`
+
+**Goal:** Fix the §4 tail over-confidence (predicted 0.895 → actual 0.378; persists OOS at `[0.90,1.00]`
+0.942→0.625 and `[0,0.10)` 0.052→0.263). The α=0.70 Bovada blend only half-fixed it (gap +0.317→+0.132).
+Add a market-free monotonic recalibration layer.
+
+**Tasks:**
+- [ ] Fit isotonic regression on Layer-3 raw P(over) → actual over-rate on a walk-forward holdout; apply
+  before the alpha blend.
+- [ ] Add conformal prediction intervals on the combiner output (distribution-free coverage) as an
+  alternative to the NegBin-CDF CI.
+- [ ] Re-check the two tail bins post-isotonic; same approach for H2H P(home).
+
+**Acceptance criteria:**
+- [ ] Post-isotonic `[0.90,1.00]` and `[0,0.10)` bin gaps materially reduced (target |gap| < 0.10).
+- [ ] Conformal 80% intervals achieve empirical 80% coverage on 2026 OOS (vs current calib_80 ~0.776).
+- [ ] Documented as a calibration fix (makes the model honest; does not by itself generate edge).
+
+### Story 10.10 — Quantile-regression-forest Layer-3 challenger  `[Home: Epic 10, REOPENED]`
+
+**Goal:** Test whether removing the log-link removes the §10 Jensen floor (β_bullpen=0.172 → 8.87 > 8.81
+before any signal). A QRF produces full predictive quantiles with no `exp(β·z)` parameterization.
+
+**Tasks:**
+- [ ] Train a quantile-regression forest on the Layer-3 matrix; derive P(over) from the predictive
+  quantiles directly (no NegBin CDF).
+- [ ] Re-run the archived Story 8.P quantile model under the **v4-era** gates (10.6 showed v4 already
+  differentiates, std-of-means 1.355 — the NGBoost-era std-shrinkage gate that killed 8.P is stale).
+- [ ] Compute the May-2026 PPM and check whether the +0.170 Jensen floor is absent.
+
+**Acceptance criteria:**
+- [ ] QRF May-2026 mean predicted total reported against 8.81; explicitly state whether the log-link
+  floor is removed.
+- [ ] calib_80, Brier vs market documented; promote/defer verdict recorded.
+
+### Story 6.6 — Reliever top-3 leverage availability vector  `[Home: Epic 6]`
+
+**Goal:** Epic 6's `availability_index` is an aggregate scalar with ~zero correlation to same-game xwOBA
+(by design). For close games (totals tails AND H2H), *which specific high-leverage relievers are
+available* is the informative, orthogonal signal. Model the top-3 leverage arms' availability explicitly.
+
+**Tasks:**
+- [ ] From reliever appearance logs (already ingested), derive per-team `closer_available`,
+  `setup1_available`, `setup2_available` (y/n + rest-days) for each game from prior-3-day usage.
+- [ ] Add to `bullpen_v2` feature set; ablate on `total_runs` and `home_win` (NLL/Brier delta).
+
+**Acceptance criteria:**
+- [ ] Availability vector non-null ≥95% of game-sides; leakage-free (prior-day usage only).
+- [ ] Ablation delta documented both targets; this is the shared signal for R33 (consumed by Epic 27/28).
+
+### Story 19.6 — VAE holistic OOD gate  `[Home: Epic 19]`
+
+**Goal:** The current bullpen OOD gate is a per-signal z>1.5σ threshold. The May-2026 drift was +0.2882σ
+on bullpen alone (below 1.5) yet was the entire kill-criterion overshoot — a per-signal gate misses
+*combination* drift. Train a VAE on the joint 2022–2025 signal vector; reconstruction error flags
+holistic OOD.
+
+**Tasks:**
+- [ ] Train a VAE on the full game-level signal vector (2022–2025); compute per-game reconstruction error.
+- [ ] Backtest: does reconstruction-error AUC flag the May-2026 cohort earlier/better than the per-signal
+  gate's recall?
+- [ ] Wire as an Epic 19 gate criterion (`signal_combination_ood`) blocking bets above a threshold.
+
+**Acceptance criteria:**
+- [ ] VAE recon-error AUC for flagging May-2026 > the per-signal z>1.5 gate's recall on the same cohort.
+- [ ] Gate criterion added to `sub_model_registry.yaml` bet_gate; threshold documented.
+
+### Story 12.10 — Betfair exchange sharp-money feed  `[Home: Epic 12]`
+
+**Goal:** Action Network gives ticket %; Betfair gives money-weighted sharp signal (actual money each
+side). Strongest feed for the Epic 12 CLV meta-model's steam/sharp-money features.
+
+**Tasks:**
+- [ ] Evaluate Betfair exchange API access + auth; ingest matched-money + back/lay for MLB h2h/totals.
+- [ ] Add money-imbalance + steam features to the Epic 12.1 meta-model feature mart.
+- [ ] Backtest the CLV meta-model with vs without Betfair features (AUC lift).
+
+**Acceptance criteria:**
+- [ ] Betfair feed ingested for a trial window; coverage documented.
+- [ ] CLV meta-model AUC lift from Betfair features quantified (gate: ≥+0.01 AUC to retain).
+
+### Story 3A.3 — Park-type hierarchical prior  `[Home: Epic 3A]`
+
+**Goal:** `mart_eb_park_factors` (3A.1) shrinks each park to the *global* league mean. Add a park-*type*
+level (high-altitude, dome, pitcher's-park clusters) so low-sample parks borrow from their type.
+
+**Tasks:**
+- [ ] Cluster parks by type; add a type-level hyperprior between the global mean and per-park posterior
+  (one-level extension of the existing Normal-Normal).
+- [ ] Re-fit; verify low-n parks (Sutter Health, Tokyo Dome) shrink toward their *type* mean.
+
+**Acceptance criteria:**
+- [ ] Low-n park posteriors are pulled toward type-cluster mean, not global mean; CV error on the ~2%
+  non-standard-venue games does not regress.
+
+### Story 5A.6 — Continuous aging-curve EB prior  `[Home: Epic 5A]`
+
+**Goal:** 5A priors are season-level age-*band* points. A continuous aging-curve prior improves rookie
+cold-start and veteran-decline detection (the subgroups 5A.3's `il_return_blend` targets).
+
+**Tasks:**
+- [ ] Fit a continuous pitcher aging curve (xwOBA-against vs age); use the curve value as the prior mean
+  instead of the band mean in `compute_starter_posteriors.py`.
+- [ ] Ablate on the April/rookie/IL-return subgroups vs the current band prior.
+
+**Acceptance criteria:**
+- [ ] April-window and IL-return subgroup MAE ≤ current band-prior MAE; documented.
+
+---
+
+## Hand-off prompts (one per story — paste into the agent when the story is pulled)
+
+Each prompt is self-contained. **Shared conventions every prompt assumes** (from the Development
+Workflow section): use `dbtf`, never `dbt`; query Snowflake via the Snowflake MCP only (never ad-hoc
+Python); hand any script that runs >1 min back to the user to run and show the command; test any new
+Snowflake-querying script with real credentials before merging; fully-qualified `db.schema.table` names,
+no `USE` statements; do not git commit or push (the user handles git); follow the Sub-model output
+standard (two-model minimum, NLL primary gate, calib_80, Optuna-tune the winner, MLflow-instrument).
+
+### 27.1 — Kalman within-season environment latent
+```
+You are picking up Story 27.1 (Epic 27 — Within-Season Scoring-Environment State Signal) in the MLB
+quant betting repo. First read quant_sports_intel_models/baseball/implementation_guide.md: the
+"Development Workflow" section and the full Epic 27 + Story 27.1 spec (in "Architecture Review Roadmap").
+Then read ablation_results/totals_2026_failure_analysis.md §8 and §10. Context: seven confirmations show
+the totals stack can't beat the market within-season; §8 proved every recency window (trailing-N, EW)
+swings 4+ runs over two weeks while the real April→May regime move is 0.48 runs — "the market wins by
+being a far lower-variance estimator, not by adapting faster." Your job is to build that low-variance
+estimator: a local-level Kalman/state-space filter over league + per-team run environment, with Q/R
+fit by MLE on 2021–2025 so it learns the true drift-to-noise ratio. Complete all Story 27.1 tasks and
+satisfy its acceptance criteria (filtered two-week std < 50% of trailing-10; reads <8.81 at May-20 2026
+while static run_env stays ~8.88; leakage guard game_date<T). The Kalman fit is likely a >1-min run —
+hand it off. Record Q/R and the validation table; this signal is the Epic 17 re-open prerequisite (R31).
+```
+
+### 27.2 — Env-state signal generation + backfill + mart wiring
+```
+You are picking up Story 27.2 (Epic 27) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: the "Development Workflow" + "Epic O —
+Sub-Model Signal Orchestration" sections and the Story 27.2 spec. Prereq: Story 27.1 produced the Kalman
+env-state model. Use betting_ml/scripts/generate_run_env_signals.py as the template for the flag contract
+(--date/--backfill/--env/--dry-run) and the Epic O canonical op pattern. Build generate_env_state_signals.py
+emitting env_league_state_mu/sigma + env_team_off_state/env_team_pitch_state per (game_pk, side); backfill
+2021–2026 (idempotent SCD-2); add the columns to feature_pregame_sub_model_signals and rebuild it; wire
+generate_env_state_signals_op into daily_ingestion_job (completed-game window). Satisfy the ACs (≥99%
+non-null, op in the job + freshness check, dry-run clean). The backfill is a >1-min run — hand it off.
+```
+
+### 27.3 — Totals re-open gate (re-run NUTS with env state)
+```
+You are picking up Story 27.3 (Epic 27) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: the full Epic 17 spec (Story 17.1, kill
+criterion + three-layer gates), the Story 27.3 spec, and ablation_results/totals_2026_failure_analysis.md
+§10. Also read betting_ml/models/bayesian/run_scoring_nuts.py and nuts_summary.json. Prereq: Story 27.2's
+env-state signal is backfilled (dependency rule R31). Add env_league_state (+ team states) as a regressor
+to the PyMC NegBin model, replacing the non-informative rolling_league_runs_14d (β_rolling≈0). Re-run NUTS
+(2–4 hr — HAND OFF) and compute the May-2026 posterior-predictive mean FIRST against the pre-committed kill
+criterion (PPM ≤ 8.81). Report PASS/FAIL before any further eval. On PASS run the three-layer + Layer-4
+gate (L1<2.8893, calib_80∈[0.75,0.85], L3 Brier<0.248 & <0.228) and record a shadow-window decision in
+model_registry.yaml + totals_2026_failure_analysis.md (§11). On FAIL, record as the 8th confirmation and
+note totals now waits on re-open criterion (a) (full-2026 delta_2026, ~Oct 2026).
+```
+
+### 27.4 — Defensive quality (OAA) orthogonal signal
+```
+You are picking up Story 27.4 (Epic 27) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow" (Sub-model output
+standard), Story 27.4 spec, and Story 3.Z (the "faithful-compression" ablation lesson — a signal that's a
+linear transform of inputs already in the matrix shows ~zero delta). OAA was migrated to Baseball Savant
+(scripts/ingest_oaa.py, 2026-06-02). Build a team defensive-quality rolling feature (OAA, sprint speed),
+EB-smooth low-sample; ablate it as a Layer-3 signal on BOTH total_runs and home_win (NLL/Brier delta vs
+the current matrix); if it clears the gate, generate a defense_quality signal and wire into
+feature_pregame_sub_model_signals. Satisfy ACs (≥95% non-null, |corr|<0.3 with existing signal mus,
+ablation verdict + re-eval trigger). This is orthogonal-to-the-matrix by construction — that's the point.
+```
+
+### 27.5 — GB/FB-pitcher × granular-park interaction
+```
+You are picking up Story 27.5 (Epic 27) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 27.5 spec, Story 3A.2 (granular park
+factors — mart_park_factors_granular has eb_hr_factor / eb_so_factor etc., already built), and the
+Sub-model output standard. The additive Layer-2 models can't represent that a fly-ball starter in a HR
+park suppresses runs differently than a ground-ball starter. Derive starter GB%/FB% from Statcast, build
+fb_pct×eb_hr_factor and gb_pct×eb_so_factor interaction features, add to run_env_v4 and/or starter_v1,
+retrain the challenger, and gate on NLL+calib_80 (promote only on both). Training is a >1-min run — hand
+it off. Satisfy ACs (≥90% non-null; challenger NLL vs champion documented).
+```
+
+### 28.1 — Alpha re-cal on sequential home_win champion
+```
+You are picking up Story 28.1 (Epic 28 — H2H Edge Recovery) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow", the Epic 28 + Story
+28.1 spec, and "Dimension 7" of the architecture review if present. Also read
+ablation_results/h2h_v2_leakage_free.md and betting_ml/scripts/run_probability_layer.py (tune_alpha /
+compute_posterior). Context: the deployed H2H alpha=0 was fit in Epic 1.7 on the OLD elasticnet models;
+the sequential XGBoost champion has different raw outputs and better ECE (0.043). This is eval-only — NO
+retraining. Build alpha_recal_h2h_seq.py: load oos_predictions_h2h_v2.parquet (season 2026,
+market-covered), pull the seq champion raw model_p_home_win + de-vigged market_devig_home + outcome, grid
+alpha 0→1 step 0.1 via tune_alpha (log-loss objective, same blend the totals path used), write best to
+best_alpha.json under key h2h_seq_alpha. If alpha>0, recompute the magnitude |model_p−market_p| gap and
+Layer-4 attribution against the NEW blended probs. Satisfy ACs (grid table; interpretation recorded).
+```
+
+### 28.2 — run_diff × classifier ensemble + disagreement gate
+```
+You are picking up Story 28.2 (Epic 28) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 28.2 spec; and
+betting_ml/scripts/evaluation/bayesian_model_eval.py (normalize_h2h_frame, sweep_thresholds),
+ablation_results/layer4_selective_strategy.md, and Story 16B.7 (evaluate_run_diff_h2h.py — already showed
+the run_diff-derived Φ(μ/σ) LOSES standalone: NLL 0.6023 vs champion 0.5957). This is eval-only. Build
+h2h_ensemble_eval.py: merge the direct-classifier p (oos_predictions_h2h_v2) with the run_diff-derived p
+(16B.7 output) on game_pk; sweep mix weight w∈{0,0.25,0.5,0.75,1.0}; run the three-layer eval (L1 NLL vs
+Bernoulli(0.54), L2 ECE/calib_80, L3 raw Brier vs market 0.182) per w; and test |p_classifier−p_run_diff|
+as a NEW abstain/conviction gate via the bayesian_model_eval sweep. Satisfy ACs (ensemble table per w;
+disagreement-gated subset Brier vs market; adopt the gate if it tightens the magnitude subset). Note: the
+disagreement gate is the real deliverable even if no mix beats the market.
+```
+
+### 28.3 — Magnitude live-tracking + pre-committed kill criterion
+```
+You are picking up Story 28.3 (Epic 28) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 28.3 spec; and
+ablation_results/layer4_selective_strategy.md (the magnitude rule: 2026 roi_devig +0.197, win 0.809 —
+but vig-free and on heavy favorites where Bovada vig is highest). Context: live H2H attribution began
+2026-06-04; as of 2026-06-05 daily_model_predictions has only the 06-04 slate (7 abstain, 2
+direction_flip, ZERO magnitude, none settled) — the live magnitude sample is empty. Statistical power is
+NOT the constraint (~15–24 bets distinguish +0.197 from 0); the constraints are vig-free optimism +
+in-sample threshold selection + real favorite-side vig. Confirm predict_today logs layer4_h2h_rule,
+model/market probs, AND the actual Bovada moneyline odds taken (not de-vig) per magnitude trigger; build a
+settled-bet monitor over daily_model_predictions computing real-book ROI at actual odds + 95% CI and
+magnitude-subset model Brier vs market Brier; register the kill criterion in model_registry.yaml under
+home_win. Kill criterion: CONFIRM at ≥150 fresh post-06-04 settled magnitude bets with 95% lower-CI
+real-book ROI>0 AND model Brier<market Brier; KILL if lower-CI≤0 at n=150 or win-rate below actual-odds
+break-even over the first 50; no auto-bets until CONFIRM. Use the Snowflake MCP for the daily_model_predictions reads.
+```
+
+### 28.4 — H2H travel/fatigue + starter×opp-offense features
+```
+You are picking up Story 28.4 (Epic 28) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow", Story 28.4 spec, and
+ablation_results/h2h_v2_leakage_free.md (model Brier 0.224 vs market 0.180 on credible 2026 — the gap to
+close). The home_win model currently reuses the totals run-volume matrix. Add the two highest-ROI
+H2H-specific features: (1) travel/fatigue from StatsAPI schedule + geocoded park coords (travel distance,
+time-zone delta, 3rd-consecutive-road-game, getaway-day — all leakage-free, data already present); (2)
+a starter_suppression_mu × opp pred_runs_mu interaction term (both signals already in the matrix; the
+additive model can't represent the product) plus run_diff σ as a conviction feature. Retrain the home_win
+challenger (use run_xgb_home_win_search.py) on the leakage-free matrix and evaluate on credible 2026.
+CONFIRMATION GATE: credible-2026 model Brier ≤ 0.195 (sharp band) to justify a non-zero blend alpha; if
+not met, document the residual gap and route to Story 28.5. The retrain is >1 min — hand it off.
+```
+
+### 28.5 — Hierarchical Bayesian Bradley-Terry H2H model
+```
+You are picking up Story 28.5 (Epic 28) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 28.5 spec, Dimension 7's "alternative
+architectures" reasoning, and betting_ml/models/bayesian/run_scoring_nuts.py (for PyMC/NUTS patterns,
+non-centered reparam, convergence gates). Context: H2H has NO Jensen floor (logit link, no count
+aggregation) so unlike totals there is no structural ceiling; the failure is signal-quality/calibration.
+Build a PyMC hierarchical Bradley-Terry model: P(home win)=σ(s_home − s_away + hfa_home), s_team partially
+pooled, hfa_team~Normal(league_hfa, σ_hfa); sub-model signals (offense_v2, bullpen_v2, starter_v1,
+run_diff μ/σ) enter as covariates on team strength. Train 2021–2025, score the leakage-free 2026 OOS,
+run three-layer + Layer-4 eval vs the XGBoost champion AND the market (Brier 0.182) on the same games.
+NUTS is 1–2 hr — HAND OFF. Satisfy ACs (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered
+reparam; promote only if it beats the champion AND closes toward the market).
+```
+
+### 9.7 — Fix `*_uncertainty` placeholder stubs  [Epic 9]
+```
+You are picking up Story 9.7 (Home: Epic 9) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: the Story 9.7 spec and the Sub-model output
+standard; the project memory reference_submodel_uncertainty_placeholders; and Story 10.3 (which discovered
+the defect). Context: run_env_uncertainty=10, offense=7, bullpen=6 are CONSTANT sentinels, not calibrated
+values — the entire epistemic-uncertainty propagation through Layer 3 (CIs, game_uncertainty_score,
+bet-gate conviction) runs on stubs, and including them blew combined_sigma to ~10. In each
+generate_*_signals.py, replace the constant uncertainty with a real per-game 80% PI width from the model's
+own predictive distribution (nbinom.ppf(0.9)−nbinom.ppf(0.1) for NegBin; 2·1.28·σ for Normal); backfill
+2021–2026; rebuild feature_pregame_sub_model_signals; re-verify combined_sigma and the P(over) CI now vary
+per game and widen on low-coverage/high-disagreement (the Story 9.3 "σ flat under reweighting" defect).
+Satisfy ACs and update/retire the placeholder memory. Backfill is >1 min — hand it off.
+```
+
+### 10.9 — Isotonic + conformal post-calibration  [Epic 10, reopened]
+```
+You are picking up Story 10.9 (Home: Epic 10, reopened) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 10.9 spec; and
+ablation_results/totals_2026_failure_analysis.md §4 (tail over-confidence: predicted 0.895 → actual 0.378;
+persists OOS at [0.90,1.00] 0.942→0.625 and [0,0.10) 0.052→0.263), ablation_results/totals_v1_reliability_
+diagram.md, and Story 10.5 (the α=0.70 Bovada blend only half-fixed the tails: gap +0.317→+0.132). Add a
+market-free monotonic recalibration: fit isotonic regression on Layer-3 raw P(over)→actual over-rate on a
+walk-forward holdout, applied BEFORE the alpha blend; add conformal prediction intervals on the combiner
+output as a distribution-free alternative to the NegBin-CDF CI; re-check the two tail bins post-isotonic;
+apply the same to H2H P(home). Satisfy ACs (tail gaps |gap|<0.10; conformal 80% empirical coverage on 2026
+OOS). Frame it honestly: this makes the model calibrated, it does not by itself create edge.
+```
+
+### 10.10 — Quantile-regression-forest Layer-3 challenger  [Epic 10, reopened]
+```
+You are picking up Story 10.10 (Home: Epic 10, reopened) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 10.10 spec; ablation_results/
+totals_2026_failure_analysis.md §10 (the structural Jensen floor: β_bullpen=0.172 → 8.87 > 8.81 before
+any signal, because E[exp(β·z)]>exp(β·μ) in the log-link NegBin); the archived Story 8.P lgb_quantile
+model (model_registry.yaml total_runs.challengers); and betting_ml/scripts/train_totals.py. A QRF produces
+full predictive quantiles with NO exp(β·z) parameterization — test whether removing the log-link removes
+the floor. Train a quantile-regression forest on the Layer-3 matrix; derive P(over) from the quantiles
+directly (no NegBin CDF); re-run the archived 8.P model under v4-era gates (10.6 showed v4 already
+differentiates, std-of-means 1.355 — the NGBoost-era std-shrinkage gate that killed 8.P is stale);
+compute the May-2026 mean predicted total vs 8.81 and state explicitly whether the floor is removed.
+Satisfy ACs. Training is >1 min — hand it off.
+```
+
+### 6.6 — Reliever top-3 leverage availability vector  [Epic 6]
+```
+You are picking up Story 6.6 (Home: Epic 6) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 6.6 spec and the bullpen registry
+(sub_model_registry.yaml bullpen_v1 availability_index_v1 — note its fatigue score has ~0 Pearson r with
+same-game xwoba BY DESIGN). Also read betting_ml/scripts/train_bullpen_distributional.py and the
+mart_bullpen_effectiveness source. Context: the aggregate availability_index predicts depth/flexibility,
+not quality; for close games (totals tails AND H2H) WHICH specific high-leverage relievers are available
+is the informative orthogonal signal. From reliever appearance logs (already ingested), derive per-team
+closer_available / setup1_available / setup2_available (y/n + rest-days) from prior-3-day usage
+(leakage-free); add to bullpen_v2 features; ablate on total_runs and home_win. Satisfy ACs (≥95%
+non-null, leakage-free, ablation delta both targets). This is a shared signal for Epics 27 + 28 (R33).
+The retrain is >1 min — hand it off.
+```
+
+### 19.6 — VAE holistic OOD gate  [Epic 19]
+```
+You are picking up Story 19.6 (Home: Epic 19) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 19.6 spec, the Epic 19 bet-permission
+gate, and Story 17.0/17.1b (the May-2026 bullpen drift was +0.2882σ — BELOW the per-signal z>1.5 gate yet
+the entire kill-criterion overshoot). The bullpen OOD gate params live in sub_model_registry.yaml
+(bullpen_v2.ood_gate) and signal_scalers.joblib. Train a VAE on the JOINT 2022–2025 game-level signal
+vector; per-game reconstruction error flags holistic/combination OOD that a per-signal gate misses;
+backtest whether recon-error AUC flags the May-2026 cohort better than the per-signal gate's recall; wire
+it as an Epic 19 gate criterion (signal_combination_ood) in the registry bet_gate. Satisfy ACs (recon AUC
+> per-signal recall on May-2026; gate criterion + threshold added). Training is >1 min — hand it off.
+```
+
+### 12.10 — Betfair exchange sharp-money feed  [Epic 12]
+```
+You are picking up Story 12.10 (Home: Epic 12) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 12.10 spec and the Epic 12 CLV
+meta-model stories (12.1 feature mart). Context: Action Network gives ticket %; Betfair exchange gives
+money-weighted sharp signal (actual money on each side). Evaluate Betfair exchange API access + auth;
+ingest matched-money + back/lay for MLB h2h/totals; add money-imbalance + steam features to the Epic 12.1
+meta-model feature mart; backtest the CLV meta-model with vs without Betfair features. Satisfy ACs (feed
+ingested for a trial window + coverage; ≥+0.01 AUC lift to retain). This is a new external integration —
+confirm credential/cost before building; do not commit secrets.
+```
+
+### 3A.3 — Park-type hierarchical prior  [Epic 3A]
+```
+You are picking up Story 3A.3 (Home: Epic 3A) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 3A.3 spec and Story 3A.1
+(betting_ml/scripts/eb_priors/fit_park_priors.py, mart_eb_park_factors — currently a Normal-Normal that
+shrinks each park to the GLOBAL league mean). Add a park-TYPE level (high-altitude, dome, pitcher's-park
+clusters) between the global mean and the per-park posterior — a one-level hyperprior extension — so
+low-sample parks (Sutter Health, Tokyo Dome, neutral sites) borrow from their type cluster, not the global
+mean. Re-fit and verify low-n parks shrink toward their type mean; confirm CV error on the ~2%
+non-standard-venue games does not regress. Satisfy ACs.
+```
+
+### 5A.6 — Continuous aging-curve EB prior  [Epic 5A]
+```
+You are picking up Story 5A.6 (Home: Epic 5A) in the MLB quant betting repo. Read
+quant_sports_intel_models/baseball/implementation_guide.md: Story 5A.6 spec and Epic 5A
+(betting_ml/scripts/eb_priors/fit_starter_priors.py + compute_starter_posteriors.py — current priors are
+season-level age-BAND points: <25/25–29/30–32/33+, with an il_return_blend). Replace the band prior mean
+with a CONTINUOUS pitcher aging curve (xwOBA-against vs age) for better rookie cold-start and veteran
+decline detection; ablate on the April / rookie / IL-return subgroups vs the current band prior. Satisfy
+ACs (April-window and IL-return subgroup MAE ≤ band-prior MAE; documented). Any retrain/ablation >1 min —
+hand it off.
+```
+
+---

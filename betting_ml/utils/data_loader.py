@@ -212,6 +212,33 @@ def _numeric_convert(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# Team-name aliases for cross-source joins. The MLB Stats API and the odds feed
+# disagree on a few franchise names — most notably the Athletics, who dropped
+# "Oakland" from the Stats API name ("Athletics") while odds providers still
+# carry a city prefix ("Oakland Athletics"). An exact full-name match silently
+# drops odds for any such game. Normalize both sides through this map so the
+# join is city-agnostic. Keys/values are lowercased; extend as drift surfaces.
+_TEAM_NAME_ALIASES = {
+    "oakland athletics":    "athletics",
+    "sacramento athletics": "athletics",
+    "las vegas athletics":  "athletics",
+}
+
+
+def _normalize_team_name(name: str | None) -> str | None:
+    """Canonicalize a team's full name for Stats API ↔ odds-feed joins.
+
+    Lowercases, collapses internal whitespace, and maps known city-prefix
+    variants (e.g. the Athletics) to a single canonical token. Lowercasing is
+    symmetric across both sources, so all other teams still match unchanged.
+    Returns None unchanged.
+    """
+    if name is None:
+        return None
+    key = " ".join(name.split()).lower()
+    return _TEAM_NAME_ALIASES.get(key, key)
+
+
 def _get_statsapi_team_abbrevs() -> dict[int, str]:
     """Return mapping from MLB team ID to team abbreviation (e.g. 116 -> 'DET')."""
     import statsapi
@@ -270,7 +297,7 @@ def _load_todays_odds(
     result: dict[tuple[str, str], dict[str, Any]] = {}
     for raw_row in cur.fetchall():
         row = dict(zip(cols, raw_row))
-        key = (row["home_team"], row["away_team"])
+        key = (_normalize_team_name(row["home_team"]), _normalize_team_name(row["away_team"]))
         result[key] = {
             "home_win_prob_consensus": row.get("home_win_prob_consensus"),
             "ml_consensus_std":        row.get("ml_consensus_std"),
@@ -278,6 +305,142 @@ def _load_todays_odds(
             "over_prob_consensus":     row.get("over_prob_consensus"),
         }
     return result
+
+
+_TODAY_LINEUP_QUERY = """
+SELECT * FROM baseball_data.betting_features.feature_pregame_lineup_features
+WHERE game_date = '{target_date}'
+"""
+
+_TODAY_STARTER_QUERY = """
+SELECT * FROM baseball_data.betting_features.feature_pregame_starter_features
+WHERE game_date = '{target_date}'
+"""
+
+# Key/meta columns to drop before overlaying; everything else is a feature.
+_LINEUP_STARTER_META_COLS = {"game_pk", "game_date", "game_year", "side"}
+
+
+def _load_todays_lineup_starter(
+    conn,
+    target_date: str,
+) -> tuple[dict[tuple[int, str], dict], dict[tuple[int, str], dict]]:
+    """Return today's lineup and starter feature rows keyed by (game_pk, side).
+
+    Epic A1 — unlike the team / rolling marts (which are spined on completed
+    games and have no rows for today), feature_pregame_lineup_features and
+    feature_pregame_starter_features are forward-looking (spined on the SCD-2
+    lineup state / probable pitchers) and DO contain today's games. Columns are
+    returned with the SAME prefixing convention feature_pregame_game_features
+    uses — lineup col C -> {side}_C, starter col C -> {side}_starter_C — so they
+    can overlay the carried-forward team row directly. EB batter/pitcher
+    posteriors ride along inside these marts (avg_eb_woba, eb_xwoba_against, …).
+    """
+    lineup_by_game: dict[tuple[int, str], dict] = {}
+    starter_by_game: dict[tuple[int, str], dict] = {}
+    cur = conn.cursor()
+
+    cur.execute(_TODAY_LINEUP_QUERY.format(target_date=target_date))
+    cols = [d[0].lower() for d in cur.description]
+    for raw in cur.fetchall():
+        r = dict(zip(cols, raw))
+        side = r.get("side")
+        if side not in ("home", "away"):
+            continue
+        lineup_by_game[(r["game_pk"], side)] = {
+            f"{side}_{c}": v for c, v in r.items() if c not in _LINEUP_STARTER_META_COLS
+        }
+
+    cur.execute(_TODAY_STARTER_QUERY.format(target_date=target_date))
+    cols = [d[0].lower() for d in cur.description]
+    for raw in cur.fetchall():
+        r = dict(zip(cols, raw))
+        side = r.get("side")
+        if side not in ("home", "away"):
+            continue
+        starter_by_game[(r["game_pk"], side)] = {
+            f"{side}_starter_{c}": v for c, v in r.items() if c not in _LINEUP_STARTER_META_COLS
+        }
+
+    return lineup_by_game, starter_by_game
+
+
+def _platoon_weighted(rhb, lhb, vs_rhb, vs_lhb):
+    """Lineup-handedness-weighted average of an opposing starter's platoon split.
+
+    Mirrors the inline computation in feature_pregame_game_features
+    (pct_rhb × split_vs_rhb + pct_lhb × split_vs_lhb). Returns None when the
+    handedness counts or starter splits are missing (→ imputed downstream).
+    Casts to float so Decimal/str values from the cursor don't raise.
+    """
+    try:
+        rhb = float(rhb)
+        lhb = float(lhb)
+        vs_rhb = float(vs_rhb)
+        vs_lhb = float(vs_lhb)
+    except (TypeError, ValueError):
+        return None
+    denom = rhb + lhb
+    if not denom:
+        return None
+    return round((rhb / denom) * vs_rhb + (lhb / denom) * vs_lhb, 3)
+
+
+def _enrich_row_with_today(
+    row: dict,
+    game_pk: int,
+    lineup_by_game: dict[tuple[int, str], dict],
+    starter_by_game: dict[tuple[int, str], dict],
+) -> int:
+    """Overlay today's lineup + starter features onto a carried-forward team row
+    and recompute the handedness adjustments. Mutates ``row`` in place; returns
+    the number of game-sides overlaid. Pure (no I/O) so it is unit-testable.
+
+    A1.8: only non-null today-values overwrite, so the overlay strictly adds
+    information (a confirmed lineup / probable starter and its EB posteriors)
+    without clobbering a carried-forward value with NULL.
+    """
+    enriched = 0
+    for src in (
+        lineup_by_game.get((game_pk, "home")),
+        lineup_by_game.get((game_pk, "away")),
+        starter_by_game.get((game_pk, "home")),
+        starter_by_game.get((game_pk, "away")),
+    ):
+        if src:
+            enriched += 1
+            for k, v in src.items():
+                if v is not None:
+                    row[k] = v
+
+    # Recompute lineup-vs-opposing-starter handedness adjustments from the
+    # overlaid lineup counts + opposing-starter splits (mirrors the dbt model).
+    for _metric in ("xwoba", "k_pct", "bb_pct"):
+        _home_adj = _platoon_weighted(
+            row.get("home_rhb_count"), row.get("home_lhb_count"),
+            row.get(f"away_starter_{_metric}_vs_rhb"), row.get(f"away_starter_{_metric}_vs_lhb"),
+        )
+        if _home_adj is not None:
+            row[f"home_lineup_vs_away_starter_{_metric}_adj"] = _home_adj
+        _away_adj = _platoon_weighted(
+            row.get("away_rhb_count"), row.get("away_lhb_count"),
+            row.get(f"home_starter_{_metric}_vs_rhb"), row.get(f"home_starter_{_metric}_vs_lhb"),
+        )
+        if _away_adj is not None:
+            row[f"away_lineup_vs_home_starter_{_metric}_adj"] = _away_adj
+
+    # A1.12 — lineup confirmation must reflect TODAY's overlay, not the stale
+    # carried-forward has_full_lineup (which is from each team's LAST game and
+    # would falsely mark a game "confirmed" when no lineup is posted today, e.g.
+    # a late game whose lineup hasn't dropped). Force both flags from whether
+    # today's lineup features were actually overlaid for the side.
+    row["home_has_full_lineup"] = bool(
+        (lineup_by_game.get((game_pk, "home")) or {}).get("home_has_full_lineup")
+    )
+    row["away_has_full_lineup"] = bool(
+        (lineup_by_game.get((game_pk, "away")) or {}).get("away_has_full_lineup")
+    )
+    return enriched
 
 
 def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
@@ -332,6 +495,7 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
     try:
         home_rows, away_rows = _load_latest_team_features(conn, home_abbrevs, away_abbrevs)
         odds_by_matchup = _load_todays_odds(conn, target_date)
+        lineup_by_game, starter_by_game = _load_todays_lineup_starter(conn, target_date)
     finally:
         conn.close()
 
@@ -342,6 +506,7 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
 
     today_year = int(target_date[:4])
     rows = []
+    enriched_sides = 0
     for g in game_records:
         home_r = home_rows.get(g["home_abbr"], {})
         away_r = away_rows.get(g["away_abbr"], {})
@@ -379,8 +544,14 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
             if col.startswith("away_"):
                 row[col] = val
 
-        # Odds consensus — match by full team name from statsapi
-        odds = odds_by_matchup.get((g.get("home_name"), g.get("away_name")), {})
+        # Odds consensus — match by canonicalized full team name from statsapi.
+        # Normalization collapses cross-source name drift (e.g. Stats API
+        # "Athletics" vs odds-feed "Oakland Athletics") that would otherwise
+        # silently drop odds for the affected game.
+        odds = odds_by_matchup.get(
+            (_normalize_team_name(g.get("home_name")), _normalize_team_name(g.get("away_name"))),
+            {},
+        )
         if odds:
             row["has_odds"] = True
             row["home_win_prob_consensus"] = odds.get("home_win_prob_consensus")
@@ -394,11 +565,28 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
             row["total_line_consensus"]    = None
             row["over_prob_consensus"]     = None
 
+        # Epic A1 — overlay TODAY's actual lineup + starter features (incl. EB
+        # posteriors) onto the carried-forward team row and recompute the
+        # handedness adjustments. The team-level rolling columns legitimately
+        # carry forward from each team's last game; lineup/starter reflect
+        # today. (The pitcher-batter H2H matchup block is NOT recomputed here —
+        # its mart is completed-game-spined with no today rows; deferred to A1.11.)
+        _n = _enrich_row_with_today(row, g["game_pk"], lineup_by_game, starter_by_game)
+        enriched_sides += _n
+        # A1.10 — per-game data_source: 'intraday_assembly' when today's lineup/
+        # starter features were overlaid, else 'intraday_fallback' (team carry-
+        # forward only — e.g. lineup not yet posted for this game).
+        row["data_source"] = "intraday_assembly" if _n > 0 else "intraday_fallback"
+
         rows.append(row)
 
     if not rows:
         return pd.DataFrame()
 
+    print(
+        f"  [Epic A1] Enriched {enriched_sides} game-side(s) with today's "
+        f"lineup/starter features (EB posteriors included)"
+    )
     df = pd.DataFrame(rows)
     return _numeric_convert(df)
 
@@ -429,9 +617,14 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
         conn.close()
 
     print(f"  No rows in feature table for {target_date}; assembling from Stats API schedule...")
-    print("[WARN] Intraday fallback active — lineup features unavailable; predictions scored on team rolling stats only.")
+    print("[INFO] Intraday assembly active — team-level rolling/EB-bullpen/standings columns carry "
+          "forward from each team's last completed game; today's lineup + starter features (incl. EB "
+          "batter/pitcher posteriors) are overlaid fresh by game_pk (Epic A1).")
     df = load_todays_features_via_statsapi(target_date)
-    if not df.empty:
+    # A1.10 — data_source is set per-row inside the assembly (intraday_assembly
+    # when lineup/starter overlay applied, else intraday_fallback). Only default
+    # it if the assembly somehow didn't stamp it.
+    if not df.empty and "data_source" not in df.columns:
         df["data_source"] = "intraday_fallback"
     return df
 

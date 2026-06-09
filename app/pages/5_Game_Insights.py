@@ -16,6 +16,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
+from app.utils.prediction_status import basis_message, is_confirmed
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — needed for joblib unpickling
 from betting_ml.utils.model_io import load_model
 
@@ -242,20 +243,12 @@ else:
 
     # Prediction basis — flag provisional predictions that may be blind to the
     # confirmed starter/lineup (the case where the edge is not yet trustworthy).
+    # Wording is shared with every other page via app.utils.prediction_status.
     _basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
-    if _basis == "lineup_confirmed":
-        st.caption("✅ Lineup-confirmed prediction (post-lineup re-score — accounts for confirmed starters & lineups).")
-    elif _basis == "provisional_fallback":
-        st.warning(
-            "⚠️ Provisional prediction (intraday fallback) — scored on team rolling stats only, "
-            "**blind to the confirmed starting pitcher and lineup**. The edge above may be a feature "
-            "gap, not real value. Wait for the post-lineup re-score before trusting it."
-        )
+    if is_confirmed(_basis):
+        st.caption(basis_message(_basis))
     else:
-        st.warning(
-            "⚠️ Provisional prediction (pre-lineup) — generated before lineups were confirmed, so it "
-            "may not reflect the confirmed starter/lineup. Wait for the post-lineup re-score."
-        )
+        st.warning(basis_message(_basis))
 
 st.divider()
 
