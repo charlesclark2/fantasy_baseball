@@ -268,15 +268,22 @@ WITH pre_game AS (
         o.ingestion_ts
     FROM baseball_data.betting.mart_odds_outcomes o
     JOIN baseball_data.betting.stg_statsapi_games g
-        -- A's name mismatch: StatsAPI reports "Athletics" while the odds feed
-        -- still says "Oakland Athletics", which silently dropped all Bovada lines
-        -- for A's games. Collapse any "… Athletics" to "Athletics" on both sides
-        -- of the join. (Durable team_id-based fix tracked as Epic A1.9.)
-        ON (CASE WHEN g.home_team_name ILIKE '%Athletics' THEN 'Athletics' ELSE g.home_team_name END)
-           = (CASE WHEN o.home_team ILIKE '%Athletics' THEN 'Athletics' ELSE o.home_team END)
-        AND (CASE WHEN g.away_team_name ILIKE '%Athletics' THEN 'Athletics' ELSE g.away_team_name END)
-           = (CASE WHEN o.away_team ILIKE '%Athletics' THEN 'Athletics' ELSE o.away_team END)
-        AND g.official_date = o.commence_date
+        ON g.official_date = o.commence_date
+    -- A1.9: resolve both feeds to team_id via the canonical lookup and join on
+    -- team_id, instead of matching display names. Kills the silent line-drop for
+    -- relocated/renamed franchises (StatsAPI "Athletics" vs odds "Oakland
+    -- Athletics", "Cleveland Indians", etc.). Consumer contract: lower + strip
+    -- the Parlay doubleheader marker before joining on name_lower.
+    JOIN baseball_data.betting.dim_team_name_lookup gh
+        ON gh.name_lower = lower(regexp_replace(trim(g.home_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup ga
+        ON ga.name_lower = lower(regexp_replace(trim(g.away_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup oh
+        ON oh.name_lower = lower(regexp_replace(trim(o.home_team), '^G[12] ', ''))
+       AND oh.team_id = gh.team_id
+    JOIN baseball_data.betting.dim_team_name_lookup oa
+        ON oa.name_lower = lower(regexp_replace(trim(o.away_team), '^G[12] ', ''))
+       AND oa.team_id = ga.team_id
     WHERE g.game_pk = {game_pk}
       AND o.bookmaker_key = 'bovada'
       AND o.ingestion_ts::TIMESTAMP_NTZ < g.game_date::TIMESTAMP_NTZ

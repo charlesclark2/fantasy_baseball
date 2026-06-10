@@ -158,6 +158,26 @@ def load_games(date_str: str) -> pd.DataFrame:
     return df
 
 
+_TEAM_LOOKUP = "baseball_data.betting.dim_team_name_lookup"
+# A1.9 consumer contract: lower + strip the Parlay doubleheader marker, then join
+# on name_lower. Applied to any feed/StatsAPI name before resolving to team_id.
+_NAME_NORM = "lower(regexp_replace(trim({col}), '^G[12] ', ''))"
+
+
+def _team_id_variants_clause(col: str, value: str) -> str:
+    """SQL predicate: the odds-feed `col` resolves (via team_id) to the same team
+    as `value`. Matches every known name variant of that team_id, so it survives
+    feed/StatsAPI name divergence (Athletics, Cleveland Indians, …)."""
+    safe = value.replace("'", "''")
+    col_norm = _NAME_NORM.format(col=col)
+    val_norm = _NAME_NORM.format(col=f"'{safe}'")
+    return (
+        f"{col_norm} IN ("
+        f"SELECT name_lower FROM {_TEAM_LOOKUP} "
+        f"WHERE team_id = (SELECT team_id FROM {_TEAM_LOOKUP} WHERE name_lower = {val_norm}))"
+    )
+
+
 def _game_filter(event_id: str | None, home_team: str, away_team: str, date_str: str) -> str:
     """Return a SQL WHERE fragment that scopes to the specific game.
 
@@ -166,15 +186,16 @@ def _game_filter(event_id: str | None, home_team: str, away_team: str, date_str:
     """
     if event_id:
         return f"event_id = '{event_id}'"
-    # A's name mismatch: StatsAPI "Athletics" vs odds feed "Oakland Athletics".
-    # Normalize both the column and the value so A's odds match on the name
-    # fallback (mart_odds_events carries no current A's events → event_id is null
-    # for them, so this path is what A's games hit). Durable fix: Epic A1.9.
-    _h_col = "(CASE WHEN home_team ILIKE '%Athletics' THEN 'Athletics' ELSE home_team END)"
-    _a_col = "(CASE WHEN away_team ILIKE '%Athletics' THEN 'Athletics' ELSE away_team END)"
-    _h = "Athletics" if home_team.strip().endswith("Athletics") else home_team
-    _a = "Athletics" if away_team.strip().endswith("Athletics") else away_team
-    return f"{_h_col} = '{_h}' AND {_a_col} = '{_a}' AND commence_date = '{date_str}'"
+    # A1.9: resolve the odds-feed column and the StatsAPI value to team_id via the
+    # canonical lookup, then match on every known name variant of that team_id.
+    # This is the fallback path A's games hit (mart_odds_events carries no current
+    # A's events → event_id is null), and it now handles ANY feed/StatsAPI name
+    # divergence (Athletics, Cleveland Indians, …), not just the A's special case.
+    return (
+        f"{_team_id_variants_clause('home_team', home_team)} "
+        f"AND {_team_id_variants_clause('away_team', away_team)} "
+        f"AND commence_date = '{date_str}'"
+    )
 
 
 @st.cache_data(ttl=300)

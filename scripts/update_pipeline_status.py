@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.pipeline_status (
     predict_today_complete_ts    TIMESTAMP_NTZ,
     lineup_confirmed_complete_ts TIMESTAMP_NTZ,
     signal_completeness_score    FLOAT,
+    avg_feature_coverage_score   FLOAT,
     n_games_scored               INT,
     n_qualified_bets             INT,
     pipeline_status              VARCHAR(16),
@@ -38,6 +39,13 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.pipeline_status (
     CONSTRAINT pk_pipeline_status PRIMARY KEY (run_date)
 )
 """
+
+# A1.10 — added after the table shipped (A1.3); CREATE IF NOT EXISTS won't add it
+# to an existing table, so ensure the column on every run.
+_ALTER = (
+    f"ALTER TABLE {_ML_SCHEMA}.pipeline_status "
+    f"ADD COLUMN IF NOT EXISTS avg_feature_coverage_score FLOAT"
+)
 
 # N floor groups that count toward the completeness score (matches check_signal_freshness.py).
 _FLOOR_COLS = [
@@ -62,6 +70,7 @@ def main() -> None:
         cur = conn.cursor()
 
         cur.execute(_DDL)
+        cur.execute(_ALTER)
 
         # Today's prediction summary from daily_model_predictions.
         cur.execute(f"""
@@ -106,6 +115,23 @@ def main() -> None:
         """)
         signal_score = float(cur.fetchone()[0] or 0.0)
 
+        # A1.10 — average feature_coverage_score over today's latest row per game
+        # (intraday-assembly steady-state ≈ 0.77; feature_store ≈ 1.0). Surfaces
+        # how completely the live feature pipeline populated each prediction.
+        cur.execute(f"""
+            SELECT AVG(feature_coverage_score)
+            FROM (
+                SELECT feature_coverage_score
+                FROM {_ML_SCHEMA}.daily_model_predictions
+                WHERE score_date = '{today}'
+                QUALIFY ROW_NUMBER() OVER (
+                    PARTITION BY game_pk ORDER BY inserted_at DESC
+                ) = 1
+            )
+        """)
+        _cov = cur.fetchone()[0]
+        avg_feature_coverage_score = float(_cov) if _cov is not None else None
+
         n_games = int(preds.get("n_games_scored") or 0)
         if n_games == 0:
             status = "failed"
@@ -124,8 +150,9 @@ def main() -> None:
             INSERT INTO {_ML_SCHEMA}.pipeline_status (
                 run_date, job_start_ts, predict_today_complete_ts,
                 lineup_confirmed_complete_ts, signal_completeness_score,
-                n_games_scored, n_qualified_bets, pipeline_status, updated_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP())
+                avg_feature_coverage_score, n_games_scored, n_qualified_bets,
+                pipeline_status, updated_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP())
             """,
             [
                 today,
@@ -133,15 +160,21 @@ def main() -> None:
                 preds.get("predict_today_complete_ts"),
                 preds.get("lineup_confirmed_complete_ts"),
                 signal_score,
+                avg_feature_coverage_score,
                 n_games,
                 int(preds.get("n_qualified_bets") or 0),
                 status,
             ],
         )
 
+        _cov_str = (
+            f"{avg_feature_coverage_score:.2f}"
+            if avg_feature_coverage_score is not None else "n/a"
+        )
         print(
             f"pipeline_status upserted: run_date={today} status={status} "
-            f"n_games={n_games}/{n_scheduled} signal_score={signal_score:.2f}"
+            f"n_games={n_games}/{n_scheduled} signal_score={signal_score:.2f} "
+            f"feature_coverage={_cov_str}"
         )
     finally:
         conn.close()

@@ -499,10 +499,11 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A1.5 alerting & monitoring ✅ (2 live ACs pending)  A1.6 scheduler ✅      │
 │   A1.7 prediction notification delivery (email + SMS) ⬜                     │
 │   Live feature-pipeline (added 06-09):                                       │
-│   A1.8 intraday lineup+starter+EB overlay 🟡 (prototype on prod; hardening)  │
-│   A1.9 canonical team dim ⬜  A1.10 feature-coverage gate 🟡 (1 task left)    │
+│   A1.8 intraday lineup+starter+EB overlay 🟡 (live; H2H block → A1.11)       │
+│   A1.9 canonical team dim ✅ (view live; all sites + bridge on team_id)      │
+│   A1.10 feature-coverage gate ✅ (coverage in pipeline_status + mart)        │
 │   A1.11 schedule-spined feature pipeline ⬜ (durable; gated on A1.10)        │
-│   A1.12 prod-write correctness (target + overwrite scope) ⬜                 │
+│   A1.12 prod-write correctness 🟡 (TARGET_ENV band-aid; DELETE scope open)   │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -10180,15 +10181,15 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 - `mart_game_odds_bridge` odds-event → game join (still name-based; re-spine on `team_id`)
 
 **Tasks:**
-- [ ] Extend `ref_teams` (already has `team_id`, `team_abbrev`, `canonical_abbrev`, `is_legacy_abbrev`) into the single source of truth for name↔id↔abbrev resolution across all feeds; add any missing odds-feed display-name variants (e.g. "Oakland Athletics", "Sacramento Athletics") as alias rows or a companion `ref_team_name_aliases` seed keyed on `team_id`
-- [ ] Re-spine `mart_game_odds_bridge`'s odds-event → game join on `team_id` (resolve both the StatsAPI team and the odds-feed team name to `team_id` via the canonical dimension) instead of normalized name strings; preserve the existing doubleheader `game_pk` disambiguation
-- [ ] Replace the inline `_load_todays_odds` name-tuple match in `data_loader.py` with a `team_id`-based join, and **delete** the `_normalize_team_name` / `_TEAM_NAME_ALIASES` band-aid once the canonical path is verified
-- [ ] Add a dbt test asserting every active MLB `team_id` resolves to exactly one canonical abbrev and that no odds-feed event for a scheduled game fails to map to a `game_pk` (a "team unmapped" failing test, scoped to the current season)
-- [ ] Backfill-verify: re-run the bridge for a date range including an Athletics home game and confirm `has_odds = true` for those games
+- [x] **Canonical resolver built (foundation, 2026-06-09):** `ref_team_aliases` seed (odds-feed variants → team_id, grounded in the actual unmatched feed names: Oakland/The/Sacramento/Las Vegas Athletics→13, Cleveland Indians→7, Chicago WS→6, Los Angeles D→28, New York M→18) + `dim_team_name_lookup` view (Stats API canonical names ∪ aliases → team_id + canonical_abbrev/name). Consumer contract: `lower(regexp_replace(trim(name), '^G[12] ', ''))` then join on `name_lower` (the `G[12]` strip handles the Parlay DH marker). `dbtf parse` clean; uniqueness verified piecewise. Non-MLB rows (college/Mexican-league/prop) intentionally don't resolve. **Hand-off:** `dbtf seed --select ref_team_aliases` then `dbtf build --select dim_team_name_lookup` (Snowflake writes — user runs)
+- [x] **Sites migrated (2026-06-09, after view build):** all three band-aided sites now JOIN `dim_team_name_lookup` and resolve on `team_id`; inline normalization deleted. `app/pages/5_Game_Insights.py::_BOVADA_LINES_SQL` (verified recovers the same 44 Bovada rows for game 824999 via team_id join), `app/pages/2_Market_Comparison.py::_game_filter` (new `_team_id_variants_clause` helper; props/NCAA excluded), `betting_ml/utils/data_loader.py::_load_todays_odds` (now keyed by `(home_team_id, away_team_id)` via `_load_team_id_lookup` + `_resolve_team_id`; `_normalize_team_name`/`_TEAM_NAME_ALIASES` removed). Tests updated → `_resolve_team_id` suite + ast import guard pass
+- [x] Re-spine `mart_game_odds_bridge`'s odds-event → game join on `team_id` via `dim_team_name_lookup` (both Odds API + Parlay sources + game spine resolve to team_id; new `home_team_id`/`away_team_id` columns with not_null tests), retiring the inline `CASE … 'Oakland Athletics' → 'Athletics'` blocks; doubleheader `game_pk` disambiguation preserved (slot logic now partitions on team_id). `dbtf compile` clean (13/13). **Hand-off:** `dbtf build --select mart_game_odds_bridge` (Snowflake write — user runs)
+- [x] dbt singular test `tests/assert_no_unmapped_mlb_odds_event.sql` — flags any h2h odds event where exactly one side resolves (a real MLB matchup with an unmapped franchise); both-unresolved = non-MLB noise, correctly ignored. Currently returns 0 rows on prod (Parlay + Odds API)
+- [ ] Backfill-verify after the build: re-run the bridge and confirm `has_odds = true` for Athletics home games (post-`dbtf build` — user runs)
 
 **Acceptance criteria:**
 - [ ] No game on the current schedule with odds present in `mart_odds_outcomes` has `has_odds = false` due to a name mismatch — verified by a query that left-joins scheduled games to bridged odds and asserts zero unmatched where outcomes exist
-- [ ] `_normalize_team_name` and `_TEAM_NAME_ALIASES` are removed from `data_loader.py`; a test using `ast.walk` confirms they are no longer referenced
+- [x] `_normalize_team_name` and `_TEAM_NAME_ALIASES` are removed from `data_loader.py` (replaced by `_load_team_id_lookup`/`_resolve_team_id` against `dim_team_name_lookup`); the `ast.walk` import-guard test still passes
 - [ ] The Athletics (and any relocated/renamed franchise) map correctly across StatsAPI, Parlay/Bovada odds, and Action Network feeds — confirmed for a live Athletics game
 - [ ] dbt test for one-canonical-abbrev-per-team_id passes under `dbtf build`
 
@@ -10205,7 +10206,7 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 - [x] Ensure every `daily_model_predictions` row carries an accurate `data_source` (`feature_store` | `intraday_assembly` | `intraday_fallback`) and a `feature_coverage_score` (fraction of 6 feature blocks populated: lineup, starter, team-rolling, bullpen-EB, sequential, odds) — computed per-row in `predict_today.py` (`_feature_coverage_score` + `_FEATURE_COVERAGE_BLOCKS`); `data_source` stamped per-game in `data_loader.py`; both added to the table via `ALTER … ADD COLUMN IF NOT EXISTS` + the INSERT
 - [x] Extend `check_prediction_coverage.py` to count expected games from the **schedule** (`stg_statsapi_games`, not the empty feature mart — that bug made the check a silent daily no-op), summarize the feature-source breakdown for the latest row per game, and emit `[METRIC] feature_coverage_score=` for Dagster metadata
 - [x] Non-blocking alert when predictions are served via `intraday_fallback` (>0 games) or mean `feature_coverage_score` drops below threshold — via `log.warning` in `check_prediction_coverage.py` (surfaces in the Dagster op logs). Threshold set to **0.70** (below the `intraday_assembly` ~0.77 steady-state, so it fires on regression not daily). A dedicated email `failure_hook` can be added if alerting beyond logs is wanted
-- [ ] Record the coverage score per run in `pipeline_status` (A1.3 table) so the app/backend and weekly health report (A1.5) can surface it — **remaining** (needs `update_pipeline_status.py` + a column add)
+- [x] Record the coverage score per run in `pipeline_status` (A1.3 table) so the app/backend and weekly health report (A1.5) can surface it — `update_pipeline_status.py` now adds `avg_feature_coverage_score` (DDL + `ALTER … ADD COLUMN IF NOT EXISTS`), computes `AVG(feature_coverage_score)` over today's latest row per game, and writes it; surfaced through `mart_pipeline_status`. **Hand-off:** the column add lands on the next `update_pipeline_status` run + `dbtf build --select mart_pipeline_status`
 - [x] Document the three `data_source` states and what each implies for prediction quality in `runbooks/dagster_pipeline_sla_analysis.md`
 - [x] **Validated end-to-end on prod 2026-06-09:** all 15 games tagged `intraday_assembly`, `feature_coverage_score` avg 0.767 (min 0.667, max 1.0); coverage check reports `feature_store=0 intraday_assembly=15 intraday_fallback=0`, emits `[METRIC] feature_coverage_score=0.7668`, no false warn. Unit tests in `betting_ml/tests/test_feature_coverage.py` (4) + `test_intraday_assembly.py` (16) all pass
 
@@ -10283,15 +10284,15 @@ A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
 A1.7 Prediction notification delivery — after A1.5; requires A0.5 SES verification complete (shares SNS/DynamoDB infra with A0.6; can be built in parallel with A0.3)
 
 Live feature-pipeline cluster (added 2026-06-09; parallel to A1.4–A1.7):
-A1.8 Intraday lineup+starter+EB overlay — DONE (prototype on prod); hardening tasks open
+A1.8 Intraday lineup+starter+EB overlay — DONE (live on prod); H2H matchup block deferred to A1.11
      ↓
-A1.10 Feature-coverage gate & observability — proves A1.8, guards A1.11
+A1.10 Feature-coverage gate & observability — DONE (data_source + coverage stamped, gate live, coverage in pipeline_status); proves A1.8, guards A1.11
      ↓
-A1.9 Canonical team dim — retires the name-match band-aid
+A1.9 Canonical team dim — DONE (dim_team_name_lookup live; all sites + mart_game_odds_bridge resolve on team_id; band-aids deleted; unmapped-event test added). Pending Snowflake builds: mart_game_odds_bridge, mart_pipeline_status
      ↓
-A1.12 Production-write correctness (target + overwrite scope)
+A1.12 Production-write correctness — PARTIAL (TARGET_ENV band-aided in button; centralize schema resolution + scope post_lineup DELETE to --game-pks still open)
      ↓
-A1.11 Schedule-spined feature pipeline — durable re-spine; gated on A1.10; supersedes A1.8
+A1.11 Schedule-spined feature pipeline — durable re-spine; gated on A1.10; supersedes A1.8 (absorbs A1.8's deferred H2H matchup block)
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```

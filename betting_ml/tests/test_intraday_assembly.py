@@ -6,7 +6,7 @@ features (incl. EB posteriors) onto the carried-forward team row:
   - _platoon_weighted        — handedness-weighted starter-split adjustment
   - _enrich_row_with_today   — non-null overlay + handedness recompute
   - _load_todays_lineup_starter — prefix mapping / meta-column exclusion
-  - _normalize_team_name     — cross-source team-name canonicalization
+  - _resolve_team_id         — cross-source team-name → team_id resolution
 """
 
 import ast
@@ -16,8 +16,8 @@ from pathlib import Path
 from betting_ml.utils.data_loader import (
     _enrich_row_with_today,
     _load_todays_lineup_starter,
-    _normalize_team_name,
     _platoon_weighted,
+    _resolve_team_id,
 )
 
 
@@ -198,20 +198,38 @@ class TestLoadTodaysLineupStarter:
         assert lineup_by_game == {}
 
 
-# ── _normalize_team_name ───────────────────────────────────────────────────────
+# ── _resolve_team_id ───────────────────────────────────────────────────────────
 
-class TestNormalizeTeamName:
-    def test_athletics_variants_collapse(self):
-        assert _normalize_team_name("Oakland Athletics") == "athletics"
-        assert _normalize_team_name("Sacramento Athletics") == "athletics"
-        assert _normalize_team_name("Athletics") == "athletics"
+class TestResolveTeamId:
+    # Mirrors a slice of dim_team_name_lookup: every Athletics name variant and
+    # the canonical Brewers name resolve through the same {name_lower -> team_id}.
+    _LOOKUP = {
+        "athletics": 13,
+        "oakland athletics": 13,
+        "sacramento athletics": 13,
+        "las vegas athletics": 13,
+        "milwaukee brewers": 158,
+    }
 
-    def test_other_teams_lowercased_symmetrically(self):
-        # Lowercasing is applied to both join sides, so non-aliased teams match.
-        assert _normalize_team_name("Milwaukee Brewers") == "milwaukee brewers"
+    def test_athletics_variants_resolve_to_same_team_id(self):
+        assert _resolve_team_id("Oakland Athletics", self._LOOKUP) == 13
+        assert _resolve_team_id("Sacramento Athletics", self._LOOKUP) == 13
+        assert _resolve_team_id("Athletics", self._LOOKUP) == 13
+
+    def test_canonical_name_resolves(self):
+        assert _resolve_team_id("Milwaukee Brewers", self._LOOKUP) == 158
+
+    def test_doubleheader_marker_is_stripped(self):
+        # Consumer contract: strip the Parlay "G1 "/"G2 " prefix before matching.
+        assert _resolve_team_id("G1 Oakland Athletics", self._LOOKUP) == 13
+        assert _resolve_team_id("G2 Milwaukee Brewers", self._LOOKUP) == 158
+
+    def test_unmapped_name_returns_none(self):
+        # Non-MLB / unknown feed names must not resolve to a team.
+        assert _resolve_team_id("Sultanes de Monterrey", self._LOOKUP) is None
 
     def test_none_passthrough(self):
-        assert _normalize_team_name(None) is None
+        assert _resolve_team_id(None, self._LOOKUP) is None
 
 
 # ── import guard (repo convention: ast.walk, not string search) ────────────────

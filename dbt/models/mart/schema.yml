@@ -433,10 +433,12 @@ models:
       for all downstream joins to mart_odds_outcomes.
       Priority by era: 2021–2025 = Odds API only; 2026 overlap = Parlay preferred;
       2026 post-cutover = Parlay API only.
-      Join logic: game_date = commence_date AND home_team_name = odds home_team
-      AND away_team_name = odds away_team (full team names, after normalization).
-      Both sources are normalized: "Cleveland Indians" → "Cleveland Guardians"
-      (2021), "Oakland Athletics" → "Athletics" (2021–2025).
+      Join logic (A1.9): game_date = commence_date AND home_team_id = odds home_team_id
+      AND away_team_id = odds away_team_id. Every feed/Stats API team name is
+      resolved to a team_id through dim_team_name_lookup, so the join is immune to
+      cross-source name drift ("Cleveland Indians" → Guardians, "Oakland Athletics"
+      → Athletics, etc.) — new variants are added to the ref_team_aliases seed, not
+      this model.
       Grain: one row per game_pk.
 
     columns:
@@ -479,6 +481,22 @@ models:
 
       - name: away_team_name
         description: Full name of the away team (e.g. New York Mets).
+        tests:
+          - not_null
+
+      - name: home_team_id
+        description: >
+          A1.9 — MLB Stats API team_id of the home team, resolved from
+          home_team_name via dim_team_name_lookup. The canonical join key to the
+          odds sources. Not-null asserts every MLB game's home team resolves.
+        tests:
+          - not_null
+
+      - name: away_team_id
+        description: >
+          A1.9 — MLB Stats API team_id of the away team, resolved from
+          away_team_name via dim_team_name_lookup. The canonical join key to the
+          odds sources. Not-null asserts every MLB game's away team resolves.
         tests:
           - not_null
 

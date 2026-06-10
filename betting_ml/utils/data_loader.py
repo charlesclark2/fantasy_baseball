@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import pandas as pd
@@ -212,31 +213,37 @@ def _numeric_convert(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# Team-name aliases for cross-source joins. The MLB Stats API and the odds feed
-# disagree on a few franchise names — most notably the Athletics, who dropped
-# "Oakland" from the Stats API name ("Athletics") while odds providers still
-# carry a city prefix ("Oakland Athletics"). An exact full-name match silently
-# drops odds for any such game. Normalize both sides through this map so the
-# join is city-agnostic. Keys/values are lowercased; extend as drift surfaces.
-_TEAM_NAME_ALIASES = {
-    "oakland athletics":    "athletics",
-    "sacramento athletics": "athletics",
-    "las vegas athletics":  "athletics",
-}
+# A1.9 — cross-source team joins resolve through the canonical team dimension
+# (dim_team_name_lookup) instead of an inline alias map. The MLB Stats API and
+# the odds feeds disagree on a few franchise names (most notably the Athletics:
+# Stats API "Athletics" vs odds-feed "Oakland Athletics"), which silently dropped
+# odds for the affected game. Both sides now resolve to team_id, so any current
+# OR future name divergence is handled by adding a row to the ref_team_aliases
+# seed — no code change.
+_TEAM_LOOKUP_QUERY = "SELECT name_lower, team_id FROM baseball_data.betting.dim_team_name_lookup"
 
 
-def _normalize_team_name(name: str | None) -> str | None:
-    """Canonicalize a team's full name for Stats API ↔ odds-feed joins.
+def _load_team_id_lookup(
+    conn: snowflake.connector.SnowflakeConnection,
+) -> dict[str, int]:
+    """Return a {name_lower -> team_id} map from the canonical team dimension."""
+    cur = conn.cursor()
+    cur.execute(_TEAM_LOOKUP_QUERY)
+    return {name_lower: team_id for name_lower, team_id in cur.fetchall()}
 
-    Lowercases, collapses internal whitespace, and maps known city-prefix
-    variants (e.g. the Athletics) to a single canonical token. Lowercasing is
-    symmetric across both sources, so all other teams still match unchanged.
-    Returns None unchanged.
+
+def _resolve_team_id(name: str | None, lookup: dict[str, int]) -> int | None:
+    """Resolve any feed/Stats API team name to a team_id via the canonical lookup.
+
+    Applies dim_team_name_lookup's consumer contract — strip the Parlay
+    doubleheader marker ("G1 "/"G2 ") then lowercase — before matching, so it
+    mirrors the SQL join exactly. Returns None for an unmapped (e.g. non-MLB)
+    name or a None input.
     """
     if name is None:
         return None
-    key = " ".join(name.split()).lower()
-    return _TEAM_NAME_ALIASES.get(key, key)
+    key = re.sub(r"^G[12] ", "", str(name).strip()).lower()
+    return lookup.get(key)
 
 
 def _get_statsapi_team_abbrevs() -> dict[int, str]:
@@ -280,25 +287,32 @@ def _load_latest_team_features(
 def _load_todays_odds(
     conn: snowflake.connector.SnowflakeConnection,
     target_date: str,
-) -> dict[tuple[str, str], dict[str, Any]]:
+    team_lookup: dict[str, int],
+) -> dict[tuple[int, int], dict[str, Any]]:
     """Compute consensus implied probabilities for today's games from mart_odds_outcomes.
 
     Replicates mart_odds_consensus logic inline since mart_game_odds_bridge requires
     completed games (joined to mart_game_results) and won't have today's games.
 
-    Returns a dict keyed by (home_team_full_name, away_team_full_name) with keys:
+    Returns a dict keyed by (home_team_id, away_team_id) — resolved through the
+    canonical team dimension so it joins cleanly to the Stats API side regardless
+    of name drift — with keys:
         home_win_prob_consensus, ml_consensus_std, total_line_consensus, over_prob_consensus
-    Returns an empty dict if no odds are available.
+    Rows whose feed name does not resolve to a team_id are skipped. Returns an
+    empty dict if no odds are available.
     """
     query = _TODAY_ODDS_QUERY.format(target_date=target_date)
     cur = conn.cursor()
     cur.execute(query)
     cols = [d[0].lower() for d in cur.description]
-    result: dict[tuple[str, str], dict[str, Any]] = {}
+    result: dict[tuple[int, int], dict[str, Any]] = {}
     for raw_row in cur.fetchall():
         row = dict(zip(cols, raw_row))
-        key = (_normalize_team_name(row["home_team"]), _normalize_team_name(row["away_team"]))
-        result[key] = {
+        home_id = _resolve_team_id(row["home_team"], team_lookup)
+        away_id = _resolve_team_id(row["away_team"], team_lookup)
+        if home_id is None or away_id is None:
+            continue
+        result[(home_id, away_id)] = {
             "home_win_prob_consensus": row.get("home_win_prob_consensus"),
             "ml_consensus_std":        row.get("ml_consensus_std"),
             "total_line_consensus":    row.get("total_line_consensus"),
@@ -494,7 +508,8 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
     conn = _connect()
     try:
         home_rows, away_rows = _load_latest_team_features(conn, home_abbrevs, away_abbrevs)
-        odds_by_matchup = _load_todays_odds(conn, target_date)
+        team_lookup = _load_team_id_lookup(conn)
+        odds_by_matchup = _load_todays_odds(conn, target_date, team_lookup)
         lineup_by_game, starter_by_game = _load_todays_lineup_starter(conn, target_date)
     finally:
         conn.close()
@@ -521,6 +536,14 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
         row["game_year"] = today_year
         row["home_team"] = g["home_abbr"]
         row["away_team"] = g["away_abbr"]
+        # Explicit abbrev + full-name columns so the scorer writes both correctly.
+        # (home_team itself stays the abbrev — the model features key on it.)
+        # Without these, predict_today.py fell through to NULL team_abbrevs and
+        # stored the abbrev in the full-name column.
+        row["home_team_abbrev"] = g["home_abbr"]
+        row["away_team_abbrev"] = g["away_abbr"]
+        row["home_name"] = g.get("home_name")
+        row["away_name"] = g.get("away_name")
         row["series_game_number"] = g.get("series_game_number")
         row["game_datetime"] = g.get("game_datetime")
         row["post_2022_rules"] = 1 if today_year >= 2023 else 0
@@ -544,12 +567,13 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
             if col.startswith("away_"):
                 row[col] = val
 
-        # Odds consensus — match by canonicalized full team name from statsapi.
-        # Normalization collapses cross-source name drift (e.g. Stats API
-        # "Athletics" vs odds-feed "Oakland Athletics") that would otherwise
-        # silently drop odds for the affected game.
+        # Odds consensus — match by team_id resolved through the canonical team
+        # dimension on both sides. This survives cross-source name drift (e.g.
+        # Stats API "Athletics" vs odds-feed "Oakland Athletics") that would
+        # otherwise silently drop odds for the affected game.
         odds = odds_by_matchup.get(
-            (_normalize_team_name(g.get("home_name")), _normalize_team_name(g.get("away_name"))),
+            (_resolve_team_id(g.get("home_name"), team_lookup),
+             _resolve_team_id(g.get("away_name"), team_lookup)),
             {},
         )
         if odds:
