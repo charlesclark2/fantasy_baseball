@@ -585,7 +585,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE (Arch Review 06-05)** | Story 28.2 (run_diff×classifier ensemble) | No gate — eval-only, no retrain | ✅ 2026-06-10: best w=0.25 (Brier=0.2089 vs market 0.1790); no w beats market L3; all w pass L4 roi_devig. Disagreement gate ✅ ADOPTED — cap≤0.02: 85 games (14.3%), model Brier 0.1793 < market 0.1895, roi_devig=+0.6812; see `ablation_results/h2h_ensemble_eval_28_2.md` |
 | **0 — DONE (Arch Review 06-05)** | Story 28.3 (magnitude live-tracking + kill criterion) | Epic 26.5 attribution live ✅ (live n=1 settled as of 2026-06-10) | ✅ 2026-06-10: `layer4_h2h_bovada_ml_home/away` added to `daily_model_predictions`; `scripts/ops/monitor_magnitude_h2h.py` built (ROI+95%-CI, model/market Brier, tripwire@n=50, verdict@n=150); kill criterion registered in `model_registry.yaml`; accrual → ~Sep/Oct 2026 |
 | **1 — DONE (2026-06-10)** | Story 10.9 (isotonic/conformal calib) | ECE 0.050→0.031; conformal cov=0.8293 ✅ | Regime shift limits 2026 tail-bin pass; `bet_paused=true` |
-| **1 — NEXT (Arch Review)** | Story 6.6 (reliever availability), Story 28.4 (H2H features) | Story 9.7 ✅ + matrix retrain | After Tier 0 |
+| **1 — IN PROGRESS (2026-06-10)** | Story 6.6 (reliever availability), Story 28.4 (H2H features) | Story 9.7 ✅ + matrix retrain | 6.6: mart+features+FEATURE_COLS done; retrain+ablation pending user handoff |
 | **1 — DONE (2026-06-10)** | Epic 27.2 (env-state signal generation + Dagster wiring) | 27.1 ✅ Kalman Q=0.000957, R=21.25; 27.2 ✅ script+dbt+op wired; backfill complete 2026-06-10 (105,192 rows; AC1 99.9% coverage Snowflake-verified) | THE totals lever |
 | **1 — NEXT** | Epic 27.3 (totals re-open gate), 27.4 (OAA), 27.5 (GB/FB×park), Story 10.10 (QRF) | 27.2 backfill ✅ 2026-06-10 — gate met | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
 | **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), Story 12.10 (Betfair) | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
@@ -10639,8 +10639,8 @@ back to the user to run and show the command; do not git commit or push (the use
 **Priority note:** the **edge-artifact guard (task 4)** is independent of the serving fixes and *actively prevents misleading recommendations today* — ship it EARLY, ahead of / in parallel with A2.3–A2.4, rather than waiting for its sequencing slot.
 
 **Tasks:**
-- [x] **Persist per-prediction imputation summary (DONE 2026-06-10):** `predict_today.py` computes a per-game summary from the PRE-imputation matrix (`X_today_raw`, real NaN for unserved features) and writes 5 new columns to `daily_model_predictions`: `imputed_feature_count`, `imputed_discriminative_count`, `discriminative_coverage` (1 − imputed_disc/total_disc), `is_degraded` (coverage < 0.85), `imputed_features` (comma-joined imputed discriminative names, VARCHAR(4000)). Discriminative set = token-boundary regex over the union of all 3 models' feature columns — `(?:^|_)elo(?:_|$)` (excludes `…_velo`), `archetype`, `cluster`, `_eb_`, `sequential`, `h2h`, `vs_starter`, `with_risp|with_runners_on`, `park_run_factor|runs_per_game_at_park` → 69 of 379. Idempotent `ALTER … ADD COLUMN IF NOT EXISTS` migrations + `[A2.5]` stdout summary line.
-- [x] **Discriminative-coverage floor + degraded flag (DONE 2026-06-10):** floor = 0.85 (healthy steady state imputes 0–3 of 69 → ≥0.95; incident imputed ~all → ≈0). Today's Picks gains a **Data** column (`✅ Full` / `◐ N imputed` / `⚠️ Degraded` / `—` untracked) with help text; Game Insights shows a per-game banner above the drivers panel (`st.error` degraded / `st.caption` partial-or-full). Count surfaced even when not degraded; flag fires only on genuine collapse.
+- [x] **Persist per-prediction imputation summary (DONE 2026-06-10):** `predict_today.py` computes a per-game summary from the PRE-imputation matrix (`X_today_raw`, real NaN for unserved features) and writes 5 new columns to `daily_model_predictions`: `imputed_feature_count` (ALL imputed model features, broad), `imputed_discriminative_count`, `discriminative_coverage` (1 − imputed_core/total_core), `is_degraded` (coverage < 0.85), `imputed_features` (comma-joined imputed core names, VARCHAR(4000)). Idempotent `ALTER … ADD COLUMN IF NOT EXISTS` migrations + `[A2.5]` stdout summary line.
+- [x] **Discriminative-coverage floor + degraded flag (DONE 2026-06-10):** floor = 0.85 over the **unconditional-core discriminative set only** — `(?:^|_)elo(?:_|$)` (excludes `…_velo`), `bp_eb`, `team_sequential`, `with_risp|with_runners_on`, `park_run_factor|runs_per_game_at_park` → **27 of 379**. **Critical refinement (2026-06-10, after the first live run flagged 5/15 morning + 2/12 post_lineup degraded):** the floor deliberately EXCLUDES lineup-/pitcher-gated families (lineup archetype/cluster/vs-starter/h2h, lineup-EB aggregates `*_avg_eb_*`, starter-EB) — those go null pre-lineup *by design*, so including them re-flagged every pre-lineup pick (every degraded game's `imputed_features` was 100% lineup-gated; 0 core features missing). The floor now isolates genuine serving failure (the incident signature: core carry-forward features null) from the expected pre-lineup state the **Lineups** column already shows. Re-verified against the live write: today's slate → **0 degraded** (correct — serving healthy). Today's Picks gains a **Data** column (`✅ Full` / `◐ N imputed` / `⚠️ Degraded` / `—` untracked) whose help text states it is serving-health, distinct from Lineups; Game Insights shows a per-game banner above the drivers panel.
 - [x] **Mark imputed SHAP contributors (DONE 2026-06-10):** `5_Game_Insights.py` `_imputed_feature_set(raw_df, cols)` finds which model features were NULL/absent in the raw feature vector (values `_build_feature_df` silently 0.0-fills); `_render_key_drivers` marks such drivers with a ⚠️ label, renders the value as italic "imputed" (not the misleading 0.000), greys the row, prepends a tooltip, and adds a per-model footnote. Directly covers elo_diff / archetype / runs_per_game_at_park.
 - [x] **Honest-framing + shared `safe_int` (DONE 2026-06-10):** Today's Picks shows an `st.info` "honest model probabilities, not bet recommendations" banner when `alpha ≤ 0` (calmer caption otherwise). New `app/utils/safe_conversions.py` (`safe_int`/`safe_float` with `pd.isna` guards) folded into both pages, replacing the inline `int(...) if pd.notna(...)` guards (the 2026-06-10 Game Insights NaN-crash fixes).
 - [x] **Edge-artifact guard (DONE 2026-06-10):** the actionable edge is now alpha-aware. Added `compute_actionable_edge(model, market, alpha) = posterior − market` to `betting_ml/utils/probability_layer.py`; `predict_today.py` stores `h2h_edge`/`totals_edge` (and Kelly sized off them) from it, so at `best_alpha=0` they collapse to ~0 and the app surfaces no phantom edges (zero app change — the app reads these columns directly; the EV endpoint has no `qualified_bet` filter). Raw model-vs-market gap preserved in `layer4_h2h_edge` for Layer-4/CLV. Printed picks table + DDL comments updated; `warnings.warn([A2.5][EDGE-GUARD])` fires at alpha≤0; guard auto-releases when re-tuning lifts alpha>0. **Validated live 2026-06-10:** every Edge/Kelly → 0.0%/0.00% (was up to 14.8%/5.90% "bet every home underdog").
@@ -11560,13 +11560,27 @@ back to the user to run and show the command; do not git commit or push (the use
 available* is the informative, orthogonal signal. Model the top-3 leverage arms' availability explicitly.
 
 **Tasks:**
-- [ ] From reliever appearance logs (already ingested), derive per-team `closer_available`,
+- [x] From reliever appearance logs (already ingested), derive per-team `closer_available`,
   `setup1_available`, `setup2_available` (y/n + rest-days) for each game from prior-3-day usage.
-- [ ] Add to `bullpen_v2` feature set; ablate on `total_runs` and `home_win` (NLL/Brier delta).
+  → `dbt/models/mart/mart_reliever_top3_availability.sql` (new); schema entry in `dbt/models/mart/schema.yml`.
+  → Joined into `dbt/models/feature/feature_pregame_bullpen_state_features.sql`.
+  → **Handoff:** `dbtf build --select mart_reliever_top3_availability` then `dbtf build --select feature_pregame_bullpen_state_features`
+- [x] Add to `bullpen_v2` feature set; ablate on `total_runs` and `home_win` (NLL/Brier delta).
+  → 6 columns added to `FEATURE_COLS` in `train_bullpen_distributional.py`, `generate_bullpen_signals.py`, `build_bullpen_state_dataset.py`.
+  → Ablation script: `betting_ml/scripts/ablation_reliever_availability.py`.
+  → **Handoff (>1 min):** `uv run python betting_ml/scripts/build_bullpen_state_dataset.py` → `uv run python betting_ml/scripts/train_bullpen_distributional.py` → `uv run python betting_ml/scripts/generate_bullpen_signals.py --backfill` → `uv run python betting_ml/scripts/ablation_reliever_availability.py`
 
 **Acceptance criteria:**
 - [ ] Availability vector non-null ≥95% of game-sides; leakage-free (prior-day usage only).
+  *(verify via `ablation_reliever_availability.py --dry-run` after mart is built)*
 - [ ] Ablation delta documented both targets; this is the shared signal for R33 (consumed by Epic 27/28).
+  *(verify via full `ablation_reliever_availability.py` run after retrain + backfill)*
+
+**Implementation notes (2026-06-10):**
+- Mart ranks each team's relievers by trailing 30-day `|delta_home_win_exp|`; top 3 = closer/setup1/setup2.
+- Available = 1 when `rest_days IS NULL OR rest_days >= 2` (COALESCE to 1 at mart level for season openers).
+- Scheduled (today's) games: NULL from LEFT JOIN; impute to 1 in `betting_ml/utils/preprocessing.py`.
+- `sub_model_registry.yaml` `bullpen_v2.story_6_6_status` documents full run sequence.
 
 ### Story 19.6 — VAE holistic OOD gate  `[Home: Epic 19]`
 

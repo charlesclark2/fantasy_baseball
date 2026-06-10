@@ -290,7 +290,7 @@ _COL_HELP = {
     "Matchup": "Away team @ Home team",
     "Game Time": "Scheduled first pitch — timezone set in sidebar",
     "Lineups": "✅ prediction is lineup-confirmed (post-lineup re-score, accounts for confirmed starters)  |  ⏳ lineups not yet posted (provisional prediction)  |  ⚠️ lineups posted but prediction still provisional — re-score pending; do not trust the edge yet",
-    "Data": "Discriminative feature coverage for this prediction.  ✅ Full = every ELO/archetype/empirical-Bayes/sequential/matchup signal was served  |  ◐ N imputed = N discriminative features were null and filled with a league prior (the prediction is slightly blunted)  |  ⚠️ Degraded = many discriminative features missing → the model falls back toward a flat base-rate; treat this pick with low confidence  |  — = not tracked (older prediction)",
+    "Data": "Serving health — coverage of the always-available core signals (ELO, bullpen quality, team sequential, RISP, park). Distinct from Lineups: matchup features that need a posted lineup aren't counted here, so a pre-lineup pick can still be ✅ Full.  ✅ Full = every core signal served  |  ◐ N imputed = N core signals were null and filled with a league prior  |  ⚠️ Degraded = many core signals missing → the model falls back toward a flat base-rate; treat with low confidence  |  — = not tracked (older prediction)",
     "P(Over)": "Model probability of total runs exceeding the consensus over/under line",
     "Model Win%": "Blended home-win probability (50% NGBoost run-differential + 50% XGBoost classifier)",
     "Market Win%": "Market-implied home-win probability derived from consensus moneyline odds",

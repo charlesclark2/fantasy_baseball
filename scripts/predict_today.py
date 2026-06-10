@@ -161,14 +161,17 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     layer4_h2h_bovada_ml_away INTEGER,      -- mirroring away-side American odds
 
     -- A2.5 — per-game imputation transparency. From the PRE-imputation matrix:
-    -- which model features (and which discriminative ones) were NULL and got
-    -- median/constant-imputed. The app surfaces these so a degraded pick is
-    -- visibly degraded rather than silently authoritative (the 2026-06 incident).
-    imputed_feature_count        INTEGER,      -- total model features imputed for this game
-    imputed_discriminative_count INTEGER,      -- of those, how many are discriminative (ELO/archetype/EB/seq/h2h/RISP/park)
-    discriminative_coverage      FLOAT,        -- 1 - imputed_discriminative / total_discriminative (1.0 = fully served)
-    is_degraded                  BOOLEAN,      -- discriminative_coverage < 0.85 → pick flagged degraded
-    imputed_features             VARCHAR(4000) -- comma-joined imputed discriminative feature names (truncated)
+    -- which model features were NULL and got median/constant-imputed. The
+    -- discriminative_* columns track only the UNCONDITIONAL-CORE discriminative set
+    -- (ELO, bullpen-EB, team-sequential, RISP/runners-on, park) — the serving-health
+    -- signal that catches the 2026-06 incident WITHOUT re-flagging the expected
+    -- pre-lineup absence of lineup-/pitcher-gated features (those are shown via the
+    -- Lineups column + the per-driver 'imputed' marking in Game Insights instead).
+    imputed_feature_count        INTEGER,      -- ALL model features imputed for this game (broad; includes lineup-gated)
+    imputed_discriminative_count INTEGER,      -- of the ~27 unconditional-core discriminative features, how many imputed
+    discriminative_coverage      FLOAT,        -- 1 - imputed_core / total_core (1.0 = every core signal served)
+    is_degraded                  BOOLEAN,      -- discriminative_coverage < 0.85 → serving-degraded pick (NOT just pre-lineup)
+    imputed_features             VARCHAR(4000) -- comma-joined imputed CORE discriminative feature names (truncated)
 )
 """
 
@@ -392,38 +395,47 @@ def _feature_coverage_score(df: pd.DataFrame, i: int) -> float:
     return round(covered / len(_FEATURE_COVERAGE_BLOCKS), 3)
 
 
-# A2.5 — discriminative feature transparency. These are the matchup/quality
-# signals that give the models their skill over a flat base-rate predictor; the
-# 2026-06 incident was these served NULL across the whole slate → constant-imputed
-# → home_win corr collapsed to ~0. Coarser than the model column list, this regex
-# tags the *discriminative* families (ELO, lineup-vs-starter archetype / cluster,
-# empirical-Bayes quality, sequential posteriors, head-to-head & vs-starter splits,
-# RISP / runners-on, park run environment). Token-boundary on `elo` so it does NOT
-# match `..._velo`. We persist per game which of these were imputed so a degraded
-# pick is visible in the app rather than silently authoritative.
+# A2.5 — discriminative coverage is the SERVING-HEALTH signal. It must catch the
+# 2026-06 incident (features that should be carried forward for every scheduled game
+# went NULL across the slate → constant-imputed → home_win corr collapsed to ~0)
+# WITHOUT crying wolf on features that are *legitimately* absent until a lineup or
+# probable pitcher is announced. So the floor is computed over the UNCONDITIONAL-CORE
+# discriminative families only — ones with no valid reason to be null for any
+# scheduled MLB game: ELO ratings, bullpen empirical-Bayes quality, team sequential
+# posteriors, team RISP / runners-on splits, and the park run environment.
+#
+# DELIBERATELY EXCLUDED here: the lineup-gated families (lineup archetype / cluster /
+# vs-starter / h2h, and the lineup-EB aggregates like `*_avg_eb_woba`) and the
+# pitcher-gated starter-EB. Their absence pre-lineup is EXPECTED, not a serving
+# failure, and is already surfaced by the Lineups column and the per-driver 'imputed'
+# marking in Game Insights — folding them in here would just re-flag every pre-lineup
+# pick as "degraded" (observed 2026-06-10: 5/15 morning games, all lineup-gated).
+# Token-boundary on `elo` so it does NOT match `..._velo`.
 _DISCRIMINATIVE_RE = re.compile(
-    r"(?:^|_)elo(?:_|$)"
-    r"|archetype"
-    r"|cluster"
-    r"|_eb_|_eb$"
-    r"|sequential"
-    r"|h2h"
-    r"|vs_starter"
-    r"|with_risp|with_runners_on"
-    r"|park_run_factor|runs_per_game_at_park",
+    r"(?:^|_)elo(?:_|$)"           # ELO ratings + diff
+    r"|bp_eb"                      # bullpen empirical-Bayes quality
+    r"|team_sequential"            # team-level sequential posteriors
+    r"|with_risp|with_runners_on"  # team RISP / runners-on splits
+    r"|park_run_factor|runs_per_game_at_park",  # park run environment
     re.I,
 )
 
-# Below this fraction of discriminative features served (non-imputed) for a game,
-# the pick is flagged `is_degraded`. The healthy steady state imputes 0–3 of ~69
-# discriminative features (coverage ≥ 0.95); the incident imputed ~all of them
-# (coverage ≈ 0). 0.85 (≈ >10 imputed) flags genuine collapse without nagging on a
-# routine missing-ELO/park gap, which is still surfaced via the imputed count.
+# Below this fraction of unconditional-core discriminative features served
+# (non-imputed) for a game, the pick is flagged `is_degraded`. The healthy steady
+# state imputes 0 of ~27 core features (coverage = 1.0); the incident imputed ~all of
+# them (coverage ≈ 0). 0.85 flags genuine collapse (≥4 core features missing) without
+# nagging on a routine single-feature gap, which is still surfaced via the count.
 _DISC_COVERAGE_FLOOR = 0.85
 
 
 def _discriminative_cols(cols: list[str]) -> list[str]:
-    """Subset of `cols` matching the discriminative families (A2.5)."""
+    """Subset of `cols` in the unconditional-core discriminative set (A2.5).
+
+    Used as the coverage-floor / degraded-flag basis — the serving-health signal.
+    NOT the same as "every matchup feature": lineup-/pitcher-gated families are
+    excluded by design (see the regex comment) so the flag isolates genuine serving
+    failure from the expected pre-lineup absence the Lineups column already shows.
+    """
     return [c for c in cols if _DISCRIMINATIVE_RE.search(c)]
 
 

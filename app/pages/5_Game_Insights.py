@@ -263,21 +263,23 @@ else:
     if _cov is not None:
         if bool(r.get("is_degraded")):
             st.error(
-                f"⚠️ **Degraded prediction** — only {_cov:.0%} of discriminative features "
-                f"(ELO, lineup-vs-starter archetype, empirical-Bayes quality, sequential, "
-                f"matchup splits) were served; {int(_n_imp or 0)} were imputed to league "
-                f"priors. The model falls back toward a flat base-rate here — treat the win "
-                f"probability with low confidence. See 'What's Driving This Pick?' below for "
-                f"which drivers are imputed."
+                f"⚠️ **Serving-degraded prediction** — only {_cov:.0%} of the always-available "
+                f"core signals (ELO, bullpen quality, team sequential, RISP, park) were served; "
+                f"{int(_n_imp or 0)} were imputed to league priors. These have no valid reason to "
+                f"be missing, so the model falls back toward a flat base-rate here — treat the win "
+                f"probability with low confidence. See 'What's Driving This Pick?' below for which "
+                f"drivers are imputed."
             )
         elif _n_imp and _n_imp > 0:
             st.caption(
-                f"◐ {int(_n_imp)} discriminative feature(s) imputed to league priors "
-                f"({_cov:.0%} coverage) — the prediction is slightly blunted but reliable. "
-                f"Imputed drivers are marked below."
+                f"◐ {int(_n_imp)} core signal(s) imputed to league priors ({_cov:.0%} coverage) — "
+                f"the prediction is slightly blunted but reliable. Imputed drivers are marked below."
             )
         else:
-            st.caption("✅ Full discriminative-feature coverage — every matchup signal was served.")
+            st.caption(
+                "✅ Full core-signal coverage. (Lineup-dependent matchup features may still be "
+                "imputed pre-lineup — those are marked individually below, not a serving issue.)"
+            )
 
 st.divider()
 
