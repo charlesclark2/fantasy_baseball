@@ -17,6 +17,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
 from app.utils.prediction_status import basis_message, is_confirmed, lineup_status_emoji
+from app.utils.scorer_env import scorer_env
 
 # ---------------------------------------------------------------------------
 # Queries
@@ -403,6 +404,7 @@ with col_r1:
                 capture_output=True,
                 text=True,
                 cwd=str(_PROJECT_ROOT),
+                env=scorer_env(),  # A1.12 — write prod (the schema this page reads)
             )
         st.cache_data.clear()
         if result.returncode == 0:
@@ -515,6 +517,7 @@ with col_r2:
                              "--run-diff-tag", "v3"],
                             capture_output=True, text=True,
                             cwd=str(_PROJECT_ROOT),
+                            env=scorer_env(),  # A1.12 — write prod (the schema this page reads)
                         )
                     if _r.returncode != 0:
                         st.error(f"predict_today.py failed (exit {_r.returncode})")
@@ -541,11 +544,8 @@ with col_r3:
             # scripts/predict_today.py is the production scorer that supports --prediction-type /
             # --lineup-confirmed. (betting_ml/scripts/predict_today.py is the multi-version
             # backfill/eval tool and does NOT accept --prediction-type — calling it here was the bug.)
-            # Write to PROD: the Today's Picks page reads baseball_data.betting_ml
-            # (prod), so the scorer must write there too — otherwise the button
-            # silently lands in betting_ml_dev and the page never updates.
-            # scripts/predict_today.py keys its write schema off TARGET_ENV
-            # (unset → betting_ml_dev; "prod" → betting_ml).
+            # A1.12 — scorer_env() stamps TARGET_ENV=prod so the scorer writes the
+            # same schema this page reads (betting_ml); read/write can't diverge.
             _r = subprocess.run(
                 ["uv", "run", "python", "scripts/predict_today.py",
                  "--prediction-type", "post_lineup",
@@ -554,7 +554,7 @@ with col_r3:
                 capture_output=True,
                 text=True,
                 cwd=str(_PROJECT_ROOT),
-                env={**os.environ, "TARGET_ENV": "prod"},
+                env=scorer_env(),
             )
         st.cache_data.clear()
         if _r.returncode == 0:

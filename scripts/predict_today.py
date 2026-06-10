@@ -50,10 +50,12 @@ from betting_ml.scripts.evaluation.bayesian_model_eval import (
 
 MODEL_VERSION = "v0"
 
-# Write isolation: dev/unset → betting_ml_dev; prod (set explicitly in CI/CD) → betting_ml.
-# Never set TARGET_ENV=prod locally — only GitHub Actions daily_ingestion.yml should do this.
-TARGET_ENV = os.getenv("TARGET_ENV", "dev")
-_ML_SCHEMA = "baseball_data.betting_ml" if TARGET_ENV == "prod" else "baseball_data.betting_ml_dev"
+# A1.12 — write target resolved by the shared resolver so this scorer, the
+# betting_ml/ scorer, and the app all agree on dev vs prod (TARGET_ENV=prod →
+# betting_ml; else betting_ml_dev). See betting_ml/utils/ml_env.py.
+from betting_ml.utils.ml_env import ml_schema  # noqa: E402
+
+_ML_SCHEMA = ml_schema()
 
 _CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'
 
@@ -311,12 +313,33 @@ def _feature_coverage_score(df: pd.DataFrame, i: int) -> float:
     return round(covered / len(_FEATURE_COVERAGE_BLOCKS), 3)
 
 
+def _post_lineup_delete_sql(schema: str, scoped_game_pks: list[int] | None) -> str:
+    """Build the overwrite DELETE for a post_lineup re-score.
+
+    A1.12 — when a ``--game-pks`` subset was scored, scope the DELETE to those
+    game_pks so a partial re-score (e.g. the lineup sensor firing for one
+    newly-confirmed game) doesn't wipe every OTHER game's post_lineup row for the
+    date. A full-slate run (``scoped_game_pks`` falsy) keeps the date-wide
+    overwrite so dropped/postponed games are cleaned up. game_pks are ints (cast
+    at parse time), so inlining them is injection-safe.
+    """
+    base = (
+        f"DELETE FROM {schema}.daily_model_predictions "
+        f"WHERE score_date = %(d)s AND prediction_type = %(pt)s"
+    )
+    if scoped_game_pks:
+        pk_list = ", ".join(str(int(pk)) for pk in scoped_game_pks)
+        return f"{base} AND game_pk IN ({pk_list})"
+    return base
+
+
 def _write_predictions_to_snowflake(
     df_today: pd.DataFrame,
     target_date: str,
     inserted_at: datetime,
     prediction_type: str,
     lineup_confirmed: bool,
+    scoped_game_pks: list[int] | None,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -498,11 +521,12 @@ def _write_predictions_to_snowflake(
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
             if lineup_confirmed:
                 cur.execute(
-                    f"DELETE FROM {_ML_SCHEMA}.daily_model_predictions "
-                    f"WHERE score_date = %(d)s AND prediction_type = %(pt)s",
+                    _post_lineup_delete_sql(_ML_SCHEMA, scoped_game_pks),
                     {"d": target_date, "pt": prediction_type},
                 )
-                print(f"  Deleted existing {prediction_type} rows for {target_date} (overwrite)")
+                _scope = (f"game_pks {sorted(scoped_game_pks)} (scoped overwrite)"
+                          if scoped_game_pks else "(full-slate overwrite)")
+                print(f"  Deleted existing {prediction_type} rows for {target_date} {_scope}")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
@@ -848,6 +872,7 @@ def main() -> None:
         else:
             print("[WARN] --lineup-confirmed set but has_full_lineup columns absent; not filtering.")
 
+    scoped_game_pks: list[int] | None = None
     if args.game_pks:
         target_pks = {int(pk.strip()) for pk in args.game_pks.split(",") if pk.strip()}
         before = len(df_today)
@@ -857,6 +882,9 @@ def main() -> None:
         if df_today.empty:
             print("No matching games found for the specified game_pks.")
             sys.exit(0)
+        # A1.12 — remember the explicit subset so the post_lineup overwrite DELETE
+        # is scoped to just these games (and doesn't wipe the rest of the slate).
+        scoped_game_pks = sorted(int(pk) for pk in df_today["game_pk"].tolist())
 
     for col in ("has_odds", "home_win_prob_consensus"):
         if col not in df_today.columns:
@@ -1098,6 +1126,7 @@ def main() -> None:
         inserted_at=run_ts,
         prediction_type=args.prediction_type,
         lineup_confirmed=args.lineup_confirmed,
+        scoped_game_pks=scoped_game_pks,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
         loc_tot=loc_tot,

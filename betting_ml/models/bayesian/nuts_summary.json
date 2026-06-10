@@ -1,9 +1,17 @@
 {
+  "model_version": "v3_jensen_rolling",
   "nuts_settings": {
     "draws": 4000,
     "tune": 2000,
     "chains": 4,
     "target_accept": 0.9
+  },
+  "jensen_sigma_sq": {
+    "run_env_z": 1.0000550933832848,
+    "offense_mu_z": 1.0000550933832846,
+    "opp_bullpen_mu_z": 1.0000550933832846,
+    "opp_starter_mu_z": 1.0000550933832846,
+    "rolling_league_z": 1.0000550933832846
   },
   "calibration_window": {
     "n_calib_obs": 866,
@@ -14,41 +22,47 @@
     ]
   },
   "diagnostics": {
-    "divergences": 0,
+    "divergences": 2,
     "max_rhat": 1.0,
-    "min_ess_bulk": 1562.0,
+    "min_ess_bulk": 1602.0,
     "rhat_ok": true
   },
-  "mu_log_league_implied_per_side": 4.360429709240381,
+  "mu_log_league_implied_per_side": 4.434448898953178,
   "coefficients": {
     "beta_run_env": {
-      "mean": 0.049709558627879784,
+      "mean": 0.04952532759652999,
       "sign_ok": true
     },
     "beta_offense": {
-      "mean": 0.03083588518285684,
+      "mean": 0.030623499585515555,
       "sign_ok": true
     },
     "beta_bullpen": {
-      "mean": 0.1723270952972742,
+      "mean": 0.17231626678922515,
       "sign_ok": true
     },
     "beta_starter": {
-      "mean": 0.04713617899841542,
+      "mean": 0.04733045880221049,
       "sign_ok": true
+    },
+    "beta_rolling": {
+      "mean": 0.004480849261204213,
+      "sign_ok": false
     }
   },
   "kill_criterion": {
     "n_games": 380,
-    "ppm": 9.302297861842105,
+    "ppm": 9.281949506578947,
     "actual_mean": 8.68421052631579,
-    "bias": 0.6180873355263152,
+    "bias": 0.5977389802631574,
     "threshold": 8.81,
     "passed": false,
-    "delta_2026_mean": -0.002404506138235729,
-    "delta_2026_hdi_low": -0.10223265636498806,
-    "delta_2026_hdi_high": 0.09479877866318429,
+    "delta_2026_mean": -0.0012488991161354992,
+    "delta_2026_hdi_low": -0.09744403830448164,
+    "delta_2026_hdi_high": 0.09543917016914918,
     "delta_2026_hdi_excludes_zero": false,
-    "season_run_shift_total": -0.02094416971911528
+    "season_run_shift_total": -0.011069444872147116,
+    "beta_rolling_mean": 0.004480849261204213,
+    "rolling_z_may_mean": -0.5083443416720097
   }
 }

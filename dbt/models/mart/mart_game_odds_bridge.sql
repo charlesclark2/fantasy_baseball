@@ -65,7 +65,10 @@ game_results as (
         gr.away_team_name,
         h.team_id as home_team_id,
         a.team_id as away_team_id
-    from {{ ref('mart_game_results') }} gr
+    -- A1.11 — spine on mart_game_spine so today's scheduled games get an odds
+    -- bridge row too (mart_game_results is completed-games only). Historical
+    -- rows are unchanged.
+    from {{ ref('mart_game_spine') }} gr
     left join team_lookup h
         on h.name_lower = lower(regexp_replace(trim(gr.home_team_name), '^G[12] ', ''))
     left join team_lookup a

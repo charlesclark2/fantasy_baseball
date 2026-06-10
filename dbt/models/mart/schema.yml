@@ -28,6 +28,51 @@ models:
         description: Canonical Stats API team name (e.g. Athletics, Cleveland Guardians).
 
   # ============================================================================
+  # mart_game_spine  (Epic A1.11 — forward-looking game spine)
+  # ============================================================================
+  - name: mart_game_spine
+    description: >
+      Epic A1.11 — the single forward-looking game spine for the pregame feature
+      pipeline. UNION of completed games (pass-through of mart_game_results) and
+      today's scheduled-not-yet-played games (from stg_statsapi_games, for
+      game_pks not yet in results, within a tight today±window). Feature marts
+      spine on this instead of mart_game_results so the feature store holds
+      today's games. Non-destructive: the completed branch is byte-for-byte
+      mart_game_results, and the scheduled branch only adds today/future game_pks
+      (never a historical date), so every past game's output is unchanged.
+      Scheduled rows carry NULL scores (no result yet). Grain: one row per game_pk.
+    columns:
+      - name: game_pk
+        description: MLB game identifier. Unique across completed + scheduled rows.
+        tests:
+          - not_null
+          - unique
+      - name: game_date
+        description: Game datetime (completed) / scheduled date promoted to timestamp.
+        tests:
+          - not_null
+      - name: game_type
+        description: Game type code (R, S, F/D/L/W). Scheduled branch is R-only.
+        tests:
+          - not_null
+      - name: home_team
+        description: >
+          Canonical home-team abbreviation. For scheduled games resolved via
+          dim_team_name_lookup; not_null asserts every spine row maps to a team.
+        tests:
+          - not_null
+      - name: away_team
+        description: Canonical away-team abbreviation (resolved as home_team).
+        tests:
+          - not_null
+      - name: is_scheduled
+        description: >
+          True for forward-looking rows sourced from the schedule (NULL scores);
+          false for completed games from mart_game_results.
+        tests:
+          - not_null
+
+  # ============================================================================
   # mart_batter_bat_tracking_profile
   # ============================================================================
   - name: mart_batter_bat_tracking_profile

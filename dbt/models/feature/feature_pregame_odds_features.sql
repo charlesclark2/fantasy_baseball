@@ -35,13 +35,15 @@
 with
 
 games as (
+    -- A1.11 — spine on mart_game_spine so today's scheduled games get odds
+    -- features; historical rows unchanged.
     select
         game_pk,
         game_date::date    as game_date,
         game_year::integer as game_year,
         home_team,
         away_team
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 
