@@ -502,8 +502,9 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A1.8 intraday lineup+starter+EB overlay 🟡 (live; H2H block → A1.11)       │
 │   A1.9 canonical team dim ✅ (view live; all sites + bridge on team_id)      │
 │   A1.10 feature-coverage gate ✅ (coverage in pipeline_status + mart)        │
-│   A1.11 schedule-spined feature pipeline 🟡 (all code done; dev build pend)  │
+│   A1.11 schedule-spined pipeline ✅ (Stages 1-4; dev-verified)               │
 │   A1.12 prod-write correctness ✅ (schema resolver shared; DELETE scoped)    │
+│   A1.13 statcast freshness SLA ✅ (sensor + catchup; deploy pending)         │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -10243,6 +10244,13 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 - [ ] **(HAND-OFF)** Build the spine + re-pointed marts to **dev**, run the verification protocol (drift=0, today present, coverage ≥ baseline), then promote to prod. The coverage gate makes a prod build safe even before parity is confirmed (it just keeps using the assembly until coverage clears)
 - [ ] Once `feature_store` serves today for 7 consecutive days, drop the A1.8 H2H-block deferral note (the spine now provides today's H2H matchup rows too)
 
+**Stage 4 — posterior + standings carry-forward, then DEV-VERIFIED (2026-06-10):** the dev build of Stages 1–3 surfaced that three coverage blocks (lineup/starter/sequential) plus the standings/season-pythagorean columns were NULL for today even with the spine in place — NOT a re-spine defect, but exact-`game_pk`-keyed posterior/record sources that have no today row:
+- [x] **Sequential block (dbt):** `feature_pregame_game_features` `team_seq` join was exact `game_pk`. Rewrote to the same `is_scheduled`-gated exact-or-as-of fallback used for bullpen/pythagorean (completed = exact game_pk row, byte-for-byte; scheduled = team's latest prior `team_sequential_posteriors` row = belief entering the game, strict `< game_date` so no leakage)
+- [x] **Standings + season pythagorean (dbt):** `feature_pregame_team_features` `season_record` join required `record_date = game_date-1` EXACTLY, so a scheduled game (or a day-stale `mart_team_season_record`) dropped wins/losses/games_back/streak + pythagorean_win_exp/residual_season to NULL. Gated exact-or-as-of: completed = exact day-before record (unchanged); scheduled = latest prior record carried forward
+- [x] **Lineup/starter EB posteriors had NO Dagster op at all** — `compute_lineup_posteriors.py` / `compute_starter_posteriors.py` were never wired, so `eb_batter_posteriors_raw` / `eb_starter_posteriors` went stale regardless of job health (same failure class as the Epic-6A bullpen-posterior gap). Added `compute_starter_posteriors_op` + `compute_lineup_posteriors_op` (forward-looking `--game-date today`, idempotent MERGE) to the **morning** `daily_ingestion_job` posterior cluster, and `lineup_compute_posteriors` + a lineup-feature rebuild to the **post-lineup sensor** (`lineup_monitor_job`) for the authoritative confirmed-lineup pass. `dbt_umpire_feature_rebuild` `--select` extended with `feature_pregame_starter_features` + `feature_pregame_lineup_features` so fresh posteriors flow into game features within the same run (build-order safe by construction)
+- [x] **DEV-VERIFIED 2026-06-10:** after the Statcast backfill (A1.13) + rebuild, the full 2026-06-09 slate shows 6/6 coverage blocks 15/15 both sides (mean coverage 1.00, clears the 0.70 gate); standings + season-pythagorean now populate for scheduled games (6-10/6-11) where they were NULL before; completed-game rows preserved (exact branch). Remaining today-zeros (lineup/starter for today's not-yet-scored slate; `elo` dev-source staleness) are dev-data artifacts, not modeling defects
+- [ ] **Prod promote** (Stages 1–4 together) + post-promote prod coverage confirmation (elo/lineup/starter populate for today; `data_source` flips to `feature_store`)
+
 **Verification protocol (run after each dev build):**
 ```sql
 -- 1. Historical drift = 0: spine completed-branch count must equal mart_game_results
@@ -10290,6 +10298,29 @@ SELECT COUNT(*) FROM <dev>.feature_pregame_game_features WHERE game_date BETWEEN
 
 ---
 
+### A1.13 — Statcast ingestion freshness SLA (availability-lag self-heal)
+
+**Overview / root cause (2026-06-10, found via the Dagster+ GraphQL API):** the A1.11 Stage-4 investigation's initial "the daily job stalled / posteriors are dead" hypothesis was **wrong** — `daily_ingestion_job` **succeeds every day** (41/41 ops, 0 failures, 6-05→6-09). The real root cause is a SILENT data-availability lag: `ingest_statcast` runs `scripts/savant_ingestion.py batter_pitches`, but Baseball Savant publishes day-D Statcast LATER than the 07:00-ET run can see it, so the run lands 0 games for "yesterday" and exits 0 (7.2s vs 19.8s when it actually loads). `stg_batter_pitches` + `mart_game_results` freeze at the last published date; the feature-store completed branch loses recent games and EVERY `_one_day_ago` posterior script no-ops on empty input — all while the job stays green. The *next* day's run catches the missing day, so the pipeline silently runs **~1 day behind**. Two compounding bugs: (a) `fetch_day` returned an empty DataFrame on exhausted transport retries, making a fetch ERROR indistinguishable from a genuinely-empty day; (b) nothing asserted that yesterday's games actually landed, so it could never go red. (The "ELO/RISP/archetype stale since 6-05" seen while debugging was a separate **dev-mart** artifact — dev marts only refresh on a manual `dbtf` build; those columns are fresh in prod through the real Savant frontier.)
+
+**Fix (CODE DONE 2026-06-10, deploy pending):**
+- [x] **Distinguish fetch error from empty day** — `scripts/savant_ingestion.py::fetch_day` now RAISES on exhausted transport retries (op → run goes red) instead of returning an empty frame; only an HTTP-200 "null"/empty body returns empty (the legitimate "no games" skip)
+- [x] **`statcast_freshness_sensor`** (`pipeline/sensors/statcast_freshness_sensor.py`, every 30 min, US/Eastern-anchored) — polls `savant.batter_pitches` for yesterday: before 04:00 ET / no games yesterday / data already present → skip; missing & **>2h before today's first pitch** (`stg_statsapi_games.game_datetime`) → fire the catch-up (hourly `run_key` ⇒ bounded retries that self-stop once data lands); missing & **within 2h of first pitch** → log `[SLA BREACH]` ERROR + SkipReason (attach a Dagster+ alert policy on this sensor to page). This makes the cadence data-driven instead of guessing Savant's publish time
+- [x] **`statcast_catchup_job`** (`pipeline/jobs/sensor_jobs.py`, lightweight) — `catchup_ingest_statcast → catchup_dbt_rebuild (stg_batter_pitches+) → bullpen/player/team/matchup/starter/lineup posteriors → dbt_umpire_feature_rebuild → predict_today_morning`; reuses the existing posterior/rebuild/score ops, only the two ingest/rebuild ops are new (`pipeline/ops/sensor_ops.py`). Registered in `jobs/__init__.py` + `sensors/__init__.py`; `defs` loads (12 jobs / 6 sensors)
+- [ ] **Deploy + verify:** confirm the `game_datetime` tz assumption (treated as UTC → ET for the deadline); watch the first real lagged day self-heal before first pitch; configure the Dagster+ alert policy on the SLA-breach ERROR
+- [ ] (Optional) extend the same loud-failure freshness assertion to `mart_game_results` in `check_data_freshness` so a frozen pitch frontier is caught even outside the sensor window
+
+**Inspecting Dagster+ run history (reusable capability):** the deployment is Dagster+ (org `penumbra-partners.dagster.plus`, deployment `prod`) with a hybrid agent on Railway. Its GraphQL API (`/prod/graphql`, header `Dagster-Cloud-Api-Token`, a **user** token — not the agent token) answers "which op failed on which day" and "what did op X log" far faster than the UI for incident triage. A `DAGSTER_CLOUD_API_TOKEN` in `.env` plus a `runsOrError`/`logsForRun` query is the pattern; promote the session's throwaway `/tmp/dagster_runs.py` + `/tmp/dagster_steplog.py` helpers into `scripts/` if a durable tool is wanted.
+
+**Acceptance criteria:**
+- [ ] A lagged day (yesterday's Statcast published after 07:00 ET) is landed + folded into today's slate by the sensor BEFORE today's first pitch — observed end-to-end on prod
+- [ ] A genuine Savant fetch error turns the run RED (no longer masked as "No data — skipping")
+- [ ] An SLA breach (yesterday still missing within 2h of first pitch) raises a Dagster+ alert
+
+**Hand-off prompt:**
+> Read `quant_sports_intel_models/baseball/implementation_guide.md` (Development Workflow + Epic A1 → A1.13). The 07:00-ET `daily_ingestion_job` queries yesterday's Statcast before Baseball Savant publishes it, so `ingest_statcast` lands 0 games and the pitch-derived chain (`mart_game_results` → feature store → `_one_day_ago` posteriors) silently runs a day behind while the job stays green. Build a freshness sensor that polls `savant.batter_pitches` for yesterday and fires a lightweight catch-up job once the data lands (deadline: ≥2h before today's first pitch from `stg_statsapi_games.game_datetime`), and make `savant_ingestion.fetch_day` raise on real fetch errors instead of returning empty. Use `dbtf` and `mcp__snowflake__run_snowflake_query`; the user handles commits/pushes ([[feedback_no_git_commits]]).
+
+---
+
 **Epic A1 sequencing summary:**
 ```
 A1.1 Timing audit            — FIRST; 2 days; identifies the actual failure mode
@@ -10313,7 +10344,9 @@ A1.9 Canonical team dim — DONE (dim_team_name_lookup live; all sites + mart_ga
      ↓
 A1.12 Production-write correctness — DONE (shared ml_env resolver; scorer_env() on all buttons; post_lineup DELETE scoped to --game-pks; 10 regression tests)
      ↓
-A1.11 Schedule-spined feature pipeline — ALL CODE DONE 2026-06-09 (dev build pending). Stage 1: keystone mart_game_spine + 5 leaf feature marts + bridge. Stage 2: schedule_context/fielding_oaa re-pointed; pythagorean + bullpen via consumer exact-or-as-of fallback (incrementals untouched); integrity test added. Stage 3: coverage-gated feature_store flip in load_todays_features (safe-by-default). Full DAG compiles 164/164. ONLY remaining = the dev build + verification protocol + prod promote (Snowflake-write hand-offs). Supersedes A1.8 when feature_store serves 7 consecutive days
+A1.11 Schedule-spined feature pipeline — ALL CODE DONE + DEV-VERIFIED 2026-06-10 (prod promote pending). Stage 1: keystone mart_game_spine + 5 leaf feature marts + bridge. Stage 2: schedule_context/fielding_oaa re-pointed; pythagorean + bullpen via consumer exact-or-as-of fallback (incrementals untouched); integrity test added. Stage 3: coverage-gated feature_store flip in load_todays_features (safe-by-default). Stage 4: sequential + season_record (standings/season-pythagorean) exact-or-as-of fallbacks; compute_lineup/starter_posteriors_op wired into morning job + post-lineup sensor. Dev 6-09 slate = 6/6 blocks 15/15 (coverage 1.00). ONLY remaining = prod promote + post-promote prod confirmation. Supersedes A1.8 when feature_store serves 7 consecutive days
+     ↓
+A1.13 Statcast ingestion freshness SLA — CODE DONE 2026-06-10 (deploy pending). Root cause (via Dagster+ API): daily_ingestion_job succeeds daily, but Savant publishes day-D pitch data after the 07:00 run, so ingest_statcast lands 0 games & exits green → pitch chain runs ~1 day behind. Fixes: fetch_day RAISES on real errors (was masked as empty); statcast_freshness_sensor polls for yesterday & fires lightweight statcast_catchup_job once data lands (deadline ≥2h before first pitch), else [SLA BREACH] alert. defs loads (12 jobs / 6 sensors)
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```
@@ -10410,6 +10443,30 @@ state, escalating to re-open criterion (a) (full-2026-season `delta_2026`).
 
 ### 27.1 — State-space (Kalman) within-season environment latent
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 27.1 standalone:
+
+```
+You are picking up Story 27.1 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 27.1 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 27.1 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 27.1 exactly.
+  - Your work MUST conform to every item in the Story 27.1 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Fit a Kalman / local-level state-space model over the within-season run-scoring environment —
 one latent league-level state and per-team offensive/pitching environment states — that updates after
 every completed game and is, by construction, lower-variance than any fixed-window recency estimator.
@@ -10437,6 +10494,30 @@ every completed game and is, by construction, lower-variance than any fixed-wind
 
 ### 27.2 — Environment-state signal generation, backfill, and feature-mart wiring
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 27.2 standalone:
+
+```
+You are picking up Story 27.2 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 27.2 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 27.2 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 27.2 exactly.
+  - Your work MUST conform to every item in the Story 27.2 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Emit the 27.1 state as a daily sub-model signal following the Epic O canonical contract.
 
 **Tasks:**
@@ -10456,6 +10537,30 @@ every completed game and is, by construction, lower-variance than any fixed-wind
 ---
 
 ### 27.3 — Totals re-open gate (re-run Epic 17 NUTS / Layer-3 with the env state)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 27.3 standalone:
+
+```
+You are picking up Story 27.3 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 27.3 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 27.3 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 27.3 exactly.
+  - Your work MUST conform to every item in the Story 27.3 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** With the env-state signal live, re-run the totals architecture against the pre-committed kill
 criterion. This is the decision gate — it does not assume success.
@@ -10478,6 +10583,30 @@ criterion. This is the decision gate — it does not assume success.
 
 ### 27.4 — Defensive quality (OAA / sprint speed) orthogonal signal
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 27.4 standalone:
+
+```
+You are picking up Story 27.4 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 27.4 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 27.4 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 27.4 exactly.
+  - Your work MUST conform to every item in the Story 27.4 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Add a fielding-quality signal — absent from every current sub-model — using the Savant OAA
 pipe already migrated (`ingest_oaa.py`, 2026-06-02). Orthogonal to offense/bullpen/starter by construction.
 
@@ -10495,6 +10624,30 @@ pipe already migrated (`ingest_oaa.py`, 2026-06-02). Orthogonal to offense/bullp
 ---
 
 ### 27.5 — GB/FB-pitcher × granular-park interaction term
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 27.5 standalone:
+
+```
+You are picking up Story 27.5 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 27.5 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 27.5 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 27.5 exactly.
+  - Your work MUST conform to every item in the Story 27.5 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** Model the interaction the additive Layer-2 models cannot — a fly-ball starter in a HR park
 suppresses runs differently than a ground-ball starter — using the granular park factors already built
@@ -10530,6 +10683,30 @@ champion promoted ✅.
 
 ### 28.1 — Alpha re-calibration on the sequential `home_win` champion (IMMEDIATE, no retrain)
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.1 standalone:
+
+```
+You are picking up Story 28.1 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.1 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 28.1 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 28.1 exactly.
+  - Your work MUST conform to every item in the Story 28.1 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** The deployed α=0 was fit in Epic 1.7 on the original elasticnet models. The sequential XGBoost
 champion has different raw outputs and better ECE (0.043). Re-run the alpha grid on its raw predictions.
 
@@ -10550,6 +10727,30 @@ champion has different raw outputs and better ECE (0.043). Re-run the alpha grid
 
 ### 28.2 — run_diff × classifier ensemble + disagreement gate (IMMEDIATE, no retrain)
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.2 standalone:
+
+```
+You are picking up Story 28.2 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.2 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 28.2 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 28.2 exactly.
+  - Your work MUST conform to every item in the Story 28.2 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** 16B.7 showed the run_diff-derived `Φ(μ/σ)` loses standalone; the untested piece is the
 ensemble of the two genuinely-independent estimators and their disagreement as a conviction signal.
 
@@ -10569,6 +10770,30 @@ ensemble of the two genuinely-independent estimators and their disagreement as a
 ---
 
 ### 28.3 — Magnitude live-tracking + pre-committed kill criterion (DECISIVE)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.3 standalone:
+
+```
+You are picking up Story 28.3 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.3 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 28.3 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 28.3 exactly.
+  - Your work MUST conform to every item in the Story 28.3 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** The magnitude signal is the only live positive. Stand up real-book tracking and a pre-committed
 kill criterion so the 2026 deployment question is answered on data, not the optimistic vig-free number.
@@ -10596,6 +10821,30 @@ optimism, in-sample threshold selection, and real favorite-side vig.
 
 ### 28.4 — H2H-specific features: travel/fatigue + starter×opp-offense interaction
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.4 standalone:
+
+```
+You are picking up Story 28.4 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.4 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 28.4 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 28.4 exactly.
+  - Your work MUST conform to every item in the Story 28.4 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** The `home_win` model reuses the totals (run-volume) matrix. Add the two highest-ROI H2H-specific
 features and retrain, targeting a credible-2026 Brier in the sharp band (≤~0.195).
 
@@ -10615,6 +10864,30 @@ features and retrain, targeting a credible-2026 Brier in the sharp band (≤~0.1
 ---
 
 ### 28.5 — Hierarchical Bayesian Bradley-Terry H2H model (reopen architecture)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.5 standalone:
+
+```
+You are picking up Story 28.5 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.5 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 28.5 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 28.5 exactly.
+  - Your work MUST conform to every item in the Story 28.5 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** Replace XGBoost classification with the likelihood actually shaped like the problem — a
 paired-comparison model with hierarchical team strength and team-specific home-field advantage. No
@@ -10640,6 +10913,30 @@ Jensen floor (logit link, no count aggregation), so unlike totals there is no st
 
 ### Story 9.7 — Replace placeholder `*_uncertainty` columns with real PI widths  `[Home: Epic 9]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 9.7 standalone:
+
+```
+You are picking up Story 9.7 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 9.7 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 9.7 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 9.7 exactly.
+  - Your work MUST conform to every item in the Story 9.7 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Story 10.3 discovered (and `reference_submodel_uncertainty_placeholders` records) that
 `run_env_uncertainty=10`, `offense=7`, `bullpen=6` are **constant sentinels**, not calibrated values —
 the entire epistemic-uncertainty propagation through Layer 3 (CIs, `game_uncertainty_score`, bet-gate
@@ -10661,6 +10958,30 @@ conviction) runs on stubs. Replace them with NLL-derived 80% predictive-interval
 
 ### Story 10.9 — Isotonic + conformal post-calibration on Layer-3 P(over)/P(home)  `[Home: Epic 10, REOPENED]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 10.9 standalone:
+
+```
+You are picking up Story 10.9 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 10.9 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 10.9 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 10.9 exactly.
+  - Your work MUST conform to every item in the Story 10.9 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Fix the §4 tail over-confidence (predicted 0.895 → actual 0.378; persists OOS at `[0.90,1.00]`
 0.942→0.625 and `[0,0.10)` 0.052→0.263). The α=0.70 Bovada blend only half-fixed it (gap +0.317→+0.132).
 Add a market-free monotonic recalibration layer.
@@ -10679,6 +11000,30 @@ Add a market-free monotonic recalibration layer.
 
 ### Story 10.10 — Quantile-regression-forest Layer-3 challenger  `[Home: Epic 10, REOPENED]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 10.10 standalone:
+
+```
+You are picking up Story 10.10 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 10.10 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 10.10 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 10.10 exactly.
+  - Your work MUST conform to every item in the Story 10.10 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Test whether removing the log-link removes the §10 Jensen floor (β_bullpen=0.172 → 8.87 > 8.81
 before any signal). A QRF produces full predictive quantiles with no `exp(β·z)` parameterization.
 
@@ -10696,6 +11041,30 @@ before any signal). A QRF produces full predictive quantiles with no `exp(β·z)
 
 ### Story 6.6 — Reliever top-3 leverage availability vector  `[Home: Epic 6]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 6.6 standalone:
+
+```
+You are picking up Story 6.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 6.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 6.6 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 6.6 exactly.
+  - Your work MUST conform to every item in the Story 6.6 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Epic 6's `availability_index` is an aggregate scalar with ~zero correlation to same-game xwOBA
 (by design). For close games (totals tails AND H2H), *which specific high-leverage relievers are
 available* is the informative, orthogonal signal. Model the top-3 leverage arms' availability explicitly.
@@ -10710,6 +11079,30 @@ available* is the informative, orthogonal signal. Model the top-3 leverage arms'
 - [ ] Ablation delta documented both targets; this is the shared signal for R33 (consumed by Epic 27/28).
 
 ### Story 19.6 — VAE holistic OOD gate  `[Home: Epic 19]`
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 19.6 standalone:
+
+```
+You are picking up Story 19.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 19.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 19.6 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 19.6 exactly.
+  - Your work MUST conform to every item in the Story 19.6 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** The current bullpen OOD gate is a per-signal z>1.5σ threshold. The May-2026 drift was +0.2882σ
 on bullpen alone (below 1.5) yet was the entire kill-criterion overshoot — a per-signal gate misses
@@ -10728,6 +11121,30 @@ holistic OOD.
 
 ### Story 12.10 — Betfair exchange sharp-money feed  `[Home: Epic 12]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.10 standalone:
+
+```
+You are picking up Story 12.10 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 12.10 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 12.10 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 12.10 exactly.
+  - Your work MUST conform to every item in the Story 12.10 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** Action Network gives ticket %; Betfair gives money-weighted sharp signal (actual money each
 side). Strongest feed for the Epic 12 CLV meta-model's steam/sharp-money features.
 
@@ -10741,6 +11158,30 @@ side). Strongest feed for the Epic 12 CLV meta-model's steam/sharp-money feature
 - [ ] CLV meta-model AUC lift from Betfair features quantified (gate: ≥+0.01 AUC to retain).
 
 ### Story 3A.3 — Park-type hierarchical prior  `[Home: Epic 3A]`
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 3A.3 standalone:
+
+```
+You are picking up Story 3A.3 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 3A.3 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 3A.3 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 3A.3 exactly.
+  - Your work MUST conform to every item in the Story 3A.3 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
 
 **Goal:** `mart_eb_park_factors` (3A.1) shrinks each park to the *global* league mean. Add a park-*type*
 level (high-altitude, dome, pitcher's-park clusters) so low-sample parks borrow from their type.
@@ -10756,6 +11197,30 @@ level (high-altitude, dome, pitcher's-park clusters) so low-sample parks borrow 
 
 ### Story 5A.6 — Continuous aging-curve EB prior  `[Home: Epic 5A]`
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 5A.6 standalone:
+
+```
+You are picking up Story 5A.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 5A.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 5A.6 (Python models/scripts, dbt models, seeds,
+    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 5A.6 exactly.
+  - Your work MUST conform to every item in the Story 5A.6 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
 **Goal:** 5A priors are season-level age-*band* points. A continuous aging-curve prior improves rookie
 cold-start and veteran-decline detection (the subgroups 5A.3's `il_return_blend` targets).
 
@@ -10767,270 +11232,3 @@ cold-start and veteran-decline detection (the subgroups 5A.3's `il_return_blend`
 **Acceptance criteria:**
 - [ ] April-window and IL-return subgroup MAE ≤ current band-prior MAE; documented.
 
----
-
-## Hand-off prompts (one per story — paste into the agent when the story is pulled)
-
-Each prompt is self-contained. **Shared conventions every prompt assumes** (from the Development
-Workflow section): use `dbtf`, never `dbt`; query Snowflake via the Snowflake MCP only (never ad-hoc
-Python); hand any script that runs >1 min back to the user to run and show the command; test any new
-Snowflake-querying script with real credentials before merging; fully-qualified `db.schema.table` names,
-no `USE` statements; do not git commit or push (the user handles git); follow the Sub-model output
-standard (two-model minimum, NLL primary gate, calib_80, Optuna-tune the winner, MLflow-instrument).
-
-### 27.1 — Kalman within-season environment latent
-```
-You are picking up Story 27.1 (Epic 27 — Within-Season Scoring-Environment State Signal) in the MLB
-quant betting repo. First read quant_sports_intel_models/baseball/implementation_guide.md: the
-"Development Workflow" section and the full Epic 27 + Story 27.1 spec (in "Architecture Review Roadmap").
-Then read ablation_results/totals_2026_failure_analysis.md §8 and §10. Context: seven confirmations show
-the totals stack can't beat the market within-season; §8 proved every recency window (trailing-N, EW)
-swings 4+ runs over two weeks while the real April→May regime move is 0.48 runs — "the market wins by
-being a far lower-variance estimator, not by adapting faster." Your job is to build that low-variance
-estimator: a local-level Kalman/state-space filter over league + per-team run environment, with Q/R
-fit by MLE on 2021–2025 so it learns the true drift-to-noise ratio. Complete all Story 27.1 tasks and
-satisfy its acceptance criteria (filtered two-week std < 50% of trailing-10; reads <8.81 at May-20 2026
-while static run_env stays ~8.88; leakage guard game_date<T). The Kalman fit is likely a >1-min run —
-hand it off. Record Q/R and the validation table; this signal is the Epic 17 re-open prerequisite (R31).
-```
-
-### 27.2 — Env-state signal generation + backfill + mart wiring
-```
-You are picking up Story 27.2 (Epic 27) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: the "Development Workflow" + "Epic O —
-Sub-Model Signal Orchestration" sections and the Story 27.2 spec. Prereq: Story 27.1 produced the Kalman
-env-state model. Use betting_ml/scripts/generate_run_env_signals.py as the template for the flag contract
-(--date/--backfill/--env/--dry-run) and the Epic O canonical op pattern. Build generate_env_state_signals.py
-emitting env_league_state_mu/sigma + env_team_off_state/env_team_pitch_state per (game_pk, side); backfill
-2021–2026 (idempotent SCD-2); add the columns to feature_pregame_sub_model_signals and rebuild it; wire
-generate_env_state_signals_op into daily_ingestion_job (completed-game window). Satisfy the ACs (≥99%
-non-null, op in the job + freshness check, dry-run clean). The backfill is a >1-min run — hand it off.
-```
-
-### 27.3 — Totals re-open gate (re-run NUTS with env state)
-```
-You are picking up Story 27.3 (Epic 27) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: the full Epic 17 spec (Story 17.1, kill
-criterion + three-layer gates), the Story 27.3 spec, and ablation_results/totals_2026_failure_analysis.md
-§10. Also read betting_ml/models/bayesian/run_scoring_nuts.py and nuts_summary.json. Prereq: Story 27.2's
-env-state signal is backfilled (dependency rule R31). Add env_league_state (+ team states) as a regressor
-to the PyMC NegBin model, replacing the non-informative rolling_league_runs_14d (β_rolling≈0). Re-run NUTS
-(2–4 hr — HAND OFF) and compute the May-2026 posterior-predictive mean FIRST against the pre-committed kill
-criterion (PPM ≤ 8.81). Report PASS/FAIL before any further eval. On PASS run the three-layer + Layer-4
-gate (L1<2.8893, calib_80∈[0.75,0.85], L3 Brier<0.248 & <0.228) and record a shadow-window decision in
-model_registry.yaml + totals_2026_failure_analysis.md (§11). On FAIL, record as the 8th confirmation and
-note totals now waits on re-open criterion (a) (full-2026 delta_2026, ~Oct 2026).
-```
-
-### 27.4 — Defensive quality (OAA) orthogonal signal
-```
-You are picking up Story 27.4 (Epic 27) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow" (Sub-model output
-standard), Story 27.4 spec, and Story 3.Z (the "faithful-compression" ablation lesson — a signal that's a
-linear transform of inputs already in the matrix shows ~zero delta). OAA was migrated to Baseball Savant
-(scripts/ingest_oaa.py, 2026-06-02). Build a team defensive-quality rolling feature (OAA, sprint speed),
-EB-smooth low-sample; ablate it as a Layer-3 signal on BOTH total_runs and home_win (NLL/Brier delta vs
-the current matrix); if it clears the gate, generate a defense_quality signal and wire into
-feature_pregame_sub_model_signals. Satisfy ACs (≥95% non-null, |corr|<0.3 with existing signal mus,
-ablation verdict + re-eval trigger). This is orthogonal-to-the-matrix by construction — that's the point.
-```
-
-### 27.5 — GB/FB-pitcher × granular-park interaction
-```
-You are picking up Story 27.5 (Epic 27) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 27.5 spec, Story 3A.2 (granular park
-factors — mart_park_factors_granular has eb_hr_factor / eb_so_factor etc., already built), and the
-Sub-model output standard. The additive Layer-2 models can't represent that a fly-ball starter in a HR
-park suppresses runs differently than a ground-ball starter. Derive starter GB%/FB% from Statcast, build
-fb_pct×eb_hr_factor and gb_pct×eb_so_factor interaction features, add to run_env_v4 and/or starter_v1,
-retrain the challenger, and gate on NLL+calib_80 (promote only on both). Training is a >1-min run — hand
-it off. Satisfy ACs (≥90% non-null; challenger NLL vs champion documented).
-```
-
-### 28.1 — Alpha re-cal on sequential home_win champion
-```
-You are picking up Story 28.1 (Epic 28 — H2H Edge Recovery) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow", the Epic 28 + Story
-28.1 spec, and "Dimension 7" of the architecture review if present. Also read
-ablation_results/h2h_v2_leakage_free.md and betting_ml/scripts/run_probability_layer.py (tune_alpha /
-compute_posterior). Context: the deployed H2H alpha=0 was fit in Epic 1.7 on the OLD elasticnet models;
-the sequential XGBoost champion has different raw outputs and better ECE (0.043). This is eval-only — NO
-retraining. Build alpha_recal_h2h_seq.py: load oos_predictions_h2h_v2.parquet (season 2026,
-market-covered), pull the seq champion raw model_p_home_win + de-vigged market_devig_home + outcome, grid
-alpha 0→1 step 0.1 via tune_alpha (log-loss objective, same blend the totals path used), write best to
-best_alpha.json under key h2h_seq_alpha. If alpha>0, recompute the magnitude |model_p−market_p| gap and
-Layer-4 attribution against the NEW blended probs. Satisfy ACs (grid table; interpretation recorded).
-```
-
-### 28.2 — run_diff × classifier ensemble + disagreement gate
-```
-You are picking up Story 28.2 (Epic 28) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 28.2 spec; and
-betting_ml/scripts/evaluation/bayesian_model_eval.py (normalize_h2h_frame, sweep_thresholds),
-ablation_results/layer4_selective_strategy.md, and Story 16B.7 (evaluate_run_diff_h2h.py — already showed
-the run_diff-derived Φ(μ/σ) LOSES standalone: NLL 0.6023 vs champion 0.5957). This is eval-only. Build
-h2h_ensemble_eval.py: merge the direct-classifier p (oos_predictions_h2h_v2) with the run_diff-derived p
-(16B.7 output) on game_pk; sweep mix weight w∈{0,0.25,0.5,0.75,1.0}; run the three-layer eval (L1 NLL vs
-Bernoulli(0.54), L2 ECE/calib_80, L3 raw Brier vs market 0.182) per w; and test |p_classifier−p_run_diff|
-as a NEW abstain/conviction gate via the bayesian_model_eval sweep. Satisfy ACs (ensemble table per w;
-disagreement-gated subset Brier vs market; adopt the gate if it tightens the magnitude subset). Note: the
-disagreement gate is the real deliverable even if no mix beats the market.
-```
-
-### 28.3 — Magnitude live-tracking + pre-committed kill criterion
-```
-You are picking up Story 28.3 (Epic 28) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 28.3 spec; and
-ablation_results/layer4_selective_strategy.md (the magnitude rule: 2026 roi_devig +0.197, win 0.809 —
-but vig-free and on heavy favorites where Bovada vig is highest). Context: live H2H attribution began
-2026-06-04; as of 2026-06-05 daily_model_predictions has only the 06-04 slate (7 abstain, 2
-direction_flip, ZERO magnitude, none settled) — the live magnitude sample is empty. Statistical power is
-NOT the constraint (~15–24 bets distinguish +0.197 from 0); the constraints are vig-free optimism +
-in-sample threshold selection + real favorite-side vig. Confirm predict_today logs layer4_h2h_rule,
-model/market probs, AND the actual Bovada moneyline odds taken (not de-vig) per magnitude trigger; build a
-settled-bet monitor over daily_model_predictions computing real-book ROI at actual odds + 95% CI and
-magnitude-subset model Brier vs market Brier; register the kill criterion in model_registry.yaml under
-home_win. Kill criterion: CONFIRM at ≥150 fresh post-06-04 settled magnitude bets with 95% lower-CI
-real-book ROI>0 AND model Brier<market Brier; KILL if lower-CI≤0 at n=150 or win-rate below actual-odds
-break-even over the first 50; no auto-bets until CONFIRM. Use the Snowflake MCP for the daily_model_predictions reads.
-```
-
-### 28.4 — H2H travel/fatigue + starter×opp-offense features
-```
-You are picking up Story 28.4 (Epic 28) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: "Development Workflow", Story 28.4 spec, and
-ablation_results/h2h_v2_leakage_free.md (model Brier 0.224 vs market 0.180 on credible 2026 — the gap to
-close). The home_win model currently reuses the totals run-volume matrix. Add the two highest-ROI
-H2H-specific features: (1) travel/fatigue from StatsAPI schedule + geocoded park coords (travel distance,
-time-zone delta, 3rd-consecutive-road-game, getaway-day — all leakage-free, data already present); (2)
-a starter_suppression_mu × opp pred_runs_mu interaction term (both signals already in the matrix; the
-additive model can't represent the product) plus run_diff σ as a conviction feature. Retrain the home_win
-challenger (use run_xgb_home_win_search.py) on the leakage-free matrix and evaluate on credible 2026.
-CONFIRMATION GATE: credible-2026 model Brier ≤ 0.195 (sharp band) to justify a non-zero blend alpha; if
-not met, document the residual gap and route to Story 28.5. The retrain is >1 min — hand it off.
-```
-
-### 28.5 — Hierarchical Bayesian Bradley-Terry H2H model
-```
-You are picking up Story 28.5 (Epic 28) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 28.5 spec, Dimension 7's "alternative
-architectures" reasoning, and betting_ml/models/bayesian/run_scoring_nuts.py (for PyMC/NUTS patterns,
-non-centered reparam, convergence gates). Context: H2H has NO Jensen floor (logit link, no count
-aggregation) so unlike totals there is no structural ceiling; the failure is signal-quality/calibration.
-Build a PyMC hierarchical Bradley-Terry model: P(home win)=σ(s_home − s_away + hfa_home), s_team partially
-pooled, hfa_team~Normal(league_hfa, σ_hfa); sub-model signals (offense_v2, bullpen_v2, starter_v1,
-run_diff μ/σ) enter as covariates on team strength. Train 2021–2025, score the leakage-free 2026 OOS,
-run three-layer + Layer-4 eval vs the XGBoost champion AND the market (Brier 0.182) on the same games.
-NUTS is 1–2 hr — HAND OFF. Satisfy ACs (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered
-reparam; promote only if it beats the champion AND closes toward the market).
-```
-
-### 9.7 — Fix `*_uncertainty` placeholder stubs  [Epic 9]
-```
-You are picking up Story 9.7 (Home: Epic 9) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: the Story 9.7 spec and the Sub-model output
-standard; the project memory reference_submodel_uncertainty_placeholders; and Story 10.3 (which discovered
-the defect). Context: run_env_uncertainty=10, offense=7, bullpen=6 are CONSTANT sentinels, not calibrated
-values — the entire epistemic-uncertainty propagation through Layer 3 (CIs, game_uncertainty_score,
-bet-gate conviction) runs on stubs, and including them blew combined_sigma to ~10. In each
-generate_*_signals.py, replace the constant uncertainty with a real per-game 80% PI width from the model's
-own predictive distribution (nbinom.ppf(0.9)−nbinom.ppf(0.1) for NegBin; 2·1.28·σ for Normal); backfill
-2021–2026; rebuild feature_pregame_sub_model_signals; re-verify combined_sigma and the P(over) CI now vary
-per game and widen on low-coverage/high-disagreement (the Story 9.3 "σ flat under reweighting" defect).
-Satisfy ACs and update/retire the placeholder memory. Backfill is >1 min — hand it off.
-```
-
-### 10.9 — Isotonic + conformal post-calibration  [Epic 10, reopened]
-```
-You are picking up Story 10.9 (Home: Epic 10, reopened) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 10.9 spec; and
-ablation_results/totals_2026_failure_analysis.md §4 (tail over-confidence: predicted 0.895 → actual 0.378;
-persists OOS at [0.90,1.00] 0.942→0.625 and [0,0.10) 0.052→0.263), ablation_results/totals_v1_reliability_
-diagram.md, and Story 10.5 (the α=0.70 Bovada blend only half-fixed the tails: gap +0.317→+0.132). Add a
-market-free monotonic recalibration: fit isotonic regression on Layer-3 raw P(over)→actual over-rate on a
-walk-forward holdout, applied BEFORE the alpha blend; add conformal prediction intervals on the combiner
-output as a distribution-free alternative to the NegBin-CDF CI; re-check the two tail bins post-isotonic;
-apply the same to H2H P(home). Satisfy ACs (tail gaps |gap|<0.10; conformal 80% empirical coverage on 2026
-OOS). Frame it honestly: this makes the model calibrated, it does not by itself create edge.
-```
-
-### 10.10 — Quantile-regression-forest Layer-3 challenger  [Epic 10, reopened]
-```
-You are picking up Story 10.10 (Home: Epic 10, reopened) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 10.10 spec; ablation_results/
-totals_2026_failure_analysis.md §10 (the structural Jensen floor: β_bullpen=0.172 → 8.87 > 8.81 before
-any signal, because E[exp(β·z)]>exp(β·μ) in the log-link NegBin); the archived Story 8.P lgb_quantile
-model (model_registry.yaml total_runs.challengers); and betting_ml/scripts/train_totals.py. A QRF produces
-full predictive quantiles with NO exp(β·z) parameterization — test whether removing the log-link removes
-the floor. Train a quantile-regression forest on the Layer-3 matrix; derive P(over) from the quantiles
-directly (no NegBin CDF); re-run the archived 8.P model under v4-era gates (10.6 showed v4 already
-differentiates, std-of-means 1.355 — the NGBoost-era std-shrinkage gate that killed 8.P is stale);
-compute the May-2026 mean predicted total vs 8.81 and state explicitly whether the floor is removed.
-Satisfy ACs. Training is >1 min — hand it off.
-```
-
-### 6.6 — Reliever top-3 leverage availability vector  [Epic 6]
-```
-You are picking up Story 6.6 (Home: Epic 6) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 6.6 spec and the bullpen registry
-(sub_model_registry.yaml bullpen_v1 availability_index_v1 — note its fatigue score has ~0 Pearson r with
-same-game xwoba BY DESIGN). Also read betting_ml/scripts/train_bullpen_distributional.py and the
-mart_bullpen_effectiveness source. Context: the aggregate availability_index predicts depth/flexibility,
-not quality; for close games (totals tails AND H2H) WHICH specific high-leverage relievers are available
-is the informative orthogonal signal. From reliever appearance logs (already ingested), derive per-team
-closer_available / setup1_available / setup2_available (y/n + rest-days) from prior-3-day usage
-(leakage-free); add to bullpen_v2 features; ablate on total_runs and home_win. Satisfy ACs (≥95%
-non-null, leakage-free, ablation delta both targets). This is a shared signal for Epics 27 + 28 (R33).
-The retrain is >1 min — hand it off.
-```
-
-### 19.6 — VAE holistic OOD gate  [Epic 19]
-```
-You are picking up Story 19.6 (Home: Epic 19) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 19.6 spec, the Epic 19 bet-permission
-gate, and Story 17.0/17.1b (the May-2026 bullpen drift was +0.2882σ — BELOW the per-signal z>1.5 gate yet
-the entire kill-criterion overshoot). The bullpen OOD gate params live in sub_model_registry.yaml
-(bullpen_v2.ood_gate) and signal_scalers.joblib. Train a VAE on the JOINT 2022–2025 game-level signal
-vector; per-game reconstruction error flags holistic/combination OOD that a per-signal gate misses;
-backtest whether recon-error AUC flags the May-2026 cohort better than the per-signal gate's recall; wire
-it as an Epic 19 gate criterion (signal_combination_ood) in the registry bet_gate. Satisfy ACs (recon AUC
-> per-signal recall on May-2026; gate criterion + threshold added). Training is >1 min — hand it off.
-```
-
-### 12.10 — Betfair exchange sharp-money feed  [Epic 12]
-```
-You are picking up Story 12.10 (Home: Epic 12) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 12.10 spec and the Epic 12 CLV
-meta-model stories (12.1 feature mart). Context: Action Network gives ticket %; Betfair exchange gives
-money-weighted sharp signal (actual money on each side). Evaluate Betfair exchange API access + auth;
-ingest matched-money + back/lay for MLB h2h/totals; add money-imbalance + steam features to the Epic 12.1
-meta-model feature mart; backtest the CLV meta-model with vs without Betfair features. Satisfy ACs (feed
-ingested for a trial window + coverage; ≥+0.01 AUC lift to retain). This is a new external integration —
-confirm credential/cost before building; do not commit secrets.
-```
-
-### 3A.3 — Park-type hierarchical prior  [Epic 3A]
-```
-You are picking up Story 3A.3 (Home: Epic 3A) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 3A.3 spec and Story 3A.1
-(betting_ml/scripts/eb_priors/fit_park_priors.py, mart_eb_park_factors — currently a Normal-Normal that
-shrinks each park to the GLOBAL league mean). Add a park-TYPE level (high-altitude, dome, pitcher's-park
-clusters) between the global mean and the per-park posterior — a one-level hyperprior extension — so
-low-sample parks (Sutter Health, Tokyo Dome, neutral sites) borrow from their type cluster, not the global
-mean. Re-fit and verify low-n parks shrink toward their type mean; confirm CV error on the ~2%
-non-standard-venue games does not regress. Satisfy ACs.
-```
-
-### 5A.6 — Continuous aging-curve EB prior  [Epic 5A]
-```
-You are picking up Story 5A.6 (Home: Epic 5A) in the MLB quant betting repo. Read
-quant_sports_intel_models/baseball/implementation_guide.md: Story 5A.6 spec and Epic 5A
-(betting_ml/scripts/eb_priors/fit_starter_priors.py + compute_starter_posteriors.py — current priors are
-season-level age-BAND points: <25/25–29/30–32/33+, with an il_return_blend). Replace the band prior mean
-with a CONTINUOUS pitcher aging curve (xwOBA-against vs age) for better rookie cold-start and veteran
-decline detection; ablate on the April / rookie / IL-return subgroups vs the current band prior. Satisfy
-ACs (April-window and IL-return subgroup MAE ≤ band-prior MAE; documented). Any retrain/ablation >1 min —
-hand it off.
-```
-
----

@@ -209,8 +209,18 @@ _TZ_ABBREVS: dict[str, str] = {
 }
 
 
+def _coalesce(*vals):
+    """First value that is genuinely present. NaT/NaN-safe — unlike `a or b`,
+    which treats pd.NaT as truthy (pandas 2.x) and so silently keeps a null
+    datetime instead of falling through to the next candidate."""
+    for v in vals:
+        if v is not None and not pd.isna(v):
+            return v
+    return None
+
+
 def _fmt_game_time(val, tz: str = "America/New_York") -> str:
-    if val is None:
+    if val is None or pd.isna(val):
         return "—"
     try:
         ts = pd.Timestamp(val)
@@ -652,7 +662,7 @@ for _, r in df.iterrows():
     display_rows.append({
         "Signal": sig,
         "Matchup": matchup,
-        "Game Time": _fmt_game_time(r.get("game_datetime") or r.get("stg_game_date"), selected_tz),
+        "Game Time": _fmt_game_time(_coalesce(r.get("game_datetime"), r.get("stg_game_date")), selected_tz),
         "Lineups": _lineup_status(basis, both),
         "P(Over)": _fmt_pct(p_over) if has_odds and p_over is not None else "—",
         "Model Win%": _fmt_pct(_safe_float(r.get("calibrated_win_prob"))),
