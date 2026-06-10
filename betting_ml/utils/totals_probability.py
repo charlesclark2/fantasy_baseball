@@ -78,3 +78,18 @@ def compute_totals_edge(p_over: float, bovada_devig_over_prob: float) -> float:
     """Primary totals signal: model P(over) minus the de-vigged market P(over).
     Positive → over edge; negative → under edge."""
     return float(p_over) - float(bovada_devig_over_prob)
+
+
+def compute_conformal_total_runs_pi(mu: float, r: float, q_hat: float) -> tuple[int, int]:
+    """Conformal-adjusted run-count PI with empirical ≥80% coverage (Story 10.9).
+
+    Expands the NegBin 75% base PI (ppf(0.125)/ppf(0.875)) by q_hat runs on each
+    side.  q_hat is loaded from conformal_totals.json (production value = 1 run).
+    Returns (lo, hi) as non-negative integer run counts.
+    """
+    mu = max(float(mu), 1e-6)
+    r_disp = max(float(r), 1e-6)
+    p = r_disp / (r_disp + mu)
+    lo = int(nbinom.ppf(0.125, n=r_disp, p=p)) - int(q_hat)
+    hi = int(nbinom.ppf(0.875, n=r_disp, p=p)) + int(q_hat)
+    return max(lo, 0), hi

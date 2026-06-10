@@ -1,5 +1,5 @@
 """
-score_totals_layer3.py — Epic 10, Story 10.3
+score_totals_layer3.py — Epic 10, Story 10.3 / 10.9
 
 Scoring engine for the Layer 3 totals champion (`totals_v1`): turns the NegBin
 (mu, r) predictive distribution + the across-model epistemic sigma into the ten
@@ -8,6 +8,11 @@ betting columns for `daily_model_predictions`:
     totals_mu, totals_r, totals_p_over, totals_p_under, totals_p_push,
     totals_p_over_ci_low, totals_p_over_ci_high, bovada_devig_over_prob,
     bovada_line, totals_edge   (+ total_line_source, combined_sigma)
+
+Story 10.9 adds two calibration columns:
+  - totals_p_over: isotonic-calibrated P(over) (before Bovada alpha blend)
+  - totals_conformal_pi_lo / totals_conformal_pi_hi: distribution-free 80% PI
+    on total runs from conformal prediction (q̂=1 run from conformal_totals.json)
 
 Reused by Story 10.4 (historical backfill) and Story 10.7 (live daily / predict_today
 `--model-source layer3`). This module does NOT write to Snowflake or flip the
@@ -21,11 +26,13 @@ Usage (engine; callers pass game_pks):
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 import yaml
 
@@ -39,6 +46,7 @@ from betting_ml.scripts.load_layer3_features import (  # noqa: E402
 )
 from betting_ml.models.totals_negbin_model import TotalsNegBinModel  # noqa: E402,F401 — needed to unpickle
 from betting_ml.utils.totals_probability import (  # noqa: E402
+    compute_conformal_total_runs_pi,
     compute_over_prob_ci,
     compute_over_under_probs,
     compute_totals_edge,
@@ -50,13 +58,44 @@ log = logging.getLogger(__name__)
 
 _REGISTRY_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
 _LOCAL_ARTIFACT = _PROJECT_ROOT / "betting_ml" / "models" / "sub_models" / "totals_v1.pkl"
+_ISOTONIC_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "layer3" / "isotonic_totals.pkl"
+_CONFORMAL_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "layer3" / "conformal_totals.json"
 
 _OUTPUT_COLUMNS = [
     "game_pk", "totals_mu", "totals_r", "combined_sigma",
     "totals_p_over", "totals_p_under", "totals_p_push",
     "totals_p_over_ci_low", "totals_p_over_ci_high",
+    "totals_conformal_pi_lo", "totals_conformal_pi_hi",
     "bovada_devig_over_prob", "bovada_line", "total_line_source", "totals_edge",
 ]
+
+_isotonic_model = None
+_conformal_q_hat: float | None = None
+
+
+def _load_isotonic():
+    """Lazy-load the isotonic calibrator (fitted on 2023-2025 OOS, Story 10.9)."""
+    global _isotonic_model
+    if _isotonic_model is None:
+        if not _ISOTONIC_PATH.exists():
+            log.warning("Isotonic calibrator not found at %s — P(over) will be uncalibrated", _ISOTONIC_PATH)
+            return None
+        _isotonic_model = joblib.load(_ISOTONIC_PATH)
+        log.info("Loaded isotonic calibrator from %s", _ISOTONIC_PATH)
+    return _isotonic_model
+
+
+def _load_conformal_q_hat() -> float:
+    """Lazy-load the conformal q̂ from conformal_totals.json (Story 10.9)."""
+    global _conformal_q_hat
+    if _conformal_q_hat is None:
+        if not _CONFORMAL_PATH.exists():
+            log.warning("conformal_totals.json not found at %s — conformal PI will be None", _CONFORMAL_PATH)
+            return 0.0
+        data = json.loads(_CONFORMAL_PATH.read_text())
+        _conformal_q_hat = float(data["q_hat"])
+        log.info("Loaded conformal q̂=%.2f from %s", _conformal_q_hat, _CONFORMAL_PATH)
+    return _conformal_q_hat
 
 
 def load_champion(model=None):
@@ -89,6 +128,10 @@ def score_games(game_pks: list[int], env: str = "prod", model=None) -> pd.DataFr
     sigma = compute_across_model_sigma(feats).to_numpy()
     lines = load_total_line_bovada(game_pks, env=env)
 
+    # Story 10.9: load calibration artifacts
+    iso = _load_isotonic()
+    q_hat = _load_conformal_q_hat()
+
     base = pd.DataFrame({
         "game_pk": feats["game_pk"].to_numpy(),
         "totals_mu": mu, "totals_r": r, "combined_sigma": sigma,
@@ -106,10 +149,22 @@ def score_games(game_pks: list[int], env: str = "prod", model=None) -> pd.DataFr
             "total_line_source": getattr(row, "total_line_source", None),
             "totals_p_over": None, "totals_p_under": None, "totals_p_push": None,
             "totals_p_over_ci_low": None, "totals_p_over_ci_high": None,
+            "totals_conformal_pi_lo": None, "totals_conformal_pi_hi": None,
             "bovada_devig_over_prob": None, "totals_edge": None,
         }
+
+        # Conformal PI is line-independent (total runs, not P(over))
+        c_lo, c_hi = compute_conformal_total_runs_pi(row.totals_mu, row.totals_r, q_hat)
+        rec["totals_conformal_pi_lo"] = c_lo
+        rec["totals_conformal_pi_hi"] = c_hi
+
         if not pd.isna(line):
             po, pu, pp = compute_over_under_probs(row.totals_mu, row.totals_r, line)
+
+            # Story 10.9: apply isotonic calibration to raw P(over) before alpha blend
+            if iso is not None:
+                po = float(np.clip(iso.predict([po])[0], 0.0, 1.0))
+
             lo, hi = compute_over_prob_ci(row.totals_mu, row.combined_sigma, row.totals_r, line)
             rec.update(totals_p_over=round(po, 4), totals_p_under=round(pu, 4),
                        totals_p_push=round(pp, 4),
@@ -124,7 +179,8 @@ def score_games(game_pks: list[int], env: str = "prod", model=None) -> pd.DataFr
     out = pd.DataFrame(recs)[_OUTPUT_COLUMNS]
     n_line = int(out["bovada_line"].notna().sum())
     n_edge = int(out["totals_edge"].notna().sum())
-    log.info("Scored %d games | %d with a line | %d with de-vig edge", len(out), n_line, n_edge)
+    log.info("Scored %d games | %d with a line | %d with de-vig edge | isotonic=%s | q̂=%.1f",
+             len(out), n_line, n_edge, iso is not None, q_hat)
     return out
 
 

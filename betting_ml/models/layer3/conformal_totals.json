@@ -1,0 +1,10 @@
+{
+  "q_hat": 1.0,
+  "calibration_window": "seasons < 2026",
+  "n_calibration": 6601,
+  "target_coverage": 0.8,
+  "negbin_coverage_oos": 0.7874,
+  "conformal_coverage_oos": 0.8293,
+  "ac_pass": true,
+  "story": "10.9"
+}
