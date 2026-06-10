@@ -40,6 +40,31 @@ def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
         raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{result.stderr}")
 
 
+# ── Statcast catch-up job ops (statcast_freshness_sensor) ─────────────────────
+# Lightweight "land yesterday's pitch data, then make today's slate whole" chain,
+# fired by statcast_freshness_sensor when Statcast publishes later than the 07:00
+# daily run. savant_ingestion is incremental (auto-resumes from last_loaded+1 to
+# yesterday), so this needs no date args and is idempotent across retries.
+
+@op(out=Out(Nothing))
+def catchup_ingest_statcast(context: OpExecutionContext) -> None:
+    """Re-attempt Statcast pitch ingestion for the not-yet-loaded day(s)."""
+    _run_script(context, "savant_ingestion.py", ["batter_pitches"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def catchup_dbt_rebuild(context: OpExecutionContext) -> None:
+    """Rebuild the pitch-derived subtree so the newly-landed completed games flow
+    into mart_game_results → mart_game_spine → rolling marts → feature store.
+    Posteriors run next (they read mart_game_results), then dbt_umpire_feature_-
+    rebuild folds them into the feature marts before the re-score."""
+    _run_dbt(context, [
+        "build",
+        "--select", "stg_batter_pitches+",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
 # ── Lineup Monitor job ops ────────────────────────────────────────────────────
 
 @op(out=Out(Nothing))
