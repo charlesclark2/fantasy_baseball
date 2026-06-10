@@ -501,7 +501,7 @@ def load_batter_stats(player_ids: tuple[int, ...], date_str: str) -> dict[int, d
         int(r["batter_id"]): {
             "ops":   _safe_float(r.get("ops")),
             "xwoba": _safe_float(r.get("xwoba")),
-            "pa":    int(r["pa"]) if r.get("pa") is not None else 0,
+            "pa":    int(r["pa"]) if pd.notna(r.get("pa")) else 0,
         }
         for _, r in df.iterrows()
     }
@@ -519,7 +519,7 @@ def load_matchup_stats(batter_ids: tuple[int, ...], pitcher_id: int, date_str: s
     df.columns = [c.lower() for c in df.columns]
     return {
         int(r["batter_id"]): {
-            "pa":    int(r["pa"]) if r.get("pa") is not None else 0,
+            "pa":    int(r["pa"]) if pd.notna(r.get("pa")) else 0,
             "xwoba": _safe_float(r.get("xwoba")),
         }
         for _, r in df.iterrows()
@@ -552,7 +552,7 @@ def _lineup_table(
     rows = []
     for slot in range(1, 10):
         pid_raw = lineup_row.get(f"slot_{slot}_player_id") if lineup_row is not None else None
-        pid = int(pid_raw) if pid_raw is not None else None
+        pid = int(pid_raw) if pd.notna(pid_raw) else None
         name = lineup_row.get(f"slot_{slot}_full_name") if lineup_row is not None else None
         pos  = lineup_row.get(f"slot_{slot}_position")  if lineup_row is not None else None
 
@@ -597,8 +597,10 @@ away_lineup_row = _get_side(lineups_df, "home_away", "away")
 
 # Load trailing stats for both pitchers in one query
 _pitcher_id_list = []
-_home_pid = int(home_starter["probable_pitcher_id"]) if home_starter is not None and home_starter.get("probable_pitcher_id") is not None else None
-_away_pid = int(away_starter["probable_pitcher_id"]) if away_starter is not None and away_starter.get("probable_pitcher_id") is not None else None
+# pd.notna guards the NaN case: a pandas NaN passes `is not None`, so int(NaN) would
+# crash when a probable starter hasn't been announced yet for one side.
+_home_pid = int(home_starter["probable_pitcher_id"]) if home_starter is not None and pd.notna(home_starter.get("probable_pitcher_id")) else None
+_away_pid = int(away_starter["probable_pitcher_id"]) if away_starter is not None and pd.notna(away_starter.get("probable_pitcher_id")) else None
 if _home_pid is not None:
     _pitcher_id_list.append(_home_pid)
 if _away_pid is not None:
@@ -617,7 +619,7 @@ def _render_starter_stats(stats: pd.Series | None) -> None:
     ra9 = _safe_float(stats["ra9"]) if stats is not None else None
     whip = _safe_float(stats["whip"]) if stats is not None else None
     k_pct = _safe_float(stats["k_pct"]) if stats is not None else None
-    starts = int(stats["starts"]) if stats is not None and stats.get("starts") is not None else None
+    starts = int(stats["starts"]) if stats is not None and pd.notna(stats.get("starts")) else None
     label_suffix = f" (last {starts} starts)" if starts else ""
     m1, m2, m3 = st.columns(3)
     m1.metric(f"RA/9{label_suffix}", f"{ra9:.2f}" if ra9 is not None else "N/A",
@@ -1338,8 +1340,8 @@ def _get_team_ids(game_pk: int) -> tuple[int | None, int | None]:
     df.columns = [c.lower() for c in df.columns]
     row = df.iloc[0]
     return (
-        int(row["home_team_id"]) if row.get("home_team_id") is not None else None,
-        int(row["away_team_id"]) if row.get("away_team_id") is not None else None,
+        int(row["home_team_id"]) if pd.notna(row.get("home_team_id")) else None,
+        int(row["away_team_id"]) if pd.notna(row.get("away_team_id")) else None,
     )
 
 
@@ -1452,7 +1454,7 @@ def _render_team_accuracy(team_name: str, team_id: int | None) -> None:
         st.caption("Not enough data.")
         return
     r = acc_df.iloc[0]
-    games = int(r["games"]) if r.get("games") is not None else 0
+    games = int(r["games"]) if pd.notna(r.get("games")) else 0
     if games == 0:
         st.caption("No scored games found.")
         return
