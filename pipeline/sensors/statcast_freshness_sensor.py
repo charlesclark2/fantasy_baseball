@@ -72,10 +72,11 @@ def _pitches_present(conn, d: date) -> bool:
 
 def _first_pitch_et(conn, d: date) -> datetime | None:
     """Earliest first-pitch for date d, as an aware US/Eastern datetime.
-    game_datetime is the StatsAPI UTC instant; treat a naive value as UTC."""
+    game_date is the StatsAPI first-pitch instant stored as TIMESTAMP_TZ
+    (tz-aware); a naive value is defensively treated as UTC."""
     cur = conn.cursor()
     cur.execute(
-        f"SELECT MIN(game_datetime) FROM {_MART_SCHEMA}.stg_statsapi_games "
+        f"SELECT MIN(game_date) FROM {_MART_SCHEMA}.stg_statsapi_games "
         f"WHERE official_date = %s AND game_type = 'R'",
         [d.isoformat()],
     )
