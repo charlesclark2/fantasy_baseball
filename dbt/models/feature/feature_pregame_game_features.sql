@@ -31,7 +31,8 @@ games as (
         game_date::date     as game_date,
         game_year::integer  as game_year,
         home_team,
-        away_team
+        away_team,
+        is_scheduled
     from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
@@ -168,22 +169,59 @@ home_win_rate as (
 -- carries NO game-G leakage (verified: prior_mu[N] == posterior_mu[N-1]). The
 -- inner qualify dedups to the latest version per (team, metric, game_pk) as
 -- insurance against SCD-2 re-runs; the outer pivot collapses the 3 metrics to
--- one row per (game_pk, team).
-team_seq as (
+-- one row per (game_pk, team, game_date).
+team_seq_pivot as (
     select
         game_pk,
         team,
+        game_date::date                                          as game_date,
         max(case when metric = 'off_xwoba'     then prior_mu end) as seq_off_xwoba,
         max(case when metric = 'bullpen_xwoba' then prior_mu end) as seq_bullpen_xwoba,
         max(case when metric = 'win_prob'      then prior_mu end) as seq_win_prob
     from (
-        select game_pk, team, metric, prior_mu
+        select game_pk, team, game_date, metric, prior_mu
         from {{ source('betting', 'team_sequential_posteriors') }}
         qualify row_number() over (
             partition by team, metric, game_pk order by update_ts desc
         ) = 1
     )
-    group by game_pk, team
+    group by game_pk, team, game_date::date
+),
+
+-- A1.11 Stage 4 — the source table is keyed by exact game_pk, so today's
+-- not-yet-played games have no row and the sequential block would go NULL.
+-- For a SCHEDULED game the correct "belief entering the game" is simply the
+-- team's LATEST prior posterior (carry-forward), exactly mirroring the
+-- bullpen/pythagorean exact-or-as-of fallback shipped for the team features.
+--   * completed games (is_scheduled = false): ONLY the exact game_pk row is
+--     eligible ⇒ byte-for-byte identical to the old plain game_pk + team join.
+--   * scheduled games (is_scheduled = true): only strictly-prior game_date rows
+--     are eligible ⇒ latest carried forward, no game-G leakage.
+spine_teams as (
+    select game_pk, game_date, is_scheduled, home_team as team, 'home' as side from games
+    union all
+    select game_pk, game_date, is_scheduled, away_team as team, 'away' as side from games
+),
+
+team_seq as (
+    select
+        st.game_pk,
+        st.side,
+        ts.seq_off_xwoba,
+        ts.seq_bullpen_xwoba,
+        ts.seq_win_prob
+    from spine_teams st
+    left join team_seq_pivot ts
+        on  ts.team = st.team
+        and (
+            (not st.is_scheduled and ts.game_pk = st.game_pk)
+            or (st.is_scheduled and ts.game_date < st.game_date)
+        )
+    qualify row_number() over (
+        partition by st.game_pk, st.side
+        order by iff(ts.game_pk = st.game_pk, 1, 0) desc,
+                 ts.game_date desc nulls last
+    ) = 1
 ),
 
 final as (
@@ -1130,8 +1168,8 @@ final as (
     left join away_starter a_st on  a_st.game_pk = g.game_pk
     left join home_team h_tm    on  h_tm.game_pk = g.game_pk
     left join away_team a_tm    on  a_tm.game_pk = g.game_pk
-    left join team_seq h_seq    on  h_seq.game_pk = g.game_pk and h_seq.team = g.home_team
-    left join team_seq a_seq    on  a_seq.game_pk = g.game_pk and a_seq.team = g.away_team
+    left join team_seq h_seq    on  h_seq.game_pk = g.game_pk and h_seq.side = 'home'
+    left join team_seq a_seq    on  a_seq.game_pk = g.game_pk and a_seq.side = 'away'
     left join {{ ref('feature_pregame_park_features') }} pk
         on  pk.game_pk = g.game_pk
     left join odds od

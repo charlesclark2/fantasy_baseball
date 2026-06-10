@@ -384,6 +384,31 @@ def update_matchup_cell_posteriors_op(context):
     _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py", ["--date", _one_day_ago()])
 
 
+# A1.11 Stage 4 — forward-looking EB posteriors for TODAY's slate (the games
+# being predicted), NOT yesterday's results. This is the key difference from the
+# sequential/bullpen ops above (which advance yesterday's beliefs via
+# _one_day_ago): a lineup/starter EB posterior is specific to today's confirmed
+# lineup / probable pitcher, so it must be COMPUTED for today and cannot carry
+# forward. Both scripts MERGE on natural keys ((game_pk, batting_slot, batter_id)
+# and (game_pk, pitcher_id)), so a daily --game-date is idempotent/re-runnable —
+# which also lets the lineup_monitor sensor safely recompute lineups once they
+# confirm. Outputs feed feature_pregame_starter_features /
+# feature_pregame_lineup_features, rebuilt in dbt_umpire_feature_rebuild below.
+# Before this op existed these tables went stale (compute_*_posteriors.py had no
+# Dagster op at all) — same failure class as compute_eb_bullpen_posteriors_op
+# above. See project_posterior_staleness_jun2026 / reference_bullpen_freshness_chain.
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def compute_starter_posteriors_op(context):
+    _run_script(context, f"{_EB_DIR}/compute_starter_posteriors.py", ["--game-date", _today()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def compute_lineup_posteriors_op(context):
+    # Best-effort morning pass on whatever lineups have posted; the lineup_monitor
+    # sensor recomputes authoritatively once each game's lineup is confirmed.
+    _run_script(context, f"{_EB_DIR}/compute_lineup_posteriors.py", ["--game-date", _today()])
+
+
 # ── Predict phase ────────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -406,6 +431,12 @@ def dbt_umpire_feature_rebuild(context):
     # freshly-written value; the two table-materialized features then pass it through
     # to feature_pregame_game_features.{home,away}_bp_eb_xwoba. dbt resolves build
     # order from the ref graph. See reference_bullpen_freshness_chain.
+    #
+    # A1.11 Stage 4 — also rebuild the lineup + starter features here so today's
+    # forward-looking EB posteriors (written by compute_lineup/starter_posteriors_op
+    # in the posterior cluster just above) land in feature_pregame_game_features.
+    # Both are table-materialized, so the full rebuild simply re-reads the fresh
+    # eb_batter_posteriors_raw / eb_starter_posteriors sources.
     _run_dbt(context, [
         "build",
         "--select",
@@ -413,6 +444,8 @@ def dbt_umpire_feature_rebuild(context):
         "feature_pregame_umpire_features",
         "mart_bullpen_effectiveness",
         "feature_pregame_team_features",
+        "feature_pregame_starter_features",
+        "feature_pregame_lineup_features",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])
