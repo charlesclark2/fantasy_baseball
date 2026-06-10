@@ -3,6 +3,31 @@ version: 2
 models:
 
   # ============================================================================
+  # dim_team_name_lookup  (Epic A1.9 — canonical cross-source team resolver)
+  # ============================================================================
+  - name: dim_team_name_lookup
+    description: >
+      Epic A1.9 — the single canonical resolver from any feed team-name variant
+      (Stats API canonical names from ref_teams + odds-feed display aliases from
+      the ref_team_aliases seed) to team_id + canonical abbrev/name. Consumers
+      normalize input the same way before joining on name_lower:
+      lower(regexp_replace(trim(name), '^G[12] ', '')). Replaces the per-site
+      inline CASE / _normalize_team_name band-aids that silently dropped odds for
+      relocated franchises (e.g. the Athletics: "Athletics" vs "Oakland Athletics").
+    columns:
+      - name: name_lower
+        description: Lowercased team-name variant; the join key.
+        tests: [unique, not_null]
+      - name: team_id
+        description: MLB Stats API team identifier this name resolves to.
+        tests: [not_null]
+      - name: canonical_abbrev
+        description: Canonical Statcast abbreviation (e.g. ATH, CLE).
+        tests: [not_null]
+      - name: canonical_name
+        description: Canonical Stats API team name (e.g. Athletics, Cleveland Guardians).
+
+  # ============================================================================
   # mart_batter_bat_tracking_profile
   # ============================================================================
   - name: mart_batter_bat_tracking_profile

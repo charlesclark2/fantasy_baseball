@@ -3,6 +3,25 @@ version: 2
 seeds:
 
   # ============================================================================
+  # ref_team_aliases  (Epic A1.9)
+  # ============================================================================
+  - name: ref_team_aliases
+    description: >
+      Epic A1.9 — odds-feed display-name variants that differ from the Stats API
+      canonical team_name in ref_teams (e.g. "Oakland Athletics" → team_id 13,
+      "Cleveland Indians" → 7, "Chicago WS" → 6). Consumed by
+      dim_team_name_lookup to resolve any feed name to a team_id. Add a row here
+      when a new feed variant appears; non-MLB rows (college, Mexican league,
+      prop markets) are intentionally absent. Grain: one row per alias name.
+    columns:
+      - name: alias_name
+        description: The non-canonical team-name string as it appears in a feed.
+        tests: [unique, not_null]
+      - name: team_id
+        description: MLB Stats API team identifier this alias resolves to.
+        tests: [not_null]
+
+  # ============================================================================
   # ref_teams
   # ============================================================================
   - name: ref_teams
