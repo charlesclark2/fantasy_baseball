@@ -17,6 +17,10 @@ with
 
 team_spine as (
 
+    -- A1.11 — spine on mart_game_spine so today's scheduled games get a row.
+    -- All fields below are window-function derived (lag/count over '1 day
+    -- preceding'), so today's rest/streaks compute correctly from prior games and
+    -- the NULL scores on a scheduled row are never read. Historical rows unchanged.
     select
         game_pk,
         game_date::date         as game_date,
@@ -24,7 +28,7 @@ team_spine as (
         home_team               as team_abbrev,
         'home'                  as side,
         venue_id
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 
     union all
@@ -36,7 +40,7 @@ team_spine as (
         away_team,
         'away',
         venue_id
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 
 ),

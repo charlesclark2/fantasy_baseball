@@ -23,13 +23,16 @@
 with
 
 games as (
+    -- A1.11 — spine on mart_game_spine (completed games + today's scheduled
+    -- games) instead of mart_game_results, so the feature store holds today's
+    -- not-yet-played games. Historical rows are byte-for-byte identical.
     select
         game_pk,
         game_date::date     as game_date,
         game_year::integer  as game_year,
         home_team,
         away_team
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 

@@ -25,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { ProbabilityBar } from "@/components/probability-bar"
+import { PipelineStatusDot } from "@/components/pipeline-status-dot"
 import { ChevronDown, Info, LogOut, TrendingUp } from "lucide-react"
 
 // ---------------------------------------------------------------------------
@@ -251,6 +252,10 @@ function PageHeader({
         <span className="text-gray-600"> &middot; </span>
         <span>{totalGames} total games today</span>
       </p>
+      {/* A1.4 — live pipeline freshness indicator (green/yellow/red) */}
+      <div className="mt-3">
+        <PipelineStatusDot />
+      </div>
     </div>
   )
 }

@@ -20,6 +20,7 @@ SELECT
     predict_today_complete_ts,
     lineup_confirmed_complete_ts,
     signal_completeness_score,
+    avg_feature_coverage_score,
     n_games_scored,
     n_qualified_bets,
     pipeline_status,

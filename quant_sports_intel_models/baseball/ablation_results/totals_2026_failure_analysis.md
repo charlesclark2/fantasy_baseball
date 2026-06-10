@@ -209,3 +209,69 @@ challenger cleared its NLL gate, so the Layer 3 signal set is unchanged from pre
 mean bias on May-2026 is intact, confirming this is the **fifth** independent measurement showing the
 combiner overestimates scoring relative to what materialised. Epic 17 (PyMC hierarchical / full-Bayesian
 layer) is the designated next step.
+
+## 10. Epic 17 PyMC hierarchical NegBin — CLOSED (7th independent confirmation, 2026-06-05)
+
+Epic 17 was the final architectural investment for totals within the log-link Negative Binomial framework:
+a PyMC 5 hierarchical model with per-team run-scoring effects, 5-season hierarchy, and NUTS full inference.
+Three NUTS variants were evaluated with a pre-committed kill criterion of **May-2026 PPM ≤ 8.81**.
+
+### NUTS run history
+
+| Run | Description | May-2026 PPM | Bias | Result |
+|---|---|---:|---:|---|
+| v1 (Candidate B signals, in-sample) | Baseline NUTS, mart_sub_model_signals bullpen (2021-2026, mean~2.35) | 8.8607 | +0.177 | FAIL (−0.051 miss) |
+| v2 (Candidate A signals, OOS) | Walk-forward OOS bullpen (2021-2025 train, 2026 eval, mean~1.56) | 9.3023 | +0.618 | FAIL |
+| v3 (Jensen correction + rolling regressor) | Analytical Jensen offset -β²σ²/2 on all signals; rolling_league_runs_14d regressor | **9.2819** | +0.598 | **FAIL** |
+
+**Note:** v2 vs v1 difference explained separately — v1 used Candidate B (in-sample for 2026, artificially low bullpen z-scores) which by chance partially offset the Jensen floor. OOS Candidate A signals restored the true bullpen z-score distribution and revealed the structural bias.
+
+### Root cause decomposition (v3 final run)
+
+| Component | PPM contribution | Analysis |
+|---|---:|---|
+| Structural Jensen floor (β_bullpen=0.172, σ_z≈1.0) | +0.170 | E[exp(β·z)] > exp(β·μ) at β=0.172; irreducible without correction |
+| True 2026 bullpen signal elevation (z_bullpen_may=+0.22) | +0.343 | Real shift vs 2022-2025 training mean; not contamination |
+| Jensen correction applied (v3) | −0.020 | Reduction small due to model recalibrating mu_log_league upward |
+| Rolling league runs (beta_rolling≈0) | ~0 | Within-season regime shift not learnable at current signal-to-noise |
+| delta_2026 (HDI [-0.097, +0.095]) | ~0 | Consistent with zero; model cannot distinguish 2026 from training |
+
+**Architectural verdict:** The structural Jensen floor at β_bullpen=0.172 places the NegBin log-link predictor at baseline + 0.170 = 8.87 > 8.81 threshold before any signal contribution. This is irreducible within the log-link architecture at this β. The Jensen correction (v3) analytically removes the floor, but the beta posterior remains at 0.172 so the model re-learns an equivalent shift through other parameters (mu_log_league increased 0.017 log-units after the correction). The 2026 bullpen elevation (+0.343) is a real OOS signal, not contamination — beta_rolling=0.0045 (95% HDI entirely overlapping zero) confirms the model has no way to counteract it.
+
+### Key v3 diagnostics
+
+- **Convergences:** 2 divergences (threshold < 160) — PASS; R-hat ≤ 1.0 — PASS; ESS_bulk ≥ 1602 — PASS
+- **beta_bullpen:** 0.172 [0.163, 0.182] P(correct)=1.00
+- **beta_rolling:** 0.0045 [−0.006, +0.015] P(correct)=0.79 WARN — posterior indistinguishable from zero
+- **rolling_z_may:** −0.508 (May-2026 scoring was below training mean) — signal directionally correct but β≈0
+- **delta_2026:** −0.0012 (HDI: [−0.097, +0.095]) — season intercept consistent with zero; 2026 in-distribution
+
+### Formal closure
+
+**DECISION (2026-06-05): Epic 17 totals formally CLOSED.** This is the **seventh** independent confirmation
+that the totals architecture cannot beat the May-2026 scoring regime with available signals:
+
+1. §6 — regime-bias root cause (OVER bias vs correctly-priced market)
+2. §7 — matchup-drop ablation (regime confirmed, cluster-mismatch ruled out)
+3. §8 — recency-adaptation diagnostic (4th: sequential run_env below noise floor)
+4. §9 — Epic 16B sequential sub-model enrichment gate (5th: combined-μ=9.01, +0.40 bias unchanged)
+5. Epic 11 H2H diagnostic — no edge vs 2026 Bovada market (parallel closure)
+6. Layer 3 leakage-fix re-eval (6th: leakage fixed but no edge; 2024-25 market degraded)
+7. **Epic 17 NUTS v3 Jensen+rolling (7th: PPM=9.2819, β_rolling≈0)**
+
+### Re-open criteria (formally registered)
+
+The totals architecture may be re-opened under either condition:
+
+**(a) Full 2026 season data for honest delta_2026.** March-April calibration (866 rows) cannot capture the
+May scoring dip. With a complete season, delta_2026 would be estimated from 5,000+ rows and could absorb
+the structural regime shift. The HDI would narrow from ±0.10 to ±0.02–0.03, potentially pulling May PPM
+below 8.81 even without architectural changes. Re-evaluate after October 2026.
+
+**(b) Sub-model signals capturing within-season scoring regime shifts.** rolling_league_runs_14d
+(beta=0.0045, P(correct)=0.79) is not informative — the 14-day window is too noisy at MLB game-to-game
+variance. Signals needed: lagged actual league run rate with tighter smoothing (e.g., ELO-style decay on
+per-team run environment), or direct market-anchored run-environment signal. Current sub-model signals
+(bullpen_v2, offense_v2, starter_v1, run_env_v4) are all game-level predictors of team quality, not
+within-season scoring-environment trackers. A new signal type — not a new model architecture — is the
+unblocking condition.

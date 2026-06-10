@@ -36,6 +36,9 @@ seeds:
         team_id:          integer
         is_legacy_abbrev: boolean
         is_active:        boolean
+    ref_team_aliases:
+      +column_types:
+        team_id:          integer
     ref_venues:
       +column_types:
         venue_id:             integer

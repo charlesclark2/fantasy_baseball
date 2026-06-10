@@ -15,6 +15,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
+from app.utils.prediction_status import DEDUP_PRIORITY_CASE, PREDICTION_BASIS_CASE
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -123,22 +124,12 @@ def _games_sql(date_str: str) -> str:
         c.market_bookmaker_count
     FROM (
         SELECT *,
-               CASE
-                   WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
-                   WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
-                   ELSE 'provisional_pre_lineup'
-               END AS prediction_basis,
-               -- Most lineup-aware prediction per game (post_lineup > pre-lineup >
-               -- intraday_fallback); recency only breaks ties within a basis.
+               {PREDICTION_BASIS_CASE} AS prediction_basis,
+               -- Shared dedup priority (app.utils.prediction_status) — identical
+               -- across all pages so the same row is selected per game everywhere.
                ROW_NUMBER() OVER (
                    PARTITION BY game_pk
-                   ORDER BY
-                       CASE
-                           WHEN prediction_type = 'post_lineup'                 THEN 2
-                           WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 0
-                           ELSE 1
-                       END DESC,
-                       inserted_at DESC
+                   ORDER BY {DEDUP_PRIORITY_CASE} DESC, inserted_at DESC
                ) AS _rn
         FROM baseball_data.betting_ml.daily_model_predictions
         WHERE score_date = '{date_str}'
@@ -167,6 +158,26 @@ def load_games(date_str: str) -> pd.DataFrame:
     return df
 
 
+_TEAM_LOOKUP = "baseball_data.betting.dim_team_name_lookup"
+# A1.9 consumer contract: lower + strip the Parlay doubleheader marker, then join
+# on name_lower. Applied to any feed/StatsAPI name before resolving to team_id.
+_NAME_NORM = "lower(regexp_replace(trim({col}), '^G[12] ', ''))"
+
+
+def _team_id_variants_clause(col: str, value: str) -> str:
+    """SQL predicate: the odds-feed `col` resolves (via team_id) to the same team
+    as `value`. Matches every known name variant of that team_id, so it survives
+    feed/StatsAPI name divergence (Athletics, Cleveland Indians, …)."""
+    safe = value.replace("'", "''")
+    col_norm = _NAME_NORM.format(col=col)
+    val_norm = _NAME_NORM.format(col=f"'{safe}'")
+    return (
+        f"{col_norm} IN ("
+        f"SELECT name_lower FROM {_TEAM_LOOKUP} "
+        f"WHERE team_id = (SELECT team_id FROM {_TEAM_LOOKUP} WHERE name_lower = {val_norm}))"
+    )
+
+
 def _game_filter(event_id: str | None, home_team: str, away_team: str, date_str: str) -> str:
     """Return a SQL WHERE fragment that scopes to the specific game.
 
@@ -175,7 +186,16 @@ def _game_filter(event_id: str | None, home_team: str, away_team: str, date_str:
     """
     if event_id:
         return f"event_id = '{event_id}'"
-    return f"home_team = '{home_team}' AND away_team = '{away_team}' AND commence_date = '{date_str}'"
+    # A1.9: resolve the odds-feed column and the StatsAPI value to team_id via the
+    # canonical lookup, then match on every known name variant of that team_id.
+    # This is the fallback path A's games hit (mart_odds_events carries no current
+    # A's events → event_id is null), and it now handles ANY feed/StatsAPI name
+    # divergence (Athletics, Cleveland Indians, …), not just the A's special case.
+    return (
+        f"{_team_id_variants_clause('home_team', home_team)} "
+        f"AND {_team_id_variants_clause('away_team', away_team)} "
+        f"AND commence_date = '{date_str}'"
+    )
 
 
 @st.cache_data(ttl=300)

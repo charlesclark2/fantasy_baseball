@@ -38,7 +38,7 @@ games as (
         home_team    as team_abbrev,
         'home'       as side,
         away_team    as opposing_team
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}   -- A1.11: completed + today's scheduled
     where game_type = 'R'
 
     union all
@@ -50,7 +50,7 @@ games as (
         away_team    as team_abbrev,
         'away'       as side,
         home_team    as opposing_team
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}   -- A1.11: completed + today's scheduled
     where game_type = 'R'
 
 ),

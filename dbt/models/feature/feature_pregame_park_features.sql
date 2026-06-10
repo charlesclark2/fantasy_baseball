@@ -21,12 +21,14 @@
 with
 
 games as (
+    -- A1.11 — spine on mart_game_spine (carries venue_id for today's scheduled
+    -- games too); historical rows unchanged.
     select
         game_pk,
         game_date,
         game_year::integer  as game_year,
         venue_id
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 

@@ -3,6 +3,76 @@ version: 2
 models:
 
   # ============================================================================
+  # dim_team_name_lookup  (Epic A1.9 — canonical cross-source team resolver)
+  # ============================================================================
+  - name: dim_team_name_lookup
+    description: >
+      Epic A1.9 — the single canonical resolver from any feed team-name variant
+      (Stats API canonical names from ref_teams + odds-feed display aliases from
+      the ref_team_aliases seed) to team_id + canonical abbrev/name. Consumers
+      normalize input the same way before joining on name_lower:
+      lower(regexp_replace(trim(name), '^G[12] ', '')). Replaces the per-site
+      inline CASE / _normalize_team_name band-aids that silently dropped odds for
+      relocated franchises (e.g. the Athletics: "Athletics" vs "Oakland Athletics").
+    columns:
+      - name: name_lower
+        description: Lowercased team-name variant; the join key.
+        tests: [unique, not_null]
+      - name: team_id
+        description: MLB Stats API team identifier this name resolves to.
+        tests: [not_null]
+      - name: canonical_abbrev
+        description: Canonical Statcast abbreviation (e.g. ATH, CLE).
+        tests: [not_null]
+      - name: canonical_name
+        description: Canonical Stats API team name (e.g. Athletics, Cleveland Guardians).
+
+  # ============================================================================
+  # mart_game_spine  (Epic A1.11 — forward-looking game spine)
+  # ============================================================================
+  - name: mart_game_spine
+    description: >
+      Epic A1.11 — the single forward-looking game spine for the pregame feature
+      pipeline. UNION of completed games (pass-through of mart_game_results) and
+      today's scheduled-not-yet-played games (from stg_statsapi_games, for
+      game_pks not yet in results, within a tight today±window). Feature marts
+      spine on this instead of mart_game_results so the feature store holds
+      today's games. Non-destructive: the completed branch is byte-for-byte
+      mart_game_results, and the scheduled branch only adds today/future game_pks
+      (never a historical date), so every past game's output is unchanged.
+      Scheduled rows carry NULL scores (no result yet). Grain: one row per game_pk.
+    columns:
+      - name: game_pk
+        description: MLB game identifier. Unique across completed + scheduled rows.
+        tests:
+          - not_null
+          - unique
+      - name: game_date
+        description: Game datetime (completed) / scheduled date promoted to timestamp.
+        tests:
+          - not_null
+      - name: game_type
+        description: Game type code (R, S, F/D/L/W). Scheduled branch is R-only.
+        tests:
+          - not_null
+      - name: home_team
+        description: >
+          Canonical home-team abbreviation. For scheduled games resolved via
+          dim_team_name_lookup; not_null asserts every spine row maps to a team.
+        tests:
+          - not_null
+      - name: away_team
+        description: Canonical away-team abbreviation (resolved as home_team).
+        tests:
+          - not_null
+      - name: is_scheduled
+        description: >
+          True for forward-looking rows sourced from the schedule (NULL scores);
+          false for completed games from mart_game_results.
+        tests:
+          - not_null
+
+  # ============================================================================
   # mart_batter_bat_tracking_profile
   # ============================================================================
   - name: mart_batter_bat_tracking_profile
@@ -408,10 +478,12 @@ models:
       for all downstream joins to mart_odds_outcomes.
       Priority by era: 2021–2025 = Odds API only; 2026 overlap = Parlay preferred;
       2026 post-cutover = Parlay API only.
-      Join logic: game_date = commence_date AND home_team_name = odds home_team
-      AND away_team_name = odds away_team (full team names, after normalization).
-      Both sources are normalized: "Cleveland Indians" → "Cleveland Guardians"
-      (2021), "Oakland Athletics" → "Athletics" (2021–2025).
+      Join logic (A1.9): game_date = commence_date AND home_team_id = odds home_team_id
+      AND away_team_id = odds away_team_id. Every feed/Stats API team name is
+      resolved to a team_id through dim_team_name_lookup, so the join is immune to
+      cross-source name drift ("Cleveland Indians" → Guardians, "Oakland Athletics"
+      → Athletics, etc.) — new variants are added to the ref_team_aliases seed, not
+      this model.
       Grain: one row per game_pk.
 
     columns:
@@ -454,6 +526,22 @@ models:
 
       - name: away_team_name
         description: Full name of the away team (e.g. New York Mets).
+        tests:
+          - not_null
+
+      - name: home_team_id
+        description: >
+          A1.9 — MLB Stats API team_id of the home team, resolved from
+          home_team_name via dim_team_name_lookup. The canonical join key to the
+          odds sources. Not-null asserts every MLB game's home team resolves.
+        tests:
+          - not_null
+
+      - name: away_team_id
+        description: >
+          A1.9 — MLB Stats API team_id of the away team, resolved from
+          away_team_name via dim_team_name_lookup. The canonical join key to the
+          odds sources. Not-null asserts every MLB game's away team resolves.
         tests:
           - not_null
 

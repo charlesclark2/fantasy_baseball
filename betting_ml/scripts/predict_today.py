@@ -45,6 +45,13 @@ from betting_ml.utils.probability_layer import (
     compute_bet_permission,
 )
 from betting_ml.models.total_runs_trainer import p_over_line
+from betting_ml.utils.ml_env import ml_schema
+
+# A1.12 — write target resolved by the shared resolver (TARGET_ENV=prod →
+# betting_ml; else betting_ml_dev), so this scorer no longer hardcodes prod and
+# can't diverge from scripts/predict_today.py or the app. alpha_tuning_results
+# stays in prod (shared tuning artifact, not an env-isolated write).
+_ML_SCHEMA = ml_schema()
 
 _REGISTRY_PATH = PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
 
@@ -247,8 +254,8 @@ def _apply_calibrator(consensus_win_prob: float) -> float:
 # Snowflake DDL + DML
 # ---------------------------------------------------------------------------
 
-_CREATE_PREDICTIONS_TABLE = """
-CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
+_CREATE_PREDICTIONS_TABLE = f"""
+CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     model_version           VARCHAR(20)    NOT NULL,
     feature_version         VARCHAR(30),
     inserted_at             TIMESTAMP_NTZ  NOT NULL,
@@ -291,13 +298,13 @@ CREATE TABLE IF NOT EXISTS baseball_data.betting_ml.daily_model_predictions (
 )
 """
 
-_CHECK_DUPLICATE = """
-SELECT COUNT(*) FROM baseball_data.betting_ml.daily_model_predictions
+_CHECK_DUPLICATE = f"""
+SELECT COUNT(*) FROM {_ML_SCHEMA}.daily_model_predictions
 WHERE game_pk = %(game_pk)s AND model_version = %(model_version)s
 """
 
-_INSERT_PREDICTION = """
-INSERT INTO baseball_data.betting_ml.daily_model_predictions (
+_INSERT_PREDICTION = f"""
+INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     model_version, feature_version, inserted_at, score_date,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
@@ -524,12 +531,12 @@ def _write_predictions_to_snowflake(
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
             # Story 19.2 migration — idempotent; safe to run on every scoring pass
-            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
-            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")
-            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")
             # Epic 16.2 migration — idempotent; safe on every scoring pass
-            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
-            cur.execute("ALTER TABLE baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
 
             inserted = 0
             skipped = 0
@@ -545,7 +552,7 @@ def _write_predictions_to_snowflake(
 
             conn.commit()
             print(f"\nWrote {inserted} prediction row(s) to "
-                  f"baseball_data.betting_ml.daily_model_predictions "
+                  f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={model_version}, feature_version={feature_version}, "
                   f"skipped_duplicates={skipped}, date={target_date})")
         finally:

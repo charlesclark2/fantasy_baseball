@@ -34,13 +34,16 @@ with oaa_raw as (
 ),
 
 games as (
+    -- A1.11 — spine on mart_game_spine; only prior-season OAA (game_year-1) is
+    -- joined as a feature, so today's scheduled row attaches the leakage-free
+    -- prior-season value. Historical rows unchanged.
     select
         game_pk,
         game_date,
         game_year,
         home_team    as team_abbrev,
         'home'       as side
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 
     union all
@@ -51,7 +54,7 @@ games as (
         game_year,
         away_team    as team_abbrev,
         'away'       as side
-    from {{ ref('mart_game_results') }}
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 )
 

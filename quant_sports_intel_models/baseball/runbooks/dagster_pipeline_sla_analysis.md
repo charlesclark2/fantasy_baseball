@@ -295,3 +295,31 @@ Escalate to the admin if:
 - The re-run also fails
 - The failure is in `predict_today_morning`, `dbt_daily_build`, or a sequential posterior op
 - `pipeline_status` shows `failed` and `signal_completeness_score < 0.60`
+
+---
+
+## A1.10 — Feature-source observability (added 2026-06-09)
+
+Every `daily_model_predictions` row carries `data_source` and `feature_coverage_score`
+so a degraded live feature set is observable rather than silent. `check_prediction_coverage.py`
+counts expected games from the **schedule** (`stg_statsapi_games`, not the completed-game
+feature mart), reports the feature-source breakdown for the latest row per game, emits
+`[METRIC] feature_coverage_score=`, and warns (non-blocking) on fallback days / low coverage.
+
+**`data_source` states:**
+
+| State | Meaning | Implication |
+|---|---|---|
+| `feature_store` | Row came from `feature_pregame_game_features` (the dbt mart). | Full feature set. Today's games only reach this state after A1.11 (schedule-spined re-spine). Expect `feature_coverage_score ≈ 1.0`. |
+| `intraday_assembly` | No mart row for today → assembled from the StatsAPI schedule, with **today's lineup + starter features (incl. EB posteriors) overlaid** onto each team's carried-forward last-game row (A1.8). | Near-full set; lineup/starter/EB fresh, team rolling/bullpen/sequential carried forward. Steady-state `feature_coverage_score ≈ 0.77`. |
+| `intraday_fallback` | Assembled but **no lineup/starter overlay applied** (e.g. lineup not yet posted for the game). | Team rolling stats only. Lowest coverage; expected pre-lineup, a problem if it persists past lineup confirmation. |
+
+**`feature_coverage_score`** = fraction of 6 feature blocks (lineup, starter, team-rolling,
+bullpen-EB, sequential, odds) populated for the game. Warn threshold 0.70 (below the
+`intraday_assembly` steady-state so it fires on regression, not daily). The durable
+feature store (A1.11) should restore `feature_store` / ~1.0.
+
+**When the fallback warning fires:** if `n_fallback > 0` after lineups should be confirmed,
+the lineup feature marts likely didn't refresh — check `feature_pregame_lineup_features`
+coverage for today and re-run the post-lineup score. A single low-coverage day at the
+`intraday_assembly` steady-state (~0.77) is expected until A1.11 lands.

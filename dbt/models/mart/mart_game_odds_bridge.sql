@@ -17,19 +17,16 @@
 --            2026 overlap period:   both present; event_id = parlay_api_event_id
 --            2026 post-cutover:     parlay_api_event_id only
 --
---          Join logic (both sources):
---            game_date      = commence_date (UTC date for Odds API; ET-corrected
---                             date from stg_parlayapi_odds for Parlay API)
---            home_team_name = odds home_team (after normalization)
---            away_team_name = odds away_team (after normalization)
---            For DH games, QUALIFY on time-proximity against Stats API scheduled
---            start distinguishes Game 1 from Game 2.
---
---          Team name normalization applied to both sources:
---            "Cleveland Indians"  → "Cleveland Guardians"  (2021 Odds API name)
---            "Oakland Athletics"  → "Athletics"            (Odds API 2021-2025 name)
---          Parlay API live data (2026+) should already use current names, but
---          the mapping is applied defensively to both sides.
+--          Join logic (both sources) — A1.9:
+--            game_date    = commence_date / game_date
+--            home_team_id = odds home_team resolved via dim_team_name_lookup
+--            away_team_id = odds away_team resolved via dim_team_name_lookup
+--          Every name (Stats API, Odds API, Parlay API) is resolved to a team_id
+--          through the canonical team dimension, so the join is immune to feed
+--          name drift (e.g. Stats API "Athletics" vs Odds API "Oakland
+--          Athletics", "Cleveland Indians" → Guardians). New variants are handled
+--          by adding a row to the ref_team_aliases seed — no model change.
+--          For DH games, QUALIFY on Stats API game_number distinguishes G1 from G2.
 --
 --          Doubleheader handling: Parlay API fixed the DH collapse bug (2026-05-11).
 --          Both DH games now return distinct events with real commence_time values.
@@ -47,40 +44,55 @@
     )
 }}
 
-with game_results as (
+with team_lookup as (
+
+    -- A1.9 canonical resolver: any feed/Stats API name -> team_id.
+    -- Consumer contract: lower(regexp_replace(trim(name), '^G[12] ', '')).
+    select name_lower, team_id
+    from {{ ref('dim_team_name_lookup') }}
+
+),
+
+game_results as (
 
     select
-        game_pk,
-        game_date,
-        game_type,
-        home_team,
-        home_team_name,
-        away_team,
-        away_team_name
-    from {{ ref('mart_game_results') }}
+        gr.game_pk,
+        gr.game_date,
+        gr.game_type,
+        gr.home_team,
+        gr.home_team_name,
+        gr.away_team,
+        gr.away_team_name,
+        h.team_id as home_team_id,
+        a.team_id as away_team_id
+    -- A1.11 — spine on mart_game_spine so today's scheduled games get an odds
+    -- bridge row too (mart_game_results is completed-games only). Historical
+    -- rows are unchanged.
+    from {{ ref('mart_game_spine') }} gr
+    left join team_lookup h
+        on h.name_lower = lower(regexp_replace(trim(gr.home_team_name), '^G[12] ', ''))
+    left join team_lookup a
+        on a.name_lower = lower(regexp_replace(trim(gr.away_team_name), '^G[12] ', ''))
 
 ),
 
 -- ── Odds API events (2021–2025 historical) ────────────────────────────────────
--- Normalize historical franchise names to match Stats API canonical names.
+-- Resolve historical franchise names to team_id via the canonical lookup
+-- (handles "Cleveland Indians" → Guardians, "Oakland Athletics" → Athletics).
 
-odds_events_normalized as (
+odds_events_resolved as (
 
     select
-        event_id,
-        commence_date,
-        case home_team
-            when 'Cleveland Indians' then 'Cleveland Guardians'
-            when 'Oakland Athletics' then 'Athletics'
-            else home_team
-        end as home_team,
-        case away_team
-            when 'Cleveland Indians' then 'Cleveland Guardians'
-            when 'Oakland Athletics' then 'Athletics'
-            else away_team
-        end as away_team,
-        ingestion_ts
-    from {{ ref('mart_odds_events') }}
+        oe.event_id,
+        oe.commence_date,
+        h.team_id as home_team_id,
+        a.team_id as away_team_id,
+        oe.ingestion_ts
+    from {{ ref('mart_odds_events') }} oe
+    left join team_lookup h
+        on h.name_lower = lower(regexp_replace(trim(oe.home_team), '^G[12] ', ''))
+    left join team_lookup a
+        on a.name_lower = lower(regexp_replace(trim(oe.away_team), '^G[12] ', ''))
 
 ),
 
@@ -92,13 +104,13 @@ odds_events_deduped as (
     select
         event_id,
         commence_date,
-        home_team,
-        away_team,
+        home_team_id,
+        away_team_id,
         row_number() over (
-            partition by commence_date, home_team, away_team
+            partition by commence_date, home_team_id, away_team_id
             order by ingestion_ts desc
         ) as _rn
-    from odds_events_normalized
+    from odds_events_resolved
 
 ),
 
@@ -107,8 +119,8 @@ odds_events as (
     select
         event_id          as odds_api_event_id,
         commence_date,
-        home_team,
-        away_team
+        home_team_id,
+        away_team_id
     from odds_events_deduped
     where _rn = 1
 
@@ -117,26 +129,22 @@ odds_events as (
 -- ── Parlay API events (2026+) ─────────────────────────────────────────────────
 -- Sourced directly from stg_parlayapi_odds — every odds row has event_id,
 -- game_date, home_team, away_team. No separate events staging model needed.
--- Apply same franchise-name normalization defensively.
+-- Resolve to team_id via the same canonical lookup.
 
-parlay_events_normalized as (
+parlay_events_resolved as (
 
     select
-        event_id,
-        game_date,
-        commence_time,
-        case home_team
-            when 'Cleveland Indians' then 'Cleveland Guardians'
-            when 'Oakland Athletics' then 'Athletics'
-            else home_team
-        end as home_team,
-        case away_team
-            when 'Cleveland Indians' then 'Cleveland Guardians'
-            when 'Oakland Athletics' then 'Athletics'
-            else away_team
-        end as away_team,
-        ingestion_ts
-    from {{ ref('stg_parlayapi_odds') }}
+        po.event_id,
+        po.game_date,
+        po.commence_time,
+        h.team_id as home_team_id,
+        a.team_id as away_team_id,
+        po.ingestion_ts
+    from {{ ref('stg_parlayapi_odds') }} po
+    left join team_lookup h
+        on h.name_lower = lower(regexp_replace(trim(po.home_team), '^G[12] ', ''))
+    left join team_lookup a
+        on a.name_lower = lower(regexp_replace(trim(po.away_team), '^G[12] ', ''))
 
 ),
 
@@ -149,13 +157,13 @@ parlay_events_deduped as (
         event_id,
         game_date,
         commence_time,
-        home_team,
-        away_team,
+        home_team_id,
+        away_team_id,
         row_number() over (
-            partition by game_date, home_team, away_team, date_trunc('hour', commence_time)
+            partition by game_date, home_team_id, away_team_id, date_trunc('hour', commence_time)
             order by ingestion_ts desc
         ) as _rn
-    from parlay_events_normalized
+    from parlay_events_resolved
 
 ),
 
@@ -165,8 +173,8 @@ parlay_events as (
         event_id          as parlay_api_event_id,
         game_date,
         commence_time,
-        home_team,
-        away_team
+        home_team_id,
+        away_team_id
     from parlay_events_deduped
     where _rn = 1
 
@@ -184,10 +192,10 @@ parlay_events_ranked as (
         parlay_api_event_id,
         game_date,
         commence_time,
-        home_team,
-        away_team,
+        home_team_id,
+        away_team_id,
         row_number() over (
-            partition by game_date, home_team, away_team
+            partition by game_date, home_team_id, away_team_id
             order by
                 case when time(commence_time) = '19:00:00'::time then 1 else 0 end asc,
                 commence_time asc
@@ -222,6 +230,8 @@ select
     gr.home_team_name,
     gr.away_team                                                    as away_team_abbrev,
     gr.away_team_name,
+    gr.home_team_id,
+    gr.away_team_id,
 
     -- ── Source-specific event keys ────────────────────────────────────────────
     oe.odds_api_event_id,
@@ -239,13 +249,13 @@ select
 from game_results gr
 left join game_schedule gs on gs.game_pk = gr.game_pk
 left join odds_events oe
-    on  gr.game_date      = oe.commence_date
-    and gr.home_team_name = oe.home_team
-    and gr.away_team_name = oe.away_team
+    on  gr.game_date    = oe.commence_date
+    and gr.home_team_id = oe.home_team_id
+    and gr.away_team_id = oe.away_team_id
 left join parlay_events_ranked pe
-    on  gr.game_date      = pe.game_date
-    and gr.home_team_name = pe.home_team
-    and gr.away_team_name = pe.away_team
+    on  gr.game_date    = pe.game_date
+    and gr.home_team_id = pe.home_team_id
+    and gr.away_team_id = pe.away_team_id
 -- Route each game_pk to its correct Parlay event slot using Stats API game_number.
 -- abs(game_number - game_slot) = 0 is a perfect match (Game 1→slot 1, Game 2→slot 2).
 -- For non-DH games: game_number=1 and only slot 1 exists → always matches correctly.

@@ -50,10 +50,12 @@ from betting_ml.scripts.evaluation.bayesian_model_eval import (
 
 MODEL_VERSION = "v0"
 
-# Write isolation: dev/unset → betting_ml_dev; prod (set explicitly in CI/CD) → betting_ml.
-# Never set TARGET_ENV=prod locally — only GitHub Actions daily_ingestion.yml should do this.
-TARGET_ENV = os.getenv("TARGET_ENV", "dev")
-_ML_SCHEMA = "baseball_data.betting_ml" if TARGET_ENV == "prod" else "baseball_data.betting_ml_dev"
+# A1.12 — write target resolved by the shared resolver so this scorer, the
+# betting_ml/ scorer, and the app all agree on dev vs prod (TARGET_ENV=prod →
+# betting_ml; else betting_ml_dev). See betting_ml/utils/ml_env.py.
+from betting_ml.utils.ml_env import ml_schema  # noqa: E402
+
+_ML_SCHEMA = ml_schema()
 
 _CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'
 
@@ -169,7 +171,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     posterior_source, prior_age_days,
     layer4_totals_decision, layer4_totals_over_signal,
     layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge,
-    bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood
+    bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood,
+    data_source, feature_coverage_score
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -186,7 +189,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(posterior_source)s, %(prior_age_days)s,
     %(layer4_totals_decision)s, %(layer4_totals_over_signal)s,
     %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s,
-    %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s
+    %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s,
+    %(data_source)s, %(feature_coverage_score)s
 )
 """
 
@@ -285,12 +289,57 @@ def _load_posterior_provenance(target_date: str) -> dict[int, dict]:
         return {}
 
 
+# A1.10 — feature-source coverage. Representative column(s) per feature block; a
+# block is "covered" for a game when all its columns are non-null. The score is
+# the fraction of blocks covered (0.0–1.0), written per-row to
+# daily_model_predictions so any degradation (e.g. an intraday_fallback day or a
+# regressed re-spine in A1.11) is observable rather than silent.
+_FEATURE_COVERAGE_BLOCKS = {
+    "lineup":       ["home_avg_eb_woba", "away_avg_eb_woba"],
+    "starter":      ["home_starter_eb_xwoba_against", "away_starter_eb_xwoba_against"],
+    "team_rolling": ["home_off_woba_30d", "away_off_woba_30d"],
+    "bullpen_eb":   ["home_bp_eb_xwoba", "away_bp_eb_xwoba"],
+    "sequential":   ["home_team_sequential_woba", "away_team_sequential_woba"],
+    "odds":         ["over_prob_consensus"],
+}
+
+
+def _feature_coverage_score(df: pd.DataFrame, i: int) -> float:
+    """Fraction of feature blocks populated for game-row i (A1.10)."""
+    covered = 0
+    for cols in _FEATURE_COVERAGE_BLOCKS.values():
+        if all(c in df.columns and pd.notna(df.iloc[i][c]) for c in cols):
+            covered += 1
+    return round(covered / len(_FEATURE_COVERAGE_BLOCKS), 3)
+
+
+def _post_lineup_delete_sql(schema: str, scoped_game_pks: list[int] | None) -> str:
+    """Build the overwrite DELETE for a post_lineup re-score.
+
+    A1.12 — when a ``--game-pks`` subset was scored, scope the DELETE to those
+    game_pks so a partial re-score (e.g. the lineup sensor firing for one
+    newly-confirmed game) doesn't wipe every OTHER game's post_lineup row for the
+    date. A full-slate run (``scoped_game_pks`` falsy) keeps the date-wide
+    overwrite so dropped/postponed games are cleaned up. game_pks are ints (cast
+    at parse time), so inlining them is injection-safe.
+    """
+    base = (
+        f"DELETE FROM {schema}.daily_model_predictions "
+        f"WHERE score_date = %(d)s AND prediction_type = %(pt)s"
+    )
+    if scoped_game_pks:
+        pk_list = ", ".join(str(int(pk)) for pk in scoped_game_pks)
+        return f"{base} AND game_pk IN ({pk_list})"
+    return base
+
+
 def _write_predictions_to_snowflake(
     df_today: pd.DataFrame,
     target_date: str,
     inserted_at: datetime,
     prediction_type: str,
     lineup_confirmed: bool,
+    scoped_game_pks: list[int] | None,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -442,6 +491,9 @@ def _write_predictions_to_snowflake(
             "bullpen_z_score_home":      gate_result.get("bullpen_z_score_home"),
             "bullpen_z_score_away":      gate_result.get("bullpen_z_score_away"),
             "bullpen_signal_ood":        gate_result.get("bullpen_signal_ood", False),
+            # A1.10 — feature-source observability
+            "data_source":               _s(df_today, "data_source", i),
+            "feature_coverage_score":    _feature_coverage_score(df_today, i),
         }))
 
     try:
@@ -461,16 +513,20 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_home FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_away FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_signal_ood BOOLEAN")
+            # A1.10 — feature-source observability
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS data_source VARCHAR(20)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS feature_coverage_score FLOAT")
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
             if lineup_confirmed:
                 cur.execute(
-                    f"DELETE FROM {_ML_SCHEMA}.daily_model_predictions "
-                    f"WHERE score_date = %(d)s AND prediction_type = %(pt)s",
+                    _post_lineup_delete_sql(_ML_SCHEMA, scoped_game_pks),
                     {"d": target_date, "pt": prediction_type},
                 )
-                print(f"  Deleted existing {prediction_type} rows for {target_date} (overwrite)")
+                _scope = (f"game_pks {sorted(scoped_game_pks)} (scoped overwrite)"
+                          if scoped_game_pks else "(full-slate overwrite)")
+                print(f"  Deleted existing {prediction_type} rows for {target_date} {_scope}")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
@@ -794,17 +850,29 @@ def main() -> None:
 
     print(f"  Found {len(df_today)} game(s) for {target_date}")
 
-    lineup_cols = ("home_lineup_slot_1", "away_lineup_slot_1")
-    if all(c in df_today.columns for c in lineup_cols):
-        before = len(df_today)
-        df_today = df_today[
-            df_today["home_lineup_slot_1"].notna() & df_today["away_lineup_slot_1"].notna()
-        ]
-        print(f"  Lineup filter: {before} → {len(df_today)} game(s) with confirmed lineups")
-        if df_today.empty:
-            print("No games with confirmed lineups found.")
-            sys.exit(0)
+    # A1.12 — when --lineup-confirmed, restrict to games whose BOTH lineups are
+    # actually posted today. Uses home/away_has_full_lineup (set per-game by the
+    # feature store, and forced to reflect today's overlay by the intraday
+    # assembly). The previous filter targeted home_lineup_slot_1/away_lineup_slot_1
+    # which exist in NEITHER path, so it silently no-op'd and every scheduled game
+    # was written as post_lineup / lineup_confirmed regardless of real status.
+    # Gated on --lineup-confirmed so the morning (projected-lineup) run is unaffected.
+    if args.lineup_confirmed:
+        lineup_cols = ("home_has_full_lineup", "away_has_full_lineup")
+        if all(c in df_today.columns for c in lineup_cols):
+            before = len(df_today)
+            df_today = df_today[
+                df_today["home_has_full_lineup"].fillna(False).astype(bool)
+                & df_today["away_has_full_lineup"].fillna(False).astype(bool)
+            ]
+            print(f"  Lineup-confirmed filter: {before} → {len(df_today)} game(s) with both lineups confirmed")
+            if df_today.empty:
+                print("No games with confirmed lineups found.")
+                sys.exit(0)
+        else:
+            print("[WARN] --lineup-confirmed set but has_full_lineup columns absent; not filtering.")
 
+    scoped_game_pks: list[int] | None = None
     if args.game_pks:
         target_pks = {int(pk.strip()) for pk in args.game_pks.split(",") if pk.strip()}
         before = len(df_today)
@@ -814,6 +882,9 @@ def main() -> None:
         if df_today.empty:
             print("No matching games found for the specified game_pks.")
             sys.exit(0)
+        # A1.12 — remember the explicit subset so the post_lineup overwrite DELETE
+        # is scoped to just these games (and doesn't wipe the rest of the slate).
+        scoped_game_pks = sorted(int(pk) for pk in df_today["game_pk"].tolist())
 
     for col in ("has_odds", "home_win_prob_consensus"):
         if col not in df_today.columns:
@@ -1055,6 +1126,7 @@ def main() -> None:
         inserted_at=run_ts,
         prediction_type=args.prediction_type,
         lineup_confirmed=args.lineup_confirmed,
+        scoped_game_pks=scoped_game_pks,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
         loc_tot=loc_tot,

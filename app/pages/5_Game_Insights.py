@@ -16,6 +16,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
+from app.utils.prediction_status import basis_message, is_confirmed
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — needed for joblib unpickling
 from betting_ml.utils.model_io import load_model
 
@@ -242,20 +243,12 @@ else:
 
     # Prediction basis — flag provisional predictions that may be blind to the
     # confirmed starter/lineup (the case where the edge is not yet trustworthy).
+    # Wording is shared with every other page via app.utils.prediction_status.
     _basis = str(r.get("prediction_basis") or "provisional_pre_lineup")
-    if _basis == "lineup_confirmed":
-        st.caption("✅ Lineup-confirmed prediction (post-lineup re-score — accounts for confirmed starters & lineups).")
-    elif _basis == "provisional_fallback":
-        st.warning(
-            "⚠️ Provisional prediction (intraday fallback) — scored on team rolling stats only, "
-            "**blind to the confirmed starting pitcher and lineup**. The edge above may be a feature "
-            "gap, not real value. Wait for the post-lineup re-score before trusting it."
-        )
+    if is_confirmed(_basis):
+        st.caption(basis_message(_basis))
     else:
-        st.warning(
-            "⚠️ Provisional prediction (pre-lineup) — generated before lineups were confirmed, so it "
-            "may not reflect the confirmed starter/lineup. Wait for the post-lineup re-score."
-        )
+        st.warning(basis_message(_basis))
 
 st.divider()
 
@@ -275,9 +268,22 @@ WITH pre_game AS (
         o.ingestion_ts
     FROM baseball_data.betting.mart_odds_outcomes o
     JOIN baseball_data.betting.stg_statsapi_games g
-        ON g.home_team_name = o.home_team
-        AND g.away_team_name = o.away_team
-        AND g.official_date = o.commence_date
+        ON g.official_date = o.commence_date
+    -- A1.9: resolve both feeds to team_id via the canonical lookup and join on
+    -- team_id, instead of matching display names. Kills the silent line-drop for
+    -- relocated/renamed franchises (StatsAPI "Athletics" vs odds "Oakland
+    -- Athletics", "Cleveland Indians", etc.). Consumer contract: lower + strip
+    -- the Parlay doubleheader marker before joining on name_lower.
+    JOIN baseball_data.betting.dim_team_name_lookup gh
+        ON gh.name_lower = lower(regexp_replace(trim(g.home_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup ga
+        ON ga.name_lower = lower(regexp_replace(trim(g.away_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup oh
+        ON oh.name_lower = lower(regexp_replace(trim(o.home_team), '^G[12] ', ''))
+       AND oh.team_id = gh.team_id
+    JOIN baseball_data.betting.dim_team_name_lookup oa
+        ON oa.name_lower = lower(regexp_replace(trim(o.away_team), '^G[12] ', ''))
+       AND oa.team_id = ga.team_id
     WHERE g.game_pk = {game_pk}
       AND o.bookmaker_key = 'bovada'
       AND o.ingestion_ts::TIMESTAMP_NTZ < g.game_date::TIMESTAMP_NTZ
