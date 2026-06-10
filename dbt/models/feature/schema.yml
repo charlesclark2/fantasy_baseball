@@ -2631,8 +2631,12 @@ models:
           - not_null
           - unique
           - relationships:
+              # A1.11 — spine on mart_game_spine (completed games + today's
+              # scheduled games), not mart_game_results (completed only). Today's
+              # scheduled game_pks legitimately aren't in mart_game_results yet,
+              # so the relationship target is the new authoritative game universe.
               arguments:
-                to: ref('mart_game_results')
+                to: ref('mart_game_spine')
                 field: game_pk
 
       - name: game_date

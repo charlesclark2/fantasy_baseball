@@ -98,8 +98,13 @@ scheduled as (
       -- of the window instead of lingering as a phantom "scheduled" row.)
       and g.official_date >= dateadd('day', -1, current_date)
       and g.official_date <= dateadd('day',  2, current_date)
-      -- Exclude games the schedule already marks finished (results lag only).
-      and coalesce(g.abstract_game_state, '') not in ('Final', 'Completed Early')
+      -- NB: we do NOT filter on abstract_game_state. A game that is already
+      -- 'Final' but whose pitch data hasn't landed in mart_game_results yet
+      -- (ingestion lags game-end by hours) must stay visible here as a pending
+      -- row, not vanish into a gap between the two branches. Once its pitches
+      -- land, NOT IN mart_game_results moves it to the completed branch
+      -- automatically. The date window above (not the game state) is what keeps
+      -- old postponed/cancelled games from being resurrected.
 
 )
 
