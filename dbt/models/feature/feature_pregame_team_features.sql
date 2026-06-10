@@ -194,6 +194,16 @@ vs_rhp_pre_game as (
 ),
 
 -- ── Season record as of the day before the game ───────────────────────────────
+-- A1.11 Stage 4 — exact "day-before" record for completed games (byte-for-byte
+-- unchanged), as-of latest prior record for today's SCHEDULED games. The old
+-- join required record_date to equal EXACTLY game_date-1; for a not-yet-played
+-- game that demands a record row dated yesterday, which is absent whenever
+-- mart_team_season_record is even a day stale (or the team had an off-day), so
+-- the whole standings + season-pythagorean block (wins/losses/games_back/streak/
+-- pythagorean_win_exp/pythagorean_residual_season) went NULL for today. Gating on
+-- is_scheduled keeps historical rows on the exact day-before record (their value,
+-- incl. intentional early-season NULLs, is preserved); scheduled games carry the
+-- team's latest available record forward. Mirrors the pythagorean_30d branch below.
 season_record as (
     select
         g.game_pk,
@@ -210,7 +220,14 @@ season_record as (
     from games g
     left join {{ ref('mart_team_season_record') }} tsr
         on  tsr.team_abbrev = g.team_abbrev
-        and tsr.record_date = dateadd('day', -1, g.game_date::date)
+        and (
+            (not g.is_scheduled and tsr.record_date = dateadd('day', -1, g.game_date::date))
+            or (g.is_scheduled and tsr.record_date::date < g.game_date::date)
+        )
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by tsr.record_date::date desc nulls last
+    ) = 1
 ),
 
 -- ── Pythagorean rolling residual (trailing 30 days, pre-game) ─────────────────

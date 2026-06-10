@@ -1,6 +1,8 @@
 from dagster import in_process_executor, job
 
 from pipeline.ops.sensor_ops import (
+    catchup_dbt_rebuild,
+    catchup_ingest_statcast,
     lineup_compute_posteriors,
     lineup_dbt_clv_rebuild,
     lineup_dbt_feature_rebuild,
@@ -10,6 +12,16 @@ from pipeline.ops.sensor_ops import (
     lineup_predict,
     pregame_dbt_clv_rebuild,
     pregame_odds_snapshot,
+)
+from pipeline.ops.daily_ingestion_ops import (
+    compute_eb_bullpen_posteriors_op,
+    compute_lineup_posteriors_op,
+    compute_starter_posteriors_op,
+    dbt_umpire_feature_rebuild,
+    predict_today_morning,
+    update_matchup_cell_posteriors_op,
+    update_player_posteriors_op,
+    update_team_posteriors_op,
 )
 
 
@@ -31,3 +43,21 @@ def lineup_monitor_job():
 def pregame_snapshot_job():
     start = pregame_odds_snapshot()
     pregame_dbt_clv_rebuild(start=start)
+
+
+@job(executor_def=in_process_executor)
+def statcast_catchup_job():
+    # Fired by statcast_freshness_sensor once yesterday's Statcast finally lands.
+    # Ingest pitches → rebuild the pitch-derived marts/feature store → refresh the
+    # posteriors that depend on the now-complete games → fold them into the feature
+    # marts → re-score today so the live slate reflects the caught-up data.
+    s1 = catchup_ingest_statcast()
+    s2 = catchup_dbt_rebuild(start=s1)
+    eb = compute_eb_bullpen_posteriors_op(start=s2)
+    pp = update_player_posteriors_op(start=eb)
+    pt = update_team_posteriors_op(start=pp)
+    pm = update_matchup_cell_posteriors_op(start=pt)
+    ps = compute_starter_posteriors_op(start=pm)
+    pl = compute_lineup_posteriors_op(start=ps)
+    s3 = dbt_umpire_feature_rebuild(start=pl)
+    predict_today_morning(start=s3)

@@ -275,8 +275,16 @@ def fetch_day(
             time.sleep(backoff)
             backoff *= 2
 
-    log.error("  All %d attempts failed for %s — skipping", MAX_RETRIES, _date_str(day))
-    return pd.DataFrame()
+    # All retries exhausted on a TRANSPORT failure (timeout / HTTP / unexpected).
+    # Do NOT return an empty frame here: a fetch error and a legitimately empty day
+    # (handled above via the "null"/empty-body check, which is the only path that
+    # may return an empty frame) must be distinguishable. Collapsing both to "no
+    # data — skipping" is exactly what let a broken ingest exit green for days.
+    # Raising propagates to run_endpoint → the op fails and the Dagster run goes red.
+    raise RuntimeError(
+        f"Savant fetch failed for {_date_str(day)} after {MAX_RETRIES} attempts "
+        f"(transport error, not an empty day)"
+    )
 
 
 # ── Snowflake write ────────────────────────────────────────────────────────────
