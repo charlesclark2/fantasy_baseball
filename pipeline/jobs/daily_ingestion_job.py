@@ -6,7 +6,9 @@ from pipeline.ops.daily_ingestion_ops import (
     check_prediction_coverage,
     compute_eb_bullpen_posteriors_op,
     compute_elo,
+    compute_lineup_posteriors_op,
     compute_model_health,
+    compute_starter_posteriors_op,
     dbt_daily_build,
     dbt_lineup_feature_rebuild,
     dbt_mart_prediction_clv,
@@ -106,7 +108,14 @@ def daily_ingestion_job():
     p_player  = update_player_posteriors_op(start=eb_bullpen)
     p_team    = update_team_posteriors_op(start=p_player)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
-    s18 = dbt_umpire_feature_rebuild(start=p_matchup)
+    # A1.11 Stage 4 — forward-looking today's-slate EB posteriors (starter +
+    # best-effort lineup), chained after the yesterday-advancing posteriors and
+    # before dbt_umpire_feature_rebuild so their outputs land in the rebuilt
+    # lineup/starter/game features. Lineup confirmations after this point are
+    # handled authoritatively by the lineup_monitor sensor.
+    p_starter = compute_starter_posteriors_op(start=p_matchup)
+    p_lineup  = compute_lineup_posteriors_op(start=p_starter)
+    s18 = dbt_umpire_feature_rebuild(start=p_lineup)
     s19 = predict_today_morning(start=s18)
     write_api_cache_op(predict_done=s19)
     s19b = update_pipeline_status(start=s19)

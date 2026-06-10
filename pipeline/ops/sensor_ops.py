@@ -1,12 +1,18 @@
 import os
 import subprocess
 import sys
+from datetime import date
 
 from dagster import In, Nothing, OpExecutionContext, Out, op
 
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
+_EB_DIR = "/app/betting_ml/scripts/eb_priors"
+
+
+def _today() -> str:
+    return date.today().strftime("%Y-%m-%d")
 
 
 def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None) -> None:
@@ -51,6 +57,32 @@ def lineup_dbt_staging_rebuild(context: OpExecutionContext) -> None:
         "stg_statsapi_lineups",
         "stg_statsapi_lineups_wide",
         "stg_statsapi_probable_pitchers",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lineup_compute_posteriors(context: OpExecutionContext) -> None:
+    """A1.11 Stage 4 — recompute EB lineup posteriors now that lineups are
+    CONFIRMED (lineup_dbt_staging_rebuild just refreshed stg_statsapi_lineups).
+    This is the authoritative pass: the morning daily job's compute_lineup_-
+    posteriors_op runs best-effort on whatever had posted then. MERGE-keyed on
+    (game_pk, batting_slot, batter_id), so re-running each sensor tick is
+    idempotent. See project_posterior_staleness_jun2026."""
+    _run_script(context, f"{_EB_DIR}/compute_lineup_posteriors.py", ["--game-date", _today()])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
+    """Rebuild the lineup + downstream game features with the fresh confirmed-
+    lineup posteriors, BEFORE lineup_predict reads the feature store — so the
+    post-lineup prediction reflects who is actually playing. Both models are
+    table-materialized; the full rebuild re-reads eb_batter_posteriors_raw."""
+    _run_dbt(context, [
+        "build",
+        "--select",
+        "feature_pregame_lineup_features",
+        "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])
 
