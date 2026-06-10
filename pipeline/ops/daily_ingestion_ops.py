@@ -280,19 +280,34 @@ def generate_matchup_signals_op(context):
                     ["--date", d, "--env", env])
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_env_state_signals_op(context):
+    # Epic 27.2. Runs the Story 27.1 Kalman filter over all historical data
+    # (loads all of mart_game_results since 2021 to build the filter state
+    # trajectory) then emits four env_state_v1 signals per (game_pk, side) for
+    # the recently-completed game window.  The filter computation is fast
+    # (<30s); the full historical load is required to avoid leakage — the
+    # pregame state for date T is derived from all games with game_date < T.
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/generate_env_state_signals.py",
+                    ["--date", d, "--env", env])
+
+
 @op(
     ins={
-        "run_env_done":   In(Nothing),
-        "offense_done":   In(Nothing),
-        "starter_done":   In(Nothing),
+        "run_env_done":    In(Nothing),
+        "offense_done":    In(Nothing),
+        "starter_done":    In(Nothing),
         "starter_ip_done": In(Nothing),
-        "bullpen_done":   In(Nothing),
-        "matchup_done":   In(Nothing),
+        "bullpen_done":    In(Nothing),
+        "matchup_done":    In(Nothing),
+        "env_state_done":  In(Nothing),
     },
     out=Out(Nothing),
 )
 def dbt_sub_model_signals_rebuild(context):
-    # Fan-in: refresh the wide PIVOT once all six signal tables are written.
+    # Fan-in: refresh the wide PIVOT once all seven signal tables are written.
     _run_dbt(context, [
         "build",
         "--select", "feature_pregame_sub_model_signals",
