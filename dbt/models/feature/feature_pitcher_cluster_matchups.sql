@@ -18,7 +18,10 @@ with games as (
         game_pk,
         game_date::date    as game_date,
         game_year::integer as game_year
-    from {{ ref('mart_game_results') }}
+    -- A2.4: spine on mart_game_spine (completed + today's scheduled games) instead of
+    -- completed-only mart_game_results, so lineup-vs-cluster matchups exist for today's
+    -- slate once lineups post. Downstream leakage guards stay game_date < anchor_date.
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 

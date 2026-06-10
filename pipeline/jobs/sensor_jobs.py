@@ -15,6 +15,7 @@ from pipeline.ops.sensor_ops import (
 )
 from pipeline.ops.daily_ingestion_ops import (
     compute_eb_bullpen_posteriors_op,
+    compute_elo,
     compute_lineup_posteriors_op,
     compute_starter_posteriors_op,
     dbt_umpire_feature_rebuild,
@@ -59,5 +60,10 @@ def statcast_catchup_job():
     pm = update_matchup_cell_posteriors_op(start=pt)
     ps = compute_starter_posteriors_op(start=pm)
     pl = compute_lineup_posteriors_op(start=ps)
-    s3 = dbt_umpire_feature_rebuild(start=pl)
+    # A2.3: recompute Elo on the now-current mart_game_results (compute_elo reads
+    # mart_game_results, which is pitch-derived and therefore lagged by the same
+    # Statcast availability gap this catch-up resolves). Without this, Elo stays
+    # stale until the next 07:00 daily run even after the catch-up self-heals.
+    el = compute_elo(start=pl)
+    s3 = dbt_umpire_feature_rebuild(start=el)
     predict_today_morning(start=s3)

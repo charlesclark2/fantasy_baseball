@@ -87,8 +87,28 @@ def compute_posterior(model_prob: float, market_prob: float, alpha: float) -> fl
 
 
 def compute_edge(model_prob: float, market_prob: float) -> float:
-    """Edge signal: positive means model sees value over market."""
+    """Raw model-vs-market diagnostic: positive means the model disagrees upward
+    with the market. NOTE: this ignores alpha, so it is NOT safe to size bets off
+    directly — use compute_actionable_edge for anything that drives a pick. Kept as
+    a calibration/CLV diagnostic and for Layer-4 selective-strategy magnitudes."""
     return model_prob - market_prob
+
+
+def compute_actionable_edge(model_prob: float, market_prob: float, alpha: float) -> float:
+    """Alpha-aware betting edge: posterior(model, market, alpha) − market.
+
+    A2.5 edge-artifact guard. Unlike compute_edge (raw model-vs-market gap), this
+    inherits the alpha blend, so the alpha tuner's skill judgment flows straight
+    through to the displayed/stored edge and any Kelly sized off it:
+
+        alpha=1.0 → posterior=model      → edge = model − market (full conviction)
+        alpha=0.0 → posterior=market     → edge ≈ 0              (no skill → no edge)
+
+    This is the correct quantity to bet on: a non-zero (calibrated − market) gap on
+    a model the tuner has set alpha=0 for is the calibrated flat-probability artifact,
+    not real value. Sizing bets off this prevents surfacing phantom edges (e.g. the
+    "bet every home underdog" pattern when the model collapses to a near-constant)."""
+    return compute_posterior(model_prob, market_prob, alpha) - market_prob
 
 
 def compute_kelly(edge: float, market_implied_prob: float) -> float:

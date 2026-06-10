@@ -27,7 +27,10 @@ with games as (
     select
         game_pk,
         game_date::date as game_date
-    from {{ ref('mart_game_results') }}
+    -- A2.4: spine on mart_game_spine (completed + today's scheduled games) instead of
+    -- completed-only mart_game_results, so pitcher-batter h2h matchups exist for today's
+    -- slate once lineups post. Downstream leakage guards stay game_date < anchor_date.
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 
