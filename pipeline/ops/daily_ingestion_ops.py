@@ -477,6 +477,18 @@ def compute_model_health(context):
     _run_script(context, "compute_model_health.py")
 
 
+# ── Story 28.3 — Magnitude H2H kill-criterion monitor ────────────────────────
+
+@op(out=Out(Nothing))
+def monitor_magnitude_h2h_op(context):
+    """Weekly read-only monitor for the magnitude H2H kill criterion (Story 28.3).
+
+    Logs real-book ROI, Brier scores, tripwire state, and accrual progress to
+    Dagster so the CONFIRM/KILL gate is auditable without manual script runs.
+    """
+    _run_script(context, "ops/monitor_magnitude_h2h.py", ["--schema", "betting_ml"])
+
+
 # ── SCD-2 incremental updates ────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

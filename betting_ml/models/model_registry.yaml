@@ -8,6 +8,37 @@ home_win:
   promoted_at: '2026-06-04'
   bet_posture: evaluation-pending
   automated_bets: false
+  kill_criterion:
+    story: 28.3
+    attribution_start: '2026-06-04'
+    monitor_script: scripts/ops/monitor_magnitude_h2h.py
+    confirm_gate:
+      n_settled: 150
+      real_book_roi_lower_ci_95_gt: 0
+      model_brier_lt_market_brier: true
+      notes: |
+        95% lower-CI ROI uses actual Bovada American moneyline odds
+        (layer4_h2h_bovada_ml_home / layer4_h2h_bovada_ml_away), not de-vigged probs.
+        Both conditions must pass simultaneously. automated_bets stays false until
+        this gate fires.
+    kill_gates:
+      - trigger: n_at_full_gate
+        condition: n=150 AND 95%-lower-CI real-book ROI <= 0
+        action: kill_magnitude_strategy
+      - trigger: early_tripwire
+        condition: "at n=50, real-book win rate < avg break-even implied by actual Bovada odds"
+        action: kill_magnitude_strategy
+    until_confirm: automated_bets=false; magnitude is manual-review/informational only
+    model_version_policy: |
+      The kill criterion tracks the champion model active at attribution_start (currently
+      v4 — XGBoost sequential-enriched + Platt calibrator). If a new champion is promoted
+      mid-season (e.g., Epic 17 PyMC NegBin), RESET attribution_start to the promotion
+      date and restart the n=150 count from zero against the new model. Do NOT mix bets
+      scored under different champion versions in the same kill window — pre/post-replacement
+      bets would conflate two distinct models and corrupt the CONFIRM/KILL signal.
+      Procedure on promotion: update attribution_start here, update ATTRIBUTION_START in
+      scripts/ops/monitor_magnitude_h2h.py, and note the prior window outcome (accrual
+      count + direction at time of reset) in the notes field above.
   ece_raw: 0.0430
   eval_year: 2026
   feature_columns_path: betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json

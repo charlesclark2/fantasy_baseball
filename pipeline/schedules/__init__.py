@@ -4,6 +4,7 @@ from pipeline.schedules.historical_matches_schedule import historical_matches_we
 from pipeline.schedules.weekly_player_profiles_schedule import weekly_player_profiles_schedule
 from pipeline.schedules.weekly_clv_monitoring_schedule import weekly_clv_monitoring_schedule
 from pipeline.schedules.weekly_ml_schedules import weekly_ml_schedule
+from pipeline.schedules.magnitude_monitor_schedule import magnitude_monitor_schedule
 
 all_schedules = [
     daily_ingestion_schedule,
@@ -11,4 +12,5 @@ all_schedules = [
     weekly_player_profiles_schedule,
     weekly_clv_monitoring_schedule,
     weekly_ml_schedule,
+    magnitude_monitor_schedule,
 ] + all_intraday_schedules
