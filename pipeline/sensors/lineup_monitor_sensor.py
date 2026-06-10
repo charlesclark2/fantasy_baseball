@@ -1,6 +1,8 @@
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from dagster import RunRequest, SensorEvaluationContext, SkipReason, sensor
 
@@ -8,6 +10,23 @@ from pipeline.jobs.sensor_jobs import lineup_monitor_job
 
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
+
+_ET = ZoneInfo("America/New_York")
+_GAMES_SCHEMA = "baseball_data.betting"
+
+# --- Early-game-aware cadence -------------------------------------------------
+# The lineup-confirmed re-score must land >= 30 min before first pitch (Epic A1
+# SLA). A flat hourly poll misses mid-day games: a 1:10pm ET game whose lineups
+# post ~3h out can be re-scored as late as ~20 min pre-game (incident 2026-06-10,
+# game 822970 BOS@TB). So we poll every _TIGHT_INTERVAL once any game is within
+# _ACTIVE_LEAD of first pitch, and fall back to _IDLE_INTERVAL when the slate is
+# hours away (keeps overnight Snowflake/subprocess load low). minimum_interval
+# is the hard floor; the cursor (ISO ts of the last real monitor run) throttles
+# the heavier monitor subprocess between floor ticks.
+_FLOOR_SECONDS = 600                       # sensor wakes at most every 10 min
+_TIGHT_INTERVAL = timedelta(minutes=10)    # active window: act on every floor tick
+_IDLE_INTERVAL = timedelta(minutes=60)     # quiet window: hourly baseline
+_ACTIVE_LEAD = timedelta(hours=5)          # "active" once first pitch is <= 5h out
 
 
 def _parse_output(stdout: str, key: str) -> str | None:
@@ -18,16 +37,80 @@ def _parse_output(stdout: str, key: str) -> str | None:
     return None
 
 
-@sensor(job=lineup_monitor_job, minimum_interval_seconds=3600)
+def _minutes_to_next_first_pitch(now_et: datetime) -> float | None:
+    """Minutes until the earliest not-yet-started regular-season game on today's
+    ET calendar day, or None if there are no upcoming games. Cheap query — safe
+    to run every tick. `game_date` is the StatsAPI first-pitch instant stored as
+    TIMESTAMP_TZ (tz-aware); a game already past first pitch but still flagged
+    'Preview' clamps to 0 (treated as active)."""
+    from betting_ml.utils.data_loader import get_snowflake_connection
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT MIN(game_date) FROM {_GAMES_SCHEMA}.stg_statsapi_games "
+            f"WHERE official_date = %s AND game_type = 'R' "
+            f"AND abstract_game_state = 'Preview'",
+            [now_et.date().isoformat()],
+        )
+        row = cur.fetchone()
+    finally:
+        conn.close()
+
+    if not row or row[0] is None:
+        return None
+    first_pitch = row[0]
+    if isinstance(first_pitch, str):
+        first_pitch = datetime.fromisoformat(first_pitch.replace("Z", "+00:00"))
+    if first_pitch.tzinfo is None:  # defensive — game_date is normally tz-aware
+        first_pitch = first_pitch.replace(tzinfo=ZoneInfo("UTC"))
+    return max(0.0, (first_pitch - now_et).total_seconds() / 60.0)
+
+
+@sensor(job=lineup_monitor_job, minimum_interval_seconds=_FLOOR_SECONDS)
 def lineup_monitor_sensor(context: SensorEvaluationContext):
     """
-    Hourly sensor: runs lineup_monitor.py to detect newly confirmed starting
-    lineups. Emits a RunRequest (with game_pks in op config) when new lineups
-    are found; yields SkipReason otherwise.
+    Early-game-aware lineup monitor. Polls every 10 min while any game is within
+    5h of first pitch (so mid-day slates get their lineup-confirmed re-score well
+    inside the Epic A1 30-min SLA), and hourly otherwise. Runs lineup_monitor.py
+    to detect newly confirmed lineups / starter changes; emits a RunRequest
+    (game_pks in op config) when found, else a SkipReason.
 
-    Transient subprocess failures are caught and logged as SkipReason so a
-    flaky Snowflake connection doesn't cascade into a failed sensor tick.
+    Transient failures (Snowflake, subprocess) are swallowed as SkipReason so a
+    flaky tick never fails the sensor.
     """
+    now_et = datetime.now(_ET)
+
+    # --- cadence gate: how soon is the next first pitch?
+    try:
+        mins = _minutes_to_next_first_pitch(now_et)
+    except Exception as e:
+        # Don't go dark if the schedule lookup hiccups — act this tick.
+        context.log.warning(f"first-pitch lookup failed ({e}); running monitor anyway.")
+        mins = 0.0
+
+    active = mins is not None and mins <= _ACTIVE_LEAD.total_seconds() / 60.0
+    desired = _TIGHT_INTERVAL if active else _IDLE_INTERVAL
+
+    last_run = None
+    if context.cursor:
+        try:
+            last_run = datetime.fromisoformat(context.cursor)
+        except ValueError:
+            last_run = None
+
+    if last_run is not None and (now_et - last_run) < desired:
+        nxt = "no upcoming games" if mins is None else f"next pitch in {mins:.0f} min"
+        yield SkipReason(
+            f"Throttled — {int(desired.total_seconds() // 60)} min cadence "
+            f"({'active' if active else 'idle'}; {nxt}); last run {last_run:%H:%M}."
+        )
+        return
+
+    # Due to run — stamp the cursor now so the throttle measures real monitor runs.
+    context.update_cursor(now_et.isoformat())
+
     script = os.path.join(SCRIPTS_DIR, "lineup_monitor.py")
     try:
         result = subprocess.run(
