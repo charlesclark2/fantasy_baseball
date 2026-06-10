@@ -96,7 +96,11 @@ def _load_best_alpha() -> float:
 
 
 def _registry_feat_cols(registry: dict, target: str) -> list[str]:
-    return json.loads((_REPO_ROOT / registry[target]["feature_columns_path"]).read_text())
+    # Match predict_today exactly: the feature-columns JSON may be a bare list OR a
+    # dict carrying {"feature_cols": [...], ...}; unwrap the dict form, else pandas
+    # reindexes on the dict KEYS (the run_differential file is a dict → 6 keys → crash).
+    raw = json.loads((_REPO_ROOT / registry[target]["feature_columns_path"]).read_text())
+    return raw["feature_cols"] if isinstance(raw, dict) else raw
 
 
 def _score(df: pd.DataFrame, registry: dict) -> pd.DataFrame:

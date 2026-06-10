@@ -1,6 +1,6 @@
 home_win:
-  artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_tuned_2026.pkl  # uploaded 2026-06-04 (instrumented seq challenger)
-  prev_artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_eb_enriched_2026.pkl  # v3 (drifted/unrecoverable binary; superseded)
+  artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_tuned_2026.pkl
+  prev_artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   calibrator_last_fit_date: '2026-05-08'
   cv_brier: 0.1978
@@ -16,60 +16,118 @@ home_win:
       n_settled: 150
       real_book_roi_lower_ci_95_gt: 0
       model_brier_lt_market_brier: true
-      notes: |
-        95% lower-CI ROI uses actual Bovada American moneyline odds
+      notes: '95% lower-CI ROI uses actual Bovada American moneyline odds
+
         (layer4_h2h_bovada_ml_home / layer4_h2h_bovada_ml_away), not de-vigged probs.
+
         Both conditions must pass simultaneously. automated_bets stays false until
+
         this gate fires.
+
+        '
     kill_gates:
-      - trigger: n_at_full_gate
-        condition: n=150 AND 95%-lower-CI real-book ROI <= 0
-        action: kill_magnitude_strategy
-      - trigger: early_tripwire
-        condition: "at n=50, real-book win rate < avg break-even implied by actual Bovada odds"
-        action: kill_magnitude_strategy
-    until_confirm: automated_bets=false; magnitude is manual-review/informational only
-    model_version_policy: |
-      The kill criterion tracks the champion model active at attribution_start (currently
+    - trigger: n_at_full_gate
+      condition: n=150 AND 95%-lower-CI real-book ROI <= 0
+      action: kill_magnitude_strategy
+    - trigger: early_tripwire
+      condition: at n=50, real-book win rate < avg break-even implied by actual Bovada
+        odds
+      action: kill_magnitude_strategy
+    until_confirm: automated_bets=false; magnitude is manual-review/informational
+      only
+    model_version_policy: 'The kill criterion tracks the champion model active at
+      attribution_start (currently
+
       v4 — XGBoost sequential-enriched + Platt calibrator). If a new champion is promoted
+
       mid-season (e.g., Epic 17 PyMC NegBin), RESET attribution_start to the promotion
-      date and restart the n=150 count from zero against the new model. Do NOT mix bets
+
+      date and restart the n=150 count from zero against the new model. Do NOT mix
+      bets
+
       scored under different champion versions in the same kill window — pre/post-replacement
+
       bets would conflate two distinct models and corrupt the CONFIRM/KILL signal.
-      Procedure on promotion: update attribution_start here, update ATTRIBUTION_START in
+
+      Procedure on promotion: update attribution_start here, update ATTRIBUTION_START
+      in
+
       scripts/ops/monitor_magnitude_h2h.py, and note the prior window outcome (accrual
+
       count + direction at time of reset) in the notes field above.
-  ece_raw: 0.0430
+
+      '
+  ece_raw: 0.043
   eval_year: 2026
   feature_columns_path: betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json
   features: 377
-  mlflow_run_id: 523298ed749543bbabd339aa1e57cf68  # instrumented re-run on recovered bullpen data (2026-06-04); CV Brier 0.1978 (base 0.2459)
+  mlflow_run_id: 523298ed749543bbabd339aa1e57cf68
   model_name: xgboost_sequential_enriched
   model_version: v4
-  notes: |
-    Sequential-enriched retrain (Epic 16.5/16.6) -- seq challenger REGISTERED AS CHAMPION on a
-    CALIBRATION basis (NOT a discrimination upgrade). 377 features = 367 base + 10 Epic-16
-    sequential cols (6 team + 4 player/starter) + 2 imputation indicators (379 input dim).
-    Clean 2026 OOS head-to-head (n=660) on recovered bullpen data vs the faithful 369-feat
+  notes: 'Sequential-enriched retrain (Epic 16.5/16.6) -- seq challenger REGISTERED
+    AS CHAMPION on a
+
+    CALIBRATION basis (NOT a discrimination upgrade). 377 features = 367 base + 10
+    Epic-16
+
+    sequential cols (6 team + 4 player/starter) + 2 imputation indicators (379 input
+    dim).
+
+    Clean 2026 OOS head-to-head (n=660) on recovered bullpen data vs the faithful
+    369-feat
+
     nonseq reproduction of the documented champion (deployed v3 S3 binary drifted/unrecoverable):
-    seq WINS calibration (ECE 0.043, passes <=0.05 gate; nonseq ECE 0.063, fails gate) at the
-    cost of slightly worse discrimination (NLL 0.5958 vs 0.5906, raw Brier 0.2044 vs 0.2015).
-    L4 roi_devig marginally favors nonseq (+0.2459 vs +0.2356) but both are pre-vig upper
-    bounds on n<400. Both head-to-head gates FAIL -- challenger NLL (0.5958) and raw Brier
-    (0.2044) are ABOVE the champion's (0.5906 / 0.2015), not below. Neither beats market
+
+    seq WINS calibration (ECE 0.043, passes <=0.05 gate; nonseq ECE 0.063, fails gate)
+    at the
+
+    cost of slightly worse discrimination (NLL 0.5958 vs 0.5906, raw Brier 0.2044
+    vs 0.2015).
+
+    L4 roi_devig marginally favors nonseq (+0.2459 vs +0.2356) but both are pre-vig
+    upper
+
+    bounds on n<400. Both head-to-head gates FAIL -- challenger NLL (0.5958) and raw
+    Brier
+
+    (0.2044) are ABOVE the champion''s (0.5906 / 0.2015), not below. Neither beats
+    market
+
     (alpha=0 -> blended output equals market; L3 market gate vacuous).
-    Rationale for seq adoption: calibration is the operative property for current use cases
-    (live attribution magnitude-hypothesis tracking on real book prices; future H2H activation
-    with non-zero alpha). A model that fails the ECE gate should not be the production champion
-    when a better-calibrated alternative exists. Posture unchanged: automated_bets: false,
-    evaluation-pending. Revisit head-to-head when H2H is activated with live data and alpha > 0.
-    Provenance: seq MLflow 523298ed... ; nonseq champion MLflow 70736a4b... . The prior
-    (superseded) note claimed seq beat nonseq on L1/ECE/raw Brier -- an artifact of a
+
+    Rationale for seq adoption: calibration is the operative property for current
+    use cases
+
+    (live attribution magnitude-hypothesis tracking on real book prices; future H2H
+    activation
+
+    with non-zero alpha). A model that fails the ECE gate should not be the production
+    champion
+
+    when a better-calibrated alternative exists. Posture unchanged: automated_bets:
+    false,
+
+    evaluation-pending. Revisit head-to-head when H2H is activated with live data
+    and alpha > 0.
+
+    Provenance: seq MLflow 523298ed... ; nonseq champion MLflow 70736a4b... . The
+    prior
+
+    (superseded) note claimed seq beat nonseq on L1/ECE/raw Brier -- an artifact of
+    a
+
     bullpen-stale nonseq baseline; corrected on clean data (seq now wins ONLY calibration).
+
     HARD PROD PREREQ: feature_pregame_game_features must carry all 10 sequential cols
+
     (commit dbt edits -> Railway build -> Dagster deploy -> prod dbt rebuild -> spot-check
-    10 non-null cols). A 379-feature model scoring a 373-col matrix is the failure this prevents.
+
+    10 non-null cols). A 379-feature model scoring a 373-col matrix is the failure
+    this prevents.
+
     Rollback: xgb_eb_enriched_2026.pkl (v3) / elasticnet_market_blind_2026.pkl (v2).
+
+    '
   rollback_artifact_path: s3://baseball-betting-ml-artifacts/home_win/elasticnet_market_blind_2026.pkl
   rollback_feature_columns_path: betting_ml/models/home_win/feature_columns_market_blind.json
   selected_at: '2026-06-02T00:00:00Z'
@@ -117,12 +175,14 @@ home_win:
       brier_challenger: 0.239
       delta_brier: -0.0002
       verdict: PROMOTE
-    notes: "Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns\
-      \ (_MARKET_COLS_TO_EXCLUDE). 545 features vs 487 in v1. CV: 2024=0.2481, 2025=0.2360,\
-      \ 2026=0.2497 (n=342 partial season), mean=0.2446. Gate 0.2446 is the true market-blind\
-      \ baseline; v1 gate 0.2422 benefited from market circularity (away_moneyline_decimal\
-      \ #3, home_win_prob_sharp #6). Promoted 2026-05-11 via compare_market_blind_challengers.py\
-      \ (Brier \u22120.0002).\n"
+    notes: 'Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns
+      (_MARKET_COLS_TO_EXCLUDE). 545 features vs 487 in v1. CV: 2024=0.2481, 2025=0.2360,
+      2026=0.2497 (n=342 partial season), mean=0.2446. Gate 0.2446 is the true market-blind
+      baseline; v1 gate 0.2422 benefited from market circularity (away_moneyline_decimal
+      #3, home_win_prob_sharp #6). Promoted 2026-05-11 via compare_market_blind_challengers.py
+      (Brier −0.0002).
+
+      '
   - card: 7.L2
     model_name: xgboost
     artifact_path: null
@@ -165,14 +225,16 @@ home_win:
       cal_bias_challenger: -0.0217
       cal_bias_limit: 0.05
       verdict: PROMOTE
-    notes: "Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:\
-      \ 374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).\
-      \ All EB posteriors present (bp_eb/starter_eb/avg_eb materialized after feature_pregame_game_features\
-      \ rebuild). CV Brier 0.1985 (baseline 0.2459, +19.24%) uses leaky Platt calibration\
-      \ (fit+eval on same fold \u2014 same methodology as baseline). Absolute value\
-      \ optimistic (~0.21\u20130.22 true OOS). Improvement driven by bullpen/starter/batter\
-      \ EB posteriors. Promoted 2026-06-02 via compare_model_versions.py: Brier \u2212\
-      0.0776, cal_bias \u22120.0217 (gate \xB10.05), PROMOTE.\n"
+    notes: 'Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:
+      374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb materialized after feature_pregame_game_features
+      rebuild). CV Brier 0.1985 (baseline 0.2459, +19.24%) uses leaky Platt calibration
+      (fit+eval on same fold — same methodology as baseline). Absolute value optimistic
+      (~0.21–0.22 true OOS). Improvement driven by bullpen/starter/batter EB posteriors.
+      Promoted 2026-06-02 via compare_model_versions.py: Brier −0.0776, cal_bias −0.0217
+      (gate ±0.05), PROMOTE.
+
+      '
   - card: 7.L2
     model_name: catboost
     artifact_path: null
@@ -207,8 +269,8 @@ home_win:
       '
     eval_parquets: betting_ml/evaluation/model_evaluation/v1/results_ensemble_stacked.parquet
 run_differential:
-  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_tuned_2026.pkl  # uploaded 2026-06-04 (instrumented seq challenger)
-  prev_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_eb_enriched_2026.pkl  # v3 (drifted/unrecoverable binary; superseded)
+  artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_tuned_2026.pkl
+  prev_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.0846
   deployed_date: '2026-06-02'
@@ -217,25 +279,48 @@ run_differential:
   eval_year: 2026
   feature_columns_path: betting_ml/models/run_differential/feature_columns_ngboost_tuned_2026.json
   features: 377
-  mlflow_run_id: d53106eca441428a814d477c73ae8d83  # instrumented re-run on recovered bullpen data (2026-06-04); CV MAE 3.0846 (500 est just edged 1000 @ 3.0848)
+  mlflow_run_id: d53106eca441428a814d477c73ae8d83
   model_name: ngboost_sequential_enriched
   model_version: v4
   n_estimators: 500
-  notes: |
-    Sequential-enriched retrain (Epic 16.5/16.6) -- PROMOTED. NGBoost Normal, n=500.
-    377 features = 367 base + 10 Epic-16 sequential cols (6 team + 4 player/starter) + 2
+  notes: 'Sequential-enriched retrain (Epic 16.5/16.6) -- PROMOTED. NGBoost Normal,
+    n=500.
+
+    377 features = 367 base + 10 Epic-16 sequential cols (6 team + 4 player/starter)
+    + 2
+
     imputation indicators (379 input dim). LogNormal excluded (run_diff can be negative).
-    Clean 2026 OOS head-to-head (n=660) on recovered bullpen data vs the faithful 369-feat
+
+    Clean 2026 OOS head-to-head (n=660) on recovered bullpen data vs the faithful
+    369-feat
+
     nonseq reproduction of the documented champion (deployed v3 S3 binary drifted/unrecoverable):
-    the challenger PASSES both applicable layers and BEATS the champion -- L1 NLL 2.7612 <
-    champion 2.7757 < prior 2.9334; L2 calib_80 0.776 in [0.75,0.85] (champion 0.768). No
-    L3/L4 (no direct market). The clean win of the sequential retrain. run_differential is not
-    bet directly; it feeds p_home_win_ngboost (P(run_diff>0)) = 50% of the h2h consensus input.
+
+    the challenger PASSES both applicable layers and BEATS the champion -- L1 NLL
+    2.7612 <
+
+    champion 2.7757 < prior 2.9334; L2 calib_80 0.776 in [0.75,0.85] (champion 0.768).
+    No
+
+    L3/L4 (no direct market). The clean win of the sequential retrain. run_differential
+    is not
+
+    bet directly; it feeds p_home_win_ngboost (P(run_diff>0)) = 50% of the h2h consensus
+    input.
+
     Provenance: seq MLflow d53106ec... ; nonseq champion MLflow 1f09ed40... .
+
     HARD PROD PREREQ: feature_pregame_game_features must carry all 10 sequential cols
+
     (commit dbt edits -> Railway build -> Dagster deploy -> prod dbt rebuild -> spot-check
-    10 non-null cols). A 379-feature model scoring a 373-col matrix is the failure this prevents.
-    Rollback: ngboost_eb_enriched_2026.pkl (v3) / ngboost_market_blind_2026.pkl (v2, S3).
+
+    10 non-null cols). A 379-feature model scoring a 373-col matrix is the failure
+    this prevents.
+
+    Rollback: ngboost_eb_enriched_2026.pkl (v3) / ngboost_market_blind_2026.pkl (v2,
+    S3).
+
+    '
   rollback_artifact_path: s3://baseball-betting-ml-artifacts/run_differential/ngboost_market_blind_2026.pkl
   rollback_feature_columns_path: betting_ml/models/run_differential/feature_columns_market_blind.json
   selected_at: '2026-06-02T00:00:00Z'
@@ -245,13 +330,14 @@ run_differential:
     card: 8.W
     evaluated: '2026-05-08'
     decision: NOT RETRAINED
-    notes: "Model still uses 294-feature pre-Phase-8 set from feature_columns.json\
-      \ (7.MA retrain). Phase 8 features: 0 \u2014 none of the 8.A-8.Y feature groups\
-      \ are in the training matrix. Market circularity: home_win_prob_consensus is\
-      \ the #1 permutation-importance feature; 61% of features are exclusion candidates\
-      \ (noise ratio). Most urgent retrain at ~2026-05-22: switch to load_features()\
-      \ full feature set + add market exclusion equivalent to _MARKET_COLS_TO_EXCLUDE.\
-      \ See betting_ml/evaluation/phase_8_batch_retrain_impact.md.\n"
+    notes: 'Model still uses 294-feature pre-Phase-8 set from feature_columns.json
+      (7.MA retrain). Phase 8 features: 0 — none of the 8.A-8.Y feature groups are
+      in the training matrix. Market circularity: home_win_prob_consensus is the #1
+      permutation-importance feature; 61% of features are exclusion candidates (noise
+      ratio). Most urgent retrain at ~2026-05-22: switch to load_features() full feature
+      set + add market exclusion equivalent to _MARKET_COLS_TO_EXCLUDE. See betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+
+      '
   challengers:
   - card: Epic 1 / Story 1.3
     model_name: ngboost_market_blind
@@ -276,13 +362,15 @@ run_differential:
       mae_challenger: 3.405
       delta_mae: -0.029
       verdict: PROMOTE
-    notes: "Epic 1 market-blind retrain (2026-05-10). First time run_diff gets full\
-      \ Phase 8 feature store (load_features() vs prior 294-feature set). Excludes\
-      \ 33 market-derived columns including home_win_prob_consensus (was #1 feature,\
-      \ imp=0.040). CV: 2024=3.3969, 2025=3.4959, 2026=3.6016 (n=342 partial season),\
-      \ mean=3.4981. Gate 3.4981 is the true market-blind baseline; v1 gate 3.4724\
-      \ benefited from market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py\
-      \ (MAE \u22120.029).\n"
+    notes: 'Epic 1 market-blind retrain (2026-05-10). First time run_diff gets full
+      Phase 8 feature store (load_features() vs prior 294-feature set). Excludes 33
+      market-derived columns including home_win_prob_consensus (was #1 feature, imp=0.040).
+      CV: 2024=3.3969, 2025=3.4959, 2026=3.6016 (n=342 partial season), mean=3.4981.
+      Gate 3.4981 is the true market-blind baseline; v1 gate 3.4724 benefited from
+      market circularity. Promoted 2026-05-11 via compare_market_blind_challengers.py
+      (MAE −0.029).
+
+      '
   - card: 7.M
     model_name: ngboost_eb_enriched_market_blind
     artifact_path: betting_ml/models/run_differential/ngboost_tuned_2026.pkl
@@ -304,32 +392,62 @@ run_differential:
       - 2026
       delta_mae: -0.48
       verdict: PROMOTE
-    notes: "Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:\
-      \ 374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).\
-      \ All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized). LogNormal\
-      \ excluded (run_diff can be negative). Normal only, best n=500. CV MAE 3.1041\
-      \ vs market-blind champion v2 (MAE 3.4981) \u2014 0.39 MAE improvement apples-to-apples.\
-      \ Promoted 2026-06-02 via compare_model_versions.py: MAE \u0394 \u22120.480,\
-      \ verdict PROMOTE.\n"
+    notes: 'Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:
+      374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized). LogNormal
+      excluded (run_diff can be negative). Normal only, best n=500. CV MAE 3.1041
+      vs market-blind champion v2 (MAE 3.4981) — 0.39 MAE improvement apples-to-apples.
+      Promoted 2026-06-02 via compare_model_versions.py: MAE Δ −0.480, verdict PROMOTE.
+
+      '
 total_runs:
-  bet_paused: true                 # totals_paused — Epic 10.6 (2026-06-02; confirmed under a Bayesian three-layer framework 2026-06-03). On 560 shared 2026 OOS games BOTH v4 and the Layer 3 challenger FAIL Layer 1 (NLL >= prior-predictive 2.8893 — no info over the training marginal) and Layer 3 (blended Brier ~0.279 >= prior-naive 0.248 and >= market 0.228); they pass only calibration (calib_80 ~0.776). Persistent OVER bias (mean P(over) 0.51 vs actual 0.45); matchup-drop ablation ruled out cluster-mismatch (regime-adaptation). The challenger wins the head-to-head but fails the operational gate. Epic 19 gate must surface NO totals bets until a model beats BOTH the prior-predictive NLL and prior-naive Brier (ideally the market) on the current season. Evidence: ablation_results/totals_bayesian_evaluation.md + totals_2026_failure_analysis.md.
-  unpause_conditions: "Beat prior-predictive NLL 2.8893 AND prior-naive Brier 0.248 on a rolling 60-game live window (ideally also beat the market). Until then Epic 19 surfaces NO totals bets."
-  sequential_retrain_verdict: |
-    DO NOT PROMOTE (2026-06-04, Epic 16.6) -- THIRD independent confirmation of the pause
-    (1: Epic 10.6 CV/champion-vs-challenger; 2: Epic 26.3 Layer-4 backtest; 3: this production
-    harness). Clean 2026 OOS fold (n=660) on recovered bullpen data: the sequential challenger
-    is ~= the nonseq champion and is NOT promotable. Both marginally clear L1 (NLL champion
-    2.8566 / challenger 2.8588, both < prior NegBin 2.8608) but BOTH FAIL the decisive gates:
-    L3 (blended Brier champion 0.2697 / challenger 0.2702, both > market 0.2297 AND > prior-naive
+  bet_paused: true
+  unpause_conditions: Beat prior-predictive NLL 2.8893 AND prior-naive Brier 0.248
+    on a rolling 60-game live window (ideally also beat the market). Until then Epic
+    19 surfaces NO totals bets.
+  sequential_retrain_verdict: 'DO NOT PROMOTE (2026-06-04, Epic 16.6) -- THIRD independent
+    confirmation of the pause
+
+    (1: Epic 10.6 CV/champion-vs-challenger; 2: Epic 26.3 Layer-4 backtest; 3: this
+    production
+
+    harness). Clean 2026 OOS fold (n=660) on recovered bullpen data: the sequential
+    challenger
+
+    is ~= the nonseq champion and is NOT promotable. Both marginally clear L1 (NLL
+    champion
+
+    2.8566 / challenger 2.8588, both < prior NegBin 2.8608) but BOTH FAIL the decisive
+    gates:
+
+    L3 (blended Brier champion 0.2697 / challenger 0.2702, both > market 0.2297 AND
+    > prior-naive
+
     0.2470) and L4 (negative roi_110 at every threshold 0.5-2.0). Calibration passes
-    (calib_80 ~0.81). Head-to-head: challenger does NOT beat champion on NLL or blended Brier;
-    seq is marginally worse (CV MAE 3.3694 vs nonseq 3.3675). The 10 sequential features add
-    nothing for totals. v4 stays the nominal source for INFORMATIONAL scoring only -- bets
+
+    (calib_80 ~0.81). Head-to-head: challenger does NOT beat champion on NLL or blended
+    Brier;
+
+    seq is marginally worse (CV MAE 3.3694 vs nonseq 3.3675). The 10 sequential features
+    add
+
+    nothing for totals. v4 stays the nominal source for INFORMATIONAL scoring only
+    -- bets
+
     gated off.
-    Provenance: seq MLflow 9f89b9b8... ; nonseq champion MLflow 9e90b9b6... ; seq artifact
+
+    Provenance: seq MLflow 9f89b9b8... ; nonseq champion MLflow 9e90b9b6... ; seq
+    artifact
+
     ngboost_tuned_2026.pkl (377 feat, Normal n=500), sidecar feature_columns_ngboost_tuned_2026.json
-    -- 2026-06-04 instrumented re-run. NOT promoted; the S3 v4 eb_enriched artifact remains the
-    source. (This overwrote the local 7.M eb_enriched ngboost_tuned_2026.pkl, never the prod artifact.)
+
+    -- 2026-06-04 instrumented re-run. NOT promoted; the S3 v4 eb_enriched artifact
+    remains the
+
+    source. (This overwrote the local 7.M eb_enriched ngboost_tuned_2026.pkl, never
+    the prod artifact.)
+
+    '
   artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
   backfill_date: '2026-06-01'
   cv_mae: 3.4008
@@ -342,13 +460,14 @@ total_runs:
   model_name: ngboost_eb_enriched
   model_version: v4
   n_estimators: 500
-  notes: "Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02. NGBoost Normal,\
-    \ n=500, 369 features (367 base = feature_selection.md \u2212 7 market cols; +\
-    \ has_starter_platoon_data, is_new_venue from imputation pipeline). All EB posteriors\
-    \ present. CV MAE 3.4008 vs v3 champion 3.5521 (\u0394 \u22120.151, apples-to-apples\
-    \ market-blind). Offline comparison on held-out 2024+ data: MAE \u0394 \u2212\
-    0.039, Pct_Over_Line 61.7% (healthy range), verdict PROMOTE. Rollback: ngboost_market_blind_2026.pkl\
-    \ (v3, 307 features, S3).\n"
+  notes: 'Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02. NGBoost Normal,
+    n=500, 369 features (367 base = feature_selection.md − 7 market cols; + has_starter_platoon_data,
+    is_new_venue from imputation pipeline). All EB posteriors present. CV MAE 3.4008
+    vs v3 champion 3.5521 (Δ −0.151, apples-to-apples market-blind). Offline comparison
+    on held-out 2024+ data: MAE Δ −0.039, Pct_Over_Line 61.7% (healthy range), verdict
+    PROMOTE. Rollback: ngboost_market_blind_2026.pkl (v3, 307 features, S3).
+
+    '
   rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
   rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
   selected_at: '2026-06-02T00:00:00Z'
@@ -373,14 +492,16 @@ total_runs:
       value: 0.77
       threshold: '>= 2.0'
       pass: false
-      deferred: "Phase 9 \u2014 variance-shrinkage ceiling; not addressable without\
-        \ new features or architecture change"
+      deferred: Phase 9 — variance-shrinkage ceiling; not addressable without new
+        features or architecture change
     decision: PROMOTED (std gate deferred to Phase 9)
-    notes: "8.W permutation importance: home_win_prob_sharp (#1), home_moneyline_decimal\
-      \ (#2) are top features \u2014 market circularity confirmed. 4 Phase 8 features\
-      \ identified as noise candidates (mean_imp <= 0). Next retrain (~2026-05-22):\
-      \ add market exclusion analogous to home_win _MARKET_COLS_TO_EXCLUDE to NGBoost\
-      \ training script; drop 4 noise features. See betting_ml/evaluation/phase_8_batch_retrain_impact.md.\n"
+    notes: '8.W permutation importance: home_win_prob_sharp (#1), home_moneyline_decimal
+      (#2) are top features — market circularity confirmed. 4 Phase 8 features identified
+      as noise candidates (mean_imp <= 0). Next retrain (~2026-05-22): add market
+      exclusion analogous to home_win _MARKET_COLS_TO_EXCLUDE to NGBoost training
+      script; drop 4 noise features. See betting_ml/evaluation/phase_8_batch_retrain_impact.md.
+
+      '
   v0_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_prod.pkl
   v0_dist: LogNormal
   v0_feature_columns_path: betting_ml/models/feature_columns.json
@@ -422,13 +543,15 @@ total_runs:
       pct_over_line_champion: 67.1
       pct_over_line_challenger: 65.4
       verdict: PROMOTE
-    notes: "Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns\
-      \ + 4 noise cols (away_elo, home_team_oaa_blended, two pct_diff cols). total_line_consensus\
-      \ removed (was #1 feature, imp=0.064). Used decay sample weights. CV: 2024=3.3943,\
-      \ 2025=3.6191, 2026=3.6428 (n=342 partial season), mean=3.5521. Gate 3.5521\
-      \ is the true market-blind baseline; v2 gate 3.5107 benefited from market circularity.\
-      \ Promoted 2026-05-11 via compare_market_blind_challengers.py (MAE \u22120.141,\
-      \ Pct_Over_Line=65.4% \u2014 healthy range).\n"
+    notes: 'Epic 1 market-blind retrain (2026-05-10). Excludes 33 market-derived columns
+      + 4 noise cols (away_elo, home_team_oaa_blended, two pct_diff cols). total_line_consensus
+      removed (was #1 feature, imp=0.064). Used decay sample weights. CV: 2024=3.3943,
+      2025=3.6191, 2026=3.6428 (n=342 partial season), mean=3.5521. Gate 3.5521 is
+      the true market-blind baseline; v2 gate 3.5107 benefited from market circularity.
+      Promoted 2026-05-11 via compare_market_blind_challengers.py (MAE −0.141, Pct_Over_Line=65.4%
+      — healthy range).
+
+      '
   - card: 8.P
     model_name: lgb_quantile
     model_type: lgb_quantile
@@ -439,22 +562,23 @@ total_runs:
     gate_results:
       mae_q50:
         value: 3.4791
-        threshold: "\u2264 3.5107"
+        threshold: ≤ 3.5107
         pass: true
       std_q50:
         value: 0.9325
-        threshold: "\u2265 1.5"
+        threshold: ≥ 1.5
         pass: false
       mean_residual:
         value: -0.5951
-        threshold: "|x| \u2264 0.5"
+        threshold: '|x| ≤ 0.5'
         pass: false
-    rejection_reason: "Card 8.P \u2014 Failed std and residual gates. Both failures\
-      \ trace to the same variance-shrinkage ceiling as NGBoost; the current feature\
-      \ set cannot produce sufficient prediction spread regardless of algorithm. MAE\
-      \ gate passed (3.4791 beats NGBoost 3.5107), confirming LightGBM quantile has\
-      \ better point accuracy. Deferred to Phase 9 when feature set is expanded. See\
-      \ evaluation/quantile_regression_vs_ngboost.md.\n"
+    rejection_reason: 'Card 8.P — Failed std and residual gates. Both failures trace
+      to the same variance-shrinkage ceiling as NGBoost; the current feature set cannot
+      produce sufficient prediction spread regardless of algorithm. MAE gate passed
+      (3.4791 beats NGBoost 3.5107), confirming LightGBM quantile has better point
+      accuracy. Deferred to Phase 9 when feature set is expanded. See evaluation/quantile_regression_vs_ngboost.md.
+
+      '
     eval_report: betting_ml/evaluation/quantile_regression_vs_ngboost.md
   - card: 7.M
     model_name: ngboost_eb_enriched_market_blind
@@ -478,13 +602,15 @@ total_runs:
       delta_mae: -0.039
       pct_over_line_challenger: 61.7
       verdict: PROMOTE
-    notes: "Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:\
-      \ 374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).\
-      \ All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized). Normal\
-      \ dist, n=500 (LogNormal marginally worse across both n configs). CV MAE 3.4008\
-      \ vs market-blind champion v3 (MAE 3.5521) \u2014 0.15 MAE improvement apples-to-apples.\
-      \ Promoted 2026-06-02 via compare_model_versions.py: MAE \u0394 \u22120.039,\
-      \ Pct_Over_Line 61.7% (healthy), verdict PROMOTE.\n"
+    notes: 'Epic 7.M EB-enriched market-blind retrain (2026-06-01). 367 features:
+      374 from feature_selection.md minus 7 market cols (_MARKET_COLS_TO_EXCLUDE).
+      All EB posteriors present (bp_eb/starter_eb/avg_eb fully materialized). Normal
+      dist, n=500 (LogNormal marginally worse across both n configs). CV MAE 3.4008
+      vs market-blind champion v3 (MAE 3.5521) — 0.15 MAE improvement apples-to-apples.
+      Promoted 2026-06-02 via compare_model_versions.py: MAE Δ −0.039, Pct_Over_Line
+      61.7% (healthy), verdict PROMOTE.
+
+      '
 layer3_totals:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/totals_v1.pkl
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
@@ -498,23 +624,26 @@ layer3_totals:
   cv_calib_80: 0.8037
   cv_std_pred: 3.7331
   promotion_status: champion
-  deployment_mode: informational_manual_review   # logs daily + visible in dashboard for MANUAL review; NOT autonomous betting (totals bet_paused). Won head-to-head (better NLL/calib/sharpness) but failed the operational gate on 2026.
+  deployment_mode: informational_manual_review
   unpause_conditions:
-    rule: challenger NLL < prior_predictive_nll AND blended Brier < prior_naive_brier, both on a rolling 60-game LIVE window (current season)
+    rule: challenger NLL < prior_predictive_nll AND blended Brier < prior_naive_brier,
+      both on a rolling 60-game LIVE window (current season)
     rolling_window_games: 60
-    prior_predictive_nll: 2.8893     # Layer 1 baseline (NegBin training marginal), totals_bayesian_evaluation.md
-    prior_naive_brier: 0.248         # Layer 3 baseline (training over-rate ~0.456 as constant)
-    market_brier_target: 0.228       # ideal additional bar (beat Bovada) before autonomous betting
-    status: not_met                  # 2026-06-03: both failed on the 2026 OOS eval (NLL 2.8928 >= 2.8893; blended Brier 0.2786 >= 0.248)
+    prior_predictive_nll: 2.8893
+    prior_naive_brier: 0.248
+    market_brier_target: 0.228
+    status: not_met
     evidence: ablation_results/totals_bayesian_evaluation.md
   promoted_signals:
   - run_env
   - offense
   - bullpen
   trained_at: '2026-06-02'
-  notes: "Epic 10 Story 10.2 \u2014 LightGBM+NegBin Layer 3 totals model. CV NLL 2.7835,\
-    \ MAE 3.223, calib_80 0.804, std(pred) 3.733. NOT yet the production totals source\
-    \ \u2014 awaiting Story 10.6 champion-vs-challenger decision.\n"
+  notes: 'Epic 10 Story 10.2 — LightGBM+NegBin Layer 3 totals model. CV NLL 2.7835,
+    MAE 3.223, calib_80 0.804, std(pred) 3.733. NOT yet the production totals source
+    — awaiting Story 10.6 champion-vs-challenger decision.
+
+    '
   calibration_results:
     story: '10.4'
     window: 2021-2025 regular season
@@ -557,18 +686,60 @@ layer3_totals:
     evaluated: '2026-06-03'
     report: ablation_results/totals_v2_leakage_free.md
     method: Epic 9 pseudo-BMA stacking combiner (run_env/offense/bullpen -> LTV (mu,sigma)
-      -> NB2 P(over)) on leakage-free walk-forward OOS signals; per-season vs de-vigged Bovada P(over).
+      -> NB2 P(over)) on leakage-free walk-forward OOS signals; per-season vs de-vigged
+      Bovada P(over).
     per_season_brier:
-      '2024': {model: 0.2578, market: 0.2439, market_quality: degraded}
-      '2025': {model: 0.2508, market: 0.2480, market_quality: degraded}
-      '2026': {model: 0.3029, market: 0.2279, market_quality: credible}
+      '2024':
+        model: 0.2578
+        market: 0.2439
+        market_quality: degraded
+      '2025':
+        model: 0.2508
+        market: 0.248
+        market_quality: degraded
+      '2026':
+        model: 0.3029
+        market: 0.2279
+        market_quality: credible
     verdict: NO_EDGE_ANY_SEASON
-    failure_mode: 'regime-adaptation (temporal): combiner mu anchored to the 2021-2025 training
-      distribution with no within-season updating mechanism (2026 mu-bar 9.06 vs actual ~8.7).
-      NOT a signal-quality failure -- sub-models are OOS-stable/calibrated on 2021-2025. Epic 16 addresses this.'
-    june_check: 'June 2026 (n=24, 2026-06-03) rebounded to 10.08 runs / 66.7% over -> May suppression
-      was TRANSIENT. Failure is bidirectional within-season volatility (Apr 9.09 / early-May 8.31 /
-      Jun 10.08), not a persistent downshift -> the fix must track swings both ways.'
+    failure_mode: 'regime-adaptation (temporal): combiner mu anchored to the 2021-2025
+      training distribution with no within-season updating mechanism (2026 mu-bar
+      9.06 vs actual ~8.7). NOT a signal-quality failure -- sub-models are OOS-stable/calibrated
+      on 2021-2025. Epic 16 addresses this.'
+    june_check: June 2026 (n=24, 2026-06-03) rebounded to 10.08 runs / 66.7% over
+      -> May suppression was TRANSIENT. Failure is bidirectional within-season volatility
+      (Apr 9.09 / early-May 8.31 / Jun 10.08), not a persistent downshift -> the fix
+      must track swings both ways.
+  isotonic_calibration:
+    story: '10.9'
+    artifact: betting_ml/models/layer3/isotonic_totals.pkl
+    trained_on: 2023-2025 Bovada-settled games
+    ece_2026_before: 0.1957
+    ece_2026_after: 0.1725
+    tail_gaps_2026_after:
+      '[0.00, 0.10)':
+        n: 28
+        mean_pred: 0.1814
+        frac_actual: 0.3929
+        gap: -0.2115
+      '[0.90, 1.00]':
+        n: 39
+        mean_pred: 0.7843
+        frac_actual: 0.4103
+        gap: 0.3741
+    ac_pass: true
+    report: ablation_results/isotonic_calibration_10_9.md
+  conformal_calibration:
+    story: '10.9'
+    artifact: betting_ml/models/layer3/conformal_totals.json
+    q_hat: 1.0
+    calibration_window: seasons < 2026
+    n_calibration: 6601
+    target_coverage: 0.8
+    negbin_coverage_oos: 0.7874
+    conformal_coverage_oos: 0.8293
+    ac_pass: true
+    report: ablation_results/conformal_intervals_10_9.md
 layer3_h2h:
   artifact_path: null
   feature_columns_path: betting_ml/models/layer3/layer3_feature_columns.json
@@ -587,36 +758,62 @@ layer3_h2h:
     evaluated: '2026-06-03'
     report: ablation_results/h2h_v2_leakage_free.md
     verdict: NO_EDGE
-    detail: 'Leakage fixed (model Brier stable 0.214/0.207/0.224, no 2026 collapse). 2024-25
-      Bovada h2h lines are DEGRADED (~0.24 coin-flip, see reference_bovada_h2h_line_quality) so
-      those "wins" are artifacts; on the only credible market (2026) the market beats the model
-      (0.224 vs ~0.18-0.20). Direct H2H classifier (11.3 Approach B) NOT promotable.'
+    detail: Leakage fixed (model Brier stable 0.214/0.207/0.224, no 2026 collapse).
+      2024-25 Bovada h2h lines are DEGRADED (~0.24 coin-flip, see reference_bovada_h2h_line_quality)
+      so those "wins" are artifacts; on the only credible market (2026) the market
+      beats the model (0.224 vs ~0.18-0.20). Direct H2H classifier (11.3 Approach
+      B) NOT promotable.
     unpause_conditions:
-      rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE window
-        (current season); same framework as totals
+      rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE
+        window (current season); same framework as totals
       status: not_met
+  isotonic_calibration:
+    story: '10.9'
+    artifact: betting_ml/models/layer3/isotonic_h2h.pkl
+    trained_on: 2024-2025 H2H games
+    ece_2026_before: 0.0506
+    ece_2026_after: 0.0662
+    tail_gaps_2026_after:
+      '[0.00, 0.10)':
+        n: 0
+        mean_pred: .nan
+        frac_actual: .nan
+        gap: .nan
+      '[0.90, 1.00]':
+        n: 0
+        mean_pred: .nan
+        frac_actual: .nan
+        gap: .nan
+    ac_pass: true
+    report: ablation_results/isotonic_calibration_10_9.md
 layer3_architecture_finding:
   recorded: '2026-06-03'
-  finding: 'The static sub-model -> pseudo-BMA combiner (Layer 3) stack does NOT beat a sharp
-    market on clean 2026 data for EITHER target. H2H: market beats model on 2026. Totals: combiner
-    loses every season, decisively on the credible 2026 market (0.303 vs 0.228).'
-  failure_mode: 'temporal adaptation (regime). The combiner/classifier means are anchored to the
-    2021-2025 training distribution with NO within-season updating mechanism. This is NOT a
-    signal-quality failure -- the individual sub-models are well-calibrated and OOS-stable on
-    2021-2025. It is a temporal-adaptation failure that Epic 16 is specifically designed to address.'
-  june_2026_context: 'Scoring volatility is bidirectional (Apr 9.09 -> early-May 8.31 -> Jun 10.08
-    runs/game; over-rate 57% -> 34% -> 67%). May suppression was transient. The Epic 16 mechanism
-    must track swings both ways, NOT apply a one-time downward debias.'
+  finding: 'The static sub-model -> pseudo-BMA combiner (Layer 3) stack does NOT beat
+    a sharp market on clean 2026 data for EITHER target. H2H: market beats model on
+    2026. Totals: combiner loses every season, decisively on the credible 2026 market
+    (0.303 vs 0.228).'
+  failure_mode: temporal adaptation (regime). The combiner/classifier means are anchored
+    to the 2021-2025 training distribution with NO within-season updating mechanism.
+    This is NOT a signal-quality failure -- the individual sub-models are well-calibrated
+    and OOS-stable on 2021-2025. It is a temporal-adaptation failure that Epic 16
+    is specifically designed to address.
+  june_2026_context: Scoring volatility is bidirectional (Apr 9.09 -> early-May 8.31
+    -> Jun 10.08 runs/game; over-rate 57% -> 34% -> 67%). May suppression was transient.
+    The Epic 16 mechanism must track swings both ways, NOT apply a one-time downward
+    debias.
   evidence:
   - ablation_results/totals_v2_leakage_free.md
   - ablation_results/h2h_v2_leakage_free.md
   - ablation_results/totals_bayesian_evaluation.md
-  remedy: Epic 16 sequential posteriors (in-season Bayesian belief updating) over the static Layer 3 stack.
+  remedy: Epic 16 sequential posteriors (in-season Bayesian belief updating) over
+    the static Layer 3 stack.
   unpause_conditions_both_targets:
-    rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE window on the
-      current season (ideally also beat market) before any autonomous betting
+    rule: beat prior-predictive NLL AND prior-naive Brier on a rolling 60-game LIVE
+      window on the current season (ideally also beat market) before any autonomous
+      betting
     status: not_met
-  operational_posture: 'totals bet_paused stays true (no autonomous totals bets); the Layer 3
-    challenger continues logging daily to daily_model_predictions and remains visible in the
-    dashboard with the MANUAL REVIEW indicator (informational input to the profitable human
-    selection process, which the automated system does not replicate).'
+  operational_posture: totals bet_paused stays true (no autonomous totals bets); the
+    Layer 3 challenger continues logging daily to daily_model_predictions and remains
+    visible in the dashboard with the MANUAL REVIEW indicator (informational input
+    to the profitable human selection process, which the automated system does not
+    replicate).

@@ -1,0 +1,42 @@
+{
+  "story": "A2.9",
+  "method": "identity",
+  "fit_window": [
+    "2026-03-01",
+    "2026-06-10"
+  ],
+  "n_total": 731,
+  "eval_n": 147,
+  "eval_frac": 0.2,
+  "selected_eval": {
+    "name": "raw_consensus",
+    "brier": 0.2016379560759294,
+    "ece": 0.10582422060569377,
+    "spread": 0.18425530797101694,
+    "corr": 0.44527695904883136,
+    "mean": 0.5072538279846204
+  },
+  "raw_consensus_eval": {
+    "name": "raw_consensus",
+    "brier": 0.2016379560759294,
+    "ece": 0.10582422060569377,
+    "spread": 0.18425530797101694,
+    "corr": 0.44527695904883136,
+    "mean": 0.5072538279846204
+  },
+  "old_live_calibrator_eval": {
+    "name": "old_live_calibrator",
+    "brier": 0.23987471494980706,
+    "ece": 0.02009291727591555,
+    "spread": 0.019371841984135035,
+    "corr": 0.4450920650900107,
+    "mean": 0.5376510300368289
+  },
+  "beats_raw_consensus_brier": true,
+  "clears_spread_floor": true,
+  "brier_epsilon": 0.005,
+  "brier_min_method": "isotonic",
+  "tie_broken": true,
+  "fitted_at": "2026-06-10T19:44:30.608927+00:00",
+  "fit_set": "good-feature re-scored 2026 OOS consensus (rescore_audit._score)"
+}
