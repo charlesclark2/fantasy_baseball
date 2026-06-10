@@ -24,13 +24,17 @@ with
 
 -- Spine: one row per game_pk × team; both teams per game
 games as (
+    -- A1.11 — spine on mart_game_spine (adds today's scheduled games); the
+    -- rolling/platoon joins below are as-of (game_date < spine.game_date), so
+    -- today's row carries forward each team's latest completed-game stats.
     select
         game_pk,
         game_date,
         game_year,
         home_team    as team_abbrev,
-        'home'       as side
-    from {{ ref('mart_game_results') }}
+        'home'       as side,
+        is_scheduled
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 
     union all
@@ -40,8 +44,9 @@ games as (
         game_date,
         game_year,
         away_team    as team_abbrev,
-        'away'       as side
-    from {{ ref('mart_game_results') }}
+        'away'       as side,
+        is_scheduled
+    from {{ ref('mart_game_spine') }}
     where game_type = 'R'
 ),
 
@@ -210,12 +215,94 @@ season_record as (
 
 -- ── Pythagorean rolling residual (trailing 30 days, pre-game) ─────────────────
 -- Card 8.X. Leakage guard already enforced inside the mart's window.
+-- A1.11 — exact pre-game row for completed games (byte-for-byte unchanged);
+-- as-of latest prior row for today's SCHEDULED games (which have no exact row,
+-- as this mart is results-derived). The branch is gated on is_scheduled so
+-- historical rows keep their exact value (incl. intentional <10-game NULLs).
 pythagorean_30d as (
     select
-        game_pk,
-        team_abbrev,
-        pythagorean_residual_30d
-    from {{ ref('mart_team_pythagorean_rolling') }}
+        g.game_pk,
+        g.team_abbrev,
+        pr.pythagorean_residual_30d
+    from games g
+    left join {{ ref('mart_team_pythagorean_rolling') }} pr
+        on  pr.team_abbrev = g.team_abbrev
+        and (
+            (not g.is_scheduled and pr.game_pk = g.game_pk)
+            or (g.is_scheduled and pr.game_date::date < g.game_date::date)
+        )
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by iff(pr.game_pk = g.game_pk, 1, 0) desc, pr.game_date::date desc nulls last
+    ) = 1
+),
+
+-- ── Bullpen workload / effectiveness (A1.11 exact-or-as-of) ───────────────────
+-- These two marts are pitch-derived (completed games only), so today's
+-- scheduled games can never have an exact row. Same pattern as pythagorean:
+-- exact game_pk row for completed games (unchanged); for scheduled games carry
+-- forward the team's most recent prior row (matches the A1.8 assembly's
+-- carry-forward semantics so the feature_store path reaches coverage parity).
+bullpen_workload_resolved as (
+    select
+        g.game_pk,
+        g.team_abbrev,
+        bw.bullpen_pitches_prev_1d,
+        bw.bullpen_pitches_prev_3d,
+        bw.bullpen_pitches_prev_7d,
+        bw.pitchers_used_prev_3d,
+        bw.pitchers_used_prev_7d,
+        bw.reliever_appearances_prev_3d,
+        bw.reliever_appearances_prev_7d,
+        bw.high_leverage_used_prev_2d,
+        bw.closer_used_prev_1d,
+        bw.closer_used_prev_2d,
+        bw.bullpen_ip_prev_1d,
+        bw.bullpen_ip_prev_2d,
+        bw.pitchers_used_prev_2d
+    from games g
+    left join {{ ref('mart_bullpen_workload') }} bw
+        on  bw.pitching_team = g.team_abbrev
+        and (
+            (not g.is_scheduled and bw.game_pk = g.game_pk)
+            or (g.is_scheduled and bw.game_date::date < g.game_date::date)
+        )
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by iff(bw.game_pk = g.game_pk, 1, 0) desc, bw.game_date::date desc nulls last
+    ) = 1
+),
+
+bullpen_effectiveness_resolved as (
+    select
+        g.game_pk,
+        g.team_abbrev,
+        be.k_pct_14d,
+        be.bb_pct_14d,
+        be.xwoba_against_14d,
+        be.hard_hit_pct_14d,
+        be.whiff_rate_14d,
+        be.innings_pitched_14d,
+        be.k_pct_30d,
+        be.bb_pct_30d,
+        be.xwoba_against_30d,
+        be.hard_hit_pct_30d,
+        be.whiff_rate_30d,
+        be.innings_pitched_30d,
+        be.eb_bullpen_xwoba,
+        be.eb_bullpen_uncertainty,
+        be.eb_bullpen_coverage_pct
+    from games g
+    left join {{ ref('mart_bullpen_effectiveness') }} be
+        on  be.team_abbrev = g.team_abbrev
+        and (
+            (not g.is_scheduled and be.game_pk = g.game_pk)
+            or (g.is_scheduled and be.game_date::date < g.game_date::date)
+        )
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by iff(be.game_pk = g.game_pk, 1, 0) desc, be.game_date::date desc nulls last
+    ) = 1
 ),
 
 -- ── Elo rating as of before this game (Card 8.D) ─────────────────────────────
@@ -398,10 +485,10 @@ final as (
     left join pythagorean_30d py30
         on  py30.game_pk     = g.game_pk
         and py30.team_abbrev = g.team_abbrev
-    left join {{ ref('mart_bullpen_workload') }} bw
-        on  bw.pitching_team = g.team_abbrev
+    left join bullpen_workload_resolved bw
+        on  bw.team_abbrev   = g.team_abbrev
         and bw.game_pk       = g.game_pk
-    left join {{ ref('mart_bullpen_effectiveness') }} be
+    left join bullpen_effectiveness_resolved be
         on  be.team_abbrev   = g.team_abbrev
         and be.game_pk       = g.game_pk
     left join {{ ref('mart_team_schedule_context') }} sc

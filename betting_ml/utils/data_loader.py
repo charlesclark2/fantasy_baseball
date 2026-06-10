@@ -213,6 +213,44 @@ def _numeric_convert(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# A1.11 Stage 3 — feature-store readiness gate. Once the schedule-spined feature
+# pipeline is built to prod, today's games appear in feature_pregame_game_features
+# and load_todays_features prefers that path. To avoid auto-flipping live serving
+# onto a HALF-populated feature store (e.g. a mart that didn't rebuild), we only
+# use the feature_store rows when their mean block coverage clears this gate;
+# otherwise we fall back to the intraday assembly. Mirrors the 6 blocks scored by
+# predict_today.py::_feature_coverage_score / the A1.10 coverage check.
+_FEATURE_STORE_COVERAGE_BLOCKS = {
+    "lineup":       ["home_avg_eb_woba", "away_avg_eb_woba"],
+    "starter":      ["home_starter_eb_xwoba_against", "away_starter_eb_xwoba_against"],
+    "team_rolling": ["home_off_woba_30d", "away_off_woba_30d"],
+    "bullpen_eb":   ["home_bp_eb_xwoba", "away_bp_eb_xwoba"],
+    "sequential":   ["home_team_sequential_woba", "away_team_sequential_woba"],
+    "odds":         ["over_prob_consensus"],
+}
+
+# Minimum mean coverage for the feature_store path to be trusted for live serving.
+# Default 0.70 matches the A1.10 warn threshold (below the ~0.77 intraday-assembly
+# steady state, so the store is used once it reaches assembly-equivalent coverage).
+_MIN_FEATURE_STORE_COVERAGE = float(os.environ.get("FEATURE_STORE_MIN_COVERAGE", "0.70"))
+
+
+def _feature_store_mean_coverage(df: pd.DataFrame) -> float:
+    """Mean fraction of populated feature blocks across today's feature-store rows."""
+    if df.empty:
+        return 0.0
+    n_blocks = len(_FEATURE_STORE_COVERAGE_BLOCKS)
+    total = 0.0
+    for _, row in df.iterrows():
+        covered = sum(
+            1
+            for cols in _FEATURE_STORE_COVERAGE_BLOCKS.values()
+            if all(c in df.columns and pd.notna(row[c]) for c in cols)
+        )
+        total += covered / n_blocks
+    return round(total / len(df), 3)
+
+
 # A1.9 — cross-source team joins resolve through the canonical team dimension
 # (dim_team_name_lookup) instead of an inline alias map. The MLB Stats API and
 # the odds feeds disagree on a few franchise names (most notably the Athletics:
@@ -618,10 +656,17 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
 def load_todays_features(target_date: str) -> pd.DataFrame:
     """Load pregame features for all regular-season games on target_date.
 
-    First tries a direct Snowflake query. If no rows are found (typical for
-    today's games during the season, since the feature pipeline runs overnight
-    after games complete), falls back to assembling features via MLB Stats API
-    schedule + latest per-team stats from Snowflake.
+    Path selection (A1.11):
+      1. feature_store — query feature_pregame_game_features directly. After the
+         schedule-spine re-spine (A1.11) this contains today's not-yet-played
+         games. Used only when the rows clear the coverage gate
+         (_MIN_FEATURE_STORE_COVERAGE), so a half-built feature store can't
+         silently degrade serving.
+      2. intraday assembly — the fallback (Stats API schedule + latest per-team
+         stats + today's lineup/starter/EB overlay). Used when the feature store
+         has no rows for today (pipeline not yet run) OR its coverage is below the
+         gate. Pre-A1.11 this was the everyday path; post-A1.11 it is the
+         outage / low-coverage fallback.
 
     Does NOT join to mart_game_results (today's scores don't exist yet).
     Does NOT apply has_full_data or min_games_played filters.
@@ -635,12 +680,22 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
         rows = cur.fetchall()
         if rows:
             df = pd.DataFrame(rows, columns=columns)
-            df["data_source"] = "feature_store"
-            return _numeric_convert(df)
+            # A1.11 Stage 3 — only trust the feature_store path if today's rows
+            # actually clear the coverage gate; otherwise fall through to the
+            # intraday assembly so a half-built feature store can't silently
+            # degrade live serving.
+            cov = _feature_store_mean_coverage(df)
+            if cov >= _MIN_FEATURE_STORE_COVERAGE:
+                print(f"[INFO] feature_store serving {len(df)} game(s) for {target_date} "
+                      f"(mean block coverage {cov:.2f} ≥ {_MIN_FEATURE_STORE_COVERAGE:.2f}).")
+                df["data_source"] = "feature_store"
+                return _numeric_convert(df)
+            print(f"[INFO] feature_store rows found for {target_date} but mean coverage "
+                  f"{cov:.2f} < {_MIN_FEATURE_STORE_COVERAGE:.2f}; falling back to intraday assembly.")
     finally:
         conn.close()
 
-    print(f"  No rows in feature table for {target_date}; assembling from Stats API schedule...")
+    print(f"  No usable feature-store rows for {target_date}; assembling from Stats API schedule...")
     print("[INFO] Intraday assembly active — team-level rolling/EB-bullpen/standings columns carry "
           "forward from each team's last completed game; today's lineup + starter features (incl. EB "
           "batter/pitcher posteriors) are overlaid fresh by game_pk (Epic A1).")

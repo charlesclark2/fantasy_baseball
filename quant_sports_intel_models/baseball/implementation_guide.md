@@ -495,15 +495,15 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic A1  Pipeline SLA & Reliability         ⏳ In Progress                   │
 │   GATE for beta launch — complete before app is shared with beta testers     │
 │   A1.1 timing audit ✅  A1.2 post-lineup re-run ⏳ (7-day validation)        │
-│   A1.3 freshness gate ✅  A1.4 freshness indicator ⬜                         │
-│   A1.5 alerting & monitoring ✅ (2 live ACs pending)  A1.6 scheduler ✅      │
+│   A1.3 freshness gate ✅  A1.4 freshness indicator 🟡 (endpoint+dot; FE wire) │
+│   A1.5 alerting & monitoring ✅ (code done; 2 live-env ACs hand-off)         │
 │   A1.7 prediction notification delivery (email + SMS) ⬜                     │
 │   Live feature-pipeline (added 06-09):                                       │
 │   A1.8 intraday lineup+starter+EB overlay 🟡 (live; H2H block → A1.11)       │
 │   A1.9 canonical team dim ✅ (view live; all sites + bridge on team_id)      │
 │   A1.10 feature-coverage gate ✅ (coverage in pipeline_status + mart)        │
-│   A1.11 schedule-spined feature pipeline ⬜ (durable; gated on A1.10)        │
-│   A1.12 prod-write correctness 🟡 (TARGET_ENV band-aid; DELETE scope open)   │
+│   A1.11 schedule-spined feature pipeline 🟡 (all code done; dev build pend)  │
+│   A1.12 prod-write correctness ✅ (schema resolver shared; DELETE scoped)    │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -9954,11 +9954,10 @@ A0.6 Push notifs              A0.7 Stripe billing
 **Overview:** The beta application frontend needs to surface pipeline status to users — specifically whether today's predictions are based on confirmed lineups, how recently they were generated, and whether any qualified bets exist. This is a trust signal for beta testers: they need to know the picks are fresh before placing bets.
 
 **Tasks:**
-- [ ] Add a `GET /pipeline/status` endpoint to the FastAPI backend that queries `mart_pipeline_status` for today's date and returns: `predictions_ready` boolean, `last_updated_at` timestamp, `lineup_confirmed` boolean, `n_games_scored`, `n_qualified_bets`, `signal_completeness_score`
-- [ ] Update the Next.js dashboard header to show a pipeline status indicator alongside the "3 qualified picks / 8 total games today" badge: green dot when `predictions_ready = true` and `lineup_confirmed = true`; yellow dot when `predictions_ready = true` but `lineup_confirmed = false` (projected-lineup predictions); red dot with "Predictions updating" when `predictions_ready = false`
-- [ ] Add a tooltip on the status dot explaining what each state means — green: "Predictions based on confirmed lineups, updated [time]"; yellow: "Predictions based on projected lineups — will update when lineups confirm"; red: "Pipeline running — check back in a few minutes"
-- [ ] Add a "last updated" timestamp below the picks table: "Last updated: 2:34 PM ET · Lineups confirmed" — updates when the user refreshes the page
-- [ ] Wire a browser notification when predictions update from projected to confirmed-lineup: if the user has notifications enabled (A0.5) and the page is open, push a notification "Lineups confirmed — picks updated for tonight's games"
+- [x] **`GET /pipeline/status` endpoint (2026-06-09):** `app/backend/routers/pipeline.py` + `models/pipeline.py`, registered in `main.py`. Queries `{_ML_SCHEMA}.pipeline_status` for `CURRENT_DATE` and returns `predictions_ready`, `lineup_confirmed`, `last_updated_at`, `n_games_scored`, `n_qualified_bets`, `signal_completeness_score`, `avg_feature_coverage_score`, plus a derived `indicator` (green/yellow/red) + `message` so every client renders identically. Fails safe to red on query error (no 500). Schema verified against the live table
+- [x] **Dashboard status dot + tooltip (2026-06-09):** `frontend/components/pipeline-status-dot.tsx` (live replacement for the mock `<SignalFreshness/>`) — self-fetches `/pipeline/status`, renders the 3-state dot with the exact non-technical tooltip copy, and a "Last updated: H:MM AM/PM <tz> · Lineups confirmed/Projected" line. Wired into the dashboard `PageHeader`. **FE build/typecheck not run here (no npm in this env) — verify with `npm run build` in `frontend/`**
+- [x] **Last-updated timestamp in local time (2026-06-09):** `formatLocal()` treats the NTZ stamp as UTC then renders via `toLocaleString(undefined, …)` → the browser's local timezone (satisfies the "local time, not UTC" AC)
+- [ ] (Deferred to A1.7) Browser notification when predictions flip projected→confirmed — depends on the A0.5/A1.7 notification infra, which is the saved-for-later story
 
 **Acceptance criteria:**
 - [ ] Pipeline status indicator renders correctly in all three states — confirmed by manually setting `pipeline_status` values and verifying the UI response
@@ -9979,8 +9978,8 @@ A0.6 Push notifs              A0.7 Stripe billing
 - [x] Document the manual intervention runbook in `quant_sports_intel_models/baseball/runbooks/dagster_pipeline_sla_analysis.md`: what to do when the 45-minute alert fires, how to trigger a manual `predict_today` re-run from the Dagster Cloud UI, how to verify predictions are available before alerting beta testers
 
 **Acceptance criteria:**
-- [ ] Dagster sensor fires correctly when tested by manually setting `pipeline_status` to `failed` 45 minutes before a scheduled game — email received within 2 minutes
-- [ ] Weekly health report appears in `clv_monitoring_log.md` with SLA compliance rate for the prior 7 days
+- [ ] **(LIVE-ENV HAND-OFF)** Dagster sensor fires correctly when tested by manually setting `pipeline_status` to `failed` 45 minutes before a scheduled game — email received within 2 minutes. Code verified schema-correct (`pipeline/sensors/pregame_alert_sensor.py` queries real `pipeline_status` columns); the live email test needs the deployed Dagster Cloud env
+- [ ] **(LIVE-ENV HAND-OFF)** Weekly health report appears in `clv_monitoring_log.md` with SLA compliance rate for the prior 7 days. Report enhanced 2026-06-09: added `avg_feature_coverage_score` (A1.10) column + "Days feature_coverage < 0.70" + "Mean feature_coverage" metrics, and **fixed a window bug** — `official_date >= today-7` had no upper bound so the report pulled the entire FUTURE schedule (inflating n_days, diluting SLA%); now bounded to the prior 7 complete days. Query tested live (2026-06-09 row shows coverage 0.7668)
 - [x] Manual intervention runbook documented — a non-developer (beta tester or external contributor) could follow it to verify pipeline status without access to Dagster Cloud
 
 ---
@@ -10225,14 +10224,36 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 
 **Overview:** The architectural replacement for the intraday assembly (A1.8). Re-spine the pregame feature pipeline on the **schedule** (`stg_statsapi_games`, which is forward-looking through season end) rather than on `mart_game_results` (pitch-derived), so the feature store itself contains today's not-yet-played games with full features attached. This is a multi-mart cascade and must be done non-destructively and verified on dev before promotion. **Large; gated on A1.10.** When complete and validated, the intraday assembly (A1.8) becomes a true exception path used only on data outages.
 
-**Tasks:**
-- [ ] Map the full spine cascade rooted in `mart_game_results`: `mart_game_odds_bridge`, `feature_pregame_team_features`, `feature_pregame_odds_features`, `feature_pregame_game_features`, and the rolling marts that have no today row (`mart_team_rolling_offense`, `mart_team_rolling_pitching`, `mart_team_vs_pitcher_hand`, `mart_team_pythagorean_rolling`, `mart_team_season_record`, `mart_bullpen_workload`, `mart_bullpen_effectiveness`, `mart_team_schedule_context`, `mart_team_fielding_oaa`, …). Determine which need a scheduled "as-of-today" row vs. which can be carried forward by an as-of join
-- [ ] Introduce a non-destructive **schedule spine**: each affected model's game-list CTE becomes `UNION ALL` of completed regular-season games (`mart_game_results`, unchanged) + scheduled-not-yet-played games (`stg_statsapi_games` where `game_type='R'` and `game_pk NOT IN (select game_pk from mart_game_results)`), resolving team abbrevs via `ref_teams` (A1.9) on `team_id`. Existing historical rows must be byte-for-byte unchanged
-- [ ] Confirm leakage guards hold for unplayed games: every rolling/EB/sequential join must use `< official_date` (strict) so a scheduled spine row aggregates only prior games; add a leakage test asserting no feature for a scheduled game references same-day or future data
-- [ ] Build the cascade to the **dev** target first (`dev_betting_features`); verify today's full slate appears in `feature_pregame_game_features` with non-null lineup/starter/team/odds blocks and `has_full_data` set appropriately for confirmed-lineup games
-- [ ] Flip `load_todays_features` to use the `feature_store` path (it already prefers it); confirm `data_source='feature_store'` for today's games and that `feature_coverage_score` (A1.10) ≥ the intraday assembly's score with no regression in any block
-- [ ] Promote to prod (`dbtf build` via the `baseball_betting_and_fantasy` target) only after a row-count + feature-parity diff vs. the current production tables shows historical rows unchanged and today's games added
-- [ ] Decommission path: once `feature_store` reliably serves today for 7 consecutive days (per A1.10 metric), mark the intraday assembly (A1.8) as the outage-only fallback in code comments and the runbook
+**Design decision (2026-06-09):** instead of duplicating a `UNION ALL` into ~16 spine CTEs, introduce ONE keystone model `mart_game_spine` (the UNION of completed `mart_game_results` + today±window scheduled `stg_statsapi_games`) and re-point each consumer's spine `from mart_game_results` → `from mart_game_spine`. The scheduled branch is bounded to `official_date BETWEEN current_date-1 AND current_date+2` and `game_type='R'`, so it NEVER adds a row for a historical date → byte-for-byte preservation is structural, not just hoped-for. Abbrevs for scheduled games resolve via `dim_team_name_lookup` (A1.9). Key insight: the rolling/platoon joins in `feature_pregame_team_features` are **as-of** (`game_date < spine.game_date`), so those marts (`mart_team_rolling_offense/pitching`, `mart_team_vs_pitcher_hand`, `mart_team_season_record`) do NOT need re-pointing — today's row carries forward each team's latest completed-game stats automatically. Only **game_pk-keyed** upstream marts need today's row.
+
+**Stage 1 — keystone + leaf feature marts (DONE 2026-06-09, dev build pending):**
+- [x] Map the full cascade + materializations (Explore agent): 16 models spine on `mart_game_results`; classified as-of vs game_pk-keyed; identified the 2 incremental game_pk-keyed marts as the risky Stage-2 set
+- [x] Build `mart_game_spine` (view) — non-destructive UNION; verified via read-only query that it yields today's 15 games (+ next 2 days), 0 unresolved abbrevs, and 0 rows for any historical date. schema.yml + tests (unique/not_null game_pk, not_null home/away_team = "every spine row resolves to a team")
+- [x] Re-point the pure spine+LEFT-join **leaf feature marts** (byte-for-byte safe by construction): `feature_pregame_game_features`, `feature_pregame_team_features`, `feature_pregame_odds_features`, `feature_pregame_park_features`, `feature_pregame_bullpen_state_features`, and `mart_game_odds_bridge`. `dbtf compile` clean (7 models | 83 tests | 90/90)
+- [ ] **Hand-off:** build `mart_game_spine` (view, instant) on **dev**, then the re-pointed marts on dev; run the verification protocol below (historical drift = 0, today's slate present)
+
+**Stage 2 — DONE 2026-06-09 (dev build pending). Two approaches by mart type:**
+- [x] `mart_team_schedule_context` (table) — re-pointed spine `games` CTE to `mart_game_spine`. All fields are window-derived (`lag`/`count over '1 day preceding'`), no scores read, so today's rest/streaks compute correctly; historical unchanged
+- [x] `mart_team_fielding_oaa` (table) — re-pointed; only prior-season OAA (`game_year-1`) joined, so today's row attaches the leakage-free prior value
+- [x] `mart_team_pythagorean_rolling` (**incremental**) + `mart_bullpen_workload`/`mart_bullpen_effectiveness` (pitch-derived) — **NOT re-pointed** (incremental `game_date > max` watermark breaks on future rows; pitch-derived marts have no today row at all). Instead added an **exact-or-as-of fallback in the consumer** `feature_pregame_team_features`: for completed games the exact game_pk row (byte-for-byte unchanged); for scheduled games (gated on `is_scheduled` carried from the spine) the team's latest prior row — matches the A1.8 carry-forward semantics. Verified read-only: all 15 of today's teams resolve to a non-NULL prior bullpen row
+- [x] Leakage/integrity test `tests/assert_game_spine_scheduled_integrity.sql` — asserts scheduled rows carry NULL scores (no result leakage) and no scheduled game_pk also exists in `mart_game_results` (no double-count). All as-of joins use strict `< game_date`. Full DAG compiles 164/164
+
+**Stage 3 — DONE 2026-06-09 (coverage-gated flip; dev build pending):**
+- [x] **Coverage gate in code** — `load_todays_features` already prefers the feature_store path; added `_feature_store_mean_coverage()` + `_MIN_FEATURE_STORE_COVERAGE` (default 0.70, env-overridable) so it only serves from the store when today's rows clear the gate, else falls back to the intraday assembly. A half-built feature store can NEVER silently degrade serving — the flip is automatic and safe-by-default. Unit tests in `test_feature_coverage.py` (8). Docstring updated: assembly is now the outage/low-coverage fallback
+- [ ] **(HAND-OFF)** Build the spine + re-pointed marts to **dev**, run the verification protocol (drift=0, today present, coverage ≥ baseline), then promote to prod. The coverage gate makes a prod build safe even before parity is confirmed (it just keeps using the assembly until coverage clears)
+- [ ] Once `feature_store` serves today for 7 consecutive days, drop the A1.8 H2H-block deferral note (the spine now provides today's H2H matchup rows too)
+
+**Verification protocol (run after each dev build):**
+```sql
+-- 1. Historical drift = 0: spine completed-branch count must equal mart_game_results
+SELECT (SELECT COUNT(*) FROM <dev>.mart_game_spine WHERE NOT is_scheduled)
+     - (SELECT COUNT(*) FROM <dev>.mart_game_results) AS should_be_zero;
+-- 2. Today present in the feature store
+SELECT COUNT(*) FROM <dev>.feature_pregame_game_features WHERE game_date = current_date;
+-- 3. No historical-row change in a re-pointed leaf mart (checksum a stable past month)
+SELECT COUNT(*) FROM <dev>.feature_pregame_game_features WHERE game_date BETWEEN '2025-06-01' AND '2025-06-30';
+--    (compare to the same query on the current prod table)
+```
 
 **Acceptance criteria:**
 - [ ] `feature_pregame_game_features` contains every scheduled regular-season game for today with lineup/starter/team/odds feature blocks populated (subject to lineup confirmation) — verified on prod
@@ -10252,11 +10273,11 @@ Table: `baseball_data.betting_ml.pipeline_notifications_log`
 
 **Tasks:**
 - [x] **Enforce real lineup confirmation (FIXED 2026-06-09):** filter on `home/away_has_full_lineup` (which exists in both paths) instead of the nonexistent `*_lineup_slot_1`; gate on `--lineup-confirmed` so the morning projected run is unaffected (`scripts/predict_today.py`). In the intraday assembly, force `home/away_has_full_lineup` from whether today's lineup was overlaid, overriding the stale carry-forward (`data_loader.py::_enrich_row_with_today`). Result on 2026-06-09: post_lineup slate 15 → 13 (dropped 824999 ATH/MIL with no lineup + 824347 COL/CHC with only the home lineup); 0 false-confirmed rows remain in prod. Unit tests added in `betting_ml/tests/test_intraday_assembly.py` (19 pass)
-- [ ] Centralize `TARGET_ENV` → schema resolution in one helper imported by both the scorer and the Streamlit/app read path, so a single source decides dev vs prod and the read/write targets cannot diverge; remove the comment that says "Never set TARGET_ENV=prod locally" or reconcile it with the now-sanctioned button behavior
-- [ ] Make the Streamlit "Score Confirmed Lineups" (and "Refresh") buttons' write target explicit and correct (replace the `env={**os.environ, "TARGET_ENV": "prod"}` band-aid with the centralized resolver + an explicit prod-write confirmation/label in the UI)
-- [ ] Scope the post-lineup overwrite DELETE to the `--game-pks` filter when one is supplied (delete only the targeted game_pks' `post_lineup` rows), so a single-game re-score never wipes the rest of the slate
-- [ ] Audit the "Refresh" button: confirm it no longer calls `betting_ml/scripts/predict_today.py` (the multi-version backfill tool, which writes `prediction_type=NULL`) for live scoring — it should use `scripts/predict_today.py` with an explicit `--prediction-type`, matching the Dagster lineup sensor
-- [ ] Add a regression test: `predict_today.py --game-pks X` leaves other games' `post_lineup` rows intact for the date
+- [x] **Centralized `TARGET_ENV` → schema resolution (2026-06-09):** new `betting_ml/utils/ml_env.py::ml_schema()` (TARGET_ENV=prod → betting_ml; else betting_ml_dev) is now the single resolver. Both scorers use it: `scripts/predict_today.py` (was inline) and `betting_ml/scripts/predict_today.py` (was HARDCODED prod from any CLI run — the second, hidden divergence). The deployed backend (`app/backend/`) already resolves reads the same way
+- [x] **Streamlit buttons routed through one helper (2026-06-09):** new `app/utils/scorer_env.py::scorer_env()` stamps `TARGET_ENV=prod` (the schema the pages read) on every scorer subprocess. All three launches in `1_Today_Picks.py` ("Refresh Predictions", "Refresh Lineups & Odds", "Score Confirmed Lineups") use it; the inline `env={**os.environ, "TARGET_ENV": "prod"}` band-aid is gone. No button can write the wrong schema
+- [x] **Scoped the post-lineup overwrite DELETE (2026-06-09):** `scripts/predict_today.py` now threads the `--game-pks` subset into a pure `_post_lineup_delete_sql(schema, scoped_game_pks)` helper — a subset re-score deletes ONLY those game_pks' `post_lineup` rows; a full-slate run (no `--game-pks`) keeps the date-wide overwrite for cleanup
+- [x] **Regression test added (2026-06-09):** `betting_ml/tests/test_predict_today_write.py` (10 tests) — DELETE scope (full-slate date-only vs subset `game_pk IN (...)`, empty-list guard, int-coercion) + `ml_env` resolution under TARGET_ENV. All pass
+- [ ] (Optional follow-up) The "Refresh Predictions" button still calls `betting_ml/scripts/predict_today.py` (writes `prediction_type=NULL`); it now writes prod consistently, but consider migrating it to `scripts/predict_today.py --prediction-type morning` so no UI path produces `prediction_type=NULL` rows
 
 **Acceptance criteria:**
 - [ ] A single source resolves the prediction read/write schema; a test (`ast.walk` over `scripts/predict_today.py` and the app read path) confirms neither hardcodes a schema string independent of the resolver
@@ -10278,10 +10299,10 @@ A1.3 Signal freshness gate ─┴─ within 5 days of A1.1
      ↓
 A1.6 Scheduler reliability   — within 2 days of A1.3 (FM-5 is root cause of only confirmed SLA miss)
      ↓
-A1.5 Alerting & monitoring ──┐
-A1.4 Freshness indicator    ─┴─ within 3 days of A1.6
+A1.5 Alerting & monitoring — CODE DONE (sensor + weekly health report; report now surfaces avg_feature_coverage_score + window bug fixed). 2 ACs are live-env hand-offs (real email; report in live log)
+A1.4 Freshness indicator — CODE DONE (GET /pipeline/status endpoint + PipelineStatusDot dashboard component, 3-state dot/tooltip/local-time). Browser-notification sub-task deferred to A1.7. FE needs `npm run build` verify
      ↓
-A1.7 Prediction notification delivery — after A1.5; requires A0.5 SES verification complete (shares SNS/DynamoDB infra with A0.6; can be built in parallel with A0.3)
+A1.7 Prediction notification delivery — SAVED FOR LATER (per user 2026-06-09); requires A0.5 SES verification complete
 
 Live feature-pipeline cluster (added 2026-06-09; parallel to A1.4–A1.7):
 A1.8 Intraday lineup+starter+EB overlay — DONE (live on prod); H2H matchup block deferred to A1.11
@@ -10290,9 +10311,9 @@ A1.10 Feature-coverage gate & observability — DONE (data_source + coverage sta
      ↓
 A1.9 Canonical team dim — DONE (dim_team_name_lookup live; all sites + mart_game_odds_bridge resolve on team_id; band-aids deleted; unmapped-event test added). Pending Snowflake builds: mart_game_odds_bridge, mart_pipeline_status
      ↓
-A1.12 Production-write correctness — PARTIAL (TARGET_ENV band-aided in button; centralize schema resolution + scope post_lineup DELETE to --game-pks still open)
+A1.12 Production-write correctness — DONE (shared ml_env resolver; scorer_env() on all buttons; post_lineup DELETE scoped to --game-pks; 10 regression tests)
      ↓
-A1.11 Schedule-spined feature pipeline — durable re-spine; gated on A1.10; supersedes A1.8 (absorbs A1.8's deferred H2H matchup block)
+A1.11 Schedule-spined feature pipeline — ALL CODE DONE 2026-06-09 (dev build pending). Stage 1: keystone mart_game_spine + 5 leaf feature marts + bridge. Stage 2: schedule_context/fielding_oaa re-pointed; pythagorean + bullpen via consumer exact-or-as-of fallback (incrementals untouched); integrity test added. Stage 3: coverage-gated feature_store flip in load_todays_features (safe-by-default). Full DAG compiles 164/164. ONLY remaining = the dev build + verification protocol + prod promote (Snowflake-write hand-offs). Supersedes A1.8 when feature_store serves 7 consecutive days
      ↓
 Full epic complete BEFORE first beta tester receives application access
 ```

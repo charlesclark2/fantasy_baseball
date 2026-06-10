@@ -385,7 +385,11 @@ WITH games_per_day AS (
            COUNT(*)                                AS n_scheduled
     FROM baseball_data.betting.stg_statsapi_games
     WHERE game_type = 'R'
-      AND official_date >= DATEADD('day', -7, CURRENT_DATE())
+      -- Prior 7 complete days only. Without the upper bound this pulled the whole
+      -- FUTURE schedule (every remaining game-day has official_date >= today-7),
+      -- inflating n_days and diluting the SLA compliance %.
+      AND official_date BETWEEN DATEADD('day', -7, CURRENT_DATE())
+                            AND DATEADD('day', -1, CURRENT_DATE())
     GROUP BY official_date
 ),
 ps AS (
@@ -395,6 +399,7 @@ ps AS (
            pipeline_status,
            n_games_scored,
            signal_completeness_score,
+           avg_feature_coverage_score,
            job_start_ts
     FROM baseball_data.betting_ml.pipeline_status
     WHERE run_date >= DATEADD('day', -7, CURRENT_DATE())
@@ -408,6 +413,7 @@ SELECT
     ps.pipeline_status,
     ps.n_games_scored,
     ps.signal_completeness_score,
+    ps.avg_feature_coverage_score,
     DATEDIFF('minute', ps.predict_today_complete_ts,
              g.earliest_first_pitch_utc)                    AS minutes_before_first_pitch
 FROM games_per_day g
@@ -431,6 +437,9 @@ def _load_pipeline_health() -> pd.DataFrame:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
     df["signal_completeness_score"] = pd.to_numeric(
         df["signal_completeness_score"], errors="coerce"
+    )
+    df["avg_feature_coverage_score"] = pd.to_numeric(
+        df["avg_feature_coverage_score"], errors="coerce"
     )
     df["minutes_before_first_pitch"] = pd.to_numeric(
         df["minutes_before_first_pitch"], errors="coerce"
@@ -459,12 +468,18 @@ def _section_pipeline_health() -> tuple[str, dict]:
 
     complete_days = int((df["pipeline_status"] == "complete").sum())
     low_signal_days = int((df["signal_completeness_score"] < 0.80).sum())
+    # A1.10/A1.11 — days the live feature pipeline served low-coverage predictions
+    # (below the 0.70 feature-store gate). Surfaces a degraded feature source even
+    # when the pipeline otherwise reports "complete".
+    low_coverage_days = int((df["avg_feature_coverage_score"] < 0.70).sum())
     short_scored_days = int(
         (df["n_games_scored"] < df["n_scheduled"]).sum()
     )
 
     runtimes = df["minutes_before_first_pitch"].dropna()
     mean_lead = float(runtimes.mean()) if len(runtimes) > 0 else float("nan")
+    cov_vals = df["avg_feature_coverage_score"].dropna()
+    mean_cov = float(cov_vals.mean()) if len(cov_vals) > 0 else float("nan")
 
     lines = [
         "### 8. Pipeline Health (last 7 days)",
@@ -475,26 +490,31 @@ def _section_pipeline_health() -> tuple[str, dict]:
         f"| SLA compliance (≥30 min before first pitch) | **{sla_met}/{n_days} ({sla_pct:.0%})** |",
         f"| Days pipeline_status = complete | {complete_days}/{n_days} |",
         f"| Days signal_completeness < 0.80 | {low_signal_days} |",
+        f"| Days feature_coverage < 0.70 | {low_coverage_days} |",
+        f"| Mean feature_coverage_score | {mean_cov:.2f} |",
         f"| Days n_games_scored < scheduled | {short_scored_days} |",
         f"| Mean prediction lead (min before first pitch) | {mean_lead:.0f} min |",
         "",
-        "| Date | Status | Scored/Sched | Signal | Lead (min) | SLA |",
-        "|------|--------|-------------|--------|-----------|-----|",
+        "| Date | Status | Scored/Sched | Signal | Coverage | Lead (min) | SLA |",
+        "|------|--------|-------------|--------|----------|-----------|-----|",
     ]
     for _, row in df.iterrows():
         status = row["pipeline_status"] or "missing"
         scored = f"{row['n_games_scored']}/{row['n_scheduled']}"
         sig = f"{row['signal_completeness_score']:.2f}" if pd.notna(row["signal_completeness_score"]) else "—"
+        cov = f"{row['avg_feature_coverage_score']:.2f}" if pd.notna(row["avg_feature_coverage_score"]) else "—"
         lead = f"{row['minutes_before_first_pitch']:.0f}" if pd.notna(row["minutes_before_first_pitch"]) else "—"
         sla_icon = "✅" if (pd.notna(row["minutes_before_first_pitch"]) and
                             row["minutes_before_first_pitch"] >= sla_threshold and
                             status == "complete") else "❌"
-        lines.append(f"| {row['official_date']} | {status} | {scored} | {sig} | {lead} | {sla_icon} |")
+        lines.append(f"| {row['official_date']} | {status} | {scored} | {sig} | {cov} | {lead} | {sla_icon} |")
 
     metrics = {
         "pipeline_sla_pct_7d": round(sla_pct, 4),
         "pipeline_complete_days_7d": complete_days,
         "pipeline_low_signal_days_7d": low_signal_days,
+        "pipeline_low_coverage_days_7d": low_coverage_days,
+        "pipeline_mean_feature_coverage_7d": round(mean_cov, 3) if not np.isnan(mean_cov) else 0.0,
         "pipeline_short_scored_days_7d": short_scored_days,
         "pipeline_mean_lead_min_7d": round(mean_lead, 1) if not np.isnan(mean_lead) else 0.0,
     }

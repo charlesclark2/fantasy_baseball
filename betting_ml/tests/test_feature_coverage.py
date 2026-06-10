@@ -39,3 +39,41 @@ class TestFeatureCoverageScore:
         df = pd.DataFrame([row])
         expected = round((len(_FEATURE_COVERAGE_BLOCKS) - 1) / len(_FEATURE_COVERAGE_BLOCKS), 3)
         assert _feature_coverage_score(df, 0) == expected
+
+
+# ── A1.11 Stage 3 — feature-store readiness gate (data_loader) ─────────────────
+
+from betting_ml.utils.data_loader import (
+    _FEATURE_STORE_COVERAGE_BLOCKS,
+    _feature_store_mean_coverage,
+)
+
+
+def _full_store_row() -> dict:
+    row = {}
+    for cols in _FEATURE_STORE_COVERAGE_BLOCKS.values():
+        for c in cols:
+            row[c] = 0.3
+    return row
+
+
+class TestFeatureStoreMeanCoverage:
+    def test_empty_df_is_zero(self):
+        assert _feature_store_mean_coverage(pd.DataFrame()) == 0.0
+
+    def test_fully_populated_is_one(self):
+        df = pd.DataFrame([_full_store_row(), _full_store_row()])
+        assert _feature_store_mean_coverage(df) == 1.0
+
+    def test_mean_across_rows(self):
+        # Row 1 fully populated (1.0); row 2 only odds block (1/6).
+        df = pd.DataFrame([_full_store_row(), {"over_prob_consensus": 0.5}])
+        n = len(_FEATURE_STORE_COVERAGE_BLOCKS)
+        expected = round((1.0 + (1 / n)) / 2, 3)
+        assert _feature_store_mean_coverage(df) == expected
+
+    def test_blocks_mirror_predict_today(self):
+        # The gate must score the SAME 6 blocks the scorer/A1.10 check use.
+        assert set(_FEATURE_STORE_COVERAGE_BLOCKS) == {
+            "lineup", "starter", "team_rolling", "bullpen_eb", "sequential", "odds",
+        }
