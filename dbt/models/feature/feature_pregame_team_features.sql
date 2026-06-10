@@ -323,12 +323,29 @@ bullpen_effectiveness_resolved as (
 ),
 
 -- ── Elo rating as of before this game (Card 8.D) ─────────────────────────────
+-- A2.3: spine-aware exact-or-as-of carry-forward (mirrors the bullpen / pythagorean
+-- branches above). Completed games (is_scheduled = false) take the EXACT game_pk's
+-- pre-game Elo — byte-for-byte unchanged. Scheduled games (is_scheduled = true)
+-- carry the team's latest strictly-prior POST-game Elo (elo_after_game = the rating
+-- entering the next game), so today's slate gets a real Elo instead of NULL →
+-- median-imputed constant (the A2.2 live-run found home/away_elo entirely null for
+-- the whole scheduled slate). Leakage-safe: strictly-prior rows only.
 elo_ratings as (
     select
-        game_pk,
-        team_abbrev,
-        elo_before_game
-    from {{ source('betting', 'team_elo_history') }}
+        g.game_pk,
+        g.team_abbrev,
+        iff(g.is_scheduled, eh.elo_after_game, eh.elo_before_game) as elo_before_game
+    from games g
+    left join {{ source('betting', 'team_elo_history') }} eh
+        on  eh.team_abbrev = g.team_abbrev
+        and (
+            (not g.is_scheduled and eh.game_pk = g.game_pk)
+            or (g.is_scheduled and eh.game_date::date < g.game_date::date)
+        )
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by iff(eh.game_pk = g.game_pk, 1, 0) desc, eh.game_date::date desc nulls last
+    ) = 1
 ),
 
 final as (

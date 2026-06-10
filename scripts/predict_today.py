@@ -33,6 +33,7 @@ from betting_ml.utils.model_io import load_model
 from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
+    compute_actionable_edge,
     compute_kelly,
     compute_bet_permission,
 )
@@ -123,16 +124,16 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- H2H (moneyline) market — NULL when has_odds = FALSE
     h2h_market_implied_prob FLOAT,   -- consensus vig-adjusted P(home wins)
     h2h_posterior_prob      FLOAT,   -- Bayesian blend of model and market
-    h2h_edge                FLOAT,   -- calibrated_win_prob - h2h_market_implied_prob
-    h2h_kelly_fraction      FLOAT,   -- full Kelly fraction (positive = bet home)
+    h2h_edge                FLOAT,   -- A2.5: actionable edge = h2h_posterior_prob - h2h_market_implied_prob (alpha-aware; ~0 when best_alpha=0). Raw cal-vs-market gap lives in layer4_h2h_edge.
+    h2h_kelly_fraction      FLOAT,   -- full Kelly fraction sized off h2h_edge (positive = bet home; ~0 when best_alpha=0)
 
     -- Totals market — NULL when has_odds = FALSE
     total_line_consensus    FLOAT,   -- consensus over/under line
     over_prob_consensus     FLOAT,   -- consensus vig-adjusted P(over)
     totals_model_prob       FLOAT,   -- NGBoost P(total > total_line_consensus)
     totals_posterior_prob   FLOAT,
-    totals_edge             FLOAT,
-    totals_kelly_fraction   FLOAT,
+    totals_edge             FLOAT,   -- A2.5: actionable edge = totals_posterior_prob - over_prob_consensus (alpha-aware; ~0 when best_alpha=0)
+    totals_kelly_fraction   FLOAT,   -- full Kelly fraction sized off totals_edge (~0 when best_alpha=0)
 
     -- Epic 16.2 — game-level sequential-posterior provenance
     posterior_source        VARCHAR(20),  -- least-informed source across the game's players
@@ -150,7 +151,13 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- Epic 19 / Story 17.1b — bullpen OOD gate
     bullpen_z_score_home      FLOAT,        -- (bullpen_mu_home - training_mean) / training_std
     bullpen_z_score_away      FLOAT,        -- (bullpen_mu_away - training_mean) / training_std
-    bullpen_signal_ood        BOOLEAN       -- TRUE when |z_home|>1.5 or |z_away|>1.5; blocks totals bets
+    bullpen_signal_ood        BOOLEAN,      -- TRUE when |z_home|>1.5 or |z_away|>1.5; blocks totals bets
+
+    -- Story 28.3 — actual Bovada American moneyline odds at scoring time (not de-vigged).
+    -- Populated for every game with Bovada h2h odds; used by the magnitude kill-criterion
+    -- monitor to compute real-book ROI (decimal = 1 + 100/|odds| if negative, or odds/100+1 if positive).
+    layer4_h2h_bovada_ml_home INTEGER,      -- e.g. -158 (home favored) or +132 (home dog)
+    layer4_h2h_bovada_ml_away INTEGER       -- mirroring away-side American odds
 )
 """
 
@@ -172,7 +179,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     layer4_totals_decision, layer4_totals_over_signal,
     layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge,
     bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood,
-    data_source, feature_coverage_score
+    data_source, feature_coverage_score,
+    layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -190,7 +198,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(layer4_totals_decision)s, %(layer4_totals_over_signal)s,
     %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s,
     %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s,
-    %(data_source)s, %(feature_coverage_score)s
+    %(data_source)s, %(feature_coverage_score)s,
+    %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s
 )
 """
 
@@ -262,6 +271,61 @@ def _load_bullpen_ood_signals(target_date: str) -> dict[int, dict]:
             conn.close()
     except Exception as exc:  # noqa: BLE001
         print(f"  [Epic 19] bullpen OOD signals unavailable ({exc}); OOD gate will not fire.")
+        return {}
+
+
+# Story 28.3 — latest Bovada American moneyline odds (not de-vigged) per game_pk.
+# Used as the "real-book price taken" column for the magnitude kill-criterion monitor.
+# Joins through mart_game_odds_bridge because mart_odds_outcomes is keyed by event_id.
+_BOVADA_ML_QUERY = """
+WITH bridge AS (
+    SELECT game_pk, event_id
+    FROM baseball_data.betting.mart_game_odds_bridge
+    WHERE game_date = %(d)s
+),
+latest_bovada AS (
+    SELECT
+        o.event_id,
+        MAX(CASE WHEN o.is_home_outcome THEN o.outcome_price_american END) AS bovada_ml_home,
+        MAX(CASE WHEN NOT o.is_home_outcome THEN o.outcome_price_american END) AS bovada_ml_away
+    FROM baseball_data.betting.mart_odds_outcomes o
+    INNER JOIN bridge b ON b.event_id = o.event_id
+    WHERE o.bookmaker_key = 'bovada'
+      AND o.market_key = 'h2h'
+    GROUP BY o.event_id
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY o.event_id ORDER BY MAX(o.ingestion_ts) DESC) = 1
+)
+SELECT b.game_pk,
+       lb.bovada_ml_home,
+       lb.bovada_ml_away
+FROM bridge b
+JOIN latest_bovada lb ON lb.event_id = b.event_id
+"""
+
+
+def _load_bovada_ml_odds(target_date: str) -> dict[int, dict]:
+    """{game_pk: {"bovada_ml_home": int, "bovada_ml_away": int}} for scoring date.
+
+    Story 28.3: captures the actual Bovada American moneyline at scoring time so the
+    magnitude kill-criterion monitor can compute real-book ROI, not vig-free estimates.
+    Graceful — returns empty dict on any failure so scoring is never blocked."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_BOVADA_ML_QUERY, {"d": target_date})
+            out: dict[int, dict] = {}
+            for gpk, ml_home, ml_away in cur.fetchall():
+                out[int(gpk)] = {
+                    "bovada_ml_home": int(ml_home) if ml_home is not None else None,
+                    "bovada_ml_away": int(ml_away) if ml_away is not None else None,
+                }
+            print(f"  [28.3] Loaded Bovada ML odds for {len(out)} game(s).")
+            return out
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [28.3] Bovada ML odds unavailable ({exc}); columns will be NULL.")
         return {}
 
 
@@ -376,6 +440,7 @@ def _write_predictions_to_snowflake(
     score_date = date.fromisoformat(target_date)
     prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
     bullpen_ood_signals = _load_bullpen_ood_signals(target_date)  # Epic 19 — bullpen OOD gate
+    bovada_ml = _load_bovada_ml_odds(target_date)  # Story 28.3 — actual Bovada ML for kill-criterion monitor
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -384,22 +449,27 @@ def _write_predictions_to_snowflake(
         cons_win = ngb_win * 0.5 + clf_win * 0.5
         cal_win  = _apply_calibrator(cons_win)
 
-        # H2H market values — use calibrated_win_prob as the live edge input
+        # H2H market values — use calibrated_win_prob as the live edge input.
+        # A2.5 edge-artifact guard: the STORED/actionable edge is alpha-aware
+        # (posterior − market), so when best_alpha=0 the model adds no skill and the
+        # edge/Kelly collapse to ~0 — no phantom "bet every home underdog" picks. The
+        # raw model-vs-market gap is preserved separately for Layer 4 / CLV diagnostics.
         h2h_mkt_v  = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
-            h2h_edge  = compute_edge(cal_win, h2h_mkt_v)
+            h2h_raw_edge = compute_edge(cal_win, h2h_mkt_v)        # diagnostic only
             h2h_post  = compute_posterior(cal_win, h2h_mkt_v, best_alpha)
+            h2h_edge  = compute_actionable_edge(cal_win, h2h_mkt_v, best_alpha)
             h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
         else:
-            h2h_edge = h2h_post = h2h_kelly = None
+            h2h_raw_edge = h2h_edge = h2h_post = h2h_kelly = None
 
         # Totals market values
         over_mkt_v    = _f(over_mkt, i)
         total_line_v  = _f(total_line_vals, i)
         p_over_v      = float(p_over_total[i])
         if has_odds and over_mkt_v is not None:
-            tot_edge  = compute_edge(p_over_v, over_mkt_v)
             tot_post  = compute_posterior(p_over_v, over_mkt_v, best_alpha)
+            tot_edge  = compute_actionable_edge(p_over_v, over_mkt_v, best_alpha)
             tot_kelly = compute_kelly(tot_edge, over_mkt_v)
         else:
             tot_edge = tot_post = tot_kelly = None
@@ -420,7 +490,7 @@ def _write_predictions_to_snowflake(
                 "h2h", model_p_home=cal_win,
                 market_p_home=(h2h_mkt_v if has_odds else None),
                 h2h_magnitude_threshold=DEFAULT_H2H_MAGNITUDE_THRESHOLD)
-            l4_h2h_edge = h2h_edge  # cal_win - h2h_mkt_v (None when no odds)
+            l4_h2h_edge = h2h_raw_edge  # raw cal_win - h2h_mkt_v (Layer-4 magnitude; None when no odds)
         except Exception as _l4_exc:
             print(f"  Warning: Layer 4 attribution failed for game index {i} "
                   f"({_l4_exc}); logging NULLs.")
@@ -436,6 +506,7 @@ def _write_predictions_to_snowflake(
         gpk_val = _s(df_today, "game_pk", i)
         game_prov = prov.get(int(gpk_val)) if gpk_val is not None else None
         game_bullpen = bullpen_ood_signals.get(int(gpk_val)) if gpk_val is not None else None
+        game_bovada = bovada_ml.get(int(gpk_val)) if gpk_val is not None else None
 
         # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
         ood_row = {
@@ -494,6 +565,9 @@ def _write_predictions_to_snowflake(
             # A1.10 — feature-source observability
             "data_source":               _s(df_today, "data_source", i),
             "feature_coverage_score":    _feature_coverage_score(df_today, i),
+            # Story 28.3 — actual Bovada American moneyline (not de-vig) for kill-criterion monitor
+            "layer4_h2h_bovada_ml_home": (game_bovada or {}).get("bovada_ml_home"),
+            "layer4_h2h_bovada_ml_away": (game_bovada or {}).get("bovada_ml_away"),
         }))
 
     try:
@@ -516,6 +590,9 @@ def _write_predictions_to_snowflake(
             # A1.10 — feature-source observability
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS data_source VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS feature_coverage_score FLOAT")
+            # Story 28.3 — actual Bovada American moneyline for kill-criterion monitor
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_home INTEGER")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_away INTEGER")
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
@@ -957,6 +1034,57 @@ def main() -> None:
 
     best_alpha = _load_best_alpha()
     print(f"  best_alpha={best_alpha}")
+    if best_alpha is not None and float(best_alpha) <= 0.0:
+        warnings.warn(
+            "[A2.5][EDGE-GUARD] best_alpha=0 → the alpha tuner gives the model zero weight "
+            "(posterior == market): the model adds no skill over the market right now. "
+            "Actionable h2h_edge/totals_edge and their Kelly fractions are computed from the "
+            "POSTERIOR (≈0), so no phantom edges/picks are surfaced. The raw model-vs-market "
+            "gap remains in layer4_h2h_edge for diagnostics. This guard auto-releases once the "
+            "model regains skill and re-tuning lifts alpha > 0 (A2.6 exit criterion).",
+            stacklevel=2,
+        )
+
+    # --- A2.2: served feature-matrix alignment guard + degradation log --------
+    # Models score by COLUMN POSITION; reindex(columns=feat_cols) aligns by name
+    # to the training order. A model-expected column ABSENT from the assembled +
+    # imputed matrix would be silently 0.0-filled — a value never seen at train
+    # time (the "379-feature model scoring a 373-col matrix" failure). Verify
+    # every model column is structurally present and FAIL LOUD if not. Separately
+    # log value-level degradation: columns served-but-entirely-null across the
+    # slate get imputed to a SINGLE constant for every game, which flattens
+    # discrimination without any structural mismatch (the 2026-06-10 corr~0
+    # finding — see Epic A2). This is observability, not a fatal condition.
+    served_cols = set(X_today_imp.columns)
+    n_today = len(df_today)
+    for _tgt, _cols in (("total_runs", tot_feat_cols),
+                        ("run_differential", diff_feat_cols),
+                        ("home_win", hw_feat_cols)):
+        _absent = [c for c in _cols if c not in served_cols]
+        _present_raw = [c for c in _cols if c in df_today.columns]
+        _all_null = [c for c in _present_raw if df_today[c].isna().all()]
+        print(
+            f"[FEATURE-ALIGN] {_tgt}: {len(_cols)} expected | "
+            f"{len(_absent)} absent(structural) | "
+            f"{len(_all_null)} served-but-all-null→constant-impute | "
+            f"{len(_cols) - len(_absent)} structurally served"
+        )
+        if _all_null:
+            warnings.warn(
+                f"[FEATURE-ALIGN] {_tgt}: {len(_all_null)} model features are entirely "
+                f"NULL across today's {n_today} game(s) and will be imputed to a single "
+                f"constant for every game (discrimination loss, NOT a structural error): "
+                f"{sorted(_all_null)[:12]}{'...' if len(_all_null) > 12 else ''}"
+            )
+        if _absent:
+            raise RuntimeError(
+                f"[FEATURE-ALIGN] {_tgt} expects {len(_cols)} features but {len(_absent)} "
+                f"are ABSENT from the served matrix and would be silently 0.0-filled (a "
+                f"value the model never saw at train time): "
+                f"{_absent[:20]}{'...' if len(_absent) > 20 else ''}. Refusing to score a "
+                f"structurally-misaligned matrix — fix the feature pipeline (dbt rebuild / "
+                f"restore renamed columns) so these columns are present, then re-run."
+            )
 
     # Slice to each model's exact expected feature set and order.
     X_tot  = X_today_imp.reindex(columns=tot_feat_cols,  fill_value=0.0).values
@@ -1086,9 +1214,12 @@ def main() -> None:
 
         picks_list.append(pick)
 
+        # A2.5: display the alpha-aware actionable edge (posterior − market), so the
+        # printed Edge/Kelly match the stored columns and collapse to ~0 at best_alpha=0
+        # instead of showing the calibrated flat-prob artifact.
         _h2h_v = float(h2h_mkt[i]) if pd.notna(h2h_mkt[i]) else None
-        _edge_v = compute_edge(calibrated_win, _h2h_v) if (has_odds and _h2h_v is not None) else None
         _post_v = compute_posterior(calibrated_win, _h2h_v, best_alpha) if (has_odds and _h2h_v is not None) else None
+        _edge_v = compute_actionable_edge(calibrated_win, _h2h_v, best_alpha) if (has_odds and _h2h_v is not None) else None
         _kelly_v = compute_kelly(_edge_v, _h2h_v) if (_edge_v is not None and _h2h_v is not None) else None
 
         rows_table.append({

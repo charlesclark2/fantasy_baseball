@@ -224,6 +224,38 @@ team_seq as (
     ) = 1
 ),
 
+-- A2.4: base-state (RISP / runners-on) rolling splits, spine-aware exact-or-as-of
+-- (mirrors team_seq). Completed games take the EXACT game_pk row (byte-for-byte);
+-- scheduled games carry the team's latest strictly-prior row, so today's slate
+-- gets real RISP / runners-on splits instead of NULL → median-imputed constant
+-- (the A2.2 live-run found these 12 cols entirely null for the scheduled slate).
+-- Leakage-safe: strictly-prior rows only.
+base_state_resolved as (
+    select
+        st.game_pk,
+        st.side,
+        st.team as team_abbrev,
+        bs.woba_with_runners_on_30d,
+        bs.xwoba_with_runners_on_30d,
+        bs.woba_with_risp_30d,
+        bs.xwoba_with_risp_30d,
+        bs.woba_against_with_runners_on_30d,
+        bs.woba_against_with_risp_30d,
+        bs.runs_per_baserunner_30d
+    from spine_teams st
+    left join {{ ref('mart_team_base_state_splits') }} bs
+        on  bs.team_abbrev = st.team
+        and (
+            (not st.is_scheduled and bs.game_pk = st.game_pk)
+            or (st.is_scheduled and bs.game_date < st.game_date)
+        )
+    qualify row_number() over (
+        partition by st.game_pk, st.side
+        order by iff(bs.game_pk = st.game_pk, 1, 0) desc,
+                 bs.game_date desc nulls last
+    ) = 1
+),
+
 final as (
     select
 
@@ -1204,12 +1236,10 @@ final as (
     left join {{ ref('mart_bullpen_leverage') }} a_blev
         on  a_blev.team_abbrev = g.away_team
         and a_blev.game_pk     = g.game_pk
-    left join {{ ref('mart_team_base_state_splits') }} h_bs
-        on  h_bs.team_abbrev = g.home_team
-        and h_bs.game_pk     = g.game_pk
-    left join {{ ref('mart_team_base_state_splits') }} a_bs
-        on  a_bs.team_abbrev = g.away_team
-        and a_bs.game_pk     = g.game_pk
+    left join base_state_resolved h_bs
+        on  h_bs.game_pk = g.game_pk and h_bs.side = 'home'
+    left join base_state_resolved a_bs
+        on  a_bs.game_pk = g.game_pk and a_bs.side = 'away'
     left join public_betting pb
         on  pb.game_date    = g.game_date
         and pb.home_team_id = g.home_team

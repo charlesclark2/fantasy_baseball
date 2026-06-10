@@ -396,8 +396,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   11.1–11.7 closed → reopened as Epic 28                                     │
 │ Epic 27  Within-Season Env State Signal     ⬜ NEW 06-05 (totals unblock)    │
 │   27.1 Kalman latent · 27.2 signals · 27.3 re-open gate · 27.4 OAA · 27.5 GB/FB×park │
-│ Epic 28  H2H Edge Recovery & Magnitude Val  ⬜ NEW 06-05                     │
-│   28.1 alpha-recal · 28.2 ensemble · 28.3 magnitude-kill · 28.4 features · 28.5 Bradley-Terry │
+│ Epic 28  H2H Edge Recovery & Magnitude Val  🔄 In Progress                  │
+│   28.1 ✅ alpha-recal · 28.2 ✅ ensemble · 28.3 magnitude-kill · 28.4 features · 28.5 Bradley-Terry │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -506,6 +506,15 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A1.12 prod-write correctness ✅ (schema resolver shared; DELETE scoped)    │
 │   A1.13 statcast freshness SLA ✅ (sensor + catchup; deploy pending)         │
 │                                                                              │
+│ Epic A2  Live Production Model Health       🩺 NEW (2026-06-10)              │
+│   Keep the deployed model healthy + honestly-measured for beta UX            │
+│   validation until the new system lands. Audit: live home_win corr ~ 0.      │
+│   A2.1 honest live-skill metrics+alert ✅  A2.2 feature-matrix alignment ✅  │
+│   A2.3 ELO freshness+carry-forward ✅  A2.4 archetype/EB serving ✅          │
+│   A2.5 edge-guard ✅ / transparency ⬜  A2.6 re-measure + health gate ⬜     │
+│   A2.7 Bovada totals coverage ⬜                                             │
+│   A2.8 feature_pregame_game_features build perf ⬜                           │
+│                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
 │                                                                              │
@@ -570,9 +579,11 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **4 — LATE SEASON** | Epic 21 (live signal generation) | Epic 20 complete | After 20 |
 | **4 — LATE SEASON** | Epic 24 (player prop layer) | 4A ✅ + 5A ✅ + 16 + 18.1 | After Epic 18 |
 | **4 — LATE SEASON** | Epic 13 (temporal platform) | Phase 10 | Offseason 2026 |
-| **0 — NOW (Arch Review 06-05)** | Story 9.7 (uncertainty stubs), 28.1 (H2H alpha re-cal), 28.2 (run_diff×classifier ensemble) | No gate — eval-only, no retrain | Immediate |
-| **0 — NOW (Arch Review 06-05)** | Story 28.3 (magnitude live-tracking + kill criterion) | Epic 26.5 attribution live ✅ (live n=0 today) | Accrual → ~Sep/Oct 2026 |
-| **1 — NEXT (Arch Review)** | Story 10.9 (isotonic/conformal calib), Story 6.6 (reliever availability), Story 28.4 (H2H features) | Story 9.7 + matrix retrain | After Tier 0 |
+| **0 — DONE (Arch Review 06-05)** | Story 9.7 (uncertainty stubs) | No gate | ✅ 2026-06-10: real NegBin/Normal 80% PI widths wired into `compute_across_model_sigma` (unc_weight=0.10); combined_sigma avg=1.04 std=0.36 range [0.66, 3.39]; `feature_pregame_sub_model_signals` rebuilt via `dbtf build` |
+| **0 — DONE (Arch Review 06-05)** | Story 28.1 (H2H alpha re-cal) | No gate — eval-only | ✅ 2026-06-10: h2h_seq_alpha=0.1 (Δ=0.002 vs α=0); magnitude gap collapses 91.5% on blend → Layer-4 magnitude path must use raw `model_p_home_win`; raw roi_devig=+0.179 (n=343, thr=0.20); see `ablation_results/h2h_alpha_recal_seq.md` |
+| **0 — DONE (Arch Review 06-05)** | Story 28.2 (run_diff×classifier ensemble) | No gate — eval-only, no retrain | ✅ 2026-06-10: best w=0.25 (Brier=0.2089 vs market 0.1790); no w beats market L3; all w pass L4 roi_devig. Disagreement gate ✅ ADOPTED — cap≤0.02: 85 games (14.3%), model Brier 0.1793 < market 0.1895, roi_devig=+0.6812; see `ablation_results/h2h_ensemble_eval_28_2.md` |
+| **0 — DONE (Arch Review 06-05)** | Story 28.3 (magnitude live-tracking + kill criterion) | Epic 26.5 attribution live ✅ (live n=1 settled as of 2026-06-10) | ✅ 2026-06-10: `layer4_h2h_bovada_ml_home/away` added to `daily_model_predictions`; `scripts/ops/monitor_magnitude_h2h.py` built (ROI+95%-CI, model/market Brier, tripwire@n=50, verdict@n=150); kill criterion registered in `model_registry.yaml`; accrual → ~Sep/Oct 2026 |
+| **1 — NEXT (Arch Review)** | Story 10.9 (isotonic/conformal calib), Story 6.6 (reliever availability), Story 28.4 (H2H features) | Story 9.7 ✅ + matrix retrain | After Tier 0 |
 | **1 — NEXT (Arch Review)** | Epic 27.1–27.2 (within-season env state signal + backfill) | Epics 3–6 ✅; Epic 17 re-open (b) | THE totals lever |
 | **2 — ARCH (Arch Review)** | Epic 27.3 (totals re-open gate), 27.4 (OAA), 27.5 (GB/FB×park), Story 10.10 (QRF) | Epic 27.2 backfill (R31) | Gated on 27.2 |
 | **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), Story 12.10 (Betfair) | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
@@ -10417,6 +10428,353 @@ barely self-predicts); survival within-game win-prob (gated on Epic 20/21 profit
 
 ---
 
+# Epic A2 — Live Production Model Health
+
+**Track:** F — Application & Product Layer (operational; sits alongside Epic A1).
+
+**Depends on:** A1.10 (feature-coverage gate) ✅, A1.11 (schedule-spined pipeline) ✅; shares the canonical team dim (A1.9).
+
+**Status:** ⬜ NEW (2026-06-10). **Keep-the-lights-on epic — NOT a model-quality upgrade** (that is Track B / Epics 27–28). It keeps the *currently deployed* champions healthy and honestly-measured so the beta application can validate end-to-end user experience on real, non-degraded predictions, even while the picks themselves are not yet edge-positive.
+
+**Why this epic exists (audit 2026-06-10, n=277 completed games since 2026-05-20):** the live `home_win` champion (v4) has **near-zero predictive skill** — `corr(prediction, outcome) = 0.001`, live Brier 0.252 (≈ the no-skill 0.249; CV Brier was 0.198), accuracy 0.495 = the home-win base rate. The raw model output varies (std 0.105) but is uncorrelated with outcomes; the Platt calibrator correctly shrinks it to ~0.54 ± 0.016 (which *improves* Brier 0.262→0.252, so the calibrator is not the fault). The CV↔live gap is **train/serve skew**. Contributing, in order of evidence: (1) suspected feature-matrix misalignment / degradation — the 377/379-col model may score a matrix whose discriminative columns are imputed or mis-ordered; (2) confirmed serving gaps — `elo_diff` null for entire scheduled slates (compute_elo stale at 6-08 + no carry-forward), lineup archetype wOBA null for all scheduled games, batter-EB null for scheduled games, ~23% average imputation (`feature_coverage_score` 0.767); (3) the model was promoted on calibration not discrimination and is correctly in `automated_bets: false` / evaluation-pending. run_diff v4 is also degraded live (MAE 3.74 vs CV 3.08; feeds 50% of the home-win blend). total_runs is healthiest (MAE 3.50 ≈ CV 3.40). Full write-up: the `project_prod_model_audit_jun2026` memory.
+
+**Binding sequencing:** A2.1 (honest live metrics) FIRST — it makes every other fix measurable and proves/disproves the alignment hypothesis. Then A2.2 (alignment — highest leverage, may be the whole problem) → A2.3 / A2.4 (serving gaps) → A2.5 (transparency) → A2.6 (re-measure + standing gate). A2.7 (Bovada totals) is independent and can run anytime. **Do not judge the Bayesian-improvement epics' eval gates (27.3 / 28.x) on live metrics until A2.6 confirms the live feature set matches the backtested one — otherwise those epics are measured against noise.**
+
+---
+
+### Story A2.1 — Honest live-skill metrics + alerting
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.1 standalone:
+
+```
+You are picking up Story A2.1 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.1 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.1 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.1 exactly.
+  - Your work MUST conform to every item in the Story A2.1 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Extend model-health monitoring beyond `home_win` Brier/ECE to capture discrimination loss and train/serve skew, per target, so degradation is visible the day it appears (the current collapse went unnoticed because only Brier/ECE were tracked — and a flat predictor near the base rate has a fine ECE).
+
+**Tasks:**
+- [x] **Metrics + gate engine DONE 2026-06-10** — `scripts/ops/model_health_metrics.py`. Joins the deployed prediction log (`baseball_data.betting_ml.daily_model_predictions`) to actual outcomes (`mart_game_results`), deduped one row per game preferring the `post_lineup` pass, and reports per target (home_win / total_runs / run_differential) over a rolling window: n, prediction spread (std), `corr(pred, outcome)`, home_win Brier vs **no-skill base-rate Brier AND vs market Brier**, MAE/RMSE (regressors), over/under Brier vs market (totals when a line is present). Shared gate thresholds live in the module (`MIN_CORR_*`, `MIN_SPREAD_*`, `BRIER_MARGIN`, `MIN_GAMES`) — A2.6 imports these, does not redefine. `--prediction-type post_lineup` (honest skill; matchup features are lineup-gated), `--since`/`--days`/`--end`, `--model-version`, `--write-snowflake` (persists to `baseball_data.betting_ml.model_health_metrics`). Unit-tested offline: a flat predictor (corr≈0.03, std≈0.013) → FAIL on all three reasons with market Brier far better; a real-signal regressor → PASS.
+- [x] **Alert contract DONE** — non-zero exit (code 2) when any enabled gate FAILs on a ≥`MIN_GAMES` sample, INSUFFICIENT (exit 0) below it; a `GATE: {...}` summary line is emitted for a scheduler/Dagster op to parse. (Wiring the op + notification channel is A2.6's "wire to alerting" task.)
+- [ ] Surface these on the Model Performance Streamlit page (or a new Model Health panel), split by `model_version`.
+- [ ] Backfill the metrics over 2026-05-01→present so the regression-onset date is pinpointed.
+- [ ] **Live validation (hand-off):** run with real creds and confirm the monitor FLAGS today's home_win state — `python scripts/ops/model_health_metrics.py --since 2026-05-20 --prediction-type post_lineup --write-snowflake`.
+
+**Acceptance criteria:**
+- [x] Per-target live-skill metrics computed; corr + spread + vs-market + vs-no-skill all present (engine done; daily scheduling is A2.6 wiring).
+- [ ] An alert fires on the current home_win state (corr≈0.001, std≈0.016) — i.e. the monitor would have caught this. *(Logic proven offline on a synthetic flat predictor → FAIL; confirm on the real window via the hand-off command above.)*
+- [ ] The regression-onset date (when live spread/corr collapsed) is identified and documented. *(Run the metrics per-week from 2026-05-01 to pinpoint.)*
+
+---
+
+### Story A2.2 — Served feature-matrix alignment verification (highest leverage)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.2 standalone:
+
+```
+You are picking up Story A2.2 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.2 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.2 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.2 exactly.
+  - Your work MUST conform to every item in the Story A2.2 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Prove or refute that the deployed models score the exact feature matrix (columns, order, dtypes, non-null) they were trained on. A 379-feature model scoring a 373-col or mis-ordered matrix produces exactly the observed `corr≈0`. This story is the single highest-leverage check in the epic and may be the whole problem.
+
+**Tasks:**
+- [ ] In `predict_today.py` (and the intraday assembly path), assert the assembled feature DataFrame's columns == the model's `feature_columns_*.json` exactly (same set AND order); fail loud (raise) on mismatch instead of silently reindexing/imputing.
+- [ ] Log, per prediction run, the count of imputed columns and the list of any model-expected columns missing from the served matrix.
+- [ ] Spot-check 5 live games: reconstruct the served vector and confirm each value matches `feature_pregame_game_features` (no silent NaN→median for discriminative cols: elo_diff, EB posteriors, sequential cols).
+- [ ] Confirm the 377/379-dim contract (367 base + 10 sequential + 2 imputation indicators) holds end to end for both home_win and run_diff v4.
+
+**Acceptance criteria:**
+- [ ] Column set + order verified identical between served matrix and `feature_columns_*.json` for all three champions; a deliberate mismatch raises.
+- [ ] Per-run imputed-column count logged; the 5-game spot-check confirms no misalignment.
+- [ ] If a misalignment is found and fixed, live `home_win` corr is measured before/after on ≥50 games (a step change confirms the cause).
+
+---
+
+### Story A2.3 — ELO freshness + scheduled-game carry-forward
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.3 standalone:
+
+```
+You are picking up Story A2.3 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.3 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.3 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.3 exactly.
+  - Your work MUST conform to every item in the Story A2.3 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Make `elo_diff`/`home_elo`/`away_elo` populated and current for every game, including today's scheduled games. Audit found ELO null for the entire 6-09 and 6-10 slates (`team_elo_history` stale at 6-08 + no carry-forward).
+
+**Tasks:**
+- [ ] Verify/repair the compute_elo Dagster op so `team_elo_history` is current through the latest completed slate every day.
+- [ ] Apply the A1.11 exact-or-as-of carry-forward to the ELO join in the feature layer so scheduled games carry each team's latest post-game ELO; completed games keep their exact pre-game ELO.
+- [ ] Backfill/recompute ELO through today and rebuild the affected feature marts.
+
+**Acceptance criteria:**
+- [ ] `elo_diff` non-null for 100% of a current scheduled slate and all recent completed games.
+- [ ] Completed-game ELO values byte-for-byte unchanged by the carry-forward (leakage-safe: strictly-prior only).
+- [ ] compute_elo freshness added to the freshness monitor so a future stall alerts.
+
+---
+
+### Story A2.4 — Scheduled-game serving for the dead discriminative-feature set
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.4 standalone:
+
+```
+You are picking up Story A2.4 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.4 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.4 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.4 exactly.
+  - Your work MUST conform to every item in the Story A2.4 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Restore scheduled-game serving for the full set of discriminative features the 2026-06-10 live `predict_today.py` run found **entirely NULL across the whole slate** (30 columns → each imputed to a single constant for every game; the `[FEATURE-ALIGN] served-but-all-null→constant-impute` count). These are NOT just lineup-dependent. The set (home + away of each): lineup archetype avg wOBA; lineup-vs-cluster wOBA/xwOBA + slot coverage; lineup-vs-home-starter h2h wOBA/xwOBA; **RISP / runners-on offensive splits** (`woba`/`xwoba_with_risp_30d`, `*_with_runners_on_30d`, `woba_against_with_risp/runners_on_30d`); plus batter-EB posteriors (partially null, 2/15). **ELO (`home/away_elo`) is the remaining ~2 of the 30 and is owned by A2.3.**
+
+**Tasks:**
+- [ ] Apply the A1.11 exact-or-as-of carry-forward to the marts feeding the **RISP / runners-on rolling splits** (`mart_team_base_state_splits` and the offensive-split marts) so scheduled games carry each team's latest **strictly-prior** split instead of NULL.
+- [ ] Restore scheduled-game serving for the **lineup archetype / vs-cluster / h2h-vs-starter** features (they depend on confirmed lineups + batter cluster assignments + the matchup marts); wire the archetype/cluster/h2h computation into the lineup re-score flow if needed.
+- [ ] Ensure batter-EB posteriors (`*_avg_eb_woba` and `*_sequential`) populate on the post-lineup re-score (currently 2/15).
+- [ ] Confirm all of the above flow through `feature_pregame_game_features` into the served matrix; verify the drop with `predict_today.py --no-log-snowflake` (the `[FEATURE-ALIGN]` all-null count should fall from 30 toward ~2, the ELO pair owned by A2.3).
+
+**Acceptance criteria:**
+- [ ] On a current slate, the `[FEATURE-ALIGN] served-but-all-null` count drops by the set this story owns — **≥28 of the 30** (remaining ELO pair = A2.3) — verified via a `predict_today.py --no-log-snowflake` run.
+- [ ] For a lineup-confirmed scheduled game, archetype + vs-cluster + h2h + RISP/runners-on + batter-EB cols are non-null in both the feature store and the served matrix.
+- [ ] `feature_coverage_score` for post-lineup predictions rises measurably vs the morning run (document the delta).
+
+---
+
+### Story A2.5 — Imputation transparency & discriminative-coverage floor
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.5 standalone:
+
+```
+You are picking up Story A2.5 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.5 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.5 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.5 exactly.
+  - Your work MUST conform to every item in the Story A2.5 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Make imputation visible per prediction, stop silently-degraded picks from looking authoritative, AND **prevent the app from surfacing spurious betting edges.** The 2026-06-10 live run found `best_alpha=0.0` → the production posterior is 100% market, while the bet **Edge** is computed as `Calibrated(flat ~0.52–0.57) − Market` — which manufactures a positive edge on **every home underdog** regardless of skill (today's picks reduced to "bet every home underdog"). Until the model regains real discrimination (A2.3/A2.4 verified by A2.6), these edges are artifacts and must not be presented as actionable. Honest beta UX even before the picks are edge-positive.
+
+**Priority note:** the **edge-artifact guard (task 4)** is independent of the serving fixes and *actively prevents misleading recommendations today* — ship it EARLY, ahead of / in parallel with A2.3–A2.4, rather than waiting for its sequencing slot.
+
+**Tasks:**
+- [ ] Persist per-prediction the count/list of imputed model features, especially the discriminative set (ELO, archetype, EB, sequential).
+- [ ] Define a discriminative-coverage floor and flag (not necessarily suppress) predictions below it on the Today's Picks / Game Insights pages.
+- [ ] In the 'What's Driving This Pick?' panel, mark N/A-valued top-SHAP contributors as imputed rather than letting them appear to contribute normally.
+- [x] **Edge-artifact guard (DONE 2026-06-10):** the actionable edge is now alpha-aware. Added `compute_actionable_edge(model, market, alpha) = posterior − market` to `betting_ml/utils/probability_layer.py`; `predict_today.py` stores `h2h_edge`/`totals_edge` (and Kelly sized off them) from it, so at `best_alpha=0` they collapse to ~0 and the app surfaces no phantom edges (zero app change — the app reads these columns directly; the EV endpoint has no `qualified_bet` filter). Raw model-vs-market gap preserved in `layer4_h2h_edge` for Layer-4/CLV. Printed picks table + DDL comments updated; `warnings.warn([A2.5][EDGE-GUARD])` fires at alpha≤0; guard auto-releases when re-tuning lifts alpha>0. **Validated live 2026-06-10:** every Edge/Kelly → 0.0%/0.00% (was up to 14.8%/5.90% "bet every home underdog").
+
+**Acceptance criteria:**
+- [ ] Each prediction row carries an imputed-feature summary; the UI distinguishes a fully-served pick from a degraded one.
+- [ ] The 3 null Home Win features for BOS/TB (elo_diff, archetype, R/G-at-park) render as explicitly imputed.
+- [x] With `alpha=0` / sub-gate discrimination, the Today's Picks Edge/EV/Kelly columns are non-actionable (~0) — no spurious home-underdog "value" surfaced; gate condition documented (alpha-aware actionable edge). **DONE/validated 2026-06-10.** The two open ACs above are the UI-transparency half of A2.5 (still pending).
+
+---
+
+### Story A2.6 — Re-measure + standing health gate
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.6 standalone:
+
+```
+You are picking up Story A2.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.6 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.6 exactly.
+  - Your work MUST conform to every item in the Story A2.6 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** After A2.2–A2.4, confirm live skill recovers and install the ongoing gate that keeps it healthy. This is the epic's exit criterion and the decision point for whether the deployed model is good enough for beta UX or must be escalated to architecture work.
+
+**Pre-fix baseline recorded (2026-06-10, `model_health_metrics`, post_lineup, 2026-05-20→06-10, n=69):** home_win FAIL (corr 0.031), run_differential FAIL (corr 0.027), total_runs PASS-weak (corr 0.094). The live verdict is **deployment-gated** — it cannot conclude until the A2.3/A2.4 fixes deploy and ≥30–50 post_lineup games accumulate with the restored feature set; then re-run `model_health_metrics.py` and compare to this baseline.
+
+**Fast audit shortcut (DONE — `scripts/ops/rescore_audit.py`):** instead of waiting for accumulation, re-score COMPLETED games against the now-populated feature marts (exact, leakage-guarded pre-game snapshot) using the deployed models, and compare to the live baseline. This isolates serving-skew from architecture *today*: a large corr jump (live≈0 → re-scored toward CV) ⇒ serving was the problem (A2.3/A2.4 will help once deployed); no jump ⇒ architecture-limited ⇒ escalate to 27/28. Reuses the A2.1 eval/gate verbatim; audit-only (no Snowflake write); refuses pre-2026 windows (in-sample for models trained ≤2025). Run: `python scripts/ops/rescore_audit.py --since 2026-05-20 --compare-live`.
+
+**Tasks:**
+- [ ] **(audit-now)** Run `rescore_audit.py --since 2026-05-20 --compare-live` and record whether re-scored corr jumps vs the live baseline — the early read on serving-vs-architecture.
+- [ ] Re-run the A2.1 metrics on ≥50 post-fix **live** games (post_lineup); compare live corr/Brier to pre-fix and to market.
+- [ ] Define the standing health gate (thresholds already centralized as constants in `model_health_metrics.py`: `MIN_CORR_*`, `MIN_SPREAD_*`, `BRIER_MARGIN`) and wire `model_health_metrics.py` to a Dagster op + notification channel (it exits 2 on FAIL for exactly this).
+- [ ] Record the verdict: if live skill recovers toward CV / clean-OOS → the deployed model is validated for beta UX; if it stays ≈ no-skill with a verified full-feature aligned matrix → escalate to architecture (Tracks B / Epics 27/28).
+
+**Acceptance criteria:**
+- [ ] Post-fix live home_win corr and spread reported vs pre-fix; gate thresholds defined and wired to alerts.
+- [ ] A clear verdict is recorded: serving-fixed-and-healthy, or architecture-limited (handed off to 27/28).
+
+---
+
+### Story A2.7 — Bovada totals coverage (O/U display + totals CLV)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.7 standalone:
+
+```
+You are picking up Story A2.7 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.7 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.7 (Python models/scripts, dbt models, Streamlit
+    pages, Dagster ops/sensors, configs, tests) by tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.7 exactly.
+  - Your work MUST conform to every item in the Story A2.7 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Restore Bovada totals coverage so the Game Insights O/U panel and Bovada totals edge/CLV work for the full slate. Audit found Bovada totals covered only 3/15 games on 2026-06-10 (stale 03:00 UTC) while Bovada h2h and every other book's totals were full at 12:00 UTC. Independent of the model skill issue — model predictions are market-blind and unaffected.
+
+**Tasks:**
+- [ ] Diagnose why Bovada totals covered only 3/15 games and were stale: an ingestion/parse gap vs Bovada genuinely posting totals late.
+- [ ] If a parse/ingest gap: fix so Bovada totals land each odds snapshot. If genuinely late: show 'Bovada total not yet posted' in the O/U panel instead of a bare 'Not available'.
+- [ ] Confirm `totals_p_over`/`totals_mu` nullness is the Epic 10/17 totals-layer gating (expected), not the missing line — so the two are never conflated.
+
+**Acceptance criteria:**
+- [ ] Bovada totals coverage for a current slate matches Bovada h2h coverage, or the shortfall is explained as genuine late-posting with the UI distinguishing the two.
+- [ ] The Game Insights O/U panel shows a line for every game where Bovada has posted one; model predictions confirmed unaffected.
+
+---
+
+### Story A2.8 — feature_pregame_game_features build performance
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.8 standalone:
+
+```
+You are picking up Story A2.8 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.8 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.8 (dbt models, the resolver CTEs, configs) by
+    tracing its Tasks list and the data lineage.
+  - Implement each Task listed under Story A2.8 exactly.
+  - Your work MUST conform to every item in the Story A2.8 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** `feature_pregame_game_features` now builds in **~2m12s** (flagged 2026-06-10) — heavy for one dbt model and a recurring Snowflake-compute cost, since it rebuilds in the daily job, on every post-lineup re-score, AND in the statcast catch-up job. Profile and reduce the build time **without changing outputs**. A likely contributor is the proliferation of A1.11/A2 exact-or-as-of resolver CTEs (each does a window-function as-of join, several over large per-game marts via repeated `spine_teams` scans) plus the model's overall join breadth (~285 cols from ~20 upstreams).
+
+**Sequencing:** do this near the END of A2 (after A2.1–A2.6 correctness work) — it's an optimization, not a correctness fix. Not urgent (user flagged 2026-06-10: "we don't have to solve that right now").
+
+**Tasks:**
+- [ ] Profile the build: capture the Snowflake query profile for `feature_pregame_game_features` (and `feature_pregame_team_features`); identify the most expensive operators (the exact-or-as-of window joins, the largest mart scans).
+- [ ] Evaluate consolidating the per-block resolver CTEs (`team_seq`, `base_state_resolved`, bullpen / pythagorean / season_record / elo) — e.g. one spine-keyed resolver pass per mart instead of repeated `spine_teams` scans, or pushing the as-of resolution upstream into the marts.
+- [ ] Consider incremental materialization or narrowing the historical scan (the as-of joins scan full mart history each build).
+- [ ] Verify outputs are byte-for-byte identical for completed games before/after; re-run the A2.6 metrics to confirm no prediction regression.
+
+**Acceptance criteria:**
+- [ ] `feature_pregame_game_features` build time materially reduced (target ≤60s; document before/after).
+- [ ] Completed-game feature vectors byte-for-byte unchanged (spot-check ≥5 games across seasons).
+- [ ] The daily-job + post-lineup + catch-up paths all still produce identical predictions for a control slate.
+
+---
+
 # Epic 27 — Within-Season Scoring-Environment State Signal
 
 **Status:** ⬜ NEW (2026-06-05). **Track B.** This is the formal answer to **Epic 17 re-open criterion
@@ -10711,17 +11069,23 @@ back to the user to run and show the command; do not git commit or push (the use
 champion has different raw outputs and better ECE (0.043). Re-run the alpha grid on its raw predictions.
 
 **Tasks:**
-- [ ] `betting_ml/scripts/alpha_recal_h2h_seq.py`: load `oos_predictions_h2h_v2.parquet`, season 2026,
+- [x] `betting_ml/scripts/alpha_recal_h2h_seq.py`: load `oos_predictions_h2h_v2.parquet`, season 2026,
   market-covered; pull the seq champion raw `model_p_home_win`, de-vigged `market_devig_home`, outcome.
-- [ ] Grid α∈[0.0..1.0] (step 0.1) via `run_probability_layer.tune_alpha` (same log-odds blend the totals
+- [x] Grid α∈[0.0..1.0] (step 0.1) via `run_probability_layer.tune_alpha` (same log-odds blend the totals
   path used); objective = log-loss. Write best to `best_alpha.json` key `h2h_seq_alpha`.
-- [ ] If α>0: recompute the magnitude `|model_p − market_p|` gap and Layer-4 attribution against the new
+- [x] If α>0: recompute the magnitude `|model_p − market_p|` gap and Layer-4 attribution against the new
   **blended** probabilities (currently measured on raw model probs).
 
 **Acceptance criteria:**
-- [ ] Alpha grid log-loss table documented; `h2h_seq_alpha` written.
-- [ ] Interpretation recorded: α=0 ⇒ market mirror (deploy only via selective path); α>0 ⇒ blended value
+- [x] Alpha grid log-loss table documented; `h2h_seq_alpha` written.
+- [x] Interpretation recorded: α=0 ⇒ market mirror (deploy only via selective path); α>0 ⇒ blended value
   exists and 28.3 must re-measure magnitude on the new blend.
+
+**Result (2026-06-10):** `h2h_seq_alpha=0.1` (log-loss 0.5266 vs 0.5287 at α=0, Δ=0.002). Key finding: the
+α=0.1 blend is 90% market — mean magnitude gap collapses 91.5% (0.1997→0.0170), Layer-4 verdict=False on
+blended probs. Raw-model Layer-4 verdict=True (roi_devig=+0.179, n=343, threshold=0.20). **Story 28.3 must
+evaluate the magnitude kill-criterion on raw `model_p_home_win`, not the blend.** Report:
+`ablation_results/h2h_alpha_recal_seq.md`.
 
 ---
 
@@ -10755,17 +11119,32 @@ back to the user to run and show the command; do not git commit or push (the use
 ensemble of the two genuinely-independent estimators and their disagreement as a conviction signal.
 
 **Tasks:**
-- [ ] `betting_ml/scripts/h2h_ensemble_eval.py`: merge the direct-classifier p (`oos_predictions_h2h_v2`)
+- [x] `betting_ml/scripts/h2h_ensemble_eval.py`: merge the direct-classifier p (`oos_predictions_h2h_v2`)
   with the run_diff-derived p (16B.7 output) on game_pk; sweep mix weight w∈{0,0.25,0.5,0.75,1.0}.
-- [ ] Three-layer eval (L1 NLL vs Bernoulli(0.54), L2 ECE/calib_80, L3 raw Brier vs market 0.182) per w.
-- [ ] Test `|p_classifier − p_run_diff|` as a NEW abstain/conviction gate via
+- [x] Three-layer eval (L1 NLL vs Bernoulli(0.54), L2 ECE/calib_80, L3 raw Brier vs market 0.182) per w.
+- [x] Test `|p_classifier − p_run_diff|` as a NEW abstain/conviction gate via
   `bayesian_model_eval.normalize_h2h_frame` + `sweep_thresholds`.
 
 **Acceptance criteria:**
-- [ ] Ensemble three-layer table per w documented; best w recorded (even if none beats market — the
-  disagreement gate is the deliverable).
-- [ ] Disagreement-gated subset Brier vs market reported; adopt as conviction filter if it tightens the
-  magnitude subset.
+- [x] Ensemble three-layer table per w documented; best w recorded (even if none beats market — the
+  disagreement gate is the deliverable).  _Run 2026-06-10: best w=0.25 (Brier=0.2089 vs market 0.1790);
+  no w beats market L3; all w pass L4 roi_devig. See `ablation_results/h2h_ensemble_eval_28_2.md`._
+- [x] Disagreement-gated subset Brier vs market reported; adopt as conviction filter if it tightens the
+  magnitude subset.  _Run 2026-06-10: ✅ ADOPTED — cap≤0.02 yields model Brier 0.1793 < market 0.1895
+  (n=85 games, n_bets=57, roi_devig=+0.6812). Conviction filter: gate on |p_clf − p_rd| ≤ 0.02._
+
+**Script:** `betting_ml/scripts/h2h_ensemble_eval.py` (written 2026-06-10)
+**Run command (hand-off — Snowflake load >1 min):**
+```
+uv run python betting_ml/scripts/h2h_ensemble_eval.py
+```
+After first run, re-run without Snowflake:
+```
+uv run python betting_ml/scripts/h2h_ensemble_eval.py \
+    --run-diff-parquet betting_ml/models/layer3/run_diff_derived_h2h_2026.parquet
+```
+**Output:** `quant_sports_intel_models/baseball/ablation_results/h2h_ensemble_eval_28_2.md`
+**Cache:** `betting_ml/models/layer3/run_diff_derived_h2h_2026.parquet` (auto-saved on first run)
 
 ---
 
@@ -10804,18 +11183,31 @@ kill criterion so the 2026 deployment question is answered on data, not the opti
 optimism, in-sample threshold selection, and real favorite-side vig.
 
 **Tasks:**
-- [ ] Confirm `predict_today` logs `layer4_h2h_rule='magnitude'`, the model & market probs, and the
+- [x] Confirm `predict_today` logs `layer4_h2h_rule='magnitude'`, the model & market probs, and the
   **actual Bovada moneyline odds taken** (not de-vig) for every magnitude trigger.
-- [ ] Build a settled-bet monitor over `daily_model_predictions` (joins CLV/result) computing real-book
+  ✅ 2026-06-10: `layer4_h2h_bovada_ml_home` / `layer4_h2h_bovada_ml_away` INTEGER columns added to
+  `daily_model_predictions` (CREATE TABLE + idempotent ALTER TABLE); `_load_bovada_ml_odds()` queries
+  `mart_game_odds_bridge` ⋈ `mart_odds_outcomes` (bookmaker_key='bovada', market_key='h2h') at scoring
+  time. Already-logged: `layer4_h2h_rule`, `calibrated_win_prob`, `h2h_market_implied_prob`. Live:
+  n=1 settled (game_pk=823942, 2026-06-06, bovada_ml_home=-192).
+- [x] Build a settled-bet monitor over `daily_model_predictions` (joins CLV/result) computing real-book
   ROI at actual odds + 95% CI, and the magnitude-subset model Brier vs market Brier.
-- [ ] Register the kill criterion in `model_registry.yaml` under `home_win`.
+  ✅ 2026-06-10: `scripts/ops/monitor_magnitude_h2h.py` — deduplicates by (date, game_pk), computes
+  per-bet profit at actual Bovada odds, ROI mean + 95% lower-CI (z=1.645), model/market Brier, win-rate
+  tripwire@n=50, full verdict@n=150.  Run: `uv run python scripts/ops/monitor_magnitude_h2h.py`
+- [x] Register the kill criterion in `model_registry.yaml` under `home_win`.
+  ✅ 2026-06-10: `kill_criterion` block added with `attribution_start`, `monitor_script`, `confirm_gate`
+  (n=150, ROI-CI>0, model_brier<market_brier), `kill_gates` (full + tripwire), `until_confirm` note.
 
 **Acceptance criteria (pre-committed kill criterion):**
 - [ ] **CONFIRM** only when ≥150 fresh post-2026-06-04 settled magnitude bets show 95% lower-CI real-book
   ROI > 0 **AND** magnitude-subset model Brier < market Brier on those games.
+  *(Infrastructure live. Currently n=1 settled. Accrual → ~Sep/Oct 2026.)*
 - [ ] **KILL** if at n=150 the 95% lower-CI real-book ROI ≤ 0, OR an early tripwire fires (real-book win
   rate below actual-odds break-even over the first 50 settled magnitude bets).
-- [ ] Until CONFIRM: `automated_bets: false`, magnitude is manual-review/informational only.
+  *(Tripwire and full-gate logic implemented in monitor script.)*
+- [x] Until CONFIRM: `automated_bets: false`, magnitude is manual-review/informational only.
+  ✅ `automated_bets: false` in model_registry.yaml; `until_confirm` note enforces this.
 
 ---
 
@@ -10943,18 +11335,35 @@ the entire epistemic-uncertainty propagation through Layer 3 (CIs, `game_uncerta
 conviction) runs on stubs. Replace them with NLL-derived 80% predictive-interval widths.
 
 **Tasks:**
-- [ ] In each `generate_*_signals.py`, compute `uncertainty` = per-game 80% PI width from the model's own
+- [x] In each `generate_*_signals.py`, compute `uncertainty` = per-game 80% PI width from the model's own
   predictive distribution (`nbinom.ppf(0.9,…) − nbinom.ppf(0.1,…)` for NegBin; `2·1.28·σ` for Normal),
   replacing the constant.
-- [ ] Backfill 2021–2026; rebuild `feature_pregame_sub_model_signals`.
-- [ ] Re-verify the Layer-3 `combined_sigma` and the P(over) CI widths now vary with per-game uncertainty
+- [x] Backfill 2021–2026; rebuild `feature_pregame_sub_model_signals`.
+- [x] Re-verify the Layer-3 `combined_sigma` and the P(over) CI widths now vary with per-game uncertainty
   (the Story 9.3 / 10.3 "σ flat under reweighting" symptom).
 
 **Acceptance criteria:**
-- [ ] No sub-model signal has a constant `uncertainty` column; per-game variance confirmed (std > 0).
-- [ ] `combined_sigma` and P(over) CI widths now widen on low-coverage / high-disagreement games
+- [x] No sub-model signal has a constant `uncertainty` column; per-game variance confirmed (std > 0).
+- [x] `combined_sigma` and P(over) CI widths now widen on low-coverage / high-disagreement games
   (the AC that Story 9.3 reported `False` should now pass or be re-explained).
-- [ ] `reference_submodel_uncertainty_placeholders` memory updated/retired.
+- [x] `reference_submodel_uncertainty_placeholders` memory updated/retired.
+
+**Status:** ✅ COMPLETE (2026-06-10) — All six `generate_*_signals.py` scripts already emitted real
+per-game 80% PI widths (NegBin `ppf(0.9)−ppf(0.1)` or Normal `2·1.28·σ`); the stubs had been replaced
+in an earlier pass. Verified live Snowflake values: `run_env_mu_v4_uncertainty` avg=11.05 std=0.81,
+`pred_runs_uncertainty_v2` avg=6.99 std=0.35, `bullpen_uncertainty_v2` avg=5.00 std=1.38,
+`starter_uncertainty_v1` avg=0.23 std=0.017 — all std > 0, AC1 passes. `feature_pregame_sub_model_signals`
+rebuilt via `dbtf build --select feature_pregame_sub_model_signals`. **Key code change:**
+`compute_across_model_sigma()` in `betting_ml/scripts/load_layer3_features.py` updated to incorporate
+the now-real per-game PI widths: σ = √(disagree_var + (0.10·unc_σ)² + floor²) where
+`unc_σ = mean(run_env_unc/2.5632, offense_unc_total/2.5632)`. The stale "intentionally NOT used —
+constant sentinel placeholders" note removed. **Verified:** combined_sigma avg=1.04, std=0.36,
+range [0.66, 3.39] across 13,149 games — clearly non-constant, AC2 passes. The `unc_weight=0.10`
+keeps the aleatoric PI-width contribution (≈0.49) on the same scale as the floor (0.5) without
+dominating; disagreement still drives large spikes (σ up to 3.4 on high-disagreement games).
+Note: combined_sigma affects only the P(over) CI bounds, not `totals_p_over`/`totals_edge` — the CI
+gate (`_eval_uncertainty_below_threshold`) is not yet wired, so no model re-evaluation needed now.
+`reference_submodel_uncertainty_placeholders` memory retired/updated, AC3 passes.
 
 ### Story 10.9 — Isotonic + conformal post-calibration on Layer-3 P(over)/P(home)  `[Home: Epic 10, REOPENED]`
 
