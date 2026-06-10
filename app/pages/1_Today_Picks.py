@@ -17,6 +17,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
 from app.utils.prediction_status import basis_message, is_confirmed, lineup_status_emoji
+from app.utils.safe_conversions import safe_int
 from app.utils.scorer_env import scorer_env
 
 # ---------------------------------------------------------------------------
@@ -280,7 +281,7 @@ def _fmt_movement_cell(open_val, current_val) -> tuple[str, float]:
 # ---------------------------------------------------------------------------
 
 _STYLE_VISIBLE_COLS = [
-    "Signal", "Matchup", "Game Time", "Lineups", "P(Over)", "Model Win%",
+    "Signal", "Matchup", "Game Time", "Lineups", "Data", "P(Over)", "Model Win%",
     "Market Win%", "Posterior%", "Edge", "EV", "Kelly%",
 ]
 
@@ -289,6 +290,7 @@ _COL_HELP = {
     "Matchup": "Away team @ Home team",
     "Game Time": "Scheduled first pitch — timezone set in sidebar",
     "Lineups": "✅ prediction is lineup-confirmed (post-lineup re-score, accounts for confirmed starters)  |  ⏳ lineups not yet posted (provisional prediction)  |  ⚠️ lineups posted but prediction still provisional — re-score pending; do not trust the edge yet",
+    "Data": "Discriminative feature coverage for this prediction.  ✅ Full = every ELO/archetype/empirical-Bayes/sequential/matchup signal was served  |  ◐ N imputed = N discriminative features were null and filled with a league prior (the prediction is slightly blunted)  |  ⚠️ Degraded = many discriminative features missing → the model falls back toward a flat base-rate; treat this pick with low confidence  |  — = not tracked (older prediction)",
     "P(Over)": "Model probability of total runs exceeding the consensus over/under line",
     "Model Win%": "Blended home-win probability (50% NGBoost run-differential + 50% XGBoost classifier)",
     "Market Win%": "Market-implied home-win probability derived from consensus moneyline odds",
@@ -301,6 +303,24 @@ _COL_HELP = {
     "EV": "Expected value per unit wagered. Positive EV = favorable long-run return at current odds",
     "Kelly%": "Kelly-criterion bet sizing as % of bankroll, capped at 10%.  ⚠ = raw Kelly exceeded cap",
 }
+
+
+def _coverage_badge(r: pd.Series) -> str:
+    """A2.5 — per-pick discriminative-feature coverage badge.
+
+    Distinguishes a fully-served prediction from a degraded one so a pick built on
+    imputed (league-prior) signals doesn't look as authoritative as one built on the
+    full feature set. NULL columns (older predictions) render as a neutral em-dash.
+    """
+    cov = _safe_float(r.get("discriminative_coverage"))
+    if cov is None:
+        return "—"  # pre-A2.5 prediction — coverage not tracked
+    if bool(r.get("is_degraded")):
+        return "⚠️ Degraded"
+    if cov >= 0.999:
+        return "✅ Full"
+    n_imp = safe_int(r.get("imputed_discriminative_count"), 0)
+    return f"◐ {n_imp} imputed"
 
 
 def _signal(has_odds: bool, edge: float | None, lineup_confirmed_pred: bool, threshold: float) -> str:
@@ -664,6 +684,7 @@ for _, r in df.iterrows():
         "Matchup": matchup,
         "Game Time": _fmt_game_time(_coalesce(r.get("game_datetime"), r.get("stg_game_date")), selected_tz),
         "Lineups": _lineup_status(basis, both),
+        "Data": _coverage_badge(r),
         "P(Over)": _fmt_pct(p_over) if has_odds and p_over is not None else "—",
         "Model Win%": _fmt_pct(_safe_float(r.get("calibrated_win_prob"))),
         "Market Win%": _fmt_pct(_safe_float(r.get("h2h_market_implied_prob"))) if has_odds else "—",
@@ -682,6 +703,26 @@ st.dataframe(
     column_order=_STYLE_VISIBLE_COLS,
 )
 
+# A2.5 — honest framing. These are calibrated model probabilities, not bet
+# recommendations. When alpha = 0 the tuner gives the model no weight over the
+# market (it isn't currently beating the closing line), so the actionable Edge/EV/
+# Kelly columns collapse to ~0 by design — no phantom "value" is surfaced. The
+# Data column flags picks built on imputed (league-prior) features.
+if best_alpha_val is not None and best_alpha_val <= 0.0:
+    st.info(
+        "ℹ️ **These are honest model probabilities, not bet recommendations.** "
+        f"The current blend weight (alpha = {best_alpha_val:.2f}) gives the model no edge "
+        "over the market — it is well-calibrated but not beating the closing line right now, "
+        "so Edge / EV / Kelly are ~0 by design (no manufactured value). Use the win "
+        "probabilities for insight; check the **Data** column for feature coverage."
+    )
+else:
+    st.caption(
+        "These are calibrated model probabilities. Edge / EV / Kelly are the *actionable* "
+        "(alpha-blended) values, not the raw model-minus-market gap. The **Data** column flags "
+        "picks built on imputed (league-prior) features."
+    )
+
 # ---------------------------------------------------------------------------
 # IL injury warnings
 # ---------------------------------------------------------------------------
@@ -689,8 +730,8 @@ st.dataframe(
 if "home_injured_player_count" in df.columns or "away_injured_player_count" in df.columns:
     il_warnings = []
     for _, r in df.iterrows():
-        home_il = int(r.get("home_injured_player_count") or 0)
-        away_il = int(r.get("away_injured_player_count") or 0)
+        home_il = safe_int(r.get("home_injured_player_count"), 0)
+        away_il = safe_int(r.get("away_injured_player_count"), 0)
         if home_il > 0 or away_il > 0:
             parts = []
             if home_il > 0:

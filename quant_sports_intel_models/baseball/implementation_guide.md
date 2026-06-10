@@ -511,10 +511,10 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   validation until the new system lands. Audit: live home_win corr ~ 0.      │
 │   A2.1 honest live-skill metrics+alert ✅  A2.2 feature-matrix alignment ✅  │
 │   A2.3 ELO freshness+carry-forward ✅  A2.4 archetype/EB serving ✅          │
-│   A2.5 edge-guard ✅ / transparency ⬜  A2.6 re-measure + health gate ⬜     │
-│   A2.7 Bovada totals coverage ⬜                                             │
+│   A2.5 edge-guard ✅ / transparency ✅  A2.6 re-measure + health gate ✅     │
+│   A2.7 Bovada totals coverage ✅ (upstream late-posting; UI distinguishes)   │
 │   A2.8 feature_pregame_game_features build perf ⬜                           │
-│   A2.9 re-fit home_win Platt calibrator ⬜ (audit: model beats mkt, cal flat)│
+│   A2.9 re-fit home_win Platt calibrator ✅ → identity (cal was flattening)   │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -10639,15 +10639,18 @@ back to the user to run and show the command; do not git commit or push (the use
 **Priority note:** the **edge-artifact guard (task 4)** is independent of the serving fixes and *actively prevents misleading recommendations today* — ship it EARLY, ahead of / in parallel with A2.3–A2.4, rather than waiting for its sequencing slot.
 
 **Tasks:**
-- [ ] Persist per-prediction the count/list of imputed model features, especially the discriminative set (ELO, archetype, EB, sequential).
-- [ ] Define a discriminative-coverage floor and flag (not necessarily suppress) predictions below it on the Today's Picks / Game Insights pages.
-- [ ] In the 'What's Driving This Pick?' panel, mark N/A-valued top-SHAP contributors as imputed rather than letting them appear to contribute normally.
+- [x] **Persist per-prediction imputation summary (DONE 2026-06-10):** `predict_today.py` computes a per-game summary from the PRE-imputation matrix (`X_today_raw`, real NaN for unserved features) and writes 5 new columns to `daily_model_predictions`: `imputed_feature_count`, `imputed_discriminative_count`, `discriminative_coverage` (1 − imputed_disc/total_disc), `is_degraded` (coverage < 0.85), `imputed_features` (comma-joined imputed discriminative names, VARCHAR(4000)). Discriminative set = token-boundary regex over the union of all 3 models' feature columns — `(?:^|_)elo(?:_|$)` (excludes `…_velo`), `archetype`, `cluster`, `_eb_`, `sequential`, `h2h`, `vs_starter`, `with_risp|with_runners_on`, `park_run_factor|runs_per_game_at_park` → 69 of 379. Idempotent `ALTER … ADD COLUMN IF NOT EXISTS` migrations + `[A2.5]` stdout summary line.
+- [x] **Discriminative-coverage floor + degraded flag (DONE 2026-06-10):** floor = 0.85 (healthy steady state imputes 0–3 of 69 → ≥0.95; incident imputed ~all → ≈0). Today's Picks gains a **Data** column (`✅ Full` / `◐ N imputed` / `⚠️ Degraded` / `—` untracked) with help text; Game Insights shows a per-game banner above the drivers panel (`st.error` degraded / `st.caption` partial-or-full). Count surfaced even when not degraded; flag fires only on genuine collapse.
+- [x] **Mark imputed SHAP contributors (DONE 2026-06-10):** `5_Game_Insights.py` `_imputed_feature_set(raw_df, cols)` finds which model features were NULL/absent in the raw feature vector (values `_build_feature_df` silently 0.0-fills); `_render_key_drivers` marks such drivers with a ⚠️ label, renders the value as italic "imputed" (not the misleading 0.000), greys the row, prepends a tooltip, and adds a per-model footnote. Directly covers elo_diff / archetype / runs_per_game_at_park.
+- [x] **Honest-framing + shared `safe_int` (DONE 2026-06-10):** Today's Picks shows an `st.info` "honest model probabilities, not bet recommendations" banner when `alpha ≤ 0` (calmer caption otherwise). New `app/utils/safe_conversions.py` (`safe_int`/`safe_float` with `pd.isna` guards) folded into both pages, replacing the inline `int(...) if pd.notna(...)` guards (the 2026-06-10 Game Insights NaN-crash fixes).
 - [x] **Edge-artifact guard (DONE 2026-06-10):** the actionable edge is now alpha-aware. Added `compute_actionable_edge(model, market, alpha) = posterior − market` to `betting_ml/utils/probability_layer.py`; `predict_today.py` stores `h2h_edge`/`totals_edge` (and Kelly sized off them) from it, so at `best_alpha=0` they collapse to ~0 and the app surfaces no phantom edges (zero app change — the app reads these columns directly; the EV endpoint has no `qualified_bet` filter). Raw model-vs-market gap preserved in `layer4_h2h_edge` for Layer-4/CLV. Printed picks table + DDL comments updated; `warnings.warn([A2.5][EDGE-GUARD])` fires at alpha≤0; guard auto-releases when re-tuning lifts alpha>0. **Validated live 2026-06-10:** every Edge/Kelly → 0.0%/0.00% (was up to 14.8%/5.90% "bet every home underdog").
 
 **Acceptance criteria:**
-- [ ] Each prediction row carries an imputed-feature summary; the UI distinguishes a fully-served pick from a degraded one.
-- [ ] The 3 null Home Win features for BOS/TB (elo_diff, archetype, R/G-at-park) render as explicitly imputed.
-- [x] With `alpha=0` / sub-gate discrimination, the Today's Picks Edge/EV/Kelly columns are non-actionable (~0) — no spurious home-underdog "value" surfaced; gate condition documented (alpha-aware actionable edge). **DONE/validated 2026-06-10.** The two open ACs above are the UI-transparency half of A2.5 (still pending).
+- [x] Each prediction row carries an imputed-feature summary (`imputed_feature_count` / `imputed_discriminative_count` / `discriminative_coverage` / `is_degraded` / `imputed_features`); the UI distinguishes a fully-served pick from a degraded one (Today's Picks **Data** column + Game Insights banner). **DONE 2026-06-10.**
+- [x] The 3 null Home Win features for BOS/TB (elo_diff, archetype, R/G-at-park) render as explicitly imputed — `_imputed_feature_set` + `_render_key_drivers` mark them ⚠️/"imputed" in the 'What's Driving This Pick?' panel instead of as 0.000 contributors. **DONE 2026-06-10.**
+- [x] With `alpha=0` / sub-gate discrimination, the Today's Picks Edge/EV/Kelly columns are non-actionable (~0) — no spurious home-underdog "value" surfaced; gate condition documented (alpha-aware actionable edge). **DONE/validated 2026-06-10.**
+
+**A2.5 COMPLETE 2026-06-10.** New columns must be created by the next `predict_today.py` run (idempotent ALTER migrations) before the app columns populate; older rows show `—` / no banner (NULL coverage). Run with real credentials to populate (hand-off — scoring run > 1 min).
 
 ---
 
@@ -10725,14 +10728,18 @@ back to the user to run and show the command; do not git commit or push (the use
 
 **Goal:** Restore Bovada totals coverage so the Game Insights O/U panel and Bovada totals edge/CLV work for the full slate. Audit found Bovada totals covered only 3/15 games on 2026-06-10 (stale 03:00 UTC) while Bovada h2h and every other book's totals were full at 12:00 UTC. Independent of the model skill issue — model predictions are market-blind and unaffected.
 
+**VERDICT (2026-06-10): genuine upstream late/sparse posting in the Parlay API totals feed — NOT a pipeline parse/ingest bug, and NOT Bovada-specific.** Diagnosis via `mart_odds_outcomes` for 2026-06-10: all 15 games had Bovada **h2h** fresh at the 15:00 UTC snapshot; Bovada **totals** existed for only 4/15 (2 fresh @15:00, 2 stale @02:00–03:00, 11 absent). Drilling into one absent-totals game showed the gap is market-wide, not book-specific: at the 15:00 snapshot **8 of 14 books** (bovada, fanduel, betmgm, caesars, bet365, fanatics, hardrock, prophetx) had NULL totals while every book's h2h was fresh; the few totals present (novig @15:00, draftkings @14:00, pinnacle/parx/betrivers @12:00) were mostly stale. Conclusion: the odds provider's per-snapshot **totals** market is sparse/laggy across books even when their moneyline is live; our ingest stores faithfully whatever is returned (proven — when Bovada totals ARE in a response we capture them). So the fix is the UI-distinguishing branch, not an ingest change.
+
 **Tasks:**
-- [ ] Diagnose why Bovada totals covered only 3/15 games and were stale: an ingestion/parse gap vs Bovada genuinely posting totals late.
-- [ ] If a parse/ingest gap: fix so Bovada totals land each odds snapshot. If genuinely late: show 'Bovada total not yet posted' in the O/U panel instead of a bare 'Not available'.
-- [ ] Confirm `totals_p_over`/`totals_mu` nullness is the Epic 10/17 totals-layer gating (expected), not the missing line — so the two are never conflated.
+- [x] **Diagnosed (DONE 2026-06-10):** market-wide upstream sparseness/late-posting in the Parlay API totals feed (evidence above), not an ingest/parse gap. `parlay_api_ingestion.py` fetches `DEFAULT_MARKETS=["h2h","totals"]` and `stg_parlayapi_odds`→`mart_odds_outcomes` flatten both identically with no market filtering — no code defect.
+- [x] **UI distinguishes genuine late-posting (DONE 2026-06-10):** `5_Game_Insights.py` O/U panel — when Bovada totals are absent but Bovada h2h exists, shows "⏳ Bovada total not yet posted … known upstream gap in the provider's totals market, not a model issue" instead of a bare "Not available"; truly-no-coverage keeps "Not available — no pre-game Bovada lines". Added a stale-total flag: when the displayed total's snapshot is ≥3h older than the h2h snapshot, warn the line may be stale (covers the 02:00/03:00 events). No ingest change (the feed is faithfully stored).
+- [x] **Model/market separation confirmed (DONE 2026-06-10):** the O/U panel renders the Bovada **market** line only; the model's own total is the separate "Predicted Total Runs" metric in Prediction Summary, and totals model probabilities (`totals_model_prob`/`p_over_ngboost`, gated per Epic 10/17) live in different columns/panels — a missing market line never reads as a model failure, and a gated model total never reads as a missing line. Made explicit in a panel comment.
 
 **Acceptance criteria:**
-- [ ] Bovada totals coverage for a current slate matches Bovada h2h coverage, or the shortfall is explained as genuine late-posting with the UI distinguishing the two.
-- [ ] The Game Insights O/U panel shows a line for every game where Bovada has posted one; model predictions confirmed unaffected.
+- [x] Bovada totals coverage shortfall explained as genuine upstream late/sparse posting (market-wide, not Bovada-specific) with the UI distinguishing not-yet-posted from no-coverage and flagging stale lines. **DONE 2026-06-10.**
+- [x] The Game Insights O/U panel shows a line for every game where Bovada has posted one (unchanged loader, faithful ingest), surfaces an honest "not yet posted" message otherwise, and model predictions are confirmed unaffected (rendered from a separate source). **DONE 2026-06-10.**
+
+**A2.7 COMPLETE 2026-06-10.** No ingest/dbt change needed — the shortfall is upstream. If totals coverage becomes a recurring beta-UX problem, the next lever is a provider-side escalation or a fallback to a sharper book's total for *display* (kept distinct from the Bovada-targeted edge/CLV path).
 
 ---
 
