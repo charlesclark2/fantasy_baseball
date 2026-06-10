@@ -7,5 +7,10 @@
   "totals_log_loss": 0.637558,
   "totals_n_games": 4580,
   "totals_run_ts": "2026-06-03T00:46:07.053580+00:00",
-  "totals_source": "recalibrate_totals_alpha.py (walk-forward OOS surface)"
+  "totals_source": "recalibrate_totals_alpha.py (walk-forward OOS surface)",
+  "h2h_seq_alpha": 0.1,
+  "h2h_seq_log_loss": 0.5266465421576941,
+  "h2h_seq_n_games": 628,
+  "h2h_seq_run_ts": "2026-06-10T18:12:45.514519+00:00",
+  "h2h_seq_source": "alpha_recal_h2h_seq.py (2026 market-covered OOS)"
 }

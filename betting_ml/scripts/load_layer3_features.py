@@ -465,28 +465,33 @@ def load_total_line_bovada(
 
 
 def compute_across_model_sigma(df: pd.DataFrame, base_floor: float = 0.5) -> pd.Series:
-    """Epistemic uncertainty about total-runs `mu`, on the totals scale (Story 10.3).
+    """Epistemic uncertainty about total-runs `mu`, on the totals scale (Story 10.3 / 9.7).
 
-    "Across-model disagreement" (the Var(E[X|model]) term): the spread among the
-    promoted signals that *directly* estimate total runs —
-      • run_env:  ``run_env_mu_v4`` (game-level total-runs environment, ~8 runs)
-      • offense:  ``home_pred_runs_mu_v2 + away_pred_runs_mu_v2`` (per-side runs → total)
-    (bullpen/starter are latent, not direct total estimators, so they don't enter
-    the disagreement.) Plus a per-game variance floor so σ is never 0 (which would
-    collapse the P(over) CI and make the bet gate falsely over-confident); the
-    floor *grows when signal coverage is low* — fewer signals present → more
-    uncertain about the mean → wider CI:
+    Combines three per-game sources of uncertainty into σ:
 
-        floor² = (base_floor · (2 − signal_completeness_score))²
-        σ = sqrt( Var_across{run_env, offense_total} + floor² )
+    1. **Across-model disagreement** (``Var(E[X|model])`` term): spread among signals
+       that directly estimate total runs —
+         • run_env:  ``run_env_mu_v4`` (game-level total-runs environment)
+         • offense:  ``home_pred_runs_mu_v2 + away_pred_runs_mu_v2``
+       (bullpen/starter are latent, not direct total estimators.)
 
-    NOTE: the sub-model ``*_uncertainty`` columns are intentionally NOT used — in
-    ``feature_pregame_sub_model_signals`` they are constant sentinel placeholders
-    (run_env=10, offense=7, bullpen=6), not calibrated per-game values, so they
-    would swamp σ. Behaves correctly (high disagreement / low coverage → wider σ)
-    and complements the champion's *aleatoric* NegBin r. ``base_floor`` is tunable
-    and can be calibrated empirically in Story 10.4.
+    2. **Per-game sub-model predictive uncertainty** (Story 9.7): real NegBin/Normal
+       80% PI widths from ``run_env_mu_v4_uncertainty`` and the offense uncertainty
+       columns, converted to σ-scale (÷ 2.5632) and weighted at ``unc_weight=0.10``.
+       These were previously constant sentinel placeholders (run_env=10, offense=7);
+       they now carry per-game calibrated values so they propagate genuine variation.
+
+    3. A per-game variance **floor** that grows when signal coverage is low:
+       ``floor = base_floor · (2 − signal_completeness_score)``.
+
+        σ = sqrt( Var_across{run_env, offense} + (unc_weight · unc_σ)² + floor² )
+
+    where ``unc_σ = mean(run_env_unc / 2.5632, offense_unc_total / 2.5632)``.
+    ``unc_weight=0.10`` lets per-game PI-width variation augment σ without
+    dominating the disagreement + floor terms (Story 9.7 AC2).
     """
+    _Z80 = 2.5632  # 2 × norm.ppf(0.90) — converts 80% PI width to Normal σ
+
     est = pd.DataFrame(index=df.index)
     if "run_env_mu_v4" in df:
         est["run_env"] = pd.to_numeric(df["run_env_mu_v4"], errors="coerce")
@@ -496,13 +501,25 @@ def compute_across_model_sigma(df: pd.DataFrame, base_floor: float = 0.5) -> pd.
     disagree_var = est.var(axis=1, ddof=1) if est.shape[1] >= 2 else pd.Series(0.0, index=df.index)
     disagree_var = disagree_var.fillna(0.0)
 
+    # Per-game sub-model 80% PI widths (Story 9.7): convert to σ-scale and average.
+    unc_parts = pd.DataFrame(index=df.index)
+    if "run_env_mu_v4_uncertainty" in df.columns:
+        unc_parts["run_env"] = pd.to_numeric(df["run_env_mu_v4_uncertainty"], errors="coerce") / _Z80
+    if {"home_pred_runs_uncertainty_v2", "away_pred_runs_uncertainty_v2"} <= set(df.columns):
+        unc_parts["offense"] = (
+            pd.to_numeric(df["home_pred_runs_uncertainty_v2"], errors="coerce")
+            + pd.to_numeric(df["away_pred_runs_uncertainty_v2"], errors="coerce")
+        ) / _Z80
+    unc_sigma = unc_parts.mean(axis=1).fillna(0.0) if not unc_parts.empty else pd.Series(0.0, index=df.index)
+
     if "signal_completeness_score" in df.columns:
         completeness = pd.to_numeric(df["signal_completeness_score"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
     else:
         completeness = pd.Series(1.0, index=df.index)
-    floor = base_floor * (2.0 - completeness)            # base_floor at full coverage, up to 2× at 0 coverage
+    floor = base_floor * (2.0 - completeness)
 
-    return (disagree_var + floor ** 2) ** 0.5
+    unc_weight = 0.10
+    return (disagree_var + (unc_weight * unc_sigma) ** 2 + floor ** 2) ** 0.5
 
 
 def analyze_totals_target(y: pd.Series) -> dict:
