@@ -394,8 +394,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   10.1–10.8 ✅  10.9 isotonic/conformal ✅  10.10 QRF challenger ⬜          │
 │ Epic 11  H2H Model Retrain                  🔁 superseded by Epic 28 (06-05) │
 │   11.1–11.7 closed → reopened as Epic 28                                     │
-│ Epic 27  Within-Season Env State Signal     🔄 In Progress (27.2 ✅ 06-10)   │
-│   27.1 ✅ · 27.2 ✅ signals · 27.3 re-open gate · 27.4 ✅ OAA · 27.5 GB/FB×park│
+│ Epic 27  Within-Season Env State Signal     🔄 In Progress (27.5 ✅ DEFER 06-11)│
+│   27.1 ✅ · 27.2 ✅ signals · 27.3 re-open gate · 27.4 ✅ OAA · 27.5 ✅ DEFER GB/FB×park│
 │ Epic 28  H2H Edge Recovery & Magnitude Val  🔄 In Progress                  │
 │   28.1 ✅ alpha-recal · 28.2 ✅ ensemble · 28.3 ✅ magnitude-kill · 28.4 ✅ features (gate ❌→28.5) · 28.5 Bradley-Terry │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -590,9 +590,12 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — DONE (2026-06-10)** | Story 6.6 (reliever availability) | Story 9.7 ✅ + matrix retrain | 6.6: ✅ mart+features+retrain+backfill+ablation COMPLETE; AC1 99.3% non-null, AC2 Δ MAE=−0.0029/Δ Brier=−0.00008 both pass |
 | **1 — DONE (2026-06-11)** | Story 28.4 (H2H travel/fatigue + interaction features) | 28.3 ✅ + augmented retrain | ✅ AC1 PASS: all 11 features ≥99.9% non-null; travel features fully orthogonal (max_corr=0.041); interaction terms correlated (0.80/0.81/0.71 — expected as products of Layer 3 signals). ❌ AC2 GATE NOT MET: credible-2026 model Brier=0.2230 vs market=0.1887 (gap=−0.034); residual 0.028 above 0.195 gate. 2023–2025 model wins (+0.054–0.059) but those markets are degraded (>0.235 Brier). Features built, mart updated, challenger saved → `h2h_v2_28_4_challenger.pkl`; report → `ablation_results/h2h_features_28_4.md`. Route to 28.5. |
 | **1 — DONE (2026-06-10)** | Epic 27.2 (env-state signal generation + Dagster wiring) | 27.1 ✅ Kalman Q=0.000957, R=21.25; 27.2 ✅ script+dbt+op wired; backfill complete 2026-06-10 (105,192 rows; AC1 99.9% coverage Snowflake-verified) | THE totals lever |
-| **1 — NEXT** | Epic 27.3 (totals re-open gate), 27.5 (GB/FB×park), Story 10.10 (QRF) | 27.2 backfill ✅ 2026-06-10; 27.4 ✅ PROMOTE 2026-06-11 (defense_quality_v1 wired) | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
-| **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), Story 12.10 (Betfair) | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
+| **1 — DONE (2026-06-11)** | Story 27.5 (GB/FB×park) | mart_pitcher_batted_ball_profile built; ablation run | ✅ DEFER: coverage 78% (fails ≥90% gate); ΔNLL=+0.0006, 0/5 folds improve; orthogonality PASS. Re-eval after full 2026 Statcast backfill (~Oct 2026) or when within-season rolling GB%/FB% is available. |
+| **1 — NEXT** | Epic 27.3 (totals re-open gate), Story 10.10 (QRF) | 27.4 ✅ PROMOTE 2026-06-11; 27.5 ✅ DEFER 2026-06-11 | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
+| **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
+| **2 — ARCH (Arch Review)** | **Story 12.11 Phase 1 (Parlay WS/SSE streaming — pregame `odds` ingestion + CLV latency, SPIKE-FIRST)** | Business tier ✅ (cost gate cleared 06-11); gated on always-on-consumer infra verdict | After Tier 1; spike before any build |
 | **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
+| **4 — LATE SEASON** | **Story 12.11 Phase 2 (Parlay `live` in-play stream → in-game betting)** | **Rule 27 / Epic 20 profitability gate** (≥30 live days positive mean CLV) → Epic 21 | Post-profitability; do NOT jump the gate |
 
 ## CLV Game Count Gate Tracker
 
@@ -10399,7 +10402,7 @@ specifies every item as a story with tasks + acceptance criteria. Two **new epic
 | 11 | Hierarchical Bayesian Bradley-Terry H2H model | 28.5 | Likelihood matches binary outcome; no Jensen floor; H2H reopen architecture | High | **High** | ❌ |
 | 12 | VAE holistic OOD gate (replace per-signal z>1.5) | 19.6 | May-2026 +0.2882σ bullpen drift slipped the per-signal gate | Med | Med | ❌ |
 | 13 | Betfair exchange sharp-money feed | 12.10 | Money-weighted sharp signal for the CLV meta-model | Med | Med | ❌ (new integration) |
-| 14 | GB/FB-pitcher × granular-park interaction | 27.5 | Real interaction the additive Layer-2 models can't represent | Med | Med | ❌ |
+| 14 | GB/FB-pitcher × granular-park interaction | 27.5 | Real interaction the additive Layer-2 models can't represent | Med | Med | ⏸ DEFER (coverage 78%; re-eval Oct 2026 or rolling GB%/FB%) |
 | 15 | Park-type hierarchical prior | 3A.3 | Cold-start non-standard venues borrow from type cluster, not global mean | Low-Med | Low-Med | ❌ |
 | 16 | Aging-curve EB prior (continuous) | 5A.6 | Cold-start rookies / veteran decline detection | Med | Low-Med | ❌ |
 
@@ -11194,13 +11197,49 @@ suppresses runs differently than a ground-ball starter — using the granular pa
 in Story 3A.2 (`mart_park_factors_granular`).
 
 **Tasks:**
-- [ ] Derive starter batted-ball profile (GB%/FB%) from Statcast; construct `fb_pct × eb_hr_factor` and
+- [x] Derive starter batted-ball profile (GB%/FB%) from Statcast; construct `fb_pct × eb_hr_factor` and
   `gb_pct × eb_so_factor` interaction features.
-- [ ] Add to `run_env_v4` and/or `starter_v1` feature sets; retrain challenger; gate on NLL.
+  *Result: `dbt/models/mart/mart_pitcher_batted_ball_profile.sql` written (grain: pitcher_id × game_year,
+  min 50 BF gate, 2015+ coverage). Four interaction columns computed in ablation script:
+  `home_fb_x_hr_park`, `home_gb_x_so_park`, `away_fb_x_hr_park`, `away_gb_x_so_park`.
+  Leakage guard: consumers join on game_year-1 (prior-season profile only).
+  Schema entry added to `dbt/models/mart/schema.yml`.*
+- [x] Add to `run_env_v4` and/or `starter_v1` feature sets; retrain challenger; gate on NLL.
+  *Result: `betting_ml/scripts/ablate_gb_fb_park_interaction.py` written. Follows exact run_env_v4
+  protocol (Ridge+NegBin walk-forward CV, same alpha grid and NegBin r MLE). Baseline = FEATURE_COLS_V3
+  (19 features); challenger = + 4 interaction terms. Reports NLL, calib_80, MAE per fold.
+  Orthogonality check (|r| < 0.30) and coverage check (≥90%) included.
+  **User must run both commands below — each >1 min.***
+
+**Run order (user executes):**
+```bash
+# 1. Build the pitcher batted-ball profile mart (regular season 2015+)
+dbtf build --select mart_pitcher_batted_ball_profile --target baseball_betting_and_fantasy
+
+# 2. Run the ablation (>1 min — Snowflake queries + walk-forward NegBin CV)
+uv run python betting_ml/scripts/ablate_gb_fb_park_interaction.py
+```
+
+**If PROMOTE verdict:**
+```bash
+# Add interaction features to run_env feature matrix and retrain challenger
+# (train_run_env_v5.py to be written based on ablation results)
+```
 
 **Acceptance criteria:**
-- [ ] Interaction features non-null ≥90% of rows; challenger NLL vs champion documented (promote only on
+- [x] Interaction features non-null ≥90% of rows; challenger NLL vs champion documented (promote only on
   NLL + calib_80 beat per Sub-model output standard).
+  *Ablation run 2026-06-11. VERDICT: DEFER.*
+  - Coverage: 78.0–78.1% (fails ≥90% gate). Root cause: prior-season GB%/FB% unavailable for rookies,
+    relievers who become starters mid-season, and pitchers below 50 BF in the prior year. ~22% of games
+    have at least one starter without a prior-season Statcast profile.
+  - NLL: ΔNLL = +0.0006 (challenger worse). 0/5 folds improve. Challenger MAE = +0.002.
+  - calib_80: Δ = −0.0006 (negligible, does not worsen threshold).
+  - Orthogonality: PASS (max |r| = 0.18, all 4 features < 0.30 vs existing signals).
+  - **Re-eval trigger:** after full 2026 season Statcast backfill (~Oct 2026), or when a within-season
+    rolling GB%/FB% feature (rolling 30-game window) is available — this would resolve the coverage gap
+    for new/returning starters and likely move the needle on NLL.
+  - Feature 14 in the roadmap table updated accordingly.
 
 ---
 
@@ -11732,25 +11771,57 @@ holistic OOD.
 - [ ] VAE recon-error AUC for flagging May-2026 > the per-signal z>1.5 gate's recall on the same cohort.
 - [ ] Gate criterion added to `sub_model_registry.yaml` bet_gate; threshold documented.
 
-### Story 12.10 — Betfair exchange sharp-money feed  `[Home: Epic 12]`
+### Story 12.10 — Betfair exchange sharp-money feed  `[Home: Epic 12]` ❌ CANCELLED 2026-06-11
 
-**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.10 standalone:
+**❌ CANCELLED — Betfair exchange is geo-blocked in the United States** (no legal API access from the
+operating jurisdiction). The underlying NEED — a money-weighted sharp-money signal for the Epic 12 CLV
+meta-model's steam features — remains valid; pursue it via the US-accessible substitutes below instead
+of Betfair:
+  1. **Pinnacle line movement (PRIMARY, data already in hand).** Pinnacle is the canonical sharp book
+     (high-limit, sharp clientele) and its line moves ARE the sharp-money signal. The historical backfill
+     is already complete (`project_pinnacle_backfill`, 2026-05-29; Pinnacle EU, 2021–2025). Reframe the
+     12.1 meta-model feature as **Pinnacle steam / Pinnacle-vs-consensus divergence + Pinnacle CLV**,
+     not Betfair matched-money. Zero new ingestion risk.
+  2. **Action Network money% (handle) vs bets% (tickets) divergence (SECONDARY).** Already ingested
+     (`public_betting_raw`). The handle-vs-ticket split is a money-weighting proxy where AN exposes it.
+  3. **US betting exchanges** (Sporttrade / Prophet Exchange / Novig) are the only true back/lay analogues
+     accessible domestically, but MLB liquidity is thin and public API access is weak → not worth the lift
+     vs Pinnacle. Note only; do not build.
+
+**Recommended replacement:** a reframed **Story 12.10′ — "Pinnacle sharp-money / steam features for the
+CLV meta-model"** using the already-ingested Pinnacle feed (same acceptance gate: ≥+0.01 AUC lift to
+retain). Tier 2 (ARCH), unblocked (no external-access dependency). The Betfair tasks/acceptance below are
+retained only for historical context.
+
+---
+
+**Original Betfair scope (CANCELLED — retained for context):** ingest Betfair matched-money + back/lay
+for MLB h2h/totals; add money-imbalance + steam features to the 12.1 meta-model mart; backtest CLV
+meta-model AUC lift. Killed by the US geo-block — superseded by 12.10′ below.
+
+---
+
+### Story 12.10′ — Pinnacle sharp-money / steam features for the CLV meta-model  `[Home: Epic 12]` ⬜ NEW (replaces 12.10)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.10′ standalone:
 
 ```
-You are picking up Story 12.10 of the MLB betting & fantasy project.
+You are picking up Story 12.10′ (the Pinnacle replacement for the cancelled Betfair Story 12.10) of the
+MLB betting & fantasy project.
 
 Before writing any code, read these three documents end-to-end to ground yourself in the current
 architecture and data model:
-  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 12.10 section;
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 12.10′ section;
      its Goal, Tasks, and Acceptance criteria are your contract for this story.
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
 Then:
-  - Identify every file associated with Story 12.10 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 12.10 exactly.
-  - Your work MUST conform to every item in the Story 12.10 Acceptance criteria — treat them as the
+  - Identify every file associated with Story 12.10′ (the Pinnacle source in oddsapi.odds_snapshots_historical,
+    feature_pregame_meta_model_features.sql, the existing Pinnacle CTE logic in build_proxy_clv_dataset.py /
+    compute_clv_monitoring.py, the CLV-label marts) by tracing its Tasks list and the data lineage in the inventory.
+  - Implement each Task listed under Story 12.10′ exactly.
+  - Your work MUST conform to every item in the Story 12.10′ Acceptance criteria — treat them as the
     definition of done; do not consider the story complete until each criterion is verified.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
@@ -11758,17 +11829,159 @@ with fully-qualified db.schema.table names and no USE statements; hand any scrip
 back to the user to run and show the command; do not git commit or push (the user handles git).
 ```
 
-**Goal:** Action Network gives ticket %; Betfair gives money-weighted sharp signal (actual money each
-side). Strongest feed for the Epic 12 CLV meta-model's steam/sharp-money features.
+**Goal:** Give the Epic 12.1 CLV meta-model the **money-weighted sharp-money signal** the cancelled Betfair
+story was meant to supply, using data already in hand. Pinnacle is the canonical sharp book (high-limit,
+sharp clientele); its open→close line movement and de-vigged "true" price ARE the sharp-money signal — a
+domestic, already-ingested substitute for Betfair matched-money. Action Network's handle%-vs-ticket% split
+is the secondary money-weight proxy. The historical Pinnacle backfill is complete (`project_pinnacle_backfill`,
+2026-05-29; `baseball_data.oddsapi.odds_snapshots_historical` WHERE `bookmaker='pinnacle'`, open+close,
+game_pk-keyed, 2021–2025), and the open/close/CLV CTE logic already exists in `build_proxy_clv_dataset.py`
+(`pinnacle_open` / `pinnacle_close` / `pinnacle_clv`) — this story productionizes it into the meta-model
+feature mart and quantifies the lift.
+
+**Goal/scope note:** `feature_pregame_meta_model_features.sql` already carries *aspirational* `bovada_vs_pinnacle_h2h*`
+/ `pinnacle_coverage_flag*` columns (asterisked = partial/placeholder). This story replaces those with
+real, populated sharp-money features.
 
 **Tasks:**
-- [ ] Evaluate Betfair exchange API access + auth; ingest matched-money + back/lay for MLB h2h/totals.
-- [ ] Add money-imbalance + steam features to the Epic 12.1 meta-model feature mart.
-- [ ] Backtest the CLV meta-model with vs without Betfair features (AUC lift).
+- [ ] **Build the Pinnacle sharp-money features.** From `oddsapi.odds_snapshots_historical` (bookmaker='pinnacle'),
+  reusing the `pinnacle_open`/`pinnacle_close`/`pinnacle_clv` CTE logic in `build_proxy_clv_dataset.py`, derive
+  per (game_pk): `pinnacle_steam_h2h` (close_devig − open_devig, signed toward home), `pinnacle_steam_totals`
+  (signed toward over), `pinnacle_close_devig` (the de-vigged sharp "true" prob), `pinnacle_vs_bovada_close`
+  (Bovada close_devig − Pinnacle close_devig = soft-vs-sharp gap), `pinnacle_snapshot_count`, and a real
+  `pinnacle_coverage_flag`. Leakage guard: use only the latest Pinnacle snapshot strictly **before first pitch**.
+- [ ] **Add the Action Network money-weight proxy.** From `feature_pregame_public_betting_features`
+  (`stg_actionnetwork_public_betting`), add `an_handle_ticket_div` (handle% − ticket% on h2h and totals) where
+  AN exposes handle% — the money-vs-tickets divergence, the part Betfair would have given directly.
+- [ ] **Wire into the meta-model mart.** Replace the placeholder `bovada_vs_pinnacle_h2h*` / `pinnacle_coverage_flag*`
+  columns in `feature_pregame_meta_model_features.sql` with the populated features above (Group 4 — bookmaker
+  disagreement / sharp-money). Update `dbt/models/feature/schema.yml`. `dbtf build` the mart (hand off if >1 min).
+- [ ] **Confirm LIVE (2026) Pinnacle coverage.** The historical Pinnacle feed is `oddsapi` (≤2025); the live odds
+  source is now the Parlay API ([[project_parlay_api_migration]]). Verify whether live Pinnacle flows for 2026
+  production. If NOT, scope these as **backtest/training-only** features and fall back to the AN handle% divergence
+  for the live operational signal — document the gap explicitly so the meta-model isn't trained on a feature it
+  can't see at serve time.
+- [ ] **Backtest the lift.** Re-run the Epic 12.1 CLV meta-model (proxy CLV labels from `mart_clv_labeled_games` /
+  `build_proxy_clv_dataset.py`) with vs without the Pinnacle + AN-handle sharp features; report AUC lift. **Hand off
+  (>1 min).**
 
 **Acceptance criteria:**
-- [ ] Betfair feed ingested for a trial window; coverage documented.
-- [ ] CLV meta-model AUC lift from Betfair features quantified (gate: ≥+0.01 AUC to retain).
+- [ ] Pinnacle steam + de-vig + soft-vs-sharp-gap features non-null on the Pinnacle-covered games, with per-season
+  coverage documented (note: historical Pinnacle backfill is partial — ~6,620 rows 2021–2025, NOT every game).
+- [ ] **Live-coverage status documented** (production-live Pinnacle available Y/N); if N, the live fallback (AN
+  handle% divergence) is specified and the train/serve-skew risk is called out.
+- [ ] **No leakage:** every feature derived strictly from snapshots before first pitch; verified on a spot sample.
+- [ ] CLV meta-model **AUC lift from the sharp-money features quantified; gate ≥ +0.01 AUC to retain** (same bar as
+  the cancelled Betfair story). Features that don't clear are dropped, not shipped.
+
+**Sequencing/gating:** Tier 2 (ARCH) — after the Tier-1 totals work (27.3/27.5). Unblocked (no external-access
+dependency; Pinnacle historical already ingested). Pairs with Epic 12.4 (Bayesian CLV meta-model) once the
+≥50-live-game gate is met.
+
+---
+
+### Story 12.11 — Parlay API WebSocket/SSE real-time odds streaming  `[Home: Epic 12]` ⬜ NEW (2026-06-11)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.11 standalone:
+
+```
+You are picking up Story 12.11 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 12.11 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 12.11 (the current REST/poll ingestion in
+    scripts/parlay_api_ingestion.py + scripts/pregame_snapshot.py, the GH Actions schedulers
+    odds_snapshot.yml / pregame_snapshot.yml / intraday_schedule.yml, the Parlay raw tables and
+    downstream mart_odds_* / feature_pregame_meta_model_features lineage) by tracing the inventory.
+  - Implement each Task listed under Story 12.11 exactly. THIS STORY IS SPIKE-FIRST — do not stand up
+    always-on infrastructure before the Task-1/2 cost+coverage verdict approves it.
+  - Your work MUST conform to every item in the Story 12.11 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Evaluate replacing the current **polling/batch** Parlay ingestion (REST snapshots on GH Actions
+cron — `scripts/parlay_api_ingestion.py`, `scripts/pregame_snapshot.py`) with Parlay's **push-delivered
+WebSocket/SSE** feed. Two distinct prizes, deliberately separated by risk:
+  - **Phase 1 (near-term, THIS story): the pregame `odds` stream as a cheaper, fresher ingestion transport.**
+    Push delivery is silent on no-change cycles (docs claim 88–90% collector skip rate) → lower ingestion
+    cost (ties to the spend-reduction theme, [[project_dbt_spend_audit_jun2026]]) AND sub-second line-movement
+    granularity → sharper steam/CLV features for the Epic 12 meta-model and [[Story 12.10′]] sharp-money work,
+    and fresher odds for the A1 pipeline SLA ([[project_epic_a1_sla]]).
+  - **Phase 2 (DEFERRED, NOT built here): the `live` in-play stream → in-game betting.** This is exactly the
+    "live infrastructure" governed by the project's **Rule 27 — "No infrastructure-for-infrastructure-sake;
+    system must demonstrate positive mean CLV over ≥30 live days before Epic 20 (live game feed) begins"** —
+    and Epic 21 (Live Signal Generation) is blocked on Epic 20. The in-game opportunity is real and the WS is
+    its enabler, but it stays parked behind that profitability gate. This story only *documents the path*.
+
+**API facts (from parlay-api.com/docs/websocket, 2026-06-11):**
+- Two streams per sport: `wss://parlay-api.com/v1/ws/odds/baseball_mlb` (current + upcoming = Phase 1) and
+  `wss://parlay-api.com/v1/ws/live/baseball_mlb` (in-play only = Phase 2). Auth via `?apiKey=`, `X-API-Key`
+  header, or `apikey.KEY` subprotocol.
+- **Cost gate CLEARED: account is on Business tier (confirmed 2026-06-11, 1,000,000 credits/mo, 0 used).**
+  WS/SSE requires Business+ (Free/Starter/Pro → close code `4001`); we qualify. ONE residual check (Task 1):
+  WS is tier-gated *per key*, and the dashboard showed 0 usage this month (a Parlay metering artifact —
+  responses also omit `x-requests-*` headers, 0/1,396 recent rows; REST ingestion verified healthy, 200s
+  daily) — so confirm the prod `PARLAY_API_KEY` IS the Business key (prefix `598f3d71…b04c`) before the WS connect.
+- Protocol: on connect → `connected` envelope → one `initial_state` snapshot (≤500 rows) → `odds_update`
+  frames on each price change. Payload grain = one outcome × book × market × event (`event_id`, `home_team`,
+  `away_team`, `commence_time`, `bookmaker`, `market_key` h2h/spread/total/props, `outcome`, `price_american`,
+  `price_decimal`, `line`, `last_update`). 30 s idle `heartbeat` (no reply needed). Reconnect = exp backoff
+  1→30 s, and **replace local state from `initial_state` on reconnect** (don't delta). Latency 300–800 ms
+  (Scale, raw) vs coalesced ≤1 s (Business) / ≤0.5 s (Enterprise).
+- **SSE fallback** (`GET /v1/sse/odds/baseball_mlb?apiKey=`) — same envelopes; for envs that can't hold a WS.
+- **Infra reality:** a persistent socket needs an **always-on consumer** — GH Actions cron + Lambda are
+  ephemeral and CANNOT hold the connection; this requires a small always-on service (ECS/Fargate/VM or a
+  long-lived Dagster daemon), which is the main new operating cost the spike must justify.
+
+**Tasks (Phase 1 — spike, then conditional build):**
+- [ ] **Confirm the prod key is Business-tier.** Cost gate already cleared (account IS Business, confirmed
+  2026-06-11). Since WS is tier-gated per key and the dashboard meter showed 0 usage (Parlay artifact, not an
+  outage — REST is healthy), verify the `PARLAY_API_KEY` in prod secrets matches the Business key
+  (`598f3d71…b04c`). If prod is on a different/older key, standardize on the Business key for the WS connect.
+- [ ] **Spike a throwaway consumer** against `wss://parlay-api.com/v1/ws/odds/baseball_mlb` for one MLB slate.
+  Capture `connected`/`initial_state`/`odds_update`; **measure** end-to-end latency, message volume + actual
+  skip rate, market coverage (do h2h + totals for **Bovada** and **Pinnacle** flow? — gates the [[Story 12.10′]]
+  and edge-targeting value), and whether the payload maps cleanly onto the existing Parlay raw grain
+  (`mlb_line_movement_raw` etc.). Hand off if the capture runs >1 min.
+- [ ] **Quantify the infra cost** of an always-on consumer (ECS/Fargate/VM or long-lived daemon; SSE fallback
+  is still long-lived) and compare it against today's polling cost (GH Actions minutes + Snowflake write
+  cadence). Net spend delta documented.
+- [ ] **Go/no-go decision.** If coverage + latency + cost clear: design the streaming consumer to
+  **replace/augment** the polling snapshots, writing **byte-compatible idempotent rows** to the same Parlay
+  raw tables (upsert keyed by event_id × bookmaker × market_key × outcome × last_update), with the REST
+  snapshot retained as a **reconciliation/backfill fallback** (handles WS gaps + the on-reconnect resync).
+  Honor the existing `stg_parlayapi_line_movement` redundancy/dedup grain so downstream marts are unchanged.
+- [ ] **Document Phase 2 only.** Write the in-play (`/v1/ws/live/…`) → in-game design as a *future* sub-story
+  explicitly gated on Rule 27 / Epic 20 profitability. **Do not build it.**
+
+**Acceptance criteria:**
+- [ ] Prod `PARLAY_API_KEY` confirmed to be the Business key (WS tier-gate satisfied); cost gate already cleared
+  (Business tier, 1M credits/mo). The dashboard 0-usage meter is noted as a Parlay artifact, not a data gap.
+- [ ] Spike report recorded: latency, message volume/skip rate, **Bovada + Pinnacle h2h/totals coverage**,
+  and schema-fit to the existing Parlay raw grain.
+- [ ] Always-on consumer infra cost quantified and compared to current polling spend; net delta stated.
+- [ ] **Go/no-go verdict** on replacing batch. On GO: the streaming consumer writes rows byte-compatible with
+  the current Parlay raw tables (downstream `mart_odds_*` / `feature_pregame_meta_model_features` unchanged),
+  with REST snapshots kept as reconciliation; no leakage/duplication in `stg_parlayapi_line_movement`.
+- [ ] Phase 2 (in-play → in-game) is documented as gated behind Rule 27 / Epic 20 and is **explicitly NOT
+  built** in this story.
+
+**Sequencing/gating:** **Tier 2 (ARCH), spike-first** — after the Tier-1 totals work (27.3/27.5). Phase 1
+gated only on the Business-tier cost decision + the always-on-infra verdict; it strengthens the Epic 12 /
+12.10′ sharp-money + CLV stack and the spend posture. **Phase 2 (in-game) is Tier 4 (Late Season), hard-gated
+by Rule 27 / Epic 20 profitability — it must not jump that gate.**
+
+---
 
 ### Story 3A.3 — Park-type hierarchical prior  `[Home: Epic 3A]`
 
