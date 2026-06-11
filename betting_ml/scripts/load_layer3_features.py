@@ -1185,6 +1185,201 @@ def write_audit(df: pd.DataFrame, report: dict, start_date: str) -> Path:
     return _AUDIT_PATH
 
 
+# ---------------------------------------------------------------------------
+# Story 28.4 — H2H-specific feature augmentation
+#   Travel/fatigue features (joined from mart_team_schedule_context) +
+#   starter×offense interaction terms + run_diff σ conviction feature.
+# ---------------------------------------------------------------------------
+
+# Travel/fatigue columns sourced from mart_team_schedule_context (Story 28.4).
+# These are per-team, so the query returns both home_* and away_* variants.
+_TRAVEL_COLS_RAW = [
+    "travel_distance_miles",
+    "tz_delta_hours",
+    "is_3rd_consecutive_road_game",
+    "is_getaway_day",
+]
+
+# Flat list of game-level travel feature column names after the home/away pivot.
+_H2H_TRAVEL_COLS: list[str] = [
+    f"{side}_{c}" for side in ("home", "away") for c in _TRAVEL_COLS_RAW
+]
+
+# Interaction + conviction feature names produced by _add_h2h_interaction_terms.
+_H2H_INTERACTION_COLS: list[str] = [
+    "home_starter_supp_X_away_offense",
+    "away_starter_supp_X_home_offense",
+    "run_diff_sigma",
+]
+
+# Combined list of all Story 28.4 extra features.
+_H2H_EXTRA_COLS: list[str] = _H2H_TRAVEL_COLS + _H2H_INTERACTION_COLS
+
+
+def _load_travel_features(game_pks: list[int], env: str = "prod") -> pd.DataFrame:
+    """Load per-game travel/fatigue features from mart_team_schedule_context.
+
+    Returns a wide DataFrame (one row per game_pk) with home_* and away_*
+    columns for each travel metric. This is a Story 28.4 augmentation —
+    it does NOT modify the base Layer 3 contract.
+
+    All columns are leakage-free: mart_team_schedule_context only looks
+    backward from game_date (lag/count over strictly-prior games).
+    """
+    _, mart_schema = _schemas(env)
+    pk_list = ", ".join(str(int(pk)) for pk in game_pks)
+    raw_cols = ", ".join(f"sc.{c}" for c in _TRAVEL_COLS_RAW)
+
+    sql = f"""
+        select
+            sc_home.game_pk,
+            {', '.join(f'sc_home.{c} as home_{c}' for c in _TRAVEL_COLS_RAW)},
+            {', '.join(f'sc_away.{c} as away_{c}' for c in _TRAVEL_COLS_RAW)}
+        from {mart_schema}.mart_team_schedule_context sc_home
+        join {mart_schema}.mart_team_schedule_context sc_away
+            on sc_home.game_pk = sc_away.game_pk
+           and sc_away.side = 'away'
+        where sc_home.side = 'home'
+          and sc_home.game_pk in ({pk_list})
+    """
+
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [d[0].lower() for d in cur.description]
+        df = pd.DataFrame(cur.fetchall(), columns=cols)
+    finally:
+        conn.close()
+
+    # Coerce boolean/numeric columns.
+    bool_cols = [f"{side}_{c}" for side in ("home", "away")
+                 for c in ("is_3rd_consecutive_road_game", "is_getaway_day")]
+    num_cols  = [f"{side}_{c}" for side in ("home", "away")
+                 for c in ("travel_distance_miles", "tz_delta_hours")]
+    for c in bool_cols:
+        if c in df.columns:
+            df[c] = df[c].astype(bool)
+    for c in num_cols:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    log.info("[travel] loaded %d rows for %d game_pk(s)", len(df), len(game_pks))
+    return df
+
+
+def _compute_run_diff_sigma(df: pd.DataFrame) -> pd.Series:
+    """Uncertainty about the run differential (Story 28.4 conviction feature).
+
+    Uses the NegBin variance formula Var(NegBin(μ,r)) = μ + μ²/r to estimate
+    per-game variance for home and away offenses, then combines in quadrature.
+
+    σ_run_diff = sqrt( Var(home_runs) + Var(away_runs) )
+
+    Columns expected: home/away pred_runs_mu_v2 and pred_runs_dispersion_v2.
+    Falls back gracefully when columns are NaN.
+    """
+    _FALLBACK_MU  = 4.5
+    _FALLBACK_R   = 10.0
+
+    mu_h = pd.to_numeric(df.get("home_pred_runs_mu_v2"),  errors="coerce").fillna(_FALLBACK_MU)
+    r_h  = pd.to_numeric(df.get("home_pred_runs_dispersion_v2"), errors="coerce").fillna(_FALLBACK_R).clip(0.1)
+    mu_a = pd.to_numeric(df.get("away_pred_runs_mu_v2"),  errors="coerce").fillna(_FALLBACK_MU)
+    r_a  = pd.to_numeric(df.get("away_pred_runs_dispersion_v2"), errors="coerce").fillna(_FALLBACK_R).clip(0.1)
+
+    var_home = mu_h + mu_h ** 2 / r_h
+    var_away = mu_a + mu_a ** 2 / r_a
+    return (var_home + var_away).clip(0).pow(0.5)
+
+
+def _add_h2h_interaction_terms(df: pd.DataFrame) -> pd.DataFrame:
+    """Add starter×offense interaction terms and run_diff σ (Story 28.4).
+
+    Interaction terms capture multiplicative effects that an additive linear
+    model cannot represent:
+      home_starter_supp_X_away_offense  — away offense load on home starter
+      away_starter_supp_X_home_offense  — home offense load on away starter
+    Both are high when the starter is suppression-weak AND the opposing offense
+    is strong, amplifying the expected run difference in that direction.
+
+    run_diff_sigma is the uncertainty about the final run differential — a
+    conviction proxy: low σ → model is more confident about the winner.
+    """
+    _FALLBACK_MU = 4.5
+
+    supp_h = pd.to_numeric(
+        df.get("home_starter_suppression_mu_v1"), errors="coerce"
+    ).fillna(0.0)
+    supp_a = pd.to_numeric(
+        df.get("away_starter_suppression_mu_v1"), errors="coerce"
+    ).fillna(0.0)
+    off_h = pd.to_numeric(
+        df.get("home_pred_runs_mu_v2"), errors="coerce"
+    ).fillna(_FALLBACK_MU)
+    off_a = pd.to_numeric(
+        df.get("away_pred_runs_mu_v2"), errors="coerce"
+    ).fillna(_FALLBACK_MU)
+
+    df = df.copy()
+    df["home_starter_supp_X_away_offense"] = supp_h * off_a
+    df["away_starter_supp_X_home_offense"] = supp_a * off_h
+    df["run_diff_sigma"] = _compute_run_diff_sigma(df)
+    return df
+
+
+def build_h2h_augmented_dataset(
+    start_date: str = "2021-01-01",
+    min_games_played: int = 15,
+    env: str = "prod",
+    return_meta: bool = False,
+):
+    """Story 28.4 — augmented H2H training dataset.
+
+    Extends the base `build_h2h_dataset` (Layer 3 signal matrix + market eval
+    probs) with:
+      • Travel/fatigue features (home/away) from mart_team_schedule_context
+      • starter_suppression_mu × opp pred_runs_mu interaction terms
+      • run_diff_sigma conviction feature
+
+    Returns ``(X_aug, y, eval_probs, report)`` or with ``meta`` appended when
+    ``return_meta=True``. X_aug = base Layer 3 features + _H2H_EXTRA_COLS.
+
+    The base Layer 3 contract is untouched — totals models are unaffected.
+    """
+    X, y, eval_probs, report, meta = build_h2h_dataset(
+        start_date=start_date,
+        min_games_played=min_games_played,
+        env=env,
+        return_meta=True,
+    )
+
+    # Join travel features
+    travel_df = _load_travel_features(meta["game_pk"].tolist(), env=env)
+    X = X.copy()
+    X["game_pk"] = meta["game_pk"].values
+    X = X.merge(travel_df, on="game_pk", how="left")
+    X = X.drop(columns=["game_pk"])
+
+    # Compute interaction + conviction features
+    X = _add_h2h_interaction_terms(X)
+
+    # Report coverage of the new features
+    null_rates = {c: float(X[c].isna().mean()) for c in _H2H_EXTRA_COLS if c in X.columns}
+    coverage_ok = all(v <= 0.05 for v in null_rates.values())
+    report["h2h_extra_coverage"] = {
+        "null_rates": null_rates,
+        "coverage_ok": coverage_ok,
+        "note": ("All new features ≥95% non-null" if coverage_ok
+                 else "⚠️ Some new features exceed 5% null — check mart rebuild"),
+    }
+    log.info("[h2h augmented] travel null rates: %s | coverage_ok=%s",
+             {k: f"{v:.3f}" for k, v in null_rates.items()}, coverage_ok)
+
+    if return_meta:
+        return X, y, eval_probs, report, meta
+    return X, y, eval_probs, report
+
+
 def _log_mlflow(df: pd.DataFrame, report: dict, start_date: str, env: str) -> None:
     import mlflow
     from betting_ml.utils.mlflow_utils import get_or_create_experiment
