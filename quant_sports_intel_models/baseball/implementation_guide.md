@@ -505,6 +505,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A1.11 schedule-spined pipeline ✅ (Stages 1-4; dev-verified)               │
 │   A1.12 prod-write correctness ✅ (schema resolver shared; DELETE scoped)    │
 │   A1.13 statcast freshness SLA ✅ (sensor + catchup; deploy pending)         │
+│   A1.14 catchup-op retry + diag capture ✅ (transient self-heal; deploy pend)│
 │                                                                              │
 │ Epic A2  Live Production Model Health       🩺 NEW (2026-06-10)              │
 │   Keep the deployed model healthy + honestly-measured for beta UX            │
@@ -7194,6 +7195,78 @@ Acceptance Criteria:
 
 ---
 
+### Story 19.7 — Placed-bets audit & Bovada reconciliation  `[Home: Epic 19]` ⬜ NEW (2026-06-11, operational)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 19.7 standalone:
+
+```
+You are picking up Story 19.7 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 19.7 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 19.7 (the EV Tracker page app/pages/3_EV_Kelly.py, the
+    baseball_data.betting_ml.placed_bets + user_bets tables, and any app/backend router that reads them)
+    by tracing the data lineage in the inventory.
+  - Implement each Task listed under Story 19.7 exactly.
+  - Your work MUST conform to every item in the Story 19.7 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** The money shown on the EV Tracker page (`app/pages/3_EV_Kelly.py`) does NOT match the user's
+actual Bovada figure (**$447.15** as of 2026-06-11). Audit the system's recorded bets, find the source of
+the mismatch, and reconcile the EV Tracker number to the real Bovada ledger. Root-cause is likely manual-entry
+drift: `placed_bets` is **manual-only writes, no automation** (existing behavior, see Epic-9-era note "the
+`placed_bets` table is not touched by any script") — so missing/duplicate/mis-staked entries are the prime
+suspects.
+
+**Hard constraint — no Bovada API:** Bovada is an offshore book with **no public/official API**. There is no
+clean programmatic pull; screen-scraping is against ToS, auth/geo-gated, and fragile (do NOT build it). The
+Bovada side of the reconciliation is a **manual export/screenshot** of "My Bets" + balance, diffed against
+the system list.
+
+**Tasks:**
+- [ ] **Profile the system bet store.** Inspect `baseball_data.betting_ml.placed_bets` and
+  `baseball_data.betting_ml.user_bets` (schemas, row counts, date range, stake/odds/status/payout columns) and
+  determine WHICH the EV Tracker reads and HOW `3_EV_Kelly.py` computes the displayed money (sum of stakes /
+  open at-risk / realized P&L / balance). Confirm the page figure is reproducible from the source table (rules
+  out a UI-computation bug vs a data-entry problem).
+- [ ] **Clarify the quantity under audit.** Pin down what `$447.15` represents — Bovada **account balance**,
+  total **open/at-risk stake**, total **wagered to date**, or **realized P&L** — because each reconciles
+  against a different system aggregate. (Open question at story creation; resolve first.)
+- [ ] **Line-item reconcile.** Diff the system bet list against the manual Bovada "My Bets" export and
+  categorize every discrepancy: (a) in system / not at Bovada (phantom or never-placed), (b) at Bovada / not in
+  system (missing entry), (c) stake or odds mismatch, (d) status mismatch (open/won/lost/push/void), (e)
+  duplicates. Root-cause each.
+- [ ] **Fix the computation/labels** if the page math or labeling is wrong (e.g., conflating at-risk stake with
+  balance, mishandling settled vs open, double-counting parlays/legs).
+- [ ] **Add a lightweight drift guard.** Since `placed_bets` is manual entry, add a simple reconciliation aid —
+  e.g., a "last reconciled vs Bovada: $X on DATE" stamp + a per-status totals readout on the page — so future
+  drift is visible without a full re-audit.
+
+**Acceptance criteria:**
+- [ ] The EV Tracker money figure is shown to be reproducible from `placed_bets`/`user_bets` (UI-bug vs
+  data-issue settled), and corrected if it was a computation/label bug.
+- [ ] Per-bet reconciliation documented: system list vs Bovada export, every discrepancy categorized and
+  root-caused; the `$447.15` is reconciled to a system number to the dollar (or the residual unexplained delta
+  is quantified with a hypothesis).
+- [ ] A repeatable reconciliation procedure (or on-page drift guard) is in place so manual-entry drift is caught
+  going forward.
+
+**Sequencing/gating:** Operational / near-term — independent of the 19.3 bet-permission-gate backtest (this
+audits the EXISTING manual bet log, not the gate). No model dependency.
+
+---
+
 # Epic 20 — StatsAPI Live Game Feed Integration
 
 **Goal:** Enable real-time in-game data ingestion from the MLB StatsAPI live game feed, providing a play-by-play foundation for live in-game betting signal generation and near-real-time game state features. This is the data infrastructure prerequisite for any live betting capability.
@@ -10340,6 +10413,42 @@ SELECT COUNT(*) FROM <dev>.feature_pregame_game_features WHERE game_date BETWEEN
 
 ---
 
+### A1.14 — Transient-failure retry + diagnostic capture on sensor catch-up ops  ✅ CODE DONE 2026-06-11 (deploy pending)
+
+**Overview / incident (2026-06-11, found via the Dagster+ GraphQL API):** `statcast_catchup_job` failed at
+05:17 at the `catchup_dbt_rebuild` op (`dbtf build --select stg_batter_pitches+`, exit 1). The IDENTICAL build
+**succeeded at 03:16, 04:16, AND in the 07:00 `daily_ingestion_job` (46/46 ops)** — three greens bracketing one
+red on unchanged code → a textbook **transient** (Snowflake warehouse-resume / incremental-MERGE lock / network
+blip on one of the dozens of subtree models). No data impact: the 07:00 daily run rebuilt the subtree, marts are
+current. This is the exact failure class **A1.6** already root-caused (the SLA "late starts" were transient op
+failures, not scheduler delays) — A1.6 documented it; this story remediates it. Two gaps surfaced:
+  1. The catch-up ops had **no retry policy** — a single transient failure pages instead of self-healing, even
+     though the whole chain is idempotent (incremental ingestion + MERGE-keyed dbt rebuilds).
+  2. The failure was **undiagnosable from logs**: dbt-fusion writes everything to STDOUT and leaves stderr EMPTY,
+     so `_run_dbt`'s `raise Exception(... {result.stderr})` produced a detail-free message; the real failing-model
+     line lived in the 108k-char stdout blob that Dagster truncates to 50k → lost.
+
+**Fix (CODE DONE 2026-06-11, `pipeline/ops/sensor_ops.py`):**
+- [x] **RetryPolicy on the catch-up ops** — `_CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)` (60 s backoff,
+  3 attempts) on `catchup_ingest_statcast` + `catchup_dbt_rebuild`. Idempotent, so retries are safe; transient
+  Snowflake hiccups now self-heal instead of alerting.
+- [x] **Diagnostic capture** — new `_failure_detail(result)` helper: prefer stderr, else fall back to the last
+  4 000 chars of STDOUT (which carries dbt-fusion's end-of-run failure summary). Wired into BOTH `_run_dbt` and
+  `_run_script`, so the next failure's exception/alert actually names the failing model.
+- [ ] **Deploy + verify:** redeploy the code location; confirm a transient catch-up failure now retries green;
+  confirm a *genuine* failure surfaces the failing-model line in the exception (no longer empty).
+
+**Follow-up (not done here):** extend `_CATCHUP_RETRY` to the other sensor-fired idempotent dbt/ingest ops
+(`lineup_*`, `pregame_*` in `pipeline/ops/sensor_ops.py`) — same transient-resilience rationale; scoped to the
+statcast catch-up ops for this incident.
+
+**Acceptance criteria:**
+- [ ] A transient `catchup_dbt_rebuild` / `catchup_ingest_statcast` failure self-heals on retry (no page).
+- [ ] A genuine (non-transient) failure exception contains the dbt failing-model detail (stdout tail), not an
+  empty stderr.
+
+---
+
 **Epic A1 sequencing summary:**
 ```
 A1.1 Timing audit            — FIRST; 2 days; identifies the actual failure mode
@@ -11056,12 +11165,65 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 27.3 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 27.3 exactly.
-  - Your work MUST conform to every item in the Story 27.3 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 27.3 "Pre-flight readiness" block in this guide IN FULL — it is the load-bearing
+context — and implement against the playbook below. Conform to every Acceptance criterion as the
+definition of done.
+
+CONTEXT (verified 2026-06-11 — do not re-litigate):
+  - This is the ONE-SHOT totals decision gate. A FAIL is recorded as the permanent "8th confirmation"
+    → totals stays paused until ~Oct 2026. So the eval surface MUST be current+complete before you run
+    the gate — a false FAIL from a stale/incomplete surface is the worst outcome here.
+  - Story 27.5 (GB/FB×park) is DEFERRED (coverage 78%). The new signals in scope are ONLY:
+    env_league_state (27.2) + defense_quality (27.4). Do NOT add GB/FB×park.
+  - NO model retraining is needed. The totals champion total_runs v4 (NGBoost EB) was retrained+promoted
+    at Epic 7.M (2026-06-02). The ONLY model fit in this story is the NUTS re-run (a 2–4 hr hand-off).
+  - 2026 OOS signal coverage is already healthy (Snowflake-verified: env_league_state 97.8%,
+    defense_quality 100%, run_env/pred_runs/bullpen/matchup/starter all ~97–98%). No re-backfill needed.
+    The "pred_runs/starter_suppression all-null" in 27.4's note was an ablation artifact, not a real gap.
+
+DESIGN DECISION TO MAKE FIRST (Task 1 has an explicit OR):
+  - Route env_league_state EITHER as a regressor in the Epic 17 PyMC NegBin model
+    (betting_ml/models/bayesian/run_scoring_nuts.py — replace the non-informative rolling_league_runs_14d,
+    β≈0) OR as a recency-aware mean offset in the Layer-3 combiner. Pick one and state why.
+  - If you route it through the NUTS (recommended — it's the within-season variance lever the §8 totals
+    analysis identified), keep the Layer-3 LightGBM CHAMPION baseline CLEAN of env_league_state
+    (walk_forward_oos.py --drop-pattern env_league_state), so the comparison isn't contaminated by the
+    signal under test.
+
+ORDERED IMPLEMENTATION PLAYBOOK:
+  1. Wire the signals into the Layer-3 feature contract. The contract (layer3_feature_columns.json) is
+     built from the HARDCODED _SIGNAL_GROUPS list at betting_ml/scripts/load_layer3_features.py:61
+     (6 groups today: run_env, offense, starter, starter_ip, bullpen, matchup) + promoted_by_target from
+     stacking_weights.json. defense_quality and env_league_state are in NEITHER — so re-running anything
+     WITHOUT editing this list is a no-op for the new signals. Register defense_quality (and
+     env_league_state only if you chose the Layer-3 route) in _SIGNAL_GROUPS + the stacking/promotion.
+  2. Regenerate + GATE on the contract:
+       uv run python betting_ml/scripts/load_layer3_features.py --write-contract
+       grep -E "defense_quality|env_league_state" betting_ml/models/layer3/layer3_feature_columns.json
+     The grep MUST now print the expected signal(s). If empty, the wiring in step 1 is incomplete — STOP
+     and fix it; do not proceed.
+  3. Rebuild the stale totals OOS eval baseline (the cached betting_ml/models/layer3/
+     oos_predictions_totals_v1.parquet is dated 2026-06-02 and is what evaluate_totals_bayesian.py reads):
+       uv run python betting_ml/scripts/walk_forward_oos.py --env prod   (hand-off >1 min)
+     (use --drop-pattern env_league_state here if env_state is the NUTS-only challenger — keep champion clean)
+  4. Add env_league_state to the NUTS regressors in run_scoring_nuts.py per the design decision.
+  5. Re-run the NUTS (HAND-OFF, 2–4 hr); compute the May-2026 posterior-predictive mean (PPM).
+  6. Evaluate the full three-layer + Layer-4 gate via betting_ml/scripts/evaluate_totals_bayesian.py on
+     the LEAKAGE-FREE 2026 OOS surface ONLY.
+
+KILL CRITERION + GUARDS (report in this order):
+  - Report the kill criterion FIRST, before any other metric: May-2026 PPM ≤ 8.81 → PASS, else FAIL.
+  - On PASS: L1 NLL < 2.8893, L2 calib_80 ∈ [0.75,0.85], L3 blended Brier < 0.248 AND < 0.228; record the
+    shadow-window decision in model_registry.yaml + totals_2026_failure_analysis.md (§11).
+  - On FAIL: record as the 8th confirmation; escalate to re-open criterion (a) (full-2026 delta_2026, ~Oct
+    2026). Do NOT keep tuning to force a pass.
+  - LEAKAGE: evaluate the headline verdict on 2026 OOS ONLY. 2023–2025 Layer-3 is contaminated by in-sample
+    signal leakage and must not enter the verdict.
+
+KEY FILES: betting_ml/models/bayesian/run_scoring_nuts.py (the NUTS model) ·
+betting_ml/scripts/load_layer3_features.py:61 (_SIGNAL_GROUPS registry) + stacking_weights.json ·
+betting_ml/scripts/walk_forward_oos.py (writes oos_predictions_totals_v1.parquet) ·
+betting_ml/scripts/evaluate_totals_bayesian.py (the 3-layer + L4 gate eval).
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -11071,10 +11233,63 @@ back to the user to run and show the command; do not git commit or push (the use
 **Goal:** With the env-state signal live, re-run the totals architecture against the pre-committed kill
 criterion. This is the decision gate — it does not assume success.
 
+**⚑ Pre-flight readiness (verified 2026-06-11 — a FAIL here is recorded as the permanent "8th confirmation",
+so the eval surface MUST be clean and current before running):**
+- **No model retraining required.** The totals champion `total_runs v4` (NGBoost EB) was retrained + promoted
+  at Epic 7.M (2026-06-02); the old "3 deferred retrains" were done there. The only model fit in this story is
+  the NUTS re-run itself (Task 2). 27.5 is DEFERRED (coverage 78%) → GB/FB×park is intentionally NOT in scope;
+  the new signals are `env_league_state` (27.2) + `defense_quality` (27.4) only.
+- **Signal coverage on 2026 OOS is healthy** (Snowflake-verified, n=2,048 game-sides, `betting_features.
+  feature_pregame_sub_model_signals`): env_league_state 97.8%, defense_quality 100%, run_env_v4 97.8%,
+  pred_runs_v2 97.8%, starter_suppression 97.7%, starter_ip 96.9%, bullpen_v2 97.4%, matchup 97.7%. NOTE:
+  27.4's "pred_runs/starter_suppression all-null" was an ablation-merge artifact, NOT a production gap —
+  both are ~98% populated. env_league_state (Kalman, causal) + defense_quality (prior-season) are
+  leakage-free by construction.
+- **⚠ REQUIRED PREP — WIRE the new signals into the Layer-3 contract, THEN rebuild the stale cache. NOT a
+  one-command rebuild (verified 2026-06-11).** `evaluate_totals_bayesian.py` reads a cached
+  `betting_ml/models/layer3/oos_predictions_totals_v1.parquet` dated **2026-06-02** (pre-dates both signals).
+  BUT the Layer-3 feature contract (`layer3_feature_columns.json`) is built from the **hardcoded
+  `_SIGNAL_GROUPS` list at `betting_ml/scripts/load_layer3_features.py:61`** (currently 6 groups: run_env,
+  offense, starter, starter_ip, bullpen, matchup) + `promoted_by_target` from `stacking_weights.json`.
+  **Neither `defense_quality` nor `env_league_state` is in either** — confirmed: `--write-contract` then
+  `grep -E "defense_quality|env_league_state" layer3_feature_columns.json` returns EMPTY. So re-running
+  `walk_forward_oos.py` alone just refreshes the date on the SAME baseline — it cannot admit the new signals.
+  Correct sequence: (1) register `defense_quality` (and `env_league_state` IF the design routes it through the
+  Layer-3 combiner rather than the NUTS — see Task 2's OR) in `_SIGNAL_GROUPS` + the stacking/promotion;
+  (2) `uv run python betting_ml/scripts/load_layer3_features.py --write-contract`; (3) the grep MUST now print
+  both — gate on this; (4) `uv run python betting_ml/scripts/walk_forward_oos.py --env prod` (hand-off >1 min;
+  use `--drop-pattern env_league_state` to keep a CLEAN champion baseline if env_state is the NUTS-only
+  challenger). This wiring is the unfinished half of 27.4's Layer-3 integration + part of 27.3 Task 1 — do it
+  IN this session, don't expect a standalone prep command. (H2H eval-gate regen is for Epic 28.x. NUTS trace
+  `nuts_trace.nc` is overwritten by Task 2 — no action.)
+- **Leakage guard (discipline, no action):** keep the headline verdict on the **2026 OOS surface only** — the
+  kill criterion (May-2026 PPM ≤ 8.81) already enforces this; 2023–2025 Layer-3 is contaminated by in-sample
+  signal leakage and must not enter the verdict.
+
+**Design decision (Task 1 OR — DECIDED 2026-06-11): route `env_league_state` through the NUTS, NOT the
+Layer-3 combiner.** Rationale: (1) the kill criterion (May-2026 PPM ≤ 8.81) is produced by `run_scoring_nuts.py`
+— routing the within-season league-state signal into the model that generates the gating metric is the only
+way it can move the PASS/FAIL verdict; a Layer-3 mean offset would not touch the PPM. (2) `env_league_state`
+(Kalman, causal, game-level league runs/game) is a strictly better-conditioned estimate of exactly what the
+old `rolling_league_runs_14d` regressor approximated (which came out non-informative, β_rolling≈0) — an
+apples-to-apples slot replacement, not an addition. (3) Keeping `env_league_state` OUT of the Layer-3 champion
+keeps the L3 challenger comparison clean of the signal under test. `defense_quality` (27.4 PROMOTE) is the
+only new Layer-3 signal — an orthogonal fielding signal legitimately part of the champion.
+
 **Tasks:**
-- [ ] Add `env_league_state` (+ team states) as a regressor to the Epic 17 PyMC NegBin model
-  (`run_scoring_nuts.py`) replacing/augmenting the non-informative `rolling_league_runs_14d`
-  (β_rolling≈0); OR add it to the Layer-3 combiner as a recency-aware mean offset.
+- [x] **PREP — Layer-3 contract wiring (code DONE 2026-06-11):** registered `defense_quality` in `_SIGNAL_GROUPS`
+  (`load_layer3_features.py:61`, in_floor=False like matchup so the completeness denominator stays 5 and the
+  training population is unchanged vs the pre-27.3 baseline). `env_league_state` intentionally NOT registered in
+  Layer-3 (NUTS-routed — see Design decision). Ran `--write-contract`; grep gate **PASSES** — contract now lists
+  `home_/away_defense_quality_{mu_v1,oaa_z_v1,sprint_z_v1,mu_v1_available}` (52 feature columns, up from 44);
+  `env_league_state` correctly absent. **Remaining (hand-off >1 min):** rebuild `oos_predictions_totals_v1.parquet`
+  via `walk_forward_oos.py --env prod` (now admits defense_quality). stacking_weights.json left unchanged — the
+  champion walk-forward trains on the FULL contract (`_load_feature_contract()`), not the `promoted_by_target`
+  subset, so defense_quality enters training via `_SIGNAL_GROUPS` alone.
+- [x] **NUTS regressor (code DONE 2026-06-11):** in `run_scoring_nuts.py`, replaced the non-informative
+  `rolling_league_runs_14d` (β_rolling≈0) with `env_league_state` (new `_load_env_league_state` Snowflake loader →
+  `env_state_z`, same Jensen-correction + Normal(0.1,0.3) prior + `beta_env_state` regressor). Snowflake-verified
+  game-level (identical home/away) and 100% coverage 2022-2026. **Remaining: re-run (hand-off).**
 - [ ] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
 - [ ] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
 
@@ -11491,12 +11706,38 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 28.5 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 28.5 exactly.
-  - Your work MUST conform to every item in the Story 28.5 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 28.5 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - Prerequisite Epic 28.4 is DONE: the feature-augmented XGBoost challenger (h2h_v2_28_4_challenger.pkl) did
+    NOT clear the market (credible-2026 model Brier 0.223 vs market 0.187) → routed HERE. 28.5 changes the
+    ARCHITECTURE, not just features: a paired-comparison likelihood (logit link, no count aggregation) → unlike
+    totals there is NO Jensen floor, so the H2H ceiling is signal-quality/calibration, which this can address.
+  - HONEST-MARKET BAR: only the 2026 Parlay h2h market is sharp (Brier ~0.182–0.198); 2024–25 Bovada h2h
+    closing lines are degraded/near-flat (Brier ~0.24) — see reference_bovada_h2h_line_quality. Gate the
+    model-vs-market comparison on the CREDIBLE 2026 surface ONLY; never headline a 2024–25 "win."
+
+MODEL SPEC (PyMC; use betting_ml/models/bayesian/run_scoring_nuts.py as the structural template):
+  P(home win) = σ(s_home − s_away + hfa_home); s_team partially pooled; hfa_team ~ Normal(league_hfa, σ_hfa);
+  sub-model signals (offense_v2, bullpen_v2, starter_v1, run_diff μ/σ) enter as covariates on team strength.
+  Use NON-CENTERED reparameterization on the hierarchical terms — required to hit the divergence/ESS gates.
+
+PLAYBOOK:
+  1. Build the BT model as a NEW module under betting_ml/models/bayesian/ (alongside run_scoring_nuts.py).
+  2. Train 2021–2025; score the leakage-free 2026 OOS h2h surface (cf. oos_predictions_h2h_v2.parquet +
+     betting_ml/scripts/leakage_fix/evaluate_h2h_oos.py).
+  3. Three-layer + Layer-4 eval vs the XGBoost champion AND the market on the SAME 2026 games (hand-off; NUTS 1–2 hr).
+  4. Fold in the hierarchical HFA + Beta-Binomial prior-strength calibration as the team-strength prior.
+
+ACCEPTANCE / GUARDS: convergence FIRST (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered reparam);
+then head-to-head vs champion on credible 2026 — L1 NLL, L2 ECE/calib_80, L3 Brier vs market ~0.182. PROMOTE
+ONLY if it beats BOTH the champion AND closes toward the market.
+
+KEY FILES: betting_ml/models/bayesian/ (new BT module; run_scoring_nuts.py = template) ·
+betting_ml/scripts/leakage_fix/evaluate_h2h_oos.py + evaluate_run_diff_h2h.py ·
+betting_ml/models/layer3/oos_predictions_h2h_v2.parquet · the h2h XGBoost champion (h2h_v2_28_4_challenger.pkl
+lineage) · betting_ml/models/layer3/isotonic_h2h.pkl.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -11650,12 +11891,40 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 10.10 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 10.10 exactly.
-  - Your work MUST conform to every item in the Story 10.10 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 10.10 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - This tests ONE hypothesis: does dropping the log-link remove the §10 Jensen floor? The NegBin champion's
+    exp(β·z) link forces E[total] ≈ exp(β_bullpen·z + …) ≈ 8.87 > the 8.81 kill threshold BEFORE any signal
+    moves it (Jensen's inequality on the convex exp). A quantile model has no exp() link → no structural floor.
+  - This is a TOTALS story → it shares Story 27.3's eval infra and kill criterion. READ 27.3's "Pre-flight
+    readiness" block too: same leakage-free 2026 OOS surface, same May-2026 PPM ≤ 8.81 gate, same Layer-3
+    feature contract (_SIGNAL_GROUPS). DO NOT re-tune to force a pass — the deliverable is an HONEST verdict.
+
+REUSE PRIOR WORK (don't rebuild from scratch):
+  - Story 8.P already built a LightGBM quantile model: betting_ml/scripts/train_quantile_totals.py +
+    betting_ml/models/total_runs/quantile_inference.py + archived per-quantile models
+    betting_ml/models/total_runs/archive/lgb_quantile_{0.10,0.25,0.50,0.75,0.90}_20260508_*.pkl.
+    NOTE: `quantile_forest` is NOT installed — realize the QRF via LightGBM quantile regression (the 8.P
+    approach) or sklearn GradientBoosting quantile; multiple per-quantile fits.
+  - 8.P was KILLED by the NGBoost-era std-shrinkage gate, which 10.6 showed is STALE (v4 std-of-means 1.355
+    already differentiates). Re-run under the v4-era gates, NOT the old shrinkage gate.
+
+PLAYBOOK:
+  1. Train/refit the quantile model on the Layer-3 matrix (build_totals_dataset in load_layer3_features.py).
+  2. Derive P(over) DIRECTLY from the predictive quantiles (interpolate across fitted quantile levels) — NO
+     NegBin CDF, NO exp-link.
+  3. Compute the May-2026 mean predicted total; state explicitly whether the +0.170 Jensen floor is absent
+     (mean ≈ league actual, not pinned ≥8.87).
+  4. Document calib_80 + Brier vs market on the 2026 OOS surface; record a promote/defer verdict.
+
+GUARDS: report May-2026 mean total vs 8.81 FIRST and state whether the log-link floor is gone; 2026 OOS only
+(2023–25 Layer-3 is leakage-contaminated).
+
+KEY FILES: betting_ml/scripts/train_quantile_totals.py · betting_ml/models/total_runs/quantile_inference.py +
+archive/lgb_quantile_*.pkl · betting_ml/scripts/load_layer3_features.py (build_totals_dataset) ·
+betting_ml/scripts/walk_forward_oos.py · betting_ml/scripts/evaluate_totals_bayesian.py.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -11744,12 +12013,34 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 19.6 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 19.6 exactly.
-  - Your work MUST conform to every item in the Story 19.6 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 19.6 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - The current OOD gate is PER-SIGNAL (z>1.5σ on each signal independently). It MISSED the May-2026 event:
+    bullpen drifted only +0.2882σ (well below 1.5) yet that was the entire totals kill-criterion overshoot —
+    the failure was a COMBINATION of small per-signal drifts, invisible to a marginal gate. A VAE on the JOINT
+    signal vector catches holistic/combination drift via reconstruction error.
+  - This is a bet-permission GATE feature (Epic 19), NOT a model-skill change. Its job is to BLOCK bets when
+    the current game's signal vector is jointly out-of-distribution vs the training regime.
+
+PLAYBOOK:
+  1. Assemble the joint game-level signal vector from feature_pregame_sub_model_signals (the _SIGNAL_GROUPS
+     mus — the same columns the Layer-3 matrix uses). Train window 2022–2025.
+  2. Train a SMALL VAE (low latent dim; tabular, only ~thousands of games — keep it tiny to avoid overfit);
+     compute per-game reconstruction error.
+  3. Backtest: does recon-error AUC flag the May-2026 cohort EARLIER/BETTER than the per-signal z>1.5 gate's
+     recall on the same cohort? (This IS the headline acceptance metric.)
+  4. Wire as an Epic 19 gate criterion `signal_combination_ood` in betting_ml/sub_model_registry.yaml
+     (bet_gate), blocking bets above a documented recon-error threshold; cover it in
+     betting_ml/tests/test_bet_permission.py.
+
+GUARDS: train on 2022–2025 ONLY — May-2026 is the held-out test cohort (no leakage). Set the threshold on the
+TRAINING-era recon-error distribution, never tuned on May-2026.
+
+KEY FILES: feature_pregame_sub_model_signals (joint signal vector; _SIGNAL_GROUPS in
+betting_ml/scripts/load_layer3_features.py:61) · betting_ml/sub_model_registry.yaml (bet_gate) ·
+betting_ml/tests/test_bet_permission.py · a new VAE module under betting_ml/models/.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -11997,12 +12288,29 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 3A.3 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 3A.3 exactly.
-  - Your work MUST conform to every item in the Story 3A.3 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 3A.3 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT (Tier 3, opportunistic — small, self-contained):
+  - mart_eb_park_factors (Story 3A.1) is a one-level Normal-Normal that shrinks each park to the GLOBAL league
+    mean. Low-sample parks (Sutter Health = A's temp park; Tokyo Dome = intl series) get over-shrunk to the
+    global mean because they have few games. Add a park-TYPE level so they borrow from SIMILAR parks instead.
+  - This is a hierarchy extension, NOT a new model: insert a type-level hyperprior BETWEEN the global mean and
+    the per-park posterior (two-level Normal-Normal).
+
+PLAYBOOK:
+  1. Cluster parks by type (high-altitude, dome/retractable, pitcher's/hitter's) from venue metadata —
+     elevation_ft + dome/dimensions live in dbt/seeds/ref_venues.csv and feature_pregame_park_features.sql.
+  2. Add the type-level hyperprior to the park-factor fit (betting_ml/scripts/eb_priors/fit_park_priors.py /
+     fit_granular_park_priors.py → mart_eb_park_factors / mart_park_factors_granular).
+  3. Re-fit; verify low-n parks shrink toward their TYPE mean, not the global mean.
+
+ACCEPTANCE: low-n park posteriors pulled toward type-cluster mean (show Sutter Health / Tokyo Dome
+before→after); CV error on the ~2% non-standard-venue games must NOT regress vs the current global-shrinkage prior.
+
+KEY FILES: dbt/models/mart/mart_eb_park_factors.sql + mart_park_factors_granular.sql ·
+betting_ml/scripts/eb_priors/fit_park_priors.py + fit_granular_park_priors.py · dbt/seeds/ref_venues.csv ·
+dbt/models/feature/feature_pregame_park_features.sql.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -12035,12 +12343,31 @@ architecture and data model:
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
-Then:
-  - Identify every file associated with Story 5A.6 (Python models/scripts, dbt models, seeds,
-    configs, tests) by tracing its Tasks list and the data lineage in the inventory.
-  - Implement each Task listed under Story 5A.6 exactly.
-  - Your work MUST conform to every item in the Story 5A.6 Acceptance criteria — treat them as the
-    definition of done; do not consider the story complete until each criterion is verified.
+Then read the Story 5A.6 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT (Tier 3, opportunistic — small, self-contained):
+  - 5A starter priors are season-level age-BAND points (u25/a25/a30/a33) in fit_starter_priors.py. A CONTINUOUS
+    aging curve (xwOBA-against vs age) removes the band discontinuities and improves the cold-start subgroups —
+    rookies and veteran decline — which are exactly what 5A.3's il_return_blend targets.
+
+PLAYBOOK:
+  1. Fit a smooth pitcher aging curve (xwOBA-against vs age — GAM / loess / low-order polynomial) from the
+     historical starter game logs; this becomes the prior-MEAN function.
+  2. In betting_ml/scripts/eb_priors/compute_starter_posteriors.py, replace the band-mean lookup
+     (_assign_experience_band → _get_prior_cell) with the curve value at the pitcher's exact age, keeping the
+     same Normal-Normal shrinkage and il_return_blend logic otherwise.
+  3. Ablate on the April-window / rookie / IL-return subgroups vs the current band prior.
+
+GOTCHA: changing the prior means eb_starter_posteriors must be RE-BACKFILLED to take effect — use the
+(now batched, A2.10) `compute_starter_posteriors.py --backfill-season <YEAR>` per season (hand-off >1 min).
+
+ACCEPTANCE: April-window AND IL-return subgroup MAE ≤ current band-prior MAE, documented (a TARGETED subgroup
+win, not a global one — don't regress the bulk).
+
+KEY FILES: betting_ml/scripts/eb_priors/fit_starter_priors.py (band priors → continuous curve) ·
+betting_ml/scripts/eb_priors/compute_starter_posteriors.py (consumer; _assign_experience_band/_get_prior_cell) ·
+betting_ml/models/eb_priors/starter_priors_{season}.json.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min

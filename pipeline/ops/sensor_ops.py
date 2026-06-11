@@ -3,12 +3,32 @@ import subprocess
 import sys
 from datetime import date
 
-from dagster import In, Nothing, OpExecutionContext, Out, op
+from dagster import In, Nothing, OpExecutionContext, Out, RetryPolicy, op
 
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
 _EB_DIR = "/app/betting_ml/scripts/eb_priors"
+
+# Epic A1 (Pipeline SLA & Reliability): the sensor-fired catch-up ops are idempotent
+# re-attempts (incremental ingestion + MERGE-keyed dbt rebuilds), so a transient
+# Snowflake hiccup (warehouse resume, incremental-MERGE lock, network blip) should
+# self-heal rather than page. Incident 2026-06-11: catchup_dbt_rebuild failed once
+# at 05:17 while the identical `stg_batter_pitches+` build succeeded at 03:16, 04:16,
+# and again in the 07:00 daily run — a textbook transient.
+_CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
+
+
+def _failure_detail(result) -> str:
+    """Diagnostic tail for a failed subprocess. dbt-fusion writes everything to
+    STDOUT and leaves stderr EMPTY, so a bare `{stderr}` lost the real error to
+    Dagster's 50k log truncation (incident 2026-06-11). Prefer stderr, else fall
+    back to the stdout tail (which carries dbt's end-of-run failure summary)."""
+    err = (result.stderr or "").strip()
+    if err:
+        return err[-4000:]
+    out_tail = (result.stdout or "")[-4000:]
+    return f"(stderr empty — stdout tail)\n{out_tail}"
 
 
 def _today() -> str:
@@ -25,7 +45,7 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
     if result.stderr:
         context.log.warning(result.stderr)
     if result.returncode != 0:
-        raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
+        raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{_failure_detail(result)}")
 
 
 def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
@@ -37,7 +57,7 @@ def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
     if result.stderr:
         context.log.warning(result.stderr)
     if result.returncode != 0:
-        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{result.stderr}")
+        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{_failure_detail(result)}")
 
 
 # ── Statcast catch-up job ops (statcast_freshness_sensor) ─────────────────────
@@ -46,13 +66,13 @@ def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
 # daily run. savant_ingestion is incremental (auto-resumes from last_loaded+1 to
 # yesterday), so this needs no date args and is idempotent across retries.
 
-@op(out=Out(Nothing))
+@op(out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
 def catchup_ingest_statcast(context: OpExecutionContext) -> None:
     """Re-attempt Statcast pitch ingestion for the not-yet-loaded day(s)."""
     _run_script(context, "savant_ingestion.py", ["batter_pitches"])
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), retry_policy=_CATCHUP_RETRY)
 def catchup_dbt_rebuild(context: OpExecutionContext) -> None:
     """Rebuild the pitch-derived subtree so the newly-landed completed games flow
     into mart_game_results → mart_game_spine → rolling marts → feature store.
