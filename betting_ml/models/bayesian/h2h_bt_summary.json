@@ -1,0 +1,81 @@
+{
+  "model": "h2h_hierarchical_bradley_terry",
+  "story": "28.5",
+  "nuts": {
+    "draws": 2000,
+    "tune": 1500,
+    "chains": 4,
+    "target_accept": 0.95
+  },
+  "n_train_games": 9076,
+  "n_oos_games": 821,
+  "n_teams": 31,
+  "scaler_stats": {
+    "offense": {
+      "mean": 4.004084794292276,
+      "std": 0.13624569432590133
+    },
+    "bullpen": {
+      "mean": 1.4453593253630366,
+      "std": 0.4812911169554321
+    },
+    "starter": {
+      "mean": 0.31745718010290497,
+      "std": 0.019787459549772
+    },
+    "run_diff_sigma": {
+      "mean": 2.829669169122611,
+      "std": 0.033793222715562184
+    }
+  },
+  "diagnostics": {
+    "max_rhat": 1.0,
+    "min_ess_bulk": 2114.0,
+    "divergences": 0,
+    "rhat_ok": true,
+    "ess_ok": true,
+    "div_ok": true,
+    "converged": true,
+    "betas": {
+      "beta_off": 0.0649,
+      "beta_bull": -0.5606,
+      "beta_start": -0.0915,
+      "beta_rd_sigma": 0.0006
+    }
+  },
+  "evaluation": {
+    "n_covered": 569,
+    "base_rate_2026": 0.5213154689403167,
+    "market_brier": 0.18150367650026883,
+    "market_credible": true,
+    "market_target": 0.182,
+    "bt_nll": 0.6396454275357716,
+    "champ_nll": 0.637201727968684,
+    "market_nll": 0.5326425639347188,
+    "prior_nll": 0.6920325697337195,
+    "bt_ece": 0.05988329877200506,
+    "champ_ece": 0.04819950520329549,
+    "bt_calib_in_large": -0.008299192039171066,
+    "champ_calib_in_large": 0.008569111918107497,
+    "bt_iso_brier": 0.2246270289772271,
+    "bt_iso_ece": 0.050546589408498294,
+    "bt_brier": 0.22408675829544686,
+    "champ_brier": 0.22305936286949982,
+    "prior_naive_brier": 0.24944289462671057,
+    "beats_champion": false,
+    "closes_toward_market": false,
+    "beats_market": false,
+    "promote": false
+  },
+  "layer4_verdict": {
+    "passed": true,
+    "gate_metric": "roi_devig",
+    "optimal_totals_threshold": 1.0,
+    "optimal_h2h_threshold": 0.1,
+    "n_bets": 417,
+    "win_rate": 0.6211031175059952,
+    "roi_110": 0.18574231523871812,
+    "roi_devig": 0.10267831826690482,
+    "roi": 0.10267831826690482
+  }
+}
