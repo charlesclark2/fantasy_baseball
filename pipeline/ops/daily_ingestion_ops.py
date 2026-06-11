@@ -519,6 +519,17 @@ def monitor_magnitude_h2h_op(context):
     _run_script(context, "ops/monitor_magnitude_h2h.py", ["--schema", "betting_ml"])
 
 
+@op(out=Out(Nothing))
+def monitor_conviction_h2h_op(context):
+    """Weekly read-only monitor for the conviction-gate H2H kill criterion (Story 28.6b).
+
+    Same discipline as the magnitude monitor: logs real-book ROI, Brier, tripwire,
+    and accrual for the 28.2 disagreement-gate selective strategy. SHADOW/manual —
+    no automated bets fire off this; it only makes the CONFIRM/KILL gate auditable.
+    """
+    _run_script(context, "ops/monitor_conviction_h2h.py", ["--schema", "betting_ml"])
+
+
 # ── SCD-2 incremental updates ────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

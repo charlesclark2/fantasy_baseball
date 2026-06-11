@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -160,6 +161,15 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     layer4_h2h_bovada_ml_home INTEGER,      -- e.g. -158 (home favored) or +132 (home dog)
     layer4_h2h_bovada_ml_away INTEGER,      -- mirroring away-side American odds
 
+    -- Story 28.6b — conviction-gate overlay (the 28.2 selective filter). Flags games
+    -- where the two INDEPENDENT H2H estimators agree within 0.02:
+    --   |calibrated_win_prob − P_run_diff(home)|, where P_run_diff(home) = Φ(μ/σ).
+    -- Consumed SHADOW/manual by monitor_conviction_h2h.py against the 28.6b kill
+    -- criterion; NO automated bets until live CONFIRM. Independent of odds (a game can
+    -- be flagged yet abstain when there's no priced market).
+    layer4_h2h_conviction_flag     BOOLEAN,  -- TRUE when |cal_win − p_run_diff| <= 0.02
+    layer4_h2h_conviction_disagree FLOAT,    -- |cal_win − p_run_diff| (kept for threshold tuning)
+
     -- A2.5 — per-game imputation transparency. From the PRE-imputation matrix:
     -- which model features were NULL and got median/constant-imputed. The
     -- discriminative_* columns track only the UNCONDITIONAL-CORE discriminative set
@@ -192,6 +202,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     posterior_source, prior_age_days,
     layer4_totals_decision, layer4_totals_over_signal,
     layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge,
+    layer4_h2h_conviction_flag, layer4_h2h_conviction_disagree,
     bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood,
     data_source, feature_coverage_score,
     layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
@@ -213,6 +224,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(posterior_source)s, %(prior_age_days)s,
     %(layer4_totals_decision)s, %(layer4_totals_over_signal)s,
     %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s,
+    %(layer4_h2h_conviction_flag)s, %(layer4_h2h_conviction_disagree)s,
     %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s,
     %(data_source)s, %(feature_coverage_score)s,
     %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s,
@@ -574,6 +586,7 @@ def _write_predictions_to_snowflake(
         # Pure logging: any failure here must NEVER abort the core prediction write,
         # so it's fully guarded and falls back to NULL on error.
         l4_tot_decision = l4_tot_signal = l4_h2h_decision = l4_h2h_rule = l4_h2h_edge = None
+        l4_h2h_conviction_flag = l4_h2h_conviction_disagree = None
         try:
             # Totals: model mu vs the book line at the 1.0-run threshold; abstain w/o a line.
             l4_line = total_line_v if has_odds else None
@@ -587,6 +600,13 @@ def _write_predictions_to_snowflake(
                 market_p_home=(h2h_mkt_v if has_odds else None),
                 h2h_magnitude_threshold=DEFAULT_H2H_MAGNITUDE_THRESHOLD)
             l4_h2h_edge = h2h_raw_edge  # raw cal_win - h2h_mkt_v (Layer-4 magnitude; None when no odds)
+            # Story 28.6b — conviction gate: agreement of the two INDEPENDENT estimators.
+            # P_run_diff(home) = Φ(μ/σ) = P(run_diff > 0); Φ(x) = 0.5·erfc(−x/√2).
+            _sd = float(scale_diff[i])
+            _z = (float(loc_diff[i]) / _sd) if _sd else 0.0
+            _p_run_diff = 0.5 * math.erfc(-_z / math.sqrt(2.0))
+            l4_h2h_conviction_disagree = abs(float(cal_win) - _p_run_diff)
+            l4_h2h_conviction_flag = bool(l4_h2h_conviction_disagree <= 0.02)
         except Exception as _l4_exc:
             print(f"  Warning: Layer 4 attribution failed for game index {i} "
                   f"({_l4_exc}); logging NULLs.")
@@ -656,6 +676,8 @@ def _write_predictions_to_snowflake(
             "layer4_h2h_decision":       l4_h2h_decision,
             "layer4_h2h_rule":           l4_h2h_rule,
             "layer4_h2h_edge":           l4_h2h_edge,
+            "layer4_h2h_conviction_flag":     l4_h2h_conviction_flag,
+            "layer4_h2h_conviction_disagree": l4_h2h_conviction_disagree,
             "bullpen_z_score_home":      gate_result.get("bullpen_z_score_home"),
             "bullpen_z_score_away":      gate_result.get("bullpen_z_score_away"),
             "bullpen_signal_ood":        gate_result.get("bullpen_signal_ood", False),

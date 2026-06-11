@@ -594,7 +594,9 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — DONE (2026-06-11)** | Story 27.5 (GB/FB×park) | mart_pitcher_batted_ball_profile built; ablation run | ✅ DEFER: coverage 78% (fails ≥90% gate); ΔNLL=+0.0006, 0/5 folds improve; orthogonality PASS. Re-eval after full 2026 Statcast backfill (~Oct 2026) or when within-season rolling GB%/FB% is available. |
 | **1 — DONE (2026-06-11)** | Epic 27.3 (totals re-open gate), Story 10.10 (QRF) | 27.4 ✅ PROMOTE 2026-06-11; 27.5 ✅ DEFER 2026-06-11 | ❌ BOTH FAIL the kill criterion. 27.3: env_league_state non-informative (β=0.0128); May-2026 PPM=9.3042 > 8.81 (8th confirmation). 10.10: Jensen floor IS removed (mean 8.53 ≤ 8.81 — first positive isolation) but no edge (Brier 0.305 > market 0.229; calib_80 0.686) (9th confirmation). Re-open criteria (b) smoothed-state + model-family BOTH exhausted; only (a) full-2026 `delta_2026` (~Oct) remains for MAIN-LINE betting. Totals stays paused → **reframed track = Epic 29**. |
 | **1 — LARGELY CLOSED (2026-06-11)** | **Epic 29 (totals point-accuracy & alt-line edge track)** | 10.10 ✅ DEFER; 10.9 conformal ✅ | 29.1 gate ran same-day → **DOWNGRADE**: on honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE (line MedAE 1.50 vs model 2.92). Model is level-unbiased (+0.05) but per-game variance-deficient — an information gap, not a level/calibration gap. 29.2 (calib) + 29.3 (alt-line) downgraded (neither fixes the center). Totals = product-only on the market line. Re-open criterion (a)/Oct now in doubt (corrects level, not variance). |
-| **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
+| **2 — DONE (2026-06-11)** | Story 28.5 (Bradley-Terry) | Epic 28.4 ❌ → 28.5 | ❌ DO NOT PROMOTE — converges cleanly (R-hat 1.0000, ESS 2114, 0 divergences in 56s; H2H has NO Jensen floor, confirmed) but no edge: credible-2026 Brier BT 0.2241 vs champion 0.2231 vs market 0.1815. **4th independent H2H no-edge confirmation** (Epic 11, 16B.7, 28.4, 28.5). A better-shaped likelihood does not manufacture signal the sub-models lack. Dominant coef beta_bull=−0.561; beta_rd_sigma≈0. Module `h2h_bradley_terry_nuts.py`; report `h2h_bradley_terry_28_5.md`. → H2H head-on modeling exhausted; pivot to SELECTIVE-edge (28.2 disagreement gate) + CLV (12.10′) + live magnitude accrual (28.3). |
+| **1 — CODE COMPLETE, DEPLOY PENDING (2026-06-11)** | **Story 28.6 (operationalize the 28.2 conviction gate)** | 28.2 ✅ gate + 28.3 ✅ monitor template | The H2H redirect after 4× head-on no-edge. **28.6a** robustness preview = AMBER (Brier edge within noise, 95% CI crosses 0 on n=85); real-book-ROI completion = hand-off script `h2h_conviction_realbook_roi_28_6a.py` (ready to run). **28.6b BUILT (shadow-only):** predict_today.py writes `layer4_h2h_conviction_flag/_disagree` (erfc=scipy to 1e-16); `monitor_conviction_h2h.py` + `home_win.conviction_kill_criterion` (n≥60 PROVISIONAL). **Remaining = user deploy:** ALTER table +2 cols, redeploy predict_today, run 28.6a + monitor. automated_bets=false until live CONFIRM. |
+| **2 — ARCH (Arch Review)** | Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 12.4 / Epic 19 | After Tier 1 |
 | **2 — ARCH (Arch Review)** | **Story 12.11 Phase 1 (Parlay WS/SSE streaming — pregame `odds` ingestion + CLV latency, SPIKE-FIRST)** | Business tier ✅ (cost gate cleared 06-11); gated on always-on-consumer infra verdict | After Tier 1; spike before any build |
 | **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
 | **4 — LATE SEASON** | **Story 12.11 Phase 2 (Parlay `live` in-play stream → in-game betting)** | **Rule 27 / Epic 20 profitability gate** (≥30 live days positive mean CLV) → Epic 21 | Post-profitability; do NOT jump the gate |
@@ -11807,6 +11809,168 @@ Module: `betting_ml/models/bayesian/h2h_bradley_terry_nuts.py`. Run: `uv run pyt
 betting_ml/models/bayesian/h2h_bradley_terry_nuts.py`. Report: `ablation_results/h2h_bradley_terry_28_5.md`.
 Note: L4 vig-free `roi_devig` passes (optimistic upper bound only; cf. 28.3 kill-criterion — real-book
 vig erases it).
+
+---
+
+### 28.6 — Operationalize the 28.2 disagreement-gate conviction filter (harden → forward-test)
+
+**Status:** ⬜ NEXT (opened 2026-06-11). **Track B.** The H2H pivot after 4× no-edge on head-on modeling
+(28.4/28.5). Head-on point models are exhausted; the one survivor with a *demonstrated* market-beating
+result is the **28.2 disagreement gate** — a SELECTIVE strategy, not a better model.
+
+**The finding being operationalized (28.2):** filter to games where the two genuinely-independent H2H
+estimators *agree* — `|p_classifier − p_run_diff| ≤ 0.02`. On that subset (2026 OOS): **n=85 games (14.3%),
+57 bets, model Brier 0.1793 < market 0.1895 (BEATS market), roi_devig +0.6812.** This is the ONLY conviction
+band that beats the market, and the only H2H result anywhere that clears the sharp 2026 Parlay line.
+
+**⚠️ HONEST FRAMING (do NOT skip — this governs the whole story).** The 28.2 result is *hypothesis-generating,
+not proof*: (1) **small sample** — 85 games / 57 bets; (2) **single-threshold selection** — 0.02 is the best
+of 6 caps tried, so some of the edge is selection luck; (3) **vig-free ROI** — `roi_devig` is the optimistic
+upper bound; the 28.3 magnitude work already showed real-book vig can erase a positive `roi_devig`. Therefore
+operationalizing means **harden first (28.6a), then forward-test on real prices (28.6b)** — NEVER pipe the
+57-bet backtest straight into live betting. This mirrors the 28.3 discipline exactly.
+
+**Prerequisites:** 28.2 ✅ (gate defined, `h2h_ensemble_eval.py`), 28.3 ✅ (the monitor + kill-criterion
+template: `scripts/ops/monitor_magnitude_h2h.py`, `model_registry.yaml home_win.kill_criterion`), 26.5 live
+attribution ✅ (`daily_model_predictions` carries `layer4_h2h_*`).
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.6 standalone:
+
+```
+You are picking up Story 28.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then read the Story 28.6 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - You are operationalizing the 28.2 disagreement gate (|p_classifier − p_run_diff| ≤ 0.02), the ONLY
+    H2H strategy that beat the sharp 2026 market (model Brier 0.1793 < market 0.1895 on 85 games / 57 bets,
+    roi_devig +0.6812). It is a SELECTIVE conviction filter, NOT a new model. Head-on H2H modeling is
+    exhausted (4× no edge: Epic 11, 16B.7, 28.4, 28.5) — do NOT build another challenger.
+  - HONEST FRAMING governs everything: the finding is small-sample (57 bets), single-threshold-selected
+    (0.02 = best of 6), and vig-free (roi_devig is optimistic). Phase 28.6a HARDENS it; only if 28.6a
+    passes its pre-committed gate do you wire the forward test in 28.6b. NEVER auto-bet a backtest.
+  - REUSE: h2h_ensemble_eval.py (gate logic + cached run_diff parquet), oos_predictions_h2h_v2.parquet
+    (p_classifier), monitor_magnitude_h2h.py (the monitor template — real-book ROI from
+    layer4_h2h_bovada_ml_home/away), model_registry.yaml home_win.kill_criterion (registration pattern).
+  - Real Bovada H2H American odds for the backtest: see reference_bovada_h2h_moneyline / load_devig_home_prob_bovada
+    (mart_odds_outcomes h2h). The sharp credible-2026 surface is the Parlay h2h market (reference_bovada_h2h_line_quality).
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Convert the 28.2 disagreement-gate finding into a *live, monitored, pre-committed* selective H2H
+strategy — but only after an honest hardening pass confirms the edge survives real-book vig and isn't a
+small-sample / threshold-selection artifact.
+
+#### Phase 28.6a — Honest hardening re-backtest (the go/no-go gate)
+
+**Tasks:**
+- [x] **Threshold robustness + bootstrap CI on the Brier gap (LOCAL preview, no Snowflake).** Replicated the
+  28.2 gate from the local parquets (`p_clf=model_p_home_win`, `p_rd=p_run_diff`, ensemble w=0.25,
+  `market_devig_home`, `home_win`); bootstrapped (B=10k) the (model−market) Brier gap per cap.
+  *Result 2026-06-11 — AMBER, edge NOT statistically robust:*
+  | cap | n | model B | mkt B | gap | gap 95% CI | P(gap<0) |
+  |--:|--:|--:|--:|--:|--:|--:|
+  | 0.01 | 42 | 0.1510 | 0.1634 | −0.0124 | [−0.063, +0.041] | 69.1% |
+  | **0.02** | **85** | **0.1793** | **0.1895** | **−0.0102** | **[−0.053, +0.032]** | **67.7%** |
+  | 0.03 | 115 | 0.1912 | 0.1751 | +0.0161 | [−0.019, +0.053] | 17.4% |
+  | 0.05 | 193 | 0.2026 | 0.1764 | +0.0262 | [−0.001, +0.053] | 3.2% |
+  | 0.10 | 343 | 0.2005 | 0.1691 | +0.0315 | [+0.011, +0.052] | 0.1% |
+  *Reads: (1) the model point-beats market at the TWO tightest caps (0.01 & 0.02) — a plateau, NOT a lone
+  spike (mild positive); BUT (2) the Brier advantage is WITHIN NOISE — the 95% CI crosses zero at both, only
+  ~68% bootstrap confidence the edge is real on n=85; and (3) it COLLAPSES immediately at cap≥0.03 (model
+  clearly loses, P(gap<0)→0.1%). So the headline "beats market" is real but not significant — a suggestive
+  signal a forward test must arbitrate, not a confirmed edge.*
+- [x] **Real-book ROI (Bovada American odds).** *DONE 2026-06-11 (`h2h_conviction_realbook_roi_28_6a.py` →
+  `ablation_results/h2h_conviction_gate_28_6a.md`): operational threshold bets n=65, real-book ROI **+0.5352**,
+  95% CI **[+0.1575, +1.0196]**, P(ROI>0)=99.9%. All-agreeing-games n=85: +0.3989, CI [+0.094, +0.773].
+  **GO** by the pre-committed gate (lower-CI > 0).* ⚠️ **Calibrate expectations:** the +0.535 point estimate is
+  NOT a forward expectation — it's high-variance (underdog wins at long odds), n=65, and on the SAME 2026 sample
+  that selected the 0.02 cap (selection inflation). The forward test will regress hard; the lower-CI +0.16 is the
+  meaningful floor and even that is optimistic. The GO means "worth forward-testing," not "we found a 53% edge."
+- [x] Pre-committed go/no-go (set BEFORE results): **forward-test only if** real-book ROI 95% lower-CI > 0
+  **AND** the Brier gap is significantly negative (upper-CI < 0) **AND** ≥2 adjacent caps beat market.
+  *Status: Brier-significance criterion ALREADY FAILS (upper-CI +0.032 at cap 0.02); the ≥2-adjacent-caps
+  criterion PASSES. Net: a strict reading is NO-GO on the backtest. The open question (below) is whether to
+  still run the cheap shadow-only forward test, since 28.6b risks no money until live CONFIRM.*
+
+**Acceptance criteria (28.6a):**
+- [ ] Report `ablation_results/h2h_conviction_gate_28_6a.md`: real-book ROI + 95% CI, cap-robustness curve,
+  bootstrap CI on the Brier gap, explicit GO / NO-GO verdict against the pre-committed gate.
+- [ ] If NO-GO: document the conviction gate as a closed small-sample artifact; H2H pivots to 12.10′ (CLV) and
+  28.3 accrual only. If GO: proceed to 28.6b.
+
+#### Phase 28.6b — Forward live-test wiring + monitor + kill criterion (only if 28.6a = GO)
+
+**Tasks:**
+- [x] Tag qualifying games in the daily prediction path. *DONE 2026-06-11 (`scripts/predict_today.py`): in the
+  Layer-4 block, `p_run_diff(home)=Φ(μ/σ)` is computed inline via `math.erfc` from `pred_run_diff_loc/scale`
+  (verified bit-identical to the scipy `norm.sf` used to build the OOS parquet, max diff 1.1e-16), and
+  `layer4_h2h_conviction_flag = |calibrated_win_prob − p_run_diff| ≤ 0.02` plus `layer4_h2h_conviction_disagree`
+  are written to `daily_model_predictions`. Additive, fully guarded (NULL on error). The flag is computed for
+  every game; a "conviction BET" = flag=TRUE AND `layer4_h2h_decision IN (home,away)`. Conviction overlays the
+  existing decision — by construction the two estimators are within 0.02, so the decision side ≈ the ensemble side.*
+- [x] Build `scripts/ops/monitor_conviction_h2h.py` (mirror `monitor_magnitude_h2h.py`): real-book ROI +
+  95%-lower-CI, model-vs-market Brier on the conviction subset, tripwire@n=20, verdict@n=60 (PROVISIONAL —
+  finalize N from 28.6a power). *DONE 2026-06-11; compiles; SHADOW/manual framing baked into the header + output.*
+- [x] Register `home_win.conviction_kill_criterion` in `model_registry.yaml`: CONFIRM (n≥60, lower-CI real-book
+  ROI > 0, Brier < market), KILL (full + tripwire@20); `automated_bets=false` until CONFIRM. *DONE 2026-06-11
+  (YAML validated); status field records the within-noise backtest caveat.*
+
+**Acceptance criteria (28.6b):**
+- [x] Code: `daily_model_predictions` write-path carries the conviction flag + disagree; monitor + registry built/validated.
+- [ ] **DEPLOY (user — needs Snowflake DDL + daily-job run):** ALTER the prod table to add the two columns
+  (below), deploy the updated `predict_today.py`, then a sample day shows the ~14% qualifying rate.
+- [x] `monitor_conviction_h2h.py` AUTOMATED in Dagster (2026-06-11): `monitor_conviction_h2h_op` added to
+  `daily_ingestion_ops.py` and folded into the existing weekly `magnitude_monitor_job` (Mondays 12:00 UTC) —
+  runs alongside the magnitude monitor, no new schedule. Reports accrual + verdict to Dagster logs each week.
+- [x] DAILY PICK ALERT (2026-06-11): `pipeline/sensors/conviction_pick_alert_sensor.py` — emails the day's
+  conviction picks (matchup, bet side, model vs market P, Bovada odds) in the pre-game window via the standard
+  raise→Dagster-Cloud-email pattern (mirrors `pregame_alert_sensor`). Registered in `all_sensors`. So the
+  operator gets the picks pushed without opening Streamlit. Dedup: one digest/day; finalizes only once
+  post_lineup predictions exist.
+- [x] PLACEMENT POLICY = MANUAL-ONLY ALWAYS (US; no automation platform; operator preference). The
+  `automated_bets` flag never flips true. CONFIRM promotes conviction from informational → TRUSTED manual-bet
+  signal (still placed by hand); KILL stops surfacing it as actionable. Reflected in `model_registry.yaml`
+  `home_win.conviction_kill_criterion.placement_policy` + the monitor's CONFIRM text.
+- [ ] Accrual clock: qualifying ≈14% of games → from the live game rate, n=60 settled ≈ a few weeks; verdict ETA noted on first run.
+
+> **Why daily_model_predictions conviction columns are NULL until deploy (not a bug):** the ALTER adds the
+> columns with NULL defaults; they only populate when the NEW `predict_today.py` runs against that table.
+> The deployed (prod) code is still the old version until you ship, so existing/scheduled prod rows show NULL.
+> Diagnose with: `SELECT prediction_type, MAX(inserted_at), COUNT(*), COUNT(layer4_h2h_conviction_disagree),
+> SUM(IFF(layer4_h2h_conviction_flag,1,0)) FROM baseball_data.betting_ml.daily_model_predictions
+> WHERE score_date=CURRENT_DATE GROUP BY 1;` — populates after deploy + the next post_lineup run.
+
+**▶ DEPLOY (hand-off — DDL + redeploy; conviction stays SHADOW/manual, no automated bets):**
+```sql
+ALTER TABLE baseball_data.<ml_schema>.daily_model_predictions
+  ADD COLUMN layer4_h2h_conviction_flag BOOLEAN,
+  ADD COLUMN layer4_h2h_conviction_disagree FLOAT;
+```
+Then redeploy `predict_today.py` (next daily/post-lineup run starts populating the columns), and after the
+first settled day:
+```bash
+uv run python scripts/ops/monitor_conviction_h2h.py --schema betting_ml
+```
+**Also run the 28.6a evidence completion** (real-book ROI on the historical 85-game backtest) to finalize the n=60 gate:
+```bash
+uv run python betting_ml/scripts/h2h_conviction_realbook_roi_28_6a.py --env prod
+```
+
+**Net framing:** 28.6 does NOT claim a confirmed H2H edge — it converts the one promising selective finding
+into an honest, pre-committed forward test on real prices, the same way 28.3 handled magnitude. The verdict
+comes from live settled bets, not the backtest.
 
 ---
 

@@ -5,5 +5,6 @@ from pipeline.sensors.pregame_snapshot_sensor import pregame_snapshot_sensor
 from pipeline.sensors.clv_alert_sensor import clv_alert_sensor
 from pipeline.sensors.statcast_freshness_sensor import statcast_freshness_sensor
 from pipeline.sensors.model_health_alert_sensor import model_health_alert_sensor
+from pipeline.sensors.conviction_pick_alert_sensor import conviction_pick_alert_sensor
 
-all_sensors = [lineup_monitor_sensor, morning_watchdog_sensor, pregame_alert_sensor, pregame_snapshot_sensor, clv_alert_sensor, statcast_freshness_sensor, model_health_alert_sensor]
+all_sensors = [lineup_monitor_sensor, morning_watchdog_sensor, pregame_alert_sensor, pregame_snapshot_sensor, clv_alert_sensor, statcast_freshness_sensor, model_health_alert_sensor, conviction_pick_alert_sensor]
