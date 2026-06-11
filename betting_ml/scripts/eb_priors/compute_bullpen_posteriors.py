@@ -772,21 +772,26 @@ def _write_team(conn, rows: list[dict]) -> None:
 
 # ── Processing ────────────────────────────────────────────────────────────────
 
-def _process_date(
+def _compute_date_rows(
     conn,
     game_date: date,
     season: int,
     priors: dict,
     prior_ali_map: dict[int, float],
     current_ali_map: dict[int, float],
-) -> tuple[int, int]:
-    """Process one game date. Returns (n_individual_rows, n_team_rows)."""
+) -> tuple[list[dict], list[dict]]:
+    """Compute (but do NOT write) one game date's rows.
+
+    A2.8 spend fix: returns (individual_rows, team_rows) so the backfill caller
+    can accumulate across all dates and write each table ONCE, instead of a
+    CREATE TEMP + INSERT + MERGE round-trip (×2 tables) per date.
+    """
     fit_date = date.today()
     run_id   = str(uuid.uuid4())
 
     game_rows = _load_game_relievers(conn, game_date)
     if not game_rows:
-        return 0, 0
+        return [], []
 
     pitcher_ids  = list({str(r["pitcher_id"]) for r in game_rows})
     season_stats = _load_season_to_date_stats(conn, pitcher_ids, game_date, season)
@@ -817,9 +822,7 @@ def _process_date(
         individual_rows.append(result)
 
     team_rows = _aggregate_to_team(individual_rows)
-    _write_individual(conn, individual_rows)
-    _write_team(conn, team_rows)
-    return len(individual_rows), len(team_rows)
+    return individual_rows, team_rows
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -947,23 +950,29 @@ def main_backfill_season(season: int) -> None:
         cur.close()
         print(f"  {len(game_dates)} game dates to process")
 
-        total_ind  = 0
-        total_team = 0
+        all_individual: list[dict] = []
+        all_team: list[dict] = []
         for i, gd in enumerate(game_dates, 1):
             if isinstance(gd, str):
                 gd = datetime.strptime(gd[:10], "%Y-%m-%d").date()
-            n_ind, n_team = _process_date(
+            ind_rows, team_rows = _compute_date_rows(
                 conn, gd, season, priors, prior_ali_map, current_ali_map
             )
-            total_ind  += n_ind
-            total_team += n_team
+            all_individual.extend(ind_rows)
+            all_team.extend(team_rows)
             if i % 50 == 0 or i == len(game_dates):
                 print(
                     f"  [{i}/{len(game_dates)}] {gd}  "
-                    f"cumulative: {total_ind} individual, {total_team} team rows"
+                    f"cumulative: {len(all_individual)} individual, {len(all_team)} team rows"
                 )
 
-        print(f"\n  Season {season} complete — {total_ind} individual, {total_team} team rows.")
+        # A2.8 spend fix: ONE batched temp-table + INSERT + MERGE per table for
+        # the whole season instead of two write round-trips per date.
+        if all_individual:
+            print(f"  Writing {len(all_individual)} individual + {len(all_team)} team rows (batched)...")
+            _write_individual(conn, all_individual)
+            _write_team(conn, all_team)
+        print(f"\n  Season {season} complete — {len(all_individual)} individual, {len(all_team)} team rows.")
     finally:
         conn.close()
 
