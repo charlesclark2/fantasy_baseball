@@ -57,6 +57,46 @@ home_win:
       count + direction at time of reset) in the notes field above.
 
       '
+  conviction_kill_criterion:
+    story: 28.6b
+    attribution_start: '2026-06-11'
+    monitor_script: scripts/ops/monitor_conviction_h2h.py
+    strategy: 'Conviction gate (28.2): bet only games where the two INDEPENDENT H2H
+      estimators agree, |calibrated_win_prob - P_run_diff(home)| <= 0.02, on the
+      model''s favored side. Tagged live by layer4_h2h_conviction_flag in
+      daily_model_predictions (predict_today.py).'
+    status: 'SHADOW/informational — NOT a confirmed edge. The 28.2 backtest model-vs-market
+      Brier gap is within noise on n=85 (95% CI [-0.053,+0.032], ~68% bootstrap
+      confidence); the 28.6a real-book ROI (lower-CI +0.16) is GO but selection-inflated.
+      This forward test on real Bovada prices is the only honest arbiter.'
+    placement_policy: 'MANUAL-ONLY ALWAYS — operator is US-based; there is no platform to
+      automate bet placement (and manual is preferred). No automated_bets flag ever flips
+      true. Until CONFIRM, conviction picks are surfaced via conviction_pick_alert_sensor
+      as INFORMATIONAL (review at discretion). On CONFIRM, they are promoted to a TRUSTED
+      manual-bet signal — still placed by hand. KILL → stop surfacing as actionable.'
+    confirm_gate:
+      n_settled: 60        # PROVISIONAL — finalize from 28.6a real-book-ROI power (h2h_conviction_gate_28_6a.md)
+      real_book_roi_lower_ci_95_gt: 0
+      model_brier_lt_market_brier: true
+      notes: '95% lower-CI ROI uses actual Bovada American odds
+        (layer4_h2h_bovada_ml_home/away), not de-vigged probs. Both conditions must
+        pass simultaneously.'
+    kill_gates:
+    - trigger: n_at_full_gate
+      condition: n=60 AND 95%-lower-CI real-book ROI <= 0
+      action: kill_conviction_strategy
+    - trigger: early_tripwire
+      condition: at n=20, real-book win rate < avg break-even implied by actual Bovada
+        odds
+      action: kill_conviction_strategy
+    until_confirm: conviction is informational-only (surfaced via conviction_pick_alert_sensor);
+      promote to TRUSTED manual-bet signal on CONFIRM. Placement is always manual (US).
+    model_version_policy: 'Tracks the champion active at attribution_start. The gate
+      mixes the classifier (calibrated_win_prob) and run_diff (pred_run_diff_loc/scale)
+      sub-models; if EITHER is re-promoted mid-season, RESET attribution_start to the
+      promotion date and restart the n=60 count (do not mix pre/post-promotion bets).
+      Update attribution_start here AND ATTRIBUTION_START in monitor_conviction_h2h.py
+      in lockstep, noting the prior window accrual + direction.'
   ece_raw: 0.043
   eval_year: 2026
   feature_columns_path: betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json

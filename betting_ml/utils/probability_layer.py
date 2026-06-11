@@ -24,6 +24,12 @@ from sklearn.metrics import log_loss as sklearn_log_loss
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# VAE OOD gate — Story 19.6
+# ---------------------------------------------------------------------------
+# Lazy-loaded; None until the artifact is present on disk.
+_vae_model: "Any" = None  # betting_ml.models.vae_ood.signal_vae.SignalVAE | None
+
 
 def vig_adjust(
     home_price: float,
@@ -172,6 +178,7 @@ def tune_alpha(
 # ---------------------------------------------------------------------------
 
 _REGISTRY_PATH = Path(__file__).resolve().parents[2] / "betting_ml" / "sub_model_registry.yaml"
+_VAE_ARTIFACT_PATH = Path(__file__).resolve().parents[2] / "betting_ml" / "models" / "vae_ood" / "signal_vae.joblib"
 
 # Bullpen OOD gate — training distribution parameters fitted on 2022-2025 data.
 # Source: betting_ml/models/bayesian/signal_scalers.joblib → 'opp_bullpen_mu' scaler.
@@ -313,6 +320,59 @@ def _eval_bullpen_ood_gate(
     return z_home, z_away, is_ood
 
 
+def _eval_signal_combination_ood(row: dict) -> bool:
+    """VAE joint OOD gate (Story 19.6).
+
+    Loads the fitted SignalVAE from disk (lazy, cached), builds the 13-column
+    mu vector from prediction_row, and returns True when the reconstruction
+    error exceeds the training-era 95th-percentile threshold.
+
+    Graceful degradation:
+      - Artifact missing → False (no OOD signal; gate does not block)
+      - All 13 columns absent from row → False (cannot evaluate)
+      - VAE not enabled in bet_gate config → caller skips this function
+
+    Args:
+        row: prediction_row dict (same object passed to compute_bet_permission).
+
+    Returns:
+        True if the game is jointly OOD (bets should be blocked).
+    """
+    global _vae_model
+
+    if not _VAE_ARTIFACT_PATH.exists():
+        return False
+
+    # Lazy load
+    if _vae_model is None:
+        try:
+            from betting_ml.models.vae_ood.signal_vae import SIGNAL_MU_COLUMNS, SignalVAE
+            _vae_model = SignalVAE.load(_VAE_ARTIFACT_PATH)
+            logger.debug("SignalVAE artifact loaded from %s", _VAE_ARTIFACT_PATH)
+        except Exception as exc:
+            logger.warning("Failed to load SignalVAE artifact: %s — OOD gate skipped.", exc)
+            return False
+
+    try:
+        from betting_ml.models.vae_ood.signal_vae import SIGNAL_MU_COLUMNS
+        import numpy as np
+
+        vec = np.array(
+            [float(row[c]) if row.get(c) is not None else float("nan")
+             for c in SIGNAL_MU_COLUMNS],
+            dtype=np.float64,
+        ).reshape(1, -1)
+
+        # NaN columns are imputed inside SignalVAE.predict_ood with training means.
+        # All-NaN rows reconstruct near the training mean → low recon error → not OOD.
+        # This is the correct graceful degradation: absent signals ≠ OOD.
+        _, is_ood = _vae_model.predict_ood(vec)
+        return bool(is_ood[0])
+    except Exception as exc:
+        logger.warning("SignalVAE OOD evaluation failed (%s) — gate skipped.", exc)
+        return False
+
+
 def compute_bet_permission(
     game_pk: str,
     prediction_row: dict[str, Any],
@@ -330,17 +390,24 @@ def compute_bet_permission(
     fires when the bullpen signal is outside the model's reliable operating range.
     Requires prediction_row to contain bullpen_mu_home and bullpen_mu_away.
 
+    VAE holistic OOD gate (Story 19.6): if the joint 13-column signal vector has a
+    VAE reconstruction error above the training-era 95th-percentile threshold,
+    qualified_bet is also forced False.  Activates only when the SignalVAE artifact
+    is present on disk AND signal_combination_ood is enabled in the registry config.
+    Catches combination drift invisible to the per-signal marginal z gate.
+
     Args:
         game_pk: Game identifier (used for logging only).
         prediction_row: Dict of scored fields from predict_today.py (pred_total_runs,
-            total_line_consensus, bullpen_mu_home, bullpen_mu_away, etc.). Missing
-            fields are treated as criterion=False / OOD gate absent.
+            total_line_consensus, bullpen_mu_home, bullpen_mu_away, and the 13 VAE
+            mu columns, etc.). Missing fields are treated as criterion=False / OOD
+            gate absent.
         gate_config: Optional override for gate thresholds and min_criteria_met.
             If None, loaded from sub_model_registry.yaml bet_gate block.
 
     Returns:
         {
-            "qualified_bet": bool,          # gate_signals_met >= min_criteria_met AND NOT bullpen_signal_ood
+            "qualified_bet": bool,          # gate_signals_met >= min_criteria_met AND NOT any OOD veto
             "gate_signals_met": int,        # 0–5
             "game_conviction_score": float, # 0.0–1.0 (equal-weighted mean strength)
             "gate_detail": {
@@ -353,6 +420,7 @@ def compute_bet_permission(
             "bullpen_z_score_home": float | None,
             "bullpen_z_score_away": float | None,
             "bullpen_signal_ood": bool,
+            "signal_combination_ood": bool,  # VAE holistic OOD veto (Story 19.6)
         }
     """
     if gate_config is None:
@@ -402,9 +470,20 @@ def compute_bet_permission(
     if bullpen_ood:
         qualified_bet = False
 
+    # VAE holistic OOD gate — hard veto (Story 19.6)
+    # Fires only when the artifact is on disk AND enabled in the registry.
+    vae_ood_enabled = _cfg("signal_combination_ood", "enabled", False)
+    signal_combination_ood = (
+        _eval_signal_combination_ood(prediction_row) if vae_ood_enabled else False
+    )
+    if signal_combination_ood:
+        qualified_bet = False
+
     logger.debug(
-        "game_pk=%s gate_signals_met=%d/%d conviction=%.4f bullpen_ood=%s qualified=%s",
-        game_pk, gate_signals_met, min_met, game_conviction_score, bullpen_ood, qualified_bet,
+        "game_pk=%s gate_signals_met=%d/%d conviction=%.4f "
+        "bullpen_ood=%s vae_ood=%s qualified=%s",
+        game_pk, gate_signals_met, min_met, game_conviction_score,
+        bullpen_ood, signal_combination_ood, qualified_bet,
     )
 
     return {
@@ -415,4 +494,5 @@ def compute_bet_permission(
         "bullpen_z_score_home": round(bullpen_z_home, 4) if bullpen_z_home is not None else None,
         "bullpen_z_score_away": round(bullpen_z_away, 4) if bullpen_z_away is not None else None,
         "bullpen_signal_ood": bullpen_ood,
+        "signal_combination_ood": signal_combination_ood,
     }

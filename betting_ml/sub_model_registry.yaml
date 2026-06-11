@@ -90,6 +90,29 @@ bet_gate:
       enabled: false
       depends_on_epic: "I"
       description: "prior_age_days ≤ 7 for key players — beliefs are fresh, not stale IL-return guesses"
+    signal_combination_ood:
+      # Threshold = training-era 95th-pct reconstruction error from the fitted VAE.
+      # Trained 2026-06-11; artifact at betting_ml/models/vae_ood/signal_vae.joblib.
+      threshold: 1.280495
+      enabled: false       # AC1 FAILED — do not activate (see description)
+      depends_on_epic: "19.6"
+      artifact_path: "betting_ml/models/vae_ood/signal_vae.joblib"
+      description: |
+        VAE reconstruction error on the 13-column joint mu signal vector (run_env, offense,
+        starter, starter_ip, bullpen, matchup, defense_quality — home+away where applicable).
+        Trained on 2022-2025 games (n=8798); threshold = 95th pct training-era recon error.
+        A game ABOVE threshold is flagged as jointly out-of-distribution and bets are BLOCKED.
+        This is a HARD VETO (not a signal-alignment vote): qualified_bet is forced False
+        regardless of other criteria when holistic OOD is detected.
+        STORY 19.6 RESULT (2026-06-11): AC1 FAILED — gate remains disabled.
+          VAE AUC on May-2026 vs rest of 2026 = 0.5175 (near-random).
+          Per-signal z>1.5 recall on May-2026 = 0.6492 (272/419 flagged).
+          Monthly mean recon error April=0.617, May=0.605, June=0.594 — May-2026 looks
+          MORE normal to the VAE than April. The joint signal structure of May-2026 is
+          not OOD relative to 2022-2025 training; individual-signal z-scores outperform
+          the holistic VAE on this cohort. The premise (sub-threshold combination drift)
+          was falsified: per-signal z gate already catches 64.9% of May-2026 games.
+          Artifact preserved for reference; do not set enabled: true without re-evaluation.
 
 run_env_v1:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/run_env_v1.pkl

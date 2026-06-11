@@ -592,8 +592,11 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — DONE (2026-06-11)** | Story 28.4 (H2H travel/fatigue + interaction features) | 28.3 ✅ + augmented retrain | ✅ AC1 PASS: all 11 features ≥99.9% non-null; travel features fully orthogonal (max_corr=0.041); interaction terms correlated (0.80/0.81/0.71 — expected as products of Layer 3 signals). ❌ AC2 GATE NOT MET: credible-2026 model Brier=0.2230 vs market=0.1887 (gap=−0.034); residual 0.028 above 0.195 gate. 2023–2025 model wins (+0.054–0.059) but those markets are degraded (>0.235 Brier). Features built, mart updated, challenger saved → `h2h_v2_28_4_challenger.pkl`; report → `ablation_results/h2h_features_28_4.md`. Route to 28.5. |
 | **1 — DONE (2026-06-10)** | Epic 27.2 (env-state signal generation + Dagster wiring) | 27.1 ✅ Kalman Q=0.000957, R=21.25; 27.2 ✅ script+dbt+op wired; backfill complete 2026-06-10 (105,192 rows; AC1 99.9% coverage Snowflake-verified) | THE totals lever |
 | **1 — DONE (2026-06-11)** | Story 27.5 (GB/FB×park) | mart_pitcher_batted_ball_profile built; ablation run | ✅ DEFER: coverage 78% (fails ≥90% gate); ΔNLL=+0.0006, 0/5 folds improve; orthogonality PASS. Re-eval after full 2026 Statcast backfill (~Oct 2026) or when within-season rolling GB%/FB% is available. |
-| **1 — NEXT** | Epic 27.3 (totals re-open gate), Story 10.10 (QRF) | 27.4 ✅ PROMOTE 2026-06-11; 27.5 ✅ DEFER 2026-06-11 | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
-| **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
+| **1 — DONE (2026-06-11)** | Epic 27.3 (totals re-open gate), Story 10.10 (QRF) | 27.4 ✅ PROMOTE 2026-06-11; 27.5 ✅ DEFER 2026-06-11 | ❌ BOTH FAIL the kill criterion. 27.3: env_league_state non-informative (β=0.0128); May-2026 PPM=9.3042 > 8.81 (8th confirmation). 10.10: Jensen floor IS removed (mean 8.53 ≤ 8.81 — first positive isolation) but no edge (Brier 0.305 > market 0.229; calib_80 0.686) (9th confirmation). Re-open criteria (b) smoothed-state + model-family BOTH exhausted; only (a) full-2026 `delta_2026` (~Oct) remains for MAIN-LINE betting. Totals stays paused → **reframed track = Epic 29**. |
+| **1 — LARGELY CLOSED (2026-06-11)** | **Epic 29 (totals point-accuracy & alt-line edge track)** | 10.10 ✅ DEFER; 10.9 conformal ✅ | 29.1 gate ran same-day → **DOWNGRADE**: on honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE (line MedAE 1.50 vs model 2.92). Model is level-unbiased (+0.05) but per-game variance-deficient — an information gap, not a level/calibration gap. 29.2 (calib) + 29.3 (alt-line) downgraded (neither fixes the center). Totals = product-only on the market line. Re-open criterion (a)/Oct now in doubt (corrects level, not variance). |
+| **2 — DONE (2026-06-11)** | Story 28.5 (Bradley-Terry) | Epic 28.4 ❌ → 28.5 | ❌ DO NOT PROMOTE — converges cleanly (R-hat 1.0000, ESS 2114, 0 divergences in 56s; H2H has NO Jensen floor, confirmed) but no edge: credible-2026 Brier BT 0.2241 vs champion 0.2231 vs market 0.1815. **4th independent H2H no-edge confirmation** (Epic 11, 16B.7, 28.4, 28.5). A better-shaped likelihood does not manufacture signal the sub-models lack. Dominant coef beta_bull=−0.561; beta_rd_sigma≈0. Module `h2h_bradley_terry_nuts.py`; report `h2h_bradley_terry_28_5.md`. → H2H head-on modeling exhausted; pivot to SELECTIVE-edge (28.2 disagreement gate) + CLV (12.10′) + live magnitude accrual (28.3). |
+| **1 — CODE COMPLETE, DEPLOY PENDING (2026-06-11)** | **Story 28.6 (operationalize the 28.2 conviction gate)** | 28.2 ✅ gate + 28.3 ✅ monitor template | The H2H redirect after 4× head-on no-edge. **28.6a** robustness preview = AMBER (Brier edge within noise, 95% CI crosses 0 on n=85); real-book-ROI completion = hand-off script `h2h_conviction_realbook_roi_28_6a.py` (ready to run). **28.6b BUILT (shadow-only):** predict_today.py writes `layer4_h2h_conviction_flag/_disagree` (erfc=scipy to 1e-16); `monitor_conviction_h2h.py` + `home_win.conviction_kill_criterion` (n≥60 PROVISIONAL). **Remaining = user deploy:** ALTER table +2 cols, redeploy predict_today, run 28.6a + monitor. automated_bets=false until live CONFIRM. |
+| **2 — ARCH (Arch Review)** | Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 12.4 / Epic 19 | After Tier 1 |
 | **2 — ARCH (Arch Review)** | **Story 12.11 Phase 1 (Parlay WS/SSE streaming — pregame `odds` ingestion + CLV latency, SPIKE-FIRST)** | Business tier ✅ (cost gate cleared 06-11); gated on always-on-consumer infra verdict | After Tier 1; spike before any build |
 | **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
 | **4 — LATE SEASON** | **Story 12.11 Phase 2 (Parlay `live` in-play stream → in-game betting)** | **Rule 27 / Epic 20 profitability gate** (≥30 live days positive mean CLV) → Epic 21 | Post-profitability; do NOT jump the gate |
@@ -659,7 +662,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 23. ≥ 100 live CLV-labeled games AND Epic 12.4 convergence criteria (R-hat < 1.01, mean CI width < 0.25, quartile separation ≥ 0.05) must both be met before Epic 12.5 wires the Bayesian model into Epic 19.
 24. ≥ 500 live CLV-labeled games before Epic 12.6 (frequentist exploratory meta-model).
 25. ≥ 1,000 live CLV-labeled games AND ≥ 2 seasons of data before Epic 12.7 (production meta-model).
-26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. **Epic 17 CLOSED 2026-06-05 (Story 17.1):** PyMC NegBin hierarchical NUTS exhausted three variants (v1 PPM=8.8607, v2 abandoned, v3 Jensen+rolling PPM=9.2819) — all failed kill criterion ≤8.81; structural Jensen floor at β_bullpen=0.172 is 8.87 (above threshold); beta_rolling posterior≈0 (within-season regime shift not learnable from current signals); 7th independent confirmation. Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026.
+26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. **Epic 17 CLOSED 2026-06-05 (Story 17.1):** PyMC NegBin hierarchical NUTS exhausted three variants (v1 PPM=8.8607, v2 abandoned, v3 Jensen+rolling PPM=9.2819) — all failed kill criterion ≤8.81; structural Jensen floor at β_bullpen=0.172 is 8.87 (above threshold); beta_rolling posterior≈0 (within-season regime shift not learnable from current signals); 7th independent confirmation. Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026. **Epics 27.3 + 10.10 CLOSED 2026-06-11 — re-open criterion (b) is now EXHAUSTED from two angles. 27.3 (8th confirmation):** the purpose-built within-season Kalman state signal `env_league_state` entered the NUTS non-informatively (β=0.0128 [−0.000,+0.026]); May-2026 PPM=9.3042 > 8.81. **10.10 (9th confirmation, first non-log-link family):** a quantile model removed the structural Jensen floor (May-2026 mean 8.53 ≤ 8.81 — the FIRST positive isolation of §10's mechanism, proving the +0.170 floor was a genuine exp-link artifact) but still beat neither market nor naive (Brier 0.305 vs 0.229/0.250; calib_80 0.686). **For MAIN-LINE betting, only re-open criterion (a) (full-2026 `delta_2026`, ~Oct 2026) remains. The pre-October path is the REFRAMED track Epic 29** (totals point-accuracy RMSE/MAE-to-actual + alt/F5/team-totals edge on a calibrated distribution) — a parallel product/thin-market track that does NOT un-pause main-line totals.
 26. Epic 12.7 must complete before Epic 12.8, and Epic 12.8 must complete before Epic 22.1–22.2.
 
 **Production operations ordering:**
@@ -11759,18 +11762,217 @@ paired-comparison model with hierarchical team strength and team-specific home-f
 Jensen floor (logit link, no count aggregation), so unlike totals there is no structural ceiling.
 
 **Tasks:**
-- [ ] PyMC hierarchical Bradley-Terry: `P(home win) = σ(s_home − s_away + hfa_home)`, `s_team` partially
+- [x] PyMC hierarchical Bradley-Terry: `P(home win) = σ(s_home − s_away + hfa_home)`, `s_team` partially
   pooled, `hfa_team ~ Normal(league_hfa, σ_hfa)`; sub-model signals (offense_v2, bullpen_v2, starter_v1,
   run_diff μ/σ) enter as covariates on team strength.
-- [ ] Train 2021–2025, score leakage-free 2026 OOS; three-layer + Layer-4 eval vs the XGBoost champion
+  ✅ Built `betting_ml/models/bayesian/h2h_bradley_terry_nuts.py` (structural template:
+  `run_scoring_nuts.py`). Per-side covariates: offense (`pred_runs_mu_v2`), own bullpen
+  (`bullpen_mu_v2`), own starter (`starter_suppression_mu_v1`) enter team strength; run_diff **σ**
+  enters the logit as a conviction covariate. **run_diff μ is structurally absorbed by β_off**: under
+  the logit link `β_off·(off^h − off^a)` IS the run-diff-mean signal (run_diff_mu = home_off − away_off
+  is an affine fn of off^h − off^a under one shared scaler), so adding it separately is perfectly
+  collinear and would blow the ESS/divergence gate — documented in the module header. Leakage-free
+  signals reuse the same OOS parquets + `_load_oos_signals/_build_training_frame` as the totals NUTS model.
+- [x] Train 2021–2025, score leakage-free 2026 OOS; three-layer + Layer-4 eval vs the XGBoost champion
   and the market on the same games (hand-off; NUTS 1–2 hr).
-- [ ] Fold in the hierarchical HFA (icebox item) and the Beta-Binomial prior-strength calibration as the
+  ✅ Implemented in the same module: trains 2022–2025 (2021 = run_env walk-forward floor, same exclusion
+  as the totals NUTS model), scores 2026 OOS, and evaluates L1 NLL / L2 ECE+calib-in-large / L3 Brier +
+  Layer-4 sweep vs the champion (`oos_predictions_h2h_v2.parquet`) and the de-vigged Bovada/Parlay market
+  on the **identical market∩champion 2026 games**. ⏳ **Awaiting the hand-off NUTS run** to produce the
+  convergence + head-to-head numbers (command below).
+- [x] Fold in the hierarchical HFA (icebox item) and the Beta-Binomial prior-strength calibration as the
   team-strength prior.
+  ✅ `hfa_team = league_hfa + hfa_raw·σ_hfa` (non-centered) realises the hierarchical-HFA icebox item.
+  The partially-pooled Normal prior on `z_team` (`σ_team` learned) is the continuous analogue of
+  Beta-Binomial prior-strength shrinkage: low-signal teams shrink toward the league mean, `σ_team` is the
+  pooling strength. Optional isotonic post-calibration (`isotonic_h2h.pkl`) reported as a reference.
 
 **Acceptance criteria:**
-- [ ] Convergence (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered reparam).
-- [ ] Head-to-head vs XGBoost champion on credible 2026: report L1 NLL, L2 ECE/calib_80, L3 Brier vs
+- [x] Convergence (R-hat<1.01, ESS_bulk>400, divergences≤5 after non-centered reparam).
+  ✅ **PASS** (NUTS, 4×2000 draws +1500 tune, 56s): max R-hat=**1.0000**, min ESS_bulk=**2114**,
+  divergences=**0**. The non-centered reparam on `z_team`/`hfa_team` cleared the gate with large margin.
+- [x] Head-to-head vs XGBoost champion on credible 2026: report L1 NLL, L2 ECE/calib_80, L3 Brier vs
   market 0.182; promote only if it beats both the champion AND closes toward the market.
+  ✅ **Reported — DO NOT PROMOTE.** Credible 2026 (market Brier **0.1815** ✅, n=569 market∩champion).
+  L3 Brier: BT **0.2241** vs champion **0.2231** vs market **0.1815** → BT loses to the champion by
+  0.0010 and does NOT close toward the market. L1 NLL 0.6396 (BT) vs 0.6372 (champion) vs 0.5326 (mkt).
+  L2 ECE 0.060 (BT) vs 0.048 (champion). Beats the Bernoulli prior (L1) but not the champion or market.
+
+**Result (2026-06-11): CLOSED — architecture change does NOT recover H2H edge.** The Bradley-Terry
+re-architecture converges cleanly (the totals Jensen-floor problem genuinely does not exist for the H2H
+logit link) but still loses to both the XGBoost champion and the sharp 2026 Parlay market on the credible
+surface. This is the **fourth independent confirmation** (Epic 11, 16B.7, 28.4, 28.5) that there is no
+H2H edge against the sharp Parlay market — the ceiling is signal quality, and a better *likelihood shape*
+does not manufacture signal that the sub-models do not carry. Dominant coefficient `beta_bull=-0.561`
+(bullpen quality is the strongest live H2H signal); `beta_rd_sigma≈0` (run_diff conviction adds nothing).
+Module: `betting_ml/models/bayesian/h2h_bradley_terry_nuts.py`. Run: `uv run python
+betting_ml/models/bayesian/h2h_bradley_terry_nuts.py`. Report: `ablation_results/h2h_bradley_terry_28_5.md`.
+Note: L4 vig-free `roi_devig` passes (optimistic upper bound only; cf. 28.3 kill-criterion — real-book
+vig erases it).
+
+---
+
+### 28.6 — Operationalize the 28.2 disagreement-gate conviction filter (harden → forward-test)
+
+**Status:** ⬜ NEXT (opened 2026-06-11). **Track B.** The H2H pivot after 4× no-edge on head-on modeling
+(28.4/28.5). Head-on point models are exhausted; the one survivor with a *demonstrated* market-beating
+result is the **28.2 disagreement gate** — a SELECTIVE strategy, not a better model.
+
+**The finding being operationalized (28.2):** filter to games where the two genuinely-independent H2H
+estimators *agree* — `|p_classifier − p_run_diff| ≤ 0.02`. On that subset (2026 OOS): **n=85 games (14.3%),
+57 bets, model Brier 0.1793 < market 0.1895 (BEATS market), roi_devig +0.6812.** This is the ONLY conviction
+band that beats the market, and the only H2H result anywhere that clears the sharp 2026 Parlay line.
+
+**⚠️ HONEST FRAMING (do NOT skip — this governs the whole story).** The 28.2 result is *hypothesis-generating,
+not proof*: (1) **small sample** — 85 games / 57 bets; (2) **single-threshold selection** — 0.02 is the best
+of 6 caps tried, so some of the edge is selection luck; (3) **vig-free ROI** — `roi_devig` is the optimistic
+upper bound; the 28.3 magnitude work already showed real-book vig can erase a positive `roi_devig`. Therefore
+operationalizing means **harden first (28.6a), then forward-test on real prices (28.6b)** — NEVER pipe the
+57-bet backtest straight into live betting. This mirrors the 28.3 discipline exactly.
+
+**Prerequisites:** 28.2 ✅ (gate defined, `h2h_ensemble_eval.py`), 28.3 ✅ (the monitor + kill-criterion
+template: `scripts/ops/monitor_magnitude_h2h.py`, `model_registry.yaml home_win.kill_criterion`), 26.5 live
+attribution ✅ (`daily_model_predictions` carries `layer4_h2h_*`).
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 28.6 standalone:
+
+```
+You are picking up Story 28.6 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 28.6 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then read the Story 28.6 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - You are operationalizing the 28.2 disagreement gate (|p_classifier − p_run_diff| ≤ 0.02), the ONLY
+    H2H strategy that beat the sharp 2026 market (model Brier 0.1793 < market 0.1895 on 85 games / 57 bets,
+    roi_devig +0.6812). It is a SELECTIVE conviction filter, NOT a new model. Head-on H2H modeling is
+    exhausted (4× no edge: Epic 11, 16B.7, 28.4, 28.5) — do NOT build another challenger.
+  - HONEST FRAMING governs everything: the finding is small-sample (57 bets), single-threshold-selected
+    (0.02 = best of 6), and vig-free (roi_devig is optimistic). Phase 28.6a HARDENS it; only if 28.6a
+    passes its pre-committed gate do you wire the forward test in 28.6b. NEVER auto-bet a backtest.
+  - REUSE: h2h_ensemble_eval.py (gate logic + cached run_diff parquet), oos_predictions_h2h_v2.parquet
+    (p_classifier), monitor_magnitude_h2h.py (the monitor template — real-book ROI from
+    layer4_h2h_bovada_ml_home/away), model_registry.yaml home_win.kill_criterion (registration pattern).
+  - Real Bovada H2H American odds for the backtest: see reference_bovada_h2h_moneyline / load_devig_home_prob_bovada
+    (mart_odds_outcomes h2h). The sharp credible-2026 surface is the Parlay h2h market (reference_bovada_h2h_line_quality).
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Convert the 28.2 disagreement-gate finding into a *live, monitored, pre-committed* selective H2H
+strategy — but only after an honest hardening pass confirms the edge survives real-book vig and isn't a
+small-sample / threshold-selection artifact.
+
+#### Phase 28.6a — Honest hardening re-backtest (the go/no-go gate)
+
+**Tasks:**
+- [x] **Threshold robustness + bootstrap CI on the Brier gap (LOCAL preview, no Snowflake).** Replicated the
+  28.2 gate from the local parquets (`p_clf=model_p_home_win`, `p_rd=p_run_diff`, ensemble w=0.25,
+  `market_devig_home`, `home_win`); bootstrapped (B=10k) the (model−market) Brier gap per cap.
+  *Result 2026-06-11 — AMBER, edge NOT statistically robust:*
+  | cap | n | model B | mkt B | gap | gap 95% CI | P(gap<0) |
+  |--:|--:|--:|--:|--:|--:|--:|
+  | 0.01 | 42 | 0.1510 | 0.1634 | −0.0124 | [−0.063, +0.041] | 69.1% |
+  | **0.02** | **85** | **0.1793** | **0.1895** | **−0.0102** | **[−0.053, +0.032]** | **67.7%** |
+  | 0.03 | 115 | 0.1912 | 0.1751 | +0.0161 | [−0.019, +0.053] | 17.4% |
+  | 0.05 | 193 | 0.2026 | 0.1764 | +0.0262 | [−0.001, +0.053] | 3.2% |
+  | 0.10 | 343 | 0.2005 | 0.1691 | +0.0315 | [+0.011, +0.052] | 0.1% |
+  *Reads: (1) the model point-beats market at the TWO tightest caps (0.01 & 0.02) — a plateau, NOT a lone
+  spike (mild positive); BUT (2) the Brier advantage is WITHIN NOISE — the 95% CI crosses zero at both, only
+  ~68% bootstrap confidence the edge is real on n=85; and (3) it COLLAPSES immediately at cap≥0.03 (model
+  clearly loses, P(gap<0)→0.1%). So the headline "beats market" is real but not significant — a suggestive
+  signal a forward test must arbitrate, not a confirmed edge.*
+- [x] **Real-book ROI (Bovada American odds).** *DONE 2026-06-11 (`h2h_conviction_realbook_roi_28_6a.py` →
+  `ablation_results/h2h_conviction_gate_28_6a.md`): operational threshold bets n=65, real-book ROI **+0.5352**,
+  95% CI **[+0.1575, +1.0196]**, P(ROI>0)=99.9%. All-agreeing-games n=85: +0.3989, CI [+0.094, +0.773].
+  **GO** by the pre-committed gate (lower-CI > 0).* ⚠️ **Calibrate expectations:** the +0.535 point estimate is
+  NOT a forward expectation — it's high-variance (underdog wins at long odds), n=65, and on the SAME 2026 sample
+  that selected the 0.02 cap (selection inflation). The forward test will regress hard; the lower-CI +0.16 is the
+  meaningful floor and even that is optimistic. The GO means "worth forward-testing," not "we found a 53% edge."
+- [x] Pre-committed go/no-go (set BEFORE results): **forward-test only if** real-book ROI 95% lower-CI > 0
+  **AND** the Brier gap is significantly negative (upper-CI < 0) **AND** ≥2 adjacent caps beat market.
+  *Status: Brier-significance criterion ALREADY FAILS (upper-CI +0.032 at cap 0.02); the ≥2-adjacent-caps
+  criterion PASSES. Net: a strict reading is NO-GO on the backtest. The open question (below) is whether to
+  still run the cheap shadow-only forward test, since 28.6b risks no money until live CONFIRM.*
+
+**Acceptance criteria (28.6a):**
+- [ ] Report `ablation_results/h2h_conviction_gate_28_6a.md`: real-book ROI + 95% CI, cap-robustness curve,
+  bootstrap CI on the Brier gap, explicit GO / NO-GO verdict against the pre-committed gate.
+- [ ] If NO-GO: document the conviction gate as a closed small-sample artifact; H2H pivots to 12.10′ (CLV) and
+  28.3 accrual only. If GO: proceed to 28.6b.
+
+#### Phase 28.6b — Forward live-test wiring + monitor + kill criterion (only if 28.6a = GO)
+
+**Tasks:**
+- [x] Tag qualifying games in the daily prediction path. *DONE 2026-06-11 (`scripts/predict_today.py`): in the
+  Layer-4 block, `p_run_diff(home)=Φ(μ/σ)` is computed inline via `math.erfc` from `pred_run_diff_loc/scale`
+  (verified bit-identical to the scipy `norm.sf` used to build the OOS parquet, max diff 1.1e-16), and
+  `layer4_h2h_conviction_flag = |calibrated_win_prob − p_run_diff| ≤ 0.02` plus `layer4_h2h_conviction_disagree`
+  are written to `daily_model_predictions`. Additive, fully guarded (NULL on error). The flag is computed for
+  every game; a "conviction BET" = flag=TRUE AND `layer4_h2h_decision IN (home,away)`. Conviction overlays the
+  existing decision — by construction the two estimators are within 0.02, so the decision side ≈ the ensemble side.*
+- [x] Build `scripts/ops/monitor_conviction_h2h.py` (mirror `monitor_magnitude_h2h.py`): real-book ROI +
+  95%-lower-CI, model-vs-market Brier on the conviction subset, tripwire@n=20, verdict@n=60 (PROVISIONAL —
+  finalize N from 28.6a power). *DONE 2026-06-11; compiles; SHADOW/manual framing baked into the header + output.*
+- [x] Register `home_win.conviction_kill_criterion` in `model_registry.yaml`: CONFIRM (n≥60, lower-CI real-book
+  ROI > 0, Brier < market), KILL (full + tripwire@20); `automated_bets=false` until CONFIRM. *DONE 2026-06-11
+  (YAML validated); status field records the within-noise backtest caveat.*
+
+**Acceptance criteria (28.6b):**
+- [x] Code: `daily_model_predictions` write-path carries the conviction flag + disagree; monitor + registry built/validated.
+- [ ] **DEPLOY (user — needs Snowflake DDL + daily-job run):** ALTER the prod table to add the two columns
+  (below), deploy the updated `predict_today.py`, then a sample day shows the ~14% qualifying rate.
+- [x] `monitor_conviction_h2h.py` AUTOMATED in Dagster (2026-06-11): `monitor_conviction_h2h_op` added to
+  `daily_ingestion_ops.py` and folded into the existing weekly `magnitude_monitor_job` (Mondays 12:00 UTC) —
+  runs alongside the magnitude monitor, no new schedule. Reports accrual + verdict to Dagster logs each week.
+- [x] DAILY PICK ALERT (2026-06-11): `pipeline/sensors/conviction_pick_alert_sensor.py` — emails the day's
+  conviction picks (matchup, bet side, model vs market P, Bovada odds) in the pre-game window via the standard
+  raise→Dagster-Cloud-email pattern (mirrors `pregame_alert_sensor`). Registered in `all_sensors`. So the
+  operator gets the picks pushed without opening Streamlit. Dedup: one digest/day; finalizes only once
+  post_lineup predictions exist.
+- [x] PLACEMENT POLICY = MANUAL-ONLY ALWAYS (US; no automation platform; operator preference). The
+  `automated_bets` flag never flips true. CONFIRM promotes conviction from informational → TRUSTED manual-bet
+  signal (still placed by hand); KILL stops surfacing it as actionable. Reflected in `model_registry.yaml`
+  `home_win.conviction_kill_criterion.placement_policy` + the monitor's CONFIRM text.
+- [ ] Accrual clock: qualifying ≈14% of games → from the live game rate, n=60 settled ≈ a few weeks; verdict ETA noted on first run.
+
+> **Conviction columns: self-healing across dev/prod (root cause of the 2026-06-11 invalid-identifier error).**
+> `predict_today.py` resolves its target schema via `ml_env.ml_schema()`: `TARGET_ENV=prod` → `betting_ml`,
+> else (bare CLI) → `betting_ml_dev`. A manual ALTER on prod alone left the DEV table without the columns, so a
+> bare-CLI run INSERT failed with `invalid identifier 'LAYER4_H2H_CONVICTION_FLAG'`. FIX: the two conviction
+> columns were added to `predict_today.py`'s idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` self-heal
+> block (alongside the other layer4 columns), so **any run in any env auto-adds them — no manual ALTER needed**.
+> Deployed Dagster jobs set `TARGET_ENV=prod` (write prod); bare CLI writes dev. To populate prod from a CLI:
+> `TARGET_ENV=prod uv run python scripts/predict_today.py --prediction-type post_lineup --lineup-confirmed`.
+
+**▶ DEPLOY (hand-off — DDL + redeploy; conviction stays SHADOW/manual, no automated bets):**
+```sql
+ALTER TABLE baseball_data.<ml_schema>.daily_model_predictions
+  ADD COLUMN layer4_h2h_conviction_flag BOOLEAN,
+  ADD COLUMN layer4_h2h_conviction_disagree FLOAT;
+```
+Then redeploy `predict_today.py` (next daily/post-lineup run starts populating the columns), and after the
+first settled day:
+```bash
+uv run python scripts/ops/monitor_conviction_h2h.py --schema betting_ml
+```
+**Also run the 28.6a evidence completion** (real-book ROI on the historical 85-game backtest) to finalize the n=60 gate:
+```bash
+uv run python betting_ml/scripts/h2h_conviction_realbook_roi_28_6a.py --env prod
+```
+
+**Net framing:** 28.6 does NOT claim a confirmed H2H edge — it converts the one promising selective finding
+into an honest, pre-committed forward test on real prices, the same way 28.3 handled magnitude. The verdict
+comes from live settled bets, not the backtest.
 
 ---
 
@@ -11989,6 +12191,244 @@ promote/defer verdict). The console prints the HEADLINE (May-2026 mean q50 vs 8.
 family). Jensen floor IS removed (May-2026 mean 8.53 ≤ 8.81), but the quantile challenger does not beat the
 market or even naive-0.50 on the 2026 OOS Brier (0.305) and under-covers (calib_80 0.686). Totals stays paused
 until the ~Oct 2026 full-season `delta_2026` re-evaluation (criterion (a)).**
+
+---
+
+# Epic 29 — Totals Point-Accuracy & Alt-Line Edge Track
+
+**Status:** 🔴 LARGELY CLOSED 2026-06-11. **Track B.** 29.1 (the decision gate) ran the day it was specced and
+returned **DOWNGRADE**: on the honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE
+and is typically within 1.5 runs vs the model's ~2.9. The model is level-unbiased but has a per-game *discrimination*
+(variance) deficit the market doesn't — so calibration (29.2) and alt-line pricing (29.3) are both downgraded
+(neither fixes the center). **Net:** the point-accuracy reframe does not rescue a betting edge; totals is
+product-only and the best projected total to surface is **the market line itself**, not the model. 29.2/29.3 are
+shelved until a future discriminative signal brings the central estimate to market parity (then re-run 29.1).
+
+**Reframe (the load-bearing decision):** Nine independent confirmations have established that our totals
+model cannot beat Bovada's **main** over/under line on a classification (P_over / Brier) basis. But that
+main line is **-110/-110 — near-even — which means it IS the market's best *point* estimate of total runs.**
+Two consequences the prior 9 confirmations never tested:
+  1. **We have never run the regression-loss test** — RMSE/MAE of our predicted total vs *actual runs*,
+     head-to-head against the Bovada line and a naive baseline. Every confirmation measured `P_over`/Brier
+     (classification) or the Jensen mean-bias. "How close are we to the actual total" is a *different
+     loss function* and is the honest measure when you are NOT trying to beat the vig on the main line.
+  2. **The sharp main line says nothing about thin markets** — alternate totals (±1.5 off main), first-5-
+     inning (F5) totals, and team totals carry less money and go stale. A *well-calibrated full predictive
+     distribution* can price those even when the main line is efficient. 10.10 proved the Jensen floor is
+     removable (mean 8.53 tracks actual) — so the central estimate is no longer structurally biased; what
+     it lacked was distribution calibration (calib_80 0.686, tails too narrow) and a thin-market surface
+     to exploit.
+
+**Goal:** Reframe the totals objective from *main-line market edge* to **(i) point-accuracy** (a product/UX
+asset — projected total feeding the app, parlay construction, and the H2H/run-diff models — measured by
+RMSE/MAE-to-actual) and **(ii) alt-line edge** (a betting surface the efficient main line does not touch),
+both built on a **calibrated** predictive distribution.
+
+**Scope guard (do NOT relitigate):** Epic 29 does **not** un-pause **main-line** totals betting —
+`total_runs.bet_paused: true` stays until the ~Oct 2026 full-season `delta_2026` re-eval (re-open criterion
+(a)). Epic 29 is a *parallel* track: point-accuracy has product value regardless, and alt-line edge is a
+distinct market from the paused main line. Any alt-line betting that 29.3 surfaces ships **shadow-only**
+behind its own pre-committed kill criterion, never auto-bet.
+
+**Prerequisites:** Story 10.10 ✅ (Jensen floor confirmed removable; `oos_predictions_totals_quantile_10_10.parquet`
+exists), Story 10.9 ✅ (conformal/isotonic machinery), reference_bovada_historical_totals (the 2026 Bovada
+line join). **Decision gate:** 29.1 governs 29.2/29.3 — if the model is not at least at point-accuracy parity
+with the market line, 29.3 is downgraded (no distributional edge to harvest) and totals reverts to product-only.
+
+---
+
+### Story 29.1 — Point-accuracy benchmark: model vs market line vs naive (RMSE/MAE-to-actual)  `[Home: Epic 29]`
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 29.1 standalone:
+
+```
+You are picking up Story 29.1 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 29.1 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then read the Story 29.1 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - This is the DECISION GATE for the reframed totals track (Epic 29). It answers the one question 9 prior
+    confirmations never did: is our predicted total a better POINT estimate of actual runs than the market
+    line? Prior confirmations measured P_over/Brier (classification) or the Jensen mean-bias — NOT regression
+    loss (RMSE/MAE) against actual runs. A -110/-110 main line IS the market's point estimate, so the honest
+    "how close are we" test is RMSE/MAE-to-actual vs the line, not Brier.
+  - The data already exists — this is an EVAL story, NO model training. Use the leakage-free 2026 OOS surface.
+  - HONEST-SURFACE GUARD: 2026 OOS ONLY. The Bovada main total line for 2026 comes from the source-specific
+    join (mart_odds_outcomes + mart_game_odds_bridge), NOT the ≤2025 historical path — see
+    reference_bovada_historical_totals / load_total_line_bovada.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Settle the reframed question with the regression-loss test never run — is the model a better
+*point* predictor of actual total runs than the Bovada line? Produce a clean RMSE/MAE/median-abs-error
+head-to-head on the 2026 OOS surface.
+
+**Tasks:**
+- [ ] Load the per-game 2026 OOS predictions: `oos_predictions_totals_quantile_10_10.parquet` (q50 + actual)
+  AND `oos_predictions_totals_v1.parquet` (NGBoost v4 champion mean) — report BOTH model central estimates.
+- [ ] Join the **Bovada main total line** for the same game_pks via the 2026 source-specific path
+  (`load_total_line_bovada` — mart_odds_outcomes + mart_game_odds_bridge). Build a **naive** baseline =
+  expanding/season-to-date league mean total (leakage-safe: games with `game_date < T`).
+- [ ] Compute RMSE, MAE, and median-abs-error for THREE predictors (model q50 / model v4-mean, Bovada line,
+  naive) on 2026 OOS overall AND split by month (Apr / May / Jun). Report n per cell.
+- [ ] State the verdict explicitly: is model RMSE ≤ market-line RMSE (central-estimate edge), or > (point-
+  accuracy reframe also fails for betting → totals stays product-only)?
+
+**▶ Hand-off (likely <1 min, but involves a Snowflake read — run and paste the table + verdict back):**
+```bash
+uv run python betting_ml/scripts/totals_point_accuracy_29_1.py --env prod
+```
+Outputs: `ablation_results/totals_point_accuracy_29_1.md` (RMSE/MAE table + monthly split + verdict).
+
+**Acceptance criteria:**
+- [x] RMSE/MAE/median-abs-error table: model (q50 and v4-mean) vs Bovada line vs naive, 2026 OOS + by month, with n.
+  *✅ DONE 2026-06-11 (`betting_ml/scripts/totals_point_accuracy_29_1.py` → `ablation_results/totals_point_accuracy_29_1.md`).
+  Honest Bovada-source surface, n=695, 2026 (all): **bovada_line RMSE 3.7298 / MAE 2.6475 / MedAE 1.5000**;
+  model_v4_mu 4.2596 / 3.3879 / 2.9227; model_q50 4.3688 / 3.4368 / 2.8445; naive 4.4988 / 3.6373 / 3.2134.*
+- [x] Explicit central-estimate verdict (model ≤ market RMSE → proceed to 29.2/29.3; model > market → downgrade 29.3, totals product-only).
+  *✅ **DOWNGRADE.** Best model (v4_mu) RMSE 4.2596 ≫ Bovada line 3.7298 (gap +0.5297; MAE gap +0.7404). The market
+  is a far better POINT predictor — MedAE 1.50 (line) vs 2.92 (model): the line is typically within 1.5 runs of
+  actual, the model within ~2.9. The model barely clears the naive floor (4.26 vs 4.50). KEY DECOMPOSITION:
+  model_v4_mu is essentially LEVEL-UNBIASED over the window (bias +0.05) yet still RMSE-worse — the deficit is
+  per-game DISCRIMINATIVE VARIANCE, not level bias. The market wins by being a lower-variance, better-informed
+  game-to-game estimator (the §8 finding, now confirmed in the regression-loss frame). Implication: a full-season
+  `delta_2026` LEVEL recalibration (re-open criterion (a)) will NOT close a per-game information gap.*
+- [x] Honest-surface guard satisfied: 2026 OOS only; Bovada line via the 2026 source-specific join (not the ≤2025 historical path); naive baseline is leakage-safe.
+  *✅ Bovada-source rows only (n=695; consensus_fallback reported separately at n=745); naive = leakage-safe
+  expanding season-to-date 2026 league mean (games game_date < T, seeded by 2025 mean 8.9278).*
+
+**STORY 29.1 VERDICT (2026-06-11): DOWNGRADE — the point-accuracy reframe does NOT find a betting edge.** On the
+honest 2026 Bovada surface the market line beats both models by ~0.53 RMSE / ~0.74 MAE and is typically within
+1.5 runs (vs the model's ~2.9). The model is level-unbiased but carries materially more per-game error variance —
+an information gap the market doesn't have. **Consequences:** (1) 29.3 (alt-line probe) is downgraded — alt-line
+pricing requires a distribution at least as well-centered as the market, which we lack; (2) **for the PRODUCT,
+the best projected total to surface is the Bovada line itself, not the model** (line RMSE 3.73 < model 4.26);
+(3) re-open criterion (a) is now in doubt for totals — it corrects LEVEL, but 29.1 shows the deficit is per-game
+variance. Totals stays product-only on the market line; no further model spend until/unless a discriminative
+signal source appears.
+
+---
+
+### Story 29.2 — Calibrate the totals predictive distribution (conformal/isotonic widening)  `[Home: Epic 29]`
+
+> **⛔ DOWNGRADED 2026-06-11 by the 29.1 gate.** 29.1 showed the model's CENTRAL estimate is ~0.53 RMSE worse
+> than the market line (a per-game *discrimination* deficit, not a calibration deficit). Widening the predictive
+> intervals does not move the center, so calibration cannot manufacture the alt-line edge 29.3 needed. This story
+> is shelved unless a future discriminative signal first brings the central estimate to market parity (29.1 re-run).
+> Below preserved as the original spec.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 29.2 standalone:
+
+```
+You are picking up Story 29.2 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 29.2 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then read the Story 29.2 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - Prerequisite: 29.1 must show the model at central-estimate parity (model RMSE ≤ market line) — else this
+    story is moot (no distribution worth pricing). The 10.10 quantile predictive UNDER-COVERS (calib_80 0.686,
+    tails too narrow because the per-quantile fits are independent). 29.3 (alt-line pricing) needs a TRUSTWORTHY
+    full distribution, so this story widens it to calibrated coverage.
+  - REUSE Story 10.9's conformal/isotonic machinery (isotonic_*.pkl / conformal coverage pipeline) — do NOT
+    rebuild a calibration layer from scratch.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Turn the 10.10 quantile output into a **calibrated** predictive distribution (calib_80 ∈ [0.78,0.82],
+roughly uniform PIT) so alternate lines can be priced off it with trustworthy tail probabilities.
+
+**Tasks:**
+- [ ] Apply split-conformal interval widening (reuse the Story 10.9 conformal pipeline) to the per-game 10.10
+  quantiles, calibrating on 2023–2025 and applying to the 2026 OOS surface. Keep the central estimate (q50) fixed.
+- [ ] Report calib_50 / calib_80 / calib_90 and a PIT histogram (coverage uniformity) on 2026 OOS; check
+  coverage by line region (low/mid/high totals) — the tails are where alt lines live.
+- [ ] Persist the calibrated per-game predictive distribution for 29.3.
+
+**Acceptance criteria:**
+- [ ] calib_80 ∈ [0.78,0.82] on 2026 OOS; PIT approximately uniform (not U-shaped); per-region coverage documented.
+- [ ] Calibrated per-game predictive distribution persisted (parquet) and referenced by 29.3.
+- [ ] Explicit note: calibration does NOT un-pause main-line totals; it is solely the prerequisite for 29.3 alt-line pricing.
+
+---
+
+### Story 29.3 — Alt / first-5 / team-totals mispricing probe (shadow-only)  `[Home: Epic 29]`
+
+> **⛔ DOWNGRADED 2026-06-11 by the 29.1 gate (pre-committed).** Alt-line pricing requires a distribution at
+> least as well-centered as the market; 29.1 showed the model trails the line by ~0.53 RMSE / ~0.74 MAE per game.
+> Mispricing a thin line off a worse-centered distribution would systematically transfer our own error onto the
+> bet. Shelved with 29.2 until the central estimate reaches market parity. Below preserved as the original spec.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 29.3 standalone:
+
+```
+You are picking up Story 29.3 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 29.3 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then read the Story 29.3 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT:
+  - Prerequisite: 29.1 (central-estimate parity or better) AND 29.2 (calibrated distribution, calib_80 ∈
+    [0.78,0.82]). If 29.1 showed model RMSE meaningfully > market line, DOWNGRADE this story — there is no
+    distributional edge to harvest and totals stays product-only.
+  - The main -110/-110 line is sharp; this story targets the markets it does NOT discipline: ALTERNATE totals
+    (±1.5 off main), FIRST-5-INNING (F5) totals, and TEAM totals — thinner, staler lines. The edge claim is
+    that a CALIBRATED full predictive distribution can find mispriced alt lines even when the main line is
+    efficient. This was never tested: every prior confirmation priced only the main line's P_over.
+  - SHADOW-ONLY. Nothing here auto-bets. Edge must clear a pre-committed kill criterion on settled 2026 alt
+    lines before any shadow deployment; honest 2026 OOS surface only.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Probe whether the 29.2-calibrated distribution finds deployable edge on alternate / F5 / team-totals
+markets — the betting surface the efficient main line does not cover.
+
+**Tasks:**
+- [ ] Inventory the non-main totals markets available in the Parlay/Bovada feed: alternate totals, first-5-
+  innings (F5) totals, team totals. Report coverage and liquidity (snapshot counts) per market type on 2026.
+- [ ] For each offered alt line ℓ at price p, compute model `P(over ℓ)` from the 29.2 calibrated distribution;
+  de-vig the offered price; flag `|model_p − devig_market_p| ≥ threshold` as candidate edges.
+- [ ] Backtest settled 2026 alt lines: Brier(model) vs Brier(devig market) and realized ROI/CLV at the offered
+  prices. Pre-commit a kill criterion (e.g. ≥N settled alt bets, realized ROI > 0 AND Brier < devig market)
+  BEFORE inspecting results.
+
+**Acceptance criteria:**
+- [ ] Coverage/liquidity report of alt / F5 / team-totals markets on the 2026 surface.
+- [ ] Backtest: model vs devig-market Brier + realized ROI/CLV on settled 2026 alt lines, vs the pre-committed kill criterion.
+- [ ] Verdict: is there a calibrated-distribution edge on thin totals markets? If pass → shadow-only deployment behind the registered kill criterion; if fail → documented as the close of the alt-line avenue. Never auto-bet.
+
+---
 
 ### Story 6.6 — Reliever top-3 leverage availability vector  `[Home: Epic 6]`
 

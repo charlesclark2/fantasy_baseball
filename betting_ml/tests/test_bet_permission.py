@@ -204,6 +204,12 @@ class TestGateAggregation:
         }
         assert set(result["gate_detail"].keys()) == expected_keys
 
+    def test_return_schema_has_signal_combination_ood(self):
+        """signal_combination_ood is always present in the return dict (Story 19.6)."""
+        result = compute_bet_permission("G22b", {}, gate_config=_PROD_CONFIG)
+        assert "signal_combination_ood" in result
+        assert isinstance(result["signal_combination_ood"], bool)
+
     def test_gate_signals_met_matches_gate_detail_count(self):
         row = {"pred_total_runs": 10.5, "total_line_consensus": 9.0}
         result = compute_bet_permission("G23", row, gate_config=_PROD_CONFIG)
@@ -216,10 +222,14 @@ class TestGateAggregation:
         assert "gate_signals_met" in result
         assert "game_conviction_score" in result
         assert "gate_detail" in result
+        assert "bullpen_signal_ood" in result
+        assert "signal_combination_ood" in result
         assert isinstance(result["qualified_bet"], bool)
         assert isinstance(result["gate_signals_met"], int)
         assert isinstance(result["game_conviction_score"], float)
         assert isinstance(result["gate_detail"], dict)
+        assert isinstance(result["bullpen_signal_ood"], bool)
+        assert isinstance(result["signal_combination_ood"], bool)
 
     def test_prior_freshness_blocks_qualification_regardless_of_signal_strength(self):
         """A game with prior_age_days > 7 never achieves qualified_bet via signal alone
@@ -243,3 +253,94 @@ class TestGateAggregation:
         # With min=1, offensive signal alone qualifies — prior_age doesn't block THIS case
         assert result["qualified_bet"] is True
         assert result["gate_detail"]["prior_fresh"] is False
+
+
+# ---------------------------------------------------------------------------
+# Story 19.6 — signal_combination_ood VAE gate
+# ---------------------------------------------------------------------------
+
+_VAE_ENABLED_CONFIG = {
+    "min_criteria_met": 1,
+    "criteria": {
+        "offensive_signal_qualifies": {"threshold": 0.5, "enabled": True},
+        "run_env_supports":           {"threshold": None, "enabled": False},
+        "uncertainty_below_threshold": {"threshold": None, "enabled": False},
+        "market_disagreement_visible": {"threshold": None, "enabled": False},
+        "prior_fresh":                {"threshold": 7,    "enabled": False},
+        "signal_combination_ood":     {"threshold": 0.05, "enabled": True},
+    },
+}
+
+
+class TestSignalCombinationOOD:
+    """Tests for the VAE holistic OOD gate (Story 19.6)."""
+
+    def test_signal_combination_ood_false_when_disabled(self):
+        """With enabled=False, signal_combination_ood is always False."""
+        row = {"pred_total_runs": 10.5, "total_line_consensus": 9.0}
+        result = compute_bet_permission("G26", row, gate_config=_PROD_CONFIG)
+        assert result["signal_combination_ood"] is False
+
+    def test_signal_combination_ood_false_when_no_artifact(self, tmp_path, monkeypatch):
+        """When VAE artifact is absent, gate returns False (graceful degradation)."""
+        import betting_ml.utils.probability_layer as pl_mod
+
+        # Point artifact path to a non-existent file
+        monkeypatch.setattr(pl_mod, "_VAE_ARTIFACT_PATH", tmp_path / "no_artifact.joblib")
+        monkeypatch.setattr(pl_mod, "_vae_model", None)
+
+        row = {"pred_total_runs": 10.5, "total_line_consensus": 9.0}
+        result = compute_bet_permission("G27", row, gate_config=_VAE_ENABLED_CONFIG)
+        assert result["signal_combination_ood"] is False
+
+    def test_signal_combination_ood_veto_forces_qualified_bet_false(self, tmp_path, monkeypatch):
+        """When VAE flags OOD, qualified_bet is forced False even if criteria met."""
+        import betting_ml.utils.probability_layer as pl_mod
+
+        # Install a mock VAE that always flags OOD
+        class _AlwaysOOD:
+            threshold_ = 0.0
+
+            def predict_ood(self, X):
+                import numpy as np
+                return np.ones(len(X)) * 999.0, np.ones(len(X), dtype=bool)
+
+        monkeypatch.setattr(pl_mod, "_VAE_ARTIFACT_PATH", tmp_path / "mock.joblib")
+        monkeypatch.setattr(pl_mod, "_vae_model", _AlwaysOOD())
+        # Make the artifact path "exist" so the enabled check passes
+        (tmp_path / "mock.joblib").write_bytes(b"mock")
+
+        # Offensive signal qualifies (min_criteria_met=1 satisfied)
+        row = {"pred_total_runs": 10.5, "total_line_consensus": 9.0}
+        result = compute_bet_permission("G28", row, gate_config=_VAE_ENABLED_CONFIG)
+
+        assert result["signal_combination_ood"] is True
+        # Hard veto: qualified_bet must be False regardless of criteria
+        assert result["qualified_bet"] is False
+
+    def test_signal_combination_ood_not_in_gate_detail(self):
+        """signal_combination_ood is a hard veto, not a gate_detail criterion vote."""
+        result = compute_bet_permission("G29", {}, gate_config=_PROD_CONFIG)
+        assert "signal_combination_ood" not in result["gate_detail"]
+
+    def test_signal_combination_ood_does_not_count_toward_gate_signals_met(
+        self, tmp_path, monkeypatch
+    ):
+        """OOD veto firing does not increment gate_signals_met."""
+        import betting_ml.utils.probability_layer as pl_mod
+
+        class _AlwaysOOD:
+            threshold_ = 0.0
+
+            def predict_ood(self, X):
+                import numpy as np
+                return np.ones(len(X)) * 999.0, np.ones(len(X), dtype=bool)
+
+        monkeypatch.setattr(pl_mod, "_VAE_ARTIFACT_PATH", tmp_path / "mock.joblib")
+        monkeypatch.setattr(pl_mod, "_vae_model", _AlwaysOOD())
+        (tmp_path / "mock.joblib").write_bytes(b"mock")
+
+        result = compute_bet_permission("G30", {}, gate_config=_VAE_ENABLED_CONFIG)
+        # No criteria fired (empty row), so gate_signals_met = 0 even with OOD
+        assert result["gate_signals_met"] == 0
+        assert result["signal_combination_ood"] is True
