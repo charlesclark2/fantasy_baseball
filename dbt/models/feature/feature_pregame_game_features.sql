@@ -148,19 +148,39 @@ game_context as (
     from {{ ref('stg_statsapi_games') }}
 ),
 
-home_win_rate as (
+-- A2.8 performance — home_win_rate_trailing_3yr is the LEAGUE-WIDE trailing-3yr
+-- home-win rate as of a game's date (the join predicate is purely date-range, no
+-- team/game key), so the value is identical for every game on a given date. The
+-- original computed it per game_pk: a keyless date-range left join of the full
+-- ~25.7k-game spine against 3 years of mart_game_results fanned out to ~149M
+-- intermediate rows (the single dominant operator, ~48% of the build) before the
+-- avg collapsed it back. Computing it once per DISTINCT spine date and mapping it
+-- back to game_pk by game_date is byte-for-byte identical (one date → one hist set
+-- → one avg; round() deterministic; left joins preserve all game_pks incl. NULL for
+-- dates with no prior games) while shrinking the explosion ~25× (≈1k distinct dates
+-- vs 25.7k games).
+home_win_rate_by_date as (
     select
-        spine.game_pk,
+        d.game_date,
         round(
             avg(hist.home_team_won::integer)
         , 4)                            as home_win_rate_trailing_3yr
-    from games spine
+    from (select distinct game_date from games) d
     left join {{ ref('mart_game_results') }} hist
         on  hist.game_type = 'R'
-        and hist.game_date::date >= dateadd('year', -3, spine.game_date)
-        and hist.game_date::date <  spine.game_date
+        and hist.game_date::date >= dateadd('year', -3, d.game_date)
+        and hist.game_date::date <  d.game_date
         and hist.home_team_won is not null
-    group by spine.game_pk
+    group by d.game_date
+),
+
+home_win_rate as (
+    select
+        spine.game_pk,
+        r.home_win_rate_trailing_3yr
+    from games spine
+    left join home_win_rate_by_date r
+        on r.game_date = spine.game_date
 ),
 
 -- Epic 16.3 — leakage-safe pre-game team sequential beliefs. In

@@ -54,6 +54,10 @@
 --   matchup_v1.matchup_k_pressure_signal      → matchup_k_pressure_signal_v1      (soft-weighted expected K% across cells)
 --   matchup_v1.matchup_power_signal           → matchup_power_signal_v1           (soft-weighted expected hard-hit% across cells)
 --   matchup_v1.matchup_cell_posterior_source  → matchup_cell_posterior_source_v1  (2=sequential_current_season, 1=historical_eb, 0=marginals_only)
+--   env_state_v1.env_league_state_mu    → env_league_state_mu_v1    (Epic 27.2; Kalman filtered league run-env mean; uncertainty=posterior σ)
+--   env_state_v1.env_league_state_sigma → env_league_state_sigma_v1 (posterior std dev of league state)
+--   env_state_v1.env_team_off_state     → env_team_off_state_v1     (batting team offensive-environment Kalman state)
+--   env_state_v1.env_team_pitch_state   → env_team_pitch_state_v1   (fielding team pitching-environment Kalman state)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -158,6 +162,19 @@ pivoted as (
         max(case when signal_name = 'matchup_power_signal'            and sub_model_version = 'v1' then signal_available end) as matchup_power_signal_v1_available,
         max(case when signal_name = 'matchup_cell_posterior_source'   and sub_model_version = 'v1' then signal_value end)     as matchup_cell_posterior_source_v1,
         max(case when signal_name = 'matchup_cell_posterior_source'   and sub_model_version = 'v1' then signal_available end) as matchup_cell_posterior_source_v1_available,
+
+        -- ------------------------------------------------------------------
+        -- Env state sub-model v1 (Epic 27.2 — Kalman within-season env state)
+        -- ------------------------------------------------------------------
+        max(case when signal_name = 'env_league_state_mu'    and sub_model_version = 'v1' then signal_value end)     as env_league_state_mu_v1,
+        max(case when signal_name = 'env_league_state_mu'    and sub_model_version = 'v1' then uncertainty end)      as env_league_state_mu_v1_uncertainty,
+        max(case when signal_name = 'env_league_state_mu'    and sub_model_version = 'v1' then signal_available end) as env_league_state_mu_v1_available,
+        max(case when signal_name = 'env_league_state_sigma' and sub_model_version = 'v1' then signal_value end)     as env_league_state_sigma_v1,
+        max(case when signal_name = 'env_league_state_sigma' and sub_model_version = 'v1' then signal_available end) as env_league_state_sigma_v1_available,
+        max(case when signal_name = 'env_team_off_state'     and sub_model_version = 'v1' then signal_value end)     as env_team_off_state_v1,
+        max(case when signal_name = 'env_team_off_state'     and sub_model_version = 'v1' then signal_available end) as env_team_off_state_v1_available,
+        max(case when signal_name = 'env_team_pitch_state'   and sub_model_version = 'v1' then signal_value end)     as env_team_pitch_state_v1,
+        max(case when signal_name = 'env_team_pitch_state'   and sub_model_version = 'v1' then signal_available end) as env_team_pitch_state_v1_available,
 
         -- ------------------------------------------------------------------
         -- Synthetic test signal (remove after 2.1 validation is confirmed)
@@ -265,6 +282,17 @@ select
     ip.uncertainty                                        as starter_ip_uncertainty_v1,
     ip.is_bulk_usage                                      as starter_ip_is_bulk_usage_v1,
     (ip.starter_ip_mu is not null)                        as starter_ip_mu_v1_available,
+
+    -- Env state signals v1 (Epic 27.2 — Kalman within-season environment)
+    p.env_league_state_mu_v1,
+    p.env_league_state_mu_v1_uncertainty,
+    p.env_league_state_mu_v1_available,
+    p.env_league_state_sigma_v1,
+    p.env_league_state_sigma_v1_available,
+    p.env_team_off_state_v1,
+    p.env_team_off_state_v1_available,
+    p.env_team_pitch_state_v1,
+    p.env_team_pitch_state_v1_available,
 
     -- Synthetic test signal
     p.test_signal_v1,

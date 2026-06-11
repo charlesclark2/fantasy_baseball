@@ -1,0 +1,18 @@
+{
+  "Q": 0.000957,
+  "R": 21.2499,
+  "mle_nll": 1540.7714,
+  "train_start": "2021-04-01",
+  "train_end": "2025-09-30",
+  "prior_mean": 8.9217,
+  "prior_var": 2.0846,
+  "n_training_dates": 912,
+  "notes": {
+    "Q_interpretation": "Per-calendar-day process noise variance. At steady state with n=15 games/day, Kalman gain K ≈ 0.026–0.04.",
+    "R_interpretation": "Per-game observation noise variance. sqrt(R) ≈ 4.61 runs matches observed game-level std (~4.5 runs).",
+    "R_n_obs_var": "Observation variance for daily mean of n games = R/n ≈ 21.25/15 ≈ 1.42.",
+    "ac2_note": "May-20 strict pregame state = 8.856 (vs 8.81 threshold); misses by 0.046 due to May 17-19 high-scoring games (obs=9.87/10.86/9.07). Filter was below 8.81 for 8 consecutive pregame dates (May-12 through May-19). May avg state = 8.82 < run_env_mu_v4 (8.88).",
+    "ac1_note": "Kalman 14-day rolling std ratio vs trailing-10 = 0.081 (requirement < 0.50). Decisively passes.",
+    "season_reset": "On gap > 120 days (off-season), state is blended 50/50 with long-run prior to prevent off-season dead-reckoning from biasing the season opener."
+  }
+}

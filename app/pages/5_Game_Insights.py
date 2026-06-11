@@ -17,6 +17,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.utils.db import run_query
 from app.utils.prediction_status import basis_message, is_confirmed
+from app.utils.safe_conversions import safe_int
 from betting_ml.utils.calibrated_classifier import PlattCalibratedXGBClassifier  # noqa: F401 — needed for joblib unpickling
 from betting_ml.utils.model_io import load_model
 
@@ -190,6 +191,10 @@ SELECT
     h2h_market_implied_prob                                                  AS market_win_prob,
     calibrated_win_prob - h2h_market_implied_prob                            AS edge,
     h2h_kelly_fraction                                                       AS kelly_fraction,
+    discriminative_coverage,
+    imputed_discriminative_count,
+    is_degraded,
+    imputed_features,
     CASE
         WHEN prediction_type = 'post_lineup'                 THEN 'lineup_confirmed'
         WHEN COALESCE(data_source, '') = 'intraday_fallback' THEN 'provisional_fallback'
@@ -249,6 +254,32 @@ else:
         st.caption(basis_message(_basis))
     else:
         st.warning(basis_message(_basis))
+
+    # A2.5 — discriminative-feature coverage banner. Distinguishes a fully-served
+    # prediction from one built on imputed (league-prior) signals, so a degraded
+    # pick doesn't look as authoritative as a fully-served one.
+    _cov = _safe_float(r.get("discriminative_coverage"))
+    _n_imp = _safe_float(r.get("imputed_discriminative_count"))
+    if _cov is not None:
+        if bool(r.get("is_degraded")):
+            st.error(
+                f"⚠️ **Serving-degraded prediction** — only {_cov:.0%} of the always-available "
+                f"core signals (ELO, bullpen quality, team sequential, RISP, park) were served; "
+                f"{int(_n_imp or 0)} were imputed to league priors. These have no valid reason to "
+                f"be missing, so the model falls back toward a flat base-rate here — treat the win "
+                f"probability with low confidence. See 'What's Driving This Pick?' below for which "
+                f"drivers are imputed."
+            )
+        elif _n_imp and _n_imp > 0:
+            st.caption(
+                f"◐ {int(_n_imp)} core signal(s) imputed to league priors ({_cov:.0%} coverage) — "
+                f"the prediction is slightly blunted but reliable. Imputed drivers are marked below."
+            )
+        else:
+            st.caption(
+                "✅ Full core-signal coverage. (Lineup-dependent matchup features may still be "
+                "imputed pre-lineup — those are marked individually below, not a serving issue.)"
+            )
 
 st.divider()
 
@@ -352,8 +383,23 @@ else:
 
     with _bov_col2:
         st.markdown("**Total Runs (O/U)**")
+        # A2.7 — this panel shows the Bovada MARKET line only. It is independent of
+        # the model's own total (see "Predicted Total Runs" above) and of the totals
+        # model probability — a missing line here never means the model failed.
+        # The Parlay API's totals feed is sparse/late for many books (Bovada
+        # included) even when their moneyline is live, so distinguish a genuine
+        # not-yet-posted total from no Bovada coverage at all rather than showing a
+        # bare "Not available".
         if _tot.empty:
-            st.caption("Not available.")
+            if not _h2h.empty:
+                st.caption(
+                    "⏳ Bovada total not yet posted — Bovada has a moneyline for this game, "
+                    "but its over/under feed is sparse/late (a known upstream gap in the odds "
+                    "provider's totals market, **not** a model issue). Check back closer to "
+                    "first pitch."
+                )
+            else:
+                st.caption("Not available — no pre-game Bovada lines for this game.")
         else:
             _over_row  = _tot[_tot["outcome_name"].str.lower() == "over"]
             _under_row = _tot[_tot["outcome_name"].str.lower() == "under"]
@@ -367,6 +413,17 @@ else:
             tc3.metric("Under", _under_ml)
             if _snap_ts is not None:
                 st.caption(f"Snapshot: {pd.Timestamp(_snap_ts).strftime('%Y-%m-%d %H:%M')} UTC")
+                # Flag a stale total: Bovada's moneyline refreshed materially later
+                # than its total, so the displayed line may be outdated.
+                _h2h_ts = _h2h["ingestion_ts"].max() if not _h2h.empty else None
+                if _h2h_ts is not None and pd.notna(_snap_ts):
+                    _lag_h = (pd.Timestamp(_h2h_ts) - pd.Timestamp(_snap_ts)).total_seconds() / 3600.0
+                    if _lag_h >= 3.0:
+                        st.caption(
+                            f"⚠️ This total is ~{_lag_h:.0f}h older than Bovada's moneyline "
+                            f"snapshot — Bovada stopped refreshing its O/U for this game, so the "
+                            f"line may be stale."
+                        )
 
 st.divider()
 
@@ -501,7 +558,7 @@ def load_batter_stats(player_ids: tuple[int, ...], date_str: str) -> dict[int, d
         int(r["batter_id"]): {
             "ops":   _safe_float(r.get("ops")),
             "xwoba": _safe_float(r.get("xwoba")),
-            "pa":    int(r["pa"]) if pd.notna(r.get("pa")) else 0,
+            "pa":    safe_int(r.get("pa"), 0),
         }
         for _, r in df.iterrows()
     }
@@ -519,7 +576,7 @@ def load_matchup_stats(batter_ids: tuple[int, ...], pitcher_id: int, date_str: s
     df.columns = [c.lower() for c in df.columns]
     return {
         int(r["batter_id"]): {
-            "pa":    int(r["pa"]) if pd.notna(r.get("pa")) else 0,
+            "pa":    safe_int(r.get("pa"), 0),
             "xwoba": _safe_float(r.get("xwoba")),
         }
         for _, r in df.iterrows()
@@ -532,12 +589,9 @@ def _extract_player_ids(lineup_row: pd.Series | None) -> list[int]:
         return []
     ids = []
     for slot in range(1, 10):
-        pid = lineup_row.get(f"slot_{slot}_player_id")
+        pid = safe_int(lineup_row.get(f"slot_{slot}_player_id"))
         if pid is not None:
-            try:
-                ids.append(int(pid))
-            except (TypeError, ValueError):
-                pass
+            ids.append(pid)
     return ids
 
 
@@ -552,7 +606,7 @@ def _lineup_table(
     rows = []
     for slot in range(1, 10):
         pid_raw = lineup_row.get(f"slot_{slot}_player_id") if lineup_row is not None else None
-        pid = int(pid_raw) if pd.notna(pid_raw) else None
+        pid = safe_int(pid_raw)
         name = lineup_row.get(f"slot_{slot}_full_name") if lineup_row is not None else None
         pos  = lineup_row.get(f"slot_{slot}_position")  if lineup_row is not None else None
 
@@ -597,10 +651,10 @@ away_lineup_row = _get_side(lineups_df, "home_away", "away")
 
 # Load trailing stats for both pitchers in one query
 _pitcher_id_list = []
-# pd.notna guards the NaN case: a pandas NaN passes `is not None`, so int(NaN) would
+# safe_int guards the NaN case: a pandas NaN passes `is not None`, so int(NaN) would
 # crash when a probable starter hasn't been announced yet for one side.
-_home_pid = int(home_starter["probable_pitcher_id"]) if home_starter is not None and pd.notna(home_starter.get("probable_pitcher_id")) else None
-_away_pid = int(away_starter["probable_pitcher_id"]) if away_starter is not None and pd.notna(away_starter.get("probable_pitcher_id")) else None
+_home_pid = safe_int(home_starter.get("probable_pitcher_id")) if home_starter is not None else None
+_away_pid = safe_int(away_starter.get("probable_pitcher_id")) if away_starter is not None else None
 if _home_pid is not None:
     _pitcher_id_list.append(_home_pid)
 if _away_pid is not None:
@@ -619,7 +673,7 @@ def _render_starter_stats(stats: pd.Series | None) -> None:
     ra9 = _safe_float(stats["ra9"]) if stats is not None else None
     whip = _safe_float(stats["whip"]) if stats is not None else None
     k_pct = _safe_float(stats["k_pct"]) if stats is not None else None
-    starts = int(stats["starts"]) if stats is not None and pd.notna(stats.get("starts")) else None
+    starts = safe_int(stats.get("starts")) if stats is not None else None
     label_suffix = f" (last {starts} starts)" if starts else ""
     m1, m2, m3 = st.columns(3)
     m1.metric(f"RA/9{label_suffix}", f"{ra9:.2f}" if ra9 is not None else "N/A",
@@ -906,6 +960,23 @@ def _build_feature_df(raw_df: pd.DataFrame, feature_cols: list[str]) -> pd.DataF
         else:
             row[col] = 0.0
     return pd.DataFrame([row], columns=feature_cols)
+
+
+def _imputed_feature_set(raw_df: pd.DataFrame, feature_cols: list[str]) -> set[str]:
+    """A2.5 — which of `feature_cols` were NULL/absent in the raw feature vector.
+
+    `_build_feature_df` silently fills these with 0.0, so a SHAP driver on an imputed
+    feature would otherwise look like a genuine '0.000' contribution. This set lets the
+    key-drivers panel mark such drivers as imputed instead of letting them appear to
+    contribute normally (the elo_diff / archetype / R-per-game-at-park case for BOS/TB).
+    """
+    if raw_df is None or raw_df.empty:
+        return set(feature_cols)
+    imputed: set[str] = set()
+    for col in feature_cols:
+        if col not in raw_df.columns or pd.isna(raw_df.iloc[0][col]):
+            imputed.add(col)
+    return imputed
 
 
 # ---------------------------------------------------------------------------
@@ -1200,6 +1271,7 @@ def _render_key_drivers(
     model_label: str,
     pos_label: str,
     neg_label: str,
+    imputed_set: set[str] | None = None,
 ) -> None:
     st.markdown(f"**{model_label}**")
     drivers = _compute_shap_drivers(explainer, X_df)
@@ -1208,21 +1280,39 @@ def _render_key_drivers(
         return
 
     feat_descs = _load_feature_descriptions()
+    imputed_set = imputed_set or set()
+    _n_imputed_shown = 0
 
     for _, row in drivers.iterrows():
         feat = row["feature"]
         shap_val = float(row["shap_value"])
         feat_val = row["feature_value"]
         label = _get_feature_label(feat)
-        val_str = _format_feature_value(feat, float(feat_val))
+        is_imputed = feat in imputed_set
         direction = pos_label if shap_val > 0 else neg_label
         arrow = "↑" if shap_val > 0 else "↓"
-        color = "#2ecc71" if shap_val > 0 else "#e74c3c"
         impact = f"{arrow} {abs(shap_val):.3f}"
+
+        # A2.5 — an imputed driver was NULL in the source and filled with a league
+        # prior; its value is not real, so show 'imputed' (not the 0.000 fill) and
+        # grey it out so it doesn't read as a genuine contribution.
+        if is_imputed:
+            _n_imputed_shown += 1
+            val_str = "imputed"
+            color = "#888"
+            label = f"{label} ⚠️"
+        else:
+            val_str = _format_feature_value(feat, float(feat_val))
+            color = "#2ecc71" if shap_val > 0 else "#e74c3c"
 
         # Tooltip: first sentence of schema.yml description, or nothing
         raw_desc = feat_descs.get(feat, "")
         tooltip = raw_desc.split(".")[0].strip() if raw_desc else ""
+        if is_imputed:
+            tooltip = (
+                "This feature was missing for this game and imputed to a league prior — "
+                "its contribution is not based on real matchup data. "
+            ) + tooltip
         # Escape quotes so they don't break the HTML title attribute
         tooltip_attr = f' title="{tooltip}"' if tooltip else ""
 
@@ -1237,11 +1327,18 @@ def _render_key_drivers(
             f'<div style="display:flex;justify-content:space-between;align-items:center;'
             f'padding:5px 10px;margin-bottom:3px;border-radius:5px;background:rgba(255,255,255,0.04);">'
             f'{label_html}'
-            f'<span style="flex:1;text-align:center;font-size:0.84rem;color:#aaa;">{val_str}</span>'
+            f'<span style="flex:1;text-align:center;font-size:0.84rem;color:#aaa;font-style:'
+            f'{"italic" if is_imputed else "normal"};">{val_str}</span>'
             f'<span style="flex:1;text-align:right;font-size:0.84rem;font-weight:600;color:{color};">'
             f'{impact} {direction}</span>'
             f'</div>',
             unsafe_allow_html=True,
+        )
+
+    if _n_imputed_shown:
+        st.caption(
+            f"⚠️ {_n_imputed_shown} of the drivers above were imputed to a league prior "
+            f"(missing for this game) — their contribution is not based on real matchup data."
         )
 
 
@@ -1264,7 +1361,8 @@ else:
         try:
             hw_explainer, hw_feature_cols = get_home_win_explainer()
             X_hw = _build_feature_df(raw_feat_df, hw_feature_cols)
-            _render_key_drivers(hw_explainer, X_hw, "Home Win Model", "→ Home Win", "→ Away Win")
+            hw_imputed = _imputed_feature_set(raw_feat_df, hw_feature_cols)
+            _render_key_drivers(hw_explainer, X_hw, "Home Win Model", "→ Home Win", "→ Away Win", hw_imputed)
         except Exception as exc:
             st.warning(f"Home Win driver analysis failed: {exc}")
 
@@ -1272,7 +1370,8 @@ else:
         try:
             tr_explainer, tr_feature_cols = get_total_runs_explainer()
             X_tr = _build_feature_df(raw_feat_df, tr_feature_cols)
-            _render_key_drivers(tr_explainer, X_tr, "Total Runs Model", "→ Over", "→ Under")
+            tr_imputed = _imputed_feature_set(raw_feat_df, tr_feature_cols)
+            _render_key_drivers(tr_explainer, X_tr, "Total Runs Model", "→ Over", "→ Under", tr_imputed)
         except Exception as exc:
             st.warning(f"Total Runs driver analysis failed: {exc}")
 
@@ -1340,8 +1439,8 @@ def _get_team_ids(game_pk: int) -> tuple[int | None, int | None]:
     df.columns = [c.lower() for c in df.columns]
     row = df.iloc[0]
     return (
-        int(row["home_team_id"]) if pd.notna(row.get("home_team_id")) else None,
-        int(row["away_team_id"]) if pd.notna(row.get("away_team_id")) else None,
+        safe_int(row.get("home_team_id")),
+        safe_int(row.get("away_team_id")),
     )
 
 
@@ -1454,7 +1553,7 @@ def _render_team_accuracy(team_name: str, team_id: int | None) -> None:
         st.caption("Not enough data.")
         return
     r = acc_df.iloc[0]
-    games = int(r["games"]) if pd.notna(r.get("games")) else 0
+    games = safe_int(r.get("games"), 0)
     if games == 0:
         st.caption("No scored games found.")
         return

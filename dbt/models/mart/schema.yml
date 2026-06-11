@@ -7565,6 +7565,85 @@ models:
           leverage exhaustion. Null when no reliever appearances on that day.
 
   # ============================================================================
+  # mart_reliever_top3_availability (Story 6.6)
+  # ============================================================================
+  - name: mart_reliever_top3_availability
+    description: >
+      Grain: team_abbrev × game_pk. Pre-game availability of the three highest-leverage
+      relievers for each team entering a given game.
+
+      The top-3 arms are ranked by their trailing 30-day leverage workload
+      (sum of |delta_home_win_exp|) using appearances strictly before this game.
+      Rank-1 = "closer", rank-2 = "setup1", rank-3 = "setup2".
+
+      Per-arm outputs:
+        {role}_available  — 1 = arm did NOT pitch yesterday (rest_days >= 2);
+                            defaults to 1 (rested) when no prior 30-day data.
+        {role}_rest_days  — days since last outing; NULL when arm hasn't appeared
+                            in the trailing 30 days (implicitly fully rested).
+
+      Leakage guard: rolling window upper bound is strictly 1 day preceding. Only
+      appearances strictly before the game date are included.
+
+      Starter exclusion: pitchers in mart_starting_pitcher_game_log are excluded.
+
+      Doubleheader handling: appearances collapsed to date level before rolling windows.
+
+      Coverage: ≥95% non-null for *_available across completed regular-season game-sides.
+      Season openers (no prior 30-day data) default to available=1. Story 6.6.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [team_abbrev, game_pk]
+
+    columns:
+
+      - name: game_pk
+        description: Unique MLB game identifier.
+        tests:
+          - not_null
+
+      - name: game_date
+        description: Date the game was played.
+        tests:
+          - not_null
+
+      - name: team_abbrev
+        description: Statcast abbreviation of the pitching team.
+        tests:
+          - not_null
+
+      - name: closer_available
+        description: >
+          1 if the rank-1 leverage arm did not pitch in the prior calendar day
+          (rest_days >= 2 or no prior 30-day appearance). 0 = used yesterday.
+          Defaults to 1 at season open.
+        tests:
+          - not_null
+
+      - name: closer_rest_days
+        description: Days since the closer's last outing. NULL if no appearance in the prior 30 days.
+
+      - name: setup1_available
+        description: >
+          1 if the rank-2 leverage arm did not pitch yesterday. Defaults to 1 at season open.
+        tests:
+          - not_null
+
+      - name: setup1_rest_days
+        description: Days since setup1's last outing. NULL if no appearance in the prior 30 days.
+
+      - name: setup2_available
+        description: >
+          1 if the rank-3 leverage arm did not pitch yesterday. Defaults to 1 at season open.
+        tests:
+          - not_null
+
+      - name: setup2_rest_days
+        description: Days since setup2's last outing. NULL if no appearance in the prior 30 days.
+
+  # ============================================================================
   # mart_pitcher_batter_history (Card 8.J)
   # ============================================================================
   - name: mart_pitcher_batter_history

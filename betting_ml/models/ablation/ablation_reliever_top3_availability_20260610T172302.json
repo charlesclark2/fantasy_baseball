@@ -1,0 +1,63 @@
+{
+  "story": "6.6",
+  "run_at": "20260610T172302",
+  "coverage_ac": {
+    "pass": true,
+    "per_col": {
+      "home_closer_available": 99.34,
+      "away_closer_available": 99.33,
+      "home_setup1_available": 99.34,
+      "away_setup1_available": 99.33,
+      "home_setup2_available": 99.34,
+      "away_setup2_available": 99.33
+    }
+  },
+  "total_runs": {
+    "baseline_mean_mae": 3.49677467352165,
+    "avail_mean_mae": 3.493561212169265,
+    "delta_mae": -0.003213461352384872,
+    "n_folds_improved": 3,
+    "n_folds_total": 3,
+    "fold_records": [
+      {
+        "tag": "avail_totals",
+        "eval_year": 2024,
+        "n_eval": 2003,
+        "mae": 3.4210257949292413,
+        "bias": 0.27707193620467135
+      },
+      {
+        "tag": "avail_totals",
+        "eval_year": 2025,
+        "n_eval": 2027,
+        "mae": 3.612672659822508,
+        "bias": -0.17750762362191536
+      },
+      {
+        "tag": "avail_totals",
+        "eval_year": 2026,
+        "n_eval": 731,
+        "mae": 3.446985181756046,
+        "bias": -0.020395576707933502
+      }
+    ]
+  },
+  "home_win": {
+    "skipped": true,
+    "reason": "home_team_wins not in feature table"
+  },
+  "avail_cols_tested": [
+    "home_closer_available",
+    "home_closer_rest_days",
+    "home_setup1_available",
+    "home_setup1_rest_days",
+    "home_setup2_available",
+    "home_setup2_rest_days",
+    "away_closer_available",
+    "away_closer_rest_days",
+    "away_setup1_available",
+    "away_setup1_rest_days",
+    "away_setup2_available",
+    "away_setup2_rest_days"
+  ]
+}

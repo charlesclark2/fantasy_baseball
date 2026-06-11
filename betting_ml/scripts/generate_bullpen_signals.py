@@ -84,18 +84,23 @@ _W_CLOSER  = 0.50
 _W_HI_LEV  = 0.25
 _MAX_HLEV_PENALTY = _W_CLOSER + _W_HI_LEV    # 0.75
 
-# Feature columns shared by v1 and v2 (same 24 as Epic 6 training)
+# Feature columns shared by v1 and v2 (23 original + 6 Story-6.6 top-3 availability = 29)
+# Note: availability_index is computed at runtime for the v1 signal output but is NOT
+# a feature input to the v2 LightGBM model (not stored in the training parquet).
 FEATURE_COLS = [
     "eb_bullpen_xwoba", "eb_bullpen_uncertainty", "eb_bullpen_coverage_pct",
     "xwoba_against_14d", "k_pct_14d", "bb_pct_14d", "hard_hit_pct_14d",
     "whiff_rate_14d", "innings_pitched_14d",
     "xwoba_against_30d", "k_pct_30d", "bb_pct_30d", "hard_hit_pct_30d",
     "whiff_rate_30d", "innings_pitched_30d",
-    "availability_index",
     "bullpen_ip_prev_1d", "bullpen_ip_prev_2d", "bullpen_ip_prev_3d",
     "pitchers_used_prev_3d", "pitchers_used_prev_7d",
     "reliever_appearances_prev_3d", "high_leverage_used_prev_2d",
     "closer_used_prev_1d",
+    # Story 6.6 — top-3 leverage arm availability vector
+    "closer_available", "closer_rest_days",
+    "setup1_available", "setup1_rest_days",
+    "setup2_available", "setup2_rest_days",
 ]
 
 
@@ -151,7 +156,16 @@ SELECT
     e.eb_bullpen_coverage_pct,
 
     -- Starter IP p20 (Epic 5D; Candidate B scaling input — NULL pre-2020 or no probable)
-    ip.starter_ip_p20_outs
+    ip.starter_ip_p20_outs,
+
+    -- Top-3 leverage arm availability (Story 6.6)
+    -- Imputed to 1 (available) and NULL (rest_days) when no prior 30-day data
+    COALESCE(av.closer_available,  1)   AS closer_available,
+    av.closer_rest_days,
+    COALESCE(av.setup1_available,  1)   AS setup1_available,
+    av.setup1_rest_days,
+    COALESCE(av.setup2_available,  1)   AS setup2_available,
+    av.setup2_rest_days
 
 FROM baseball_data.betting.mart_game_results g
 JOIN baseball_data.betting.mart_bullpen_workload w
@@ -164,6 +178,9 @@ LEFT JOIN baseball_data.betting_features.starter_ip_signals ip
     ON  ip.game_pk       = g.game_pk
     AND ip.side          = CASE WHEN w.pitching_team = g.home_team THEN 'home' ELSE 'away' END
     AND ip.model_version = 'starter_ip_v1'
+LEFT JOIN baseball_data.betting.mart_reliever_top3_availability av
+    ON  av.game_pk     = g.game_pk
+    AND av.team_abbrev = w.pitching_team
 
 WHERE g.game_date >= '{start_date}'
   AND g.game_date <= '{end_date}'

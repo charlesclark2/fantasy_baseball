@@ -25,6 +25,14 @@ Features (all pre-game, no leakage):
     team_sequential_bullpen_xwoba  (as-of-date: latest game_date < scoring_date)
     posterior_source               (1 if sequential posterior available, else 0)
 
+  Top-3 leverage arm availability (Story 6.6) — mart_reliever_top3_availability:
+    closer_available   (1 = closer not used yesterday; NULL → imputed 1)
+    closer_rest_days   (days since last outing; NULL when no prior 30-day data)
+    setup1_available   (same for rank-2 arm)
+    setup1_rest_days
+    setup2_available   (same for rank-3 arm)
+    setup2_rest_days
+
 Target (post-game, computed from pitch data):
   actual_bullpen_xwoba — game-level xwOBA against for the team's relievers
   in the current game. Used as the training target for Story 6.3 (bullpen
@@ -170,6 +178,21 @@ seq_intervals AS (
         posterior_mu
     FROM baseball_data.betting.team_sequential_posteriors
     WHERE metric = 'bullpen_xwoba'
+),
+
+-- ── Top-3 leverage arm availability (Story 6.6) ──────────────────────────────
+top3_avail AS (
+    SELECT
+        game_pk,
+        team_abbrev,
+        closer_available,
+        closer_rest_days,
+        setup1_available,
+        setup1_rest_days,
+        setup2_available,
+        setup2_rest_days
+    FROM baseball_data.betting.mart_reliever_top3_availability
+    WHERE game_pk IN (SELECT DISTINCT game_pk FROM actual_xwoba)
 )
 
 SELECT
@@ -220,7 +243,17 @@ SELECT
     -- As-of-date: latest posterior updated BEFORE this game (leakage-safe).
     -- NULL for pre-2021 games and season openers before first observation.
     si.posterior_mu                                           AS team_sequential_bullpen_xwoba,
-    CASE WHEN si.posterior_mu IS NOT NULL THEN 1 ELSE 0 END  AS posterior_source
+    CASE WHEN si.posterior_mu IS NOT NULL THEN 1 ELSE 0 END  AS posterior_source,
+
+    -- ── Top-3 leverage arm availability (Story 6.6) ──────────────────────────
+    -- NULL when no prior 30-day appearances (season openers); impute to 1 in
+    -- preprocessing. Leakage-free: mart uses strictly-prior appearances.
+    ta.closer_available,
+    ta.closer_rest_days,
+    ta.setup1_available,
+    ta.setup1_rest_days,
+    ta.setup2_available,
+    ta.setup2_rest_days
 
 FROM actual_xwoba ax
 LEFT JOIN workload w
@@ -233,6 +266,9 @@ LEFT JOIN seq_intervals si
     ON  si.team      = ax.pitching_team
     AND ax.game_date > si.valid_from
     AND (si.valid_until IS NULL OR ax.game_date <= si.valid_until)
+LEFT JOIN top3_avail ta
+    ON  ta.game_pk     = ax.game_pk
+    AND ta.team_abbrev = ax.pitching_team
 
 ORDER BY ax.game_date, ax.game_pk, ax.pitching_team
 """
@@ -265,6 +301,7 @@ def _print_coverage(df: pd.DataFrame) -> None:
         "bullpen_ip_prev_1d", "bullpen_ip_prev_2d", "bullpen_ip_prev_3d",
         "xwoba_against_14d", "xwoba_against_30d",
         "team_sequential_bullpen_xwoba",
+        "closer_available", "setup1_available", "setup2_available",
     ]
     for col in key_cols:
         if col not in df.columns:

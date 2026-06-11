@@ -16,6 +16,7 @@ from pipeline.ops.daily_ingestion_ops import (
     dbt_sub_model_signals_rebuild,
     dbt_umpire_feature_rebuild,
     generate_bullpen_signals_op,
+    generate_env_state_signals_op,
     generate_matchup_signals_op,
     generate_offense_signals_op,
     generate_run_env_signals_op,
@@ -78,6 +79,11 @@ def daily_ingestion_job():
     sig_starter_ip = generate_starter_ip_signals_op(start=s16)
     sig_bullpen    = generate_bullpen_signals_op(start=sig_starter_ip)
     sig_matchup    = generate_matchup_signals_op(start=s16)
+    # Epic 27.2 — Kalman env-state signal (runs concurrently with the other six).
+    # Runs the full-history league + team filter on each call; fast (<1 min) because
+    # the Kalman recursion over ~2500 dates is pure Python and the Snowflake
+    # mart_game_results aggregation resolves in seconds.
+    sig_env_state  = generate_env_state_signals_op(start=s16)
     sig_rebuild    = dbt_sub_model_signals_rebuild(
         run_env_done=sig_run_env,
         offense_done=sig_offense,
@@ -85,6 +91,7 @@ def daily_ingestion_job():
         starter_ip_done=sig_starter_ip,
         bullpen_done=sig_bullpen,
         matchup_done=sig_matchup,
+        env_state_done=sig_env_state,
     )
     sig_fresh = signal_freshness_check(start=sig_rebuild)
     # SCD-2 update: mart_odds_outcomes is now fresh; update market features and

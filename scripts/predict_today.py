@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import warnings
 from datetime import date, datetime, timezone
@@ -157,7 +158,20 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- Populated for every game with Bovada h2h odds; used by the magnitude kill-criterion
     -- monitor to compute real-book ROI (decimal = 1 + 100/|odds| if negative, or odds/100+1 if positive).
     layer4_h2h_bovada_ml_home INTEGER,      -- e.g. -158 (home favored) or +132 (home dog)
-    layer4_h2h_bovada_ml_away INTEGER       -- mirroring away-side American odds
+    layer4_h2h_bovada_ml_away INTEGER,      -- mirroring away-side American odds
+
+    -- A2.5 — per-game imputation transparency. From the PRE-imputation matrix:
+    -- which model features were NULL and got median/constant-imputed. The
+    -- discriminative_* columns track only the UNCONDITIONAL-CORE discriminative set
+    -- (ELO, bullpen-EB, team-sequential, RISP/runners-on, park) — the serving-health
+    -- signal that catches the 2026-06 incident WITHOUT re-flagging the expected
+    -- pre-lineup absence of lineup-/pitcher-gated features (those are shown via the
+    -- Lineups column + the per-driver 'imputed' marking in Game Insights instead).
+    imputed_feature_count        INTEGER,      -- ALL model features imputed for this game (broad; includes lineup-gated)
+    imputed_discriminative_count INTEGER,      -- of the ~27 unconditional-core discriminative features, how many imputed
+    discriminative_coverage      FLOAT,        -- 1 - imputed_core / total_core (1.0 = every core signal served)
+    is_degraded                  BOOLEAN,      -- discriminative_coverage < 0.85 → serving-degraded pick (NOT just pre-lineup)
+    imputed_features             VARCHAR(4000) -- comma-joined imputed CORE discriminative feature names (truncated)
 )
 """
 
@@ -180,7 +194,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     layer4_h2h_decision, layer4_h2h_rule, layer4_h2h_edge,
     bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood,
     data_source, feature_coverage_score,
-    layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away
+    layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
+    imputed_feature_count, imputed_discriminative_count,
+    discriminative_coverage, is_degraded, imputed_features
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -199,7 +215,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(layer4_h2h_decision)s, %(layer4_h2h_rule)s, %(layer4_h2h_edge)s,
     %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s,
     %(data_source)s, %(feature_coverage_score)s,
-    %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s
+    %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s,
+    %(imputed_feature_count)s, %(imputed_discriminative_count)s,
+    %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s
 )
 """
 
@@ -377,6 +395,83 @@ def _feature_coverage_score(df: pd.DataFrame, i: int) -> float:
     return round(covered / len(_FEATURE_COVERAGE_BLOCKS), 3)
 
 
+# A2.5 — discriminative coverage is the SERVING-HEALTH signal. It must catch the
+# 2026-06 incident (features that should be carried forward for every scheduled game
+# went NULL across the slate → constant-imputed → home_win corr collapsed to ~0)
+# WITHOUT crying wolf on features that are *legitimately* absent until a lineup or
+# probable pitcher is announced. So the floor is computed over the UNCONDITIONAL-CORE
+# discriminative families only — ones with no valid reason to be null for any
+# scheduled MLB game: ELO ratings, bullpen empirical-Bayes quality, team sequential
+# posteriors, team RISP / runners-on splits, and the park run environment.
+#
+# DELIBERATELY EXCLUDED here: the lineup-gated families (lineup archetype / cluster /
+# vs-starter / h2h, and the lineup-EB aggregates like `*_avg_eb_woba`) and the
+# pitcher-gated starter-EB. Their absence pre-lineup is EXPECTED, not a serving
+# failure, and is already surfaced by the Lineups column and the per-driver 'imputed'
+# marking in Game Insights — folding them in here would just re-flag every pre-lineup
+# pick as "degraded" (observed 2026-06-10: 5/15 morning games, all lineup-gated).
+# Token-boundary on `elo` so it does NOT match `..._velo`.
+_DISCRIMINATIVE_RE = re.compile(
+    r"(?:^|_)elo(?:_|$)"           # ELO ratings + diff
+    r"|bp_eb"                      # bullpen empirical-Bayes quality
+    r"|team_sequential"            # team-level sequential posteriors
+    r"|with_risp|with_runners_on"  # team RISP / runners-on splits
+    r"|park_run_factor|runs_per_game_at_park",  # park run environment
+    re.I,
+)
+
+# Below this fraction of unconditional-core discriminative features served
+# (non-imputed) for a game, the pick is flagged `is_degraded`. The healthy steady
+# state imputes 0 of ~27 core features (coverage = 1.0); the incident imputed ~all of
+# them (coverage ≈ 0). 0.85 flags genuine collapse (≥4 core features missing) without
+# nagging on a routine single-feature gap, which is still surfaced via the count.
+_DISC_COVERAGE_FLOOR = 0.85
+
+
+def _discriminative_cols(cols: list[str]) -> list[str]:
+    """Subset of `cols` in the unconditional-core discriminative set (A2.5).
+
+    Used as the coverage-floor / degraded-flag basis — the serving-health signal.
+    NOT the same as "every matchup feature": lineup-/pitcher-gated families are
+    excluded by design (see the regex comment) so the flag isolates genuine serving
+    failure from the expected pre-lineup absence the Lineups column already shows.
+    """
+    return [c for c in cols if _DISCRIMINATIVE_RE.search(c)]
+
+
+def _build_imputation_summary(
+    X_raw: pd.DataFrame, model_cols: list[str], disc_cols: list[str]
+) -> list[dict]:
+    """Per-game imputation transparency from the PRE-imputation matrix (A2.5).
+
+    `X_raw` carries real NaN for any feature that wasn't served (it is imputed to a
+    median/constant downstream). For each row we record how many model features and
+    how many *discriminative* features were null, the discriminative coverage, the
+    degraded flag, and the (truncated) list of imputed discriminative feature names.
+    Row order matches `X_raw` / `df_today`, so the writer indexes it by position.
+    """
+    model_cols = [c for c in model_cols if c in X_raw.columns]
+    disc_cols = [c for c in disc_cols if c in X_raw.columns]
+    n_disc = len(disc_cols)
+    out: list[dict] = []
+    for i in range(len(X_raw)):
+        row = X_raw.iloc[i]
+        imputed_all = [c for c in model_cols if pd.isna(row[c])]
+        imputed_disc = [c for c in disc_cols if pd.isna(row[c])]
+        cov = round(1.0 - len(imputed_disc) / n_disc, 3) if n_disc else 1.0
+        names = ",".join(sorted(imputed_disc))
+        if len(names) > 3900:  # keep within VARCHAR(4000)
+            names = names[:3900] + ",…"
+        out.append({
+            "imputed_feature_count":        len(imputed_all),
+            "imputed_discriminative_count": len(imputed_disc),
+            "discriminative_coverage":      cov,
+            "is_degraded":                  bool(n_disc and cov < _DISC_COVERAGE_FLOOR),
+            "imputed_features":             names or None,
+        })
+    return out
+
+
 def _post_lineup_delete_sql(schema: str, scoped_game_pks: list[int] | None) -> str:
     """Build the overwrite DELETE for a post_lineup re-score.
 
@@ -417,6 +512,7 @@ def _write_predictions_to_snowflake(
     has_odds_col: pd.Series,
     best_alpha: float,
     picks: list[str],
+    imputation_summary: list[dict] | None = None,
 ) -> None:
     def _f(arr, i) -> float | None:
         v = arr[i]
@@ -507,6 +603,7 @@ def _write_predictions_to_snowflake(
         game_prov = prov.get(int(gpk_val)) if gpk_val is not None else None
         game_bullpen = bullpen_ood_signals.get(int(gpk_val)) if gpk_val is not None else None
         game_bovada = bovada_ml.get(int(gpk_val)) if gpk_val is not None else None
+        imp_summ = imputation_summary[i] if (imputation_summary and i < len(imputation_summary)) else None
 
         # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
         ood_row = {
@@ -568,6 +665,12 @@ def _write_predictions_to_snowflake(
             # Story 28.3 — actual Bovada American moneyline (not de-vig) for kill-criterion monitor
             "layer4_h2h_bovada_ml_home": (game_bovada or {}).get("bovada_ml_home"),
             "layer4_h2h_bovada_ml_away": (game_bovada or {}).get("bovada_ml_away"),
+            # A2.5 — per-game imputation transparency (None-safe when summary absent)
+            "imputed_feature_count":        (imp_summ or {}).get("imputed_feature_count"),
+            "imputed_discriminative_count": (imp_summ or {}).get("imputed_discriminative_count"),
+            "discriminative_coverage":      (imp_summ or {}).get("discriminative_coverage"),
+            "is_degraded":                  (imp_summ or {}).get("is_degraded"),
+            "imputed_features":             (imp_summ or {}).get("imputed_features"),
         }))
 
     try:
@@ -593,6 +696,12 @@ def _write_predictions_to_snowflake(
             # Story 28.3 — actual Bovada American moneyline for kill-criterion monitor
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_home INTEGER")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_away INTEGER")
+            # A2.5 — per-game imputation transparency
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_feature_count INTEGER")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_discriminative_count INTEGER")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS discriminative_coverage FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS is_degraded BOOLEAN")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_features VARCHAR(4000)")
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
@@ -1024,6 +1133,19 @@ def main() -> None:
     X_today_imp = pipeline.transform(X_today_raw)
     X_today_imp = X_today_imp.reindex(columns=X_hist_imp.columns, fill_value=0.0)
 
+    # A2.5 — per-game imputation transparency, computed from the PRE-imputation
+    # matrix (X_today_raw carries real NaN for unserved features). Persisted to
+    # daily_model_predictions so the app can flag degraded picks.
+    _model_union_cols = list(dict.fromkeys(tot_feat_cols + diff_feat_cols + hw_feat_cols))
+    _disc_cols = _discriminative_cols(_model_union_cols)
+    imputation_summary = _build_imputation_summary(X_today_raw, _model_union_cols, _disc_cols)
+    _n_degraded = sum(1 for s in imputation_summary if s["is_degraded"])
+    print(
+        f"[A2.5] Imputation transparency: {len(_disc_cols)} discriminative features tracked | "
+        f"{_n_degraded}/{len(imputation_summary)} game(s) below the {_DISC_COVERAGE_FLOOR:.0%} "
+        f"discriminative-coverage floor (flagged degraded)."
+    )
+
     print("Loading production models from registry...")
     ngb_total = load_model("total_runs", "prod")
     ngb_diff  = load_model("run_differential", "prod")
@@ -1271,6 +1393,7 @@ def main() -> None:
         has_odds_col=has_odds_col,
         best_alpha=best_alpha,
         picks=picks_list,
+        imputation_summary=imputation_summary,
     )
 
 

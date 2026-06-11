@@ -348,6 +348,24 @@ def _persist(conn, run_at: datetime, start: date, end: date, ptype: str | None,
     print(f"  Wrote {len(rows)} metric row(s) to {_RESULTS_TABLE} (run_at={run_at.isoformat()}).")
 
 
+def evaluate(conn, schema: str, start: date, end: date,
+             model_version: str | None = None, prediction_type: str | None = None,
+             min_games: int = MIN_GAMES) -> dict | None:
+    """Run the health check and return {target: metrics} (or None if no data).
+
+    Shared by the CLI (main) and the Dagster health-gate sensor so the live gate and
+    the ad-hoc report use identical fetch + eval + thresholds. Caller owns `conn`.
+    """
+    df = _fetch(conn, schema, start, end, model_version, prediction_type)
+    if df.empty:
+        return None
+    return {
+        "home_win": _eval_home_win(df, min_games),
+        "total_runs": _eval_regression(df, "total_runs", min_games),
+        "run_differential": _eval_regression(df, "run_differential", min_games),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Honest live-skill metrics + health gate (A2.1).")
     g = ap.add_mutually_exclusive_group()
@@ -371,15 +389,14 @@ def main() -> int:
 
     conn = get_snowflake_connection()
     try:
-        df = _fetch(conn, args.schema, start, end, args.model_version, args.prediction_type)
-        if df.empty:
+        result = evaluate(conn, args.schema, start, end, args.model_version,
+                          args.prediction_type, min_games)
+        if result is None:
             print(f"No completed-game predictions in {window} "
                   f"(schema={args.schema}, type={args.prediction_type or 'any'}).")
             return 0
 
-        hw = _eval_home_win(df, min_games)
-        tot = _eval_regression(df, "total_runs", min_games)
-        rd = _eval_regression(df, "run_differential", min_games)
+        hw, tot, rd = result["home_win"], result["total_runs"], result["run_differential"]
         _print_report(window, args.prediction_type, args.model_version, hw, tot, rd)
 
         if args.write_snowflake:

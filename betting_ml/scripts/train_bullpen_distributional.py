@@ -116,7 +116,9 @@ _SEQ_MIN_YEAR          = 2021     # D2 locked: sequential posteriors backfilled 
 _IP_SIGNALS_TABLE = "baseball_data.betting_features.starter_ip_signals"
 
 
-# ── Feature set (same 24 as Epic 6 champion bullpen_quality_v1) ───────────────
+# ── Feature set (24 original + 6 Story-6.6 top-3 leverage arm availability) ──
+# Note: availability_index is computed at runtime in generate_bullpen_signals.py for the
+# v1 signal output but is NOT stored in the training parquet; exclude from model features.
 FEATURE_COLS = [
     "eb_bullpen_xwoba",
     "eb_bullpen_uncertainty",
@@ -133,7 +135,6 @@ FEATURE_COLS = [
     "hard_hit_pct_30d",
     "whiff_rate_30d",
     "innings_pitched_30d",
-    "availability_index",
     "bullpen_ip_prev_1d",
     "bullpen_ip_prev_2d",
     "bullpen_ip_prev_3d",
@@ -142,6 +143,13 @@ FEATURE_COLS = [
     "reliever_appearances_prev_3d",
     "high_leverage_used_prev_2d",
     "closer_used_prev_1d",
+    # Story 6.6 — top-3 leverage arm availability vector
+    "closer_available",
+    "closer_rest_days",
+    "setup1_available",
+    "setup1_rest_days",
+    "setup2_available",
+    "setup2_rest_days",
 ]
 
 # Epic 16B.2: sequential enrichment adds 2 features (restricted to 2021+)
@@ -850,8 +858,15 @@ def _subset_eval(
     y_all  = df[_TARGET_COL].to_numpy(dtype=float)
     mu_all = np.clip(final_model.predict(X_all), 1e-6, None)
 
-    # High-fatigue subset
-    fatigue_mask = df["fatigue_score"].fillna(0.0) > _FATIGUE_THRESH
+    # High-fatigue subset — fatigue_score derived from ip columns (same formula as
+    # compute_bullpen_availability_index.py: 3*ip_1d + 2*ip_2d + 1*ip_3d).
+    # availability_index is not stored in the training parquet; compute proxy here.
+    df["_fatigue_score"] = (
+        3.0 * df["bullpen_ip_prev_1d"].fillna(0.0)
+        + 2.0 * df["bullpen_ip_prev_2d"].fillna(0.0)
+        + 1.0 * df["bullpen_ip_prev_3d"].fillna(0.0)
+    )
+    fatigue_mask = df["_fatigue_score"] > _FATIGUE_THRESH
     rest_mask    = ~fatigue_mask
     high_fatigue = {"n": int(fatigue_mask.sum())}
     rested       = {"n": int(rest_mask.sum())}
