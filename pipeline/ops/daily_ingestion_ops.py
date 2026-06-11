@@ -587,23 +587,8 @@ def ingest_player_profiles_update(context):
                 "Prevents Snowflake queries on every API request.",
 )
 def write_api_cache_op(context):
-    """
-    Queries Snowflake once after predict_today_morning completes and writes
-    API-ready JSON to S3 so FastAPI never hits Snowflake per-request.
-
-    TODO: implement full cache write logic in A0.3 completion:
-    1. Query daily_model_predictions for today's qualified picks
-    2. Query mart_clv_labeled_games for recent history
-    3. Query mart_bankroll_state (or fallback) for performance summary
-    4. Write each to S3 via set_cache()
-
-    For now: log a warning so the cache miss path (Snowflake fallback)
-    in FastAPI handles requests correctly.
-    """
-    context.log.warning(
-        "write_api_cache_op is a stub — FastAPI will fall back to Snowflake "
-        "for today's picks. Implement full cache write before beta launch."
-    )
+    """Queries Snowflake and writes picks/today + performance/summary to S3."""
+    _run_script(context, "write_api_cache.py")
 
 
 # ── Backfill phase ───────────────────────────────────────────────────────────
