@@ -593,7 +593,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — DONE (2026-06-10)** | Epic 27.2 (env-state signal generation + Dagster wiring) | 27.1 ✅ Kalman Q=0.000957, R=21.25; 27.2 ✅ script+dbt+op wired; backfill complete 2026-06-10 (105,192 rows; AC1 99.9% coverage Snowflake-verified) | THE totals lever |
 | **1 — DONE (2026-06-11)** | Story 27.5 (GB/FB×park) | mart_pitcher_batted_ball_profile built; ablation run | ✅ DEFER: coverage 78% (fails ≥90% gate); ΔNLL=+0.0006, 0/5 folds improve; orthogonality PASS. Re-eval after full 2026 Statcast backfill (~Oct 2026) or when within-season rolling GB%/FB% is available. |
 | **1 — DONE (2026-06-11)** | Epic 27.3 (totals re-open gate), Story 10.10 (QRF) | 27.4 ✅ PROMOTE 2026-06-11; 27.5 ✅ DEFER 2026-06-11 | ❌ BOTH FAIL the kill criterion. 27.3: env_league_state non-informative (β=0.0128); May-2026 PPM=9.3042 > 8.81 (8th confirmation). 10.10: Jensen floor IS removed (mean 8.53 ≤ 8.81 — first positive isolation) but no edge (Brier 0.305 > market 0.229; calib_80 0.686) (9th confirmation). Re-open criteria (b) smoothed-state + model-family BOTH exhausted; only (a) full-2026 `delta_2026` (~Oct) remains for MAIN-LINE betting. Totals stays paused → **reframed track = Epic 29**. |
-| **1 — NEXT (reframe, pre-Oct)** | **Epic 29 (totals point-accuracy & alt-line edge track)** | 10.10 ✅ DEFER (Jensen floor confirmed removable); 10.9 conformal ✅ | Reframes totals from "beat the -110/-110 main line" (efficient, 9× confirmed unbeatable) to point-accuracy (RMSE/MAE vs actual — the test never run) + alt/F5/team-totals edge on the calibrated distribution. 29.1 is the decision gate. Does NOT un-pause main-line totals (criterion (a)/Oct still governs that). |
+| **1 — LARGELY CLOSED (2026-06-11)** | **Epic 29 (totals point-accuracy & alt-line edge track)** | 10.10 ✅ DEFER; 10.9 conformal ✅ | 29.1 gate ran same-day → **DOWNGRADE**: on honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE (line MedAE 1.50 vs model 2.92). Model is level-unbiased (+0.05) but per-game variance-deficient — an information gap, not a level/calibration gap. 29.2 (calib) + 29.3 (alt-line) downgraded (neither fixes the center). Totals = product-only on the market line. Re-open criterion (a)/Oct now in doubt (corrects level, not variance). |
 | **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), ~~Story 12.10 (Betfair)~~ → **12.10′ (Pinnacle sharp-money, replaces Betfair — US geo-block)** | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
 | **2 — ARCH (Arch Review)** | **Story 12.11 Phase 1 (Parlay WS/SSE streaming — pregame `odds` ingestion + CLV latency, SPIKE-FIRST)** | Business tier ✅ (cost gate cleared 06-11); gated on always-on-consumer infra verdict | After Tier 1; spike before any build |
 | **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
@@ -12030,7 +12030,13 @@ until the ~Oct 2026 full-season `delta_2026` re-evaluation (criterion (a)).**
 
 # Epic 29 — Totals Point-Accuracy & Alt-Line Edge Track
 
-**Status:** 🔄 NEXT (opened 2026-06-11 after the 10.10 DEFER). **Track B.** The pre-October totals track.
+**Status:** 🔴 LARGELY CLOSED 2026-06-11. **Track B.** 29.1 (the decision gate) ran the day it was specced and
+returned **DOWNGRADE**: on the honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE
+and is typically within 1.5 runs vs the model's ~2.9. The model is level-unbiased but has a per-game *discrimination*
+(variance) deficit the market doesn't — so calibration (29.2) and alt-line pricing (29.3) are both downgraded
+(neither fixes the center). **Net:** the point-accuracy reframe does not rescue a betting edge; totals is
+product-only and the best projected total to surface is **the market line itself**, not the model. 29.2/29.3 are
+shelved until a future discriminative signal brings the central estimate to market parity (then re-run 29.1).
 
 **Reframe (the load-bearing decision):** Nine independent confirmations have established that our totals
 model cannot beat Bovada's **main** over/under line on a classification (P_over / Brier) basis. But that
