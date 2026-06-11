@@ -2,7 +2,7 @@
 model_health_alert_sensor.py — Epic A2 Story A2.6
 
 Daily standing health gate for the DEPLOYED prediction model. Runs the A2.1 honest
-live-skill metrics (`scripts/ops/model_health_metrics.evaluate`) over a rolling window
+live-skill metrics (`betting_ml.monitoring.model_health_metrics.evaluate`) over a rolling window
 of completed games and RAISES an exception — marking the tick failed and firing Dagster's
 standard email-on-failure alert — when any target's gate FAILs on a sufficient sample.
 Healthy or insufficient-sample → SkipReason with a summary.
@@ -35,7 +35,10 @@ from dagster import SensorEvaluationContext, SkipReason, sensor
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
-sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "ops"))
+# NOTE: model_health_metrics now lives in the installable `betting_ml` package
+# (betting_ml.monitoring), NOT under scripts/ — scripts/ is not shipped to the
+# Dagster code location in prod, which caused ModuleNotFoundError here. Do not
+# re-add scripts/ops to sys.path; import from the package below.
 
 _ROLLING_DAYS = 30
 _PREDICTION_TYPE = "post_lineup"
@@ -48,7 +51,7 @@ _GATE_FLOOR_DATE = date(2026, 6, 10)
 @sensor(minimum_interval_seconds=86400)  # at most once per day
 def model_health_alert_sensor(context: SensorEvaluationContext):
     """Alert if the deployed model's live skill degrades (serving/calibration regression)."""
-    import model_health_metrics as mh
+    from betting_ml.monitoring import model_health_metrics as mh
     from betting_ml.utils.data_loader import get_snowflake_connection
 
     end = date.today()

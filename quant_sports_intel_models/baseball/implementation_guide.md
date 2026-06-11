@@ -515,6 +515,8 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A2.7 Bovada totals coverage ✅ (upstream late-posting; UI distinguishes)   │
 │   A2.8 build perf ✅ killed home_win_rate 149M-row range join (rebuild=time) │
 │   A2.9 re-fit home_win Platt calibrator ✅ → identity (cal was flattening)   │
+│   A2.10 EB-posterior backfill batching ✅ (17-min burst → 1 MERGE/table)     │
+│   A2.11 EB-posteriors → dbt models ⬜ DEFERRED (priors-seeding gated)        │
 │                                                                              │
 │ NFL Epic (Track F v2)   ⬜  August — sport selector + NFL sub-models        │
 │ NCAA Basketball Epic    ⬜  October — same pattern as NFL                    │
@@ -10692,6 +10694,7 @@ back to the user to run and show the command; do not git commit or push (the use
 **Tasks:**
 - [x] **(audit-now) DONE** — `rescore_audit.py` proved serving-fixed-and-healthy (corr jump above).
 - [x] **Standing health gate WIRED (DONE 2026-06-10):** `pipeline/sensors/model_health_alert_sensor.py` — daily sensor runs `model_health_metrics.evaluate()` (refactored into a shared fn) over a rolling 30d window of `post_lineup` prod predictions; RAISES on any target FAIL (→ Dagster email-on-failure, the same alerting clv_alert_sensor uses); SkipReason when healthy/insufficient. Floored at the 2026-06-10 deploy date so it never gates on pre-fix flat-calibrator predictions (INSUFFICIENT during the ~30d warmup → no false alarm). Thresholds reuse `model_health_metrics` constants. Registered in `pipeline/sensors/__init__.py`. **MANUAL STEP: enable `model_health_alert_sensor` in the Dagster UI** (project convention — no sensor sets `default_status`).
+  - **PROD HOTFIX 2026-06-11:** the sensor raised `ModuleNotFoundError: No module named 'model_health_metrics'` in prod — the module lived under `scripts/ops/`, which is **not shipped to the Dagster code location** (only the `pipeline` dir + the `betting_ml` wheel deploy; `[tool.hatch.build.targets.wheel] packages = ["betting_ml"]`). Fix: relocated the canonical module to **`betting_ml/monitoring/model_health_metrics.py`** (inside the installable package → importable in prod) and left a back-compat shim at `scripts/ops/model_health_metrics.py` (re-aliases via `sys.modules` so `import model_health_metrics` and the `python scripts/ops/model_health_metrics.py …` CLI still work for the dev ops tools refit_home_win_calibrator / rescore_audit / align_alpha_audit). Sensor now does `from betting_ml.monitoring import model_health_metrics as mh`. **Lesson:** code imported by in-process Dagster sensors/schedules MUST live under `pipeline/` or the `betting_ml` wheel — never loose under `scripts/`.
 - [ ] **(accumulation-gated)** Re-run A2.1 metrics on ≥50 post-fix **live** post_lineup games once accumulated; record the live corr vs the re-scored 0.46 (confirms live serving matches the audit). This is confirmation only — the verdict is already reached via re-score.
 
 **Acceptance criteria:**
@@ -10832,6 +10835,68 @@ back to the user to run and show the command; do not git commit or push (the use
 - [ ] New calibrator's OOS Brier ≤ raw consensus Brier (no degradation) AND calibrated spread ≥ 0.03; before/after table recorded.
 - [ ] best_alpha re-tuned and reported (expected > 0); the A2.5 edge guard auto-releases as alpha rises.
 - [ ] A2.6's live re-measure (post-deploy) shows home_win PASS on all three gate criteria (corr, spread, Brier-vs-no-skill).
+
+---
+
+### Story A2.10 — EB-posterior backfill batching (warehouse-uptime spend) ✅ DONE 2026-06-11
+
+**Goal:** Close the top remaining warehouse-uptime lever from the 2026-06-10 dbt/Snowflake spend audit (`project_dbt_spend_audit_jun2026`). The EB-posterior **backfill** (not the daily path) pinned COMPUTE_WH for a ~17-min, ~2,865-statement burst because each `compute_{starter,lineup,bullpen}_posteriors.py --backfill-season` looped over ~716 dates doing a CREATE-TABLE-IF-NOT-EXISTS + CREATE-TEMP + executemany INSERT + MERGE **per date**, and `backfill_eb_posteriors.py` spawned a **fresh OS subprocess per date** (Python cold-start + Snowflake auth handshake each).
+
+**Tasks:**
+- [x] Split compute from write in all three scripts: `_process_date` → `_compute_date_rows` (computes + returns rows, no write); `main_backfill_season` accumulates ALL dates' rows then writes ONCE (1 temp + 1 INSERT + 1 MERGE per target table; bullpen writes its 2 tables once each). Collapses ~3 write-statements × N dates → 3 total.
+- [x] Rewrite `backfill_eb_posteriors.py` to call the in-process batched `main_backfill_season(season)` per season — no subprocess-per-date.
+- [x] `compute_archetype_posteriors.py` left as-is (already a single `_upsert`, no per-date loop).
+- [x] **Validated byte-for-byte (2026-06-11):** re-backfilled closed season 2025 and compared `COUNT(*)/COUNT(DISTINCT game_pk)/ROUND(SUM(<float>),3)` fingerprints to pre-change baselines. starter / bullpen / bullpen-team **bit-EXACT**; lineup grain EXACT (43,740 rows / 2,430 games) with a sub-0.001% float drift traced to upstream ZiPS refresh on its 42% `zips_blend` rows (NOT the refactor — compute path untouched; the two frozen-input tables are exact under the identical change). PASS.
+
+**Why byte-for-byte safe:** only *where* the write happens changed, never `_compute_*_row`; MERGE keys (`game_pk, …`) are unique across dates (a game_pk belongs to one date) so the batched single-MERGE cannot hit duplicate-source-key errors.
+
+**Follow-on:** Story A2.11 (full dbt migration) — deferred.
+
+---
+
+### Story A2.11 — Migrate EB posteriors from Python compute to dbt models (DEFERRED follow-on of A2.10)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.11 standalone:
+
+```
+You are picking up Story A2.11 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story A2.11 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story A2.11 (the betting_ml/scripts/eb_priors/compute_*.py
+    sources, the fit_*_priors.py prior producers, the prior JSON files in betting_ml/models/eb_priors/,
+    dbt/seeds/, and the eb_*_posteriors target tables) by tracing the data lineage in the inventory.
+  - Implement each Task listed under Story A2.11 exactly.
+  - Your work MUST conform to every item in the Story A2.11 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** A2.10 batched the backfill *writes* but kept the per-date *reads* and the whole computation in Python. The cleaner end-state is to retire the Python compute for `eb_starter_posteriors` / `eb_batter_posteriors_raw` / `eb_bullpen_posteriors` (+ team) entirely and express them as dbt models — removing the warehouse-uptime burst AND the daily Python path, folding the posteriors into the dbt DAG, and eliminating any train/serve skew between the Python and SQL surfaces. The 2026-06-11 scope review confirmed the per-entity math is **100% closed-form arithmetic** (Beta-Binomial wOBA/K%/BB%, Normal-Normal starter/bullpen xwOBA + lineup ISO, weighted ZiPS/IL blends, discrete experience-band bucketing) — no scipy, no iterative fitting. "Season-to-date stats strictly before game_date" is a window aggregate; the Epic-16.2 sequential as-of lookup is the carry-forward pattern already used in the A2.8 feature models.
+
+**The blocker (Task 1 gates the rest):** the priors live as **JSON files** in `betting_ml/models/eb_priors/` (`{starter,lineup,bullpen}_priors_{season}.json`, `archetype_priors.json`), produced by the `fit_*_priors.py` scripts. dbt cannot read filesystem JSON — they must be materialized into Snowflake first (the repo seeds only `ref_*` CSVs in `dbt/seeds/` today).
+
+**Tasks:**
+- [ ] **Seed priors into Snowflake.** Decide between (a) `dbt seed` of flattened prior CSVs, or (b) the `fit_*_priors.py` scripts writing prior tables directly (VARCHAR-temp-then-MERGE per `feedback_snowflake_variant_insert`). Land one row per (metric, band/role/cluster, season) with μ/σ or α/β.
+- [ ] **Reimplement each posterior as a dbt model** keyed identically to today's tables (`eb_starter_posteriors` (game_pk, pitcher_id); `eb_batter_posteriors_raw` (game_pk, batting_slot, batter_id); `eb_bullpen_posteriors` (game_pk, pitcher_id) + `eb_bullpen_team_posteriors` (game_pk, team)). Window-aggregate the season-to-date stats with the `game_date <` leakage guard; carry-forward join the sequential posteriors; CASE the IL-return / ZiPS blends.
+- [ ] **Byte-for-byte validate** each dbt model against the Python output on a closed season (2025) using the same `COUNT/COUNT(DISTINCT)/ROUND(SUM(...))` fingerprints recorded in A2.10 (modulo the known ZiPS-refresh drift on lineup — pin the ZiPS snapshot for the comparison).
+- [ ] **Retire/deprecate** the Python compute paths (daily Dagster ops + `--backfill-season`) only after the dbt models are wired into the feature DAG and validated; keep the bullpen aLI (leverage) precomputation as its own materialized model if it stays heavy.
+
+**Acceptance criteria:**
+- [ ] Each `eb_*_posteriors` table is produced by a dbt model; the per-date Python compute is removed from the daily Dagster job.
+- [ ] 2025 fingerprints match the A2.10 baselines (lineup compared against a pinned ZiPS snapshot).
+- [ ] Net Snowflake-credit reduction confirmed on the COMPUTE_WH metering over a full daily cycle (no posterior Python warehouse uptime).
+
+**Sequencing/gating:** **DEFERRED.** A2.10 already removed the acute spend (backfill burst). Revisit A2.11 only if backfill frequency rises or the daily posterior Python path becomes a measurable COMPUTE_WH line item — otherwise the migration's multi-model rewrite + prior-seeding effort outweighs its marginal saving. Tracked in `project_dbt_spend_audit_jun2026`.
 
 ---
 
@@ -11321,17 +11386,18 @@ back to the user to run and show the command; do not git commit or push (the use
 features and retrain, targeting a credible-2026 Brier in the sharp band (≤~0.195).
 
 **Tasks:**
-- [ ] Travel/fatigue features from StatsAPI schedule + geocoded park coords: travel distance, time-zone
+- [x] Travel/fatigue features from StatsAPI schedule + geocoded park coords: travel distance, time-zone
   delta, 3rd-consecutive-road-game flag, getaway-day flag (all leakage-free, data already present).
-- [ ] `starter_suppression_mu × opp pred_runs_mu` interaction term (both signals already in matrix; the
+- [x] `starter_suppression_mu × opp pred_runs_mu` interaction term (both signals already in matrix; the
   additive model can't represent the product) and `σ` of run_diff as a conviction feature.
-- [ ] Retrain the `home_win` challenger (seq + new features) on the leakage-free matrix; evaluate on the
+- [x] Retrain the `home_win` challenger (seq + new features) on the leakage-free matrix; evaluate on the
   credible 2026 surface.
 
 **Acceptance criteria:**
-- [ ] New features non-null ≥95% of rows; orthogonality of travel features confirmed.
-- [ ] **Confirmation gate:** credible-2026 model Brier ≤ 0.195 (enters the 0.18–0.20 sharp band) to
-  justify a non-zero blend alpha; if not met, document the residual gap and route to 28.5.
+- [x] New features non-null ≥95% of rows; orthogonality of travel features confirmed. (travel: max_corr=0.041 ✅; interaction terms correlated 0.80/0.81/0.71 — expected as products of existing Layer 3 signals)
+- [x] **Confirmation gate:** credible-2026 model Brier ≤ 0.195 — ❌ GATE NOT MET (2026 model=0.2230 vs market=0.1887; residual gap=+0.028). Documented in `ablation_results/h2h_features_28_4.md`. Routed to 28.5.
+
+**Result (2026-06-11):** Feature augmentation does not close the market gap. 2023–2025 model wins (+0.054–0.059 Brier) but those Bovada Odds-API markets are degraded. On honest credible-2026 (Parlay API, market Brier=0.187), model loses by 0.034. Root cause is architectural (Jensen floor in logistic model), not feature-level. → **Story 28.5 (Bradley-Terry)**.
 
 ---
 
