@@ -146,7 +146,17 @@ final as (
                     )
                 end
 
-        end                                     as bullpen_matchup_quality_vs_lineup
+        end                                     as bullpen_matchup_quality_vs_lineup,
+
+        -- ── Top-3 leverage arm availability (Story 6.6) ───────────────────────
+        -- NULL when no completed-game workload data (today's scheduled games);
+        -- impute to 1 (available) in betting_ml/utils/preprocessing.py.
+        av.closer_available,
+        av.closer_rest_days,
+        av.setup1_available,
+        av.setup1_rest_days,
+        av.setup2_available,
+        av.setup2_rest_days
 
     from games g
 
@@ -157,6 +167,10 @@ final as (
     left join {{ ref('mart_bullpen_handedness_splits') }} hs
         on  hs.team_abbrev = g.team_abbrev
         and hs.game_pk     = g.game_pk
+
+    left join {{ ref('mart_reliever_top3_availability') }} av
+        on  av.team_abbrev = g.team_abbrev
+        and av.game_pk     = g.game_pk
 
     left join home_lineup hln
         on  hln.game_pk = g.game_pk

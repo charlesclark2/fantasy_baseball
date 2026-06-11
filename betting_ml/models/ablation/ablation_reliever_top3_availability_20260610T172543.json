@@ -1,0 +1,86 @@
+{
+  "story": "6.6",
+  "run_at": "20260610T172543",
+  "coverage_ac": {
+    "pass": true,
+    "per_col": {
+      "home_closer_available": 99.34,
+      "away_closer_available": 99.33,
+      "home_setup1_available": 99.34,
+      "away_setup1_available": 99.33,
+      "home_setup2_available": 99.34,
+      "away_setup2_available": 99.33
+    }
+  },
+  "total_runs": {
+    "baseline_mean_mae": 3.4922932453895457,
+    "avail_mean_mae": 3.4894309022387344,
+    "delta_mae": -0.002862343150811242,
+    "n_folds_improved": 3,
+    "n_folds_total": 3,
+    "fold_records": [
+      {
+        "tag": "avail_totals",
+        "eval_year": 2024,
+        "n_eval": 2003,
+        "mae": 3.4189578512649215,
+        "bias": 0.2785598486786289
+      },
+      {
+        "tag": "avail_totals",
+        "eval_year": 2025,
+        "n_eval": 2027,
+        "mae": 3.6051502311793686,
+        "bias": -0.17951955634756545
+      },
+      {
+        "tag": "avail_totals",
+        "eval_year": 2026,
+        "n_eval": 731,
+        "mae": 3.444184624271914,
+        "bias": -0.016439434039644193
+      }
+    ]
+  },
+  "home_win": {
+    "baseline_mean_brier": 0.24403814670680976,
+    "avail_mean_brier": 0.24395907614765663,
+    "delta_brier": -7.907055915312711e-05,
+    "n_folds_improved": 2,
+    "n_folds_total": 3,
+    "fold_records": [
+      {
+        "tag": "avail_h2h",
+        "eval_year": 2024,
+        "n_eval": 2003,
+        "brier": 0.24130349584507543
+      },
+      {
+        "tag": "avail_h2h",
+        "eval_year": 2025,
+        "n_eval": 2027,
+        "brier": 0.2434839596292242
+      },
+      {
+        "tag": "avail_h2h",
+        "eval_year": 2026,
+        "n_eval": 731,
+        "brier": 0.24708977296867024
+      }
+    ]
+  },
+  "avail_cols_tested": [
+    "home_closer_available",
+    "home_closer_rest_days",
+    "home_setup1_available",
+    "home_setup1_rest_days",
+    "home_setup2_available",
+    "home_setup2_rest_days",
+    "away_closer_available",
+    "away_closer_rest_days",
+    "away_setup1_available",
+    "away_setup1_rest_days",
+    "away_setup2_available",
+    "away_setup2_rest_days"
+  ]
+}
