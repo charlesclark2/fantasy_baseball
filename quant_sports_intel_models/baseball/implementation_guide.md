@@ -11945,12 +11945,14 @@ small-sample / threshold-selection artifact.
   `home_win.conviction_kill_criterion.placement_policy` + the monitor's CONFIRM text.
 - [ ] Accrual clock: qualifying ≈14% of games → from the live game rate, n=60 settled ≈ a few weeks; verdict ETA noted on first run.
 
-> **Why daily_model_predictions conviction columns are NULL until deploy (not a bug):** the ALTER adds the
-> columns with NULL defaults; they only populate when the NEW `predict_today.py` runs against that table.
-> The deployed (prod) code is still the old version until you ship, so existing/scheduled prod rows show NULL.
-> Diagnose with: `SELECT prediction_type, MAX(inserted_at), COUNT(*), COUNT(layer4_h2h_conviction_disagree),
-> SUM(IFF(layer4_h2h_conviction_flag,1,0)) FROM baseball_data.betting_ml.daily_model_predictions
-> WHERE score_date=CURRENT_DATE GROUP BY 1;` — populates after deploy + the next post_lineup run.
+> **Conviction columns: self-healing across dev/prod (root cause of the 2026-06-11 invalid-identifier error).**
+> `predict_today.py` resolves its target schema via `ml_env.ml_schema()`: `TARGET_ENV=prod` → `betting_ml`,
+> else (bare CLI) → `betting_ml_dev`. A manual ALTER on prod alone left the DEV table without the columns, so a
+> bare-CLI run INSERT failed with `invalid identifier 'LAYER4_H2H_CONVICTION_FLAG'`. FIX: the two conviction
+> columns were added to `predict_today.py`'s idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` self-heal
+> block (alongside the other layer4 columns), so **any run in any env auto-adds them — no manual ALTER needed**.
+> Deployed Dagster jobs set `TARGET_ENV=prod` (write prod); bare CLI writes dev. To populate prod from a CLI:
+> `TARGET_ENV=prod uv run python scripts/predict_today.py --prediction-type post_lineup --lineup-confirmed`.
 
 **▶ DEPLOY (hand-off — DDL + redeploy; conviction stays SHADOW/manual, no automated bets):**
 ```sql

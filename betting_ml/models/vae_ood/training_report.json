@@ -1,0 +1,37 @@
+{
+  "story": "19.6",
+  "trained_at": "2026-06-11",
+  "train_window": "2022-2025",
+  "train_n_games": 8798,
+  "signal_columns": [
+    "run_env_mu_v4",
+    "home_pred_runs_mu_v2",
+    "away_pred_runs_mu_v2",
+    "home_starter_suppression_mu_v1",
+    "away_starter_suppression_mu_v1",
+    "home_starter_ip_mu_v1",
+    "away_starter_ip_mu_v1",
+    "home_bullpen_mu_v2",
+    "away_bullpen_mu_v2",
+    "home_matchup_advantage_mu_v1",
+    "away_matchup_advantage_mu_v1",
+    "home_defense_quality_mu_v1",
+    "away_defense_quality_mu_v1"
+  ],
+  "architecture": {
+    "input_dim": 13,
+    "hidden_dim": 8,
+    "latent_dim": 3,
+    "beta": 0.1,
+    "n_epochs": 300,
+    "lr": 0.001
+  },
+  "threshold_p95": 1.2804945910075356,
+  "backtest": {
+    "test_cohort": "May-2026",
+    "vae_auc_may26_vs_rest_2026": 0.5174675869186609,
+    "per_signal_z15_recall_may26": 0.649164677804296,
+    "ac1_pass": false
+  },
+  "artifact_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/vae_ood/signal_vae.joblib"
+}
