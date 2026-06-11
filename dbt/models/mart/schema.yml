@@ -8147,3 +8147,37 @@ models:
       - name: sprint_available
         description: TRUE when prior-season sprint speed data exists for this team × season.
         tests: [not_null]
+
+  # ============================================================================
+  # mart_pitcher_batted_ball_profile  (Story 27.5 — GB/FB × park interaction)
+  # ============================================================================
+  - name: mart_pitcher_batted_ball_profile
+    description: >
+      Story 27.5 — pitcher-season batted-ball profile derived from Statcast.
+      Grain: pitcher_id × game_year.  Computes GB%, FB%, LD%, Popup% from
+      stg_batter_pitches for regular-season appearances (≥50 BF gate).
+      Coverage: 2015+.
+      LEAKAGE GUARD: consumers must join on game_year - 1 (prior season only).
+      Used to build fb_pct × eb_hr_factor and gb_pct × eb_so_factor interaction
+      features for Epic 27.5 ablation and run_env_v5 challenger.
+    columns:
+      - name: pitcher_id
+        description: MLB Stats API player ID for the pitcher.
+        tests: [not_null]
+      - name: game_year
+        description: Season year.
+        tests: [not_null]
+      - name: bf_count
+        description: Total batters faced in this season (≥50 required to appear in mart).
+        tests: [not_null]
+      - name: total_batted_balls
+        description: Balls in play with a non-null batted_ball_type (excludes K/BB/HBP).
+        tests: [not_null]
+      - name: gb_pct
+        description: Ground balls / total_batted_balls. NULL when total_batted_balls = 0.
+      - name: fb_pct
+        description: Fly balls / total_batted_balls. NULL when total_batted_balls = 0.
+      - name: ld_pct
+        description: Line drives / total_batted_balls.
+      - name: popup_pct
+        description: Infield pop-ups / total_batted_balls.
