@@ -1,6 +1,6 @@
 {
   "version": "9.4",
-  "generated_at": "2026-06-02T20:56:46+00:00",
+  "generated_at": "2026-06-11T14:41:54+00:00",
   "grain": "one row per game_pk",
   "completeness_floor": 0.4,
   "feature_columns": [
@@ -47,7 +47,15 @@
     "home_matchup_advantage_mu_v1_uncertainty",
     "away_matchup_advantage_mu_v1_uncertainty",
     "home_matchup_advantage_mu_v1_available",
-    "away_matchup_advantage_mu_v1_available"
+    "away_matchup_advantage_mu_v1_available",
+    "home_defense_quality_mu_v1",
+    "away_defense_quality_mu_v1",
+    "home_defense_quality_oaa_z_v1",
+    "away_defense_quality_oaa_z_v1",
+    "home_defense_quality_sprint_z_v1",
+    "away_defense_quality_sprint_z_v1",
+    "home_defense_quality_mu_v1_available",
+    "away_defense_quality_mu_v1_available"
   ],
   "signal_groups": {
     "run_env": {
@@ -152,6 +160,24 @@
         "away_matchup_advantage_mu_v1_uncertainty",
         "home_matchup_advantage_mu_v1_available",
         "away_matchup_advantage_mu_v1_available"
+      ]
+    },
+    "defense_quality": {
+      "mu": "defense_quality_mu_v1",
+      "spread": "defense_quality_oaa_z_v1",
+      "uncertainty": "defense_quality_sprint_z_v1",
+      "available": "defense_quality_mu_v1_available",
+      "env_level": false,
+      "counts_toward_completeness": false,
+      "columns": [
+        "home_defense_quality_mu_v1",
+        "away_defense_quality_mu_v1",
+        "home_defense_quality_oaa_z_v1",
+        "away_defense_quality_oaa_z_v1",
+        "home_defense_quality_sprint_z_v1",
+        "away_defense_quality_sprint_z_v1",
+        "home_defense_quality_mu_v1_available",
+        "away_defense_quality_mu_v1_available"
       ]
     }
   },

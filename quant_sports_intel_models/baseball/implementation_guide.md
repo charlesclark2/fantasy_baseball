@@ -11290,15 +11290,25 @@ only new Layer-3 signal — an orthogonal fielding signal legitimately part of t
   `rolling_league_runs_14d` (β_rolling≈0) with `env_league_state` (new `_load_env_league_state` Snowflake loader →
   `env_state_z`, same Jensen-correction + Normal(0.1,0.3) prior + `beta_env_state` regressor). Snowflake-verified
   game-level (identical home/away) and 100% coverage 2022-2026. **Remaining: re-run (hand-off).**
-- [ ] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
-- [ ] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
+- [x] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
+  *DONE 2026-06-11: NUTS v4 (Jensen + env_league_state). 4 chains × 4000 draws, 0 divergences, R-hat 1.0000,
+  min ESS 2076 — clean run. May-2026 PPM = **9.3042**.*
+- [N/A — FAIL] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
+  *Gated behind a NUTS PASS; the kill criterion is self-contained in the NUTS PPM and is independent of the
+  Layer-3 parquet, so step C (`evaluate_totals_bayesian.py` + walk_forward rebuild) was not run. The
+  `defense_quality` contract wiring stands for Epic 28 / future use.*
 
 **Acceptance criteria:**
-- [ ] **Kill criterion reported first:** May-2026 PPM with PASS (≤8.81) / FAIL verdict, before any further eval.
-- [ ] On PASS: L1 NLL < 2.8893, L2 calib_80 ∈ [0.75,0.85], L3 blended Brier < 0.248 AND < 0.228; record
-  shadow-window decision in `model_registry.yaml` + `totals_2026_failure_analysis.md` (§11).
-- [ ] On FAIL: record as the 8th confirmation; conclude the environment is not learnable even with a
-  low-variance state and escalate to re-open criterion (a) (full-2026 `delta_2026`, ~Oct 2026).
+- [x] **Kill criterion reported first:** May-2026 PPM = **9.3042 > 8.81 → FAIL** (bias +0.620 vs actual 8.6842).
+- [x] On PASS: (N/A — kill criterion FAILED).
+- [x] On FAIL: recorded as the **8th confirmation** in `totals_2026_failure_analysis.md` §11. **Decisive finding:**
+  `env_league_state` (the §10 re-open-criterion-(b) within-season scoring signal, Kalman-smoothed + causal)
+  came in non-informative (β_env_state=0.0128, 94% HDI [−0.000,+0.026]) — bias unchanged from v3 — so the
+  environment is not learnable even with a low-variance within-season state. Criterion (b) is now exhausted for
+  the smoothed-state signal class; only re-open criterion **(a)** (full-2026 `delta_2026`, ~Oct 2026) remains.
+
+**STORY 27.3 VERDICT (2026-06-11): FAIL — 8th confirmation. Totals stays paused until the ~Oct 2026 full-season
+`delta_2026` re-evaluation (criterion (a)). No further totals tuning.**
 
 ---
 
