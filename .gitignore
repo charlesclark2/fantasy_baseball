@@ -70,3 +70,4 @@ frontend/.env.local
 frontend/.env*.local
 # Layer-3 OOS signal matrices (regenerated from Snowflake on demand)
 betting_ml/models/layer3/oos_signals/*.parquet
+.lambda_build/

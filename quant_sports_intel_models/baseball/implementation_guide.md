@@ -7746,8 +7746,8 @@ Tasks:
 - [x] Document coverage cutoff in model comments
 
 Acceptance Criteria:
-- [ ] At least one confirmed late umpire substitution has two SCD-2 rows — no substitutions in current data (all 25,731 games single-row); **re-checked 2026-06-02: still 25,731 rows / 25,731 games, 0 closed rows — mechanism built, awaiting first real substitution event**
-- [ ] AS-OF query returns correct umpire at prediction time — **re-checked 2026-06-02: still no multi-row game exists; verify once a substitution occurs in live ingestion**
+- [ ] At least one confirmed late umpire substitution has two SCD-2 rows — no substitutions in current data (all 25,747 games single-row); **re-checked 2026-06-11: still 25,747 rows / 25,747 games, 0 closed rows — mechanism built, awaiting first real substitution event. Re-check 2026-06-25.**
+- [ ] AS-OF query returns correct umpire at prediction time — **re-checked 2026-06-11: still no multi-row game exists; verify once a substitution occurs in live ingestion. Re-check 2026-06-25.**
 - [x] `dbtf build` succeeds; coverage cutoff documented — 15/15 passing 2026-05-29
 
 ---
@@ -12490,6 +12490,21 @@ prerequisite for trusting ANY live model output, including the CLV meta-model (E
 
 **Prerequisites:** none — uses existing artifacts. **Gates Tier 1+** (12.10′ / CLV / breadth wait on it).
 
+**⭐ EVALUATION ORDER — PRIMARY vs SECONDARY (operator directive, 2026-06-11; binds all three 30.x stories):**
+For BOTH the totals and H2H production models, the PRIMARY success metric is **prediction accuracy — getting
+as close as possible to the true outcome** (the actual total runs / the team that actually won), NOT beating
+the market. Market-edge is a SECONDARY, diagnostic question (and a separate decision — cf. the totals reframe
+in Epic 29 and the H2H conviction gate). Concretely, every Epic 30 ablation/audit is judged FIRST on:
+  - **Totals:** RMSE / MAE / median-abs-error of the predicted total vs ACTUAL runs (the 29.1 frame), plus
+    distributional calibration (calib_80). Lower error wins. "Beats Bovada line / market Brier" is reported but
+    is the tiebreaker, not the gate.
+  - **H2H:** classification quality vs the ACTUAL winner — accuracy, log-loss/NLL, and Brier vs the 0/1 outcome,
+    plus calibration (ECE). Picking the correct winner more often / sharper calibrated probabilities wins.
+    "Beats the sharp market Brier" is reported as secondary context, not the promotion gate.
+So a 30.1/30.2 change that improves accuracy-to-truth but does not (yet) beat the market is a PROMOTE candidate.
+This deliberately decouples "is the model good at predicting baseball" (Epic 30's job) from "is there a market
+edge" (Epics 28/29/12's job) — fix the former first; the latter is downstream.
+
 ---
 
 ### 30.1 — Feature-hygiene audit & retrain (identifier/temporal feature scrub)
@@ -12501,8 +12516,12 @@ You are picking up Story 30.1 of the MLB betting & fantasy project.
 
 Before writing any code, read these three documents end-to-end to ground yourself in the current
 architecture and data model:
-  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 30.1 section;
-     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  1. quant_sports_intel_models/baseball/implementation_guide.md — FIRST read the Epic 30 header IN FULL,
+     especially the "⭐ EVALUATION ORDER — PRIMARY vs SECONDARY" block: it BINDS this story — judge every
+     ablation on PREDICTION ACCURACY TO THE TRUE OUTCOME first (totals → RMSE/MAE/MedAE vs actual runs +
+     calib_80; H2H → accuracy/NLL/Brier vs the 0/1 winner + ECE), with beating-the-market as a SECONDARY
+     tiebreaker, NOT the promotion gate. Then locate the Story 30.1 section; its Goal, Tasks, and
+     Acceptance criteria are your contract for this story.
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
@@ -12556,8 +12575,12 @@ You are picking up Story 30.2 of the MLB betting & fantasy project.
 
 Before writing any code, read these three documents end-to-end to ground yourself in the current
 architecture and data model:
-  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 30.2 section;
-     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  1. quant_sports_intel_models/baseball/implementation_guide.md — FIRST read the Epic 30 header IN FULL,
+     especially the "⭐ EVALUATION ORDER — PRIMARY vs SECONDARY" block: it BINDS this story — judge every
+     ablation on PREDICTION ACCURACY TO THE TRUE OUTCOME first (totals → RMSE/MAE/MedAE vs actual runs +
+     calib_80; H2H → accuracy/NLL/Brier vs the 0/1 winner + ECE), with beating-the-market as a SECONDARY
+     tiebreaker, NOT the promotion gate. Then locate the Story 30.2 section; its Goal, Tasks, and
+     Acceptance criteria are your contract for this story.
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
@@ -12607,8 +12630,12 @@ You are picking up Story 30.3 of the MLB betting & fantasy project.
 
 Before writing any code, read these three documents end-to-end to ground yourself in the current
 architecture and data model:
-  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 30.3 section;
-     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  1. quant_sports_intel_models/baseball/implementation_guide.md — FIRST read the Epic 30 header IN FULL,
+     especially the "⭐ EVALUATION ORDER — PRIMARY vs SECONDARY" block: it BINDS this story — judge model
+     quality on PREDICTION ACCURACY TO THE TRUE OUTCOME first (totals → RMSE/MAE/MedAE vs actual runs +
+     calib_80; H2H → accuracy/NLL/Brier vs the 0/1 winner + ECE), with beating-the-market as a SECONDARY
+     tiebreaker, NOT the promotion gate. Then locate the Story 30.3 section; its Goal, Tasks, and
+     Acceptance criteria are your contract for this story.
   2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
   3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
 
