@@ -8104,3 +8104,46 @@ models:
 
       - name: n_qualified_bets
         description: Rows where qualified_bet = TRUE in daily_model_predictions for this run_date.
+
+  # ============================================================================
+  # mart_team_defense_quality_rolling  (Story 27.4 — defensive quality signal)
+  # ============================================================================
+  - name: mart_team_defense_quality_rolling
+    description: >
+      Story 27.4 — team defensive quality composite per game-side, combining
+      prior-season OAA (Baseball Savant) and prior-season team mean sprint speed
+      (Statcast, EB-smoothed).  Both components are leakage-safe (game_year-1 only).
+      Grain: game_pk × side (fielding-team perspective).
+      Shared signal for Epic 27 (totals) and Epic 28 (H2H) per R33.
+    columns:
+      - name: game_pk
+        description: MLB game identifier.
+        tests: [not_null]
+      - name: side
+        description: "'home' or 'away' — the FIELDING team for this row."
+        tests: [not_null]
+      - name: team_abbrev
+        description: Canonical team abbreviation for the fielding team.
+        tests: [not_null]
+      - name: oaa_prior_season
+        description: Prior-season Outs Above Average (OAA) from Baseball Savant. NULL for pre-2017 games.
+      - name: sprint_speed_prior_eb
+        description: Prior-season team mean sprint speed (ft/s), EB-smoothed toward league mean with K=8 pseudo-obs.
+      - name: n_sprint_players
+        description: Number of players with measured sprint speed in the prior season for this team.
+      - name: oaa_z
+        description: Per-season z-score of oaa_prior_season. 0.0 when OAA is missing.
+      - name: sprint_z
+        description: Per-season z-score of sprint_speed_prior_eb. 0.0 when sprint speed is missing.
+      - name: defense_quality_mu
+        description: >
+          Composite defensive quality z-score: (oaa_z + sprint_z)/sqrt(2) when both available,
+          otherwise available component's z-score, 0.0 when neither is present.
+          Higher = better team defense.
+        tests: [not_null]
+      - name: oaa_available
+        description: TRUE when prior-season OAA data exists for this team × season.
+        tests: [not_null]
+      - name: sprint_available
+        description: TRUE when prior-season sprint speed data exists for this team × season.
+        tests: [not_null]

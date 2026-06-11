@@ -58,6 +58,9 @@
 --   env_state_v1.env_league_state_sigma → env_league_state_sigma_v1 (posterior std dev of league state)
 --   env_state_v1.env_team_off_state     → env_team_off_state_v1     (batting team offensive-environment Kalman state)
 --   env_state_v1.env_team_pitch_state   → env_team_pitch_state_v1   (fielding team pitching-environment Kalman state)
+--   defense_quality_v1.defense_quality_mu     → defense_quality_mu_v1     (Story 27.4; composite OAA+sprint z-score; higher = better fielding team)
+--   defense_quality_v1.defense_quality_oaa_z  → defense_quality_oaa_z_v1  (OAA z-score component; prior-season leakage-safe)
+--   defense_quality_v1.defense_quality_sprint_z → defense_quality_sprint_z_v1 (sprint speed z-score, EB-smoothed)
 --   [test_signal_v1]                   → test_signal_v1  (synthetic; remove post-validation)
 --
 -- SCD-2 note: only is_current = true rows are used for mart_sub_model_signals.
@@ -177,6 +180,16 @@ pivoted as (
         max(case when signal_name = 'env_team_pitch_state'   and sub_model_version = 'v1' then signal_available end) as env_team_pitch_state_v1_available,
 
         -- ------------------------------------------------------------------
+        -- Defense quality sub-model v1 (Story 27.4 — OAA + sprint speed composite)
+        -- ------------------------------------------------------------------
+        max(case when signal_name = 'defense_quality_mu'       and sub_model_version = 'v1' then signal_value end)     as defense_quality_mu_v1,
+        max(case when signal_name = 'defense_quality_mu'       and sub_model_version = 'v1' then signal_available end) as defense_quality_mu_v1_available,
+        max(case when signal_name = 'defense_quality_oaa_z'    and sub_model_version = 'v1' then signal_value end)     as defense_quality_oaa_z_v1,
+        max(case when signal_name = 'defense_quality_oaa_z'    and sub_model_version = 'v1' then signal_available end) as defense_quality_oaa_z_v1_available,
+        max(case when signal_name = 'defense_quality_sprint_z' and sub_model_version = 'v1' then signal_value end)     as defense_quality_sprint_z_v1,
+        max(case when signal_name = 'defense_quality_sprint_z' and sub_model_version = 'v1' then signal_available end) as defense_quality_sprint_z_v1_available,
+
+        -- ------------------------------------------------------------------
         -- Synthetic test signal (remove after 2.1 validation is confirmed)
         -- ------------------------------------------------------------------
         max(case when signal_name = 'test_signal' and sub_model_version = 'v1' then signal_value end)     as test_signal_v1,
@@ -293,6 +306,14 @@ select
     p.env_team_off_state_v1_available,
     p.env_team_pitch_state_v1,
     p.env_team_pitch_state_v1_available,
+
+    -- Defense quality signals v1 (Story 27.4 — OAA + sprint speed composite; shared Epic 27/28)
+    p.defense_quality_mu_v1,
+    p.defense_quality_mu_v1_available,
+    p.defense_quality_oaa_z_v1,
+    p.defense_quality_oaa_z_v1_available,
+    p.defense_quality_sprint_z_v1,
+    p.defense_quality_sprint_z_v1_available,
 
     -- Synthetic test signal
     p.test_signal_v1,
