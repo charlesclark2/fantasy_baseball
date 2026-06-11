@@ -367,7 +367,7 @@ def _section_timing(df: pd.DataFrame) -> tuple[str, dict]:
         mean_clv = float(g["clv"].mean())
         pct_pos = _pct_positive(g["clv_positive"])
         lines.append(f"| {lbl} | {n} | {mean_clv:+.4f} | {pct_pos:.1%} |")
-        safe = lbl.replace("<", "lt").replace(" ", "").replace("–", "_")
+        safe = lbl.replace("<", "lt").replace(" ", "").replace("–", "_").replace("+", "plus")
         metrics[f"timing_{safe}_n"] = n
         metrics[f"timing_{safe}_mean_clv"] = round(mean_clv, 6)
 
@@ -413,13 +413,37 @@ SELECT
     ps.pipeline_status,
     ps.n_games_scored,
     ps.signal_completeness_score,
-    ps.avg_feature_coverage_score,
-    DATEDIFF('minute', ps.predict_today_complete_ts,
-             g.earliest_first_pitch_utc)                    AS minutes_before_first_pitch
+    ps.avg_feature_coverage_score
 FROM games_per_day g
 LEFT JOIN ps ON ps.run_date = g.official_date
 ORDER BY g.official_date DESC
 """
+
+
+def _utc_naive(val) -> "pd.Timestamp | None":
+    """Return a UTC-naive datetime from either a TZ-aware or NTZ value.
+
+    predict_today_complete_ts arrives as TIMESTAMP_NTZ (timezone-naive Python
+    datetime) whose wall-clock value is UTC. earliest_first_pitch_utc arrives
+    as TIMESTAMP_TZ (timezone-aware, UTC). Using Snowflake DATEDIFF between
+    them is unreliable because DATEDIFF treats NTZ as the session timezone
+    (America/Denver = UTC-7 for this deployment), creating a -420 min bias.
+    Computing the diff in Python avoids this entirely.
+    """
+    import datetime as _dt
+    if val is None:
+        return None
+    try:
+        if isinstance(val, _dt.datetime):
+            if val.tzinfo is not None:
+                return val.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+            return val  # NTZ from Snowflake — wall clock is UTC
+        ts = pd.Timestamp(val)
+        if ts.tzinfo is not None:
+            return ts.tz_convert("UTC").tz_localize(None)
+        return ts
+    except Exception:
+        return None
 
 
 def _load_pipeline_health() -> pd.DataFrame:
@@ -441,9 +465,14 @@ def _load_pipeline_health() -> pd.DataFrame:
     df["avg_feature_coverage_score"] = pd.to_numeric(
         df["avg_feature_coverage_score"], errors="coerce"
     )
-    df["minutes_before_first_pitch"] = pd.to_numeric(
-        df["minutes_before_first_pitch"], errors="coerce"
-    )
+    # Compute lead in Python to avoid Snowflake DATEDIFF session-timezone bias
+    # (NTZ predict_ts is UTC; DATEDIFF treats NTZ as America/Denver = -7h error).
+    predict_utc = df["predict_today_complete_ts"].apply(_utc_naive)
+    pitch_utc = df["earliest_first_pitch_utc"].apply(_utc_naive)
+    df["minutes_before_first_pitch"] = [
+        (p - r).total_seconds() / 60 if p is not None and r is not None else float("nan")
+        for p, r in zip(pitch_utc, predict_utc)
+    ]
     return df
 
 
