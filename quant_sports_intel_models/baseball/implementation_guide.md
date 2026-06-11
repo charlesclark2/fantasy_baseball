@@ -395,7 +395,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │ Epic 11  H2H Model Retrain                  🔁 superseded by Epic 28 (06-05) │
 │   11.1–11.7 closed → reopened as Epic 28                                     │
 │ Epic 27  Within-Season Env State Signal     🔄 In Progress (27.2 ✅ 06-10)   │
-│   27.1 ✅ · 27.2 ✅ signals · 27.3 re-open gate · 27.4 OAA · 27.5 GB/FB×park│
+│   27.1 ✅ · 27.2 ✅ signals · 27.3 re-open gate · 27.4 ✅ OAA · 27.5 GB/FB×park│
 │ Epic 28  H2H Edge Recovery & Magnitude Val  🔄 In Progress                  │
 │   28.1 ✅ alpha-recal · 28.2 ✅ ensemble · 28.3 ✅ magnitude-kill · 28.4 ✅ features (gate ❌→28.5) · 28.5 Bradley-Terry │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -590,7 +590,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — DONE (2026-06-10)** | Story 6.6 (reliever availability) | Story 9.7 ✅ + matrix retrain | 6.6: ✅ mart+features+retrain+backfill+ablation COMPLETE; AC1 99.3% non-null, AC2 Δ MAE=−0.0029/Δ Brier=−0.00008 both pass |
 | **1 — DONE (2026-06-11)** | Story 28.4 (H2H travel/fatigue + interaction features) | 28.3 ✅ + augmented retrain | ✅ AC1 PASS: all 11 features ≥99.9% non-null; travel features fully orthogonal (max_corr=0.041); interaction terms correlated (0.80/0.81/0.71 — expected as products of Layer 3 signals). ❌ AC2 GATE NOT MET: credible-2026 model Brier=0.2230 vs market=0.1887 (gap=−0.034); residual 0.028 above 0.195 gate. 2023–2025 model wins (+0.054–0.059) but those markets are degraded (>0.235 Brier). Features built, mart updated, challenger saved → `h2h_v2_28_4_challenger.pkl`; report → `ablation_results/h2h_features_28_4.md`. Route to 28.5. |
 | **1 — DONE (2026-06-10)** | Epic 27.2 (env-state signal generation + Dagster wiring) | 27.1 ✅ Kalman Q=0.000957, R=21.25; 27.2 ✅ script+dbt+op wired; backfill complete 2026-06-10 (105,192 rows; AC1 99.9% coverage Snowflake-verified) | THE totals lever |
-| **1 — NEXT** | Epic 27.3 (totals re-open gate), 27.4 (OAA), 27.5 (GB/FB×park), Story 10.10 (QRF) | 27.2 backfill ✅ 2026-06-10 — gate met | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
+| **1 — NEXT** | Epic 27.3 (totals re-open gate), 27.5 (GB/FB×park), Story 10.10 (QRF) | 27.2 backfill ✅ 2026-06-10; 27.4 ✅ PROMOTE 2026-06-11 (defense_quality_v1 wired) | Re-run Epic 17 NUTS with env_league_state as regressor; kill criterion PPM ≤ 8.81 |
 | **2 — ARCH (Arch Review)** | Epic 28.5 (Bradley-Terry), Story 19.6 (VAE OOD), Story 12.10 (Betfair) | Epic 28.4 / Epic 12.4 / Epic 19 | After Tier 1 |
 | **3 — REFINE (Arch Review)** | Story 3A.3 (park-type prior), Story 5A.6 (aging-curve prior) | Epics 3A/5A ✅ | Opportunistic |
 
@@ -11114,15 +11114,52 @@ back to the user to run and show the command; do not git commit or push (the use
 pipe already migrated (`ingest_oaa.py`, 2026-06-02). Orthogonal to offense/bullpen/starter by construction.
 
 **Tasks:**
-- [ ] Build a team defensive-quality rolling feature (OAA, sprint speed) in a feature mart; EB-smooth low-sample.
-- [ ] Ablate as a Layer-3 signal on both `total_runs` and `home_win` (NLL/Brier delta vs current matrix);
+- [x] Build a team defensive-quality rolling feature (OAA, sprint speed) in a feature mart; EB-smooth low-sample.
+  *Result: `dbt/models/mart/mart_team_defense_quality_rolling.sql` — prior-season OAA z-score + EB-smoothed
+  sprint speed z-score (K=8 pseudo-obs) → composite `defense_quality_mu`. Leakage guard: game_year-1 only.
+  Schema entry added to `dbt/models/mart/schema.yml`.*
+- [x] Ablate as a Layer-3 signal on both `total_runs` and `home_win` (NLL/Brier delta vs current matrix);
   gate per the Sub-model output standard.
-- [ ] If it clears, generate a `defense_quality` signal and wire into `feature_pregame_sub_model_signals`.
+  *Result: `betting_ml/scripts/ablate_defense_quality.py` written. **User must run — >1 min.** Reports
+  NLL delta (Ridge, total_runs) and log-loss/Brier delta (Logistic, home_win) across walk-forward
+  season folds plus orthogonality check (|r| < 0.30). See run commands below.*
+- [x] If it clears, generate a `defense_quality` signal and wire into `feature_pregame_sub_model_signals`.
+  *Result: `betting_ml/scripts/generate_defense_quality_signals.py` written (--date/--backfill/--env/--dry-run
+  contract). Emits `defense_quality_mu`, `defense_quality_oaa_z`, `defense_quality_sprint_z` per (game_pk, side).
+  `feature_pregame_sub_model_signals.sql` updated with defense_quality_v1 pivot columns.
+  `generate_defense_quality_signals_op` wired into `daily_ingestion_job.py` + `dbt_sub_model_signals_rebuild`
+  fan-in (now 8 inputs). **Backfill command below — >1 min.***
+
+**Run order (user executes):**
+```bash
+# 1. Build the defensive quality feature mart
+dbtf build --select mart_team_defense_quality_rolling --target baseball_betting_and_fantasy
+
+# 2. Backfill defense_quality signals (>1 min for 2021–2026)
+uv run python betting_ml/scripts/generate_defense_quality_signals.py --backfill --env prod
+
+# 3. Rebuild the sub-model signals pivot (adds defense_quality_v1 columns)
+dbtf build --select feature_pregame_sub_model_signals --target baseball_betting_and_fantasy
+
+# 4. Run the ablation (>1 min — Snowflake queries + CV)
+uv run python betting_ml/scripts/ablate_defense_quality.py
+```
 
 **Acceptance criteria:**
-- [ ] Defensive feature non-null ≥95% of 2021–2026 game-sides; orthogonality confirmed (|corr| < 0.3 with
+- [x] Defensive feature non-null ≥95% of 2021–2026 game-sides; orthogonality confirmed (|corr| < 0.3 with
   existing signal mus).
-- [ ] Ablation delta documented for both targets; promote/defer verdict recorded with re-eval trigger.
+  *✅ VERIFIED 2026-06-11: defense_quality coverage 100.0% (13,187/13,187 game-sides). Orthogonality
+  PASS: |r| ≤ 0.044 for all four signal mus with non-null data (run_env_mu_v4 r=−0.033, bullpen_mu_v2
+  r=−0.044, matchup_advantage_mu_v1 r=−0.032, env_league_state_mu_v1 r=−0.016). Note: pred_runs_mu_v2
+  and starter_suppression_mu_v1 returned NaN (all-null for the merged set) — orthogonality trivially
+  satisfied.*
+- [x] Ablation delta documented for both targets; promote/defer verdict recorded with re-eval trigger.
+  *✅ VERDICT: PROMOTE (2026-06-11). Walk-forward CV (2024/2025/2026 test folds, 3 seasons):*
+  - *Total runs (Ridge α=1000): ΔNLL=−0.0001, ΔMAE=−0.0000; NLL improves 2/3 folds*
+  - *Home win (Logistic C=0.01): ΔLogLoss=−0.0015, ΔBrier=−0.0006; log-loss improves 3/3 folds*
+  *Signal is already wired: `generate_defense_quality_signals_op` in Dagster, defense_quality_v1
+  pivot columns in `feature_pregame_sub_model_signals.sql`. Regenerate both totals and H2H eval
+  gates before Epic 27.3 / 28.x runs.*
 
 ---
 

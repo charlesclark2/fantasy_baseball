@@ -16,6 +16,7 @@ from pipeline.ops.daily_ingestion_ops import (
     dbt_sub_model_signals_rebuild,
     dbt_umpire_feature_rebuild,
     generate_bullpen_signals_op,
+    generate_defense_quality_signals_op,
     generate_env_state_signals_op,
     generate_matchup_signals_op,
     generate_offense_signals_op,
@@ -84,6 +85,10 @@ def daily_ingestion_job():
     # the Kalman recursion over ~2500 dates is pure Python and the Snowflake
     # mart_game_results aggregation resolves in seconds.
     sig_env_state  = generate_env_state_signals_op(start=s16)
+    # Story 27.4 — defense quality signal (OAA + sprint speed).
+    # Reads mart_team_defense_quality_rolling (dbt-built; prior-season OAA + EB sprint speed).
+    # Shared signal for Epic 27 (totals) and Epic 28 (H2H) per R33.
+    sig_defense_quality = generate_defense_quality_signals_op(start=s16)
     sig_rebuild    = dbt_sub_model_signals_rebuild(
         run_env_done=sig_run_env,
         offense_done=sig_offense,
@@ -92,6 +97,7 @@ def daily_ingestion_job():
         bullpen_done=sig_bullpen,
         matchup_done=sig_matchup,
         env_state_done=sig_env_state,
+        defense_quality_done=sig_defense_quality,
     )
     sig_fresh = signal_freshness_check(start=sig_rebuild)
     # SCD-2 update: mart_odds_outcomes is now fresh; update market features and

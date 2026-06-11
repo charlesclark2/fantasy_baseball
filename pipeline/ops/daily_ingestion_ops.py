@@ -294,20 +294,35 @@ def generate_env_state_signals_op(context):
                     ["--date", d, "--env", env])
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing), tags=_SUB_MODEL_OP_TAGS)
+def generate_defense_quality_signals_op(context):
+    # Story 27.4. Reads mart_team_defense_quality_rolling (dbt-built, prior-season
+    # OAA + EB-smoothed sprint speed) and emits three defense_quality_v1 signals
+    # per (game_pk, side) for the recently-completed game window.  The mart is
+    # leakage-safe by construction (game_year-1 OAA and sprint speed only), so
+    # no historical rebuild is required — just score the completed window.
+    # Shared signal for Epic 27 (totals) and Epic 28 (H2H) per R33.
+    env = _target_env()
+    for d in _recent_completed_dates():
+        _run_script(context, "/app/betting_ml/scripts/generate_defense_quality_signals.py",
+                    ["--date", d, "--env", env])
+
+
 @op(
     ins={
-        "run_env_done":    In(Nothing),
-        "offense_done":    In(Nothing),
-        "starter_done":    In(Nothing),
-        "starter_ip_done": In(Nothing),
-        "bullpen_done":    In(Nothing),
-        "matchup_done":    In(Nothing),
-        "env_state_done":  In(Nothing),
+        "run_env_done":       In(Nothing),
+        "offense_done":       In(Nothing),
+        "starter_done":       In(Nothing),
+        "starter_ip_done":    In(Nothing),
+        "bullpen_done":       In(Nothing),
+        "matchup_done":       In(Nothing),
+        "env_state_done":     In(Nothing),
+        "defense_quality_done": In(Nothing),
     },
     out=Out(Nothing),
 )
 def dbt_sub_model_signals_rebuild(context):
-    # Fan-in: refresh the wide PIVOT once all seven signal tables are written.
+    # Fan-in: refresh the wide PIVOT once all eight signal tables are written.
     _run_dbt(context, [
         "build",
         "--select", "feature_pregame_sub_model_signals",
