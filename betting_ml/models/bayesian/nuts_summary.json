@@ -1,5 +1,5 @@
 {
-  "model_version": "v3_jensen_rolling",
+  "model_version": "v3_jensen_env_state",
   "nuts_settings": {
     "draws": 4000,
     "tune": 2000,
@@ -7,11 +7,11 @@
     "target_accept": 0.9
   },
   "jensen_sigma_sq": {
-    "run_env_z": 1.0000550933832848,
+    "run_env_z": 1.0000550933832846,
     "offense_mu_z": 1.0000550933832846,
     "opp_bullpen_mu_z": 1.0000550933832846,
     "opp_starter_mu_z": 1.0000550933832846,
-    "rolling_league_z": 1.0000550933832846
+    "env_state_z": 1.0000550933832846
   },
   "calibration_window": {
     "n_calib_obs": 866,
@@ -22,47 +22,47 @@
     ]
   },
   "diagnostics": {
-    "divergences": 2,
+    "divergences": 0,
     "max_rhat": 1.0,
-    "min_ess_bulk": 1602.0,
+    "min_ess_bulk": 2076.0,
     "rhat_ok": true
   },
-  "mu_log_league_implied_per_side": 4.434448898953178,
+  "mu_log_league_implied_per_side": 4.433879836069263,
   "coefficients": {
     "beta_run_env": {
-      "mean": 0.04952532759652999,
+      "mean": 0.049294275871298,
       "sign_ok": true
     },
     "beta_offense": {
-      "mean": 0.030623499585515555,
+      "mean": 0.030347653576421715,
       "sign_ok": true
     },
     "beta_bullpen": {
-      "mean": 0.17231626678922515,
+      "mean": 0.17275887460458558,
       "sign_ok": true
     },
     "beta_starter": {
-      "mean": 0.04733045880221049,
+      "mean": 0.04763610847312067,
       "sign_ok": true
     },
-    "beta_rolling": {
-      "mean": 0.004480849261204213,
-      "sign_ok": false
+    "beta_env_state": {
+      "mean": 0.012774388328869535,
+      "sign_ok": true
     }
   },
   "kill_criterion": {
     "n_games": 380,
-    "ppm": 9.281949506578947,
+    "ppm": 9.304175493421052,
     "actual_mean": 8.68421052631579,
-    "bias": 0.5977389802631574,
+    "bias": 0.6199649671052629,
     "threshold": 8.81,
     "passed": false,
-    "delta_2026_mean": -0.0012488991161354992,
-    "delta_2026_hdi_low": -0.09744403830448164,
-    "delta_2026_hdi_high": 0.09543917016914918,
+    "delta_2026_mean": 1.0651652692794665e-06,
+    "delta_2026_hdi_low": -0.08908110855294708,
+    "delta_2026_hdi_high": 0.09311387402181369,
     "delta_2026_hdi_excludes_zero": false,
-    "season_run_shift_total": -0.011069444872147116,
-    "beta_rolling_mean": 0.004480849261204213,
-    "rolling_z_may_mean": -0.5083443416720097
+    "season_run_shift_total": 9.445634649551948e-06,
+    "beta_env_state_mean": 0.012774388328869535,
+    "env_state_z_may_mean": -0.11446177338092293
   }
 }

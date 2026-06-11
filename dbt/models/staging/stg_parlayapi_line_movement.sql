@@ -1,6 +1,8 @@
 {{
     config(
-        materialized='table'
+        materialized='incremental',
+        incremental_strategy='append',
+        on_schema_change='append_new_columns'
     )
 }}
 
@@ -8,6 +10,14 @@
 -- Two lateral flattens:
 --   1. raw_json array  → one record per (source × market_key × player)
 --   2. record.snapshots[] → one row per timestamped price point
+--
+-- Materialization: incremental (append). The raw table is append-only — each
+-- ingestion run writes new rows with a fresh ingestion_ts (unique per row), and
+-- the grain already includes ingestion_ts. A full CTAS re-explodes every raw
+-- row's cumulative snapshots[] array on every run (~58s, a top dbt-run choke
+-- point). Watermarking on max(ingestion_ts) means each run only flattens the
+-- newly-landed raw rows; because ingestion_ts is monotonic and unique per raw
+-- row, append never double-counts. Use `--full-refresh` (after DROP) to rebuild.
 --
 -- Schema note: the line-movement endpoint uses "source" (e.g. "fanduel") as the
 -- bookmaker key — this is the non-suffixed live key, matching stg_parlayapi_odds.bookmaker_key
@@ -28,6 +38,9 @@ with source as (
     from {{ source('parlayapi', 'mlb_line_movement_raw') }}
     where raw_json is not null
       and event_id is not null
+    {% if is_incremental() %}
+      and ingestion_ts > (select max(ingestion_ts) from {{ this }})
+    {% endif %}
 
 ),
 

@@ -4,13 +4,36 @@
 -- Grain: one row per pitch per plate appearance per game
 -- Purpose: Rename to snake_case, cast types, document all fields,
 --          drop deprecated columns, and add surrogate key.
+--
+-- Materialization: incremental (delete+insert) partitioned on game_date. The
+-- source is 7.6M+ pitches back to 2015; a full CTAS re-scans the entire history
+-- every run (~58s, a top dbt-run choke point). Each incremental run only reads
+-- and replaces the trailing `batter_pitches_lookback_days` window (default 14),
+-- which re-absorbs late Statcast revisions (xwOBA, bat tracking, etc.) for
+-- recently-played games. delete+insert keyed on game_date deletes exactly the
+-- window's dates and re-inserts them — a game_pk maps to a single game_date, so
+-- pitch_sk stays unique across the whole table. The complete 2015→present
+-- history is retained for the ~30 downstream marts that scan it. Use
+-- `--full-refresh` (after DROP) to rebuild from scratch.
 -- =============================================================================
+
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='delete+insert',
+        unique_key='game_date',
+        on_schema_change='append_new_columns'
+    )
+}}
 
 with
 
 source as (
 
     select * from {{ source('savant', 'batter_pitches') }}
+    {% if is_incremental() %}
+    where game_date >= dateadd('day', -{{ var('batter_pitches_lookback_days', 14) }}, current_date)
+    {% endif %}
 
 ),
 

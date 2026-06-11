@@ -11290,15 +11290,25 @@ only new Layer-3 signal — an orthogonal fielding signal legitimately part of t
   `rolling_league_runs_14d` (β_rolling≈0) with `env_league_state` (new `_load_env_league_state` Snowflake loader →
   `env_state_z`, same Jensen-correction + Normal(0.1,0.3) prior + `beta_env_state` regressor). Snowflake-verified
   game-level (identical home/away) and 100% coverage 2022-2026. **Remaining: re-run (hand-off).**
-- [ ] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
-- [ ] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
+- [x] Re-run the NUTS (hand-off, 2–4 hr) and compute May-2026 posterior-predictive mean (PPM).
+  *DONE 2026-06-11: NUTS v4 (Jensen + env_league_state). 4 chains × 4000 draws, 0 divergences, R-hat 1.0000,
+  min ESS 2076 — clean run. May-2026 PPM = **9.3042**.*
+- [N/A — FAIL] Evaluate the full three-layer + Layer-4 gate on the leakage-free 2026 OOS surface.
+  *Gated behind a NUTS PASS; the kill criterion is self-contained in the NUTS PPM and is independent of the
+  Layer-3 parquet, so step C (`evaluate_totals_bayesian.py` + walk_forward rebuild) was not run. The
+  `defense_quality` contract wiring stands for Epic 28 / future use.*
 
 **Acceptance criteria:**
-- [ ] **Kill criterion reported first:** May-2026 PPM with PASS (≤8.81) / FAIL verdict, before any further eval.
-- [ ] On PASS: L1 NLL < 2.8893, L2 calib_80 ∈ [0.75,0.85], L3 blended Brier < 0.248 AND < 0.228; record
-  shadow-window decision in `model_registry.yaml` + `totals_2026_failure_analysis.md` (§11).
-- [ ] On FAIL: record as the 8th confirmation; conclude the environment is not learnable even with a
-  low-variance state and escalate to re-open criterion (a) (full-2026 `delta_2026`, ~Oct 2026).
+- [x] **Kill criterion reported first:** May-2026 PPM = **9.3042 > 8.81 → FAIL** (bias +0.620 vs actual 8.6842).
+- [x] On PASS: (N/A — kill criterion FAILED).
+- [x] On FAIL: recorded as the **8th confirmation** in `totals_2026_failure_analysis.md` §11. **Decisive finding:**
+  `env_league_state` (the §10 re-open-criterion-(b) within-season scoring signal, Kalman-smoothed + causal)
+  came in non-informative (β_env_state=0.0128, 94% HDI [−0.000,+0.026]) — bias unchanged from v3 — so the
+  environment is not learnable even with a low-variance within-season state. Criterion (b) is now exhausted for
+  the smoothed-state signal class; only re-open criterion **(a)** (full-2026 `delta_2026`, ~Oct 2026) remains.
+
+**STORY 27.3 VERDICT (2026-06-11): FAIL — 8th confirmation. Totals stays paused until the ~Oct 2026 full-season
+`delta_2026` re-evaluation (criterion (a)). No further totals tuning.**
 
 ---
 
@@ -11935,16 +11945,50 @@ back to the user to run and show the command; do not git commit or push (the use
 before any signal). A QRF produces full predictive quantiles with no `exp(β·z)` parameterization.
 
 **Tasks:**
-- [ ] Train a quantile-regression forest on the Layer-3 matrix; derive P(over) from the predictive
+- [x] Train a quantile-regression forest on the Layer-3 matrix; derive P(over) from the predictive
   quantiles directly (no NegBin CDF).
-- [ ] Re-run the archived Story 8.P quantile model under the **v4-era** gates (10.6 showed v4 already
+  *Code DONE 2026-06-11: `betting_ml/scripts/quantile_totals_layer3_oos.py`. LightGBM quantile regression
+  (q=0.10/0.25/0.50/0.75/0.90, pinball loss — `quantile_forest` not installed, the 8.P approach) trained
+  **walk-forward** on `build_totals_dataset` (Layer-3 matrix, completeness ≥0.40, market-blind). Mirrors
+  `walk_forward_oos.py` (`all_season_splits`, `min_train_seasons=2` → eval folds 2023–26) so the 2026 fold is
+  the SAME leakage-free OOS surface 27.3 / `evaluate_totals_bayesian` use. P(over line) interpolated DIRECTLY
+  from the per-game predictive quantiles via `quantile_inference._interpolate_one` — no NegBin CDF, no exp-link.
+  Per-game quantiles are isotonized (`np.maximum.accumulate`) so independent fits never cross.*
+- [x] Re-run the archived Story 8.P quantile model under the **v4-era** gates (10.6 showed v4 already
   differentiates, std-of-means 1.355 — the NGBoost-era std-shrinkage gate that killed 8.P is stale).
-- [ ] Compute the May-2026 PPM and check whether the +0.170 Jensen floor is absent.
+  *DONE in code: the stale `std(pred_q50) ≥ 1.5` gate that killed 8.P is NOT applied; gates are the v4-era
+  kill criterion (May-2026 mean q50 ≤ 8.81) + calib_80 ∈ [0.75,0.85] + Brier(P_over) < market on 2026 OOS.*
+- [x] Compute the May-2026 PPM and check whether the +0.170 Jensen floor is absent.
+  *Implemented: script reports May-2026 mean q50 vs 8.81 FIRST and states whether the floor is removed
+  (mean ≤ 8.81 / tracks the league actual vs pinned ≥8.87). **Verdict pending the hand-off run below.***
+
+**▶ Hand-off (>1 min — ~20 LightGBM fits + Snowflake reads; user runs, then paste the headline + verdict back):**
+```bash
+uv run python betting_ml/scripts/quantile_totals_layer3_oos.py --env prod
+```
+Outputs: `betting_ml/models/layer3/oos_predictions_totals_quantile_10_10.parquet` (per-game OOS quantiles +
+P(over)) and `quant_sports_intel_models/baseball/ablation_results/totals_quantile_layer3_10_10.md` (report +
+promote/defer verdict). The console prints the HEADLINE (May-2026 mean q50 vs 8.81, floor-removed bool) and VERDICT.
 
 **Acceptance criteria:**
-- [ ] QRF May-2026 mean predicted total reported against 8.81; explicitly state whether the log-link
+- [x] QRF May-2026 mean predicted total reported against 8.81; explicitly state whether the log-link
   floor is removed.
-- [ ] calib_80, Brier vs market documented; promote/defer verdict recorded.
+  *✅ DONE 2026-06-11: **May-2026 mean q50 = 8.5314 ≤ 8.81 → PASS** (n=419; actual 8.6086). **The Jensen
+  log-link floor IS REMOVED** — with no `exp(β·z)` parameterization the predicted mean drops below 8.81 and
+  tracks the league actual instead of being pinned ≥8.87. This is the FIRST positive isolation of §10's
+  Jensen mechanism: the +0.170 floor was a genuine artifact of the exp-link, not the data.*
+- [x] calib_80, Brier vs market documented; promote/defer verdict recorded.
+  *✅ DONE 2026-06-11 (`ablation_results/totals_quantile_layer3_10_10.md`): on the 2026 OOS surface
+  (n=789; 667 settled) **calib_80 = 0.6857** (under-covers; gate 0.75–0.85 ❌) and **Brier(P_over) = 0.3053
+  vs market 0.2292 vs naive 0.2500** — beats neither market nor naive (❌). **VERDICT: DEFER.** Removing the
+  structural floor is necessary but NOT sufficient: the covariates add no deployable edge over Bovada on
+  honest 2026 OOS, confirming the §11 finding that the residual is a real un-priceable regime shift. Recorded
+  as §11 entry 9 (model-family angle). No re-tuning.*
+
+**STORY 10.10 VERDICT (2026-06-11): DEFER — 9th independent confirmation (first via a non-log-link model
+family). Jensen floor IS removed (May-2026 mean 8.53 ≤ 8.81), but the quantile challenger does not beat the
+market or even naive-0.50 on the 2026 OOS Brier (0.305) and under-covers (calib_80 0.686). Totals stays paused
+until the ~Oct 2026 full-season `delta_2026` re-evaluation (criterion (a)).**
 
 ### Story 6.6 — Reliever top-3 leverage availability vector  `[Home: Epic 6]`
 

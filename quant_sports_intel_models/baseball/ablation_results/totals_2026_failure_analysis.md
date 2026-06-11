@@ -223,6 +223,7 @@ Three NUTS variants were evaluated with a pre-committed kill criterion of **May-
 | v1 (Candidate B signals, in-sample) | Baseline NUTS, mart_sub_model_signals bullpen (2021-2026, mean~2.35) | 8.8607 | +0.177 | FAIL (−0.051 miss) |
 | v2 (Candidate A signals, OOS) | Walk-forward OOS bullpen (2021-2025 train, 2026 eval, mean~1.56) | 9.3023 | +0.618 | FAIL |
 | v3 (Jensen correction + rolling regressor) | Analytical Jensen offset -β²σ²/2 on all signals; rolling_league_runs_14d regressor | **9.2819** | +0.598 | **FAIL** |
+| v4 (Jensen + env_league_state, Story 27.3) | rolling_league_runs_14d replaced by the Kalman env_league_state signal (27.2); see §11 | **9.3042** | +0.620 | **FAIL** |
 
 **Note:** v2 vs v1 difference explained separately — v1 used Candidate B (in-sample for 2026, artificially low bullpen z-scores) which by chance partially offset the Jensen floor. OOS Candidate A signals restored the true bullpen z-score distribution and revealed the structural bias.
 
@@ -275,3 +276,125 @@ per-team run environment), or direct market-anchored run-environment signal. Cur
 (bullpen_v2, offense_v2, starter_v1, run_env_v4) are all game-level predictors of team quality, not
 within-season scoring-environment trackers. A new signal type — not a new model architecture — is the
 unblocking condition.
+
+---
+
+## 11. Epic 27 — env_league_state + defense_quality re-open gate — CLOSED (8th independent confirmation, 2026-06-11)
+
+Story 27.3 was the one-shot totals re-open gate built on top of two new signals introduced specifically to
+attack the §10 re-open criterion (b): **env_league_state** (27.2, a Kalman-filtered causal estimate of the
+current league total-runs/game level — exactly the "within-season scoring-environment tracker with tighter
+smoothing" §10 called for) and **defense_quality** (27.4, an orthogonal OAA/sprint-speed fielding signal).
+Same pre-committed kill criterion: **May-2026 PPM ≤ 8.81**.
+
+### Routing decision
+
+`env_league_state` was routed through the **NUTS** (replacing the non-informative `rolling_league_runs_14d`,
+β_rolling≈0), because the kill criterion is produced by `run_scoring_nuts.py` and only a NUTS regressor can
+move the PPM verdict. `defense_quality` (27.4 PROMOTE) was wired into the **Layer-3 champion** feature contract
+(`_SIGNAL_GROUPS`, in_floor=False so the completeness gate / training population is unchanged); the Layer-3
+challenger comparison was kept clean of `env_league_state`.
+
+### NUTS v4 result (Jensen + env_league_state)
+
+| Metric | Value | Verdict |
+|---|---:|---|
+| May-2026 PPM | **9.3042** | **FAIL** (> 8.81 by +0.494) |
+| Bias (PPM − actual) | +0.620 | actual May-2026 mean = 8.6842 |
+| beta_env_state | **0.0128** [−0.000, +0.026], P(correct)=0.96 | essentially zero — like beta_rolling before it |
+| env_state_z (May-2026) | −0.1145 | May state slightly below training mean; directionally fine but β≈0 |
+| delta_2026 | 0.0000 [−0.0891, +0.0931], excl. zero = NO | 2026 intercept still consistent with zero |
+
+**Diagnostics — all PASS (this is an honest FAIL, not a broken run):** 0 divergences (threshold < 160),
+max R-hat 1.0000, min ESS_bulk 2076; all beta signs correct. env_league_state coverage was 100% on the
+NUTS train+OOS surface (19,794/19,794 rows, 0 imputed).
+
+### Decisive finding — re-open criterion (b) is now also exhausted
+
+The v4 result is the critical test of §10's re-open criterion (b). A purpose-built, Kalman-smoothed,
+causal within-season league-state signal — the strictly better-conditioned replacement for the noisy 14-day
+rolling mean — STILL came in non-informative (β_env_state=0.0128, 94% HDI grazing zero). The bias is
+**unchanged** from v3 (+0.620 vs +0.598; the 0.02 difference is within run-to-run PPC sampling noise). This
+confirms the §10 architectural verdict from a different angle: the May-2026 OVER bias is the structural Jensen
+floor at β_bullpen=0.173 plus a real OOS bullpen-signal elevation, and **no within-season scoring-environment
+signal in the current data can counteract it** — the signal-to-noise at MLB game-to-game variance is simply
+too low for the model to learn a useful within-season offset, smoothing method notwithstanding.
+
+### Formal closure
+
+**DECISION (2026-06-11): the totals architecture remains CLOSED. This is the 8th independent confirmation.**
+Pre-committed: a FAIL here is recorded as the permanent 8th confirmation; **no further tuning.**
+
+8. **Epic 27 NUTS v4 Jensen + env_league_state (8th: PPM=9.3042, β_env_state≈0)** — the within-season
+   league-state signal (re-open criterion (b)) is non-informative even when Kalman-smoothed and causal.
+
+`defense_quality` remains a validated, promoted Layer-3 signal (27.4) and stays wired into the champion
+feature contract for H2H (Epic 28) and future use; its Layer-3 totals-challenger eval (step C) was gated
+behind a NUTS PASS and was therefore not run — the kill criterion is self-contained in the NUTS PPM and does
+not depend on the Layer-3 parquet.
+
+### Re-open criteria after the 8th confirmation
+
+Criterion (b) (within-season scoring-regime signal) is now **exhausted for the Kalman/smoothed-state signal
+class** — env_league_state was its strongest realization and failed. The only remaining re-open path is:
+
+**(a) Full 2026 season data for an honest delta_2026 (~Oct 2026).** With a complete season, delta_2026 would
+be estimated from 5,000+ rows rather than the 866-row March–April calibration; the HDI would narrow from
+±0.09 to ±0.02–0.03 and could absorb the structural regime shift, potentially pulling May PPM below 8.81
+without any architectural change. Re-evaluate after October 2026 (this is the registered Epic 27 totals
+re-open trigger).
+
+---
+
+## 12. Story 10.10 — quantile (no-log-link) Layer-3 challenger — DEFER (9th confirmation, first via a non-log-link family, 2026-06-11)
+
+Every prior confirmation (1–8) used the NegBin `exp(β·z)` log-link. §10's architectural verdict attributed the
++0.170 May-2026 OVER floor to **Jensen's inequality on the convex exp** at β_bullpen≈0.172 — a claim that, until
+now, was inferred analytically but never tested by removing the link. Story 10.10 builds the direct experiment:
+a **LightGBM quantile-regression model** (q=0.10/0.25/0.50/0.75/0.90, pinball loss — `quantile_forest` not
+installed) that predicts the conditional quantiles of `total_runs` **directly**, with no `exp()` parameterization
+and therefore no structural floor by construction. P(over) is interpolated directly from the predictive quantiles
+(no NegBin CDF). Trained walk-forward on the same Layer-3 matrix (`build_totals_dataset`, market-blind) and
+evaluated on the **same leakage-free 2026 OOS surface** as 27.3.
+
+Script: `betting_ml/scripts/quantile_totals_layer3_oos.py`. Full report:
+`ablation_results/totals_quantile_layer3_10_10.md`.
+
+### Result — two distinct findings
+
+| Metric (2026 OOS, n=789; 667 settled) | Value | Gate | Verdict |
+|---|---:|---|---|
+| **May-2026 mean predicted total (q50)** | **8.5314** | ≤ 8.81 | **PASS** (actual May 8.6086) |
+| Jensen log-link floor present? | **NO** | — | floor REMOVED |
+| calib_80 (empirical [q10,q90] coverage) | 0.6857 | 0.75–0.85 | **FAIL** (under-covers) |
+| Brier(P_over) | **0.3053** | < market 0.2292 | **FAIL** (also > naive-0.50 0.2500) |
+| MAE(q50) / mean resid / std(q50) | 3.428 / −0.480 / 1.910 | — | — |
+
+**Finding 1 — the Jensen floor IS a real artifact (NEW positive result).** With the log-link gone, the May-2026
+mean predicted total drops to **8.5314 ≤ 8.81** and tracks the league actual (8.6086) instead of being pinned
+≥8.87. This is the **first direct confirmation** of §10's Jensen mechanism: the +0.170 structural floor was a
+genuine consequence of the convex `exp()` parameterization, not a property of the data. A quantile family is the
+only architecture in this entire investigation that clears the kill criterion's mean-bias component.
+
+**Finding 2 — removing the floor is necessary but NOT sufficient (9th confirmation).** Despite passing the
+mean-bias kill criterion, the quantile challenger **beats neither the market (Brier 0.3053 vs Bovada 0.2292) nor
+even naive-0.50 (0.2500)** on the honest 2026 OOS surface, and its 80% predictive interval under-covers
+(calib_80 0.686, ~9 pts short — the independent per-quantile fits produce too-narrow tails everywhere, including
+the contaminated 2023–25 folds). The covariates add **no deployable edge over Bovada**. This corroborates the
+§11 conclusion from a fresh angle: the residual 2026 OVER bias / lack of edge is a **real, un-priceable
+scoring-environment regime shift**, not solely a structural artifact of the log-link. Killing the floor exposes
+that the underlying signal simply isn't there at MLB game-to-game variance.
+
+### Formal closure
+
+**DECISION (2026-06-11): DEFER. The totals architecture remains CLOSED. This is the 9th independent confirmation
+— and the first to test a non-log-link model family.**
+
+9. **Story 10.10 quantile (no-log-link) Layer-3 challenger (9th: May-2026 q50=8.5314 PASS-on-mean, but
+   2026 Brier=0.3053 > market 0.2292 and > naive 0.2500; calib_80=0.686)** — removing the exp-link removes the
+   §10 Jensen floor (confirming the mechanism) but yields no edge; the bias is a real regime shift, not just an
+   artifact.
+
+**Re-open criteria are unchanged.** Criterion (b) (smoothed within-season state) was exhausted at the 8th
+confirmation; the model-family lever is now also exhausted (a no-link quantile model has no edge). The only
+remaining re-open path stays **(a) full-2026 `delta_2026` (~Oct 2026)**. No further totals tuning.

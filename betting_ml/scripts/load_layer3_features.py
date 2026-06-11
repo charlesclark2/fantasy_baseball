@@ -65,6 +65,14 @@ _SIGNAL_GROUPS = [
     ("starter_ip", "starter_ip_mu_v1",           "starter_ip_dispersion_v1",    "starter_ip_uncertainty_v1",           "starter_ip_mu_v1_available",          True),
     ("bullpen",    "bullpen_mu_v2",              "bullpen_dispersion_v2",       "bullpen_uncertainty_v2",              "bullpen_mu_v2_available",             True),
     ("matchup",    "matchup_advantage_mu_v1",    "matchup_advantage_sigma_v1",  "matchup_advantage_mu_v1_uncertainty", "matchup_advantage_mu_v1_available",   False),
+    # Story 27.4 (PROMOTE 2026-06-11) — orthogonal fielding-quality signal. The
+    # group's two component z-scores (OAA / sprint speed) occupy the spread/unc
+    # slots; the composite mu is defense_quality_mu_v1. in_floor=False (like
+    # matchup): availability-gated and orthogonal, so it must NOT alter the
+    # signal_completeness_score denominator — keeping the training population
+    # identical to the pre-27.3 baseline. env_league_state is intentionally NOT
+    # registered here: Story 27.3 routes it through the Epic 17 NUTS, not Layer 3.
+    ("defense_quality", "defense_quality_mu_v1", "defense_quality_oaa_z_v1",    "defense_quality_sprint_z_v1",         "defense_quality_mu_v1_available",     False),
 ]
 
 # run_env is environment-level (identical home/away — verified across all games);
@@ -81,7 +89,7 @@ _NON_FEATURE_COLS = _TARGET_COLS | {
     "signal_completeness_score", "low_signal_completeness",
 }
 
-_N_FLOOR_GROUPS = sum(1 for *_, in_floor in _SIGNAL_GROUPS if in_floor)  # = 5
+_N_FLOOR_GROUPS = sum(1 for *_, in_floor in _SIGNAL_GROUPS if in_floor)  # = 5 (matchup + defense_quality excluded — availability-gated)
 _COMPLETENESS_FLOOR = 0.40
 _MLFLOW_EXPERIMENT = "layer3_matrix"
 

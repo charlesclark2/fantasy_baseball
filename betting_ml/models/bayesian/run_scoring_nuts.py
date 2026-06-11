@@ -21,12 +21,15 @@ v3 changes (final architectural attempt within log-link NegBin):
       starter:  -beta_starter² × σ²_starter / 2   ≈ -0.0011  (β≈0.05)
     Exact training variances logged at runtime.
 
-  Fix 2 — Within-season actual runs regressor:
-    rolling_league_runs_14d: 14-calendar-day rolling mean of league-wide total
-    runs/game, using only games strictly before each game's date. Sourced from
-    mart_game_results (home_final_score + away_final_score). Leakage-safe: each
-    row's window uses games with game_date < row's game_date. Prior: Normal(0.1, 0.3).
-    Also Jensen-corrected.
+  Fix 2 — Within-season league run-environment STATE regressor (Story 27.3):
+    env_league_state: the Kalman-filtered, causal estimate of the current
+    league total-runs/game level (signal 27.2). Sourced from the production
+    sub-model signal pivot (feature_pregame_sub_model_signals.env_league_state_mu_v1),
+    game-level (identical home/away). Leakage-safe by construction (causal Kalman
+    state from games strictly before each date). Prior: Normal(0.1, 0.3); also
+    Jensen-corrected. REPLACES the original v3 rolling_league_runs_14d, which came
+    out non-informative (beta_rolling ≈ 0) — env_league_state is the better-
+    conditioned within-season variance lever the §8 totals analysis identified.
 
 2026 calibration window (v2, unchanged):
   - pre-May 2026 (March + April) → training observations for delta_2026
@@ -95,53 +98,57 @@ from betting_ml.models.bayesian.run_scoring_advi import (
 
 
 # ---------------------------------------------------------------------------
-# Fix 2: rolling 14-day league run environment feature
+# Fix 2 (Story 27.3): within-season league run environment STATE regressor
+#
+# Replaces the original v3 `rolling_league_runs_14d` (a 14-calendar-day rolling
+# mean of league runs/game), which came out non-informative in the NUTS posterior
+# (beta_rolling ≈ 0). Story 27.3 routes the Kalman-filtered, causal
+# `env_league_state` signal (27.2) through this same regressor slot: it is the
+# within-season variance lever the §8 totals analysis identified, and it is a
+# strictly better-conditioned estimate of exactly the quantity the rolling mean
+# approximated — the current league total-runs/game level. It is game-level
+# (identical home/away — verified) and leakage-free by construction (causal
+# Kalman state from games strictly before each date).
 # ---------------------------------------------------------------------------
 
-def _add_rolling_league_runs(game_df: pd.DataFrame) -> pd.DataFrame:
+def _load_env_league_state(seasons: list[int]) -> pd.DataFrame:
+    """Pull the env_league_state signal (game-level league runs/game state).
+
+    Returns one row per game_pk: (game_pk, env_league_state). The signal is
+    identical for both sides of a game, so we dedupe to game grain. Sourced from
+    the production sub-model signal pivot; coverage is ~100% for 2022-2026.
+    Games with no signal (e.g. outside coverage) are simply absent — the caller
+    LEFT-joins and imputes the training mean before z-scoring.
     """
-    Add rolling_league_runs_14d to a game-level DataFrame.
+    from betting_ml.utils.data_loader import get_snowflake_connection
 
-    For each game on date D, computes the mean total runs/game across all
-    completed games in the 14 calendar days strictly before D (window: [D-14, D)).
-    Leakage-safe: a game's own result is never in its own window.
-
-    Games with no prior-14d data (e.g. first week of each season) receive NaN —
-    callers should impute with the training mean before z-scoring.
+    season_list = ", ".join(str(s) for s in seasons)
+    sql = f"""
+        select
+            f.game_pk,
+            max(f.env_league_state_mu_v1) as env_league_state
+        from baseball_data.betting_features.feature_pregame_sub_model_signals f
+        join baseball_data.betting.mart_game_results g on g.game_pk = f.game_pk
+        where g.game_type = 'R'
+          and g.game_year in ({season_list})
+          and f.env_league_state_mu_v1 is not null
+        group by f.game_pk
     """
-    game_df = game_df.copy()
-    game_df["total_runs"] = game_df["home_final_score"] + game_df["away_final_score"]
+    log.info("Querying env_league_state for seasons %s", season_list)
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [d[0].lower() for d in cur.description]
+        df = pd.DataFrame(cur.fetchall(), columns=cols)
+    finally:
+        conn.close()
 
-    # Aggregate to daily totals
-    daily = (
-        game_df.groupby("game_date")
-        .agg(runs_sum=("total_runs", "sum"), n_games=("total_runs", "count"))
-        .reset_index()
-        .sort_values("game_date")
-        .reset_index(drop=True)
-    )
-
-    dates     = daily["game_date"].values
-    runs_sum  = daily["runs_sum"].values
-    n_games   = daily["n_games"].values
-
-    rolling_vals: dict = {}
-    for i, d in enumerate(dates):
-        window_start = d - np.timedelta64(14, "D")
-        mask = (dates >= window_start) & (dates < d)
-        total_n = int(n_games[mask].sum())
-        rolling_vals[d] = (
-            float(runs_sum[mask].sum()) / float(total_n) if total_n > 0 else np.nan
-        )
-
-    daily["rolling_league_runs_14d"] = daily["game_date"].map(rolling_vals)
-
-    game_df = game_df.merge(
-        daily[["game_date", "rolling_league_runs_14d"]],
-        on="game_date",
-        how="left",
-    )
-    return game_df
+    df["game_pk"] = df["game_pk"].astype(int)
+    df["env_league_state"] = pd.to_numeric(df["env_league_state"], errors="coerce")
+    log.info("Loaded env_league_state for %d games (mean=%.3f)",
+             len(df), float(df["env_league_state"].mean()) if len(df) else float("nan"))
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +205,7 @@ def _build_indices_with_2026(
 
 
 # ---------------------------------------------------------------------------
-# Fix 1 + Fix 2: Jensen-corrected model with rolling regressor (v3)
+# Fix 1 + Fix 2: Jensen-corrected model with env_league_state regressor (v3)
 # ---------------------------------------------------------------------------
 
 def build_model_v3(
@@ -207,23 +214,23 @@ def build_model_v3(
     sigma_sq_dict: dict,
 ) -> object:
     """
-    Jensen-corrected NegBin model with within-season rolling runs regressor.
+    Jensen-corrected NegBin model with within-season league-state regressor.
 
     Each signal s contributes: beta_s * z_s - beta_s² * sigma_sq_s / 2
     where sigma_sq_s is the training z-score variance (fixed constant ≈ 1.0).
     This makes E_z[exp(beta*z - beta²*sigma²/2)] = exp(beta*E[z]) = 1 on the
     training distribution, zeroing the Jensen structural floor.
 
-    rolling_league_z (Fix 2) is included with the same Jensen correction and
-    prior Normal(0.1, 0.3).
+    env_state_z (Fix 2, Story 27.3) is included with the same Jensen correction
+    and prior Normal(0.1, 0.3).
     """
     import pymc as pm
 
-    sigma_sq_run_env = float(sigma_sq_dict["run_env_z"])
-    sigma_sq_offense = float(sigma_sq_dict["offense_mu_z"])
-    sigma_sq_bullpen = float(sigma_sq_dict["opp_bullpen_mu_z"])
-    sigma_sq_starter = float(sigma_sq_dict["opp_starter_mu_z"])
-    sigma_sq_rolling = float(sigma_sq_dict["rolling_league_z"])
+    sigma_sq_run_env   = float(sigma_sq_dict["run_env_z"])
+    sigma_sq_offense   = float(sigma_sq_dict["offense_mu_z"])
+    sigma_sq_bullpen   = float(sigma_sq_dict["opp_bullpen_mu_z"])
+    sigma_sq_starter   = float(sigma_sq_dict["opp_starter_mu_z"])
+    sigma_sq_env_state = float(sigma_sq_dict["env_state_z"])
 
     n_teams   = len(coords["team"])
     n_seasons = len(coords["season"])
@@ -232,11 +239,11 @@ def build_model_v3(
     pit_idx = df_train["pitching_team_idx"].values
     sea_idx = df_train["season_idx"].values
 
-    z_run_env  = df_train["run_env_z"].values
-    z_offense  = df_train["offense_mu_z"].values
-    z_bullpen  = df_train["opp_bullpen_mu_z"].values
-    z_starter  = df_train["opp_starter_mu_z"].values
-    z_rolling  = df_train["rolling_league_z"].values
+    z_run_env   = df_train["run_env_z"].values
+    z_offense   = df_train["offense_mu_z"].values
+    z_bullpen   = df_train["opp_bullpen_mu_z"].values
+    z_starter   = df_train["opp_starter_mu_z"].values
+    z_env_state = df_train["env_state_z"].values
 
     with pm.Model(coords=coords) as model:
 
@@ -252,11 +259,11 @@ def build_model_v3(
         delta_season  = pm.Normal("delta_season",  mu=0, sigma=sigma_season,  dims="season")
 
         # ── Signal coefficients ───────────────────────────────────────────────
-        beta_run_env = pm.Normal("beta_run_env", mu=0.0, sigma=0.3)
-        beta_offense = pm.Normal("beta_offense", mu=0.2, sigma=0.3)
-        beta_bullpen = pm.Normal("beta_bullpen", mu=0.1, sigma=0.3)
-        beta_starter = pm.Normal("beta_starter", mu=0.1, sigma=0.3)
-        beta_rolling = pm.Normal("beta_rolling", mu=0.1, sigma=0.3)
+        beta_run_env   = pm.Normal("beta_run_env",   mu=0.0, sigma=0.3)
+        beta_offense   = pm.Normal("beta_offense",   mu=0.2, sigma=0.3)
+        beta_bullpen   = pm.Normal("beta_bullpen",   mu=0.1, sigma=0.3)
+        beta_starter   = pm.Normal("beta_starter",   mu=0.1, sigma=0.3)
+        beta_env_state = pm.Normal("beta_env_state", mu=0.1, sigma=0.3)
 
         # ── Jensen-corrected log-linear predictor ─────────────────────────────
         # Each term: beta * z - beta² * sigma² / 2
@@ -270,7 +277,7 @@ def build_model_v3(
             + beta_offense * z_offense - beta_offense**2 * sigma_sq_offense / 2
             + beta_bullpen * z_bullpen - beta_bullpen**2 * sigma_sq_bullpen / 2
             + beta_starter * z_starter - beta_starter**2 * sigma_sq_starter / 2
-            + beta_rolling * z_rolling - beta_rolling**2 * sigma_sq_rolling / 2
+            + beta_env_state * z_env_state - beta_env_state**2 * sigma_sq_env_state / 2
         )
         mu_side = pm.Deterministic("mu_side", pm.math.exp(log_mu_side))
 
@@ -329,7 +336,7 @@ def check_nuts_diagnostics(trace) -> dict:
     summary = az.summary(trace, var_names=[
         "mu_log_league", "sigma_offense", "sigma_defense", "sigma_season",
         "beta_run_env", "beta_offense", "beta_bullpen", "beta_starter",
-        "beta_rolling", "alpha_nb",
+        "beta_env_state", "alpha_nb",
     ])
     log.info("\nParameter summary (key scalars):\n%s", summary.to_string())
 
@@ -364,7 +371,7 @@ def check_nuts_diagnostics(trace) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Kill criterion check (v3 — Jensen-corrected + rolling)
+# Kill criterion check (v3 — Jensen-corrected + env_league_state)
 # ---------------------------------------------------------------------------
 
 def run_kill_criterion(
@@ -376,7 +383,7 @@ def run_kill_criterion(
     """
     Posterior predictive mean on May-2026 OOS. Must be ≤ 8.81.
 
-    Log-linear predictor includes Jensen corrections and rolling_league_z regressor,
+    Log-linear predictor includes Jensen corrections and env_state_z regressor,
     matching build_model_v3. sigma_sq_dict provides the fixed training variance
     constants for each signal.
     """
@@ -401,28 +408,28 @@ def run_kill_criterion(
     alpha_offense = post["alpha_offense"].values.reshape(n_samples, len(coords["team"]))
     alpha_defense = post["alpha_defense"].values.reshape(n_samples, len(coords["team"]))
     delta_season  = post["delta_season"].values.reshape(n_samples, len(coords["season"]))
-    beta_run_env  = post["beta_run_env"].values.reshape(n_samples)
-    beta_offense  = post["beta_offense"].values.reshape(n_samples)
-    beta_bullpen  = post["beta_bullpen"].values.reshape(n_samples)
-    beta_starter  = post["beta_starter"].values.reshape(n_samples)
-    beta_rolling  = post["beta_rolling"].values.reshape(n_samples)
-    alpha_nb      = post["alpha_nb"].values.reshape(n_samples)
+    beta_run_env   = post["beta_run_env"].values.reshape(n_samples)
+    beta_offense   = post["beta_offense"].values.reshape(n_samples)
+    beta_bullpen   = post["beta_bullpen"].values.reshape(n_samples)
+    beta_starter   = post["beta_starter"].values.reshape(n_samples)
+    beta_env_state = post["beta_env_state"].values.reshape(n_samples)
+    alpha_nb       = post["alpha_nb"].values.reshape(n_samples)
 
-    bat_idx    = may_df["batting_team_idx"].values
-    pit_idx    = may_df["pitching_team_idx"].values
-    sea_idx    = may_df["season_idx"].values
-    run_env_z  = may_df["run_env_z"].values
-    offense_z  = may_df["offense_mu_z"].values
-    bullpen_z  = may_df["opp_bullpen_mu_z"].values
-    starter_z  = may_df["opp_starter_mu_z"].values
-    rolling_z  = may_df["rolling_league_z"].values
+    bat_idx     = may_df["batting_team_idx"].values
+    pit_idx     = may_df["pitching_team_idx"].values
+    sea_idx     = may_df["season_idx"].values
+    run_env_z   = may_df["run_env_z"].values
+    offense_z   = may_df["offense_mu_z"].values
+    bullpen_z   = may_df["opp_bullpen_mu_z"].values
+    starter_z   = may_df["opp_starter_mu_z"].values
+    env_state_z = may_df["env_state_z"].values
 
     # Jensen correction constants (fixed training variances)
-    sq_run_env  = float(sigma_sq_dict["run_env_z"])
-    sq_offense  = float(sigma_sq_dict["offense_mu_z"])
-    sq_bullpen  = float(sigma_sq_dict["opp_bullpen_mu_z"])
-    sq_starter  = float(sigma_sq_dict["opp_starter_mu_z"])
-    sq_rolling  = float(sigma_sq_dict["rolling_league_z"])
+    sq_run_env   = float(sigma_sq_dict["run_env_z"])
+    sq_offense   = float(sigma_sq_dict["offense_mu_z"])
+    sq_bullpen   = float(sigma_sq_dict["opp_bullpen_mu_z"])
+    sq_starter   = float(sigma_sq_dict["opp_starter_mu_z"])
+    sq_env_state = float(sigma_sq_dict["env_state_z"])
 
     log.info("Computing posterior predictive for %d OOS rows × %d draws...", len(may_df), n_samples)
 
@@ -439,8 +446,8 @@ def run_kill_criterion(
         - (beta_bullpen**2)[:, None] * sq_bullpen / 2
         + beta_starter[:, None] * starter_z[None, :]
         - (beta_starter**2)[:, None] * sq_starter / 2
-        + beta_rolling[:, None] * rolling_z[None, :]
-        - (beta_rolling**2)[:, None] * sq_rolling / 2
+        + beta_env_state[:, None] * env_state_z[None, :]
+        - (beta_env_state**2)[:, None] * sq_env_state / 2
     )
     mu_oos = np.exp(log_mu)  # (n_samples, n_oos)
 
@@ -510,11 +517,11 @@ def run_kill_criterion(
     log.info("    Implied run shift: %+.3f per side (%+.3f total)",
              run_shift_per_side, run_shift_per_side * 2)
 
-    # Rolling feature: mean z-score for May-2026 (diagnostic)
-    rolling_z_may_mean = float(rolling_z.mean())
-    log.info("\n  rolling_league_z (May-2026): mean=%.4f  std=%.4f",
-             rolling_z_may_mean, float(rolling_z.std()))
-    log.info("  beta_rolling posterior: mean=%.4f", float(beta_rolling.mean()))
+    # env_league_state: mean z-score for May-2026 (diagnostic)
+    env_state_z_may_mean = float(env_state_z.mean())
+    log.info("\n  env_state_z (May-2026): mean=%.4f  std=%.4f",
+             env_state_z_may_mean, float(env_state_z.std()))
+    log.info("  beta_env_state posterior: mean=%.4f", float(beta_env_state.mean()))
 
     return {
         "n_games": len(actual_totals),
@@ -528,8 +535,8 @@ def run_kill_criterion(
         "delta_2026_hdi_high": delta_2026_p97,
         "delta_2026_hdi_excludes_zero": hdi_excludes_zero,
         "season_run_shift_total": float(run_shift_per_side * 2),
-        "beta_rolling_mean": float(beta_rolling.mean()),
-        "rolling_z_may_mean": rolling_z_may_mean,
+        "beta_env_state_mean": float(beta_env_state.mean()),
+        "env_state_z_may_mean": env_state_z_may_mean,
     }
 
 
@@ -544,7 +551,7 @@ def check_coefficient_directions_nuts(trace) -> dict:
         "beta_offense":  ("positive", lambda x: x > 0),
         "beta_bullpen":  ("positive", lambda x: x > 0),
         "beta_starter":  ("positive", lambda x: x > 0),
-        "beta_rolling":  ("positive", lambda x: x > 0),
+        "beta_env_state":  ("positive", lambda x: x > 0),
     }
     results = {}
     log.info("\nNUTS coefficient posterior means (HDI 94%%):")
@@ -568,7 +575,7 @@ def check_coefficient_directions_nuts(trace) -> dict:
 def main() -> None:
     log.info("=" * 60)
     log.info("Epic 17 Story 17.1 — NUTS Full Inference (Phase 1, v3)")
-    log.info("Fixes: Jensen correction + rolling league runs regressor")
+    log.info("Fixes: Jensen correction + env_league_state regressor (Story 27.3)")
     log.info("=" * 60)
 
     # ── Load all data ────────────────────────────────────────────────────────
@@ -577,31 +584,16 @@ def main() -> None:
     signals  = _load_oos_signals()
     games    = _load_game_results(all_seasons)
 
-    # Fix 2: add rolling 14d league runs feature to game-level df
-    log.info("  Computing rolling_league_runs_14d (14-day window, leakage-safe)...")
-    games = _add_rolling_league_runs(games)
-
     sides    = _expand_to_sides(games)
     full_df  = _build_training_frame(signals, sides)
 
-    # Merge rolling feature from game level into (game_pk, side) frame
-    rolling_map = games[["game_pk", "rolling_league_runs_14d"]].drop_duplicates("game_pk")
-    full_df = full_df.merge(rolling_map, on="game_pk", how="left")
-
-    # Spot-check: first May-2026 game's rolling window must exclude May games
-    may_2026_games = full_df[
-        (full_df["season"] == 2026) & (full_df["game_date"].dt.month == 5)
-    ].drop_duplicates("game_pk").sort_values("game_date")
-    if len(may_2026_games) > 0:
-        sample = may_2026_games.iloc[0]
-        sample_date = sample["game_date"]
-        log.info("  Rolling 14d spot-check: first May-2026 game on %s → rolling_14d=%.3f",
-                 sample_date.date(),
-                 float(sample["rolling_league_runs_14d"])
-                 if pd.notna(sample["rolling_league_runs_14d"]) else float("nan"))
-        log.info("    Window: [%s, %s)  — strictly before game date ✓",
-                 (sample_date - pd.Timedelta(days=14)).date(),
-                 sample_date.date())
+    # Fix 2 (Story 27.3): merge the env_league_state signal (game-level) into the
+    # (game_pk, side) frame. Replaces the original rolling_league_runs_14d.
+    env_state_map = _load_env_league_state(all_seasons)
+    full_df = full_df.merge(env_state_map, on="game_pk", how="left")
+    n_env_missing = int(full_df["env_league_state"].isna().sum())
+    log.info("  env_league_state merged: %d/%d rows populated (%d missing → imputed)",
+             len(full_df) - n_env_missing, len(full_df), n_env_missing)
 
     # ── Split 2026 into calibration (Mar+Apr) and OOS (May) ─────────────────
     log.info("\n[2/5] Splitting 2026 into calibration + OOS windows...")
@@ -652,35 +644,35 @@ def main() -> None:
     train_for_scalers = full_df[base_train_mask].copy().reset_index(drop=True)
     train_for_scalers, full_df, _ = _fit_and_apply_scalers(train_for_scalers, full_df)
 
-    # Fix 2: z-score rolling_league_runs_14d on 2022-2025 training data
+    # Fix 2 (Story 27.3): z-score env_league_state on 2022-2025 training data
     from sklearn.preprocessing import StandardScaler
 
-    # Impute NaN (first week of each season) with training mean → z-scores to 0
-    train_rolling_mean = float(
-        full_df.loc[base_train_mask, "rolling_league_runs_14d"].dropna().mean()
+    # Impute any missing state with the training mean → z-scores to 0
+    train_env_state_mean = float(
+        full_df.loc[base_train_mask, "env_league_state"].dropna().mean()
     )
-    full_df["rolling_league_runs_14d"] = (
-        full_df["rolling_league_runs_14d"].fillna(train_rolling_mean)
+    full_df["env_league_state"] = (
+        full_df["env_league_state"].fillna(train_env_state_mean)
     )
-    rolling_scaler = StandardScaler()
-    rolling_scaler.fit(
-        full_df.loc[base_train_mask, "rolling_league_runs_14d"].values.reshape(-1, 1)
+    env_state_scaler = StandardScaler()
+    env_state_scaler.fit(
+        full_df.loc[base_train_mask, "env_league_state"].values.reshape(-1, 1)
     )
-    full_df["rolling_league_z"] = rolling_scaler.transform(
-        full_df["rolling_league_runs_14d"].values.reshape(-1, 1)
+    full_df["env_state_z"] = env_state_scaler.transform(
+        full_df["env_league_state"].values.reshape(-1, 1)
     ).ravel()
     log.info(
-        "  rolling_league_runs_14d → rolling_league_z   mean=%.4f  std=%.4f",
-        float(full_df.loc[base_train_mask, "rolling_league_z"].mean()),
-        float(full_df.loc[base_train_mask, "rolling_league_z"].std()),
+        "  env_league_state → env_state_z   mean=%.4f  std=%.4f",
+        float(full_df.loc[base_train_mask, "env_state_z"].mean()),
+        float(full_df.loc[base_train_mask, "env_state_z"].std()),
     )
-    log.info("  rolling_league_runs_14d training: mean=%.4f  std=%.4f",
-             train_rolling_mean,
-             float(full_df.loc[base_train_mask, "rolling_league_runs_14d"].std()))
-    log.info("  rolling_league_z May-2026: mean=%.4f",
+    log.info("  env_league_state training: mean=%.4f  std=%.4f",
+             train_env_state_mean,
+             float(full_df.loc[base_train_mask, "env_league_state"].std()))
+    log.info("  env_state_z May-2026: mean=%.4f",
              float(full_df.loc[
                  (full_df["season"] == 2026) & (full_df["game_date"].dt.month == 5),
-                 "rolling_league_z"
+                 "env_state_z"
              ].mean()))
 
     # Fix 1: compute Jensen correction constants (training z-score variances ≈ 1.0)
@@ -689,7 +681,7 @@ def main() -> None:
         "offense_mu_z":     float(full_df.loc[base_train_mask, "offense_mu_z"].var()),
         "opp_bullpen_mu_z": float(full_df.loc[base_train_mask, "opp_bullpen_mu_z"].var()),
         "opp_starter_mu_z": float(full_df.loc[base_train_mask, "opp_starter_mu_z"].var()),
-        "rolling_league_z": float(full_df.loc[base_train_mask, "rolling_league_z"].var()),
+        "env_state_z":      float(full_df.loc[base_train_mask, "env_state_z"].var()),
     }
     log.info("  Jensen correction σ² (training z-score variances, should be ≈1.0):")
     for k, v in sigma_sq_dict.items():
@@ -709,7 +701,7 @@ def main() -> None:
     log.info("  Runs scored — mean=%.3f  std=%.3f",
              train_df["runs_scored"].mean(), train_df["runs_scored"].std())
 
-    # ── Build model (v3: Jensen-corrected + rolling) and run NUTS ────────────
+    # ── Build model (v3: Jensen-corrected + env_league_state) and run NUTS ───
     log.info("\n[4/5] Building PyMC model (v3) and running NUTS...")
     import pymc as pm
     import arviz as az
@@ -736,7 +728,7 @@ def main() -> None:
 
     # ── Save summary ─────────────────────────────────────────────────────────
     summary = {
-        "model_version": "v3_jensen_rolling",
+        "model_version": "v3_jensen_env_state",
         "nuts_settings": {
             "draws": _N_DRAWS,
             "tune": _N_TUNE,
@@ -759,7 +751,7 @@ def main() -> None:
     log.info("\nSummary saved → %s", _SUMMARY_PATH)
 
     log.info("\n" + "=" * 60)
-    log.info("NUTS PHASE 1 SUMMARY (v3 — Jensen + rolling)")
+    log.info("NUTS PHASE 1 SUMMARY (v3 — Jensen + env_league_state)")
     log.info("=" * 60)
     log.info("Calibration obs (Mar+Apr 2026): %d  %s",
              n_calib_obs, "OK" if n_calib_obs >= _MIN_CALIB_OBS else "WARN: sparse")
@@ -774,9 +766,9 @@ def main() -> None:
              kill.get("delta_2026_hdi_low", float("nan")),
              kill.get("delta_2026_hdi_high", float("nan")),
              kill.get("delta_2026_hdi_excludes_zero", "?"))
-    log.info("beta_rolling:     mean=%.4f  rolling_z_may=%.4f",
-             kill.get("beta_rolling_mean", float("nan")),
-             kill.get("rolling_z_may_mean", float("nan")))
+    log.info("beta_env_state:   mean=%.4f  env_state_z_may=%.4f",
+             kill.get("beta_env_state_mean", float("nan")),
+             kill.get("env_state_z_may_mean", float("nan")))
     log.info("Kill criterion:   PPM=%.4f  threshold=%.2f  %s",
              kill.get("ppm", float("nan")), _KILL_THRESHOLD_NUTS,
              "PASS" if kill.get("passed") else "FAIL")
