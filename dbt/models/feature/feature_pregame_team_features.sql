@@ -50,8 +50,48 @@ games as (
     where game_type = 'R'
 ),
 
+-- A2.8 perf — the four rolling/platoon resolvers below used the "left join EVERY
+-- prior row per game-team + row_number()=1" as-of pattern, which fanned the
+-- per-team spine out to ~43.6M / 43.6M / 31.3M / 12.3M rows (four windowed sorts =
+-- ~85% of the build). Each is replaced by an as-of CARRY-FORWARD: a single ordered
+-- pass over (mart ∪ distinct (team, anchor-date) demand) carries the latest strictly-
+-- prior game_date (is_demand DESC enforces the strict < guard), then an equi-join
+-- fetches that row's stats in NATIVE types (no precision drift). The final dedup
+-- takes the latest game_pk on the as-of date: deterministic, and the semantically
+-- correct "latest prior game" for doubleheader dates. (Verified: pitching and
+-- vs-hand duplicate (team, date) rows are identical-valued so the pick is
+-- value-invariant; offense DH rows DIFFER and the old row_number had no tiebreak →
+-- arbitrary/non-reproducible, so this also makes those rows reproducible.)
+team_demand as (
+    select distinct team_abbrev, game_date::date as anchor_date
+    from games
+),
+
 -- ── Rolling offense (most recent pre-game row per game × team) ─────────────────
-offense_ranked as (
+offense_combined as (
+    select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_team_rolling_offense') }}
+    union all
+    select team_abbrev, anchor_date as evt_date, 1 as is_demand
+    from team_demand
+),
+
+offense_asof as (
+    select team_abbrev, anchor_date, asof_date from (
+        select
+            team_abbrev,
+            evt_date as anchor_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by team_abbrev
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from offense_combined
+    ) where is_demand = 1
+),
+
+offense_pre_game as (
     select
         g.game_pk,
         g.team_abbrev,
@@ -81,23 +121,45 @@ offense_ranked as (
         ro.hard_hit_pct_30d,
         ro.hard_hit_pct_std,
         ro.barrel_pct_30d,
-        ro.slugging_30d,
-        row_number() over (
-            partition by g.game_pk, g.team_abbrev
-            order by ro.game_date::date desc
-        ) as rn
+        ro.slugging_30d
     from games g
+    left join offense_asof a
+        on  a.team_abbrev = g.team_abbrev
+        and a.anchor_date = g.game_date::date
     left join {{ ref('mart_team_rolling_offense') }} ro
         on  ro.team            = g.team_abbrev
-        and ro.game_date::date < g.game_date::date   -- LEAKAGE GUARD
-),
-
-offense_pre_game as (
-    select * from offense_ranked where rn = 1
+        and ro.game_date::date = a.asof_date
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by ro.game_pk desc nulls last
+    ) = 1
 ),
 
 -- ── Rolling pitching (most recent pre-game row per game × team) ────────────────
-pitching_ranked as (
+pitching_combined as (
+    select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_team_rolling_pitching') }}
+    union all
+    select team_abbrev, anchor_date as evt_date, 1 as is_demand
+    from team_demand
+),
+
+pitching_asof as (
+    select team_abbrev, anchor_date, asof_date from (
+        select
+            team_abbrev,
+            evt_date as anchor_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by team_abbrev
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from pitching_combined
+    ) where is_demand = 1
+),
+
+pitching_pre_game as (
     select
         g.game_pk,
         g.team_abbrev,
@@ -122,51 +184,46 @@ pitching_ranked as (
         rp.hard_hit_pct_allowed_7d,
         rp.hard_hit_pct_allowed_30d,
         rp.hard_hit_pct_allowed_std,
-        rp.barrel_pct_allowed_30d,
-        row_number() over (
-            partition by g.game_pk, g.team_abbrev
-            order by rp.game_date::date desc
-        ) as rn
+        rp.barrel_pct_allowed_30d
     from games g
+    left join pitching_asof a
+        on  a.team_abbrev = g.team_abbrev
+        and a.anchor_date = g.game_date::date
     left join {{ ref('mart_team_rolling_pitching') }} rp
         on  rp.team            = g.team_abbrev
-        and rp.game_date::date < g.game_date::date   -- LEAKAGE GUARD
-),
-
-pitching_pre_game as (
-    select * from pitching_ranked where rn = 1
+        and rp.game_date::date = a.asof_date
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by rp.game_pk desc nulls last
+    ) = 1
 ),
 
 -- ── Platoon splits vs LHP (most recent pre-game row) ──────────────────────────
-vs_lhp_ranked as (
-    select
-        g.game_pk,
-        g.team_abbrev,
-        vh.woba_30d,
-        vh.xwoba_30d,
-        vh.k_pct_30d,
-        vh.bb_pct_30d,
-        vh.hard_hit_pct_30d,
-        vh.slugging_30d,
-        vh.woba_std,
-        vh.xwoba_std,
-        row_number() over (
-            partition by g.game_pk, g.team_abbrev
-            order by vh.game_date::date desc
-        ) as rn
-    from games g
-    left join {{ ref('mart_team_vs_pitcher_hand') }} vh
-        on  vh.team             = g.team_abbrev
-        and vh.opp_starter_hand = 'L'
-        and vh.game_date::date  < g.game_date::date   -- LEAKAGE GUARD
+vs_lhp_combined as (
+    select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_team_vs_pitcher_hand') }}
+    where opp_starter_hand = 'L'
+    union all
+    select team_abbrev, anchor_date as evt_date, 1 as is_demand
+    from team_demand
+),
+
+vs_lhp_asof as (
+    select team_abbrev, anchor_date, asof_date from (
+        select
+            team_abbrev,
+            evt_date as anchor_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by team_abbrev
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from vs_lhp_combined
+    ) where is_demand = 1
 ),
 
 vs_lhp_pre_game as (
-    select * from vs_lhp_ranked where rn = 1
-),
-
--- ── Platoon splits vs RHP (most recent pre-game row) ──────────────────────────
-vs_rhp_ranked as (
     select
         g.game_pk,
         g.team_abbrev,
@@ -177,20 +234,70 @@ vs_rhp_ranked as (
         vh.hard_hit_pct_30d,
         vh.slugging_30d,
         vh.woba_std,
-        vh.xwoba_std,
-        row_number() over (
-            partition by g.game_pk, g.team_abbrev
-            order by vh.game_date::date desc
-        ) as rn
+        vh.xwoba_std
     from games g
+    left join vs_lhp_asof a
+        on  a.team_abbrev = g.team_abbrev
+        and a.anchor_date = g.game_date::date
     left join {{ ref('mart_team_vs_pitcher_hand') }} vh
         on  vh.team             = g.team_abbrev
-        and vh.opp_starter_hand = 'R'
-        and vh.game_date::date  < g.game_date::date   -- LEAKAGE GUARD
+        and vh.opp_starter_hand = 'L'
+        and vh.game_date::date  = a.asof_date
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by vh.game_pk desc nulls last
+    ) = 1
+),
+
+-- ── Platoon splits vs RHP (most recent pre-game row) ──────────────────────────
+vs_rhp_combined as (
+    select team as team_abbrev, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_team_vs_pitcher_hand') }}
+    where opp_starter_hand = 'R'
+    union all
+    select team_abbrev, anchor_date as evt_date, 1 as is_demand
+    from team_demand
+),
+
+vs_rhp_asof as (
+    select team_abbrev, anchor_date, asof_date from (
+        select
+            team_abbrev,
+            evt_date as anchor_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by team_abbrev
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from vs_rhp_combined
+    ) where is_demand = 1
 ),
 
 vs_rhp_pre_game as (
-    select * from vs_rhp_ranked where rn = 1
+    select
+        g.game_pk,
+        g.team_abbrev,
+        vh.woba_30d,
+        vh.xwoba_30d,
+        vh.k_pct_30d,
+        vh.bb_pct_30d,
+        vh.hard_hit_pct_30d,
+        vh.slugging_30d,
+        vh.woba_std,
+        vh.xwoba_std
+    from games g
+    left join vs_rhp_asof a
+        on  a.team_abbrev = g.team_abbrev
+        and a.anchor_date = g.game_date::date
+    left join {{ ref('mart_team_vs_pitcher_hand') }} vh
+        on  vh.team             = g.team_abbrev
+        and vh.opp_starter_hand = 'R'
+        and vh.game_date::date  = a.asof_date
+    qualify row_number() over (
+        partition by g.game_pk, g.team_abbrev
+        order by vh.game_pk desc nulls last
+    ) = 1
 ),
 
 -- ── Season record as of the day before the game ───────────────────────────────

@@ -150,8 +150,56 @@ lineup_slots as (
     select game_pk, official_date, home_away, 9, slot_9_player_id from lineups
 ),
 
--- Most recent pre-game rolling stats for each slot
-slot_stats_ranked as (
+-- A2.8 perf — most recent pre-game rolling stats for each lineup slot, resolved
+-- via an as-of CARRY-FORWARD instead of the old "left join EVERY prior row per
+-- slot + row_number()=1". That join fanned lineup_slots × all-prior-rows out to
+-- ~166.8M rows whose windowed sort was 82% of the build. Here we carry the latest
+-- strictly-prior game_date per (batter, official_date) in ONE ordered pass over
+-- (rolling_stats ∪ demand), then equi-join back to fetch that row's stats in their
+-- NATIVE types (no OBJECT round-trip → no precision drift). Byte-for-byte identical:
+--   * leakage guard stays strict — demand rows sort BEFORE same-date data rows
+--     (is_demand desc), so a data row ON official_date is excluded.
+--   * the 6% of (batter, date) pairs with duplicate rolling-stats rows were verified
+--     to carry IDENTICAL stat values, so the final dedup pick is value-invariant.
+--   * batters with no prior row get asof_date = NULL → NULL stats (matches the old
+--     LEFT join), and doubleheaders (same batter+date, 2 game_pks) both resolve to
+--     the same as-of row.
+slot_asof_demand as (
+    select distinct batter_id, official_date
+    from lineup_slots
+    where batter_id is not null
+),
+
+slot_asof_combined as (
+    -- data rows (is_demand = 0)
+    select batter_id, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_batter_rolling_stats') }}
+    union all
+    -- demand rows (is_demand = 1 → sort before same-date data, enforcing strict <)
+    select batter_id, official_date as evt_date, 1 as is_demand
+    from slot_asof_demand
+),
+
+slot_asof_date as (
+    select batter_id, official_date, asof_date
+    from (
+        select
+            batter_id,
+            evt_date as official_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by batter_id
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from slot_asof_combined
+    )
+    where is_demand = 1
+),
+
+-- Re-attach the resolved stats to each slot (equi-joins only; dedup the verified
+-- identical-valued duplicate rolling-stats rows).
+slot_pre_game as (
     select
         ls.game_pk,
         ls.official_date,
@@ -172,21 +220,19 @@ slot_stats_ranked as (
         rs.k_pct_std,
         rs.bb_pct_std,
         rs.hard_hit_pct_std,
-        rs.barrel_pct_std,
-        row_number() over (
-            partition by ls.game_pk, ls.home_away, ls.slot
-            order by rs.game_date::date desc
-        )                                   as rn
+        rs.barrel_pct_std
     from lineup_slots ls
+    left join slot_asof_date ad
+        on  ad.batter_id     = ls.batter_id
+        and ad.official_date = ls.official_date
     left join {{ ref('mart_batter_rolling_stats') }} rs
-        on  rs.batter_id        = ls.batter_id
-        and rs.game_date::date  < ls.official_date   -- LEAKAGE GUARD
+        on  rs.batter_id       = ls.batter_id
+        and rs.game_date::date  = ad.asof_date
     where ls.batter_id is not null
-),
-
--- Keep only the most recent row per slot (pre-game)
-slot_pre_game as (
-    select * from slot_stats_ranked where rn = 1
+    qualify row_number() over (
+        partition by ls.game_pk, ls.home_away, ls.slot
+        order by 1
+    ) = 1
 ),
 
 -- Point-in-time IL status per lineup slot as of official_date

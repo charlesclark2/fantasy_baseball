@@ -131,6 +131,50 @@ slot_opp_cluster as (
         and opp_sc.side    = case when bcj.side = 'home' then 'away' else 'home' end
 ),
 
+-- A2.8 perf — as-of CARRY-FORWARD replacing the old "left join EVERY prior
+-- (cluster-pair) row per slot + row_number()=1". The matchup mart is keyed by the
+-- LOW-CARDINALITY (batter_cluster_label, pitcher_cluster_label) pair, so each of the
+-- ~504k slots fanned out to every prior date for its pair → a WindowFunction over
+-- ~216M rows = 93% of the build. We carry the latest strictly-prior mart date per
+-- (cluster-pair, anchor game_date) in ONE ordered pass over (mart ∪ demand), then
+-- equi-join to fetch that row in native types. Byte-for-byte: the mart is UNIQUE on
+-- (batter_cluster_label, pitcher_cluster_label, game_date) (0 dups), and is_demand
+-- DESC keeps the strict < guard (a same-date mart row is excluded).
+archetype_demand as (
+    select distinct
+        soc.batter_cluster_label,
+        soc.opp_pitcher_cluster_label,
+        g.game_date as anchor_date
+    from slot_opp_cluster soc
+    join games g on g.game_pk = soc.game_pk
+    where soc.batter_cluster_label    is not null
+      and soc.opp_pitcher_cluster_label is not null
+),
+
+archetype_combined as (
+    select batter_cluster_label, pitcher_cluster_label, game_date::date as evt_date, 0 as is_demand
+    from {{ ref('mart_batter_archetype_vs_pitcher_cluster') }}
+    union all
+    select batter_cluster_label, opp_pitcher_cluster_label, anchor_date as evt_date, 1 as is_demand
+    from archetype_demand
+),
+
+archetype_asof as (
+    select batter_cluster_label, pitcher_cluster_label, anchor_date, asof_date from (
+        select
+            batter_cluster_label,
+            pitcher_cluster_label,
+            evt_date as anchor_date,
+            is_demand,
+            last_value(case when is_demand = 0 then evt_date end ignore nulls) over (
+                partition by batter_cluster_label, pitcher_cluster_label
+                order by evt_date asc, is_demand desc
+                rows between unbounded preceding and current row
+            ) as asof_date
+        from archetype_combined
+    ) where is_demand = 1
+),
+
 -- Look up population-level adj_woba for (batter_cluster_label, opp_pitcher_cluster_label)
 -- from mart_batter_archetype_vs_pitcher_cluster using most recent prior record.
 slot_matchup_stats as (
@@ -145,13 +189,17 @@ slot_matchup_stats as (
     from slot_opp_cluster soc
     join games g
         on  g.game_pk = soc.game_pk
+    left join archetype_asof ad
+        on  ad.batter_cluster_label  = soc.batter_cluster_label
+        and ad.pitcher_cluster_label = soc.opp_pitcher_cluster_label
+        and ad.anchor_date           = g.game_date
     left join {{ ref('mart_batter_archetype_vs_pitcher_cluster') }} bam
         on  bam.batter_cluster_label  = soc.batter_cluster_label
         and bam.pitcher_cluster_label = soc.opp_pitcher_cluster_label
-        and bam.game_date             < g.game_date
+        and bam.game_date::date       = ad.asof_date
     qualify row_number() over (
         partition by soc.game_pk, soc.side, soc.slot
-        order by bam.game_date desc nulls last
+        order by bam.game_date::date desc nulls last
     ) = 1
 ),
 
