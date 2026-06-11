@@ -7320,6 +7320,39 @@ models:
         tests:
           - not_null
 
+      - name: travel_distance_miles
+        description: >
+          Haversine distance (miles) from the previous game's venue to the
+          current venue. NULL on Opening Day or when venue coordinates are
+          unavailable. For home teams starting a new home stand this is the
+          distance from their last road venue. Added Story 28.4.
+
+      - name: tz_delta_hours
+        description: >
+          Absolute difference in UTC offset (hours) between the current venue
+          and the previous game's venue. 0 when the timezone is unchanged or
+          when Opening Day (no prior game). Maximum observed value is 3
+          (Eastern ↔ Pacific). Added Story 28.4.
+        tests:
+          - not_null
+
+      - name: is_3rd_consecutive_road_game
+        description: >
+          True when the team is playing their 3rd or later consecutive road game
+          in the current road trip. Always false for home rows. Captures
+          cumulative travel fatigue. Added Story 28.4.
+        tests:
+          - not_null
+
+      - name: is_getaway_day
+        description: >
+          True when this is the last game before the team switches between home
+          and away (i.e. a getaway day — the team travels after this game).
+          Computed via LEAD on streak_group. False for the last game of the
+          season (no subsequent game). Added Story 28.4.
+        tests:
+          - not_null
+
   # ============================================================================
   # mart_batter_woba_vs_cluster
   # ============================================================================

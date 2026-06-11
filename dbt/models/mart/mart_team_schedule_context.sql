@@ -45,13 +45,16 @@ team_spine as (
 
 ),
 
--- ── Step 2: Attach timezone from most recent venue record ─────────────────────
+-- ── Step 2: Attach timezone + coordinates from most recent venue record ───────
 
 venue_tz as (
 
     select
         venue_id,
-        timezone_id
+        timezone_id,
+        timezone_utc_offset,
+        latitude,
+        longitude
     from {{ ref('stg_statsapi_venues') }}
     qualify row_number() over (partition by venue_id order by ingest_date desc) = 1
 
@@ -65,7 +68,10 @@ team_games as (
         ts.game_year,
         ts.team_abbrev,
         ts.side,
-        v.timezone_id
+        v.timezone_id,
+        v.timezone_utc_offset,
+        v.latitude,
+        v.longitude
     from team_spine ts
     left join venue_tz v on v.venue_id = ts.venue_id
 
@@ -82,6 +88,9 @@ rest_and_frequency as (
         team_abbrev,
         side,
         timezone_id,
+        timezone_utc_offset,
+        latitude,
+        longitude,
 
         -- Days since this team's last game; null on first game of each season
         datediff(
@@ -106,11 +115,26 @@ rest_and_frequency as (
             range between interval '14 days' preceding and interval '1 day' preceding
         )                               as games_last_14d,
 
-        -- Previous game's timezone (for travel signal)
+        -- Previous game's timezone and coordinates (for travel signals)
         lag(timezone_id) over (
             partition by team_abbrev, game_year
             order by game_date, game_pk
-        )                               as prev_timezone_id
+        )                               as prev_timezone_id,
+
+        lag(timezone_utc_offset) over (
+            partition by team_abbrev, game_year
+            order by game_date, game_pk
+        )                               as prev_timezone_utc_offset,
+
+        lag(latitude) over (
+            partition by team_abbrev, game_year
+            order by game_date, game_pk
+        )                               as prev_latitude,
+
+        lag(longitude) over (
+            partition by team_abbrev, game_year
+            order by game_date, game_pk
+        )                               as prev_longitude
 
     from team_games
 
@@ -135,6 +159,27 @@ streak_grouped as (
         )                               as streak_group
 
     from rest_and_frequency
+
+),
+
+-- ── Step 5: Getaway-day flag — next game changes home/away status ─────────────
+
+getaway_flagged as (
+
+    select
+        *,
+        -- is_getaway_day: this is the last game before the team switches from
+        -- home→away or away→home. Uses LEAD on streak_group; on the last game of
+        -- the season LEAD returns NULL, which we conservatively treat as non-getaway.
+        coalesce(
+            lead(streak_group) over (
+                partition by team_abbrev, game_year
+                order by game_date, game_pk
+            ) != streak_group,
+            false
+        )::boolean                      as is_getaway_day
+
+    from streak_grouped
 
 ),
 
@@ -173,16 +218,55 @@ final as (
         end                             as consecutive_away_games,
             -- Length of current road trip, including this game. Null when home.
 
-        -- ── Travel signal ─────────────────────────────────────────────────────
+        -- ── Travel signal (binary) ────────────────────────────────────────────
         coalesce(
             (prev_timezone_id is not null
              and prev_timezone_id != timezone_id)::boolean,
             false
-        )                               as tz_changed_from_last_game
+        )                               as tz_changed_from_last_game,
             -- True when team traveled across timezone boundaries since last game.
             -- False on Opening Day and when venue data is unavailable.
 
-    from streak_grouped
+        -- ── Story 28.4 travel/fatigue features ───────────────────────────────
+
+        -- Geodesic distance (Haversine, miles) from last game venue to current.
+        -- NULL on Opening Day or when venue coordinates are unavailable.
+        case
+            when prev_latitude  is not null
+             and prev_longitude is not null
+             and latitude       is not null
+             and longitude      is not null
+            then
+                2 * 3958.8 * asin(sqrt(
+                    pow(sin(radians(latitude  - prev_latitude)  / 2), 2)
+                    + cos(radians(prev_latitude)) * cos(radians(latitude))
+                    * pow(sin(radians(longitude - prev_longitude) / 2), 2)
+                ))
+        end                             as travel_distance_miles,
+
+        -- Absolute timezone offset difference (hours) vs. previous game venue.
+        -- 0 when same or unknown; maximum observed value is 3 (ET→PT or PT→ET).
+        coalesce(
+            abs(timezone_utc_offset - prev_timezone_utc_offset),
+            0
+        )                               as tz_delta_hours,
+
+        -- Flag: team is on their 3rd or later consecutive road game (cumulative
+        -- fatigue; consecutive_away_games is NULL for home rows so this is false).
+        coalesce(
+            case when side = 'away'
+                then row_number() over (
+                         partition by team_abbrev, game_year, streak_group
+                         order by game_date, game_pk
+                     ) >= 3
+            end,
+            false
+        )::boolean                      as is_3rd_consecutive_road_game,
+
+        -- Flag: this is the last game before a home↔away switch (getaway day).
+        is_getaway_day
+
+    from getaway_flagged
 
 )
 

@@ -564,15 +564,21 @@ def _write_to_snowflake(conn, rows: list[dict]) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def _process_date(conn, game_date: date, priors: dict) -> int:
-    """Process one game date. Returns number of rows written."""
+def _compute_date_rows(conn, game_date: date, priors: dict) -> list[dict]:
+    """Compute (but do NOT write) all posterior rows for one game date.
+
+    A2.8 spend fix: the backfill used to write per date (CREATE TEMP + INSERT +
+    MERGE round-trip × N dates). This returns the rows so the caller can
+    accumulate across all dates and write ONCE. The reads stay per-date (each
+    date needs season-to-date stats strictly before game_date).
+    """
     season = game_date.year
     fit_date = date.today()
     run_id = str(uuid.uuid4())
 
     starters = _load_starters(conn, game_date)
     if not starters:
-        return 0
+        return []
 
     pitcher_ids = list({str(r["pitcher_id"]) for r in starters})
     current_stats = _load_current_season_stats(conn, pitcher_ids, game_date, season)
@@ -601,8 +607,7 @@ def _process_date(conn, game_date: date, priors: dict) -> int:
         )
         results.append(row)
 
-    _write_to_snowflake(conn, results)
-    return len(results)
+    return results
 
 
 def main(game_date: date) -> None:
@@ -705,18 +710,23 @@ def main_backfill_season(season: int) -> None:
         cur.close()
 
         print(f"  {len(game_dates)} game dates to process")
-        total_rows = 0
+        all_rows: list[dict] = []
         for i, gd in enumerate(game_dates, 1):
             gd_obj = (
                 gd if isinstance(gd, date)
                 else datetime.strptime(str(gd)[:10], "%Y-%m-%d").date()
             )
-            n = _process_date(conn, gd_obj, priors)
-            total_rows += n
+            all_rows.extend(_compute_date_rows(conn, gd_obj, priors))
             if i % 50 == 0 or i == len(game_dates):
-                print(f"  [{i}/{len(game_dates)}] {gd_obj}  cumulative rows={total_rows}")
+                print(f"  [{i}/{len(game_dates)}] {gd_obj}  cumulative rows={len(all_rows)}")
 
-        print(f"\n  Season {season} complete — {total_rows} total rows written.")
+        # A2.8 spend fix: ONE batched temp-table + INSERT + MERGE for the whole
+        # season instead of a write round-trip per date (was ~3 statements × N
+        # dates pinning COMPUTE_WH; now 3 statements total).
+        if all_rows:
+            print(f"  Writing {len(all_rows)} rows in a single batched MERGE...")
+            _write_to_snowflake(conn, all_rows)
+        print(f"\n  Season {season} complete — {len(all_rows)} total rows written.")
     finally:
         conn.close()
 
