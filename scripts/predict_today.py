@@ -718,6 +718,9 @@ def _write_predictions_to_snowflake(
             # Story 28.3 — actual Bovada American moneyline for kill-criterion monitor
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_home INTEGER")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_away INTEGER")
+            # Story 28.6b — conviction-gate overlay (self-healing across dev/prod schemas)
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_conviction_flag BOOLEAN")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_conviction_disagree FLOAT")
             # A2.5 — per-game imputation transparency
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_feature_count INTEGER")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_discriminative_count INTEGER")
