@@ -343,3 +343,58 @@ be estimated from 5,000+ rows rather than the 866-row March–April calibration;
 ±0.09 to ±0.02–0.03 and could absorb the structural regime shift, potentially pulling May PPM below 8.81
 without any architectural change. Re-evaluate after October 2026 (this is the registered Epic 27 totals
 re-open trigger).
+
+---
+
+## 12. Story 10.10 — quantile (no-log-link) Layer-3 challenger — DEFER (9th confirmation, first via a non-log-link family, 2026-06-11)
+
+Every prior confirmation (1–8) used the NegBin `exp(β·z)` log-link. §10's architectural verdict attributed the
++0.170 May-2026 OVER floor to **Jensen's inequality on the convex exp** at β_bullpen≈0.172 — a claim that, until
+now, was inferred analytically but never tested by removing the link. Story 10.10 builds the direct experiment:
+a **LightGBM quantile-regression model** (q=0.10/0.25/0.50/0.75/0.90, pinball loss — `quantile_forest` not
+installed) that predicts the conditional quantiles of `total_runs` **directly**, with no `exp()` parameterization
+and therefore no structural floor by construction. P(over) is interpolated directly from the predictive quantiles
+(no NegBin CDF). Trained walk-forward on the same Layer-3 matrix (`build_totals_dataset`, market-blind) and
+evaluated on the **same leakage-free 2026 OOS surface** as 27.3.
+
+Script: `betting_ml/scripts/quantile_totals_layer3_oos.py`. Full report:
+`ablation_results/totals_quantile_layer3_10_10.md`.
+
+### Result — two distinct findings
+
+| Metric (2026 OOS, n=789; 667 settled) | Value | Gate | Verdict |
+|---|---:|---|---|
+| **May-2026 mean predicted total (q50)** | **8.5314** | ≤ 8.81 | **PASS** (actual May 8.6086) |
+| Jensen log-link floor present? | **NO** | — | floor REMOVED |
+| calib_80 (empirical [q10,q90] coverage) | 0.6857 | 0.75–0.85 | **FAIL** (under-covers) |
+| Brier(P_over) | **0.3053** | < market 0.2292 | **FAIL** (also > naive-0.50 0.2500) |
+| MAE(q50) / mean resid / std(q50) | 3.428 / −0.480 / 1.910 | — | — |
+
+**Finding 1 — the Jensen floor IS a real artifact (NEW positive result).** With the log-link gone, the May-2026
+mean predicted total drops to **8.5314 ≤ 8.81** and tracks the league actual (8.6086) instead of being pinned
+≥8.87. This is the **first direct confirmation** of §10's Jensen mechanism: the +0.170 structural floor was a
+genuine consequence of the convex `exp()` parameterization, not a property of the data. A quantile family is the
+only architecture in this entire investigation that clears the kill criterion's mean-bias component.
+
+**Finding 2 — removing the floor is necessary but NOT sufficient (9th confirmation).** Despite passing the
+mean-bias kill criterion, the quantile challenger **beats neither the market (Brier 0.3053 vs Bovada 0.2292) nor
+even naive-0.50 (0.2500)** on the honest 2026 OOS surface, and its 80% predictive interval under-covers
+(calib_80 0.686, ~9 pts short — the independent per-quantile fits produce too-narrow tails everywhere, including
+the contaminated 2023–25 folds). The covariates add **no deployable edge over Bovada**. This corroborates the
+§11 conclusion from a fresh angle: the residual 2026 OVER bias / lack of edge is a **real, un-priceable
+scoring-environment regime shift**, not solely a structural artifact of the log-link. Killing the floor exposes
+that the underlying signal simply isn't there at MLB game-to-game variance.
+
+### Formal closure
+
+**DECISION (2026-06-11): DEFER. The totals architecture remains CLOSED. This is the 9th independent confirmation
+— and the first to test a non-log-link model family.**
+
+9. **Story 10.10 quantile (no-log-link) Layer-3 challenger (9th: May-2026 q50=8.5314 PASS-on-mean, but
+   2026 Brier=0.3053 > market 0.2292 and > naive 0.2500; calib_80=0.686)** — removing the exp-link removes the
+   §10 Jensen floor (confirming the mechanism) but yields no edge; the bias is a real regime shift, not just an
+   artifact.
+
+**Re-open criteria are unchanged.** Criterion (b) (smoothed within-season state) was exhausted at the 8th
+confirmation; the model-family lever is now also exhausted (a no-link quantile model has no edge). The only
+remaining re-open path stays **(a) full-2026 `delta_2026` (~Oct 2026)**. No further totals tuning.
