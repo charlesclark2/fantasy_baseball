@@ -24,6 +24,10 @@ class Pick(BaseModel):
     lineup_confirmed: bool | None = None
     home_team: str | None = None
     away_team: str | None = None
+    pick_side: str | None = None
+    game_start_utc: datetime | None = None
+    model_total_runs: float | None = None
+    market_total_line: float | None = None
 
 
 class TodayPicksResponse(BaseModel):
@@ -39,4 +43,27 @@ class HistoricalPick(Pick):
 
 class HistoryPicksResponse(BaseModel):
     picks: list[HistoricalPick]
+    total: int
+
+
+class EVPick(BaseModel):
+    game_pk: int
+    game_date: date | None = None
+    game_start_utc: datetime | None = None
+    market_type: str
+    model_prob: float | None = None
+    bovada_devig_prob: float | None = None
+    edge: float | None = None
+    game_conviction_score: float | None = None
+    lineup_confirmed: bool | None = None
+    qualified_bet: bool | None = None
+    home_team: str | None = None
+    away_team: str | None = None
+    kelly_fraction: float | None = None
+    total_line_consensus: float | None = None
+    pred_total_runs: float | None = None
+
+
+class EVPicksResponse(BaseModel):
+    picks: list[EVPick]
     total: int

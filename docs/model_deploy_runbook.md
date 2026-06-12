@@ -4,6 +4,14 @@
 **Last updated:** 2026-05-04 (Card 7.L2)  
 **Applies to:** All three production targets — `home_win`, `total_runs`, `run_differential`
 
+> **⚠️ Mechanism has changed since this was written.** Production now loads champions from
+> **S3** (`artifact_path` URIs in the registry), not git-tracked `.pkl`s, and a local retrain
+> does **not** go live until it is uploaded. For the actual go-live steps (S3 upload,
+> contract/model feature-count integrity check, 28.3 kill-window reset, no-prediction-window
+> timing) use **[`model_promotion_runbook.md`](model_promotion_runbook.md)**. This document
+> remains the reference for the champion/challenger gate (Step 1b), acceptance bars, and the
+> registry version history below.
+
 ---
 
 ## Overview

@@ -172,12 +172,12 @@ Apply this authorizer to all routes except `GET /health`.
 | **Cache bucket** | `credence-prod-s3-api-cache` |
 | **Cache key pattern** | `api-cache/{YYYY-MM-DD}/{endpoint}.json` |
 | **Date-scoped keys** | Yesterday's cache never serves today — keys auto-expire by date prefix |
-| **Endpoints cached** | `picks/today.json`, `performance/summary.json` |
-| **Endpoints NOT cached** | `/picks/history`, `/performance/by-model`, `/alerts/*`, `/admin/*`, `/health` |
-| **Cache population** | `write_api_cache_op` in Dagster after `predict_today_morning` (stub — full implementation pending) |
+| **Endpoints cached** | `picks/today.json`, `picks/ev.json`, `picks/history.json`, `performance/summary.json` |
+| **Endpoints NOT cached** | `/performance/by-model`, `/alerts/*`, `/admin/*`, `/health` |
+| **Cache population** | `write_api_cache.py` called as final step of `predict` job in `daily_ingestion.yml` |
 | **Cache invalidation** | `POST /admin/cache/invalidate` — used by admin Force Refresh button |
 | **Fallback** | On cache miss, FastAPI falls back to Snowflake and warms the cache |
-| **Status** | ⏳ Bucket must be provisioned; `write_api_cache_op` stub added — full implementation pending |
+| **Status** | ✅ Live — bucket provisioned, pipeline writes cache daily after predictions complete |
 
 ```bash
 # Provision the cache bucket (run once)

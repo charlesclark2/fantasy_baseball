@@ -13,7 +13,10 @@ import logging
 import os
 import time
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
+
+load_dotenv()  # no-op in Lambda (env vars already injected); loads .env for local uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 

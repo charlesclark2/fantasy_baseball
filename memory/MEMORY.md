@@ -7,3 +7,4 @@
 - [Snowflake VARIANT insert pattern](feedback_snowflake_variant_insert.md) — PARSE_JSON/TRY_PARSE_JSON forbidden in any VALUES clause; use INSERT INTO ... SELECT instead
 - [No UUID_STRING() as column DEFAULT](feedback_uuid_string.md) — UUID_STRING() in DDL column defaults causes MCP errors; generate UUIDs in Python and pass as bind params
 - [DDL conventions — no IF NOT EXISTS on ADD COLUMN](feedback_ddl_no_use_statements.md) — ADD COLUMN IF NOT EXISTS unsupported on this account; also never USE DATABASE/SCHEMA, always fully qualify
+- [No GitHub Actions — pipeline runs in Dagster+](feedback_no_github_actions.md) — GH Actions workflows are decommissioned; all pipeline fixes go in Dagster ops/jobs; diagnose via dagster_runs.py + dagster_steplog.py

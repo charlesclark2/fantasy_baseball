@@ -486,7 +486,7 @@ Status legend: ✅ Complete · 🔄 In Progress · ⬜ Not Started · 🔒 Gated
 │   A0.0 UI/UX Design & Wireframing ⬜  (1 week; gates A0.4)                  │
 │   A0.1 Domain + SSL ✅ (2026-06-04)                                          │
 │   A0.2 Cognito auth ✅ (2026-06-04)                                          │
-│   A0.3 FastAPI/Lambda ⬜  (after A0.2; can overlap A0.0)                    │
+│   A0.3 FastAPI/Lambda ✅ (2026-06-11)                                        │
 │   A0.4 Next.js frontend ⬜  (after A0.0 + A0.3; target July 4)             │
 │   A0.5 Brand identity & comms ⬜  (after A0.1; before beta launch)          │
 │   A0.6 Push notifications ⬜  (after A0.4; target July 11)                  │
@@ -9742,9 +9742,11 @@ Acceptance criteria:
 
 ---
 
-### A0.3 — FastAPI Backend on Lambda + API Gateway
+### A0.3 — FastAPI Backend on Lambda + API Gateway ✅ (2026-06-11)
 
 **Overview:** A lightweight FastAPI application deployed on AWS Lambda via Mangum (ASGI adapter). API Gateway provides the HTTP endpoint. Lambda is effectively free at beta scale (first 1M requests/month free). This is the backend that serves prediction data, user preferences, and performance data to the React frontend.
+
+**S3 API Cache (complete 2026-06-11):** Four endpoints are pre-populated to S3 (`credence-prod-s3-api-cache`) by the Dagster `write_api_cache_op` after `predict_today` completes each day. Lambda reads from S3 first and falls back to Snowflake on miss. Cache keys are date-scoped (`api-cache/YYYY-MM-DD/<endpoint>.json`) so yesterday's cache never serves today. Script: `scripts/write_api_cache.py`. Endpoints cached: `picks/today.json`, `picks/ev.json`, `picks/history.json`, `performance/summary.json`. **Dagster agent env vars required:** `CACHE_BUCKET=credence-prod-s3-api-cache`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`.
 
 **Script:** `app/backend/main.py`
 
@@ -10090,7 +10092,9 @@ Files to read first:
 - frontend/lib/api.ts
 
 GET /picks/ev?date=YYYY-MM-DD (omit date for today) response:
-{ picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, lineup_confirmed, qualified_bet, home_team, away_team, kelly_fraction, total_line_consensus }], total }
+{ picks: [{ game_pk, game_date, game_start_utc, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, lineup_confirmed, qualified_bet, home_team, away_team, kelly_fraction, total_line_consensus, pred_total_runs }], total }
+
+Note: today's data is served from S3 cache (fast, <100ms); historical date lookups always hit Snowflake directly (not cached).
 
 Work:
 1. Find the date state variable (calendar picker uses a Date object).
@@ -10116,7 +10120,7 @@ Replace `MOCK_DATA` in `frontend/app/performance/page.tsx`. Three endpoints. "By
 **APIs:**
 - `GET /performance/summary` → `{ total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }`
 - `GET /performance/by-model` → `{ breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }`
-- `GET /picks/history` → `{ picks: [{ game_date, game_pk, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }`
+- `GET /picks/history` → `{ picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, win_prob_ci_low, win_prob_ci_high, lineup_confirmed, home_team, away_team, pick_side, game_start_utc, model_total_runs, market_total_line, clv, clv_positive, actual_outcome }], total }`
 
 **Tasks:**
 - [ ] Replace summary stat tiles with `GET /performance/summary`
@@ -10142,7 +10146,8 @@ Files to read first:
 Three endpoints:
 1. GET /performance/summary → { total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }
 2. GET /performance/by-model → { breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }
-3. GET /picks/history → { picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }
+3. GET /picks/history → { picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, win_prob_ci_low, win_prob_ci_high, lineup_confirmed, home_team, away_team, pick_side, game_start_utc, model_total_runs, market_total_line, clv, clv_positive, actual_outcome }], total }
+   Note: served from S3 cache (fast); performance/summary also cached.
 
 Work:
 1. const { accessToken } = useAuth()
@@ -13034,13 +13039,33 @@ contracts, and extend the importance flagger to auto-catch them going forward.
 **run_diff** live-win (live MAE 3.121→3.1195, calib80 0.774→**0.800**); **total_runs** hygiene/live-neutral
 (CV flat, live MAE +0.0095 within noise, no over-pred bias reintroduced — `bet_paused` anyway).
 **⭐ Cross-story:** honest-2026 home_win corr = **0.42** (not the live 0.001) ⇒ the contract HAS skill; the live
-zero-skill is a **serving** problem → re-points it to **30.3**. **Promotion (corrected 2026-06-11):** the 3 search
-trainers now auto-drop the ID cols, but `save_model()` writes LOCAL only while `predict_today` loads the champion
-from the registry **S3** `artifact_path` — so promotion needs an explicit S3 upload (`migrate_artifacts_to_s3.py`),
-not just a retrain. home_win retrained locally (374-feat); run_diff pending; **total_runs deferred** — its deployed
-champion is the **eb_enriched** lineage (`feature_columns_eb_2026.json`, still carries the 3 ID cols), NOT the
-`ngboost_tuned` file the search writes, so the search can't promote it (bet_paused → no live impact). Promoting a
-new champion RESETS the 28.3 kill-window. 30.2 runs on the cleaned set regardless.
+zero-skill is a **serving** problem → re-points it to **30.3**.
+
+**Promotion — EXECUTED & LIVE (2026-06-11).** home_win + run_diff scrubbed champions are on S3 and committed;
+total_runs left on its bet-paused `eb_enriched` lineage (369-dim, untouched). Mechanics, and the two traps that
+bit this promotion, are now codified in **`docs/model_promotion_runbook.md`** (consult it before any future
+go-live; the older `model_deploy_runbook.md` predates the S3 mechanism). Key facts:
+- **Prod reads S3, not the working tree.** `save_model()`/a finished `run_*_search.py` writes LOCAL only;
+  `predict_today` loads the champion from the registry **S3** `artifact_path`. A model is live only after
+  `upload_artifact(local_pkl, s3_uri)` AND the git-tracked registry/contract point at it — the two halves move
+  together, in a no-prediction window.
+- **⚠️ Contract/model feature-count must match EXACTLY (the 374-vs-376 IndexError).** `build_imputation_pipeline`
+  appends 2 indicator cols (`has_starter_platoon_data`, `is_new_venue`), so the trained model is N+2. The search
+  scripts had been writing the *pre-imputation* contract (374) → `predict_today` fed a 374-wide matrix to a
+  376-feature model → opaque `IndexError: index 374 is out of bounds`. **Fixes shipped:** (1) the 3 search trainers
+  now write the post-imputation column list (`list(last_fold["X_train"].columns)`); (2) the 3 tuned contracts were
+  patched to 376 (verified name-for-name vs the home_win model); (3) `predict_today.py` gained a **CONTRACT-GUARD**
+  that fails fast with a clear message if `len(contract) != model.n_features` (never an opaque IndexError again).
+  So the **live model dim is 376** (374 base after dropping the 3 IDs, + 2 imputation indicators), NOT 374.
+- **Registry + kill-window updated (2026-06-11):** home_win/run_diff `features: 376`, `deployed_date`/`promoted_at`
+  = 2026-06-11; `cv_brier`/`cv_mae` left at the registration-protocol values with an inline 30.1 note (the ablation
+  harness used a different protocol — see deliverable — so its 0.1991/3.0840 are NOT drop-in replacements; refresh
+  from the retrain logs if exact same-protocol values are needed). Promoting a new champion **RESETS the 28.3
+  kill-window**: `home_win.kill_criterion.attribution_start` 2026-06-04→2026-06-11 in the registry AND
+  `ATTRIBUTION_START` in `scripts/ops/monitor_magnitude_h2h.py`. The 28.6b conviction window
+  (`monitor_conviction_h2h.py` + `conviction_kill_criterion`) was already 2026-06-11.
+
+30.2 runs on the cleaned 376-dim set regardless.
 
 **Tasks:**
 - [x] AST/contract scan of all three `feature_columns_*_tuned_2026.json` for identifier/temporal columns:
@@ -13096,9 +13121,14 @@ CONTEXT (verified 2026-06-11):
     (sequential-enriched, Layer-3 blends) repeatedly failed to beat market/naive. Measure honestly against
     the same L1-NLL / L3-Brier gates on the clean 2026 OOS surface. Run AFTER 30.1 so enrichment is tested
     on the cleaned (de-junked) base contract, not the leaky one.
-  - 30.1 FINDINGS THAT BIND THIS STORY (2026-06-11): (1) 30.1 PROMOTED all three cleaned contracts — build
-    the challenger on the **374-feat scrubbed home_win** / cleaned run_diff/total_runs base, and confirm via
-    `betting_ml.utils.feature_hygiene.is_identifier_name` that no identifier col sneaks back in. (2) The
+  - 30.1 FINDINGS THAT BIND THIS STORY (2026-06-11): (1) 30.1 PROMOTED the cleaned home_win + run_diff
+    contracts (LIVE on S3, 376-dim each); total_runs stays on its bet-paused eb_enriched (369-dim) lineage.
+    Build the challenger on the **376-dim scrubbed home_win** (= 374 base after the 3 ID drops + 2 imputation
+    indicators `has_starter_platoon_data`/`is_new_venue`) / cleaned run_diff base, and confirm via
+    `betting_ml.utils.feature_hygiene.is_identifier_name` that no identifier col sneaks back in. ⚠️ When you write
+    the challenger contract, write the POST-imputation column list (`list(last_fold["X_train"].columns)`) so it
+    includes the 2 indicators — a pre-imputation contract is N-2 and trips the `predict_today` CONTRACT-GUARD
+    (the 374-vs-376 IndexError that 30.1 fixed). (2) The
     signal is DIFFUSE (home_win top-10 features ≈ 9% of total |SHAP|; no dominant driver) — do NOT expect
     enrichment to be a silver bullet; a flat/neutral result is the likely and acceptable outcome. (3) ⭐ The
     honest-2026 home_win corr is 0.42 offline but ~0.001 LIVE — enrichment is an ACCURACY experiment on the
@@ -13162,14 +13192,27 @@ CONTEXT (verified 2026-06-11):
     **corr 0.42 / Brier 0.206** (real skill) — vs the **0.001 / 0.252 LIVE**. Same model, opposite skill ⇒
     the contract/architecture is NOT the cause; the live SERVE path is. 30.3 must find what differs between
     the feature-store matrix (skilled) and the predict_today live matrix (zero-skill).
-  - The home_win contract is now **374 features** (post-30.1 scrub), run_diff/total_runs unchanged pending
-    promotion — verify the served matrix against the CURRENT registry `feature_columns_path`, not a stale 379.
+  - The home_win + run_diff contracts are now **376 features** (post-30.1 scrub, LIVE on S3): 374 base after the
+    3 ID drops + the 2 imputation indicators `has_starter_platoon_data`/`is_new_venue` that
+    `build_imputation_pipeline` appends. total_runs unchanged (eb_enriched, 369). Verify the served matrix
+    against the CURRENT registry `feature_columns_path` (376), not a stale 379/374.
+  - ⚠️ SERVING-PARITY TRAP ALREADY FOUND & GUARDED (30.1, 2026-06-11): the contract and the trained model must
+    agree on feature count EXACTLY — models score by column position, so a contract written pre-imputation (374)
+    against a post-imputation model (376) yields an opaque `IndexError` (or, worse, silent 0.0-fills). This is now
+    caught at load time by the `predict_today.py` **CONTRACT-GUARD** (`len(contract) == model.n_features`). 30.3
+    must treat this guard + the [FEATURE-ALIGN] block as the FIRST parity check, but go further: a matrix that
+    passes the structural guard can still be VALUE-degraded (right columns, wrong/null values) — that is the
+    actual zero-skill suspect.
   - The signal is DIFFUSE (home_win top-10 features ≈ 9% of total |SHAP|; no dominant driver). Implication:
     there is no single feature whose correct serving rescues skill — a handful of strong-tier features served
     null/constant is enough to collapse the thin edge. Prioritize the STRONG-tier features from
     `betting_ml/scripts/influence_report.py` for the live null-rate / impute-rate comparison.
   - predict_today.py already prints [FEATURE-ALIGN] diagnostics (served / all-null / structurally-served
-    counts). Use those + a live-vs-training null-rate comparison as the evidence base.
+    counts) AND the CONTRACT-GUARD count check. On the 2026-06-10 slate, 5 model features came through
+    all-null→constant-imputed for ALL three targets (`over_american`, `ump_accuracy_zscore`,
+    `ump_run_impact_zscore`, `under_american`, `under_implied_prob`) — a concrete, reproducible value-degradation
+    lead for this story. Use those + a live-vs-training null-rate comparison as the evidence base. See
+    `docs/model_promotion_runbook.md` for the serving/contract invariants.
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -13186,7 +13229,9 @@ owns the highest-value lever on live performance.
   Flag any feature served all-null / constant-imputed live that was informative in training (esp. ELO,
   archetype/cluster, EB posterior columns) — cross-reference the strong-tier list from `influence_report.py`.
 - [ ] Verify column ORDER + count parity between the served matrix and each CURRENT `feature_columns_*.json`
-  (home_win is now 374; confirm the served matrix tracks the post-30.1 contract, not a cached 379).
+  (home_win + run_diff are now **376**; total_runs 369; confirm the served matrix tracks the post-30.1 contract,
+  not a cached 379/374). The `predict_today.py` CONTRACT-GUARD now enforces count parity at load time; this task
+  extends it to ORDER + value parity.
 - [ ] Fix the serving gaps found (wire missing posteriors into the serve path / align column order /
   correct impute defaults); re-measure live corr + Brier on the next settled slate — target moving live
   corr toward the 0.42 the contract achieves offline.
