@@ -10120,7 +10120,7 @@ Replace `MOCK_DATA` in `frontend/app/performance/page.tsx`. Three endpoints. "By
 **APIs:**
 - `GET /performance/summary` → `{ total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }`
 - `GET /performance/by-model` → `{ breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }`
-- `GET /picks/history` → `{ picks: [{ game_date, game_pk, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }`
+- `GET /picks/history` → `{ picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, win_prob_ci_low, win_prob_ci_high, lineup_confirmed, home_team, away_team, pick_side, game_start_utc, model_total_runs, market_total_line, clv, clv_positive, actual_outcome }], total }`
 
 **Tasks:**
 - [ ] Replace summary stat tiles with `GET /performance/summary`
@@ -10146,7 +10146,8 @@ Files to read first:
 Three endpoints:
 1. GET /performance/summary → { total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }
 2. GET /performance/by-model → { breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }
-3. GET /picks/history → { picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }
+3. GET /picks/history → { picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, win_prob_ci_low, win_prob_ci_high, lineup_confirmed, home_team, away_team, pick_side, game_start_utc, model_total_runs, market_total_line, clv, clv_positive, actual_outcome }], total }
+   Note: served from S3 cache (fast); performance/summary also cached.
 
 Work:
 1. const { accessToken } = useAuth()

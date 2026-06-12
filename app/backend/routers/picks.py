@@ -15,6 +15,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.backend.models.picks import (
     DataQuality,
+    EVPick,
+    EVPicksResponse,
     HistoricalPick,
     HistoryPicksResponse,
     Pick,
@@ -36,16 +38,16 @@ _ML_SCHEMA = (
 _TODAY_QUERY = f"""
 WITH ranked AS (
     SELECT
-        *,
+        p.*,
+        g.game_date                                  AS game_start_utc,
         ROW_NUMBER() OVER (
-            PARTITION BY game_pk
-            ORDER BY
-                CASE WHEN lineup_confirmed THEN 0 ELSE 1 END,
-                inserted_at DESC
+            PARTITION BY p.game_pk
+            ORDER BY p.inserted_at DESC
         ) AS _rn
-    FROM {_ML_SCHEMA}.daily_model_predictions
-    WHERE game_date = CURRENT_DATE
-      AND qualified_bet = TRUE
+    FROM {_ML_SCHEMA}.daily_model_predictions p
+    LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = p.game_pk
+    WHERE p.game_date = CURRENT_DATE
+      AND p.prediction_type = 'post_lineup'
 ),
 base AS (
     SELECT * FROM ranked WHERE _rn = 1
@@ -54,43 +56,50 @@ h2h AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'h2h'                           AS market_type,
-        b.calibrated_win_prob           AS model_prob,
-        b.h2h_market_implied_prob       AS bovada_devig_prob,
-        b.h2h_edge                      AS edge,
-        b.game_conviction_score,
+        'h2h'                                        AS market_type,
+        b.calibrated_win_prob                        AS model_prob,
+        b.h2h_market_implied_prob                    AS bovada_devig_prob,
+        b.layer4_h2h_edge                            AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        NULL::FLOAT                                  AS win_prob_ci_low,
+        NULL::FLOAT                                  AS win_prob_ci_high,
         b.home_team,
         b.away_team,
-        b.inserted_at
+        b.layer4_h2h_decision                        AS pick_side,
+        b.game_start_utc,
+        b.inserted_at,
+        NULL::FLOAT                                  AS model_total_runs,
+        NULL::FLOAT                                  AS market_total_line
     FROM base b
-    WHERE b.h2h_edge IS NOT NULL
+    WHERE b.layer4_h2h_decision IN ('home', 'away')
 ),
 totals AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'totals'                        AS market_type,
-        b.totals_model_prob             AS model_prob,
-        b.over_prob_consensus           AS bovada_devig_prob,
-        b.totals_edge                   AS edge,
-        b.game_conviction_score,
+        'totals'                                     AS market_type,
+        b.totals_model_prob                          AS model_prob,
+        b.over_prob_consensus                        AS bovada_devig_prob,
+        b.layer4_totals_over_signal                  AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        NULL::FLOAT                                  AS win_prob_ci_low,
+        NULL::FLOAT                                  AS win_prob_ci_high,
         b.home_team,
         b.away_team,
-        b.inserted_at
+        b.layer4_totals_decision                     AS pick_side,
+        b.game_start_utc,
+        b.inserted_at,
+        b.pred_total_runs                            AS model_total_runs,
+        b.total_line_consensus                       AS market_total_line
     FROM base b
-    WHERE b.totals_edge IS NOT NULL
-      AND NOT COALESCE(b.bullpen_signal_ood, FALSE)
+    WHERE b.layer4_totals_decision IN ('over', 'under')
 )
 SELECT * FROM h2h
 UNION ALL
 SELECT * FROM totals
-ORDER BY game_pk, market_type
+ORDER BY game_start_utc, game_pk, market_type
 """
 
 _FRESHNESS_QUERY = f"""
@@ -174,34 +183,35 @@ WITH ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY
-                CASE WHEN lineup_confirmed THEN 0 ELSE 1 END,
-                inserted_at DESC
+            ORDER BY inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
     WHERE game_date = CURRENT_DATE
+      AND prediction_type = 'post_lineup'
 ),
 base AS (
-    SELECT * FROM ranked WHERE _rn = 1
+    SELECT r.*, g.game_date AS game_start_utc
+    FROM ranked r
+    LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = r.game_pk
+    WHERE r._rn = 1
 ),
 h2h AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'h2h'                           AS market_type,
-        b.calibrated_win_prob           AS model_prob,
-        b.h2h_market_implied_prob       AS bovada_devig_prob,
-        b.h2h_edge                      AS edge,
-        b.game_conviction_score,
+        b.game_start_utc,
+        'h2h'                                        AS market_type,
+        b.calibrated_win_prob                        AS model_prob,
+        b.h2h_market_implied_prob                    AS bovada_devig_prob,
+        b.layer4_h2h_edge                            AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        b.qualified_bet,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        b.layer4_h2h_decision <> 'abstain'           AS qualified_bet,
         b.home_team,
         b.away_team,
-        b.h2h_kelly_fraction            AS kelly_fraction,
+        b.h2h_kelly_fraction                         AS kelly_fraction,
         b.total_line_consensus,
-        b.inserted_at
+        NULL::FLOAT                                  AS pred_total_runs
     FROM base b
     WHERE b.h2h_market_implied_prob IS NOT NULL
 ),
@@ -209,20 +219,19 @@ totals AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'totals'                        AS market_type,
-        b.totals_model_prob             AS model_prob,
-        b.over_prob_consensus           AS bovada_devig_prob,
-        b.totals_edge                   AS edge,
-        b.game_conviction_score,
+        b.game_start_utc,
+        'totals'                                     AS market_type,
+        b.totals_model_prob                          AS model_prob,
+        b.over_prob_consensus                        AS bovada_devig_prob,
+        b.layer4_totals_over_signal                  AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        COALESCE(b.qualified_bet, FALSE) AND NOT COALESCE(b.bullpen_signal_ood, FALSE) AS qualified_bet,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        b.layer4_totals_decision <> 'abstain'        AS qualified_bet,
         b.home_team,
         b.away_team,
-        b.totals_kelly_fraction         AS kelly_fraction,
+        b.totals_kelly_fraction                      AS kelly_fraction,
         b.total_line_consensus,
-        b.inserted_at
+        b.pred_total_runs
     FROM base b
     WHERE b.over_prob_consensus IS NOT NULL
 )
@@ -238,34 +247,35 @@ WITH ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY
-                CASE WHEN lineup_confirmed THEN 0 ELSE 1 END,
-                inserted_at DESC
+            ORDER BY inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
     WHERE game_date = %(target_date)s
+      AND prediction_type = 'post_lineup'
 ),
 base AS (
-    SELECT * FROM ranked WHERE _rn = 1
+    SELECT r.*, g.game_date AS game_start_utc
+    FROM ranked r
+    LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = r.game_pk
+    WHERE r._rn = 1
 ),
 h2h AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'h2h'                           AS market_type,
-        b.calibrated_win_prob           AS model_prob,
-        b.h2h_market_implied_prob       AS bovada_devig_prob,
-        b.h2h_edge                      AS edge,
-        b.game_conviction_score,
+        b.game_start_utc,
+        'h2h'                                        AS market_type,
+        b.calibrated_win_prob                        AS model_prob,
+        b.h2h_market_implied_prob                    AS bovada_devig_prob,
+        b.layer4_h2h_edge                            AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        b.qualified_bet,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        b.layer4_h2h_decision <> 'abstain'           AS qualified_bet,
         b.home_team,
         b.away_team,
-        b.h2h_kelly_fraction            AS kelly_fraction,
+        b.h2h_kelly_fraction                         AS kelly_fraction,
         b.total_line_consensus,
-        b.inserted_at
+        NULL::FLOAT                                  AS pred_total_runs
     FROM base b
     WHERE b.h2h_market_implied_prob IS NOT NULL
 ),
@@ -273,20 +283,19 @@ totals AS (
     SELECT
         b.game_pk,
         b.game_date,
-        'totals'                        AS market_type,
-        b.totals_model_prob             AS model_prob,
-        b.over_prob_consensus           AS bovada_devig_prob,
-        b.totals_edge                   AS edge,
-        b.game_conviction_score,
+        b.game_start_utc,
+        'totals'                                     AS market_type,
+        b.totals_model_prob                          AS model_prob,
+        b.over_prob_consensus                        AS bovada_devig_prob,
+        b.layer4_totals_over_signal                  AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        COALESCE(b.qualified_bet, FALSE) AND NOT COALESCE(b.bullpen_signal_ood, FALSE) AS qualified_bet,
-        NULL::FLOAT                     AS win_prob_ci_low,
-        NULL::FLOAT                     AS win_prob_ci_high,
+        b.layer4_totals_decision <> 'abstain'        AS qualified_bet,
         b.home_team,
         b.away_team,
-        b.totals_kelly_fraction         AS kelly_fraction,
+        b.totals_kelly_fraction                      AS kelly_fraction,
         b.total_line_consensus,
-        b.inserted_at
+        b.pred_total_runs
     FROM base b
     WHERE b.over_prob_consensus IS NOT NULL
 )
@@ -335,6 +344,10 @@ def get_picks_today() -> TodayPicksResponse:
             lineup_confirmed=r.get("LINEUP_CONFIRMED"),
             home_team=r.get("HOME_TEAM"),
             away_team=r.get("AWAY_TEAM"),
+            pick_side=r.get("PICK_SIDE"),
+            game_start_utc=r.get("GAME_START_UTC"),
+            model_total_runs=r.get("MODEL_TOTAL_RUNS"),
+            market_total_line=r.get("MARKET_TOTAL_LINE"),
         )
         for r in rows
     ]
@@ -352,6 +365,10 @@ def get_picks_today() -> TodayPicksResponse:
 
 @router.get("/history", response_model=HistoryPicksResponse)
 def get_picks_history() -> HistoryPicksResponse:
+    cached = get_cache("picks/history.json")
+    if cached is not None:
+        return HistoryPicksResponse(**cached)
+
     try:
         rows = execute_query(_HISTORY_QUERY)
     except Exception as exc:
@@ -379,11 +396,13 @@ def get_picks_history() -> HistoryPicksResponse:
         for r in rows
     ]
 
-    return HistoryPicksResponse(picks=picks, total=len(picks))
+    result = HistoryPicksResponse(picks=picks, total=len(picks))
+    set_cache("picks/history.json", result.model_dump(mode="json"))
+    return result
 
 
-@router.get("/ev")
-def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> dict:
+@router.get("/ev", response_model=EVPicksResponse)
+def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
     if date:
         try:
             from datetime import date as _date
@@ -392,9 +411,16 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
         query = _EV_QUERY_DATE
         params = {"target_date": date}
+        cache_key = None  # don't cache historical date lookups
     else:
         query = _EV_QUERY_TODAY
         params = None
+        cache_key = "picks/ev.json"
+
+    if cache_key:
+        cached = get_cache(cache_key)
+        if cached is not None:
+            return EVPicksResponse(**cached)
 
     try:
         rows = execute_query(query, params)
@@ -402,4 +428,27 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
         logger.exception("Snowflake query failed for /picks/ev")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
 
-    return {"picks": rows, "total": len(rows)}
+    picks = [
+        EVPick(
+            game_pk=r["GAME_PK"],
+            game_date=r.get("GAME_DATE"),
+            game_start_utc=r.get("GAME_START_UTC"),
+            market_type=r["MARKET_TYPE"],
+            model_prob=r.get("MODEL_PROB"),
+            bovada_devig_prob=r.get("BOVADA_DEVIG_PROB"),
+            edge=r.get("EDGE"),
+            game_conviction_score=r.get("GAME_CONVICTION_SCORE"),
+            lineup_confirmed=r.get("LINEUP_CONFIRMED"),
+            qualified_bet=r.get("QUALIFIED_BET"),
+            home_team=r.get("HOME_TEAM"),
+            away_team=r.get("AWAY_TEAM"),
+            kelly_fraction=r.get("KELLY_FRACTION"),
+            total_line_consensus=r.get("TOTAL_LINE_CONSENSUS"),
+            pred_total_runs=r.get("PRED_TOTAL_RUNS"),
+        )
+        for r in rows
+    ]
+    result = EVPicksResponse(picks=picks, total=len(picks))
+    if cache_key:
+        set_cache(cache_key, result.model_dump(mode="json"))
+    return result
