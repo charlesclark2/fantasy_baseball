@@ -294,7 +294,8 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     gate_signals_met        INTEGER,       -- 0-5 gate criteria that fired
     game_conviction_score   FLOAT,         -- 0.0-1.0 weighted gate strength
     posterior_source        VARCHAR(20),   -- Epic 16.2: game-level least-informed player-quality source {sequential|season_eb|prior_only}
-    prior_age_days          INTEGER        -- Epic 16.2: stalest (max) sequential-posterior age in days; >7 raises game_uncertainty_score
+    prior_age_days          INTEGER,       -- Epic 16.2: stalest (max) sequential-posterior age in days; >7 raises game_uncertainty_score
+    is_backfill             BOOLEAN  DEFAULT FALSE  -- Story 30.7: TRUE only for rows backfilled after a promotion; live rows are FALSE
 )
 """
 
@@ -319,7 +320,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
     data_source,
     qualified_bet, gate_signals_met, game_conviction_score,
-    posterior_source, prior_age_days
+    posterior_source, prior_age_days,
+    is_backfill
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -335,7 +337,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
     %(data_source)s,
     %(qualified_bet)s, %(gate_signals_met)s, %(game_conviction_score)s,
-    %(posterior_source)s, %(prior_age_days)s
+    %(posterior_source)s, %(prior_age_days)s,
+    FALSE
 )
 """
 

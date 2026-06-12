@@ -181,7 +181,15 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     imputed_discriminative_count INTEGER,      -- of the ~27 unconditional-core discriminative features, how many imputed
     discriminative_coverage      FLOAT,        -- 1 - imputed_core / total_core (1.0 = every core signal served)
     is_degraded                  BOOLEAN,      -- discriminative_coverage < 0.85 → serving-degraded pick (NOT just pre-lineup)
-    imputed_features             VARCHAR(4000) -- comma-joined imputed CORE discriminative feature names (truncated)
+    imputed_features             VARCHAR(4000), -- comma-joined imputed CORE discriminative feature names (truncated)
+
+    -- A1 — row-level qualification flag. TRUE when either market has an actionable
+    -- (non-abstain) layer4 decision. Used by /picks/history to filter to real signals.
+    qualified_bet                BOOLEAN,
+    -- Story 30.7 — explicit provenance flag. TRUE only for rows backfilled after a
+    -- promotion; live (real-time, pre-game) rows are FALSE. Replaces the overloaded
+    -- use of prediction_type='backfill'; prediction_type now means live-timing only.
+    is_backfill                  BOOLEAN  DEFAULT FALSE
 )
 """
 
@@ -207,7 +215,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     data_source, feature_coverage_score,
     layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
     imputed_feature_count, imputed_discriminative_count,
-    discriminative_coverage, is_degraded, imputed_features
+    discriminative_coverage, is_degraded, imputed_features,
+    qualified_bet,
+    is_backfill
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -229,7 +239,9 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(data_source)s, %(feature_coverage_score)s,
     %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s,
     %(imputed_feature_count)s, %(imputed_discriminative_count)s,
-    %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s
+    %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s,
+    %(qualified_bet)s,
+    FALSE
 )
 """
 
@@ -772,6 +784,10 @@ def _write_predictions_to_snowflake(
             "discriminative_coverage":      (imp_summ or {}).get("discriminative_coverage"),
             "is_degraded":                  (imp_summ or {}).get("is_degraded"),
             "imputed_features":             (imp_summ or {}).get("imputed_features"),
+            "qualified_bet": (
+                (l4_h2h_decision is not None and l4_h2h_decision != "abstain")
+                or (l4_tot_decision is not None and l4_tot_decision != "abstain")
+            ),
         }))
 
     if _n_serving_guard:
@@ -825,6 +841,7 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS discriminative_coverage FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS is_degraded BOOLEAN")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_features VARCHAR(4000)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
