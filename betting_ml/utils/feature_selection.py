@@ -84,9 +84,15 @@ PROTECTED_FEATURES: frozenset[str] = frozenset(
         "home_win_rate_trailing_3yr",
         "home_win_prob_consensus",
         "total_line_consensus",
-        "over_prob_consensus",
+        # Story 30.4 (2026-06-12): `over_prob_consensus` and `market_bookmaker_count`
+        # removed from PROTECTED — they are market-derived leaks now added to every
+        # trainer's `_MARKET_COLS_TO_EXCLUDE` to complete market-blindness. Force-
+        # retaining them here would let a future select_features() md-regeneration pull
+        # them back into a contract, re-leaking the market (mirrors the `game_year`
+        # un-protect precedent from 30.1). The three *_consensus / consensus-std cols
+        # kept below were already in the exclude set, so protection is harmless (the
+        # trainer strips them); they are retained to avoid churn in the selection md.
         "ml_consensus_std",
-        "market_bookmaker_count",
         *SEQUENTIAL_POSTERIOR_FEATURES,
     }
 )

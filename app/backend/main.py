@@ -20,7 +20,7 @@ load_dotenv()  # no-op in Lambda (env vars already injected); loads .env for loc
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
-from app.backend.routers import admin, alerts, auth, picks, performance, pipeline
+from app.backend.routers import admin, alerts, auth, bets, picks, performance, pipeline
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ async def log_requests(request: Request, call_next) -> Response:
 app.include_router(picks.router)
 app.include_router(performance.router)
 app.include_router(alerts.router)
+app.include_router(bets.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(pipeline.router)

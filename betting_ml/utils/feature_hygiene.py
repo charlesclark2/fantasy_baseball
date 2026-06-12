@@ -27,10 +27,25 @@ Design note — why NAME is the primary signal, not cardinality:
 
 from __future__ import annotations
 
+import json
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+# Repo root — feature_hygiene.py is at betting_ml/utils/feature_hygiene.py
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Story 30.4b — per-target dead-weight prune lists. Written by
+# `ablation_market_deadweight.py --write-exclude` when an ablation PROMOTEs the
+# cleaned contract, then consumed by the production search trainers so the pruned
+# contract regenerates deterministically (no hard-coded list in the trainer).
+_DEAD_WEIGHT_PATHS = {
+    "home_win": "betting_ml/models/home_win/dead_weight_exclude.json",
+    "run_differential": "betting_ml/models/run_differential/dead_weight_exclude.json",
+    "total_runs": "betting_ml/models/total_runs/dead_weight_exclude.json",
+}
 
 # Identifier / temporal column-name patterns (Story 30.1 spec set):
 #   *_id, *_pk, game_year, season, venue_id, *_cluster_id
@@ -50,6 +65,26 @@ _HIGH_CARD_INT_RATIO = 0.50
 def is_identifier_name(col: str) -> bool:
     """True if the column name matches the identifier/temporal pattern set."""
     return bool(_IDENTIFIER_NAME_RE.search(col))
+
+
+def load_dead_weight_exclude(target: str) -> list[str]:
+    """Story 30.4b — load the promoted dead-weight prune list for a target.
+
+    `target` is the production target dir name (`home_win`, `run_differential`,
+    `total_runs`). Returns the feature names to drop, or [] if no prune has been
+    promoted (the artifact is absent until `ablation_market_deadweight.py
+    --write-exclude` writes it after a PROMOTE decision). This keeps the trainer a
+    no-op until the dead-weight ablation is approved, and makes the pruned contract
+    reproducible from a committed artifact rather than a hand-edited list.
+    """
+    rel = _DEAD_WEIGHT_PATHS.get(target)
+    if rel is None:
+        return []
+    path = _PROJECT_ROOT / rel
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text())
+    return list(payload.get("features", []))
 
 
 def flag_identifier_features(

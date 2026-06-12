@@ -617,8 +617,16 @@ def settle_user_bets_op(context):
     Bets live in DynamoDB (OLTP); scores live in Snowflake (OLAP). Runs after
     dbt_daily_build, where last night's finals (stg_statsapi_games) are fresh.
     Off the critical prediction path — failure here must not block predictions.
+    Soft-fail (mirrors ingest_umpire_scorecards): this is a leaf op
+    (settle_user_bets_op(start=s16) — nothing downstream depends on it), so a
+    settlement error (missing script, transient DynamoDB/Snowflake hiccup) must
+    not flip daily_ingestion_job to FAILURE and fire the Run Failure alert. The
+    warning is logged for monitoring; unsettled bets are retried next daily run.
     """
-    _run_script(context, "settle_user_bets.py")
+    try:
+        _run_script(context, "settle_user_bets.py")
+    except Exception as e:
+        context.log.warning(f"User-bet settlement failed (non-fatal, retried next run): {e}")
 
 
 # ── Backfill phase ───────────────────────────────────────────────────────────

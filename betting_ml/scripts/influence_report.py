@@ -45,6 +45,29 @@ from betting_ml.utils.feature_hygiene import is_identifier_name
 
 _OUT_DIR = PROJECT_ROOT / "betting_ml" / "evaluation" / "feature_selection" / "influence_report"
 
+
+class _PermAdapter:
+    """Thin wrapper so sklearn.permutation_importance accepts an already-fitted
+    model. permutation_importance's param-validation requires a `fit` method even
+    though it never refits (it only permutes columns and re-scores via our custom
+    scorer). PlattCalibratedXGBClassifier exposes predict_proba but no fit/predict,
+    so wrap it; delegate predict/predict_proba to the real model unchanged."""
+
+    def __init__(self, model):
+        self._model = model
+
+    def fit(self, X=None, y=None):  # no-op — model is pre-fitted
+        return self
+
+    def predict(self, X):
+        if hasattr(self._model, "predict"):
+            return self._model.predict(X)
+        # classification fallback: threshold the calibrated P(class 1)
+        return (self._model.predict_proba(X)[:, 1] >= 0.5).astype(int)
+
+    def predict_proba(self, X):
+        return self._model.predict_proba(X)
+
 # Local champion artifact + contract per target (the freshly-retrained files).
 _TARGETS = {
     "home_win": {
@@ -81,7 +104,7 @@ def _run_target(name: str, df: pd.DataFrame, n_repeats: int) -> dict:
     cfg = _TARGETS[name]
     contract = json.loads((PROJECT_ROOT / cfg["contract"]).read_text())
     feat_cols = contract["feature_cols"] if isinstance(contract, dict) else contract
-    model = joblib.load(PROJECT_ROOT / cfg["pkl"])
+    model = _PermAdapter(joblib.load(PROJECT_ROOT / cfg["pkl"]))
 
     X, y, missing = _eval_surface(df, cfg["target_col"], feat_cols, 2026)
     print(f"\n=== {name} ({cfg['kind']}) — {len(feat_cols)} feats, 2026 eval n={len(X)} ===")
@@ -170,8 +193,11 @@ def _write_markdown(results: dict) -> None:
         for f in r["families"][:10]:
             lines.append(f"| {f['group']} | {f['sum']:.4f} | {f['count']} |")
         lines += [""]
-    (_OUT_DIR / "influence_report.md").write_text("\n".join(lines))
-    print(f"\nWrote {_OUT_DIR / 'influence_report.md'}")
+    # NOTE: filename is deliberately NOT "influence_report.md" — on a case-insensitive
+    # filesystem (macOS) that collides with the curated INFLUENCE_REPORT.md evidence doc
+    # in this same dir and silently overwrites it. Keep the generated report distinct.
+    (_OUT_DIR / "influence_report_generated.md").write_text("\n".join(lines))
+    print(f"\nWrote {_OUT_DIR / 'influence_report_generated.md'}")
 
 
 def main() -> None:

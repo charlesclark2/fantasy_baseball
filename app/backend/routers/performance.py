@@ -2,15 +2,28 @@
 
 GET /performance/summary    — fund-level P&L, win rate, mean CLV, Sharpe ratio
 GET /performance/by-model   — breakdown by market_type and signal_group
+GET /performance/model      — model skill metrics (Brier/CLV/win-rate) with season filter
+GET /performance/bets       — per-user settled bets for P&L curve with season filter
 """
 
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.backend.models.performance import ModelBreakdown, PerformanceByModelResponse, PerformanceSummary
+from app.backend.dependencies import get_user_id
+from app.backend.models.performance import (
+    MarketMetrics,
+    ModelBreakdown,
+    ModelMetricsResponse,
+    PerformanceBet,
+    PerformanceBetsResponse,
+    PerformanceByModelResponse,
+    PerformanceSummary,
+)
+from app.backend.services.dynamo import list_bets
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
 
@@ -131,3 +144,118 @@ def get_performance_by_model() -> PerformanceByModelResponse:
         for r in rows
     ]
     return PerformanceByModelResponse(breakdown=breakdown)
+
+
+# ── C1: model skill metrics ───────────────────────────────────────────────────
+
+_MODEL_METRICS_QUERY = """
+SELECT
+    YEAR(game_date)                                           AS season,
+    market_type,
+    COUNT(*)                                                  AS n_predictions,
+    AVG(POWER(model_prob - actual_outcome, 2))                AS brier_score,
+    AVG(clv)                                                  AS avg_clv,
+    AVG(CASE WHEN clv_positive THEN 1.0 ELSE 0.0 END)        AS clv_positive_pct,
+    AVG(actual_outcome)                                       AS win_rate
+FROM baseball_data.betting.mart_clv_labeled_games
+WHERE actual_outcome IS NOT NULL
+  {season_filter}
+GROUP BY 1, 2
+ORDER BY 1, 2
+"""
+
+
+@router.get("/model", response_model=ModelMetricsResponse)
+def get_model_metrics(season: Optional[int] = None) -> ModelMetricsResponse:
+    cache_key = f"performance/model_{season or 'all'}.json"
+    cached = get_cache(cache_key)
+    if cached is not None:
+        return ModelMetricsResponse(**cached)
+
+    season_filter = "AND YEAR(game_date) = %(season)s" if season else ""
+    query = _MODEL_METRICS_QUERY.format(season_filter=season_filter)
+    params = {"season": season} if season else None
+
+    try:
+        rows = execute_query(query, params)
+    except Exception as exc:
+        logger.exception("Snowflake query failed for /performance/model")
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    markets = [
+        MarketMetrics(
+            season=r["SEASON"],
+            market_type=r["MARKET_TYPE"],
+            n_predictions=r.get("N_PREDICTIONS") or 0,
+            brier_score=r.get("BRIER_SCORE"),
+            avg_clv=r.get("AVG_CLV"),
+            clv_positive_pct=r.get("CLV_POSITIVE_PCT"),
+            win_rate=r.get("WIN_RATE"),
+        )
+        for r in rows
+    ]
+    result = ModelMetricsResponse(season=season, markets=markets)
+    set_cache(cache_key, result.model_dump(mode="json"))
+    return result
+
+
+# ── C1: per-user settled bets ─────────────────────────────────────────────────
+
+@router.get("/bets", response_model=PerformanceBetsResponse)
+def get_performance_bets(
+    season: Optional[int] = None,
+    user_id: str = Depends(get_user_id),
+) -> PerformanceBetsResponse:
+    try:
+        all_bets = list_bets(user_id)
+    except Exception as exc:
+        logger.exception("DynamoDB read failed for /performance/bets user=%s", user_id)
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    # settled = outcome recorded; optionally filter by score_date year
+    settled = [
+        b for b in all_bets
+        if b.get("outcome") is not None
+        and (season is None or str(b.get("score_date", "")).startswith(str(season)))
+    ]
+
+    net_pnl: float | None = None
+    if settled:
+        pls = [b.get("profit_loss") for b in settled if b.get("profit_loss") is not None]
+        net_pnl = sum(pls) if pls else None
+
+    bets_out = [
+        PerformanceBet(
+            bet_id=b["bet_id"],
+            game_pk=int(b["game_pk"]),
+            score_date=str(b.get("score_date", "")),
+            matchup=b.get("matchup"),
+            market=b["market"],
+            bookmaker=b.get("bookmaker"),
+            american_odds=int(b["american_odds"]) if b.get("american_odds") is not None else None,
+            stake=float(b.get("stake", 0)),
+            outcome=b.get("outcome"),
+            profit_loss=float(b["profit_loss"]) if b.get("profit_loss") is not None else None,
+            ev=float(b["ev"]) if b.get("ev") is not None else None,
+            model_prob=float(b["model_prob"]) if b.get("model_prob") is not None else None,
+            placed_at=str(b.get("placed_at", "")),
+        )
+        for b in settled
+    ]
+
+    # total = bets placed in the selected season (settled + pending); use placed_at for filter
+    if season:
+        total_count = sum(
+            1 for b in all_bets
+            if str(b.get("placed_at", "")).startswith(str(season))
+        )
+    else:
+        total_count = len(all_bets)
+
+    return PerformanceBetsResponse(
+        season=season,
+        bets=bets_out,
+        total=total_count,
+        settled_count=len(settled),
+        net_pnl=net_pnl,
+    )

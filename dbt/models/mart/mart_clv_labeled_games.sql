@@ -71,8 +71,13 @@ h2h_rows as (
         c.close_vf_home                                                 as bovada_close_devig_prob,
         p.consensus_win_prob                                            as model_prob,
         p.h2h_edge                                                      as model_edge,
-        c.clv_home_ml                                                   as clv,
-        (c.clv_home_ml > 0)::boolean                                    as clv_positive,
+        -- clv = close − open of the devig probs (schema definition). Source
+        -- mart_closing_line_value.clv_home_ml is avg(per-book close−open) and can be
+        -- NULL when no single book carried BOTH an open and close price even though the
+        -- avg open/close (guaranteed non-null by the WHERE) are present; fall back to
+        -- close−open of those displayed probs so the not_null label contract holds.
+        coalesce(c.clv_home_ml, c.close_vf_home - c.open_vf_home)        as clv,
+        (coalesce(c.clv_home_ml, c.close_vf_home - c.open_vf_home) > 0)::boolean as clv_positive,
         -- actual_outcome = 1 if home team won (consistent with home-perspective CLV)
         r.home_team_won::integer                                        as actual_outcome
     from predictions p
@@ -99,8 +104,12 @@ totals_rows as (
         c.close_vf_over                                                 as bovada_close_devig_prob,
         p.totals_model_prob                                             as model_prob,
         p.totals_edge                                                   as model_edge,
-        c.clv_over_prob                                                 as clv,
-        (c.clv_over_prob > 0)::boolean                                  as clv_positive,
+        -- See h2h note: clv_over_prob (avg per-book close−open) is NULL when no single
+        -- book carried both an open and close over-price; fall back to close−open of the
+        -- displayed avg devig probs (non-null by the WHERE) so the not_null test holds.
+        -- (2026-06-10 had 2 such totals games — the catchup_dbt_rebuild test failure.)
+        coalesce(c.clv_over_prob, c.close_vf_over - c.open_vf_over)      as clv,
+        (coalesce(c.clv_over_prob, c.close_vf_over - c.open_vf_over) > 0)::boolean as clv_positive,
         -- actual_outcome = 1 if total runs exceeded the opening total line (over won)
         case
             when r.home_final_score + r.away_final_score > c.open_total_line then 1

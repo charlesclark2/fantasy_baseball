@@ -13,9 +13,14 @@ _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 # Epic A1 (Pipeline SLA & Reliability): the sensor-fired catch-up ops are idempotent
 # re-attempts (incremental ingestion + MERGE-keyed dbt rebuilds), so a transient
 # Snowflake hiccup (warehouse resume, incremental-MERGE lock, network blip) should
-# self-heal rather than page. Incident 2026-06-11: catchup_dbt_rebuild failed once
-# at 05:17 while the identical `stg_batter_pitches+` build succeeded at 03:16, 04:16,
-# and again in the 07:00 daily run — a textbook transient.
+# self-heal rather than page. The 2026-06-11 single failure looked like a textbook
+# transient — but it did NOT self-heal: catchup_dbt_rebuild has failed EVERY run
+# since 2026-06-11 05:17 (all 3 attempts exhausted). Root cause is NOT transient: it
+# runs `dbtf build` (models + TESTS) on the stg_batter_pitches+ subtree, whereas the
+# weekday daily build runs `dbtf run` (models only) — so a data-quality TEST failing
+# on the recent statcast batch reds the catchup while the daily job stays green. The
+# retry just 3x's the runtime and delays surfacing it; the actual failing test is in
+# the dbt run-summary tail (see _failure_detail + the _run_dbt ERROR-log of it).
 _CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
 
 
@@ -57,7 +62,14 @@ def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
     if result.stderr:
         context.log.warning(result.stderr)
     if result.returncode != 0:
-        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{_failure_detail(result)}")
+        # Log the dbt failure tail as its OWN short ERROR event. The full stdout
+        # above is truncated to its 50k HEAD by Dagster (dbt's end-of-run failure
+        # summary lives in the tail), and under _CATCHUP_RETRY the raised exception
+        # is swallowed as RetryRequestedFromPolicy — so without this the failing
+        # model/test is invisible in the cloud logs (incident 2026-06-11/12).
+        detail = _failure_detail(result)
+        context.log.error(f"dbtf {args[0]} failed (exit {result.returncode}) — failure tail:\n{detail}")
+        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{detail}")
 
 
 # ── Statcast catch-up job ops (statcast_freshness_sensor) ─────────────────────

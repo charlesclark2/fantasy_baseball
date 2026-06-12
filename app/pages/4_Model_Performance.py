@@ -16,6 +16,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 import datetime
 
 from app.utils.db import get_snowflake_session, run_query
+from app.utils.user_bets import load_owner_bets_df
 
 _MODEL_REGISTRY_PATH = _PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
 
@@ -47,25 +48,6 @@ def load_active_models() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Queries
 # ---------------------------------------------------------------------------
-
-_PLACED_BETS_SQL = """
-SELECT
-    b.score_date,
-    b.matchup,
-    b.market,
-    b.american_odds,
-    b.stake,
-    b.total_line,
-    b.outcome,
-    g.home_score,
-    g.away_score,
-    g.status_code
-FROM baseball_data.betting_ml.placed_bets b
-LEFT JOIN baseball_data.betting.stg_statsapi_games g
-    ON b.game_pk = g.game_pk
-    AND g.status_code = 'F'
-ORDER BY b.score_date ASC, b.placed_at ASC
-"""
 
 _PREDICTION_LOG_SQL = """
 WITH preds AS (
@@ -176,52 +158,12 @@ def _table_missing(exc: Exception) -> bool:
 
 @st.cache_data(ttl=300)
 def load_placed_bets() -> pd.DataFrame:
+    # Bets are canonical in DynamoDB; outcome/profit_loss are pre-settled by the
+    # daily Dagster settle_user_bets_op, so no score join is needed here.
     try:
-        df = run_query(_PLACED_BETS_SQL)
+        return load_owner_bets_df()
     except Exception:
         return pd.DataFrame()
-    if df.empty:
-        return pd.DataFrame()
-    df.columns = [c.lower() for c in df.columns]
-    df["score_date"] = pd.to_datetime(df["score_date"]).dt.date
-    for col in ("american_odds", "home_score", "away_score"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    for col in ("stake", "total_line"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
-
-
-def _settle_outcome(row: pd.Series) -> str | None:
-    if pd.isna(row.get("status_code")) or row.get("status_code") != "F":
-        return None
-    hs, as_ = row.get("home_score"), row.get("away_score")
-    if pd.isna(hs) or pd.isna(as_):
-        return None
-    total = hs + as_
-    market = str(row.get("market", ""))
-    tl = row.get("total_line")
-    if market == "h2h home":
-        return "win" if hs > as_ else "loss"
-    if market == "h2h away":
-        return "win" if as_ > hs else "loss"
-    if market in ("over", "under") and not pd.isna(tl):
-        if total > tl:
-            return "win" if market == "over" else "loss"
-        if total < tl:
-            return "win" if market == "under" else "loss"
-        return "push"
-    return None
-
-
-def _pl_from_outcome(stake: float, american_odds: int, outcome: str | None) -> float | None:
-    if outcome is None:
-        return None
-    if outcome == "push":
-        return 0.0
-    dec = (american_odds / 100 + 1) if american_odds > 0 else (100 / abs(american_odds) + 1)
-    return stake * (dec - 1) if outcome == "win" else -stake
 
 
 @st.cache_data(ttl=3600)
@@ -1182,15 +1124,9 @@ df_bets = load_placed_bets()
 if df_bets.empty:
     st.info("No bets logged yet. Use 'Log a Bet' on the EV Tracker page to start tracking.")
 else:
-    df_bets["_outcome"] = df_bets.apply(_settle_outcome, axis=1)
-    df_bets["_pl"] = df_bets.apply(
-        lambda r: _pl_from_outcome(
-            float(r["stake"]) if not pd.isna(r["stake"]) else 0.0,
-            int(r["american_odds"]) if not pd.isna(r["american_odds"]) else 0,
-            r["_outcome"],
-        ),
-        axis=1,
-    )
+    # Stored, already-settled values from DynamoDB (NaN/None while pending).
+    df_bets["_outcome"] = df_bets["outcome"].where(df_bets["outcome"].notna(), None)
+    df_bets["_pl"] = pd.to_numeric(df_bets["profit_loss"], errors="coerce")
 
     settled_bets = df_bets[df_bets["_outcome"].notna()].copy()
     wins_b = (settled_bets["_outcome"] == "win").sum()
