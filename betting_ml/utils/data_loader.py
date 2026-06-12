@@ -709,6 +709,20 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
 
 
 def load_features(min_games_played: int = 15) -> pd.DataFrame:
+    """Training/offline feature surface — `feature_pregame_game_features` joined to
+    final scores, filtered to `has_full_data` + min games.
+
+    ⚠ NOT POINT-IN-TIME (Story 30.3). This reads each game's row AS IT EXISTS NOW —
+    i.e. POST-game-backfilled and dense (lineups, starters, EB posteriors, umpire
+    tendency all populated after the fact). The live serve only ever saw the
+    PRE-game (sparse) row for the same game_pk. So any skill measured here (e.g. the
+    home_win corr 0.42) is an upper-bound CEILING, NOT the achievable live number.
+    For the honest, point-in-time live skill, score the ACTUALLY-SERVED predictions
+    in `daily_model_predictions` against the outcome — see
+    `betting_ml/scripts/honest_live_skill.py`. Until the feature store is
+    AS-OF-snapshotted (refined_architecture_proposal §Point-in-Time), treat offline
+    evals via this loader as ceilings, not live KPIs.
+    """
     conn = _connect()
     try:
         query = _QUERY.format(min_games_played=int(min_games_played))

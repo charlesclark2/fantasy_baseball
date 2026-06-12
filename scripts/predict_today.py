@@ -504,6 +504,58 @@ def _post_lineup_delete_sql(schema: str, scoped_game_pks: list[int] | None) -> s
     return base
 
 
+def _serving_degraded(imp_summ: dict | None, has_full_data_val) -> tuple[bool, str]:
+    """Story 30.3 — per-game SERVING-HEALTH gate for the ACTIONABLE edge path.
+
+    Returns (degraded, reason). A degraded matrix means the model scored a
+    VALUE-degraded row, so its posterior is untrustworthy and NO actionable
+    edge/Kelly should be surfaced — the same stance the global ``best_alpha==0``
+    EDGE-GUARD takes, applied per game (and mirroring the no-odds abstain).
+
+    Two genuine-degradation conditions (NOT ordinary pre-lineup absence):
+      1. ``is_degraded`` — the unconditional-CORE discriminative families
+         (ELO / bullpen-EB / team-sequential / RISP / park) collapsed below the
+         coverage floor. These have no valid reason to be null for any scheduled
+         game, so their absence is a serving failure (the 2026-05-29 / 06-10
+         carry-forward incidents), not the expected pre-lineup sparseness.
+      2. ``has_full_data is False`` — the game is OUTSIDE the training admission
+         criteria (`_QUERY` requires has_full_data=TRUE). The serve query
+         `_TODAY_QUERY` applies no such filter, so it scores ~8% of games the
+         model never saw the distribution of; their strong-tier null rate is
+         2–4× higher (Story 30.3 parity report §4). Abstain rather than bet a
+         posterior from an out-of-distribution matrix.
+
+    Deliberately does NOT fire on a normal morning pre-lineup pick: the
+    lineup-/pitcher-gated families excluded from `is_degraded` are EXPECTED to be
+    null before lineups post (that is a TIMING question owned by the Epic A1 SLA,
+    not a serving defect). Pure (no I/O) so it is unit-testable.
+    """
+    reasons: list[str] = []
+    if imp_summ and imp_summ.get("is_degraded"):
+        reasons.append(f"core-collapse (disc_cov={imp_summ.get('discriminative_coverage')})")
+    if has_full_data_val is False:
+        reasons.append("has_full_data=FALSE (out-of-training-distribution)")
+    return (bool(reasons), "; ".join(reasons))
+
+
+def _lineups_confirmed(df: pd.DataFrame, i: int) -> bool | None:
+    """Story 30.3 — are BOTH lineups confirmed for game-row i?
+
+    Returns True/False, or None when the flags aren't served (→ caller does not
+    gate on lineup state). This is the "is this the DENSE serve" signal: the
+    morning matrix is ~30% imputed because the lineup-/pitcher-gated families
+    aren't known pre-lineup; once both lineups post, the post_lineup re-score
+    serves them. The actionable bet should ride the dense post_lineup pass, so a
+    pre-lineup (unconfirmed) game defers its edge to that re-score rather than
+    surfacing one off the sparse morning matrix (Story 30.3: live skill ≈ 0 there).
+    NaN/None flags count as NOT confirmed.
+    """
+    cols = ("home_has_full_lineup", "away_has_full_lineup")
+    if not all(c in df.columns for c in cols):
+        return None
+    return all((lambda v: pd.notna(v) and bool(v))(df.iloc[i][c]) for c in cols)
+
+
 def _write_predictions_to_snowflake(
     df_today: pd.DataFrame,
     target_date: str,
@@ -549,6 +601,8 @@ def _write_predictions_to_snowflake(
     prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
     bullpen_ood_signals = _load_bullpen_ood_signals(target_date)  # Epic 19 — bullpen OOD gate
     bovada_ml = _load_bovada_ml_odds(target_date)  # Story 28.3 — actual Bovada ML for kill-criterion monitor
+    _n_serving_guard = 0    # Story 30.3 — games abstained for value-degraded serving
+    _n_lineup_deferred = 0  # Story 30.3 — pre-lineup games whose edge defers to the post_lineup re-score
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -557,6 +611,26 @@ def _write_predictions_to_snowflake(
         cons_win = ngb_win * 0.5 + clf_win * 0.5
         cal_win  = _apply_calibrator(cons_win)
 
+        # Story 30.3 — SERVING-HEALTH gate. Compute BEFORE the edge math so a
+        # value-degraded matrix (core-feature collapse or an out-of-training game)
+        # abstains the actionable edge/Kelly instead of surfacing a phantom bet
+        # from an untrustworthy posterior. Raw diagnostic edges + model probs are
+        # preserved (CLV / Layer-4 monitoring is unaffected).
+        _imp_i = imputation_summary[i] if (imputation_summary and i < len(imputation_summary)) else None
+        _hfd_i = _s(df_today, "has_full_data", i)
+        game_degraded, _degraded_reason = _serving_degraded(_imp_i, _hfd_i)
+        # Bind the actionable bet to the DENSE post_lineup serve: a pre-lineup
+        # (unconfirmed) game defers its edge to the post_lineup re-score rather than
+        # surfacing one off the ~30%-imputed morning matrix. None = flags unserved
+        # → don't gate on lineup state (fail-open to prior behavior).
+        _lineups_ok = _lineups_confirmed(df_today, i)
+        lineup_deferred = (_lineups_ok is False) and not game_degraded
+        game_actionable = (not game_degraded) and (_lineups_ok is not False)
+        if game_degraded:
+            _n_serving_guard += 1
+        if lineup_deferred:
+            _n_lineup_deferred += 1
+
         # H2H market values — use calibrated_win_prob as the live edge input.
         # A2.5 edge-artifact guard: the STORED/actionable edge is alpha-aware
         # (posterior − market), so when best_alpha=0 the model adds no skill and the
@@ -564,10 +638,15 @@ def _write_predictions_to_snowflake(
         # raw model-vs-market gap is preserved separately for Layer 4 / CLV diagnostics.
         h2h_mkt_v  = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
-            h2h_raw_edge = compute_edge(cal_win, h2h_mkt_v)        # diagnostic only
-            h2h_post  = compute_posterior(cal_win, h2h_mkt_v, best_alpha)
-            h2h_edge  = compute_actionable_edge(cal_win, h2h_mkt_v, best_alpha)
-            h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
+            h2h_raw_edge = compute_edge(cal_win, h2h_mkt_v)        # diagnostic only (preserved when not actionable)
+            if not game_actionable:
+                # Abstain: degraded matrix (untrustworthy posterior) OR pre-lineup
+                # (defer to the dense post_lineup re-score) → no actionable bet.
+                h2h_post = h2h_edge = h2h_kelly = None
+            else:
+                h2h_post  = compute_posterior(cal_win, h2h_mkt_v, best_alpha)
+                h2h_edge  = compute_actionable_edge(cal_win, h2h_mkt_v, best_alpha)
+                h2h_kelly = compute_kelly(h2h_edge, h2h_mkt_v)
         else:
             h2h_raw_edge = h2h_edge = h2h_post = h2h_kelly = None
 
@@ -575,7 +654,7 @@ def _write_predictions_to_snowflake(
         over_mkt_v    = _f(over_mkt, i)
         total_line_v  = _f(total_line_vals, i)
         p_over_v      = float(p_over_total[i])
-        if has_odds and over_mkt_v is not None:
+        if has_odds and over_mkt_v is not None and game_actionable:
             tot_post  = compute_posterior(p_over_v, over_mkt_v, best_alpha)
             tot_edge  = compute_actionable_edge(p_over_v, over_mkt_v, best_alpha)
             tot_kelly = compute_kelly(tot_edge, over_mkt_v)
@@ -623,7 +702,7 @@ def _write_predictions_to_snowflake(
         game_prov = prov.get(int(gpk_val)) if gpk_val is not None else None
         game_bullpen = bullpen_ood_signals.get(int(gpk_val)) if gpk_val is not None else None
         game_bovada = bovada_ml.get(int(gpk_val)) if gpk_val is not None else None
-        imp_summ = imputation_summary[i] if (imputation_summary and i < len(imputation_summary)) else None
+        imp_summ = _imp_i  # Story 30.3 — computed above for the serving-health gate
 
         # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
         ood_row = {
@@ -694,6 +773,25 @@ def _write_predictions_to_snowflake(
             "is_degraded":                  (imp_summ or {}).get("is_degraded"),
             "imputed_features":             (imp_summ or {}).get("imputed_features"),
         }))
+
+    if _n_serving_guard:
+        warnings.warn(
+            f"[SERVING-GUARD] {_n_serving_guard}/{len(df_today)} game(s) had their actionable "
+            f"h2h/totals edge + Kelly ABSTAINED (set NULL) because the served matrix was "
+            f"value-degraded (unconditional-core collapse and/or has_full_data=FALSE). The model "
+            f"probabilities and raw diagnostic edges are still written for monitoring; only the "
+            f"actionable bet is suppressed (Story 30.3 — same stance as the best_alpha=0 guard, "
+            f"applied per game).",
+            stacklevel=2,
+        )
+    if _n_lineup_deferred:
+        print(
+            f"[SERVING-GUARD] {_n_lineup_deferred}/{len(df_today)} game(s) are PRE-LINEUP "
+            f"(lineups not both confirmed) — actionable edge/Kelly deferred to the dense "
+            f"post_lineup re-score (Story 30.3: the morning matrix is ~30% imputed; the live "
+            f"bet rides the post_lineup pass). Model probabilities + raw diagnostic edges still "
+            f"written. This is expected on the morning run and clears as lineups post."
+        )
 
     try:
         conn = get_snowflake_connection()

@@ -13223,30 +13223,67 @@ back to the user to run and show the command; do not git commit or push (the use
 mechanism behind live zero-skill. 30.1 established the contract HAS skill offline (corr 0.42), so this story
 owns the highest-value lever on live performance.
 
+**Status (2026-06-11): ROOT CAUSE IDENTIFIED — serving gap confirmed, re-attributed to point-in-time
+completeness (NOT a contract/architecture/order bug).** Deliverable:
+`betting_ml/evaluation/feature_selection/story_30_3_serving_skew.md`; reusable harness
+`betting_ml/scripts/serving_parity_report.py`. Findings:
+- ⭐ **The offline-vs-live paradox resolves as a point-in-time skew.** `feature_pregame_game_features` is NOT
+  AS-OF-snapshotted: for *not-yet-played* games the strong-tier blocks are ~100% NULL (verified on the
+  06-12/06-13 scheduled rows); once played they're backfilled to ~0% null. The live serve reads the sparse
+  pre-game row; the offline 0.42 re-reads the **same game_pks after they're played** (dense). Same model,
+  opposite null profile → **the 0.42 is optimistic, not the live target.**
+- **~30% of the live matrix is imputed-to-constant at bet time.** `daily_model_predictions`: the **morning**
+  run (SLA-binding, ≥30 min pre-pitch) imputes **110–140 / 376** features per game (feat-coverage 0.65–0.81);
+  by **post_lineup** the same slate is dense (imputed ≈0, coverage 0.98). On a diffuse model (top-10 = 9% of
+  |SHAP|) flattening 30% of columns to training-median constants collapses the edge to noise → the observed
+  live corr ≈ 0 (confirmed: corr −0.05…−0.10 / Brier 0.27–0.30 across data_sources on settled 2026 games).
+- **No structural/order gap.** CONTRACT-GUARD count parity (376/376/369) and FEATURE-ALIGN absent-column
+  refusal both pass; `reindex(columns=contract)` guarantees order. The failure is value-level (right columns,
+  null values), exactly the case the guards can't catch.
+- **Secondary leak:** `_TODAY_QUERY` (serve) applies no `has_full_data`/`min_games_played` filter, so it scores
+  the ~8% of games (`has_full_data=FALSE`) that carry 2–4× strong-tier null rate and were never in training.
+- **Fixes shipped:** (1) per-game SERVING-GUARD in `predict_today.py` (abstains actionable edge/Kelly on
+  value-degraded matrices). (2) **Point-in-time-honest eval ✅** — `betting_ml/scripts/honest_live_skill.py`
+  scores the ACTUALLY-SERVED `daily_model_predictions` vs truth (Epic 30 PRIMARY metrics), and `load_features()`
+  now carries a ⚠ NOT-POINT-IN-TIME ceiling caveat at the source. **The 0.42 is a CEILING, not the live KPI.**
+  First honest read: live home_win corr −0.105 / Brier 0.299 / ECE 0.46 (n=15, too small for a verdict). (3)
+  Story 30.5 fixed the umpire serving feed. (4) **Bind-to-post_lineup ✅ SHIPPED** — `predict_today.py` defers the
+  actionable edge/Kelly to the dense post_lineup re-score for any pre-lineup (unconfirmed) game
+  (`_lineups_confirmed` gate; fails open if flags unserved; 5 tests). This is the PRIMARY live-skill lever (the
+  post_lineup serve is dense, disc-cov 0.99). (5) The deeper AS-OF feature-store snapshot + point-in-time retrain
+  is specced as **Story 30.6** (gated on a queued retrain — not built now; eval-honesty is already covered by
+  `honest_live_skill.py`). **30.3 effectively COMPLETE.** Live-skill re-measure is **gated on accumulating ≥30–50
+  settled post_lineup/feature_store games** (track via `honest_live_skill.py`). Cross-ref
+  [[project_posterior_staleness_jun2026]] + [[reference_bullpen_freshness_chain]] for the lineup-cluster/archetype
+  null gap (largest *recoverable* nulls).
+
 **Tasks:**
-- [ ] For a recent live slate, compare per-feature NULL/impute rate in the SERVED matrix (predict_today
+- [x] For a recent live slate, compare per-feature NULL/impute rate in the SERVED matrix (predict_today
   `[FEATURE-ALIGN]` output + `daily_model_predictions` imputation columns) vs the TRAINING distribution.
   Flag any feature served all-null / constant-imputed live that was informative in training (esp. ELO,
   archetype/cluster, EB posterior columns) — cross-reference the strong-tier list from `influence_report.py`.
-- [ ] Verify column ORDER + count parity between the served matrix and each CURRENT `feature_columns_*.json`
-  (home_win + run_diff are now **376**; total_runs 369; confirm the served matrix tracks the post-30.1 contract,
-  not a cached 379/374). The `predict_today.py` CONTRACT-GUARD now enforces count parity at load time; this task
-  extends it to ORDER + value parity.
-- [ ] Fix the serving gaps found (wire missing posteriors into the serve path / align column order /
-  correct impute defaults); re-measure live corr + Brier on the next settled slate — target moving live
-  corr toward the 0.42 the contract achieves offline.
-- [ ] Re-confirm with an offline-vs-live parity check: load the same game_pks through BOTH the feature store
-  and the predict_today serve path; the per-feature value diff localizes the skew (this is the direct test
-  the 30.1 finding implies).
+  (Deliverable §2–§4; ELO robust on both surfaces — culprit is EB-sequential / lineup-vs-cluster / archetype.)
+- [x] Verify column ORDER + count parity between the served matrix and each CURRENT `feature_columns_*.json`
+  (home_win + run_diff **376**; total_runs 369). Count parity = CONTRACT-GUARD; order parity structurally
+  guaranteed by `reindex`. **Both pass — no structural gap** (deliverable §5).
+- [x] Fix the serving gaps found — **SHIPPED a per-game SERVING-GUARD in `scripts/predict_today.py`**
+  (`_serving_degraded()` + wiring): abstains the actionable `h2h_edge`/`kelly`/`totals_edge`/`kelly` (NULL) when
+  the served matrix is value-degraded (unconditional-core `is_degraded` collapse, or `has_full_data=FALSE`
+  out-of-training game), preserving model probs + raw diagnostic edges + CLV. Same stance as the `best_alpha==0`
+  guard, per game; does NOT fire on normal pre-lineup picks. 6 unit tests (`TestServingDegradedGate`, all pass).
+  The remaining levers (bind picks to post_lineup dense path / point-in-time-honest eval / upstream ump-data)
+  are documented + handed off (overlap Epic A1 SLA). Live corr re-measure GATED on settled post_lineup-path slates.
+- [x] Offline-vs-live parity check: `betting_ml/scripts/serving_parity_report.py` reproduces predict_today's
+  exact matrix build and diffs the served matrix vs contract + training distribution per target (hand-off, >1 min).
 
 **Acceptance criteria:**
-- [ ] Served-vs-trained parity report: per-feature live null/impute rate, ordering/count check, list of
-  informative-but-unserved features (esp. strong-tier).
-- [ ] Fixes applied for any real serving gap; live skill (corr / Brier) re-measured and reported against the
-  0.42 offline benchmark.
-- [ ] If no serving gap is found, the zero-skill cause is re-attributed — but note 30.1 makes a pure
-  contract/architecture cause unlikely (it scored 0.42 offline), so look next at label/odds-join or
-  calibration-at-serve issues.
+- [x] Served-vs-trained parity report: per-feature live null/impute rate, ordering/count check, list of
+  informative-but-unserved features (esp. strong-tier). (Deliverable + harness.)
+- [~] Fixes applied for any real serving gap; live skill re-measured. **Re-attributed (point-in-time, not a
+  fixable column bug); fixes specified + handed off; re-measure gated on settled post_lineup-path slates.**
+- [x] If no serving gap is found, the zero-skill cause is re-attributed. **A gap IS found — point-in-time
+  serving-completeness (the morning matrix is ~30% constant-imputed) — and a pure contract/architecture cause
+  is ruled out (0.42 offline). The 0.42 itself is revealed as a non-point-in-time-honest upper bound.**
 
 ---
 
@@ -13334,6 +13371,125 @@ per target on the accuracy-vs-edge-validity + no-regression bars.
   explicit promote/keep decision and the accuracy-vs-edge-validity tradeoff stated for the market part.
 - [ ] Updated `_MARKET_COLS_TO_EXCLUDE` (+ PROTECTED_FEATURES edit) and pruned contracts; champions retrained;
   the reduced feature count + smaller serving surface documented (tie to the 30.3 live-skill re-measure).
+
+---
+
+### 30.5 — Umpire tendency feed has no recurring loader (surfaced by 30.3)  `[Home: Epic 30 / data-pipeline]`
+
+**Status:** ✅ DONE 2026-06-11 — tendency loader built+wired+backfilled (null 34.6%→1.1%); assignment staleness
+root-caused (timing) + fixed (afternoon lineup-path ingest, idempotent); source-scoped alert-only freshness added.
+**Priority:** medium (ump signal ≈ 4% of home_win |SHAP|; small but it is a clean, recurring serving null and a
+totals run-environment input). Out of `predict_today`'s scope — a pipeline/ingestion fix.
+
+**⭐ UmpScorecards DOES expose a JSON feed** (operator-supplied 2026-06-11):
+`https://umpscorecards.com/api/games?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&seasonType=R` — envelope
+`{"rows":[…]}`, camelCase date params (snake_case is ignored → dumps all 2015→present, ~29 MB). Per-game fields:
+`game_pk, date, umpire, home_score, away_score, total_run_impact, accuracy_above_x, correct_calls_above_x, favor,
+type`. Verified to have full tendency coverage through **2026-06-10** (533 games across the 05-02→present gap).
+
+**BUILT (2026-06-11):**
+- `scripts/ingest_umpire_scorecards.py` — recurring API loader. Maps the JSON 1:1 to the `umpire_game_log`
+  `data_source='umpscorecards'` shape (identical to the historical CSV loader). **Idempotent**: delete-then-insert
+  scoped to `umpscorecards` + the fetched game_pks (no daily-append bloat). Defaults to a trailing 7-day window;
+  `--start/--end` for backfill; `--dry-run`. Read path validated against the live API (44/44 mapped, tendency
+  populated). Write path (Snowflake) handed to operator to run.
+- Wired into Dagster `daily_ingestion_job`: new soft-fail op `ingest_umpire_scorecards` (in
+  `pipeline/ops/daily_ingestion_ops.py`), chained after `ingest_umpires_late` and before
+  `dbt_umpire_feature_rebuild` (so fresh tendency rows feed the trailing-z rebuild). Job graph builds (48 nodes).
+
+**Key correction to the original framing:** the *binding* fix is the daily HP-**assignment** ingest, not daily
+UmpScorecards. Of the 636 settled-2026 games that DID get an assignment, **616 (97%) already resolved to a real
+z-score** from existing history — so a reliable assignment + this tendency feed together close the gap. The
+assignment op (`ingest_umpires_early`/`_late`) is ALREADY wired but went stale after 2026-06-04 — audit why
+(soft-fail swallowed it / job not running) is a remaining task.
+
+**Problem (verified 2026-06-11 via Snowflake `baseball_data.statsapi.umpire_game_log`):** the HP-umpire features
+`ump_run_impact_zscore` / `ump_accuracy_zscore` (and `ump_runs_per_game_zscore`) arrive NULL for **~34% of
+settled 2026 games** (332/968 `has_full_data=TRUE`) and ~100% of recent/scheduled games — the persistent
+"5 all-null→constant" features the 30.3 parity harness flagged. Root cause is **two stalled feeds**, not the
+model:
+- **UmpScorecards *tendency* rows** (`total_runs IS NOT NULL`; the source of the predictive z-scores via
+  `feature_pregame_umpire_features` → `feature_pregame_game_features`) exist only through **2026-05-01** and then
+  stop. There is **no daily/automated UmpScorecards load** — it was batch-loaded and never wired to a schedule.
+- **StatsAPI *assignment* rows** (`ingest_umpires.py`, HP-umpire NAME only) cover just **191 games, 2026-05-03 →
+  06-04**, and are stale since 06-04. So even the name-join the z-score depends on is intermittently missing.
+The dbt lineage itself is fine (z-scores are trailing-3yr, ≥10-game gated; only 17/968 hit the sample gate) —
+the failure is purely that neither upstream feed runs on a schedule.
+
+**Tasks:**
+- [x] Stand up a recurring **UmpScorecards tendency loader** — `scripts/ingest_umpire_scorecards.py` (API-based,
+  idempotent) wired into `daily_ingestion_job` as `ingest_umpire_scorecards` (soft-fail, before the dbt rebuild).
+- [x] **Backfill DONE (2026-06-11):** ran `ingest_umpire_scorecards.py --start 2026-05-02 --end <today>` → 533 rows
+  inserted (0 replaced). After the dbt rebuild (`stg_statsapi_umpire_game_log` → `feature_pregame_umpire_features`
+  → `feature_pregame_game_features`), the served `ump_*_zscore` null rate on settled-2026 `has_full_data=TRUE`
+  games dropped **34.6% → 1.1%** (= the ≤2025 baseline); recent dates 06-04…06-10 are **0% null**. Tendency
+  coverage Mar–Jun now 95–100%. ✅ serving gap closed on the settled surface.
+- [x] **Assignment-staleness AUDIT + FIX DONE (2026-06-11).** Root cause = **TIMING, not breakage**: the daily
+  `ingest_umpires_early`/`_late` ops run inside the 07:00 job at **~08 ET** (verified: the 06-11 `ingest_umpires_late`
+  step ran 12:12 UTC and StatsAPI returned *"No HP umpire listed"* for every game), **hours before MLB posts HP
+  umps**. The feed was always intermittent (sporadic 3–14 partial rows/day; gaps 05-26, 05-29→06-01) and has
+  caught nothing since 06-04 — all 7 daily runs 06-05→06-11 SUCCEEDED (soft-fail swallowed the 0-row writes).
+  The script itself works (dry-run returns today's 7 assignments). **Fix:** ingest the assignment on the
+  **afternoon lineup-confirm path** (`lineup_monitor_job`), when umps ARE posted and which drives the actionable
+  post_lineup re-score: new soft-fail op `lineup_ingest_umpires` (after `lineup_ingest_schedule`, before the
+  feature rebuild); `lineup_dbt_feature_rebuild` extended to rebuild `stg_statsapi_umpire_game_log` +
+  `feature_pregame_umpire_features` so the z-scores recompute pre-score; and `ingest_umpires.py` made
+  **idempotent** (delete-then-insert scoped to `statsapi` + today's game_pks) so the multi-tick sensor can't
+  bloat the table. Job graph validated. NOTE: settled-surface coverage is already fixed by the UmpScorecards
+  backfill (which carries `umpire_name` too); this fix is specifically for getting today's ump into the LIVE
+  post_lineup bet.
+- [x] **Per-`data_source` freshness DONE (2026-06-11):** replaced the table-level `umpire_game_log` entry (which
+  masked a one-source stall) with TWO source-scoped, **alert-only** (`non_blocking`) checks in
+  `check_data_freshness.py`, each scoped by `game_date`: `[statsapi HP assignment]` (48h, game-day-only) and
+  `[umpscorecards tendency]` (96h). Extended the config schema with optional `table` + `where`. Alert-only by
+  design — per-game gaps are expected (a game's HP ump may be unposted pre-game; e.g. 824589 on 06-11) and
+  settled games are backfilled from UmpScorecards post-hoc, and a hard fail would death-spiral the predict job
+  that carries the retry. Verified live: both render OK (28h / 52h); a real stall (the 06-04 gap = 168h) prints a
+  STALE alert without failing the run.
+- [x] Re-verified: `ump_*_zscore` null on settled-2026 `has_full_data=TRUE` games = **1.1%** (was 34.6%; =
+  ≤2025 baseline); recent 06-04…06-10 = 0%. The 30.3 all-null-5 set will shrink to 3 (just the market cols 30.4
+  removes) — ump pair now served.
+
+**Acceptance criteria:**
+- [x] A scheduled loader exists for UmpScorecards tendency data (built + Dagster-wired + API-validated).
+- [x] The 2026 gap is backfilled ✅ + re-verified (1.1% null); source-scoped alert-only freshness monitor added ✅.
+- [x] HP-assignment ingest staleness root-caused (timing: 07:00 job runs ~08 ET, before MLB posts HP umps) +
+  fixed (afternoon `lineup_monitor_job` ingest, idempotent, ump feature rebuild wired). Live test pending operator.
+- [ ] Post-fix null-rate check on `ump_*_zscore` for settled 2026 games (target ≤ ~5%); 30.3 harness re-run.
+
+---
+
+### 30.6 — Point-in-time feature snapshot & AS-OF retraining (the live-ceiling lift)  `[Home: Epic 30 / architecture]`
+
+**Status:** ⬜ OPEN (EPIC-SIZED) — specced 2026-06-11 from the Story 30.3 finding. **Gated:** do NOT start until a
+base-model retrain is queued (it only pays off through retraining). The eval-honesty need 30.3 raised is ALREADY
+met by `honest_live_skill.py`; this is the deeper, optional lift.
+
+**Why it exists.** 30.3 showed live home_win ≈ 0-skill vs a 0.42 offline CEILING because the feature store is NOT
+AS-OF-snapshotted: `feature_pregame_game_features` is re-read POST-game (dense) for training/eval, but the live
+serve only ever saw the PRE-game (sparse) row. **30.3's item 1 (bind the bet to the dense post_lineup re-score)
+is the PRIMARY lever and is shipped** — it makes the live bet ride a dense matrix (disc-cov 0.99). This story is
+the SECONDARY lever: make the base models robust to the pre-game distribution by TRAINING on point-in-time
+features (so they don't depend on post-hoc-backfilled values the serve never has).
+
+**Why gated / not built now.** A forward-capture snapshot only accrues value over a future season AND only pays
+off when paired with a point-in-time retrain — building the snapshot infra ahead of a queued retrain is
+speculative dead infra. arch §"Point-in-Time Feature Engineering" already names this the long-term direction.
+
+**Tasks (when un-gated):**
+- [ ] Forward-capture: a Dagster op (after `predict_today_morning` AND after the post_lineup re-score) that
+  appends today's `feature_pregame_game_features` rows to a dated snapshot table
+  (`feature_pregame_game_features_asof`, keyed by game_pk + `snapshot_ts` + prediction_type) — the AS-SERVED
+  (sparse) matrix, never the backfill. Cheap (≈15 rows/day). Captures forward only; the past is unrecoverable.
+- [ ] Point-in-time training surface: a `load_features_asof()` that reads the snapshot (the row as it existed at
+  lineup-lock), not the live backfilled table, so train/serve distributions match.
+- [ ] Retrain home_win / run_diff on the AS-OF surface once ≥1 season of snapshots exists; compare live skill
+  (via `honest_live_skill.py`) vs the current champions on the honest post_lineup surface.
+
+**Acceptance criteria:**
+- [ ] Snapshot table + forward-capture op live; `load_features_asof()` reads it.
+- [ ] AS-OF-retrained challenger vs champion on the honest live (post_lineup/feature_store) surface — promote only
+  if it raises live corr/Brier toward the 0.42 ceiling (Epic 30 PRIMARY accuracy-to-truth bar).
 
 ---
 

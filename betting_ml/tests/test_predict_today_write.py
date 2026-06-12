@@ -75,3 +75,82 @@ class TestMlSchemaResolution:
         # Only the exact string "prod" selects prod — anything else is dev.
         monkeypatch.setenv("TARGET_ENV", "production")
         assert ml_env.ml_schema() == "baseball_data.betting_ml_dev"
+
+
+# ── Story 30.3 — serving-health gate for the actionable edge ────────────────────
+
+class TestServingDegradedGate:
+    def test_healthy_matrix_is_not_degraded(self):
+        # Full unconditional-core coverage + admitted game → bet as normal.
+        imp = {"is_degraded": False, "discriminative_coverage": 1.0}
+        degraded, reason = predict_today._serving_degraded(imp, True)
+        assert degraded is False
+        assert reason == ""
+
+    def test_core_collapse_is_degraded(self):
+        # The 2026-05-29 / 06-10 carry-forward incident: core families NULL.
+        imp = {"is_degraded": True, "discriminative_coverage": 0.40}
+        degraded, reason = predict_today._serving_degraded(imp, True)
+        assert degraded is True
+        assert "core-collapse" in reason
+
+    def test_has_full_data_false_is_degraded(self):
+        # Out-of-training-distribution game (serve query has no has_full_data filter).
+        imp = {"is_degraded": False, "discriminative_coverage": 1.0}
+        degraded, reason = predict_today._serving_degraded(imp, False)
+        assert degraded is True
+        assert "out-of-training-distribution" in reason
+
+    def test_both_conditions_reported(self):
+        imp = {"is_degraded": True, "discriminative_coverage": 0.2}
+        degraded, reason = predict_today._serving_degraded(imp, False)
+        assert degraded is True
+        assert "core-collapse" in reason and "out-of-training-distribution" in reason
+
+    def test_pre_lineup_morning_pick_is_NOT_degraded(self):
+        # Ordinary pre-lineup sparseness: lineup-/pitcher-gated families are absent
+        # but is_degraded (scoped to unconditional-core) stays False, and the game
+        # is in-distribution (has_full_data TRUE). Must NOT abstain — that is the
+        # Epic A1 timing question, not a serving defect.
+        imp = {"is_degraded": False, "discriminative_coverage": 0.87}
+        degraded, _ = predict_today._serving_degraded(imp, True)
+        assert degraded is False
+
+    def test_missing_summary_and_unknown_has_full_data_do_not_fire(self):
+        # None summary + has_full_data absent (None, not False) → no false positive.
+        degraded, reason = predict_today._serving_degraded(None, None)
+        assert degraded is False
+        assert reason == ""
+
+
+# ── Story 30.3 — bind the actionable bet to the dense post_lineup serve ─────────
+
+class TestLineupsConfirmedGate:
+    @staticmethod
+    def _df(home, away):
+        import pandas as pd
+        return pd.DataFrame([{"home_has_full_lineup": home, "away_has_full_lineup": away}])
+
+    def test_both_confirmed_is_true(self):
+        assert predict_today._lineups_confirmed(self._df(True, True), 0) is True
+
+    def test_one_unconfirmed_is_false(self):
+        assert predict_today._lineups_confirmed(self._df(True, False), 0) is False
+
+    def test_nan_counts_as_not_confirmed(self):
+        import numpy as np
+        assert predict_today._lineups_confirmed(self._df(True, np.nan), 0) is False
+
+    def test_missing_columns_returns_none_no_gate(self):
+        import pandas as pd
+        # Flags not served → None so the caller fails OPEN (doesn't gate on lineup state).
+        assert predict_today._lineups_confirmed(pd.DataFrame([{"x": 1}]), 0) is None
+
+    def test_actionable_logic_matches_gate(self):
+        # Mirror the loop's combination: actionable iff not degraded AND lineups != False.
+        def actionable(degraded, lineups_ok):
+            return (not degraded) and (lineups_ok is not False)
+        assert actionable(False, True) is True      # dense, confirmed → bet
+        assert actionable(False, None) is True       # flags absent → fail-open → bet
+        assert actionable(False, False) is False     # pre-lineup → defer to post_lineup
+        assert actionable(True, True) is False        # degraded → abstain regardless
