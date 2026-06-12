@@ -101,6 +101,22 @@ _MARKET_COLS_TO_EXCLUDE: set[str] = {
     "sharp_soft_ml_spread", "n_books_available",
     "stale_book_flag", "totals_line_std", "totals_line_range",
     "ml_consensus_std",
+    # ── Story 30.4 — complete the market-blind exclusion (2026-06-12) ──
+    # These market-derived cols leaked into every deployed contract because they were
+    # added to the feature store AFTER this exclude list was authored, so the base
+    # models were only "consensus-and-moneyline-blind," not market-blind (architecture
+    # Principle 3 / §5.6 / §5.7). over_american/under_american are raw totals odds
+    # prices; home_ml_money_pct/over_ticket_pct are public-betting % (8.R);
+    # over_prob_consensus/under_implied_prob/total_line_movement are totals-market
+    # consensus/movement; market_bookmaker_count is book availability.
+    "over_prob_consensus", "under_implied_prob", "total_line_movement",
+    "home_ml_money_pct", "over_ticket_pct", "market_bookmaker_count",
+    "over_american", "under_american",
+    # `total_line_std` (consensus stddev of the betting total, from mart_odds_consensus)
+    # is a 9th leak: the near-identically-named `totals_line_std` (plural, from
+    # mart_bookmaker_disagreement) IS excluded above, but the consensus singular slipped
+    # through the name collision. Both are market-dispersion features → exclude both.
+    "total_line_std",
 }
 
 

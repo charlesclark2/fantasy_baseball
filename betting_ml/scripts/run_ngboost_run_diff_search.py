@@ -30,7 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.scripts.train_run_diff_prod import _MARKET_COLS_TO_EXCLUDE
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
-from betting_ml.utils.feature_hygiene import is_identifier_name
+from betting_ml.utils.feature_hygiene import is_identifier_name, load_dead_weight_exclude
 from betting_ml.utils.feature_selection import (
     SEQUENTIAL_POSTERIOR_FEATURES,
     load_retained_features,
@@ -98,6 +98,13 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
     _identifier_removed = [f for f in feature_cols if is_identifier_name(f)]
     feature_cols = [f for f in feature_cols if not is_identifier_name(f)]
     print(f"Story 30.1: dropped {len(_identifier_removed)} identifier/temporal cols: {_identifier_removed}")
+    # Story 30.4b — drop the promoted dead-weight features (no-op until the ablation
+    # writes betting_ml/models/run_differential/dead_weight_exclude.json). The 9 market
+    # leaks are already gone via _MARKET_COLS_TO_EXCLUDE (Story 30.4a).
+    _dead_weight = set(load_dead_weight_exclude("run_differential"))
+    _dead_removed = [f for f in feature_cols if f in _dead_weight]
+    feature_cols = [f for f in feature_cols if f not in _dead_weight]
+    print(f"Story 30.4b: dropped {len(_dead_removed)} dead-weight cols")
     missing = [f for f in retained if f not in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
     if missing:
         print(f"WARNING: {len(missing)} retained features absent from DataFrame (skipped): {missing[:5]}")
