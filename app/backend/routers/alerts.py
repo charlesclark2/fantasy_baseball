@@ -13,8 +13,9 @@ import os
 
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.backend.dependencies import get_user_id
 from app.backend.models.alerts import AlertPreferences, AlertPreferencesUpdate
 
 logger = logging.getLogger(__name__)
@@ -40,26 +41,8 @@ def _get_dynamo_table():
     return ddb.Table(_DYNAMO_TABLE)
 
 
-def _extract_user_id(request: Request) -> str:
-    """Pull sub claim from API Gateway JWT authorizer context (HTTP API v2).
-
-    In local dev the header X-User-Id can be used to simulate a user.
-    """
-    event = request.scope.get("aws.event", {})
-    try:
-        return event["requestContext"]["authorizer"]["jwt"]["claims"]["sub"]
-    except (KeyError, TypeError):
-        pass
-    # Local dev fallback
-    dev_user = request.headers.get("X-User-Id")
-    if dev_user:
-        return dev_user
-    raise HTTPException(status_code=401, detail="Unable to determine user identity")
-
-
 @router.get("/preferences", response_model=AlertPreferences)
-def get_alert_preferences(request: Request) -> AlertPreferences:
-    user_id = _extract_user_id(request)
+def get_alert_preferences(user_id: str = Depends(get_user_id)) -> AlertPreferences:
     table = _get_dynamo_table()
     try:
         resp = table.get_item(Key={"user_id": user_id})
@@ -80,9 +63,8 @@ def get_alert_preferences(request: Request) -> AlertPreferences:
 
 @router.put("/preferences", response_model=AlertPreferences)
 def update_alert_preferences(
-    request: Request, body: AlertPreferencesUpdate
+    body: AlertPreferencesUpdate, user_id: str = Depends(get_user_id)
 ) -> AlertPreferences:
-    user_id = _extract_user_id(request)
     table = _get_dynamo_table()
 
     # Read existing item first to merge with updates

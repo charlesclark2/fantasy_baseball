@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -46,7 +46,7 @@ WITH ranked AS (
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions p
     LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = p.game_pk
-    WHERE p.game_date = CURRENT_DATE
+    WHERE p.game_date = %(today)s
       AND p.prediction_type = 'post_lineup'
 ),
 base AS (
@@ -105,7 +105,7 @@ ORDER BY game_start_utc, game_pk, market_type
 _FRESHNESS_QUERY = f"""
 SELECT MAX(inserted_at) AS last_updated_at
 FROM {_ML_SCHEMA}.daily_model_predictions
-WHERE game_date = CURRENT_DATE
+WHERE game_date = %(today)s
 """
 
 _HISTORY_QUERY = f"""
@@ -186,7 +186,7 @@ WITH ranked AS (
             ORDER BY inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
-    WHERE game_date = CURRENT_DATE
+    WHERE game_date = %(today)s
       AND prediction_type = 'post_lineup'
 ),
 base AS (
@@ -319,9 +319,10 @@ def get_picks_today() -> TodayPicksResponse:
     if cached is not None:
         return TodayPicksResponse(**cached)
 
+    today = date.today().isoformat()
     try:
-        rows = execute_query(_TODAY_QUERY)
-        freshness = execute_query(_FRESHNESS_QUERY)
+        rows = execute_query(_TODAY_QUERY, params={"today": today})
+        freshness = execute_query(_FRESHNESS_QUERY, params={"today": today})
     except Exception as exc:
         logger.exception("Snowflake query failed for /picks/today")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
@@ -403,9 +404,10 @@ def get_picks_history() -> HistoryPicksResponse:
 
 @router.get("/ev", response_model=EVPicksResponse)
 def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
+    from datetime import date as _date
+    today_str = _date.today().isoformat()
     if date:
         try:
-            from datetime import date as _date
             _date.fromisoformat(date)
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
@@ -414,7 +416,7 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
         cache_key = None  # don't cache historical date lookups
     else:
         query = _EV_QUERY_TODAY
-        params = None
+        params = {"today": today_str}
         cache_key = "picks/ev.json"
 
     if cache_key:

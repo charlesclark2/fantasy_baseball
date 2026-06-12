@@ -13,7 +13,8 @@ import streamlit as st
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.utils.db import run_execute, run_query
+from app.utils.db import run_query
+from app.utils.user_bets import load_owner_bets_df, write_owner_bet
 from app.utils.prediction_status import (
     DEDUP_PRIORITY_CASE,
     PREDICTION_BASIS_CASE,
@@ -484,43 +485,6 @@ else:
 # Log a Bet
 # ---------------------------------------------------------------------------
 
-_BET_HISTORY_SQL = """
-SELECT
-    b.bet_id,
-    b.placed_at,
-    b.score_date,
-    b.game_pk,
-    b.matchup,
-    b.market,
-    b.bookmaker,
-    b.american_odds,
-    b.stake,
-    b.total_line,
-    b.model_prob,
-    b.market_prob,
-    b.ev,
-    b.kelly_capped,
-    b.outcome,
-    b.profit_loss,
-    b.notes,
-    g.home_score,
-    g.away_score,
-    g.status_code
-FROM baseball_data.betting_ml.placed_bets b
-LEFT JOIN baseball_data.betting.stg_statsapi_games g
-    ON b.game_pk = g.game_pk
-    AND g.status_code = 'F'
-ORDER BY b.placed_at DESC
-"""
-
-_INSERT_BET_SQL = """
-INSERT INTO baseball_data.betting_ml.placed_bets
-    (score_date, game_pk, matchup, market, bookmaker, american_odds, stake,
-     total_line, model_prob, market_prob, ev, kelly_capped, notes)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-"""
-
-
 def _derive_outcome(row: pd.Series) -> str | None:
     """Return 'win', 'loss', 'push', or None (pending) for a placed_bets row."""
     if pd.isna(row.get("status_code")) or row.get("status_code") != "F":
@@ -569,7 +533,8 @@ def _american_from_decimal(dec: float) -> int:
 
 @st.cache_data(ttl=300, show_spinner="Loading bet history...")
 def load_bet_history() -> pd.DataFrame:
-    return run_query(_BET_HISTORY_SQL)
+    # Bets are canonical in DynamoDB; outcomes are pre-settled by the daily job.
+    return load_owner_bets_df()
 
 
 st.divider()
@@ -656,24 +621,21 @@ with st.expander("📝 Log a Bet", expanded=False):
                 else:
                     try:
                         game_pk_val = int(df_game_rows.iloc[0]["game_pk"]) if not df_game_rows.empty else None
-                        run_execute(
-                            _INSERT_BET_SQL,
-                            params=(
-                                date_str,
-                                game_pk_val,
-                                sel_game,
-                                sel_market,
-                                bookmaker or None,
-                                int(actual_odds),
-                                float(stake_input),
-                                float(total_line_input) if total_line_input is not None else None,
-                                float(ev_row["model_prob"]) if ev_row is not None else None,
-                                float(ev_row["market_prob"]) if ev_row is not None else None,
-                                float(ev_row["ev"]) if ev_row is not None else None,
-                                float(ev_row["kelly_capped"]) if ev_row is not None else None,
-                                notes_input or None,
-                            ),
-                        )
+                        write_owner_bet({
+                            "score_date": date_str,
+                            "game_pk": game_pk_val,
+                            "matchup": sel_game,
+                            "market": sel_market,
+                            "bookmaker": bookmaker or None,
+                            "american_odds": int(actual_odds),
+                            "stake": float(stake_input),
+                            "total_line": float(total_line_input) if total_line_input is not None else None,
+                            "model_prob": float(ev_row["model_prob"]) if ev_row is not None else None,
+                            "market_prob": float(ev_row["market_prob"]) if ev_row is not None else None,
+                            "ev": float(ev_row["ev"]) if ev_row is not None else None,
+                            "kelly_capped": float(ev_row["kelly_capped"]) if ev_row is not None else None,
+                            "notes": notes_input or None,
+                        })
                         st.session_state["_bet_success"] = f"{sel_game} — {sel_market} @ {int(actual_odds):+d} (${float(stake_input):.2f})"
                         st.session_state["_bet_sel_version"] = _sel_v + 1
                         st.session_state["_bet_form_version"] = _form_v + 1
