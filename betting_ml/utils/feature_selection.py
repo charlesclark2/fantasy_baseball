@@ -77,7 +77,10 @@ SEQUENTIAL_POSTERIOR_FEATURES: tuple[str, ...] = (
 PROTECTED_FEATURES: frozenset[str] = frozenset(
     {
         "post_2022_rules",
-        "game_year",
+        # Story 30.1: `game_year` removed from PROTECTED — it is a train-serve-skew
+        # OOD constant (train 2021-25 / serve 2026). The retrain trainers also drop
+        # it via feature_hygiene.is_identifier_name; un-protecting it here keeps a
+        # future select_features() md-regeneration from forcing it back in.
         "home_win_rate_trailing_3yr",
         "home_win_prob_consensus",
         "total_line_consensus",

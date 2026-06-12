@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -29,6 +30,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.scripts.model_evaluation.cv_harness import _NON_FEATURE_COLS
+from betting_ml.utils.feature_hygiene import flag_identifier_features
 
 _OUTPUT_DIR = PROJECT_ROOT / "betting_ml" / "evaluation" / "model_evaluation"
 _FOLD = "fold_2025"
@@ -110,6 +112,59 @@ def _is_phase7(group: str) -> bool:
     return any(group.startswith(p) or group == p for p in _PHASE7_GROUPS)
 
 
+def _apply_identifier_flag(df: pd.DataFrame, values: pd.DataFrame) -> pd.DataFrame:
+    """Add Story 30.1 identifier columns and fold them into prune_candidate.
+
+    `df` must contain a `feature` column and an `importance_prune` column.
+    `values` is the raw (pre-imputation) feature frame for cardinality stats.
+    Returns `df` with `identifier_risk`, `identifier_reason`, and a
+    `prune_candidate = importance_prune OR identifier_risk` column.
+    """
+    flags = flag_identifier_features(df["feature"].tolist(), values=values)
+    df = df.merge(
+        flags[["identifier_risk", "cardinality", "card_ratio", "reason"]].rename(
+            columns={"reason": "identifier_reason"}
+        ),
+        left_on="feature",
+        right_index=True,
+        how="left",
+    )
+    df["identifier_risk"] = df["identifier_risk"].fillna(False).astype(bool)
+    df["prune_candidate"] = df["importance_prune"] | df["identifier_risk"]
+    return df
+
+
+def reflag_only() -> None:
+    """Fast path: re-apply the identifier flagger to the existing parquet.
+
+    Reads the persisted feature_importance_v1.parquet and the fold feature
+    frame, recomputes the identifier flags + prune_candidate, and rewrites the
+    parquet — WITHOUT refitting XGBoost/SHAP. Used to demonstrate that the
+    updated flagger now catches the identifier columns (Story 30.1 AC).
+    """
+    out = _OUTPUT_DIR / "feature_importance_v1.parquet"
+    df = pd.read_parquet(out)
+    feat = pd.read_parquet(_OUTPUT_DIR / f"features_{_FOLD}.parquet")
+    tr_f = feat[feat["split"] == "train"].reset_index(drop=True)
+
+    # Backwards-compat: older parquet has `prune_candidate` as the importance-only
+    # flag. Preserve it under `importance_prune` before re-deriving.
+    if "importance_prune" not in df.columns:
+        df = df.rename(columns={"prune_candidate": "importance_prune"})
+
+    avail = [c for c in df["feature"] if c in tr_f.columns]
+    df = _apply_identifier_flag(df, tr_f[avail])
+
+    flagged = df[df["identifier_risk"]].sort_values("mean_abs_shap", ascending=False)
+    print(f"=== Re-flag only — {out.name} ===")
+    print(f"Identifier-risk features now flagged: {len(flagged)}")
+    cols = ["feature", "mean_abs_shap", "cardinality", "card_ratio",
+            "importance_prune", "identifier_risk", "prune_candidate"]
+    print(flagged[cols].to_string(index=False))
+    df.to_parquet(out, index=False)
+    print(f"\nRewrote {out}")
+
+
 def main() -> None:
     print(f"=== Feature Importance Analysis — {_FOLD} ===\n")
 
@@ -189,7 +244,7 @@ def main() -> None:
         "feature_group":     groups,
     })
 
-    df["prune_candidate"] = (
+    df["importance_prune"] = (
         (df["mean_abs_shap"] < 0.001) &
         (df["xgb_gain_importance"] < 0.0005)
     )
@@ -199,14 +254,24 @@ def main() -> None:
         (df["mean_abs_shap"] < median_shap)
     )
 
+    # Story 30.1 — identifier/temporal flagger. Importance-only pruning CANNOT
+    # catch a memorized identifier (home_starter_pitcher_id is rank #12 by SHAP),
+    # so flag by name/cardinality and OR it into prune_candidate.
+    df = _apply_identifier_flag(df, tr_f[feat_cols])
+
     df = df.sort_values("mean_abs_shap", ascending=False).reset_index(drop=True)
 
     # ── Summary stats ─────────────────────────────────────────────────────────
     n_prune = df["prune_candidate"].sum()
     n_noise = df["noise_risk"].sum()
+    n_ident = df["identifier_risk"].sum()
     print(f"\nTotal features:     {len(df)}")
-    print(f"Prune candidates:   {n_prune}  (mean_abs_shap < 0.001 AND gain < 0.0005)")
+    print(f"Prune candidates:   {n_prune}  (importance-prune OR identifier-risk)")
+    print(f"Identifier-risk:    {n_ident}  (name *_id/*_pk/game_year/season/*_cluster_id or high-card int)")
     print(f"Noise-risk:         {n_noise}  (Phase-7 group AND below median SHAP)")
+    ident_feats = df.loc[df["identifier_risk"], "feature"].tolist()
+    if ident_feats:
+        print(f"  identifier features: {ident_feats}")
     print(f"Median SHAP:        {median_shap:.5f}")
     print(f"\nTop 20 features by mean |SHAP|:")
     print(df[["feature","mean_abs_shap","xgb_gain_importance","feature_group"]].head(20).to_string(index=False))
@@ -226,4 +291,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Card 7.MB / Story 30.1 feature-importance flagger")
+    parser.add_argument(
+        "--reflag-only", action="store_true",
+        help="Re-apply the Story 30.1 identifier flagger to the existing parquet "
+             "(no XGBoost/SHAP refit). Demonstrates the identifier columns now flag.",
+    )
+    args = parser.parse_args()
+    if args.reflag_only:
+        reflag_only()
+    else:
+        main()

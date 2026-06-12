@@ -30,6 +30,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.scripts.train_run_diff_prod import _MARKET_COLS_TO_EXCLUDE
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
+from betting_ml.utils.feature_hygiene import is_identifier_name
 from betting_ml.utils.feature_selection import (
     SEQUENTIAL_POSTERIOR_FEATURES,
     load_retained_features,
@@ -91,6 +92,12 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
 
     retained = load_retained_features()
     feature_cols = [f for f in retained if f in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
+    # Story 30.1 — drop leakage-prone identifier/temporal columns
+    # (home_starter_pitcher_id, venue_id, game_year). All three targets PROMOTE
+    # without them; see evaluation/feature_selection/story_30_1_identifier_hygiene.md.
+    _identifier_removed = [f for f in feature_cols if is_identifier_name(f)]
+    feature_cols = [f for f in feature_cols if not is_identifier_name(f)]
+    print(f"Story 30.1: dropped {len(_identifier_removed)} identifier/temporal cols: {_identifier_removed}")
     missing = [f for f in retained if f not in df.columns and f not in _MARKET_COLS_TO_EXCLUDE]
     if missing:
         print(f"WARNING: {len(missing)} retained features absent from DataFrame (skipped): {missing[:5]}")
@@ -177,6 +184,11 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
     )
     print(f"  run_differential/{model_name} → {model_path}")
 
+    # Contract must list the POST-imputation columns the model actually consumes
+    # (feature_cols + the imputation indicators has_starter_platoon_data/is_new_venue,
+    # appended by build_imputation_pipeline). Writing the pre-imputation feature_cols
+    # makes predict_today serve fewer columns than the model expects → IndexError.
+    final_feature_cols = list(last_fold["X_train"].columns)
     cols_path = Path(model_path).with_name(f"feature_columns_{model_name}_{last_eval_year}.json")
     with open(cols_path, "w") as f:
         json.dump(
@@ -185,8 +197,8 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
                 "model_name": model_name,
                 "eval_year": last_eval_year,
                 "exclude_sequential": exclude_sequential,
-                "n_features": len(feature_cols),
-                "feature_cols": feature_cols,
+                "n_features": len(final_feature_cols),
+                "feature_cols": final_feature_cols,
             },
             f,
             indent=2,

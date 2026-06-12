@@ -565,7 +565,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **1 — NEXT** | Epic 6D (distributional bullpen) | Epic 6 champion | After Epic 6 |
 | **0 — NOW** | Epic 8 (matchup model) | 7.M ✅ + 7A ✅ + 8.0 ✅ | Unblocked |
 | **0 — DONE** | Epic 12.3 (proxy CLV analysis) | ≥50 live games | ✅ 2026-06-02: 1,334 games, CV AUC=0.548, power threshold=500 games confirmed |
-| **0 — TIER 0 NEXT (2026-06-11)** | **Epic 30 (production model audit & hardening)** | none — uses existing artifacts | FOUNDATION-FIRST. 30.1 feature-hygiene (junk identifier/`game_year` features in all 3 v4 contracts) · 30.2 Bayesian-leverage (unused sub-model distributional layer) · 30.3 serving-skew (live home_win zero-skill). Gates Tier 1+. See "Foundation-First Immediate Roadmap". |
+| **0 — TIER 0 IN PROGRESS (2026-06-11)** | **Epic 30 (production model audit & hardening)** | none — uses existing artifacts | FOUNDATION-FIRST. 30.1 feature-hygiene ✅ DONE (all 3 PROMOTE; offline corr 0.42 vs live 0.001 ⇒ serving, not model) · 30.2 Bayesian-leverage (unused sub-model distributional layer) · 30.3 serving-skew (live home_win zero-skill — now the highest-value lever) · 30.4 contract cleanup (complete market-blindness: 6 leaked cols + dead-weight prune: run_diff ~61%). Gates Tier 1+. See "Foundation-First Immediate Roadmap". |
 | **1 — AFTER Epic 30** | Epic 12.4/12.5 (CLV meta-model) | ✅ label gates CLEARED: 345 h2h / 288 totals live CLV labels (Snowflake-verified 2026-06-11; ≥50 & ≥100 met) | UNBLOCKED by labels, but sequenced after Epic 30 so it trains on the hardened base models (it consumes their edge/conviction signals). 12.6 (≥500) ~60-70% there. |
 | **1 — AFTER Epic 30** | Story 12.10′ (Pinnacle steam / CLV) | none (data in hand) | The profit lever; user-confirmed to run after Epic 30. ≥+0.01 AUC gate. |
 | **1 — NEXT** | Epic 19.3 (permission gate backtest) | ✅ ≥50 live games met (345 h2h) | ~Early June |
@@ -6808,6 +6808,8 @@ Acceptance Criteria:
 
 ### 19.4 — Update EV Tracker page
 
+**Note (2026-06-11):** `GET /picks/ev` already returns all scored games with a `qualified_bet` field and is the right data source for showing non-qualified picks alongside qualified ones. The dashboard's `GET /picks/today` only returns `qualified_bet = true` rows. If the dashboard ever needs a "below threshold" section, replace the `/picks/today` call with `/picks/ev` and split on `qualified_bet` client-side — no backend changes needed.
+
 Tasks:
 - [ ] EV Tracker default view filters to `qualified_bet = true` only
 - [ ] Add sidebar toggle: "Show all scored games" / "Qualified bets only" (default: qualified)
@@ -9414,6 +9416,7 @@ Output path correction: all components use `frontend/app/` not `frontend/src/app
 *As a bettor, I want to see every market for today's games with EV calculations and Kelly-sized stake recommendations so that I can make informed sizing decisions across all markets, not just the pre-filtered qualified ones.*
 
 - [x] Page has a bankroll input at the top; all stake suggestions update dynamically when bankroll changes
+- [ ] **Settings: user-configurable default bankroll** — The bankroll input on the EV Tracker currently defaults to $1,000 hardcoded. Users should be able to save their default bankroll in Settings (`frontend/app/settings/page.tsx`) so the EV Tracker loads with their preferred value. Persist via user profile in Cognito custom attributes or a lightweight Snowflake user-prefs table. Also expose **max Kelly cap** (currently hardcoded at 5%, now a session-only input) as a saved setting.
 - [x] Table shows ALL markets for the selected date (not just qualified bets), with columns: Game, Market, Side, Model%, Bovada%, Edge, EV, Raw Kelly%, Capped Kelly%, Suggested Stake ($)
 - [x] Qualified markets (edge > threshold, Kelly > 0) are visually distinguished from non-qualifying rows
 - [x] Date selector defaults to today but allows browsing historical dates
@@ -9784,48 +9787,516 @@ Acceptance criteria:
 
 ---
 
-### A0.4 — Next.js Frontend on S3 + CloudFront
+### A0.4 — Next.js Frontend API Integration
 
-**Overview:** A Next.js single-page application (static export) hosted on S3, distributed via CloudFront CDN. CloudFront provides HTTPS via the ACM certificate from A0.1. Built with Next.js (App Router) + TypeScript + Tailwind CSS + TanStack Query.
+**Overview:** Wire the existing Next.js frontend (`frontend/`) to the live FastAPI Lambda backend (`https://api.credencesports.com`). All pages currently render with `MOCK_DATA` constants — this story replaces every mock with a real API call, wires Cognito auth, and configures the Vercel deployment for `app.credencesports.com`.
 
-**Stack:** `next.js` (App Router, `output: 'export'` for static S3 hosting), TypeScript, Tailwind CSS, `amazon-cognito-identity-js` / `@aws-amplify/auth`, `recharts`, `@tanstack/react-query`, `lucide-react`.
+**Current state (2026-06-11):** Frontend code exists under `frontend/`, deployed via Vercel. `amazon-cognito-identity-js` 6.3.16 and `@tanstack/react-query` v5 are installed but unused. Only `PipelineStatusDot` makes a live API call. Cognito user pool is provisioned (A0.2 complete). Backend Lambda responds at `https://api.credencesports.com`.
 
-**Pages:**
-- `/login` — Cognito Hosted UI redirect; handles JWT callback
-- `/dashboard` — today's qualified picks with conviction scores and CI visualizations
-- `/ev-tracker` — all markets for today (or selected date) with EV, Kelly%, and bankroll-adjusted stake suggestions; "Log Bet" action per row links to `/bets`
-- `/bets` — bet log form + history table; pre-fills from EV tracker; settled P&L summary
-- `/performance` — fund P&L chart, win rate, CLV trend, model version breakdown
-- `/picks/[game_pk]` — pick detail drill-down with run distribution, sub-model signals, gate criteria
-- `/market-comparison` — *(lower priority)* multi-bookmaker line comparison; build after core pages
-- `/settings` — notification preferences (email, browser push)
-- `/subscribe` — Stripe Checkout paywall (shown to unauthenticated non-beta users post-launch)
-- `/admin` — system health dashboard (Dagster status, signal freshness, CLV label count)
-- `/` → redirect to `/dashboard` if authenticated, `/login` if not
+**Tech stack:**
+- Next.js 16.2.6, React 19, TypeScript 5.7.3 (App Router, `"use client"` pages)
+- shadcn/ui + Radix + Tailwind CSS v4 — components in `frontend/components/ui/`
+- TanStack Query v5 (`@tanstack/react-query`) — installed, not yet configured
+- `amazon-cognito-identity-js` 6.3.16 — installed, not yet called
+- Recharts 2.15.0, `date-fns` 4.1
 
-Tasks:
-- [ ] Initialize Next.js app: `npx create-next-app@latest app/frontend --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"` — use App Router; TypeScript from the start
-- [ ] Add dependencies: `npm install amazon-cognito-identity-js @aws-amplify/auth recharts lucide-react @tanstack/react-query`
-- [ ] Configure `next.config.ts`: set `output: 'export'` for static export to S3; add `trailingSlash: true` for S3 compatibility
-- [ ] Configure `@tanstack/react-query` as the data fetching layer — wraps all API Gateway calls with caching, loading states, and background refetch; set `staleTime: 5 * 60 * 1000` (5 minutes) as default cache window for picks data
-- [ ] Implement Cognito auth flow: redirect to Cognito Hosted UI on unauthenticated access; handle the authorization code callback; **store JWT in memory only (not localStorage — security requirement)**; refresh token via `/auth/refresh` on expiry
-- [ ] Build Dashboard page: fetch `GET /picks/today`; display as picks table per A0.0 wireframe — one row per qualified bet with game matchup, market type, model probability, Bovada line, conviction score, CI bar visualization, signal icon grid, and collapsible "Why this pick?" panel
-- [ ] Build EV Tracker page (`/ev-tracker`): fetch `GET /picks/ev`; bankroll input drives stake column; qualified rows visually distinguished; "Log Bet" button on each row navigates to `/bets` with query params pre-filling the form
-- [ ] Build Bet Log page (`/bets`): fetch `GET /bets` for history table and `GET /bets/summary` for stat tiles; form submits `POST /bets`; inline "Settle" action on open bets; accepts query params `game_pk`, `market_type`, `side` from EV tracker link
-- [ ] Build Performance page: fetch `GET /performance/summary` and `GET /performance/by-model`; render P&L curve using Recharts LineChart, win rate stat tile, mean CLV by signal group; tabbed breakdown per A0.0 wireframe
-- [ ] Build S3 bucket for static hosting (separate from the ML artifact bucket); configure for static website hosting
-- [ ] Create CloudFront distribution: origin = S3 bucket; viewer protocol = HTTPS only; attach ACM certificate from A0.1; configure `index.html` as default root and error page (required for client-side routing)
-- [ ] Write `infrastructure/frontend/deploy.sh`: `npm run build` → `next export` produces `out/` → `aws s3 sync out/ s3://your-bucket --delete` → `aws cloudfront create-invalidation --distribution-id $DIST_ID --paths "/*"`
-- [ ] Add `app/frontend/` to `.github/workflows/ci.yml` — lint and typecheck on every PR
+**Backend API base URL:** `https://api.credencesports.com` — set via `NEXT_PUBLIC_API_URL` env var
 
-Acceptance criteria:
-- [ ] Application loads at `https://yourdomain.com` with valid SSL
-- [ ] Unauthenticated access to `/dashboard` redirects to `/login`
-- [ ] Authenticated user sees today's qualified bets populated from real `daily_model_predictions` data
-- [ ] Performance page renders P&L curve for all historical `mart_bankroll_state` data
-- [ ] JWT stored in memory only — confirmed by checking `localStorage` and `sessionStorage` are empty after login
-- [ ] `next build` completes with zero TypeScript errors and zero ESLint warnings
-- [ ] Static export produces valid HTML for all routes — confirmed by checking `out/` directory structure
+**Security constraints (apply across all sub-tasks):**
+- Do not store JWT in `localStorage` or `sessionStorage` — React Context (in-memory) only; consequence is that users must re-authenticate when the tab closes; acceptable for beta
+- All secrets via environment variables — no hardcoded credentials or URLs
+- Lambda cold start budget: 3 seconds — no heavy ML library imports anywhere in the backend
+
+**Sub-task sequencing:** A0.4.1 → A0.4.2 → A0.4.3 must complete in order. A0.4.4 – A0.4.8 can run in parallel once A0.4.3 is done. A0.4.9 can run once A0.4.1 Cognito env vars are known.
+
+---
+
+#### A0.4.1 — Cognito login ✅ (2026-06-11)
+
+Wire `frontend/app/login/page.tsx` to real Cognito auth. The current `handleSubmit` is a stub (1200ms wait + navigate). Replace with `CognitoUser.authenticateUser`.
+
+**Dependencies:** A0.2 complete (Cognito user pool and app client provisioned)
+**Blocks:** A0.4.2
+
+**Tasks:**
+- [x] Look up `NEXT_PUBLIC_COGNITO_USER_POOL_ID` and `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID` from Cognito console (us-east-1); add to `frontend/.env.local` (local) and Vercel dashboard (prod)
+- [x] Create `frontend/lib/cognito.ts` — export `getCognitoUser(email)` helper returning a `CognitoUser` backed by a `CognitoUserPool` using the two env vars
+- [x] Replace stub `handleSubmit` with `CognitoUser.authenticateUser`; on `onSuccess` call `onLoginSuccess(accessToken, idToken)` stub (will be wired to AuthContext in A0.4.2) then navigate to `/dashboard`
+- [x] Handle error cases: `NotAuthorizedException` → "Invalid email or password", `UserNotFoundException` → "No account found", `NewPasswordRequired` challenge → "New password required — contact support" inline message
+- [x] Show inline error below the form (no toasts); show loading state on submit button while in-flight
+
+**Acceptance criteria:**
+- [x] Correct credentials navigate to `/dashboard`
+- [x] Wrong password shows inline error without page reload
+- [x] Token is not written to `localStorage` or `sessionStorage`
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 (App Router), React 19, TypeScript, shadcn/ui, Tailwind CSS v4. Backend: FastAPI Lambda at https://api.credencesports.com. Auth: AWS Cognito (us-east-1). Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.1 — Wire the login page to real Cognito auth.
+
+Files to read first:
+- frontend/app/login/page.tsx  (handleSubmit stub is the target)
+- frontend/package.json  (confirm amazon-cognito-identity-js is installed)
+
+Work:
+1. Look up NEXT_PUBLIC_COGNITO_USER_POOL_ID and NEXT_PUBLIC_COGNITO_APP_CLIENT_ID from AWS Cognito console (us-east-1) and add them to frontend/.env.local.
+2. Create frontend/lib/cognito.ts:
+   import { CognitoUser, CognitoUserPool, AuthenticationDetails } from 'amazon-cognito-identity-js'
+   const pool = new CognitoUserPool({ UserPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!, ClientId: process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID! })
+   export function getCognitoUser(email: string) { return new CognitoUser({ Username: email, Pool: pool }) }
+   export { AuthenticationDetails }
+3. Replace handleSubmit in frontend/app/login/page.tsx:
+   - Create AuthenticationDetails({ Username: email, Password: password })
+   - Call getCognitoUser(email).authenticateUser(authDetails, { onSuccess(session) { onLoginSuccess(session.getAccessToken().getJwtToken(), session.getIdToken().getJwtToken()); router.push('/dashboard') }, onFailure(err) { /* set error state */ }, newPasswordRequired() { setError('New password required — contact support') } })
+   - Add an onLoginSuccess(accessToken, idToken) stub function above handleSubmit that does nothing (will be wired in A0.4.2)
+4. Add an error useState<string | null> and render it below the form as <p className="text-sm text-[#ef4444]">{error}</p>.
+5. Show a loading spinner or disabled state on the submit button while the Cognito call is in-flight.
+
+Constraints:
+- Do NOT store tokens in localStorage or sessionStorage — return them via the onLoginSuccess callback only.
+- Keep all existing UI — only replace handleSubmit logic.
+- next.config.mjs has typescript.ignoreBuildErrors: true but still write valid TypeScript.
+
+Done when: correct credentials navigate to /dashboard, wrong credentials show inline error, no tokens in storage.
+```
+
+---
+
+#### A0.4.2 — Auth context + route guard + Sign Out ✅ (2026-06-11)
+
+Create a React context that holds the JWT in memory, protect all authenticated routes, display the real user email in navbars, and wire Sign Out buttons.
+
+**Dependencies:** A0.4.1 complete
+**Blocks:** A0.4.3, A0.4.4, A0.4.5, A0.4.6, A0.4.7, A0.4.8
+
+**Tasks:**
+- [x] Create `frontend/lib/auth-context.tsx` — `AuthContext` holds `{ accessToken: string | null, email: string | null, onLoginSuccess: (at: string, it: string) => void, signOut: () => void }`; decode `idToken` JWT (base64-decode middle segment) to extract `email`; export `useAuth()` hook
+- [x] Wrap `frontend/app/layout.tsx` children with `<AuthProvider>`
+- [x] Wire `login/page.tsx` `onLoginSuccess` stub to call `useAuth().onLoginSuccess`
+- [x] Create `frontend/components/auth-guard.tsx` — implemented as a **wrapper** component (`<AuthGuard>{children}</AuthGuard>`) rather than a void sibling; returns `null` when `accessToken === null` to prevent any flash of protected content before redirect fires
+- [x] Wrap page content in `<AuthGuard>...</AuthGuard>` in `dashboard/page.tsx`, `performance/page.tsx`, `ev-tracker/page.tsx`, `picks/[game_pk]/page.tsx`; guard is inside `BetLogInner` (not `BetLogPage`) in `bet-log/page.tsx` due to `useSearchParams` + `<Suspense>` pattern
+- [x] Replace all hardcoded `user@example.com` in navbar components with `useAuth().email ?? "—"`
+- [x] Wire all Sign Out buttons to call `useAuth().signOut()` + `router.push('/login')`
+
+**Acceptance criteria:**
+- [x] Navigating directly to `/dashboard` with no token redirects to `/login`
+- [x] Real user email displays in navbar after login
+- [x] Sign Out clears token and lands on `/login`
+- [x] Token never written to `localStorage` or `sessionStorage`
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 (App Router), React 19, TypeScript, shadcn/ui, Tailwind CSS v4. Tokens are held in React Context only (not localStorage). A0.4.1 is complete: frontend/lib/cognito.ts exists and login/page.tsx calls onLoginSuccess(accessToken, idToken) on success. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.2 — Auth context, route guard, Sign Out wiring.
+
+Files to read first:
+- frontend/app/login/page.tsx  (see how onLoginSuccess is currently stubbed)
+- frontend/app/layout.tsx
+- frontend/app/dashboard/page.tsx  (see navbar structure — same pattern in all 5 pages)
+
+Work:
+1. Create frontend/lib/auth-context.tsx:
+   type AuthCtx = { accessToken: string | null; email: string | null; onLoginSuccess: (at: string, it: string) => void; signOut: () => void }
+   - AuthProvider: holds accessToken + email in useState.
+   - onLoginSuccess: decodes idToken (JSON.parse(atob(idToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')))) to get email; sets both in state.
+   - signOut: sets both to null.
+   - export const AuthContext = createContext<AuthCtx>(...); export function useAuth() { return useContext(AuthContext) }
+2. Wrap children in frontend/app/layout.tsx with <AuthProvider>.
+3. In frontend/app/login/page.tsx: import useAuth, replace the stub with useAuth().onLoginSuccess(accessToken, idToken) inside the Cognito onSuccess callback.
+4. Create frontend/components/auth-guard.tsx:
+   "use client"
+   export function AuthGuard() {
+     const { accessToken } = useAuth(); const router = useRouter()
+     useEffect(() => { if (accessToken === null) router.push('/login') }, [accessToken])
+     return null
+   }
+5. Add <AuthGuard /> as the first element inside the outermost div of: dashboard/page.tsx, performance/page.tsx, ev-tracker/page.tsx, bet-log/page.tsx, picks/[game_pk]/page.tsx.
+6. In each of those 5 files, replace hardcoded "user@example.com" in the Navbar component with useAuth().email ?? "—".
+7. In each of those 5 files, find the Sign Out Button and wire its onClick to: () => { useAuth().signOut(); router.push('/login') }. If it is currently an <a> or Link to "/", convert to a Button with onClick.
+
+Constraints:
+- Tokens must NOT be stored in localStorage or sessionStorage.
+- Do not change any visual styling.
+- All 5 authenticated pages must have AuthGuard.
+
+Done when: unauthenticated /dashboard redirects to /login, email shows in navbar, Sign Out works.
+```
+
+---
+
+#### A0.4.3 — API client + TanStack Query setup ✅
+
+Create the central fetch wrapper with Bearer auth. Configure TanStack Query. Document required env vars.
+
+**Dependencies:** A0.4.2 complete
+**Blocks:** A0.4.4, A0.4.5, A0.4.6, A0.4.7, A0.4.8
+
+**Tasks:**
+- [x] Create `frontend/lib/api.ts` — `apiFetch(path: string, options?: RequestInit, token?: string | null): Promise<any>`; reads `NEXT_PUBLIC_API_URL`; attaches `Authorization: Bearer <token>`; on HTTP 401 throws `AuthError`; on other non-OK throws `Error(status)`; returns `response.json()`
+- [x] Create `frontend/lib/query-client.ts` — `export const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } } })`
+- [x] Wrap `frontend/app/layout.tsx` children with `<QueryClientProvider client={queryClient}>` — implemented via `frontend/components/providers.tsx` (`'use client'`) to avoid Next.js App Router Server→Client class-instance serialization error; `QueryClient` instantiated with `useState` inside the provider component
+- [x] Create `frontend/.env.local.example` with `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID`, `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID`
+
+**Acceptance criteria:**
+- [x] `apiFetch('/picks/today', {}, token)` sends correct `Authorization` header (verifiable in Network tab)
+- [x] `useQuery` hooks work in any page
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 (App Router), React 19, TypeScript, TanStack Query v5. Backend API at https://api.credencesports.com (env var NEXT_PUBLIC_API_URL). A0.4.2 is complete: frontend/lib/auth-context.tsx exists with useAuth() providing accessToken. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.3 — Central API client and TanStack Query setup.
+
+Files to read first:
+- frontend/app/layout.tsx  (add QueryClientProvider here)
+- frontend/lib/auth-context.tsx  (understand useAuth interface)
+
+Work:
+1. Create frontend/lib/api.ts:
+   export class AuthError extends Error {}
+   export async function apiFetch(path: string, options: RequestInit = {}, token?: string | null): Promise<any> {
+     const base = process.env.NEXT_PUBLIC_API_URL ?? ''
+     const res = await fetch(`${base}${path}`, {
+       ...options,
+       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }
+     })
+     if (res.status === 401) throw new AuthError('Unauthorized')
+     if (!res.ok) throw new Error(`API error ${res.status}`)
+     return res.json()
+   }
+
+2. Create frontend/lib/query-client.ts:
+   import { QueryClient } from '@tanstack/react-query'
+   export const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5 * 60 * 1000, retry: 1 } } })
+
+3. In frontend/app/layout.tsx:
+   - Import QueryClientProvider and queryClient
+   - Wrap children with <QueryClientProvider client={queryClient}> inside the existing AuthProvider
+
+4. Create frontend/.env.local.example:
+   NEXT_PUBLIC_API_URL=https://api.credencesports.com
+   NEXT_PUBLIC_COGNITO_USER_POOL_ID=
+   NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=
+
+Constraints:
+- apiFetch accepts token as a parameter (not read from context) because hooks can't be called inside utility functions.
+- Do not wrap apiFetch in a React hook.
+
+Done when: apiFetch is exported, QueryClientProvider wraps the app, .env.local.example exists.
+```
+
+---
+
+#### A0.4.4 — Dashboard: wire `GET /picks/today` ✅ (2026-06-11)
+
+Replace `MOCK_DATA` in `frontend/app/dashboard/page.tsx`. Remove the redundant `SignalFreshness` component.
+
+**Dependencies:** A0.4.3 complete
+**API:** `GET /picks/today`
+
+Response shape (final — includes Layer 4 conviction + run total fields):
+```json
+{
+  "picks": [{ "game_pk": 746604, "game_date": "2026-06-11", "market_type": "h2h",
+    "model_prob": 0.572, "bovada_devig_prob": 0.510, "edge": 0.062,
+    "game_conviction_score": 0.74, "win_prob_ci_low": null, "win_prob_ci_high": null,
+    "lineup_confirmed": true, "home_team": "NYM", "away_team": "HOU",
+    "pick_side": "home", "game_start_utc": "2026-06-11T23:10:00",
+    "model_total_runs": null, "market_total_line": null }],
+  "data_quality": { "signal_completeness_score": null, "last_updated_at": "...", "pipeline_status": "ok" }
+}
+```
+
+**Completed work:**
+- [x] `useQuery(['picks-today'], ...)` replaces `MOCK_DATA`; `SignalFreshness` component removed
+- [x] Backend `_TODAY_QUERY` updated to Layer 4 columns: `layer4_h2h_decision`/`layer4_totals_decision` for pick side, `layer4_h2h_edge`/`layer4_totals_over_signal` for edge, `IFF(layer4_h2h_conviction_flag, 0.8, 0.4)` for conviction score
+- [x] `Pick` Pydantic model extended with `pick_side`, `game_start_utc`, `model_total_runs`, `market_total_line`
+- [x] Loading skeleton rows; empty-state card when picks array is empty; error-state card on 503
+- [x] `ProbabilityBar` component: always-visible "Model"/"Market" labels above ticks; `ciLow`/`ciHigh` optional
+- [x] Dedicated **Pick** column (team abbrev or Over/Under) separate from market type
+- [x] **Split tables:** Moneyline and Total Runs rendered as two separate `PicksSection` tables with market-appropriate column headers (`Model Win %` / `Bovada Win %` vs `Model Runs` / `O/U Line`)
+- [x] Total Runs rows show raw run totals (e.g. `8.5` vs `9.9`) instead of over-probability percentages
+- [x] **Conviction badge** with hover tooltip explaining HIGH/MED/LOW; column centered
+- [x] **Pipeline status** redesigned: `PipelineStatusDot` counts `lineup_confirmed` per pick and renders green/yellow dot breakdown; no longer polls `/pipeline/status` endpoint
+- [x] Header tightened: removed "Dashboard" h1 and redundant qualified-picks count; pipeline status + date sit above "Today's Picks" section heading
+
+**Acceptance criteria:**
+- [x] Dashboard shows real game matchups, edge, and conviction values
+- [x] Loading skeleton visible before data lands; empty state shown when picks is empty
+- [x] `SignalFreshness` component removed; no `MOCK_DATA` remains
+
+**Known follow-ups (not blocking):**
+- `n_qualified_bets` in `pipeline_status` table writes 0 (legacy `qualified_bet` column is all zeros since Layer 4 migration) — misleading for ops but not user-facing
+- `_HISTORY_QUERY` still uses legacy `qualified_bet = TRUE`, `h2h_edge`, `totals_edge` columns — deferred until Performance page is built out (A0.4.6)
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 (App Router), React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx (useAuth() → accessToken), API client in frontend/lib/api.ts (apiFetch). Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.4 — Replace mock data in the dashboard with real GET /picks/today.
+
+Files to read first:
+- frontend/app/dashboard/page.tsx  (full file — MOCK_DATA at the top)
+- frontend/lib/api.ts
+- frontend/lib/auth-context.tsx
+
+GET /picks/today response:
+{ picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, win_prob_ci_low, win_prob_ci_high, lineup_confirmed, home_team, away_team }], data_quality: { pipeline_status, last_updated_at } }
+
+Work:
+1. Remove MOCK_DATA const.
+2. const { accessToken } = useAuth()
+3. const { data, isLoading, isError } = useQuery({ queryKey: ['picks-today'], queryFn: () => apiFetch('/picks/today', {}, accessToken), staleTime: 5 * 60 * 1000 })
+4. While isLoading: render skeleton rows (use <Skeleton> from frontend/components/ui/skeleton.tsx if it exists, or a simple animate-pulse div).
+5. When data?.picks?.length === 0: render "No qualified picks for today — check back after the morning pipeline runs."
+6. Map picks to the table: game = `${pick.away_team} @ ${pick.home_team}`, conviction = pick.game_conviction_score > 0.70 ? 'HIGH' : pick.game_conviction_score > 0.50 ? 'MED' : 'LOW'.
+7. Remove the <SignalFreshness> component and import — PipelineStatusDot already covers pipeline health.
+8. Remove the non-qualified section entirely — the backend only returns qualified picks.
+
+Done when: real picks render with loading/empty states, SignalFreshness removed, no MOCK_DATA remains.
+```
+
+---
+
+#### A0.4.5 — EV Tracker: wire `GET /picks/ev` ⬜
+
+Replace `MOCK_DATA` in `frontend/app/ev-tracker/page.tsx`. Date picker controls the query parameter.
+
+**Dependencies:** A0.4.3 complete
+**API:** `GET /picks/ev?date=YYYY-MM-DD` (omit date for today)
+
+Response shape: same as `/picks/today` plus `qualified_bet: boolean`, `kelly_fraction: number | null`, `total_line_consensus: number | null`.
+
+**Tasks:**
+- [ ] Add `useQuery(['picks-ev', isoDate], () => apiFetch('/picks/ev?date='+isoDate, {}, token))` keyed on selected date
+- [ ] EV, raw Kelly, capped Kelly, stake are computed client-side from `edge` and `kelly_fraction` — confirm mock field names match API field names and rename if needed
+- [ ] Rows with `qualified_bet === true` visually distinguished (green left border `border-l-2 border-[#10b981]` or badge)
+- [ ] Remove `MOCK_DATA`; add loading skeleton and empty state
+
+**Acceptance criteria:**
+- [ ] Changing date re-fetches for the new date; qualified rows are visually distinguished; no mock data remains
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4, date-fns 4.1. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.5 — Replace mock data in the EV Tracker with real GET /picks/ev.
+
+Files to read first:
+- frontend/app/ev-tracker/page.tsx  (full file)
+- frontend/lib/api.ts
+
+GET /picks/ev?date=YYYY-MM-DD (omit date for today) response:
+{ picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, game_conviction_score, lineup_confirmed, qualified_bet, home_team, away_team, kelly_fraction, total_line_consensus }], total }
+
+Work:
+1. Find the date state variable (calendar picker uses a Date object).
+2. const isoDate = format(date, 'yyyy-MM-dd')
+3. const { accessToken } = useAuth()
+4. Replace MOCK_DATA with:
+   const { data, isLoading } = useQuery({ queryKey: ['picks-ev', isoDate], queryFn: () => apiFetch(`/picks/ev?date=${isoDate}`, {}, accessToken), staleTime: 5 * 60 * 1000 })
+5. Map data?.picks to table rows. The page computes EV/Kelly/stake from edge and kelly_fraction — check current mock field names against the API names above; rename as needed.
+6. Rows where qualified_bet === true: add border-l-2 border-[#10b981] to the TableRow className.
+7. Add loading skeleton and empty state ("No markets available for this date").
+8. Remove MOCK_DATA entirely.
+
+Done when: date picker re-fetches data, qualified rows are styled, no MOCK_DATA remains.
+```
+
+---
+
+#### A0.4.6 — Performance: wire `GET /performance/summary`, `GET /performance/by-model`, `GET /picks/history` ⬜
+
+Replace `MOCK_DATA` in `frontend/app/performance/page.tsx`. Three endpoints. "By Conviction" and "By Signal" tabs have no backend equivalent — replace with placeholders.
+
+**Dependencies:** A0.4.3 complete
+**APIs:**
+- `GET /performance/summary` → `{ total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }`
+- `GET /performance/by-model` → `{ breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }`
+- `GET /picks/history` → `{ picks: [{ game_date, game_pk, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }`
+
+**Tasks:**
+- [ ] Replace summary stat tiles with `GET /performance/summary`
+- [ ] Replace "By Market" tab with `GET /performance/by-model` breakdown
+- [ ] P&L curve: sort history by `game_date` asc, filter to `actual_outcome !== null`, accumulate `clv_positive ? +1 : -1` per pick (flat-unit approximation)
+- [ ] "Recent Results" table: last 10 rows of history where `actual_outcome !== null`
+- [ ] "By Conviction" and "By Signal" tab contents: replace with `<div className="text-sm text-gray-500 py-8 text-center">Per-conviction and per-signal breakdowns coming in a future release.</div>`
+- [ ] Remove `MOCK_DATA`
+
+**Acceptance criteria:**
+- [ ] Summary tiles show real `total_bets`, `win_rate`, `mean_clv`; P&L curve renders from history; By Market tab works; conviction/signal tabs show placeholder; no MOCK_DATA remains
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4, Recharts 2.15.0. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.6 — Replace mock data in the Performance page with real API data.
+
+Files to read first:
+- frontend/app/performance/page.tsx  (full file)
+- frontend/lib/api.ts
+
+Three endpoints:
+1. GET /performance/summary → { total_bets, wins, win_rate, mean_clv, net_pnl_flat, net_pnl_kelly, sharpe_ratio, source }
+2. GET /performance/by-model → { breakdown: [{ market_type, signal_group, total_bets, wins, win_rate, mean_clv, net_pnl_flat }] }
+3. GET /picks/history → { picks: [{ game_pk, game_date, market_type, model_prob, bovada_devig_prob, edge, home_team, away_team, clv, clv_positive, actual_outcome }], total }
+
+Work:
+1. const { accessToken } = useAuth()
+2. Three useQuery calls:
+   const { data: summaryData } = useQuery({ queryKey: ['perf-summary'], queryFn: () => apiFetch('/performance/summary', {}, accessToken) })
+   const { data: byModelData } = useQuery({ queryKey: ['perf-by-model'], queryFn: () => apiFetch('/performance/by-model', {}, accessToken) })
+   const { data: historyData } = useQuery({ queryKey: ['picks-history'], queryFn: () => apiFetch('/picks/history', {}, accessToken) })
+3. Wire summary stat tiles to summaryData fields.
+4. Wire "By Market" tab to byModelData?.breakdown.
+5. Compute P&L curve (useMemo):
+   const settled = (historyData?.picks ?? []).filter(p => p.actual_outcome !== null).sort((a, b) => a.game_date.localeCompare(b.game_date))
+   let running = 0
+   const pnlCurve = settled.map(p => { running += p.clv_positive ? 1 : -1; return { date: p.game_date, pnl: running } })
+   Pass to the Recharts LineChart.
+6. Wire "Recent Results" table to the last 10 entries of settled (most recent first).
+7. For "By Conviction" and "By Signal" TabsContent: replace inner content with:
+   <div className="text-sm text-gray-500 py-8 text-center">Per-conviction and per-signal breakdowns coming in a future release.</div>
+8. Remove MOCK_DATA entirely.
+
+Done when: summary tiles show real data, P&L curve and recent results use history, by-market tab works, conviction/signal tabs show placeholder, no MOCK_DATA remains.
+```
+
+---
+
+#### A0.4.7 — Pick detail: wire game header from `GET /picks/today` ⬜
+
+Wire the game header in `frontend/app/picks/[game_pk]/page.tsx`. Signal breakdown, gate criteria, and distribution chart have no backend endpoint — replace with placeholders.
+
+**Dependencies:** A0.4.3 complete; shares `['picks-today']` TanStack Query cache with A0.4.4
+**API:** `GET /picks/today` — reuse cached result, filter client-side by `game_pk`
+
+**Tasks:**
+- [ ] Read `game_pk` from `useParams()`; filter `data?.picks` to find the matching pick
+- [ ] Replace game header mock with real `home_team`, `away_team`, `market_type`, `edge`, `model_prob`, `bovada_devig_prob`, `game_conviction_score`
+- [ ] Handle pick-not-found: show "Pick not found" with link back to `/dashboard`
+- [ ] Signal breakdown cards, gate criteria checklist, run distribution chart: replace each section's inner content with `<p className="text-sm text-gray-500">Signal detail — coming in a future release.</p>`; keep outer card container and section heading
+- [ ] Remove `MOCK_DATA`
+
+**Acceptance criteria:**
+- [ ] Game header shows real matchup, edge, model/Bovada probs; signal/gate/chart sections show placeholder; no MOCK_DATA remains
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.7 — Wire pick detail game header to real data; replace signal/gate sections with placeholders.
+
+Files to read first:
+- frontend/app/picks/[game_pk]/page.tsx  (full file)
+- frontend/lib/api.ts
+
+Context: GET /picks/today returns all qualified picks. Pick detail is reached by clicking a dashboard row. game_pk comes from the URL via useParams().
+
+Work:
+1. const { accessToken } = useAuth(); const params = useParams()
+2. const { data, isLoading } = useQuery({ queryKey: ['picks-today'], queryFn: () => apiFetch('/picks/today', {}, accessToken) })
+   (TanStack Query returns cached result if the dashboard was visited first — same queryKey.)
+3. const gamePk = Number(params.game_pk)
+   const pick = data?.picks?.find((p: any) => p.game_pk === gamePk)
+4. If isLoading: show skeleton. If !pick after load: show "Pick not found" + Link to /dashboard.
+5. Replace game header mock fields with: pick.away_team, pick.home_team, pick.market_type, pick.edge, pick.model_prob, pick.bovada_devig_prob, pick.game_conviction_score.
+6. For every section showing signal data (signal breakdown cards, gate criteria checklist) and the run distribution chart: replace the card body/inner content with:
+   <p className="text-sm text-gray-500">Signal detail — coming in a future release.</p>
+   Keep the outer card container and section heading.
+7. Remove MOCK_DATA const.
+
+Done when: game header shows real data, all signal/gate/chart sections show placeholder, no MOCK_DATA remains.
+```
+
+---
+
+#### A0.4.8 — Bet log: wire game dropdown + note persistence gap ⬜
+
+Wire the game dropdown in `frontend/app/bet-log/page.tsx` to populate from `GET /picks/today`. Full bet persistence (`POST /bets`, `GET /bets`) requires new backend endpoints not in scope for A0.4.
+
+**Dependencies:** A0.4.3 complete
+**Gap:** `POST /bets` + `GET /bets` + `GET /bets/summary` backend endpoints do not exist — bet history remains local React state only. Log as a follow-on task.
+
+**Tasks:**
+- [ ] Replace `MOCK_DATA.games` in the game dropdown with deduplicated picks from `GET /picks/today` — one entry per `game_pk`, label `"{away_team} @ {home_team}"`
+- [ ] Update `prefillGame` lookup (uses `qGamePk` from query params) to work with the new picks-based games list
+- [ ] Add comment above `MOCK_DATA.initialBets` state: `// TODO: Replace with GET /bets once backend endpoints exist (POST /bets + GET /bets + GET /bets/summary)`
+- [ ] Add "No games today" disabled option when picks are loading or empty
+- [ ] Remove only `MOCK_DATA.games` — keep `MOCK_DATA.initialBets`
+
+**Acceptance criteria:**
+- [ ] Game dropdown populates from today's real picks; pre-fill from EV Tracker URL params still works; "Save Bet" still writes to local state; no crash when picks is empty
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root is baseball_betting_and_fantasy/.
+
+Task: A0.4.8 — Wire the bet log game dropdown to real GET /picks/today data.
+
+Files to read first:
+- frontend/app/bet-log/page.tsx  (full file — BetLogInner component)
+- frontend/lib/api.ts
+
+Context: The bet log has a "Log a Bet" form. The Game dropdown uses MOCK_DATA.games. Replace with today's picks. The bet history table (MOCK_DATA.initialBets) stays as local state — POST /bets + GET /bets endpoints don't exist yet.
+
+Work:
+1. In BetLogInner: const { accessToken } = useAuth()
+2. const { data: picksData } = useQuery({ queryKey: ['picks-today'], queryFn: () => apiFetch('/picks/today', {}, accessToken) })
+3. Derive a deduplicated games list (useMemo):
+   const games = useMemo(() => {
+     const seen = new Set<number>()
+     return (picksData?.picks ?? []).filter((p: any) => { if (seen.has(p.game_pk)) return false; seen.add(p.game_pk); return true })
+       .map((p: any) => ({ game_pk: p.game_pk, label: `${p.away_team} @ ${p.home_team}` }))
+   }, [picksData])
+4. Replace the MOCK_DATA.games reference in <SelectContent> with games.map(). If games.length === 0, show a disabled <SelectItem value="">No games today</SelectItem>.
+5. Update the prefillGame lookup: change MOCK_DATA.games.find(...) to games.find(...).
+6. Above the initialBets useState, add the comment:
+   // TODO A0.4.8: Replace MOCK_DATA.initialBets with GET /bets once backend endpoints exist.
+   // Required: POST /bets, GET /bets (history), GET /bets/summary.
+7. Remove MOCK_DATA.games from the MOCK_DATA const (keep initialBets).
+
+Constraints:
+- Do not add POST /bets API call.
+- Save Bet must still work (writes to local state).
+- Do not change the form layout.
+
+Done when: game dropdown shows real games, prefill from URL params still works, no crash on empty picks.
+```
+
+---
+
+#### A0.4.9 — Vercel deployment + custom domain ⬜
+
+Configure `app.credencesports.com` in Vercel with production env vars.
+
+**Dependencies:** A0.4.1 complete (Cognito env var values known)
+**Note:** Console + DNS task — no code files to edit.
+
+**Tasks:**
+- [ ] In Vercel dashboard → Project Settings → Environment Variables, add for Production: `NEXT_PUBLIC_API_URL=https://api.credencesports.com`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID=<from Cognito console>`, `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=<from Cognito console>`
+- [ ] In Vercel → Domains, add `app.credencesports.com`; copy the CNAME target Vercel provides
+- [ ] Add the CNAME record in Route 53 hosted zone for `credencesports.com`
+- [ ] Trigger a Vercel redeploy after env vars are set
+- [ ] Confirm `https://app.credencesports.com` loads the login page with valid SSL
+
+**Acceptance criteria:**
+- [ ] `https://app.credencesports.com` loads with valid SSL
+- [ ] Login authenticates against Cognito (not a stub)
+- [ ] Dashboard loads real picks (confirms `NEXT_PUBLIC_API_URL` is set)
+
+---
+
+**Epic A0.4 overall acceptance criteria:**
+- [ ] All five pages (`/dashboard`, `/ev-tracker`, `/performance`, `/picks/[game_pk]`, `/bet-log`) serve real data — no `MOCK_DATA` constants remain
+- [ ] Unauthenticated navigation to any authenticated route redirects to `/login`
+- [ ] JWT is held in React Context only — `localStorage` and `sessionStorage` are empty after login
+- [ ] Game dropdown in bet log populates from real picks
+- [ ] `next build` passes with zero errors
+- [ ] `https://app.credencesports.com` is live
 
 ---
 
@@ -12458,7 +12929,7 @@ training it BEFORE Epic 30 would bake in soon-to-be-stale base outputs → do Ep
 
 | Tier | Work | Rationale | Effort |
 |---|---|---|---|
-| **0 — FOUNDATION (do first)** | **Epic 30** — 30.1 feature-hygiene scrub · 30.2 Bayesian-leverage · 30.3 serving-skew verification | May directly explain live zero-skill; prerequisite already flagged ("fix serving before Epics 27/28"); gates the value of everything downstream | M |
+| **0 — FOUNDATION (do first)** | **Epic 30** — 30.1 feature-hygiene scrub ✅ · 30.2 Bayesian-leverage · 30.3 serving-skew verification (highest-value: 30.1 proved offline corr 0.42 vs live 0.001) · 30.4 contract cleanup (complete market-blindness + dead-weight prune) | May directly explain live zero-skill; prerequisite already flagged ("fix serving before Epics 27/28"); gates the value of everything downstream | M |
 | **1 — PROFIT LEVER (AFTER Epic 30)** | **12.10′** Pinnacle steam → then **CLV meta-model 12.4/12.5** (label-unblocked) → **12.11 Phase-1** WS spike | CLV doesn't need to beat the line outright; trains on the *hardened* base; user-confirmed sequencing (12.10′ after Epic 30) | M |
 | **2 — CHEAP WINS (anytime/parallel)** | **Epic 25** (ZiPS/Steamer refresh, ~1–2 days) · **3A.3** (park-type prior, test on H2H) | Low effort; keep features fresh / small sub-model edge | S |
 | **3 — OPPORTUNISTIC** | 5A.6 (aging curve — *expensive backfill*) · 19.6 (OOD safety gate) · Epic 14.1 (MiLB audit — *measure first*) · Epic 24 (props — only if targeting that market) | Real but not foundational; measure before building | M |
@@ -12476,12 +12947,20 @@ binding constraint is model hygiene, not data breadth.
 
 # Epic 30 — Production Model Audit & Hardening
 
-**Status:** ⬜ NEXT — Tier 0 (opened 2026-06-11 from the backlog audit). **Track B.** The foundation fix.
+**Status:** 🟦 IN PROGRESS — Tier 0 (opened 2026-06-11). **Track B.** The foundation fix. **30.1 COMPLETE
+(all 3 PROMOTE); 30.4 added** from the 30.1 influence audit.
 
 **Goal:** Make the production totals / H2H / run_diff models *trustworthy on live data* before any further
-edge or breadth work. Three audits: (30.1) remove leakage-prone identifier/temporal features, (30.2) test
+edge or breadth work. Four audits: (30.1 ✅) remove leakage-prone identifier/temporal features, (30.2) test
 whether the unused Bayesian sub-model distributional layer improves the base models, (30.3) verify the
-served feature matrix matches the trained contract (the suspected root cause of live zero-skill).
+served feature matrix matches the trained contract (the suspected root cause of live zero-skill), (30.4)
+complete market-blindness (6 leaked market cols) + prune dead weight (run_diff ~61% of features).
+
+**⭐ Cross-story finding from 30.1 (2026-06-11) — re-prioritizes 30.3 as the highest-value lever:** the same
+home_win contract + model, trained ≤2025 and evaluated on 2026 with feature-store-served features, scores
+**corr 0.42 / Brier 0.206** — vs **0.001 / 0.252 LIVE**. The contract/architecture HAS skill; the live
+zero-skill is a SERVING problem, not a model problem. 30.1 also found the base models are only
+*consensus-and-moneyline-blind* (6 market cols leak) and carry massive dead weight → 30.4.
 
 **Why now:** [[project_prod_model_audit_jun2026]] found live `home_win` has ~zero skill (corr 0.001, Brier
 0.252 live vs 0.198 CV) and flagged "fix serving before Epics 27/28." The 2026-06-11 audit added the
@@ -12548,21 +13027,40 @@ back to the user to run and show the command; do not git commit or push (the use
 **Goal:** Identify and ablate the leakage-prone identifier/temporal features from the three production
 contracts, and extend the importance flagger to auto-catch them going forward.
 
-**Tasks:**
-- [ ] AST/contract scan of all three `feature_columns_*_tuned_2026.json` for identifier/temporal columns:
-  `*_id`, `*_pk`, `game_year`, `season`, `venue_id`, `*_cluster_id`. List each per target with its
-  importance rank (SHAP from `feature_importance_v1.parquet`, permutation from the `feature_selection/*.txt`).
-- [ ] Ablation retrain per target (home_win, run_differential, total_runs) DROPPING the flagged columns;
-  compare champion vs ablated on CV (NLL/Brier/MAE) AND the honest 2026 live surface (live corr / Brier).
-- [ ] Extend `betting_ml/scripts/model_evaluation/feature_importance_per_target.py` so the `noise_risk` /
-  `prune_candidate` flagger auto-catches identifier-typed columns (regex on name + cardinality≈n_rows).
-- [ ] Per-target decision: promote the ablated contract if no CV regression AND (live skill improves OR OOD/
-  memorization risk removed at flat CV). Document `game_year`'s train-serve-skew specifically.
+**Status (2026-06-11): COMPLETE — all 3 targets PROMOTE.** Deliverable:
+`betting_ml/evaluation/feature_selection/story_30_1_identifier_hygiene.md`. All three v4 contracts carry exactly
+`home_starter_pitcher_id`, `venue_id`, `game_year` (`away_starter_pitcher_id` asymmetrically absent). Ablation
+(377→374 feats, dropping the 3): **home_win** strict win (CV Brier 0.2002→0.1991; live corr 0.417→0.420);
+**run_diff** live-win (live MAE 3.121→3.1195, calib80 0.774→**0.800**); **total_runs** hygiene/live-neutral
+(CV flat, live MAE +0.0095 within noise, no over-pred bias reintroduced — `bet_paused` anyway).
+**⭐ Cross-story:** honest-2026 home_win corr = **0.42** (not the live 0.001) ⇒ the contract HAS skill; the live
+zero-skill is a **serving** problem → re-points it to **30.3**. **Promotion (corrected 2026-06-11):** the 3 search
+trainers now auto-drop the ID cols, but `save_model()` writes LOCAL only while `predict_today` loads the champion
+from the registry **S3** `artifact_path` — so promotion needs an explicit S3 upload (`migrate_artifacts_to_s3.py`),
+not just a retrain. home_win retrained locally (374-feat); run_diff pending; **total_runs deferred** — its deployed
+champion is the **eb_enriched** lineage (`feature_columns_eb_2026.json`, still carries the 3 ID cols), NOT the
+`ngboost_tuned` file the search writes, so the search can't promote it (bet_paused → no live impact). Promoting a
+new champion RESETS the 28.3 kill-window. 30.2 runs on the cleaned set regardless.
 
-**Acceptance criteria:**
-- [ ] Table of identifier/temporal features × target × importance rank.
-- [ ] Ablation results (CV + live) per target; explicit promote/keep decision each.
-- [ ] Flagger updated + re-run shows the identifier columns now flagged.
+**Tasks:**
+- [x] AST/contract scan of all three `feature_columns_*_tuned_2026.json` for identifier/temporal columns:
+  `*_id`, `*_pk`, `game_year`, `season`, `venue_id`, `*_cluster_id`. Per-target importance-rank table in the
+  deliverable §1.2 (SHAP `feature_importance_v1.parquet` + permutation `feature_selection/*.txt`).
+- [x] Ablation retrain per target (home_win, run_differential, total_runs) DROPPING the flagged columns;
+  compared champion vs ablated on CV (NLL/Brier/MAE) AND the honest 2026 surface
+  (`betting_ml/scripts/ablation_identifier_features.py`; results JSON in `…/ablation_identifier/`). All 3 PROMOTE.
+- [x] Extend the `noise_risk`/`prune_candidate` flagger to auto-catch identifier-typed columns. New shared
+  `betting_ml/utils/feature_hygiene.py` (name regex — primary; cardinality only a diagnostic, see note below)
+  wired into `analyze_feature_importance.py` (folds into `prune_candidate`; `--reflag-only` fast path) AND
+  `feature_importance_per_target.py`. NOTE: spec's "cardinality≈n_rows" is a poor discriminator (real ID
+  `home_starter_pitcher_id` card-ratio 0.068 < continuous `home_win_prob_consensus` 0.60) — name regex is primary.
+- [x] Per-target decision documented (deliverable §3): home_win/run_diff/total_runs all PROMOTE; `game_year`
+  train-serve-skew documented. Promotion-mechanics retrain handed off to the operator.
+
+**Acceptance criteria — ALL MET:**
+- [x] Table of identifier/temporal features × target × importance rank. (deliverable §1.2)
+- [x] Ablation results (CV + live) per target; explicit promote/keep decision each. (deliverable §3 — all 3 PROMOTE)
+- [x] Flagger updated + re-run shows the identifier columns now flagged. (`--reflag-only` flags 5 identifier cols, all previously `prune_candidate=False`)
 
 ---
 
@@ -12598,6 +13096,17 @@ CONTEXT (verified 2026-06-11):
     (sequential-enriched, Layer-3 blends) repeatedly failed to beat market/naive. Measure honestly against
     the same L1-NLL / L3-Brier gates on the clean 2026 OOS surface. Run AFTER 30.1 so enrichment is tested
     on the cleaned (de-junked) base contract, not the leaky one.
+  - 30.1 FINDINGS THAT BIND THIS STORY (2026-06-11): (1) 30.1 PROMOTED all three cleaned contracts — build
+    the challenger on the **374-feat scrubbed home_win** / cleaned run_diff/total_runs base, and confirm via
+    `betting_ml.utils.feature_hygiene.is_identifier_name` that no identifier col sneaks back in. (2) The
+    signal is DIFFUSE (home_win top-10 features ≈ 9% of total |SHAP|; no dominant driver) — do NOT expect
+    enrichment to be a silver bullet; a flat/neutral result is the likely and acceptable outcome. (3) ⭐ The
+    honest-2026 home_win corr is 0.42 offline but ~0.001 LIVE — enrichment is an ACCURACY experiment on the
+    offline surface; it will NOT fix live skill (that is a serving problem → 30.3). Do not conflate the two.
+    (4) "Market-blind" is INCOMPLETE — the base contracts still carry 6 market-derived cols
+    (`over_prob_consensus`, `under_implied_prob`, `total_line_movement`, `home_ml_money_pct`, `over_ticket_pct`,
+    `market_bookmaker_count`; cleanup is 30.4). Do NOT add any further market signal via the sub-model block,
+    and keep the enrichment cols strictly baseball-mechanism (μ/dispersion/PI-width).
 
 Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
 with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
@@ -12645,9 +13154,20 @@ every Acceptance criterion as the definition of done.
 CONTEXT (verified 2026-06-11):
   - project_prod_model_audit_jun2026: live home_win has ~ZERO skill (corr 0.001, live Brier 0.252 vs CV
     0.198). Suspected root cause = feature-SERVING skew at predict_today time — ELO/archetype/EB columns
-    arriving NULL and/or a 377-vs-379-column matrix misalignment between the served matrix and the trained
-    contract. This is distinct from 30.1 (which features are IN the contract); 30.3 asks whether the
-    contracted features are actually SERVED correctly at inference.
+    arriving NULL and/or a column-misalignment between the served matrix and the trained contract. This is
+    distinct from 30.1 (which features are IN the contract); 30.3 asks whether the contracted features are
+    actually SERVED correctly at inference.
+  - ⭐⭐ 30.1 ALL-BUT-PROVED THE SERVING HYPOTHESIS (this is your strongest lead): the SAME contract + model
+    family, trained ≤2025 and evaluated on 2026 with FEATURE-STORE-served features, gets home_win
+    **corr 0.42 / Brier 0.206** (real skill) — vs the **0.001 / 0.252 LIVE**. Same model, opposite skill ⇒
+    the contract/architecture is NOT the cause; the live SERVE path is. 30.3 must find what differs between
+    the feature-store matrix (skilled) and the predict_today live matrix (zero-skill).
+  - The home_win contract is now **374 features** (post-30.1 scrub), run_diff/total_runs unchanged pending
+    promotion — verify the served matrix against the CURRENT registry `feature_columns_path`, not a stale 379.
+  - The signal is DIFFUSE (home_win top-10 features ≈ 9% of total |SHAP|; no dominant driver). Implication:
+    there is no single feature whose correct serving rescues skill — a handful of strong-tier features served
+    null/constant is enough to collapse the thin edge. Prioritize the STRONG-tier features from
+    `betting_ml/scripts/influence_report.py` for the live null-rate / impute-rate comparison.
   - predict_today.py already prints [FEATURE-ALIGN] diagnostics (served / all-null / structurally-served
     counts). Use those + a live-vs-training null-rate comparison as the evidence base.
 
@@ -12657,23 +13177,118 @@ back to the user to run and show the command; do not git commit or push (the use
 ```
 
 **Goal:** Confirm (or fix) that the live-served feature matrix matches the trained contract — the suspected
-mechanism behind live zero-skill.
+mechanism behind live zero-skill. 30.1 established the contract HAS skill offline (corr 0.42), so this story
+owns the highest-value lever on live performance.
 
 **Tasks:**
 - [ ] For a recent live slate, compare per-feature NULL/impute rate in the SERVED matrix (predict_today
   `[FEATURE-ALIGN]` output + `daily_model_predictions` imputation columns) vs the TRAINING distribution.
   Flag any feature served all-null / constant-imputed live that was informative in training (esp. ELO,
-  archetype/cluster, EB posterior columns).
-- [ ] Verify column ORDER + count parity between the served matrix and each `feature_columns_*.json`
-  (the 377-vs-379 misalignment suspicion).
+  archetype/cluster, EB posterior columns) — cross-reference the strong-tier list from `influence_report.py`.
+- [ ] Verify column ORDER + count parity between the served matrix and each CURRENT `feature_columns_*.json`
+  (home_win is now 374; confirm the served matrix tracks the post-30.1 contract, not a cached 379).
 - [ ] Fix the serving gaps found (wire missing posteriors into the serve path / align column order /
-  correct impute defaults); re-measure live corr + Brier on the next settled slate.
+  correct impute defaults); re-measure live corr + Brier on the next settled slate — target moving live
+  corr toward the 0.42 the contract achieves offline.
+- [ ] Re-confirm with an offline-vs-live parity check: load the same game_pks through BOTH the feature store
+  and the predict_today serve path; the per-feature value diff localizes the skew (this is the direct test
+  the 30.1 finding implies).
 
 **Acceptance criteria:**
 - [ ] Served-vs-trained parity report: per-feature live null/impute rate, ordering/count check, list of
-  informative-but-unserved features.
-- [ ] Fixes applied for any real serving gap; live skill (corr / Brier) re-measured and reported.
-- [ ] If no serving gap is found, the zero-skill cause is re-attributed (→ 30.1 junk features / architecture).
+  informative-but-unserved features (esp. strong-tier).
+- [ ] Fixes applied for any real serving gap; live skill (corr / Brier) re-measured and reported against the
+  0.42 offline benchmark.
+- [ ] If no serving gap is found, the zero-skill cause is re-attributed — but note 30.1 makes a pure
+  contract/architecture cause unlikely (it scored 0.42 offline), so look next at label/odds-join or
+  calibration-at-serve issues.
+
+---
+
+### 30.4 — Contract cleanup: complete market-blindness + dead-weight prune
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.4 standalone:
+
+```
+You are picking up Story 30.4 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — FIRST read the Epic 30 header IN FULL,
+     especially the "⭐ EVALUATION ORDER — PRIMARY vs SECONDARY" block: it BINDS this story — judge every
+     ablation on PREDICTION ACCURACY TO THE TRUE OUTCOME first (totals → RMSE/MAE/MedAE vs actual runs +
+     calib_80; H2H → accuracy/NLL/Brier vs the 0/1 winner + ECE), with beating-the-market as a SECONDARY
+     tiebreaker, NOT the promotion gate. Then locate the Story 30.4 section; its Goal, Tasks, and
+     Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+  Also read: betting_ml/evaluation/feature_selection/influence_report/INFLUENCE_REPORT.md and
+  betting_ml/evaluation/feature_selection/story_30_1_identifier_hygiene.md — they are the evidence base.
+
+Then read the Story 30.4 Goal/Tasks/Acceptance below and implement against this playbook. Conform to
+every Acceptance criterion as the definition of done.
+
+CONTEXT (verified 2026-06-11, from the 30.1 influence audit):
+  - "MARKET-BLIND" IS INCOMPLETE. All three trainers share an identical 33-col `_MARKET_COLS_TO_EXCLUDE`
+    (in train_elasticnet_prod / train_run_diff_prod / train_total_runs_prod) that strips moneyline /
+    H2H-consensus / sharp / totals-line columns, but 6 market-derived columns LEAK into every deployed
+    contract because they were never added to the exclude set:
+      over_prob_consensus, under_implied_prob, total_line_movement,
+      home_ml_money_pct, over_ticket_pct, market_bookmaker_count
+    (the public-betting block — home_ml_money_pct/over_ticket_pct, Story 8.R — and several odds cols were
+    added AFTER the exclude list was authored). So the base models are "consensus-and-moneyline-blind," NOT
+    market-blind — violating architecture Principle 3 / §5.6 / §5.7. NOTE `over_prob_consensus` and
+    `market_bookmaker_count` are also force-retained in feature_selection.PROTECTED_FEATURES, so removing
+    them cleanly means dropping them from PROTECTED too (mirror the game_year precedent from 30.1).
+  - MASSIVE DEAD WEIGHT. Permutation importance shows ~61% of run_diff features (180/294) and ~22% of
+    total_runs (68/311) are exclusion candidates (shuffling them does not hurt MAE). Pruning them shrinks
+    the serving-skew attack surface (fewer cols to mis-serve — directly relevant to the live-zero-skill
+    finding), cuts overfit, and eases debugging.
+  - THE BUILT-IN TRADEOFF (market-blind part): market features HELP raw accuracy (the book is sharp) but
+    INVALIDATE model-vs-market edge measurement (circularity). Epic 30's PRIMARY metric is accuracy-to-truth,
+    so removing the 6 leaks may cost a little accuracy — quantify it and decide explicitly per target; this
+    is NOT an automatic remove. If the 6 cols are highly influential, that itself is a finding (the models
+    lean on the book more than intended).
+  - TOOLING ALREADY EXISTS: betting_ml/scripts/influence_report.py (registry/local-driven permutation
+    importance + family aggregation + strong/moderate/weak/dead/identifier classification) and
+    betting_ml/scripts/ablation_identifier_features.py (the 30.1 ablation harness — copy its champion-vs-
+    ablated CV + honest-2026 pattern). betting_ml/utils/feature_hygiene.is_identifier_name is the shared
+    name-based flagger.
+  - SEQUENCE: run AFTER 30.3 (serving). A feature that looks "dead" in permutation importance may only be
+    dead because it is mis-served live; do not prune a feature that 30.3 shows is informative-but-unserved.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Trim each base contract to a clean, defensible feature set — (a) complete the market-blind
+exclusion (the 6 leaked market cols) and (b) drop the dead-weight features — then retrain and decide
+per target on the accuracy-vs-edge-validity + no-regression bars.
+
+**Tasks:**
+- [ ] Run `betting_ml/scripts/influence_report.py --target all` on the current champions and classify every
+  contract feature per target: MARKET-LEAK (the 6) / DEAD-WEIGHT (exclusion candidate) / STRONG / moderate /
+  weak. Produce the table. (Cross-check against the 30.3 served-null list so a mis-served feature is not
+  mislabeled dead.)
+- [ ] **30.4a — complete market-blindness:** add the 6 leaked cols to the shared `_MARKET_COLS_TO_EXCLUDE`
+  (and drop `over_prob_consensus` + `market_bookmaker_count` from `PROTECTED_FEATURES`). Ablate champion vs
+  market-blind-completed per target on CV AND honest 2026 OOS (Brier/NLL/ECE for h2h; MAE/RMSE/MedAE/calib_80
+  for totals/run_diff). Report the accuracy cost AND, secondarily, the edge-validity gain.
+- [ ] **30.4b — dead-weight prune:** drop the exclusion-candidate features; retrain on the strong+moderate
+  tiers; compare vs champion on CV + 2026 OOS. (Apply 30.4a and 30.4b together in a single retrain per target
+  so you don't retrain twice.)
+- [ ] Per-target decision: promote the cleaned contract if no accuracy regression beyond tolerance (or an
+  acceptable, explicitly-accepted accuracy cost for the market-blind gain). Document the new feature count
+  and the reduced serving surface. Use the trainer auto-scrub (30.1) + the new exclude set so the cleaned
+  contracts regenerate deterministically.
+
+**Acceptance criteria:**
+- [ ] Per-target feature-classification table (market-leak / dead-weight / strong) from `influence_report.py`.
+- [ ] Ablation results (CV + 2026 OOS) for market-blind-completion AND dead-weight-prune per target, with an
+  explicit promote/keep decision and the accuracy-vs-edge-validity tradeoff stated for the market part.
+- [ ] Updated `_MARKET_COLS_TO_EXCLUDE` (+ PROTECTED_FEATURES edit) and pruned contracts; champions retrained;
+  the reduced feature count + smaller serving surface documented (tie to the 30.3 live-skill re-measure).
 
 ---
 

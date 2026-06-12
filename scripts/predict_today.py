@@ -1179,6 +1179,38 @@ def main() -> None:
     print(f"  run_differential: {type(ngb_diff).__name__}")
     print(f"  home_win: {type(clf_hw).__name__}")
 
+    # --- Contract/model feature-count guard (fail fast) -----------------------
+    # The registry sidecar (feature_columns_*.json) and the trained model MUST
+    # agree on feature count. A mismatch means the JSON was written from a
+    # different (e.g. pre-imputation) column set than the model was fit on —
+    # build_imputation_pipeline appends `has_starter_platoon_data`/`is_new_venue`,
+    # so a contract that omits them is 2 short. Models score by COLUMN POSITION,
+    # so a short contract surfaces as an opaque `IndexError: index N is out of
+    # bounds` deep inside NGBoost/XGBoost. Assert it here with a clear message
+    # instead (the 2026-06-11 Story 30.1 promotion bug).
+    def _model_n_features(_m) -> int | None:
+        for _attr in ("n_features", "n_features_in_"):
+            _v = getattr(_m, _attr, None)
+            if _v is not None:
+                return int(_v)
+        return None  # unknown model type → skip (never false-fail)
+
+    for _tgt, _model, _cols in (("total_runs", ngb_total, tot_feat_cols),
+                                ("run_differential", ngb_diff, diff_feat_cols),
+                                ("home_win", clf_hw, hw_feat_cols)):
+        _n_model = _model_n_features(_model)
+        if _n_model is not None and _n_model != len(_cols):
+            raise RuntimeError(
+                f"[CONTRACT-GUARD] {_tgt}: registry contract "
+                f"({_registry[_tgt]['feature_columns_path']}) lists {len(_cols)} "
+                f"features but the trained {type(_model).__name__} expects {_n_model}. "
+                f"These must match — the model scores by column position, so a "
+                f"mismatch yields a silent IndexError. Likely cause: the contract was "
+                f"written pre-imputation and is missing the imputation indicator "
+                f"columns (has_starter_platoon_data, is_new_venue). Regenerate the "
+                f"contract from the post-imputation training matrix and re-upload."
+            )
+
     best_alpha = _load_best_alpha()
     print(f"  best_alpha={best_alpha}")
     if best_alpha is not None and float(best_alpha) <= 0.0:

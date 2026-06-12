@@ -33,6 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.utils.data_loader import load_features
+from betting_ml.utils.feature_hygiene import flag_identifier_features
 
 # ---------------------------------------------------------------------------
 # Phase 8 feature origin patterns
@@ -90,12 +91,18 @@ def analyze_home_win(out_dir: Path) -> None:
         if len(coef) != len(feat_cols):
             raise ValueError(f"Coefficient length {len(coef)} != feature list length {len(feat_cols)}")
 
+    ident = flag_identifier_features(feat_cols)  # name-only (no raw values at coef time)
     df = pd.DataFrame({
         "feature":       feat_cols,
         "coefficient":   coef,
         "abs_coef":      np.abs(coef),
         "phase8_origin": [_phase8_origin(c) for c in feat_cols],
+        "identifier_risk": [bool(ident.loc[c, "identifier_risk"]) for c in feat_cols],
     }).sort_values("abs_coef", ascending=False).reset_index(drop=True)
+
+    ident_rows = df[df["identifier_risk"]]
+    if len(ident_rows):
+        print(f"\n  IDENTIFIER/TEMPORAL features flagged (Story 30.1): {ident_rows['feature'].tolist()}")
 
     top20      = df.head(20)
     n_nonzero  = (df["abs_coef"] > 0).sum()
@@ -135,6 +142,17 @@ def analyze_home_win(out_dir: Path) -> None:
         rank = len(df) - 19 + i
         lines.append(f"{rank:<5} {row['feature']:<55} {row['coefficient']:>+12.4f}  {row['phase8_origin']}")
 
+    if len(ident_rows):
+        lines += [
+            "",
+            f"IDENTIFIER/TEMPORAL FEATURES (Story 30.1 — leakage/OOD-prone, drop candidates):",
+            f"{'Feature':<55} {'Coefficient':>12} {'|coef| rank'}",
+            "-" * 85,
+        ]
+        for _, row in ident_rows.iterrows():
+            rank = int(df.index[df["feature"] == row["feature"]][0]) + 1
+            lines.append(f"{row['feature']:<55} {row['coefficient']:>+12.4f}  {rank}")
+
     zero_coef = df[df["abs_coef"] == 0.0]
     if len(zero_coef):
         lines += [
@@ -166,10 +184,11 @@ def _load_2025_test_data(feat_cols: list[str], target_col: str) -> tuple[np.ndar
             df[c] = 0.0
 
     valid_mask = df[target_col].notna()
-    X = df.loc[valid_mask, feat_cols].fillna(0.0).values.astype(np.float32)
+    X_df = df.loc[valid_mask, feat_cols]
+    X = X_df.fillna(0.0).values.astype(np.float32)
     y = df.loc[valid_mask, target_col].values.astype(np.float32)
     print(f"  Valid rows for '{target_col}': {len(X)}")
-    return X, y
+    return X, y, X_df.reset_index(drop=True)
 
 
 def _run_perm_importance(
@@ -184,7 +203,8 @@ def _run_perm_importance(
 
     model     = joblib.load(model_path)
     feat_cols = json.loads(feat_path.read_text())
-    X, y      = _load_2025_test_data(feat_cols, target_col)
+    X, y, X_df = _load_2025_test_data(feat_cols, target_col)
+    ident     = flag_identifier_features(feat_cols, values=X_df)
 
     # Baseline MAE before any permutation
     y_pred_base = model.predict(X)
@@ -213,6 +233,8 @@ def _run_perm_importance(
         "std_imp":        imp_std,
         "ci_lower":       ci_lower,
         "phase8_origin":  [_phase8_origin(c) for c in feat_cols],
+        "identifier_risk": [bool(ident.loc[c, "identifier_risk"]) for c in feat_cols],
+        "cardinality":    [int(ident.loc[c, "cardinality"]) for c in feat_cols],
     }).sort_values("mean_imp", ascending=False).reset_index(drop=True)
 
     # Exclusion candidate: shuffling doesn't hurt (or helps) model — feature is noise
@@ -277,6 +299,24 @@ def _run_perm_importance(
         ]
         for _, row in p8_exclude.iterrows():
             lines.append(f"  {row['feature']}  ({row['phase8_origin']})  mean={row['mean_imp']:.5f}")
+
+    ident_rows = df_imp[df_imp["identifier_risk"]]
+    if len(ident_rows):
+        print(f"\n  IDENTIFIER/TEMPORAL features flagged (Story 30.1): {ident_rows['feature'].tolist()}")
+        lines += [
+            "",
+            f"IDENTIFIER/TEMPORAL FEATURES (Story 30.1 — leakage/OOD-prone, drop candidates):",
+            "Note: a memorized identifier shows mean_imp > 0 (shuffling HURTS MAE) yet is NOT an",
+            "exclusion candidate by the importance filter — it must be caught by name/cardinality.",
+            f"{'Feature':<48} {'Mean Imp':>10} {'CI Lower':>10} {'Cardinality':>12} {'Perm rank':>10}",
+            "-" * 95,
+        ]
+        for _, row in ident_rows.iterrows():
+            rank = int(df_imp.index[df_imp["feature"] == row["feature"]][0]) + 1
+            lines.append(
+                f"{row['feature']:<48} {row['mean_imp']:>10.5f} {row['ci_lower']:>10.5f} "
+                f"{row['cardinality']:>12d} {rank:>10d}"
+            )
 
     out_path.write_text("\n".join(lines))
     print(f"\n  Saved → {out_path}")
