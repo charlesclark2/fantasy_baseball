@@ -1,0 +1,53 @@
+{
+  "total_runs": {
+    "target": "total_runs",
+    "metric": "mae",
+    "champion_recipe": "ngboost-Normal(champion)",
+    "challenger_recipe": "ngboost-LogNormal(challenger)",
+    "n_features": {
+      "champion": 367,
+      "challenger": 111
+    },
+    "decision": "HOLD",
+    "overall_delta": -0.006900955106342893,
+    "boot_ci": [
+      -0.023767777216037986,
+      0.010528865008807368
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2003,
+        "champion": 3.2085798717415215,
+        "challenger": 3.204390925918043,
+        "delta": -0.004188945823478285,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2027,
+        "champion": 3.534120169773096,
+        "challenger": 3.5245393160019405,
+        "delta": -0.009580853771155695,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 751,
+        "champion": 3.3440075293894997,
+        "challenger": 3.3287022137895868,
+        "delta": -0.015305315599912994,
+        "complete": false,
+        "regressed": false
+      }
+    ],
+    "reasons": [
+      "Pooled improvement -0.0069 does NOT clear the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0105 \u2265 0 (not significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "Current season 2026 corroborates (-0.0153)."
+    ]
+  }
+}

@@ -210,6 +210,81 @@ Legitimate uses: bias correction (e.g., run_env_v3 — XGBoost cleared MAE gate 
 
 The walk-forward CV fold count varies by domain. The ≥ 5/8 fold consistency threshold above assumes 8 folds. For domains with different fold counts, apply the same ≥ 62.5% majority rule proportionally.
 
+### ⭐ Case 3 — Production base-model promotion gate (CANONICAL, codified 2026-06-12)
+
+**Applies to the deployed base models** (`home_win`, `run_differential`, `total_runs`) and any
+model that replaces a production champion. **Codified — not ad-hoc — in
+`betting_ml/utils/promotion_gate.py` (`evaluate_promotion`).** Supersedes per-story judgement
+calls for base-model promotion. Operator decisions 2026-06-12; see memory
+[[project_promote_on_point_accuracy]] + [[project_search_baseline_misleading]].
+
+**Primary metric = accuracy-to-truth, NOT beating the market.** Closeness to the true outcome is the
+gate (totals/run_diff → MAE/RMSE/CRPS-to-actual; home_win → Brier/NLL vs the 0/1 winner). The
+production champion does not beat the market either, so "beat the market" is the WRONG gate; market
+edge is reported as SECONDARY context only. Compare the challenger to the **deployed champion**, never
+to the static no-skill baseline floor the search trainers headline against (that floor ≈ coinflip and
+masks regressions — the search-trainer `_load_baseline_brier`/baseline-MAE comparison must be changed
+to the champion; tracked in [[project_search_baseline_misleading]]).
+
+**PROMOTE iff ALL hold** (lower-is-better score; `evaluate_promotion` returns the verdict):
+
+1. **Cross-season, walk-forward.** Judge on the mean over **completed** held-out seasons
+   (`all_season_splits`, forward-chained — never train on the future), NOT the current partial season.
+2. **Effect size beyond the noise floor.** Pooled per-game improvement must exceed a per-metric noise
+   floor (`NOISE_FLOOR`: mae 0.02 runs, brier 0.002, crps 0.02, nll 0.01) — not a bare point delta.
+3. **Statistical significance.** A season-stratified **paired bootstrap** 95% CI of the per-game
+   (challenger − champion) score must lie entirely below 0 (reliably better, not better-on-average).
+4. **No completed-season regression.** The challenger must not get worse than the noise floor on ANY
+   completed season. Win-overall-but-lose-2024 = overfitting → HOLD.
+5. **Current season = corroboration only.** Reported; a strong regression is flagged as a regime-shift
+   watch; it never DRIVES a PROMOTE and is ignored below `min_current_games` (default 200).
+6. **Hysteresis (operational).** Promote only after the gate PASSES on ≥ `MIN_CONSECUTIVE_PASSES`
+   (default 2) independent evaluations, respecting a minimum re-eval interval — stops monthly redeploys
+   chasing early-season run-environment noise. (The single call returns one verdict; the caller tracks
+   the streak.) This is the operational guard against the "redeploy every April because the regime
+   shifted" failure mode — promotion is **robust to regime, not reactive to it.** A genuine regime shift
+   is a SIGNAL problem (see the regime-tracking story), never solved by promoting more often.
+
+**⭐ Correctness override (`correctness_override=` / `--correctness-override`).** Market- or
+identifier-leakage is a **correctness violation (architecture Principle 3), not an accuracy tradeoff** — a
+champion that leaks is NON-COMPLIANT and **must** be replaced by a compliant challenger *regardless of an
+accuracy win*. The override **PROMOTEs despite no significant accuracy gain** — but it **WAIVES only the
+effect-size + significance bars, NEVER criterion 4**: the gate still confirms accuracy **non-regression** (no
+completed-season regression beyond tolerance), and **REFUSES** the override if the challenger actually
+regresses (a hygiene fix must not ship an accuracy regression). Every override is **recorded** (reason string
+→ verdict + JSON + registry notes), mirroring the sub-model `--force-winner` policy. This is the *only*
+sanctioned way to promote without clearing the accuracy bars; "I think it's better" is not a correctness
+violation. Precedent: **home_win 30.4 — PROMOTE via correctness override** (removes 9 market leaks + 3
+identifiers; gate confirmed accuracy parity, pooled ΔBrier −0.0016 on 2024+2025, no regression).
+
+**Frequentist AND Bayesian (non-frequentist) models** go through the identical gate — it consumes a
+per-game score array and is agnostic to how the score was produced:
+
+| Model output | Per-game scorer (`promotion_gate`) | Metric key |
+|---|---|---|
+| Point (XGBoost home_win) | `brier(y, p)` | `brier` |
+| Point (NGBoost μ) | `abs_error(y, μ)` | `mae` |
+| Parametric predictive (NGBoost Normal/LogNormal) | `crps_normal` / `nll_normal` / `nll_lognormal` | `crps` / `nll` |
+| **Bayesian posterior-predictive SAMPLES (PyMC, Epic 17)** | **`crps_ensemble(y, samples)`** / `nll_ensemble` | `crps` / `nll` |
+
+**CRPS is the unifying ruler**: CRPS of a point mass reduces to absolute error, so a point model and a
+posterior-predictive Bayesian model are compared on the SAME scale on the shared OOS games. A Bayesian
+challenger is judged by exactly criteria 1–6, scored with `crps_ensemble`, against the champion's
+`crps_normal` (or its own ensemble CRPS). Run the full `model_promotion_runbook.md` (S3 push,
+CONTRACT-GUARD, kill-window reset) once the gate returns PROMOTE.
+
+**How ANY model plugs in (no gate/harness changes):** every model emits a `PredictiveOutput`
+(`point`/`binary_prob`/`normal`/`lognormal`/`samples`); `PredictiveOutput.score_to_truth(y, metric)` maps it
+to per-game scores and raises on an undefined pairing (e.g. `nll` on a bare point). The harness
+`betting_ml/scripts/promotion_gate_eval.py` is **adapter-based** — `XGBPlattSpec`/`NGBoostSpec`/
+`SklearnPointSpec`/`SamplesSpec` (the PyMC/posterior hook); a new architecture = a new ~10-line adapter, the
+`walk_forward_gate` driver and the gate untouched. For a model trained/served OUTSIDE this harness (external
+service, non-Python, precomputed), skip adapters and feed per-game scores straight to `evaluate_promotion` —
+the universal escape hatch. **Soundness guard:** comparing MISMATCHED output kinds on a distributional metric
+(`crps`/`nll`) credits distribution quality, not just point accuracy (a point model's CRPS = its abs-error, so
+a distributional challenger can "win" purely for having a distribution) — the driver warns; use `metric='mae'`
+for a pure point-accuracy verdict (the totals-product policy).
+
 ---
 
 ## Sub-model output standard
@@ -10172,50 +10247,74 @@ Done when: summary tiles show real data, P&L curve and recent results use histor
 
 ---
 
-#### A0.4.7 — Pick detail: wire game header from `GET /picks/today` ⬜
+#### A0.4.7 — Pick detail page: full game intelligence view ✅ (Phase 1 ✅ 2026-06-12 · Phase 2 ✅ 2026-06-12)
 
-Wire the game header in `frontend/app/picks/[game_pk]/page.tsx`. Signal breakdown, gate criteria, and distribution chart have no backend endpoint — replace with placeholders.
+Purpose: `/picks/[game_pk]` is the core bet-research page. The user arrives here to decide whether to place a bet. Every data asset available pre-game should be surfaced in a scannable, collapsible format. Backend endpoint: `GET /picks/{game_pk}/details` (dedicated, not the shared picks-today cache).
 
-**Dependencies:** A0.4.3 complete; shares `['picks-today']` TanStack Query cache with A0.4.4
-**API:** `GET /picks/today` — reuse cached result, filter client-side by `game_pk`
+**Phase 1 — Completed 2026-06-12**
 
-**Tasks:**
-- [ ] Read `game_pk` from `useParams()`; filter `data?.picks` to find the matching pick
-- [ ] Replace game header mock with real `home_team`, `away_team`, `market_type`, `edge`, `model_prob`, `bovada_devig_prob`, `game_conviction_score`
-- [ ] Handle pick-not-found: show "Pick not found" with link back to `/dashboard`
-- [ ] Signal breakdown cards, gate criteria checklist, run distribution chart: replace each section's inner content with `<p className="text-sm text-gray-500">Signal detail — coming in a future release.</p>`; keep outer card container and section heading
-- [ ] Remove `MOCK_DATA`
+Shipped:
+- Dedicated `GET /picks/{game_pk}/details` backend endpoint replacing the client-side `picks-today` filter
+- Banner card with game score/status, pre-game team records (post-game adjusted from `HOME_IS_WINNER`), market probabilities, edge, conviction score, model run total vs market line, and prediction timestamp (`INSERTED_AT` from `daily_model_predictions`)
+- Collapsible section framework (`<CollapsibleSection>`) with chevron toggle, default-open state, green accent bar headers
+- Tooltip system (`<MetricTip>` with shadcn Tooltip + Info icon) on all numeric metrics
+- Starting Pitchers: point-in-time season stats (RA9, WHIP, K%) using `game_year = gm.game_year AND game_date < gm.game_date`; prior-season fallback shown when `current_starts < 8`; label switches "Probable Starters" → "Starting Pitchers" for completed games
+- Team Lineups: batting order with season OPS + xwOBA from `mart_batter_rolling_stats`; completed-game box score (H/AB, K, BB, HR, xwOBA) from `stg_batter_pitches`
+- Team Performance section: `CompareRow` component with `lowerBetter` support and color coding for offense, starter quality, bullpen quality (IP colored correctly — more = fatigued = red), days rest, park run factor
+- Park run factor label corrected: "Runs/G at Park (3yr)" — raw runs/game both teams, avg ≈ 8.9, not a ratio around 1.0
+- ELO diff tooltip and all team-feature metric tooltips
+
+**Phase 2 — Completed 2026-06-12**
+
+**New data sources being wired:**
+
+| Section | Source table | Key columns |
+|---|---|---|
+| Team logos | ESPN CDN (no backend) | `{team_abbrev}.toLowerCase()` |
+| Player photos | MLB Stats API CDN (no backend) | `probable_pitcher_id` |
+| Opener detection | `mart_starting_pitcher_game_log` | median IP last 5 starts |
+| Pythagorean win% | `mart_team_pythagorean_rolling` | `pythagorean_win_exp_30d` + `pythagorean_residual_30d` |
+| Umpire | `feature_pregame_game_features` | `umpire_name`, `ump_k_pct_zscore`, `ump_runs_per_game_zscore`, `ump_run_impact_zscore`, `ump_bb_pct_zscore` |
+| Public betting | `feature_pregame_public_betting_features` | `home_ml_money_pct`, `home_ml_ticket_pct`, `ml_sharp_signal`, `over_money_pct`, `over_ticket_pct`, `total_sharp_signal` |
+| Weather | `feature_pregame_weather_features` | `temp_f`, `wind_speed_mph`, `wind_component_mph`, `is_dome`, `weather_observation_type` |
+| Line movement | `mart_odds_line_movement` | `open_home_win_prob`, `pregame_home_win_prob`, `h2h_line_movement`, `open_total_line`, `pregame_total_line`, `total_line_movement` |
+| Recent form | `stg_statsapi_games` computed | L5/L10 record per team, pre-game |
+| H2H this season | `mart_head_to_head_team_history` | `team_a_wins`, `team_b_wins`, `games_played`, `avg_total_runs` |
+
+**New Pydantic models:** `WeatherInfo`, `PublicBetting`, `LineMovement`, `UmpireInfo`, `GameContext` (recent form + H2H). `GameDetailResponse` gains `weather`, `public_betting`, `line_movement`, `umpire`, `game_context` fields. `StarterStats` gains `is_opener: bool`.
+
+**Frontend additions:**
+- Team logo `<img>` tags in banner H1 flanking team names (ESPN CDN, lowercase abbrev, `onError` fallback hides image)
+- Player photo thumbnails in Starting Pitchers cards (MLB Stats API CDN using `pitcher_id`; silhouette fallback built into the CDN URL)
+- Amber "OPENER" badge on starter card when `is_opener = true`; stats label changes to "Recent outings (opener role)"
+- Pythagorean win% appended to record in banner: `{awayName} (28-35 · Pyth .491) @ {homeName} (32-31 · Pyth .512)` using 30d rolling Pyth from `mart_team_pythagorean_rolling`; Pythagorean residual shown as "lucky" / "unlucky" indicator
+- **Umpire section** (new `CollapsibleSection`, default open): umpire name, K-rate tendency bar (z-score colored ±1.5), run-environment tendency bar, BB-rate tendency, sample size note
+- **Market Action section** (new `CollapsibleSection`, default open): ML ticket % vs money % bars for both sides with sharp-vs-public divergence call-out; sharp signal badge (positive = sharp lean home, negative = away); totals ticket/money bars; total sharp signal; coverage-start caveat (data from 2026-05-07 forward)
+- **Weather section** (new `CollapsibleSection`, default open for outdoor parks, hidden for domes): temp (colored cool/hot), wind component mph (tailwind positive = green/over lean, headwind negative = red/under lean), raw wind speed + direction, humidity; dome badge replaces weather block for indoor parks
+- **Line movement** added to Market Action section: opening vs closing Bovada implied home win probability (colored by direction), H2H move in percentage points; opening vs closing total line + move
+- **Recent Form + H2H section** (new `CollapsibleSection`, default open): L5 and L10 records for each team (computed pre-game); season series record (from `mart_head_to_head_team_history`); avg total runs in this matchup this season
+
+**Backend tasks:**
+- [x] Add `_WEATHER_QUERY`, `_PUBLIC_BETTING_QUERY`, `_LINE_MOVEMENT_QUERY`, `_PYTHAGOREAN_QUERY`, `_RECENT_FORM_QUERY`, `_H2H_QUERY`, `_UMPIRE_QUERY` constants
+- [x] Extend `_STARTERS_QUERY` to compute `is_opener` (median IP of last 5 starts < 2.5)
+- [x] Update `get_game_detail` to fire new queries in parallel and populate response
+
+**Frontend tasks:**
+- [x] Team logos + player photos (CDN-only, no new queries)
+- [x] Opener badge + Pythagorean in banner
+- [x] Umpire section
+- [x] Market Action section (public betting + line movement)
+- [x] Weather section
+- [x] Recent Form + H2H section
 
 **Acceptance criteria:**
-- [ ] Game header shows real matchup, edge, model/Bovada probs; signal/gate/chart sections show placeholder; no MOCK_DATA remains
-
-**Session prompt:**
-```
-You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root is baseball_betting_and_fantasy/.
-
-Task: A0.4.7 — Wire pick detail game header to real data; replace signal/gate sections with placeholders.
-
-Files to read first:
-- frontend/app/picks/[game_pk]/page.tsx  (full file)
-- frontend/lib/api.ts
-
-Context: GET /picks/today returns all qualified picks. Pick detail is reached by clicking a dashboard row. game_pk comes from the URL via useParams().
-
-Work:
-1. const { accessToken } = useAuth(); const params = useParams()
-2. const { data, isLoading } = useQuery({ queryKey: ['picks-today'], queryFn: () => apiFetch('/picks/today', {}, accessToken) })
-   (TanStack Query returns cached result if the dashboard was visited first — same queryKey.)
-3. const gamePk = Number(params.game_pk)
-   const pick = data?.picks?.find((p: any) => p.game_pk === gamePk)
-4. If isLoading: show skeleton. If !pick after load: show "Pick not found" + Link to /dashboard.
-5. Replace game header mock fields with: pick.away_team, pick.home_team, pick.market_type, pick.edge, pick.model_prob, pick.bovada_devig_prob, pick.game_conviction_score.
-6. For every section showing signal data (signal breakdown cards, gate criteria checklist) and the run distribution chart: replace the card body/inner content with:
-   <p className="text-sm text-gray-500">Signal detail — coming in a future release.</p>
-   Keep the outer card container and section heading.
-7. Remove MOCK_DATA const.
-
-Done when: game header shows real data, all signal/gate/chart sections show placeholder, no MOCK_DATA remains.
-```
+- [x] Banner shows team logos, records with Pythagorean, and prediction timestamp
+- [x] Starting Pitchers show player photos; opener role flagged when median last-5 IP < 2.5
+- [x] Umpire section shows umpire name + colored z-score bars for K, run impact, BB tendencies
+- [x] Market Action shows ML ticket/money splits, sharp signal, line movement (opening → closing)
+- [x] Weather section shows temp/wind for outdoor parks; dome badge for indoor
+- [x] Recent Form shows L5/L10 per team + season H2H series record
+- [x] All new sections are collapsible; no crashes when data is NULL (network gaps, pre-2026-05-07 for public betting, pre-2026-05-01 for weather)
 
 ---
 
@@ -10280,6 +10379,8 @@ Configure `app.credencesports.com` in Vercel with production env vars.
 
 **Dependencies:** A0.4.1 complete (Cognito env var values known)
 **Note:** Console + DNS task — no code files to edit.
+
+**Local dev CORS note:** API Gateway has CORS configured for `https://app.credencesports.com` only — `localhost:3000` is not in the allowed origins. For local development, point `NEXT_PUBLIC_API_URL` at a local uvicorn instance (`http://localhost:8000`) instead of the production API Gateway URL. Add `NEXT_PUBLIC_API_URL=http://localhost:8000` to `frontend/.env.local` for local dev; Vercel production uses `https://api.credencesports.com`.
 
 **Tasks:**
 - [ ] In Vercel dashboard → Project Settings → Environment Variables, add for Production: `NEXT_PUBLIC_API_URL=https://api.credencesports.com`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID=<from Cognito console>`, `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=<from Cognito console>`
@@ -10439,7 +10540,7 @@ Replace `MOCK_DATA` in `frontend/app/page.tsx`. The home page is a **Server Comp
 
 **Backend gaps — must be built before this story:**
 1. **`GET /picks/featured` endpoint** — new route in `app/backend/routers/picks.py`; queries `daily_model_predictions` for today's highest `game_conviction_score` qualified pick; returns the field shape above; S3-cached under `picks/featured.json` with the same `invalidate_today()` pattern
-2. **`ai_summary` column on `daily_model_predictions`** — new `VARCHAR` column populated by a Dagster op that calls `anthropic.messages.create` (Claude Haiku 4.5) once per day for the featured pick; prompt: `"In 2–3 sentences, explain why this MLB {market_type} pick has edge. Stats: model_prob={model_prob:.3f}, market_prob={market_prob:.3f}, edge={edge:.3%}, conviction={conviction_label}. Write for a sports bettor who understands probability."` — store the response text in `ai_summary`
+2. **`ai_summary` column on `daily_model_predictions`** — new `VARCHAR` column populated by a Dagster op that calls `anthropic.messages.create` (model: `claude-haiku-4-5-20251001`) once per day for the featured pick; prompt: `"In 2–3 sentences, explain why this MLB {market_type} pick has edge. Stats: model_prob={model_prob:.3f}, market_prob={market_prob:.3f}, edge={edge:.3%}, conviction={conviction_label}. Write for a sports bettor who understands probability."` — store the response text in `ai_summary`
 3. **`yesterday` sub-object** — fetched in the same endpoint by looking up the most recent prior-day qualified pick with `actual_outcome IS NOT NULL`
 
 **Tasks (frontend):**
@@ -10569,7 +10670,10 @@ Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` 
 - `GET /admin/cache/invalidate` (`POST`) — already exists; wire the "Invalidate Cache" button
 
 **Backend gaps — must be built before this story:**
-1. **`GET /admin/pipeline-runs`** — new route; calls Dagster+ GraphQL API at `penumbra-partners.dagster.plus/prod/graphql` (token in env); returns last 14 run entries across `daily_ingestion_job` and `lineup_monitor_sensor` jobs; add to `app/backend/routers/admin.py`
+
+`app/backend/routers/admin.py` already exists with only `POST /admin/cache/invalidate`. Add the two new routes to that file:
+
+1. **`GET /admin/pipeline-runs`** — new route; calls Dagster+ GraphQL API at `penumbra-partners.dagster.plus/prod/graphql` (token in env; see `scripts/ops/dagster_runs.py` for the query pattern); returns last 14 run entries across `daily_ingestion_job` and `lineup_monitor_sensor` jobs
 2. **`GET /admin/model-freshness`** — new route; queries Snowflake `baseball_data.betting_ml.model_registry` (or reads S3 `models/*/metadata.json`) for each champion model's `trained_at` timestamp; computes `days_since_training`; status: healthy < 30d, watch 30–60d, stale > 60d
 
 **Note on Snowflake credits chart:** No Snowflake cost API is available at runtime. Replace the `creditData` bar chart with a static note: "Snowflake credit usage is monitored in the AWS Cost Explorer and Snowflake admin console — not available via API." Hide the chart section.
@@ -10634,6 +10738,111 @@ Work:
 
 Done when: status cards, run table, and model table show real data; cache invalidation button works; no MOCK_DATA remains.
 ```
+
+---
+
+#### A0.4.15 — Data quality bug report ⬜
+
+Allow beta users to flag data errors (wrong scores, missing lines, bad umpire stats, etc.) without leaving the page. Captures context automatically so nothing has to be described from scratch.
+
+**Dependencies:** A0.4.3 complete; new backend endpoint `POST /feedback/data-quality` must be built first.
+
+**Backend gap — build before this story:**
+
+Add `POST /feedback/data-quality` to `app/backend/routers/` (new file `feedback.py`):
+- Request body: `{ page_url: str, game_pk: int | None, user_email: str, description: str }`
+- Writes one row to a new DynamoDB table `data_quality_reports` (same pattern as bet log): `report_id` (UUID), `submitted_at` (ISO 8601 UTC), `page_url`, `game_pk`, `user_email`, `description`, `status: "open"`
+- Sends a Slack webhook notification to the ops channel (or logs to CloudWatch if no webhook configured) — use env var `SLACK_DATA_QUALITY_WEBHOOK_URL`
+- Returns 201 `{ report_id }`
+
+**UX:**
+- Small "Report data issue" link in the footer of every data card on the game detail page (and eventually other pages)
+- On click: opens a `Dialog` (shadcn/ui) pre-populated with `game_pk` and `page URL`
+- Single multi-line text field "Describe the issue"; Submit button
+- On success: shows a toast "Report submitted — thank you"; on error: "Couldn't send report, please try again"
+- No screenshot upload for now (keep it lightweight for beta)
+
+**Tasks:**
+- [ ] Build `POST /feedback/data-quality` backend route with DynamoDB write + Slack notify
+- [ ] Create `frontend/components/report-data-issue.tsx` — a `<ReportDataIssue gamePk={number|null} />` component that renders the trigger link + Dialog + form + mutation
+- [ ] Add `<ReportDataIssue gamePk={game_pk} />` to the game detail page footer (below all cards)
+- [ ] Wire `useMutation` calling `POST /feedback/data-quality`; pass `accessToken` in Authorization header; include `page_url = window.location.href` and `user_email` from `useAuth()`
+
+**Acceptance criteria:**
+- [ ] Clicking "Report data issue" on the game detail page opens the dialog
+- [ ] Submitting a non-empty description creates a row in DynamoDB `data_quality_reports` (verified by direct table scan)
+- [ ] A Slack/CloudWatch notification fires on submit
+- [ ] Error state shows a retry message (not a silent failure)
+- [ ] Empty description is blocked by the Submit button being disabled
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 App Router, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend: FastAPI on AWS Lambda. Auth in frontend/lib/auth-context.tsx; API client in frontend/lib/api.ts. Repo root: baseball_betting_and_fantasy/.
+
+Task: A0.4.15 — Data quality bug report feature.
+
+Two-part story: (1) backend endpoint, (2) frontend component.
+
+Backend (app/backend/routers/feedback.py — create new file):
+- POST /feedback/data-quality
+- Request: { page_url: str, game_pk: int | None, user_email: str, description: str }
+- Write to DynamoDB table "data_quality_reports" — same boto3 pattern as app/backend/services/dynamo.py
+- Post to Slack webhook (SLACK_DATA_QUALITY_WEBHOOK_URL env var) — simple requests.post; skip silently if env var not set
+- Return 201 { report_id: str }
+- Register the router in app/backend/main.py
+
+Frontend (frontend/components/report-data-issue.tsx — create new file):
+- Props: { gamePk: number | null }
+- Render a small "Report data issue" text link
+- On click: opens shadcn Dialog with a Textarea (placeholder "Describe the issue…") and a Submit button
+- useMutation calling POST /feedback/data-quality with { page_url: window.location.href, game_pk, user_email: email from useAuth(), description }
+- On success: close dialog, show toast "Report submitted — thank you"
+- On error: show toast "Couldn't send report, please try again"
+- Submit disabled when description.trim() === ""
+
+Add <ReportDataIssue gamePk={game_pk} /> to frontend/app/picks/[game_pk]/page.tsx — below the last card, above the page bottom.
+
+Done when: clicking the link, filling in text, and submitting creates a DynamoDB row and fires a Slack notification.
+```
+
+---
+
+#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*
+
+Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement — do not start until the serving layer story (A2.12) is underway, since player/team pages would add significant new Snowflake query surface if not built against a pre-materialized data path.
+
+**Dependencies:** A0.4.7 complete; A2.12 serving layer in place or committed.
+
+**Player profile page** (`/player/[player_id]`):
+- Season stats: PA, OPS, xwOBA, K%, BB%, wRC+
+- L10 performance trend (sparkline)
+- vs LHP / vs RHP splits
+- Recent games: date, opponent, PA, H, HR, BB, K, xwOBA
+
+**Team profile page** (`/team/[team_id]`):
+- Season record, run differential, team ERA, team xwOBA
+- L10 form (win/loss row)
+- ELO rating + 30-day trend (sparkline)
+- Upcoming schedule (next 7 games with opponent + starter)
+- Rotation (projected starters for next 5 games)
+
+**Backend gaps:**
+- `GET /player/{player_id}` — season stats, splits, last 10 game log (sources: `mart_batter_rolling_stats`, `feature_pregame_lineup_features`)
+- `GET /team/{team_id}` — record, ERA, xwOBA, ELO history, schedule (sources: `mart_team_rolling_stats`, `feature_pregame_team_features`, `stg_statsapi_games`)
+
+**Tasks:**
+- [ ] Audit what data is available per-player and per-team from existing feature marts before designing API schemas
+- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data, not live Snowflake queries at request time (see A2.12)
+- [ ] Create `frontend/app/player/[player_id]/page.tsx` and `frontend/app/team/[team_id]/page.tsx`
+- [ ] Make player names in the game detail lineup card link to `/player/{player_id}`
+- [ ] Make team names/logos in the game detail header link to `/team/{team_id}`
+
+**Acceptance criteria:**
+- [ ] Clicking a player name from the lineup card navigates to `/player/{player_id}` with real season stats
+- [ ] Clicking a team name/logo navigates to `/team/{team_id}` with record, ELO, and schedule
+- [ ] Both pages use the same nav/layout as other authenticated pages
+- [ ] Pages return a graceful 404 if the player/team ID is not found
+- [ ] No raw Snowflake queries at request time — data is served from pre-materialized cache
 
 ---
 
@@ -11836,10 +12045,100 @@ back to the user to run and show the command; do not git commit or push (the use
 
 ---
 
+### Story A2.12 — Pre-computed game detail serving layer (reverse ETL)  `[Home: Epic A2 / infrastructure]`  ⬜
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.12 standalone:
+
+```
+You are picking up Story A2.12 of the MLB betting & fantasy project.
+
+Before writing any code, read these documents end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate Story A2.12; its Goal,
+     Tasks, and Acceptance criteria are your contract.
+  2. app/backend/routers/picks.py — the get_game_detail handler and existing S3 cache usage
+  3. app/backend/services/s3_cache.py — current cache implementation (permanent + date-scoped flags)
+  4. pipeline/dagster_project/ — existing Dagster job and sensor structure
+
+Conventions (non-negotiable): query Snowflake only via the Snowflake MCP with fully-qualified
+db.schema.table names and no USE statements; hand any script that runs >1 min back to the user;
+do not git commit or push (the user handles git).
+```
+
+**Goal:** Eliminate all Snowflake queries from the web API at request time. The current architecture — Snowflake queried synchronously on every page load — is the root cause of both slow first-loads and unbounded compute spend as traffic scales. All game-detail, picks, and context data should be pre-materialized by Dagster and served from S3 (or DynamoDB for sub-10ms latency), with Snowflake never touched at request time.
+
+**Interim fix shipped 2026-06-12:** S3 cache added to `GET /picks/{game_pk}/detail`:
+- Final games → `api-cache/permanent/picks/game/{game_pk}.json` (immutable, never expires)
+- Live/preview games → `api-cache/{date}/picks/game/{game_pk}.json` (date-scoped, resets nightly)
+
+This eliminates repeated Snowflake hits for completed historical games but does NOT solve the cold-start problem for today's in-progress games (the first request of the day still hits Snowflake before the cache is warm).
+
+**Full story — Dagster-driven pre-materialization:**
+
+**Tasks:**
+- [ ] **Design the materialization trigger map.** Identify which Dagster events trigger a re-materialize per game: (a) `predict_today` completes → write all today's games; (b) `lineup_monitor_sensor` fires a post-lineup re-score → write the re-scored games; (c) daily ingestion finishes → write any newly-Final games not yet in the permanent cache.
+- [ ] **Build a `materialize_game_detail` Dagster op** that assembles the same `GameDetailResponse` payload as `get_game_detail` but writes directly to S3, bypassing the HTTP layer entirely. Accept a list of `game_pk` values and materialize with bounded concurrency (max ~5 parallel Snowflake queries).
+- [ ] **Wire the op** into the post-`predict_today` job (writes all today's games at once) and the `lineup_monitor_sensor` downstream (re-writes re-scored games on lineup confirmation).
+- [ ] **Pre-materialize `GET /picks/today`** as well — the current `picks/today.json` S3 cache is written on first HTTP request; move the write to the Dagster job so the dashboard is warm before any user opens it.
+- [ ] **Verify cold-start elimination.** After a Dagster run, the first HTTP request for any today-game returns the S3-cached payload with zero Snowflake queries — confirmed via CloudWatch or backend logs.
+- [ ] **DynamoDB evaluation.** If median S3 `GetObject` latency in prod exceeds 50ms, evaluate migrating hot game detail blobs to DynamoDB `GameDetailCache` table (pk = `game_pk`, sort key = `game_date`). Document decision.
+- [ ] **Admin invalidation extension.** Extend `POST /admin/cache/invalidate` to accept optional `?game_pk=<N>` param so a single game can be invalidated without clearing the whole slate.
+
+**Acceptance criteria:**
+- [ ] After Dagster `predict_today` completes, all today's games are pre-materialized in S3; first HTTP request for any game detail page is a cache hit — zero Snowflake queries during a normal page-load session (confirmed via logs)
+- [ ] Final games are written to the permanent prefix and never re-queried once complete
+- [ ] `GET /picks/today` is pre-materialized before first user request
+- [ ] `POST /admin/cache/invalidate?game_pk=<N>` invalidates a single game's entry
+- [ ] Dagster trigger map and materialization op are documented in the Development Workflow section of this guide
+
+**Sequencing:** Start after A0.4.7 pick detail page is stable and the `GameDetailResponse` schema is settled (no more breaking changes in flight). The interim S3 cache gives breathing room — this is high-priority but not an emergency blocker for beta.
+
+---
+
+### Story A2.13 — Bovada totals web-app coverage audit  `[Home: Epic A2 / data quality]`  ⬜
+
+**Cross-reference:** A2.7 (COMPLETE 2026-06-10) diagnosed the Parlay API totals feed as market-wide sparse/laggy on that incident date and added a "not yet posted" message to the Streamlit app. This follow-up story is scoped to the **new Next.js web app**, where the user observed (2026-06-12) that a number of games are missing O/U data in the current pick detail page.
+
+**Goal:** Determine whether the missing O/U lines are (a) the same upstream feed sparseness documented in A2.7, (b) a display/rendering gap in the Next.js pick detail page (the old Streamlit fix may not have been ported), or (c) a new data pipeline issue (e.g., the Parlay API migration broke the `mart_game_odds_bridge` event_id join for totals). Produce a coverage report and fix whichever layer is defective.
+
+**Tasks:**
+- [ ] **Measure current coverage.** Using Snowflake MCP: for `game_pk` values in `stg_statsapi_games` over the last 14 days + today, count games with Bovada h2h vs Bovada totals vs any-book totals in `mart_odds_outcomes`. Compare to the A2.7 baseline (3/15 on 2026-06-10). Report by date range.
+- [ ] **Audit the web app display path.** Trace `GET /picks/{game_pk}/detail` → the totals query in `picks.py` → `BovadaLines` model → the O/U display section in `frontend/app/picks/[game_pk]/page.tsx`. Confirm the UI renders an honest "not yet posted" / "unavailable" message when the line is null, rather than silently blank.
+- [ ] **Check the historical totals join.** For 2025 and earlier games, `load_total_line_bovada` unions `oddsapi.odds_snapshots_historical` (game_pk-keyed) and `mart_odds_outcomes` (source-specific event_id join via `mart_game_odds_bridge`). Verify the union is intact after the Parlay API migration — the bridge join is a known fragility point (see `reference_bovada_historical_totals` memory).
+- [ ] **Fix or escalate.** Display bug → fix the frontend. Join/pipeline bug → fix the dbt model or loader. Upstream feed sparseness (same as A2.7) → document the scope, port the "not yet posted" message to the web app if not already there, and close.
+
+**Acceptance criteria:**
+- [ ] Coverage report produced: % of games with Bovada totals by date range (today, last 14 days, 2026 season)
+- [ ] Root cause identified: upstream feed / display gap / join bug — documented in story notes
+- [ ] If a code fix is applied: tested with real Snowflake data before merge (per `feedback_test_before_deploy`)
+- [ ] The web app's O/U panel shows an honest status message for games where Bovada totals are absent — no silent blank panel
+
+**Session prompt:**
+```
+You are picking up Story A2.13 of the MLB betting & fantasy project — an audit of Bovada O/U
+(totals) coverage gaps in the Credence Sports Next.js web app.
+
+Before doing anything, read:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story A2.13 AND Story A2.7
+     (COMPLETE 2026-06-10, the prior Streamlit diagnosis)
+  2. app/backend/routers/picks.py — find the totals/Bovada odds query
+  3. frontend/app/picks/[game_pk]/page.tsx — the O/U display section
+
+Step 1 (data before code): use mcp__snowflake__run_snowflake_query to run the coverage query
+from Task 1. Report the numbers before touching any code.
+Step 2: Trace the display path from the query to the UI. Identify any null-handling gaps.
+Step 3: Fix whichever layer is defective based on findings.
+
+Conventions: Snowflake MCP only; fully-qualified names; no USE statements; do not git commit or push.
+```
+
+---
+
 # Epic 27 — Within-Season Scoring-Environment State Signal
 
-**Status:** 🔄 IN PROGRESS (27.1 ✅ 2026-06-10). **Track B.** This is the formal answer to **Epic 17 re-open criterion
-(b)**: *"A new signal type — not a new model architecture — is the unblocking condition."*
+**Status:** 🔄 IN PROGRESS (27.1 ✅ 2026-06-10; 27.3/27.5 ✅ DEFER/FAIL; **27.6 ⬜ NEW 2026-06-12 — the pivot:
+regime MONITORING + exogenous leading indicators, after in-season *prediction* from lagging signals was settled
+as not-learnable**). **Track B.** This is the formal answer to **Epic 17 re-open criterion (b)**: *"A new signal
+type — not a new model architecture — is the unblocking condition."*
 
 **Goal:** Produce a **low-variance, recursively-updated estimate of the current within-season run-
 scoring environment** (league-level and per-team) as a new sub-model signal. The totals_2026_failure_
@@ -12289,6 +12588,62 @@ uv run python betting_ml/scripts/ablate_gb_fb_park_interaction.py
     rolling GB%/FB% feature (rolling 30-game window) is available — this would resolve the coverage gap
     for new/returning starters and likely move the needle on NLL.
   - Feature 14 in the roadmap table updated accordingly.
+
+---
+
+### 27.6 — Run-environment regime MONITORING + exogenous leading indicators  `[Home: Epic 27]`
+
+**Status:** ⬜ NEW (2026-06-12). **Track B.** The pivot story: in-season *prediction* of the regime is
+settled (failed); this reframes regime work to **detection/monitoring** (achievable, operationally valuable)
+plus the one **untried signal class** (exogenous leading indicators).
+
+**⭐ Reconcile first — what's already been tried (do NOT relitigate):** "tracking the regime" is not new —
+it is the whole of **Epic 27** (Kalman `env_league_state` latent, 27.1✅/27.3) plus **Epic 17**'s PyMC
+`beta_rolling` and **Story 10.8**'s recency-weighting. All FAILED for ONE consistent reason, and it is a
+**signal-to-noise** problem, not a modeling-effort problem: the April→May within-season run move is **~0.48
+runs**, while every trailing-N / EW recency window and the Kalman state swing **4+ runs** over two-week spans —
+so the purpose-built state signals loaded **non-informatively** (`env_league_state` β=0.0128 [−0.000,+0.026];
+`beta_rolling`≈0). Conclusion on record (Epic 27 re-open framing): *the environment is not learnable in-season
+even with a low-variance state* from signals **derived from lagging team/pitcher stats**. Re-open criterion (b)
+(smoothed-state + model-family) is marked EXHAUSTED; only (a) full-2026 `delta_2026` (~Oct) remains for
+main-line betting. **This story does NOT re-run the NUTS/Kalman with another lagging signal.**
+
+**Why a new story anyway (two genuinely-different angles):**
+1. **Regime MONITORING ≠ in-season prediction.** *Predicting* the per-game regime is dominated by noise;
+   *detecting* that the league-wide scoring environment has structurally shifted (after enough games) is a
+   different, easier statistical problem (changepoint / CUSUM on the league run-rate, with a slow season-level
+   baseline). The value is **operational, not predictive** — it directly feeds the new codified **promotion
+   gate** (Champion-selection Case 3): criterion 5 flags "current-season regression = regime-shift watch," and
+   a fired regime monitor is the honest trigger for the ~Oct `delta_2026` re-eval and for *holding* (not
+   redeploying) when early-season drift is just regime, not model decay. This is the mechanism that makes
+   promotion **robust to regime, not reactive to it** — the thing the gate's hysteresis criterion assumes exists.
+2. **Exogenous LEADING indicators (the only untried data class).** Every failed signal was *endogenous* (lagging
+   team/pitcher rollups). The untried angle is signals that **lead** scoring rather than lag it: ball
+   drag / coefficient-of-restitution (the documented driver of MLB's year-to-year HR/run swings), rule &
+   equipment changes, and league-wide weather/altitude regime. These are orthogonal to the matrix by
+   construction and are the honest re-open-criterion-(b) candidates a *new signal type* (not a new architecture)
+   was always specified to require.
+
+**Tasks:**
+- [ ] **Monitor:** a changepoint/CUSUM detector on the league-wide (and per-team) run-scoring rate writing a
+  `run_env_regime_state` series + a `regime_shift_flag` (with magnitude + detection lag). Calibrate on 2021–2025
+  (known year-to-year shifts) so the false-alarm rate is bounded; report detection lag in games.
+- [ ] **Wire to the promotion gate:** expose the flag so `evaluate_promotion`'s current-season corroboration can
+  cite an active regime shift (turn the "watch" into a logged, queryable signal), and so the ~Oct `delta_2026`
+  totals re-eval has a programmatic trigger instead of a calendar guess.
+- [ ] **Exogenous-signal scoping spike:** inventory availability of ball-drag/CoR (Statcast / public research),
+  rule/equipment change dates, and a league weather/altitude regime aggregate; for each, a faithful-compression
+  (Story 3.Z) + orthogonality check before any modeling. Only signals that clear coverage + orthogonality
+  proceed to a 27.3-style NUTS/Layer-3 re-run against the **unchanged** kill criterion (PPM ≤ 8.81 / L1<2.8893 /
+  L3<0.248 & <0.228).
+
+**Acceptance criteria:**
+- [ ] `run_env_regime_state` + `regime_shift_flag` produced, backtested on 2021–2025 shifts (bounded false-alarm
+  rate; reported detection lag), and surfaced to `promotion_gate` + the totals `delta_2026` re-eval trigger.
+- [ ] Exogenous-leading-indicator inventory with a per-signal coverage + orthogonality verdict; any qualifying
+  signal carried into a kill-criterion re-run (else recorded as exhausted, escalating fully to re-open (a)).
+- [ ] Explicit statement that this does NOT re-attempt in-season regime *prediction* from lagging signals
+  (settled by Epic 17/27.3/10.8) — monitoring + exogenous leads only.
 
 ---
 
@@ -13017,7 +13372,26 @@ until the ~Oct 2026 full-season `delta_2026` re-evaluation (criterion (a)).**
 
 # Epic 29 — Totals Point-Accuracy & Alt-Line Edge Track
 
-**Status:** 🔴 LARGELY CLOSED 2026-06-11. **Track B.** 29.1 (the decision gate) ran the day it was specced and
+**⭐ OPERATOR DIRECTIVE (2026-06-12) — REOPENS THE POINT-ACCURACY TRACK + sets a new promotion policy:**
+- **Totals is a point-accuracy PRODUCT.** Surface the model's projected total (as close to the actual total
+  as possible) and let the **user decide** whether to act on the over/under. This is product/UX, NOT auto-betting
+  the main line — `total_runs.bet_paused: true` (auto-bet) stays; the user-facing projection is the deliverable.
+- **Actively improve point accuracy NOW.** This overrides the "29.2/29.3 shelved until a discriminative signal"
+  posture *for the point-accuracy objective only* — the goal is to drive RMSE/MAE-to-actual down as far as
+  possible immediately. (29.2 calibration / 29.3 alt-line betting stay gated on a discriminative signal.)
+- **⭐ PROMOTION POLICY (applies to totals; generalizes the Epic 30 accuracy-to-truth directive):** promote any
+  model that **beats the current PRODUCTION champion on point accuracy (RMSE/MAE-to-actual)** — *regardless of
+  whether it beats the market.* Rationale: the production champion does not beat the market either, so
+  "beat the market" is the wrong gate; closeness-to-truth is. Beating the market remains reported as SECONDARY
+  context. (This also fixes the misleading "+X% vs no-skill floor" gate — compare vs the deployed champion;
+  see [[project_search_baseline_misleading]].)
+- **Near-term offering roadmap (verbiage to honor):** beyond the main-line projection we WANT to track and
+  surface **alternate totals (±1.5 off main), first-5-inning (F5) totals, and team totals** as expanded
+  betting-recommendation offerings — a calibrated predictive distribution can price these thin/stale markets
+  even when the main line is efficient (29.3 scope). Sequenced after the point-accuracy push.
+
+**Status:** 🔴 LARGELY CLOSED 2026-06-11 → 🟡 POINT-ACCURACY TRACK REOPENED 2026-06-12 (operator directive above).
+**Track B.** 29.1 (the decision gate) ran the day it was specced and
 returned **DOWNGRADE**: on the honest 2026 Bovada surface the market line beats the model by ~0.53 RMSE / ~0.74 MAE
 and is typically within 1.5 runs vs the model's ~2.9. The model is level-unbiased but has a per-game *discrimination*
 (variance) deficit the market doesn't — so calibration (29.2) and alt-line pricing (29.3) are both downgraded
@@ -13940,6 +14314,141 @@ speculative dead infra. arch §"Point-in-Time Feature Engineering" already names
 - [ ] Snapshot table + forward-capture op live; `load_features_asof()` reads it.
 - [ ] AS-OF-retrained challenger vs champion on the honest live (post_lineup/feature_store) surface — promote only
   if it raises live corr/Brier toward the 0.42 ceiling (Epic 30 PRIMARY accuracy-to-truth bar).
+
+---
+
+### 30.7 — Model & prediction provenance tracking (champion lineage + backfill flag)  `[Home: Epic 30 / governance]`
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.7 standalone:
+
+```
+You are picking up Story 30.7 of the MLB betting & fantasy project.
+
+Before writing any code, read these end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — the Epic 30 header, the "Champion
+     selection policy → Case 3" block, and the Story 30.7 Goal/Tasks/Acceptance below.
+  2. scripts/ddl/model_tracking_migration.sql (the model_registry table DDL + seed — ALREADY EXISTS).
+  3. betting_ml/scripts/predict_today.py (daily_model_predictions DDL ~line 257; prediction_snapshots
+     DDL ~line 687) and betting_ml/scripts/backfill_predictions.py (writes prediction_type='backfill').
+  4. docs/model_promotion_runbook.md.
+
+CONTEXT (verified 2026-06-12):
+  - GAP 1 (champion lineage): Snowflake baseball_data.betting_ml.model_registry has the RIGHT schema
+    (promoted_date / deprecated_date / is_current) but was SEEDED ONCE and nothing maintains it on
+    promotion — grep finds no INSERT/MERGE/UPDATE from any promotion path. So after the first promote,
+    deprecated_date/is_current are fiction. model_registry.yaml is the hand-edited current-champion
+    source of truth but has promoted_at + deployed_date and NO retired_at.
+  - GAP 2 (backfill flag): the MAIN table daily_model_predictions has prediction_type, which is
+    OVERLOADED — it carries both live-timing ('morning'|'post_lineup') AND provenance ('backfill').
+    A backfilled row loses the morning/post_lineup distinction; the axes aren't independent. The clean
+    flag (prediction_snapshots.reconstruction_type 'live'|'backfill') is on a DIFFERENT table that the
+    live path only ever writes 'live' to, and the app/perf pages don't read.
+  - Two predict_today.py copies exist (scripts/ and betting_ml/scripts/) with drifted DDL — reconcile
+    or note which is canonical as part of this work.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP with
+fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min (incl.
+read-only Snowflake queries) back to the user to run and show the command; test any new Snowflake-querying
+script with real creds before merge; do not git commit or push (the user handles git).
+```
+
+**Status:** ⬜ OPEN — specced 2026-06-12. Surfaced while promoting the Story 30.4 market-blind retrains:
+we could not cleanly answer "what window was model X the production champion?" or "is this prediction row a
+real-time live pick or a post-promotion backfill?" Both are governance pre-reqs for honest live-track-record
+evaluation. **Operator directive (2026-06-12): the 30.4 promotion cycle must flow THROUGH this infra** —
+home_win (and total_runs/run_diff once gated) are promoted via the new `record_promotion()` entrypoint and
+any backfilled predictions are stamped `is_backfill=TRUE`, so we stop accruing the lineage debt going forward.
+
+**Why it exists.** Early model-development phase with frequent refinement → we MUST be able to (a) reconstruct
+the exact timeframe each model was the production champion, and (b) distinguish predictions a model made in
+real time (before the game, as champion) from predictions backfilled after it was promoted. Without (b), live
+skill metrics (`honest_live_skill.py`) and the promotion gate's current-season corroboration silently mix
+real-time and retroactively-scored rows, flattering or distorting the live record.
+
+**Part A — Champion lineage (maintain the Snowflake model_registry SCD on promote):**
+- [ ] `betting_ml/utils/model_registry_tracker.py::record_promotion(target, new_version, model_name,
+  artifact_path, feature_columns_path, features, training_rows, training_cutoff, cv_metric_name,
+  cv_metric_value, promoted_date, notes, conn=None)` — ONE transaction: (1) UPDATE the outgoing
+  `is_current=TRUE` row for `target` → `deprecated_date = promoted_date, is_current = FALSE`; (2) INSERT the
+  new row `is_current = TRUE, deprecated_date = NULL`. Idempotent on (target, model_version) PK — re-running
+  the same promote is a no-op (MERGE/`INSERT … WHERE NOT EXISTS`). Uses fully-qualified
+  `baseball_data.betting_ml.model_registry`, no USE statements.
+- [ ] `betting_ml/scripts/record_promotion.py` — thin CLI wrapper (the missing per-promotion entrypoint; the
+  existing `migrate_artifacts_to_s3.py` is a bulk uploader, not a promote step). Operator runs it as part of
+  the runbook right after the S3 push.
+- [ ] Reconcile YAML ↔ Snowflake: decide the Snowflake `model_registry` is canonical for *temporal lineage*
+  (windows) and the YAML stays canonical for *current serving artifact* (what predict_today loads); add a
+  `retired_at` comment-field to YAML challenger entries for human readability. Document the split so they
+  don't drift.
+- [ ] Wire `record_promotion()` into `docs/model_promotion_runbook.md` as a required step (after S3 push,
+  before kill-window reset).
+
+**Part B — Explicit backfill flag on the main predictions table:**
+- [ ] DDL migration `scripts/ddl/add_is_backfill_flag.sql`: `ALTER TABLE
+  baseball_data.betting_ml.daily_model_predictions ADD COLUMN IF NOT EXISTS is_backfill BOOLEAN DEFAULT FALSE;`
+  then backfill existing rows `UPDATE … SET is_backfill = TRUE WHERE prediction_type = 'backfill';`.
+- [ ] Live writers (both `predict_today.py` copies) set `is_backfill = FALSE` explicitly; backfill scripts
+  (`backfill_predictions.py`, `backfill_predictions_2026.py`) set `is_backfill = TRUE`. Keep `prediction_type`
+  for live-timing only (`morning`|`post_lineup`); stop using it as a provenance axis.
+- [ ] Consumers exclude backfills from LIVE metrics: `honest_live_skill.py`, the Model Performance page /
+  perf-API, and the promotion gate's current-season corroboration filter add `AND is_backfill = FALSE`.
+- [ ] Reconcile the two `predict_today.py` copies (or document the canonical one) so the column is written
+  identically by both.
+
+**Acceptance criteria:**
+- [ ] `record_promotion()` tested with real creds (per convention) on a no-op re-run AND a real version bump;
+  `SELECT target, model_version, is_current, promoted_date, deprecated_date FROM
+  baseball_data.betting_ml.model_registry ORDER BY target, promoted_date` shows exactly one `is_current=TRUE`
+  per target and a gap-free promoted→deprecated timeline.
+- [ ] `is_backfill` present on `daily_model_predictions`, defaulted FALSE, existing backfill rows migrated TRUE;
+  a live predict run writes FALSE and a backfill run writes TRUE.
+- [ ] At least one live-metric consumer (perf page or `honest_live_skill.py`) demonstrably excludes backfills.
+- [ ] The 30.4 home_win promotion was recorded via `record_promotion()` (lineage row written), proving the
+  cycle flowed through the new infra.
+
+---
+
+### 30.8 — Pre-lineup and post-lineup prediction contracts  `[Home: Epic 30 / architecture]`  ⬜
+
+**Prerequisite for:** stable "pick of the day" UI feature; the morning pick shown to users should be clearly labeled by model confidence tier and must not degrade to a post-lineup model's stale or imputed output.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.8 standalone:
+
+```
+You are picking up Story 30.8 of the MLB betting & fantasy project.
+
+Before writing any code, read end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story 30.8 AND Story 30.3
+     (Epic 30.3 COMPLETE 2026-06-11 — root cause: ~30% feature imputation at morning serve time)
+  2. betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json
+  3. scripts/predict_today.py (or betting_ml/scripts/predict_today.py — see 30.7 for the copy issue)
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Create two distinct prediction pipelines — a **pre-lineup model** (fires in the morning using only roster-level and starting pitcher features, deliberately excluding lineup-dependent inputs) and the existing **post-lineup model** (fires after official lineup confirmation, using the full current feature set). This eliminates the train/serve skew documented in Epic 30.3, where ~30% of the current morning-serve feature matrix is imputed to constants because lineup-dependent features are not yet available.
+
+**Background (Epic 30.3 root cause):** The single current model runs both pre- and post-lineup but was trained on a feature set that assumes post-lineup completeness. Morning-serve imputes `batting_order_*`, `batter_archetype_matchup_*`, `lineup_quality_*`, and other slot-dependent features to constants — producing a materially different input distribution than training. The offline correlation (0.42) is optimistic because the training set was retroactively dense; the morning live predictions are degraded because the matrix is sparse.
+
+**Tasks:**
+- [ ] **Audit the feature contract for lineup-dependence.** Classify every column in `feature_columns_xgb_classifier_tuned_2026.json` (and equivalent for `run_diff`, `total_runs`) as: (A) available pre-lineup (team-level, starter, park, weather, ELO, umpire, EB posteriors) or (B) requires confirmed lineup (batting order, handedness matchups, slot-level OPS/xwOBA, archetype cluster, bullpen leverage). Produce a written classification table. This gates the rest of the story.
+- [ ] **Define the pre-lineup feature contract.** Create `feature_columns_pre_lineup_home_win.json` (and `run_diff`, `total_runs` equivalents) containing only Class-A features from the audit. The contract must pass the existing `CONTRACT-GUARD` in `predict_today.py` without modification.
+- [ ] **Train the pre-lineup challenger.** Retrain `home_win` (and `run_diff`, `total_runs`) using ONLY the pre-lineup feature set, on the same train/val split as the current champion. Compare CV metrics pre-lineup vs post-lineup champion — the pre-lineup model will be weaker; that is expected and acceptable. Document the gap (e.g., "pre-lineup AUC 0.58 vs post-lineup 0.65 — 7pp trade-off for morning freshness").
+- [ ] **Add a `prediction_timing` field to `daily_model_predictions`** (values: `'pre_lineup'` | `'post_lineup'` — orthogonal to the existing `prediction_type` = `'morning'` | `'post_lineup'`; note the overlap in naming: reconcile via 30.7's DDL migration or add a new column). This field is required for the UI to distinguish confidence tiers.
+- [ ] **Wire two runs in `predict_today.py`**: (a) morning run uses the pre-lineup model + pre-lineup feature assembly path, stamps `prediction_timing='pre_lineup'`; (b) post-lineup sensor re-run uses the full post-lineup model + dense feature path, stamps `prediction_timing='post_lineup'`.
+- [ ] **Interim UI labeling.** Until the pre-lineup model is trained and promoted, update the web app's game detail page to show a "Lineup Unconfirmed — Prediction Preliminary" badge on any game where `lineup_confirmed = False`. This is a stop-gap so the UI does not present a degraded prediction as a confident pick.
+
+**Acceptance criteria:**
+- [ ] Feature classification table written: every column tagged Class-A or Class-B, with rationale
+- [ ] Pre-lineup feature contract file created and validated against the CONTRACT-GUARD
+- [ ] Pre-lineup model trained and CV metrics documented (expected weaker than post-lineup champion — this is correct behavior, not a failure)
+- [ ] `prediction_timing` column present on `daily_model_predictions`; morning writes `'pre_lineup'`, post-lineup sensor writes `'post_lineup'`
+- [ ] Web app shows "Lineup Unconfirmed — Prediction Preliminary" badge for pre-lineup-only games
+- [ ] Pick-of-the-day feature (A0.4.12) is gated on this story — do not promote a morning pick as a "pick of the day" until the pre-lineup model is live and the `prediction_timing` field is populated
+
+**Sequencing:** Do NOT start the pre-lineup model training until Story 30.4 (market-blind contract) is fully promoted and stable — the pre-lineup contract is a subset of the post-lineup market-blind contract; training on a different feature set while the contract is still shifting creates unnecessary rework. The interim UI badge (Task 6) can be shipped independently at any time.
 
 ---
 

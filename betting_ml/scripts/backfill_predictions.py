@@ -56,9 +56,15 @@ ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
 ADD COLUMN IF NOT EXISTS retrain_tag VARCHAR(50)
 """
 
+# Story 30.7: explicit, non-overloaded provenance flag (TRUE for backfilled rows).
+_ALTER_IS_BACKFILL = f"""
+ALTER TABLE {_ML_SCHEMA}.daily_model_predictions
+ADD COLUMN IF NOT EXISTS is_backfill BOOLEAN DEFAULT FALSE
+"""
+
 _INSERT_ROW = f"""
 INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
-    model_version, inserted_at, score_date, prediction_type, retrain_tag,
+    model_version, inserted_at, score_date, prediction_type, retrain_tag, is_backfill,
     game_pk, game_date, game_datetime,
     home_team, away_team, home_team_abbrev, away_team_abbrev,
     has_odds,
@@ -71,7 +77,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     total_line_consensus, over_prob_consensus,
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction
 ) VALUES (
-    %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(retrain_tag)s,
+    %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(retrain_tag)s, %(is_backfill)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
     %(home_team)s, %(away_team)s, %(home_team_abbrev)s, %(away_team_abbrev)s,
     %(has_odds)s,
@@ -247,6 +253,7 @@ def _build_rows(
             "score_date":             game_date_val,
             "prediction_type":        _PREDICTION_TYPE,
             "retrain_tag":            _RETRAIN_TAG,
+            "is_backfill":            True,  # Story 30.7: explicit provenance flag
             "game_pk":                _col(df, "game_pk", i),
             "game_date":              game_date_val,
             "game_datetime":          None,
@@ -339,16 +346,17 @@ def main() -> None:
         print(f"  {len(df):,} rows loaded")
 
     if not args.dry_run:
-        # Ensure retrain_tag column exists before querying it
+        # Ensure retrain_tag + is_backfill columns exist before inserting (Story 30.7).
         try:
             conn = get_snowflake_connection()
             try:
                 conn.cursor().execute(_ALTER_RETRAIN_TAG)
+                conn.cursor().execute(_ALTER_IS_BACKFILL)
                 conn.commit()
             finally:
                 conn.close()
         except Exception as exc:
-            print(f"[WARN] Could not add retrain_tag column ({exc})")
+            print(f"[WARN] Could not add retrain_tag/is_backfill column ({exc})")
 
         print("\nChecking for existing backfill rows in Snowflake...")
         existing_pks = _get_existing_game_pks(model_version)

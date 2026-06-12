@@ -1,8 +1,20 @@
 # Model Promotion Runbook (S3 + Contract Integrity)
 
 **Owner:** Charles Clark
-**Last updated:** 2026-06-11 (Story 30.1)
+**Last updated:** 2026-06-12 (codified promotion gate)
 **Applies to:** All three production targets — `home_win`, `total_runs`, `run_differential`
+
+> **Step 0 — the promotion DECISION gate (run BEFORE any S3 push).** Whether a challenger is
+> *allowed* to replace the champion is no longer an ad-hoc per-story judgement. It is the
+> **codified Case 3 gate** — `betting_ml/utils/promotion_gate.py` (`evaluate_promotion`),
+> specified in `implementation_guide.md` → "Champion selection policy → Case 3". In one line:
+> **PROMOTE iff the challenger beats the *deployed champion* on accuracy-to-truth across
+> COMPLETED held-out seasons — beyond the noise floor, paired-bootstrap significant, with no
+> completed-season regression, the current partial season corroboration-only — and the gate
+> passes on ≥2 consecutive evals (hysteresis).** Beating the market is NOT required (the champion
+> doesn't either). Model-agnostic: Bayesian/posterior-predictive challengers are scored with
+> `crps_ensemble` and judged by the same criteria. Only once the gate returns PROMOTE do you run
+> the S3 + contract steps below.
 
 > **Why this exists (read first).** The older [`model_deploy_runbook.md`](model_deploy_runbook.md)
 > describes the *train → registry → git-tag* flow and assumes the `.pkl` artifacts are
@@ -140,6 +152,29 @@ For each promoted target, edit its top-level block in `betting_ml/models/model_r
 > `total_runs` is bet-paused on the `eb_enriched` lineage. Promoting a tuned-totals challenger
 > is a **separate, gated** decision (beat NLL 2.8893 AND prior-naive Brier 0.248 on a rolling
 > 60-game live window) and is a different artifact lineage — do not repoint it as a side effect.
+
+---
+
+## Step 3b — Record the champion lineage (Snowflake temporal registry)  `[Story 30.7]`
+
+The YAML edit in Step 3 changes the *current* champion but does NOT record the **window** the
+outgoing champion held. `baseball_data.betting_ml.model_registry` is the canonical temporal
+lineage (promoted_date / deprecated_date / is_current); it is only correct if every promotion
+calls `record_promotion`. Run it right after the registry edit, once per promoted target:
+
+```
+uv run python betting_ml/scripts/record_promotion.py \
+  --target home_win --new-version v5 --model-name xgb_market_blind \
+  --artifact-path s3://baseball-betting-ml-artifacts/home_win/<artifact>.pkl \
+  --feature-columns-path betting_ml/models/home_win/<contract>.json \
+  --features <post_pipeline_dim> --training-rows <n> --training-cutoff 2021+ \
+  --cv-metric brier --cv-value <cv> --promoted-date <today> \
+  --notes "<one-line rationale; note any correctness override>"
+```
+
+It closes the prior champion (`deprecated_date = today, is_current = FALSE`) and inserts the new
+one (`is_current = TRUE`) in one transaction; idempotent on (target, version) so re-runs are
+no-ops. Verify exactly one `is_current = TRUE` per target afterward.
 
 ---
 

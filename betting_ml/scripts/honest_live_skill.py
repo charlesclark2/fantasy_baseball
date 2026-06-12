@@ -66,6 +66,9 @@ FROM baseball_data.betting_ml.daily_model_predictions dmp
 JOIN baseball_data.betting.mart_game_results r USING (game_pk)
 WHERE dmp.game_date >= '{since}'
   AND r.home_final_score IS NOT NULL
+  -- Story 30.7: live-skill must exclude rows backfilled after a promotion. Explicit
+  -- flag (not prediction_type<>'backfill'), so post_lineup backfills can't sneak in.
+  AND COALESCE(dmp.is_backfill, FALSE) = FALSE
 """
 
 

@@ -14,13 +14,32 @@ from datetime import date, datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 
 from app.backend.models.picks import (
+    BovadaH2H,
+    BovadaLines,
+    BovadaTotals,
     DataQuality,
     EVPick,
     EVPicksResponse,
+    GameContext,
+    GameDetailResponse,
+    GameLineups,
+    GamePerfFeatures,
+    GamePicksResponse,
+    GameScore,
+    GameStarters,
+    H2HRecord,
     HistoricalPick,
     HistoryPicksResponse,
+    LineMovement,
+    LineupPlayer,
     Pick,
+    PublicBetting,
+    StarterStats,
+    TeamPerfStats,
+    TeamRecentForm,
     TodayPicksResponse,
+    UmpireInfo,
+    WeatherInfo,
 )
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
@@ -305,6 +324,486 @@ SELECT * FROM totals
 ORDER BY game_pk, market_type
 """
 
+_GAME_QUERY = f"""
+WITH ranked AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
+        ) AS _rn
+    FROM {_ML_SCHEMA}.daily_model_predictions
+    WHERE game_pk = %(game_pk)s
+),
+base AS (
+    SELECT r.*, g.game_date AS game_start_utc
+    FROM ranked r
+    LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = r.game_pk
+    WHERE r._rn = 1
+),
+h2h AS (
+    SELECT
+        b.game_pk,
+        b.game_date,
+        'h2h'                                        AS market_type,
+        b.calibrated_win_prob                        AS model_prob,
+        b.h2h_market_implied_prob                    AS bovada_devig_prob,
+        b.layer4_h2h_edge                            AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
+        b.lineup_confirmed,
+        NULL::FLOAT                                  AS win_prob_ci_low,
+        NULL::FLOAT                                  AS win_prob_ci_high,
+        b.home_team,
+        b.away_team,
+        NULLIF(b.layer4_h2h_decision, 'abstain')    AS pick_side,
+        b.game_start_utc,
+        b.inserted_at,
+        NULL::FLOAT                                  AS model_total_runs,
+        NULL::FLOAT                                  AS market_total_line
+    FROM base b
+    WHERE b.h2h_market_implied_prob IS NOT NULL
+),
+totals AS (
+    SELECT
+        b.game_pk,
+        b.game_date,
+        'totals'                                     AS market_type,
+        b.totals_model_prob                          AS model_prob,
+        b.over_prob_consensus                        AS bovada_devig_prob,
+        b.layer4_totals_over_signal                  AS edge,
+        IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
+        b.lineup_confirmed,
+        NULL::FLOAT                                  AS win_prob_ci_low,
+        NULL::FLOAT                                  AS win_prob_ci_high,
+        b.home_team,
+        b.away_team,
+        NULLIF(b.layer4_totals_decision, 'abstain') AS pick_side,
+        b.game_start_utc,
+        b.inserted_at,
+        b.pred_total_runs                            AS model_total_runs,
+        b.total_line_consensus                       AS market_total_line
+    FROM base b
+    WHERE b.over_prob_consensus IS NOT NULL
+)
+SELECT * FROM h2h
+UNION ALL
+SELECT * FROM totals
+ORDER BY market_type
+"""
+
+_GAME_STATUS_QUERY = """
+SELECT
+    g.abstract_game_state,
+    g.home_score,
+    g.away_score,
+    g.home_team_name,
+    g.away_team_name,
+    g.home_wins,
+    g.home_losses,
+    g.away_wins,
+    g.away_losses,
+    g.home_is_winner,
+    g.home_team_id,
+    g.away_team_id,
+    hp.pythagorean_win_exp_30d AS home_pyth_pct,
+    hp.pythagorean_residual_30d AS home_pyth_residual,
+    ap.pythagorean_win_exp_30d AS away_pyth_pct,
+    ap.pythagorean_residual_30d AS away_pyth_residual
+FROM baseball_data.betting.stg_statsapi_games g
+LEFT JOIN baseball_data.betting.mart_team_pythagorean_rolling hp
+    ON hp.game_pk = g.game_pk AND hp.team_id = g.home_team_id
+LEFT JOIN baseball_data.betting.mart_team_pythagorean_rolling ap
+    ON ap.game_pk = g.game_pk AND ap.team_id = g.away_team_id
+WHERE g.game_pk = %(game_pk)s
+LIMIT 1
+"""
+
+_STARTERS_QUERY = """
+WITH game_meta AS (
+    SELECT game_date, YEAR(game_date) AS game_year
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE game_pk = %(game_pk)s
+    LIMIT 1
+),
+starters AS (
+    SELECT side, probable_pitcher_id, probable_pitcher_name
+    FROM baseball_data.betting.stg_statsapi_probable_pitchers
+    WHERE game_pk = %(game_pk)s
+),
+-- Season-to-date stats in the same season as the game, before game date (point-in-time)
+current_season AS (
+    SELECT
+        g.pitcher_id,
+        COUNT(*)                                                                             AS starts,
+        ROUND(SUM(g.runs_allowed) * 9.0 / NULLIF(SUM(g.innings_pitched), 0), 2)            AS ra9,
+        ROUND((SUM(g.walks) + SUM(g.hits_allowed)) / NULLIF(SUM(g.innings_pitched), 0), 2) AS whip,
+        ROUND(SUM(g.strikeouts)::FLOAT / NULLIF(SUM(g.batters_faced), 0) * 100, 1)         AS k_pct
+    FROM baseball_data.betting.mart_starting_pitcher_game_log g
+    CROSS JOIN game_meta gm
+    WHERE g.pitcher_id IN (SELECT probable_pitcher_id FROM starters WHERE probable_pitcher_id IS NOT NULL)
+      AND g.game_year = gm.game_year
+      AND g.game_date < gm.game_date
+    GROUP BY g.pitcher_id
+),
+-- Full prior-season stats — shown as context when current-season sample is sparse
+prior_season AS (
+    SELECT
+        g.pitcher_id,
+        COUNT(*)                                                                             AS starts,
+        ROUND(SUM(g.runs_allowed) * 9.0 / NULLIF(SUM(g.innings_pitched), 0), 2)            AS ra9,
+        ROUND((SUM(g.walks) + SUM(g.hits_allowed)) / NULLIF(SUM(g.innings_pitched), 0), 2) AS whip,
+        ROUND(SUM(g.strikeouts)::FLOAT / NULLIF(SUM(g.batters_faced), 0) * 100, 1)         AS k_pct
+    FROM baseball_data.betting.mart_starting_pitcher_game_log g
+    CROSS JOIN game_meta gm
+    WHERE g.pitcher_id IN (SELECT probable_pitcher_id FROM starters WHERE probable_pitcher_id IS NOT NULL)
+      AND g.game_year = gm.game_year - 1
+    GROUP BY g.pitcher_id
+),
+-- Last 5 starts before game date — median IP < 2.5 flags opener usage
+last5 AS (
+    SELECT sub.pitcher_id, MEDIAN(sub.innings_pitched) AS median_ip_last5
+    FROM (
+        SELECT g.pitcher_id, g.innings_pitched,
+               ROW_NUMBER() OVER (PARTITION BY g.pitcher_id ORDER BY g.game_date DESC) AS rn
+        FROM baseball_data.betting.mart_starting_pitcher_game_log g
+        CROSS JOIN game_meta gm
+        WHERE g.pitcher_id IN (SELECT probable_pitcher_id FROM starters WHERE probable_pitcher_id IS NOT NULL)
+          AND g.game_date < gm.game_date
+    ) sub
+    WHERE sub.rn <= 5
+    GROUP BY sub.pitcher_id
+)
+SELECT
+    s.side,
+    s.probable_pitcher_id,
+    s.probable_pitcher_name,
+    gm.game_year                                                 AS current_season_year,
+    cs.starts                                                    AS current_starts,
+    cs.ra9                                                       AS current_ra9,
+    cs.whip                                                      AS current_whip,
+    cs.k_pct                                                     AS current_k_pct,
+    gm.game_year - 1                                             AS prior_season_year,
+    ps.starts                                                    AS prior_starts,
+    ps.ra9                                                       AS prior_ra9,
+    ps.whip                                                      AS prior_whip,
+    ps.k_pct                                                     AS prior_k_pct,
+    IFF(COALESCE(l5.median_ip_last5, 5.0) < 2.5, TRUE, FALSE)   AS is_opener
+FROM starters s
+CROSS JOIN game_meta gm
+LEFT JOIN current_season cs ON cs.pitcher_id = s.probable_pitcher_id
+LEFT JOIN prior_season ps ON ps.pitcher_id = s.probable_pitcher_id
+LEFT JOIN last5 l5 ON l5.pitcher_id = s.probable_pitcher_id
+"""
+
+_BOVADA_LINES_QUERY = """
+WITH pre_game AS (
+    SELECT
+        o.market_key,
+        o.outcome_name,
+        o.outcome_price_american,
+        o.outcome_point,
+        o.is_home_outcome,
+        o.ingestion_ts
+    FROM baseball_data.betting.mart_odds_outcomes o
+    JOIN baseball_data.betting.stg_statsapi_games g
+        ON g.official_date = o.commence_date
+    JOIN baseball_data.betting.dim_team_name_lookup gh
+        ON gh.name_lower = lower(regexp_replace(trim(g.home_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup ga
+        ON ga.name_lower = lower(regexp_replace(trim(g.away_team_name), '^G[12] ', ''))
+    JOIN baseball_data.betting.dim_team_name_lookup oh
+        ON oh.name_lower = lower(regexp_replace(trim(o.home_team), '^G[12] ', ''))
+       AND oh.team_id = gh.team_id
+    JOIN baseball_data.betting.dim_team_name_lookup oa
+        ON oa.name_lower = lower(regexp_replace(trim(o.away_team), '^G[12] ', ''))
+       AND oa.team_id = ga.team_id
+    WHERE g.game_pk = %(game_pk)s
+      AND o.bookmaker_key = 'bovada'
+      AND o.ingestion_ts::TIMESTAMP_NTZ < g.game_date::TIMESTAMP_NTZ
+)
+SELECT
+    market_key,
+    outcome_name,
+    outcome_price_american,
+    outcome_point,
+    is_home_outcome,
+    ingestion_ts
+FROM pre_game
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY market_key, outcome_name
+    ORDER BY ingestion_ts DESC
+) = 1
+ORDER BY market_key, is_home_outcome DESC
+"""
+
+_TEAM_FEATURES_QUERY = f"""
+SELECT
+    home_off_woba_30d,
+    away_off_woba_30d,
+    home_off_xwoba_30d,
+    away_off_xwoba_30d,
+    home_off_runs_per_game_30d,
+    away_off_runs_per_game_30d,
+    home_starter_xwoba_against_30d,
+    away_starter_xwoba_against_30d,
+    home_starter_k_pct_30d,
+    away_starter_k_pct_30d,
+    home_starter_pitcher_hand,
+    away_starter_pitcher_hand,
+    home_lineup_vs_away_starter_xwoba_adj,
+    away_lineup_vs_home_starter_xwoba_adj,
+    home_bp_xwoba_against_14d,
+    away_bp_xwoba_against_14d,
+    home_bp_innings_pitched_14d,
+    away_bp_innings_pitched_14d,
+    home_days_rest,
+    away_days_rest,
+    park_run_factor_3yr,
+    elo_diff,
+    umpire_name,
+    ump_k_pct_zscore,
+    ump_runs_per_game_zscore,
+    ump_run_impact_zscore,
+    ump_bb_pct_zscore,
+    ump_games_sample
+FROM baseball_data.betting_features.feature_pregame_game_features
+WHERE game_pk = %(game_pk)s
+ORDER BY game_date DESC
+LIMIT 1
+"""
+
+
+_LINEUP_QUERY = """
+WITH wide AS (
+    SELECT *
+    FROM baseball_data.betting.stg_statsapi_lineups_wide
+    WHERE game_pk = %(game_pk)s
+),
+slots AS (
+    SELECT home_away, official_date, 1 AS slot, slot_1_player_id AS player_id, slot_1_full_name AS player_name, slot_1_position AS position FROM wide
+    UNION ALL SELECT home_away, official_date, 2, slot_2_player_id, slot_2_full_name, slot_2_position FROM wide
+    UNION ALL SELECT home_away, official_date, 3, slot_3_player_id, slot_3_full_name, slot_3_position FROM wide
+    UNION ALL SELECT home_away, official_date, 4, slot_4_player_id, slot_4_full_name, slot_4_position FROM wide
+    UNION ALL SELECT home_away, official_date, 5, slot_5_player_id, slot_5_full_name, slot_5_position FROM wide
+    UNION ALL SELECT home_away, official_date, 6, slot_6_player_id, slot_6_full_name, slot_6_position FROM wide
+    UNION ALL SELECT home_away, official_date, 7, slot_7_player_id, slot_7_full_name, slot_7_position FROM wide
+    UNION ALL SELECT home_away, official_date, 8, slot_8_player_id, slot_8_full_name, slot_8_position FROM wide
+    UNION ALL SELECT home_away, official_date, 9, slot_9_player_id, slot_9_full_name, slot_9_position FROM wide
+),
+season_stats AS (
+    SELECT
+        rs.batter_id,
+        rs.ops_std   AS season_ops,
+        rs.xwoba_std AS season_xwoba
+    FROM baseball_data.betting.mart_batter_rolling_stats rs
+    JOIN slots s
+        ON  rs.batter_id  = s.player_id
+        AND rs.game_year  = YEAR(s.official_date)
+        AND rs.game_date  < s.official_date
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY rs.batter_id ORDER BY rs.game_date DESC) = 1
+)
+SELECT
+    s.home_away,
+    s.slot,
+    s.player_id,
+    s.player_name,
+    s.position,
+    st.season_ops,
+    st.season_xwoba
+FROM slots s
+LEFT JOIN season_stats st ON st.batter_id = s.player_id
+WHERE s.player_id IS NOT NULL
+ORDER BY s.home_away, s.slot
+"""
+
+_BOX_SCORE_QUERY = """
+WITH pa_end AS (
+    SELECT
+        batter_id,
+        player_name,
+        inning_half,
+        at_bat_number,
+        plate_appearance_event,
+        woba_value,
+        woba_denom,
+        xwoba
+    FROM baseball_data.betting.stg_batter_pitches
+    WHERE game_pk = %(game_pk)s
+      AND woba_denom = 1
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY batter_id, at_bat_number
+        ORDER BY pitch_number DESC
+    ) = 1
+)
+SELECT
+    batter_id,
+    player_name,
+    CASE WHEN UPPER(inning_half) = 'TOP' THEN 'away' ELSE 'home' END AS home_away,
+    COUNT(*)                                                                                           AS pa,
+    SUM(CASE WHEN plate_appearance_event NOT IN (
+        'walk','intent_walk','hit_by_pitch','sac_fly','sac_bunt',
+        'catcher_interf','sac_fly_double_play'
+    ) THEN 1 ELSE 0 END)                                                                               AS ab,
+    SUM(CASE WHEN plate_appearance_event IN ('single','double','triple','home_run') THEN 1 ELSE 0 END) AS h,
+    SUM(CASE WHEN plate_appearance_event IN ('strikeout','strikeout_double_play') THEN 1 ELSE 0 END)   AS k,
+    SUM(CASE WHEN plate_appearance_event IN ('walk','intent_walk') THEN 1 ELSE 0 END)                  AS bb,
+    SUM(CASE WHEN plate_appearance_event = 'home_run' THEN 1 ELSE 0 END)                               AS hr,
+    ROUND(
+        SUM(COALESCE(xwoba, woba_value, 0) * woba_denom) / NULLIF(SUM(woba_denom), 0),
+        3
+    )                                                                                                   AS xwoba_game
+FROM pa_end
+GROUP BY batter_id, player_name, inning_half
+ORDER BY home_away, batter_id
+"""
+
+
+_WEATHER_QUERY = """
+SELECT
+    temp_f,
+    wind_speed_mph,
+    wind_component_mph,
+    is_dome,
+    weather_observation_type
+FROM baseball_data.betting_features.feature_pregame_weather_features
+WHERE game_pk = %(game_pk)s
+LIMIT 1
+"""
+
+_PUBLIC_BETTING_QUERY = """
+SELECT
+    home_ml_money_pct,
+    away_ml_money_pct,
+    home_ml_ticket_pct,
+    away_ml_ticket_pct,
+    over_money_pct,
+    under_money_pct,
+    over_ticket_pct,
+    under_ticket_pct,
+    ml_sharp_signal,
+    total_sharp_signal
+FROM baseball_data.betting_features.feature_pregame_public_betting_features
+WHERE game_pk = %(game_pk)s
+LIMIT 1
+"""
+
+_LINE_MOVEMENT_QUERY = """
+SELECT
+    open_home_win_prob,
+    pregame_home_win_prob,
+    h2h_line_movement,
+    open_total_line,
+    pregame_total_line,
+    total_line_movement
+FROM baseball_data.betting.mart_odds_line_movement
+WHERE game_pk = %(game_pk)s
+LIMIT 1
+"""
+
+_RECENT_FORM_QUERY = """
+WITH game_meta AS (
+    SELECT game_date, home_team_id, away_team_id
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE game_pk = %(game_pk)s
+    LIMIT 1
+),
+home_recent AS (
+    SELECT
+        CASE WHEN g.home_team_id = gm.home_team_id THEN g.home_is_winner
+             ELSE g.away_is_winner END   AS won,
+        ROW_NUMBER() OVER (ORDER BY g.game_date DESC) AS rn
+    FROM baseball_data.betting.stg_statsapi_games g
+    CROSS JOIN game_meta gm
+    WHERE g.abstract_game_state = 'Final'
+      AND g.game_date < gm.game_date
+      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND g.home_is_winner IS NOT NULL
+      AND (g.home_team_id = gm.home_team_id OR g.away_team_id = gm.home_team_id)
+),
+away_recent AS (
+    SELECT
+        CASE WHEN g.home_team_id = gm.away_team_id THEN g.home_is_winner
+             ELSE g.away_is_winner END   AS won,
+        ROW_NUMBER() OVER (ORDER BY g.game_date DESC) AS rn
+    FROM baseball_data.betting.stg_statsapi_games g
+    CROSS JOIN game_meta gm
+    WHERE g.abstract_game_state = 'Final'
+      AND g.game_date < gm.game_date
+      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND g.home_is_winner IS NOT NULL
+      AND (g.home_team_id = gm.away_team_id OR g.away_team_id = gm.away_team_id)
+)
+SELECT 'home' AS team_side,
+    SUM(CASE WHEN rn <= 5  AND won = TRUE  THEN 1 ELSE 0 END) AS l5_wins,
+    SUM(CASE WHEN rn <= 5  AND won = FALSE THEN 1 ELSE 0 END) AS l5_losses,
+    SUM(CASE WHEN rn <= 5  THEN 1 ELSE 0 END)                 AS l5_games,
+    SUM(CASE WHEN rn <= 10 AND won = TRUE  THEN 1 ELSE 0 END) AS l10_wins,
+    SUM(CASE WHEN rn <= 10 AND won = FALSE THEN 1 ELSE 0 END) AS l10_losses,
+    SUM(CASE WHEN rn <= 10 THEN 1 ELSE 0 END)                 AS l10_games
+FROM home_recent WHERE rn <= 10
+UNION ALL
+SELECT 'away' AS team_side,
+    SUM(CASE WHEN rn <= 5  AND won = TRUE  THEN 1 ELSE 0 END) AS l5_wins,
+    SUM(CASE WHEN rn <= 5  AND won = FALSE THEN 1 ELSE 0 END) AS l5_losses,
+    SUM(CASE WHEN rn <= 5  THEN 1 ELSE 0 END)                 AS l5_games,
+    SUM(CASE WHEN rn <= 10 AND won = TRUE  THEN 1 ELSE 0 END) AS l10_wins,
+    SUM(CASE WHEN rn <= 10 AND won = FALSE THEN 1 ELSE 0 END) AS l10_losses,
+    SUM(CASE WHEN rn <= 10 THEN 1 ELSE 0 END)                 AS l10_games
+FROM away_recent WHERE rn <= 10
+"""
+
+# Point-in-time H2H computed directly from game results before the current game date.
+# Uses home_team_id/away_team_id from the game itself so no abbreviation params needed.
+_H2H_QUERY = """
+WITH game_meta AS (
+    SELECT game_date, home_team_id, away_team_id
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE game_pk = %(game_pk)s LIMIT 1
+),
+h2h_games AS (
+    SELECT
+        CASE WHEN g.home_team_id = gm.home_team_id THEN g.home_is_winner
+             ELSE g.away_is_winner END AS home_team_won,
+        g.home_score + g.away_score   AS total_runs
+    FROM baseball_data.betting.stg_statsapi_games g
+    CROSS JOIN game_meta gm
+    WHERE g.abstract_game_state = 'Final'
+      AND YEAR(g.game_date) = YEAR(gm.game_date)
+      AND g.game_date < gm.game_date
+      AND g.home_is_winner IS NOT NULL
+      AND (
+        (g.home_team_id = gm.home_team_id AND g.away_team_id = gm.away_team_id)
+        OR (g.home_team_id = gm.away_team_id AND g.away_team_id = gm.home_team_id)
+      )
+)
+SELECT
+    SUM(CASE WHEN home_team_won = TRUE  THEN 1 ELSE 0 END) AS home_wins,
+    SUM(CASE WHEN home_team_won = FALSE THEN 1 ELSE 0 END) AS away_wins,
+    COUNT(*)                                                AS games_played,
+    ROUND(AVG(total_runs), 2)                              AS avg_total_runs
+FROM h2h_games
+"""
+
+# Null-guard k%/bb% z-scores — source k_pct/bb_pct are NULL in umpire_game_log
+# (UmpScorecards API doesn't provide pitch-call breakdown), so the feature pipeline
+# defaults those z-scores to 0.0. Expose NULL so the UI shows "n/a" instead of
+# a misleading "avg".
+_UMPIRE_QUERY = """
+SELECT
+    umpire_name,
+    ump_games_sample,
+    CASE WHEN ump_k_pct_trailing  IS NULL THEN NULL ELSE ump_k_pct_zscore  END AS ump_k_pct_zscore,
+    CASE WHEN ump_bb_pct_trailing IS NULL THEN NULL ELSE ump_bb_pct_zscore END AS ump_bb_pct_zscore,
+    ump_runs_per_game_zscore,
+    ump_run_impact_zscore
+FROM baseball_data.betting_features.feature_pregame_umpire_features
+WHERE game_pk = %(game_pk)s
+ORDER BY game_pk DESC
+LIMIT 1
+"""
+
 
 def _pipeline_status(last_updated_at: datetime | None) -> str:
     if last_updated_at is None:
@@ -454,3 +953,460 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
     if cache_key:
         set_cache(cache_key, result.model_dump(mode="json"))
     return result
+
+
+@router.get("/{game_pk}/detail", response_model=GameDetailResponse)
+def get_game_detail(game_pk: int) -> GameDetailResponse:
+    params = {"game_pk": game_pk}
+
+    # Cache check — permanent for Final games (immutable), date-scoped for live/preview
+    _game_cache_key = f"picks/game/{game_pk}.json"
+    _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
+    if _cached is not None:
+        try:
+            return GameDetailResponse(**_cached)
+        except Exception:
+            logger.warning("Stale/invalid cache for game_pk=%s, re-fetching", game_pk)
+
+    # Base picks
+    try:
+        pick_rows = execute_query(_GAME_QUERY, params=params)
+    except Exception as exc:
+        logger.exception("Snowflake query failed for /picks/%s/detail (picks)", game_pk)
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    if not pick_rows:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    picks = [
+        Pick(
+            game_pk=r["GAME_PK"],
+            game_date=r["GAME_DATE"],
+            market_type=r["MARKET_TYPE"],
+            model_prob=r.get("MODEL_PROB"),
+            bovada_devig_prob=r.get("BOVADA_DEVIG_PROB"),
+            edge=r.get("EDGE"),
+            game_conviction_score=r.get("GAME_CONVICTION_SCORE"),
+            win_prob_ci_low=r.get("WIN_PROB_CI_LOW"),
+            win_prob_ci_high=r.get("WIN_PROB_CI_HIGH"),
+            lineup_confirmed=r.get("LINEUP_CONFIRMED"),
+            home_team=r.get("HOME_TEAM"),
+            away_team=r.get("AWAY_TEAM"),
+            pick_side=r.get("PICK_SIDE"),
+            game_start_utc=r.get("GAME_START_UTC"),
+            model_total_runs=r.get("MODEL_TOTAL_RUNS"),
+            market_total_line=r.get("MARKET_TOTAL_LINE"),
+            predicted_at=r.get("INSERTED_AT"),
+        )
+        for r in pick_rows
+    ]
+
+    # Game status + full team names + pre-game records
+    game_score: GameScore | None = None
+    home_team_name: str | None = None
+    away_team_name: str | None = None
+    try:
+        status_rows = execute_query(_GAME_STATUS_QUERY, params=params)
+        if status_rows:
+            sr = status_rows[0]
+            state = str(sr.get("ABSTRACT_GAME_STATE") or "Preview")
+
+            def _int(key: str) -> int | None:
+                v = sr.get(key)
+                return int(v) if v is not None else None
+
+            hw_raw = _int("HOME_WINS")
+            hl_raw = _int("HOME_LOSSES")
+            aw_raw = _int("AWAY_WINS")
+            al_raw = _int("AWAY_LOSSES")
+
+            # StatsAPI stores post-game record for Final games; subtract result to recover pre-game
+            if state == "Final" and hw_raw is not None:
+                home_won = bool(sr.get("HOME_IS_WINNER"))
+                hw = hw_raw - (1 if home_won else 0)
+                hl = hl_raw - (0 if home_won else 1) if hl_raw is not None else None
+                aw = aw_raw - (0 if home_won else 1) if aw_raw is not None else None
+                al = al_raw - (1 if home_won else 0) if al_raw is not None else None
+            else:
+                hw, hl, aw, al = hw_raw, hl_raw, aw_raw, al_raw
+
+            def _flt(key: str) -> float | None:
+                v = sr.get(key)
+                try:
+                    return float(v) if v is not None else None
+                except (TypeError, ValueError):
+                    return None
+
+            game_score = GameScore(
+                home_score=_int("HOME_SCORE"),
+                away_score=_int("AWAY_SCORE"),
+                status=state if state in ("Live", "Final") else "Preview",
+                home_wins=hw,
+                home_losses=hl,
+                away_wins=aw,
+                away_losses=al,
+                home_pyth_pct=_flt("HOME_PYTH_PCT"),
+                home_pyth_residual=_flt("HOME_PYTH_RESIDUAL"),
+                away_pyth_pct=_flt("AWAY_PYTH_PCT"),
+                away_pyth_residual=_flt("AWAY_PYTH_RESIDUAL"),
+            )
+            home_team_name = sr.get("HOME_TEAM_NAME")
+            away_team_name = sr.get("AWAY_TEAM_NAME")
+    except Exception:
+        logger.warning("Could not load game status for game_pk=%s", game_pk)
+
+    # Probable starters — current-season + prior-season stats
+    starters: GameStarters | None = None
+    try:
+        starter_rows = execute_query(_STARTERS_QUERY, params=params)
+        home_sp: StarterStats | None = None
+        away_sp: StarterStats | None = None
+        for row in starter_rows:
+            sp = StarterStats(
+                pitcher_id=row.get("PROBABLE_PITCHER_ID"),
+                name=row.get("PROBABLE_PITCHER_NAME"),
+                is_opener=bool(row.get("IS_OPENER", False)),
+                season=row.get("CURRENT_SEASON_YEAR"),
+                starts=row.get("CURRENT_STARTS"),
+                ra9=row.get("CURRENT_RA9"),
+                whip=row.get("CURRENT_WHIP"),
+                k_pct=row.get("CURRENT_K_PCT"),
+                prior_season=row.get("PRIOR_SEASON_YEAR"),
+                prior_starts=row.get("PRIOR_STARTS"),
+                prior_ra9=row.get("PRIOR_RA9"),
+                prior_whip=row.get("PRIOR_WHIP"),
+                prior_k_pct=row.get("PRIOR_K_PCT"),
+            )
+            if str(row.get("SIDE", "")).lower() == "home":
+                home_sp = sp
+            else:
+                away_sp = sp
+        if home_sp or away_sp:
+            starters = GameStarters(home=home_sp, away=away_sp)
+    except Exception:
+        logger.warning("Could not load starters for game_pk=%s", game_pk)
+
+    # Bovada lines
+    bovada_lines: BovadaLines | None = None
+    try:
+        bov_rows = execute_query(_BOVADA_LINES_QUERY, params=params)
+        h2h_rows = [r for r in bov_rows if str(r.get("MARKET_KEY", "")).lower() == "h2h"]
+        tot_rows = [r for r in bov_rows if str(r.get("MARKET_KEY", "")).lower() == "totals"]
+
+        bov_h2h: BovadaH2H | None = None
+        if h2h_rows:
+            home_r = next((r for r in h2h_rows if r.get("IS_HOME_OUTCOME")), None)
+            away_r = next((r for r in h2h_rows if not r.get("IS_HOME_OUTCOME")), None)
+            snap = str(max(r["INGESTION_TS"] for r in h2h_rows)) if h2h_rows else None
+            bov_h2h = BovadaH2H(
+                home_american=int(home_r["OUTCOME_PRICE_AMERICAN"]) if home_r and home_r.get("OUTCOME_PRICE_AMERICAN") is not None else None,
+                away_american=int(away_r["OUTCOME_PRICE_AMERICAN"]) if away_r and away_r.get("OUTCOME_PRICE_AMERICAN") is not None else None,
+                snapshot_utc=snap,
+            )
+
+        bov_totals: BovadaTotals | None = None
+        if tot_rows:
+            over_r = next((r for r in tot_rows if str(r.get("OUTCOME_NAME", "")).lower() == "over"), None)
+            under_r = next((r for r in tot_rows if str(r.get("OUTCOME_NAME", "")).lower() == "under"), None)
+            snap = str(max(r["INGESTION_TS"] for r in tot_rows)) if tot_rows else None
+            bov_totals = BovadaTotals(
+                line=float(over_r["OUTCOME_POINT"]) if over_r and over_r.get("OUTCOME_POINT") is not None else None,
+                over_american=int(over_r["OUTCOME_PRICE_AMERICAN"]) if over_r and over_r.get("OUTCOME_PRICE_AMERICAN") is not None else None,
+                under_american=int(under_r["OUTCOME_PRICE_AMERICAN"]) if under_r and under_r.get("OUTCOME_PRICE_AMERICAN") is not None else None,
+                snapshot_utc=snap,
+            )
+
+        if bov_h2h or bov_totals:
+            bovada_lines = BovadaLines(h2h=bov_h2h, totals=bov_totals)
+    except Exception:
+        logger.warning("Could not load Bovada lines for game_pk=%s", game_pk)
+
+    # Team performance features
+    team_features: GamePerfFeatures | None = None
+    try:
+        feat_rows = execute_query(_TEAM_FEATURES_QUERY, params=params)
+        if feat_rows:
+            fr = feat_rows[0]
+
+            def _f(key: str) -> float | None:
+                val = fr.get(key.upper())
+                if val is None:
+                    return None
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return None
+
+            home_perf = TeamPerfStats(
+                off_woba_30d=_f("home_off_woba_30d"),
+                off_xwoba_30d=_f("home_off_xwoba_30d"),
+                off_runs_per_game_30d=_f("home_off_runs_per_game_30d"),
+                starter_xwoba_against_30d=_f("home_starter_xwoba_against_30d"),
+                starter_k_pct_30d=_f("home_starter_k_pct_30d"),
+                starter_hand=fr.get("HOME_STARTER_PITCHER_HAND"),
+                lineup_vs_sp_xwoba_adj=_f("home_lineup_vs_away_starter_xwoba_adj"),
+                bp_xwoba_against_14d=_f("home_bp_xwoba_against_14d"),
+                bp_innings_pitched_14d=_f("home_bp_innings_pitched_14d"),
+                days_rest=_f("home_days_rest"),
+            )
+            away_perf = TeamPerfStats(
+                off_woba_30d=_f("away_off_woba_30d"),
+                off_xwoba_30d=_f("away_off_xwoba_30d"),
+                off_runs_per_game_30d=_f("away_off_runs_per_game_30d"),
+                starter_xwoba_against_30d=_f("away_starter_xwoba_against_30d"),
+                starter_k_pct_30d=_f("away_starter_k_pct_30d"),
+                starter_hand=fr.get("AWAY_STARTER_PITCHER_HAND"),
+                lineup_vs_sp_xwoba_adj=_f("away_lineup_vs_home_starter_xwoba_adj"),
+                bp_xwoba_against_14d=_f("away_bp_xwoba_against_14d"),
+                bp_innings_pitched_14d=_f("away_bp_innings_pitched_14d"),
+                days_rest=_f("away_days_rest"),
+            )
+            team_features = GamePerfFeatures(
+                home=home_perf,
+                away=away_perf,
+                park_run_factor=_f("park_run_factor_3yr"),
+                elo_diff=_f("elo_diff"),
+            )
+
+    except Exception:
+        logger.warning("Could not load team features for game_pk=%s", game_pk)
+
+    # Umpire — sourced from dedicated umpire features table so k%/bb% nulls are preserved
+    umpire: UmpireInfo | None = None
+    try:
+        ump_rows = execute_query(_UMPIRE_QUERY, params=params)
+        if ump_rows:
+            ur = ump_rows[0]
+            def _uf(key: str) -> float | None:
+                val = ur.get(key.upper())
+                if val is None:
+                    return None
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return None
+            ump_sample_raw = ur.get("UMP_GAMES_SAMPLE")
+            umpire = UmpireInfo(
+                name=ur.get("UMPIRE_NAME"),
+                k_pct_zscore=_uf("ump_k_pct_zscore"),
+                runs_per_game_zscore=_uf("ump_runs_per_game_zscore"),
+                run_impact_zscore=_uf("ump_run_impact_zscore"),
+                bb_pct_zscore=_uf("ump_bb_pct_zscore"),
+                games_sample=int(ump_sample_raw) if ump_sample_raw is not None else None,
+            )
+    except Exception:
+        logger.warning("Could not load umpire data for game_pk=%s", game_pk)
+
+    # Weather
+    weather: WeatherInfo | None = None
+    try:
+        wx_rows = execute_query(_WEATHER_QUERY, params=params)
+        if wx_rows:
+            wr = wx_rows[0]
+            weather = WeatherInfo(
+                temp_f=float(wr["TEMP_F"]) if wr.get("TEMP_F") is not None else None,
+                wind_speed_mph=float(wr["WIND_SPEED_MPH"]) if wr.get("WIND_SPEED_MPH") is not None else None,
+                wind_component_mph=float(wr["WIND_COMPONENT_MPH"]) if wr.get("WIND_COMPONENT_MPH") is not None else None,
+                is_dome=bool(wr.get("IS_DOME", False)),
+                observation_type=wr.get("WEATHER_OBSERVATION_TYPE"),
+            )
+    except Exception:
+        logger.warning("Could not load weather for game_pk=%s", game_pk)
+
+    # Public betting action
+    public_betting: PublicBetting | None = None
+    try:
+        pb_rows = execute_query(_PUBLIC_BETTING_QUERY, params=params)
+        if pb_rows:
+            pb = pb_rows[0]
+
+            def _pf(key: str) -> float | None:
+                v = pb.get(key.upper())
+                try:
+                    return float(v) if v is not None else None
+                except (TypeError, ValueError):
+                    return None
+
+            public_betting = PublicBetting(
+                home_ml_money_pct=_pf("home_ml_money_pct"),
+                away_ml_money_pct=_pf("away_ml_money_pct"),
+                home_ml_ticket_pct=_pf("home_ml_ticket_pct"),
+                away_ml_ticket_pct=_pf("away_ml_ticket_pct"),
+                over_money_pct=_pf("over_money_pct"),
+                under_money_pct=_pf("under_money_pct"),
+                over_ticket_pct=_pf("over_ticket_pct"),
+                under_ticket_pct=_pf("under_ticket_pct"),
+                ml_sharp_signal=_pf("ml_sharp_signal"),
+                total_sharp_signal=_pf("total_sharp_signal"),
+            )
+    except Exception:
+        logger.warning("Could not load public betting for game_pk=%s", game_pk)
+
+    # Line movement
+    line_movement: LineMovement | None = None
+    try:
+        lm_rows = execute_query(_LINE_MOVEMENT_QUERY, params=params)
+        if lm_rows:
+            lm = lm_rows[0]
+
+            def _lf(key: str) -> float | None:
+                v = lm.get(key.upper())
+                try:
+                    return float(v) if v is not None else None
+                except (TypeError, ValueError):
+                    return None
+
+            line_movement = LineMovement(
+                open_home_win_prob=_lf("open_home_win_prob"),
+                pregame_home_win_prob=_lf("pregame_home_win_prob"),
+                h2h_line_movement=_lf("h2h_line_movement"),
+                open_total_line=_lf("open_total_line"),
+                pregame_total_line=_lf("pregame_total_line"),
+                total_line_movement=_lf("total_line_movement"),
+            )
+    except Exception:
+        logger.warning("Could not load line movement for game_pk=%s", game_pk)
+
+    # Recent form + H2H
+    game_context: GameContext | None = None
+    try:
+        form_rows = execute_query(_RECENT_FORM_QUERY, params=params)
+        home_form: TeamRecentForm | None = None
+        away_form: TeamRecentForm | None = None
+        for row in form_rows:
+            form = TeamRecentForm(
+                l5_wins=int(row["L5_WINS"]) if row.get("L5_WINS") is not None else None,
+                l5_losses=int(row["L5_LOSSES"]) if row.get("L5_LOSSES") is not None else None,
+                l5_games=int(row["L5_GAMES"]) if row.get("L5_GAMES") is not None else None,
+                l10_wins=int(row["L10_WINS"]) if row.get("L10_WINS") is not None else None,
+                l10_losses=int(row["L10_LOSSES"]) if row.get("L10_LOSSES") is not None else None,
+                l10_games=int(row["L10_GAMES"]) if row.get("L10_GAMES") is not None else None,
+            )
+            if str(row.get("TEAM_SIDE", "")).lower() == "home":
+                home_form = form
+            else:
+                away_form = form
+
+        # H2H computed point-in-time from stg_statsapi_games (game_pk drives date filter)
+        h2h: H2HRecord | None = None
+        h2h_rows = execute_query(_H2H_QUERY, params=params)
+        if h2h_rows:
+            hr = h2h_rows[0]
+            gp = hr.get("GAMES_PLAYED")
+            if gp is not None and int(gp) > 0:
+                h2h = H2HRecord(
+                    home_wins=int(hr["HOME_WINS"]) if hr.get("HOME_WINS") is not None else None,
+                    away_wins=int(hr["AWAY_WINS"]) if hr.get("AWAY_WINS") is not None else None,
+                    games_played=int(gp),
+                    avg_total_runs=float(hr["AVG_TOTAL_RUNS"]) if hr.get("AVG_TOTAL_RUNS") is not None else None,
+                )
+
+        if home_form or away_form or h2h:
+            game_context = GameContext(home_form=home_form, away_form=away_form, h2h=h2h)
+    except Exception:
+        logger.warning("Could not load game context for game_pk=%s", game_pk)
+
+    # Batting lineups (always) + box score (completed games only)
+    lineups: GameLineups | None = None
+    try:
+        lineup_rows = execute_query(_LINEUP_QUERY, params=params)
+
+        # Build a box-score lookup keyed by batter_id if the game is final
+        box_score_map: dict[int, dict] = {}
+        if game_score and game_score.status == "Final":
+            try:
+                bs_rows = execute_query(_BOX_SCORE_QUERY, params=params)
+                for bs in bs_rows:
+                    bid = bs.get("BATTER_ID")
+                    if bid is not None:
+                        box_score_map[int(bid)] = bs
+            except Exception:
+                logger.warning("Could not load box score for game_pk=%s", game_pk)
+
+        if lineup_rows:
+            home_players: list[LineupPlayer] = []
+            away_players: list[LineupPlayer] = []
+            for row in lineup_rows:
+                pid = row.get("PLAYER_ID")
+                bs = box_score_map.get(int(pid)) if pid is not None else None
+                player = LineupPlayer(
+                    slot=int(row["SLOT"]),
+                    player_id=int(pid) if pid is not None else None,
+                    player_name=row.get("PLAYER_NAME"),
+                    position=row.get("POSITION"),
+                    season_ops=float(row["SEASON_OPS"]) if row.get("SEASON_OPS") is not None else None,
+                    season_xwoba=float(row["SEASON_XWOBA"]) if row.get("SEASON_XWOBA") is not None else None,
+                    game_pa=int(bs["PA"]) if bs and bs.get("PA") is not None else None,
+                    game_ab=int(bs["AB"]) if bs and bs.get("AB") is not None else None,
+                    game_h=int(bs["H"]) if bs and bs.get("H") is not None else None,
+                    game_k=int(bs["K"]) if bs and bs.get("K") is not None else None,
+                    game_bb=int(bs["BB"]) if bs and bs.get("BB") is not None else None,
+                    game_hr=int(bs["HR"]) if bs and bs.get("HR") is not None else None,
+                    game_xwoba=float(bs["XWOBA_GAME"]) if bs and bs.get("XWOBA_GAME") is not None else None,
+                )
+                if str(row.get("HOME_AWAY", "")).lower() == "home":
+                    home_players.append(player)
+                else:
+                    away_players.append(player)
+            if home_players or away_players:
+                lineups = GameLineups(home=home_players, away=away_players)
+    except Exception:
+        logger.warning("Could not load lineups for game_pk=%s", game_pk)
+
+    result = GameDetailResponse(
+        picks=picks,
+        total=len(picks),
+        home_team_name=home_team_name,
+        away_team_name=away_team_name,
+        game_score=game_score,
+        starters=starters,
+        bovada_lines=bovada_lines,
+        team_features=team_features,
+        lineups=lineups,
+        weather=weather,
+        public_betting=public_betting,
+        line_movement=line_movement,
+        umpire=umpire,
+        game_context=game_context,
+    )
+
+    # Write to cache: Final games are immutable → permanent prefix; others → today's date prefix
+    _is_final = game_score is not None and game_score.status == "Final"
+    set_cache(_game_cache_key, result.model_dump(mode="json"), permanent=_is_final)
+
+    return result
+
+
+@router.get("/{game_pk}", response_model=GamePicksResponse)
+def get_pick_by_game_pk(game_pk: int) -> GamePicksResponse:
+    try:
+        rows = execute_query(_GAME_QUERY, params={"game_pk": game_pk})
+    except Exception as exc:
+        logger.exception("Snowflake query failed for /picks/%s", game_pk)
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    picks = [
+        Pick(
+            game_pk=r["GAME_PK"],
+            game_date=r["GAME_DATE"],
+            market_type=r["MARKET_TYPE"],
+            model_prob=r.get("MODEL_PROB"),
+            bovada_devig_prob=r.get("BOVADA_DEVIG_PROB"),
+            edge=r.get("EDGE"),
+            game_conviction_score=r.get("GAME_CONVICTION_SCORE"),
+            win_prob_ci_low=r.get("WIN_PROB_CI_LOW"),
+            win_prob_ci_high=r.get("WIN_PROB_CI_HIGH"),
+            lineup_confirmed=r.get("LINEUP_CONFIRMED"),
+            home_team=r.get("HOME_TEAM"),
+            away_team=r.get("AWAY_TEAM"),
+            pick_side=r.get("PICK_SIDE"),
+            game_start_utc=r.get("GAME_START_UTC"),
+            model_total_runs=r.get("MODEL_TOTAL_RUNS"),
+            market_total_line=r.get("MARKET_TOTAL_LINE"),
+        )
+        for r in rows
+    ]
+    return GamePicksResponse(picks=picks, total=len(picks))

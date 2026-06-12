@@ -46,7 +46,7 @@ from betting_ml.utils.data_loader import get_snowflake_connection
 # ---------------------------------------------------------------------------
 KILL_N_FULL = 60
 KILL_N_TRIPWIRE = 20
-ATTRIBUTION_START = "2026-06-11"  # set to the actual deploy date of the conviction wiring
+ATTRIBUTION_START = "2026-06-12"  # RESET on Story 30.4 home_win + run_diff market-blind re-promotion (was 2026-06-11); conviction gate mixes classifier + run_diff, both re-promoted — keep in lockstep with home_win.conviction_kill_criterion.attribution_start
 
 
 _CONVICTION_QUERY = """

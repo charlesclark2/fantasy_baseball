@@ -1,0 +1,56 @@
+{
+  "home_win": {
+    "target": "home_win",
+    "metric": "brier",
+    "champion_recipe": "xgb_platt(champion)",
+    "challenger_recipe": "xgb_platt(challenger)",
+    "n_features": {
+      "champion": 374,
+      "challenger": 209
+    },
+    "decision": "PROMOTE",
+    "override_applied": true,
+    "correctness_override": "30.4: removes 9 market leaks + 3 identifiers (architecture Principle 3); gate-confirmed accuracy non-regression",
+    "overall_delta": -0.0015803264104400215,
+    "boot_ci": [
+      -0.0035284674252557295,
+      0.00044995557362883593
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2003,
+        "champion": 0.1948290773908859,
+        "challenger": 0.19194780311711365,
+        "delta": -0.002881274273772244,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2027,
+        "champion": 0.19799988440841684,
+        "challenger": 0.19770510243322817,
+        "delta": -0.00029478197518867377,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 751,
+        "champion": 0.20361232465294668,
+        "challenger": 0.19598921944121173,
+        "delta": -0.007623105211734954,
+        "complete": false,
+        "regressed": false
+      }
+    ],
+    "reasons": [
+      "Pooled improvement -0.0016 does NOT clear the 0.002 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0004 \u2265 0 (not significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "Current season 2026 corroborates (-0.0076).",
+      "\u2b50 CORRECTNESS OVERRIDE \u2014 30.4: removes 9 market leaks + 3 identifiers (architecture Principle 3); gate-confirmed accuracy non-regression. PROMOTE despite no significant accuracy gain: the fix is mandatory (compliance, not accuracy) and the gate confirms accuracy NON-REGRESSION (pooled \u0394 -0.0016, no completed-season regression). Effect-size/significance bars waived; record the override + violation."
+    ]
+  }
+}
