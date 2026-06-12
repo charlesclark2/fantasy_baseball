@@ -107,6 +107,23 @@ def lineup_dbt_staging_rebuild(context: OpExecutionContext) -> None:
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def lineup_ingest_umpires(context: OpExecutionContext) -> None:
+    """Story 30.5 — ingest today's HP-umpire ASSIGNMENT here, on the afternoon
+    lineup-confirm path, NOT just in the 07:00 daily job. Root cause of the
+    assignment staleness: the daily early/late ops run ~08 ET, hours BEFORE MLB
+    posts HP umpires, so they wrote 0–partial rows (nothing since 2026-06-04).
+    The lineup monitor fires within ~5h of first pitch — when umps ARE posted —
+    so this is when the assignment is actually available for the post_lineup
+    re-score (the actionable bet). ingest_umpires.py is now idempotent
+    (delete-then-insert scoped to statsapi + today's game_pks), so re-running on
+    every sensor tick is safe. Soft-fail: never block the post-lineup re-score."""
+    try:
+        _run_script(context, "ingest_umpires.py", ["--date", _today()])
+    except Exception as e:
+        context.log.warning(f"Lineup-path umpire assignment ingest failed (non-fatal): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_compute_posteriors(context: OpExecutionContext) -> None:
     """A1.11 Stage 4 — recompute EB lineup posteriors now that lineups are
     CONFIRMED (lineup_dbt_staging_rebuild just refreshed stg_statsapi_lineups).
@@ -126,6 +143,11 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
     _run_dbt(context, [
         "build",
         "--select",
+        # Story 30.5 — recompute the ump z-scores from the just-ingested HP
+        # assignment (lineup_ingest_umpires) so feature_pregame_game_features
+        # picks up today's umpire. dbt resolves order via refs.
+        "stg_statsapi_umpire_game_log",
+        "feature_pregame_umpire_features",
         "feature_pregame_lineup_features",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",

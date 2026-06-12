@@ -161,7 +161,20 @@ def fetch_hp_umpires(game_date: str) -> list[dict]:
 
 
 def insert_rows(conn, rows: list[dict]) -> int:
+    # Idempotent: replace any existing statsapi assignment rows for these game_pks
+    # before inserting. The append-only INSERT used to bloat the table when the
+    # daily early+late ops AND the afternoon lineup_monitor ticks (Story 30.5) each
+    # re-ran for the same day. Scoped to data_source='statsapi' so it never touches
+    # the umpscorecards tendency rows for the same game_pk (settled games carry
+    # both; the dbt staging model prefers umpscorecards).
+    game_pks = [int(r["game_pk"]) for r in rows if r.get("game_pk") is not None]
     with conn.cursor() as cur:
+        if game_pks:
+            pk_list = ", ".join(str(pk) for pk in game_pks)
+            cur.execute(
+                f"DELETE FROM {TABLE_FQN} "
+                f"WHERE data_source = 'statsapi' AND game_pk IN ({pk_list})"
+            )
         for row in rows:
             cur.execute(INSERT_SQL, row)
     return len(rows)

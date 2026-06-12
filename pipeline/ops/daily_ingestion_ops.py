@@ -453,6 +453,23 @@ def ingest_umpires_late(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def ingest_umpire_scorecards(context):
+    # Story 30.5 — recurring UmpScorecards TENDENCY load (the missing daily feed).
+    # ingest_umpires.py above stamps only today's HP-umpire NAME; this pulls the
+    # per-game tendency metrics (run impact / accuracy / favor) the trailing-3yr
+    # z-scores in feature_pregame_umpire_features are computed from, so they stay
+    # current as the season progresses. Trailing 7-day window (script default)
+    # catches scorecards posted a day or two after the game. Runs BEFORE
+    # dbt_umpire_feature_rebuild so the fresh rows feed the feature rebuild.
+    # Soft-fail: tendency history is not on the critical path (predict-side
+    # imputation handles a still-null ump feature) and must never block predict.
+    try:
+        _run_script(context, "ingest_umpire_scorecards.py")
+    except Exception as e:
+        context.log.warning(f"UmpScorecards tendency ingest failed (non-fatal): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_umpire_feature_rebuild(context):
     # mart_bullpen_effectiveness + feature_pregame_team_features are rebuilt HERE
     # (after compute_eb_bullpen_posteriors_op writes yesterday's EB posteriors at
@@ -589,6 +606,19 @@ def ingest_player_profiles_update(context):
 def write_api_cache_op(context):
     """Queries Snowflake and writes picks/today + performance/summary to S3."""
     _run_script(context, "write_api_cache.py")
+
+
+# ── User bet settlement (Performance page redesign, story B1) ─────────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def settle_user_bets_op(context):
+    """Settle pending DynamoDB user-bets against final scores.
+
+    Bets live in DynamoDB (OLTP); scores live in Snowflake (OLAP). Runs after
+    dbt_daily_build, where last night's finals (stg_statsapi_games) are fresh.
+    Off the critical prediction path — failure here must not block predictions.
+    """
+    _run_script(context, "settle_user_bets.py")
 
 
 # ── Backfill phase ───────────────────────────────────────────────────────────

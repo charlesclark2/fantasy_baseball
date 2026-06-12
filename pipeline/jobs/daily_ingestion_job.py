@@ -41,10 +41,12 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_statcast,
     ingest_statsapi_schedule,
     ingest_transactions,
+    ingest_umpire_scorecards,
     ingest_umpires_early,
     ingest_umpires_late,
     ingest_weather,
     predict_today_morning,
+    settle_user_bets_op,
     update_lineup_state_scd2,
     update_market_features_scd2,
     write_api_cache_op,
@@ -70,6 +72,11 @@ def daily_ingestion_job():
     s14 = compute_elo(start=s13)
     s15 = check_data_freshness(start=s14)
     s16 = dbt_daily_build(start=s15)
+    # Story B1 — settle pending user bets against last night's finals (now fresh
+    # in stg_statsapi_games). Off the critical prediction path: fans out from
+    # dbt_daily_build and is never depended on, so a settle failure can't block
+    # predictions or the API cache.
+    settle_user_bets_op(start=s16)
     # Epic O.2 — sub-model signal generation for the recently-completed game
     # window. Fan out from dbt_daily_build (mart_game_results + feature marts are
     # fresh), fan in to the PIVOT rebuild, then a (non-blocking) freshness check.
@@ -109,12 +116,16 @@ def daily_ingestion_job():
     s16d = update_lineup_state_scd2(start=s16c)
     s16e = dbt_lineup_feature_rebuild(start=s16d)
     s17 = ingest_umpires_late(start=s16e)
+    # Story 30.5 — pull UmpScorecards tendency rows (the daily feed that was missing)
+    # after the assignment retry and before dbt_umpire_feature_rebuild, so the
+    # trailing-3yr ump z-scores recompute on current data. Soft-fail (non-critical).
+    s17u = ingest_umpire_scorecards(start=s17)
     # Epic 6A — refresh yesterday's EB bullpen posteriors (eb_bullpen_posteriors +
     # eb_bullpen_team_posteriors) BEFORE the sequential team update, whose
     # bullpen_xwoba branch reads eb_bullpen_posteriors for reliever-PA membership,
     # and before dbt_umpire_feature_rebuild, which rebuilds the bullpen features.
     # Missing op was the cause of the 2026-05-29 bullpen-seq / champion-bullpen stall.
-    eb_bullpen = compute_eb_bullpen_posteriors_op(start=s17)
+    eb_bullpen = compute_eb_bullpen_posteriors_op(start=s17u)
     # Epic O.4 / 16.4 — advance yesterday's sequential posteriors after pitch data
     # (dbt_daily_build) lands and before feature_pregame_game_features is rebuilt
     # in dbt_umpire_feature_rebuild, so it picks up the fresh team posteriors.

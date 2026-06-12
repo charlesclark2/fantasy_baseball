@@ -8,6 +8,7 @@ from pipeline.ops.sensor_ops import (
     lineup_dbt_feature_rebuild,
     lineup_dbt_staging_rebuild,
     lineup_ingest_schedule,
+    lineup_ingest_umpires,
     lineup_odds_snapshot,
     lineup_predict,
     pregame_dbt_clv_rebuild,
@@ -29,7 +30,11 @@ from pipeline.ops.daily_ingestion_ops import (
 @job(executor_def=in_process_executor)
 def lineup_monitor_job():
     s1 = lineup_ingest_schedule()
-    s2 = lineup_dbt_staging_rebuild(start=s1)
+    # Story 30.5 — ingest today's HP-umpire assignment here (afternoon, when MLB
+    # has posted it), idempotently, so the confirmed-lineup re-score reflects the
+    # actual umpire. The 07:00 daily ops run too early to ever catch it.
+    s1u = lineup_ingest_umpires(start=s1)
+    s2 = lineup_dbt_staging_rebuild(start=s1u)
     # A1.11 Stage 4 — recompute EB lineup posteriors on the now-confirmed lineups
     # and rebuild the lineup/game features before predicting, so the post-lineup
     # prediction reflects the actual batters (not the morning best-effort pass).
