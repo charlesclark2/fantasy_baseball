@@ -64,17 +64,33 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         # but never fail the betting ingest/predict job over fantasy-only data.
         "non_blocking": True,
     },
-    "baseball_data.statsapi.umpire_game_log": {
-        "ts_col": "loaded_at",
-        "max_stale_hours": 48,
+    # Story 30.5 — umpire_game_log has TWO independent feeds; a table-level MAX
+    # masks one going stale while the other stays fresh (the exact failure that hid
+    # the assignment outage for a week and the tendency gap for 40 days). So check
+    # each `data_source` separately, scoped by game_date (= "do we have umps for
+    # recent GAMES", the meaningful signal — not just "did some row get written").
+    # BOTH are ALERT-ONLY (non_blocking): per-game gaps are expected (a game's HP
+    # ump may not be posted pre-game, e.g. 824589 on 2026-06-11) and settled games
+    # are backfilled from UmpScorecards post-hoc — so these must warn, never fail
+    # (a hard fail would death-spiral the predict job that carries the retry).
+    "umpire_game_log [statsapi HP assignment]": {
+        "table": "baseball_data.statsapi.umpire_game_log",
+        "where": "data_source = 'statsapi'",
+        "ts_col": "game_date",
+        "max_stale_hours": 48,   # healthy game-day feed is <24h; tolerates the
+                                 # morning-before-assignments-post window; a 2+ day
+                                 # gap (the 2026-06-04→ stall) alerts.
         "game_day_only": True,
-        # Non-blocking: the daily ingestion workflow's late-retry step (in the
-        # predict job) is what actually loads today's HP umpires (~11 ET, after
-        # MLB Stats API posts assignments). If we fail the ingest job on stale
-        # umpire data, the predict job — which contains the late retry — never
-        # runs, creating a death spiral across multiple days. Logged as WARN
-        # but does not block downstream jobs. Predict-side imputation handles
-        # the case where umpire features are still null at scoring time.
+        "non_blocking": True,
+    },
+    "umpire_game_log [umpscorecards tendency]": {
+        "table": "baseball_data.statsapi.umpire_game_log",
+        "where": "data_source = 'umpscorecards'",
+        "ts_col": "game_date",
+        "max_stale_hours": 96,   # scorecards lag the game ~1-2 days + the daily
+                                 # loader; 4 days tolerates that, a feed stop
+                                 # (the 2026-05-01→ gap) alerts.
+        "game_day_only": False,
         "non_blocking": True,
     },
     "baseball_data.statsapi.player_transactions": {
@@ -175,21 +191,27 @@ def _max_ingestion_timestamp(
     ts_col: str,
     con: snowflake.connector.SnowflakeConnection,
     eod_offset_hours: int = 0,
+    where: str | None = None,
 ) -> datetime | None:
     """Query MAX of the table's freshness column, optionally offset by eod_offset_hours.
 
     DATE columns store a calendar date (no timezone). eod_offset_hours shifts the reference
     forward to approximate when the data is actually available — e.g. for game_date columns
     where Statcast publishes the following morning rather than at UTC midnight.
+
+    ``where`` scopes the MAX to a subset of rows — used for SOURCE-scoped freshness
+    (e.g. one check per ``data_source`` in a multi-source table), so a single source
+    going stale isn't masked by another source keeping the table-level MAX fresh.
+    The clause is a trusted constant from FRESHNESS_THRESHOLDS, never user input.
     """
     cur = con.cursor()
+    inner = f"MAX({ts_col}::TIMESTAMP_NTZ)"
     if eod_offset_hours:
-        cur.execute(
-            f"SELECT DATEADD(hour, %s, MAX({ts_col}::TIMESTAMP_NTZ)) FROM {table}",
-            (eod_offset_hours,),
-        )
-    else:
-        cur.execute(f"SELECT MAX({ts_col}::TIMESTAMP_NTZ) FROM {table}")
+        inner = f"DATEADD(hour, {int(eod_offset_hours)}, {inner})"
+    sql = f"SELECT {inner} FROM {table}"
+    if where:
+        sql += f" WHERE {where}"
+    cur.execute(sql)
     row = cur.fetchone()
     if row and row[0] is not None:
         ts = row[0]
@@ -228,13 +250,17 @@ def run(check_date: date, dry_run: bool = False) -> None:
             ts_col: str = cfg["ts_col"]
             eod_offset_hours: int = cfg.get("eod_offset_hours", 0)
             non_blocking: bool = cfg.get("non_blocking", False)
+            # `table` is the display label / key; `query_table` is the physical table
+            # (defaults to the key) and `where` scopes the MAX for source-scoped checks.
+            query_table: str = cfg.get("table", table)
+            where: str | None = cfg.get("where")
 
             if game_day_only and not game_day:
                 log.info("  %-55s SKIP (off day)", table)
                 results.append({"table": table, "status": "SKIP (off day)", "hours_stale": None})
                 continue
 
-            max_ts = _max_ingestion_timestamp(table, ts_col, con, eod_offset_hours)
+            max_ts = _max_ingestion_timestamp(query_table, ts_col, con, eod_offset_hours, where)
             if max_ts is None:
                 log.warning("  %-55s NO DATA", table)
                 results.append({"table": table, "status": "NO DATA", "hours_stale": None})
