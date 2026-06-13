@@ -26,7 +26,6 @@ const SUB_NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
   { label: "Performance", href: "/performance", key: "performance" },
-  { label: "Settings", href: "/settings", key: "settings" },
   { label: "Bet Log", href: "/bet-log", key: "bet-log" },
 ] as const
 
