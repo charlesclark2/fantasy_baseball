@@ -7,6 +7,7 @@ function getPool(): CognitoUserPool {
     _pool = new CognitoUserPool({
       UserPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID!,
       ClientId: process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID!,
+      Storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
     })
   }
   return _pool
