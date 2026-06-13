@@ -249,14 +249,23 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
 
       {/* Bar — hidden on mobile */}
       <TableCell className="hidden md:table-cell py-4 pr-5 min-w-[180px]">
-        <ProbabilityBar
-          ciLow={pick.win_prob_ci_low}
-          ciHigh={pick.win_prob_ci_high}
-          modelProb={pick.model_prob}
-          marketProb={pick.bovada_devig_prob}
-          showLabels={true}
-          showHighConviction={false}
-        />
+        {(() => {
+          const flip = isSideFlipped(pick)
+          const mProb = flip ? 1 - pick.model_prob : pick.model_prob
+          const mkProb = flip ? 1 - pick.bovada_devig_prob : pick.bovada_devig_prob
+          const ciLow = flip && pick.win_prob_ci_high != null ? 1 - pick.win_prob_ci_high : pick.win_prob_ci_low
+          const ciHigh = flip && pick.win_prob_ci_low != null ? 1 - pick.win_prob_ci_low : pick.win_prob_ci_high
+          return (
+            <ProbabilityBar
+              ciLow={ciLow}
+              ciHigh={ciHigh}
+              modelProb={mProb}
+              marketProb={mkProb}
+              showLabels={true}
+              showHighConviction={false}
+            />
+          )
+        })()}
       </TableCell>
     </TableRow>
   )
