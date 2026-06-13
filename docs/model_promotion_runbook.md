@@ -195,6 +195,52 @@ Confirm:
 `--no-log-snowflake` keeps it off the prod table; drop it (or point at `betting_ml_dev`) for a
 dev write test.
 
+### Contract deploy-parity check (catches "contract not committed")  `[added 2026-06-12 after a prod CONTRACT-GUARD outage]`
+
+The local smoke test only proves the **working-tree** contract matches the model. Prod loads the
+model binary from **S3** but the contract JSON from the **deployed git image** — so if the new
+contract is edited locally but **left out of the deploy commit**, the working-tree smoke test passes
+yet prod scores a new model against the OLD committed contract → `[CONTRACT-GUARD]` failure in
+`lineup_predict` (this is exactly what happened on 2026-06-12: the v5 registry + S3 models deployed
+but the 211/169 contract JSONs were never committed, so `HEAD` still had 376).
+
+Run this parity check for every promoted target. It compares, per target, the registry's `features`
+count against the contract length in your **working tree** AND in **`HEAD`** (what will actually
+deploy). They must all agree:
+
+```bash
+uv run python - <<'PY'
+import json, subprocess, yaml
+reg = yaml.safe_load(open("betting_ml/models/model_registry.yaml"))
+def clen(ref, path):                       # ref=None → working tree; else git show <ref>:<path>
+    raw = open(path).read() if ref is None else subprocess.run(
+        ["git", "show", f"{ref}:{path}"], capture_output=True, text=True).stdout
+    d = json.loads(raw); c = d["feature_cols"] if isinstance(d, dict) else d
+    return len(c)
+bad = False
+for tgt in ("home_win", "run_differential", "total_runs"):
+    e = reg[tgt]; path = e["feature_columns_path"]; want = e.get("features")
+    wt = clen(None, path)
+    try:    head = clen("HEAD", path)
+    except Exception: head = None
+    ok = (wt == want == head)
+    bad |= not ok
+    print(f"{tgt:16s} registry.features={want}  working_tree={wt}  HEAD={head}  "
+          f"{'OK' if ok else '*** MISMATCH — do NOT deploy ***'}")
+print("\nALL GOOD" if not bad else
+      "\nFIX: a MISMATCH where working_tree != HEAD means the contract change is NOT in your deploy "
+      "commit — `git add` the contract JSON, recommit, and re-run this check before Step 6.")
+PY
+```
+
+- **`working_tree != HEAD`** ⇒ the new contract is uncommitted; it will NOT deploy. Stage + commit it
+  (Step 5), then re-run this check — `HEAD` must update to match.
+- **`registry.features != working_tree`** ⇒ the YAML and the contract disagree (e.g. a pre-imputation
+  contract missing the imputation indicators); regenerate the contract before promoting.
+
+**Re-run this AFTER Step 5 (commit)** — `HEAD` only reflects the committed contract once you've committed.
+Do not redeploy (Step 6) until this prints `ALL GOOD`.
+
 ---
 
 ## Step 5 — Commit the git-tracked half

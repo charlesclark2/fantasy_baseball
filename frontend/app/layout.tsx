@@ -1,30 +1,23 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { Providers } from '@/components/providers'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
 const geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Credence Sports - Bayesian Baseball Analytics',
-  description: 'AI-powered baseball betting picks and analytics',
+  title: 'Credence Sports',
+  description: 'Bayesian sports analytics. Daily edge, quantified.',
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
+    icon: '/brand/logo-icon.svg',
+    shortcut: '/brand/logo-icon.svg',
+    apple: '/brand/logo-icon.svg',
+  },
+  openGraph: {
+    title: 'Credence Sports',
+    description: 'Bayesian sports analytics. Daily edge, quantified.',
+    images: ['/brand/logo-full.svg'],
   },
 }
 
@@ -38,9 +31,9 @@ export default function RootLayout({
       <body
         className={`${geist.className} font-sans antialiased bg-background`}
       >
-        <TooltipProvider>
+        <Providers>
           {children}
-        </TooltipProvider>
+        </Providers>
       </body>
     </html>
   )

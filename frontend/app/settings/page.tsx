@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -10,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/components/ui/use-toast"
-import { CheckCircle2, LogOut, ShieldCheck } from "lucide-react"
+import { CheckCircle2, ShieldCheck } from "lucide-react"
 
 // ---------------------------------------------------------------------------
 // TODO: wire to PUT /alerts/preferences and GET /auth/me
@@ -64,54 +65,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      {/* ------------------------------------------------------------------ */}
-      {/* Nav                                                                  */}
-      {/* ------------------------------------------------------------------ */}
-      <nav className="sticky top-0 z-50 border-b border-[#1a1a1a] bg-[#0a0a0a]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <Link href="/" className="flex items-center gap-0 text-lg font-bold tracking-tight">
-            <span className="text-[#10b981]">Credence</span>
-            <span className="text-white"> Sports</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-xs text-gray-500 sm:block">
-              {MOCK_DATA.user.email}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-gray-400 hover:text-white hover:bg-[#141414]"
-              asChild
-            >
-              <Link href="/">
-                <LogOut className="mr-1.5 h-3.5 w-3.5" />
-                Sign Out
-              </Link>
-            </Button>
-          </div>
-        </div>
-        {/* Sub-nav — Settings active */}
-        <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
-          <Link
-            href="/dashboard"
-            className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            Dashboard
-          </Link>
-          <Link
-            href="/performance"
-            className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-          >
-            Performance
-          </Link>
-          <Link
-            href="/settings"
-            className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
-          >
-            Settings
-          </Link>
-        </div>
-      </nav>
+      <Nav authenticated activeLink="settings" userEmail={MOCK_DATA.user.email} />
 
       {/* ------------------------------------------------------------------ */}
       {/* Page content                                                         */}

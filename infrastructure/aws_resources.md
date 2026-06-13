@@ -68,6 +68,7 @@ USERS_TABLE=credence-prod-dynamo-users
 AWS_REGION=us-east-1
 
 CACHE_BUCKET=credence-prod-s3-api-cache
+DAGSTER_CLOUD_API_TOKEN=<token from .env>
 ```
 
 ### Snowflake Role Grants Required
@@ -304,6 +305,24 @@ Lambda IAM policy to add:
 ## CloudFront (A0.4)
 
 > Not yet provisioned. Document here when A0.4 begins.
+
+---
+
+## Brand Identity Assets (A0.4.10)
+
+Static logo assets in `frontend/public/brand/`. Served via Next.js static file handling (no CDN needed until A0.4 CloudFront is provisioned).
+
+| File | Description | Status |
+|---|---|---|
+| `logo-full.svg` | Full lockup (icon + wordmark), dark background | ⏳ Pending SVG conversion (Vectorizer.ai) |
+| `logo-icon.svg` | Icon only, for favicon and small contexts | ⏳ Pending SVG conversion (Vectorizer.ai) |
+| `logo-wordmark.svg` | Wordmark only (white), dark background | ⏳ Pending SVG conversion (Vectorizer.ai) |
+| `logo-full-light.svg` | Full lockup, light background (inverted) | ⏳ Pending generation |
+| `white-logo-wordmark.svg` | Source file — white wordmark PNG-traced | ✅ Ready (source) |
+| `black-logo-wordmark.svg` | Source file — black wordmark PNG-traced | ✅ Ready (source) |
+
+**Manual steps remaining:**
+1. Generate `logo-full-light.svg` — light-background inverted variant (only needed if the logo ever appears on a white/light background, e.g. email templates). The placeholder at `frontend/public/brand/logo-full-light.svg` is not referenced in the app.
 
 ---
 

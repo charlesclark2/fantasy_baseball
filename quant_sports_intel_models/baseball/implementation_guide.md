@@ -10396,76 +10396,42 @@ Configure `app.credencesports.com` in Vercel with production env vars.
 
 ---
 
-#### A0.4.10 — Frontend Brand Implementation ⬜
+#### A0.4.10 — Frontend Brand Implementation ✅
 
 **Overview:** Replace all v0-generated inline nav bar JSX and text wordmarks with the finalized SVG logo assets and a shared `<Nav>` component. Update favicon and metadata. Remove any remaining `Diamond Edge` / `Meridian` references.
 
-**Dependencies:** Logo PNG assets exist in `frontend/public/brand/` (vectorized SVGs may be placeholders pending Vectorizer.ai conversion)
-**Blocks:** Nothing — purely cosmetic; can land before or after SVG conversion completes
+**Completed 2026-06-12.**
 
-**What to build:**
+**What was built:**
 
-1. **Placeholder SVGs** — if real vectorized SVGs don't exist yet, create placeholder SVGs for `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg` (and optionally `logo-full-light.svg`) using emerald `#10b981` with a `<!-- PLACEHOLDER: Replace with vectorized SVG from Vectorizer.ai -->` comment header. Place in `frontend/public/brand/`.
+1. ✅ **Placeholder SVGs** — `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg`, `logo-full-light.svg` exist in `frontend/public/brand/` (placeholder SVGs; see deferred manual steps below)
 
-2. **Shared Nav component** — create `frontend/components/nav.tsx` accepting props `activeLink`, `authenticated`, `userEmail`. Renders:
-   - Top bar: `<Image src="/brand/logo-full.svg" …>` (links to `/dashboard` if authenticated, `/` otherwise), right-side user email + Sign Out / Sign In + Join Beta
-   - Sub-nav row (authenticated only): Dashboard / Performance / Settings tabs with active indicator; add an `admin` tab that renders only when `activeLink === 'admin'` is passed
-   - Sign Out button calls `signOut()` from `useAuth()` and redirects to `/login`
+2. ✅ **Shared Nav component** — `frontend/components/nav.tsx` with props `activeLink`, `authenticated`, `userEmail`; logo links to `/`; authenticated sub-nav includes Dashboard / EV Tracker / Performance / Settings / Bet Log; admin tab renders when `activeLink === 'admin'`; Sign Out calls `signOut()` + redirects to `/login`; `style={{ width: "auto" }}` on logo `<Image>` to silence Next.js aspect-ratio warning
 
-3. **Replace nav bars on 9 pages** using `<Nav … />`:
+3. ✅ **Nav replaced on all 9 pages**
 
-   | Page | `authenticated` | `activeLink` |
-   |---|---|---|
-   | `frontend/app/page.tsx` | `false` | `null` |
-   | `frontend/app/login/page.tsx` | `false` | `null` |
-   | `frontend/app/dashboard/page.tsx` | `true` | `'dashboard'` |
-   | `frontend/app/performance/page.tsx` | `true` | `'performance'` |
-   | `frontend/app/settings/page.tsx` | `true` | `'settings'` |
-   | `frontend/app/picks/[game_pk]/page.tsx` | `true` | `null` |
-   | `frontend/app/ev-tracker/page.tsx` | `true` | `null` |
-   | `frontend/app/bet-log/page.tsx` | `true` | `'bet-log'` |
-   | `frontend/app/admin/page.tsx` | `true` | `'admin'` |
+4. ✅ **Login card wordmark** — `<Image src="/brand/logo-wordmark.svg" …>` with `style={{ width: "auto" }}` replacing the old all-caps text
 
-4. **Login card wordmark** — in `frontend/app/login/page.tsx`, replace the `CREDENCE SPORTS` all-caps text with `<Image src="/brand/logo-wordmark.svg" alt="Credence Sports" width={160} height={28} className="h-7 w-auto mx-auto mb-2" priority />`.
+5. ✅ **Favicon + metadata** — `layout.tsx` sets `title`, `description`, `icons`, and `openGraph` all pointing to Credence Sports brand assets
 
-5. **Favicon + metadata** — in `frontend/app/layout.tsx`:
-   - Set `icons: { icon: '/brand/logo-icon.svg', shortcut: '/brand/logo-icon.svg', apple: '/brand/logo-icon.svg' }`
-   - Set `title: 'Credence Sports'`, `description: 'Bayesian sports analytics. Daily edge, quantified.'`
-   - Add `openGraph: { title: 'Credence Sports', description: '…', images: ['/brand/logo-full.svg'] }`
-   - Add comment `{/* TODO: replace /brand/logo-icon.svg with favicon.ico from favicon.io once ICO conversion is done */}`
+6. ✅ **Reference cleanup** — zero `Diamond Edge` / `Meridian` hits in `frontend/`
 
-6. **Reference cleanup** — grep for `Diamond Edge`, `Meridian`, `diamond-edge`, `meridian` across `frontend/` and replace all hits with `Credence Sports` / `credencesports`.
+7. ✅ **`aws_resources.md`** — Brand Identity section updated with asset table
 
-7. **`aws_resources.md` update** — update the Brand Identity section with the asset table (mark each as ⏳ Pending SVG conversion or ✅ Ready).
+**Deferred (manual steps — skipped, no timeline):**
+- Vectorizer.ai SVG conversion: upload PNGs → replace placeholder SVGs for `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg`
+- favicon.io: generate `favicon.ico` from `logo-icon.svg` → place at `frontend/public/favicon.ico`
+- `logo-full-light.svg`: generate light-background inverted variant (only needed for email templates; not referenced in app)
 
-**Manual steps for Charlie (cannot be done in code):**
-- Vectorizer.ai: upload each PNG from `frontend/public/brand/` → save output as `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg`, replacing the placeholders
-- favicon.io: upload `logo-icon.svg` (or PNG) → download `favicon.ico` → place at `frontend/public/favicon.ico`
-- Generate `logo-full-light.svg` — light-background inverted variant; not yet produced
+These are cosmetic polish items and do not block any functionality.
 
 **Acceptance criteria:**
-- [ ] `frontend/components/nav.tsx` exists; all 9 pages import and use it — verified by `grep -r "Sign Out" frontend/app/` returning zero hits (Sign Out only in nav.tsx)
-- [ ] `frontend/public/brand/` has at minimum placeholder SVGs for `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg`
-- [ ] Login card uses `<Image src="/brand/logo-wordmark.svg" …>` not text
-- [ ] `layout.tsx` favicon points to `/brand/logo-icon.svg`
-- [ ] `grep -r "Diamond Edge\|Meridian" frontend/` returns zero hits
-- [ ] `aws_resources.md` Brand Identity section updated
-
-**Prompt for agent:**
-
-```
-You are completing Epic A0.4.10 — Frontend Brand Identity for Credence Sports.
-
-Context: Next.js 16.2.6 App Router, React 19, TypeScript, shadcn/ui, Tailwind CSS v4. Auth via useAuth() from frontend/lib/auth-context.tsx. Repo root: baseball_betting_and_fantasy/.
-
-Before writing any code, read:
-1. frontend/app/page.tsx — current nav bar (v0 inline JSX)
-2. frontend/app/login/page.tsx — current wordmark in login card
-3. frontend/app/dashboard/page.tsx — sub-nav pattern used across authenticated pages
-4. frontend/app/layout.tsx — current metadata/favicon config
-
-Then complete all 7 steps in the A0.4.10 spec in the implementation guide. Follow the acceptance criteria exactly. At the end, output the manual steps checklist (Vectorizer.ai, favicon.io, logo-full-light.svg).
-```
+- [x] `frontend/components/nav.tsx` exists; all 9 pages import and use it
+- [x] `frontend/public/brand/` has placeholder SVGs for `logo-full.svg`, `logo-icon.svg`, `logo-wordmark.svg`
+- [x] Login card uses `<Image src="/brand/logo-wordmark.svg" …>` not text
+- [x] `layout.tsx` favicon points to `/brand/logo-icon.svg`
+- [x] `grep -r "Diamond Edge\|Meridian" frontend/` returns zero hits
+- [x] `aws_resources.md` Brand Identity section updated
 
 ---
 
@@ -10658,7 +10624,7 @@ Done when all 6 new pages render, footer links route correctly, no link goes to 
 
 ---
 
-#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜
+#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)
 
 Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` exists and covers the status cards. Pipeline run history, model artifact freshness, and Snowflake credit chart require new backend endpoints — spec'd below.
 
@@ -10669,31 +10635,42 @@ Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` 
 - `GET /admin/model-freshness` → `[{ model_name, version, last_trained_date, days_since_training, status: "healthy"|"watch"|"stale" }]` — new endpoint querying `baseball_data.betting_ml.model_registry` Snowflake table (or S3 model metadata)
 - `GET /admin/cache/invalidate` (`POST`) — already exists; wire the "Invalidate Cache" button
 
-**Backend gaps — must be built before this story:**
+**What has already been implemented (2026-06-12):**
 
-`app/backend/routers/admin.py` already exists with only `POST /admin/cache/invalidate`. Add the two new routes to that file:
+Backend — `app/backend/routers/admin.py`:
+- `GET /admin/pipeline-runs` added — calls Dagster+ GraphQL at `penumbra-partners.dagster.plus/prod/graphql`, queries both `daily_ingestion_job` and `lineup_monitor_sensor`, merges + sorts by start time, returns last 14. Returns 503 if `DAGSTER_CLOUD_API_TOKEN` env var is absent, 502 on Dagster API error.
+- `GET /admin/model-freshness` added — queries `baseball_data.betting_ml.model_registry WHERE is_current = TRUE`, computes `DATEDIFF('day', promoted_date, CURRENT_DATE)` as `days_since_training`, status: healthy <30d / watch 30–60d / stale >60d.
+- `Pydantic` response models `PipelineRun` and `ModelFreshness` defined in the same file.
+- `infrastructure/aws_resources.md` updated: `DAGSTER_CLOUD_API_TOKEN` added to Lambda env var list (value in `.env`). **Must be set in Lambda console before pipeline-runs endpoint works.**
 
-1. **`GET /admin/pipeline-runs`** — new route; calls Dagster+ GraphQL API at `penumbra-partners.dagster.plus/prod/graphql` (token in env; see `scripts/ops/dagster_runs.py` for the query pattern); returns last 14 run entries across `daily_ingestion_job` and `lineup_monitor_sensor` jobs
-2. **`GET /admin/model-freshness`** — new route; queries Snowflake `baseball_data.betting_ml.model_registry` (or reads S3 `models/*/metadata.json`) for each champion model's `trained_at` timestamp; computes `days_since_training`; status: healthy < 30d, watch 30–60d, stale > 60d
+Frontend — `frontend/app/admin/page.tsx`:
+- `MOCK_DATA` const and all Recharts imports removed.
+- Three `useQuery` hooks wired: `pipeline-status` → `GET /pipeline/status`, `pipeline-runs` → `GET /admin/pipeline-runs`, `model-freshness` → `GET /admin/model-freshness`.
+- Status cards driven by live `PipelineStatus` data (5 cards; Snowflake credits card removed).
+- Pipeline run table wired to real Dagster run history.
+- Model freshness list wired to real `model_registry` data.
+- Skeleton loading states for each section.
+- Force Refresh button calls `POST /admin/cache/invalidate` AND `qc.invalidateQueries()` to re-fetch all three data sources.
+- Snowflake credits chart section replaced with static note + link to Snowflake console.
 
-**Note on Snowflake credits chart:** No Snowflake cost API is available at runtime. Replace the `creditData` bar chart with a static note: "Snowflake credit usage is monitored in the AWS Cost Explorer and Snowflake admin console — not available via API." Hide the chart section.
+Other fixes shipped alongside (not part of A0.4.14 proper):
+- `frontend/components/nav.tsx` — `<Image>` for `logo-full.svg` gained `style={{ width: "auto" }}` to silence Next.js aspect-ratio warning.
+- `frontend/app/login/page.tsx` — same fix for `logo-wordmark.svg`.
 
-**Status card mapping from `GET /pipeline/status`:**
-- "Last Dagster Run" → `last_updated_at` (format as local time)
-- "Predictions Generated" → `n_games_scored` + " games today"
-- "CLV Label Count" → `n_qualified_bets` + " qualified bets"
-- "Stale Signals" → derive from `signal_completeness_score`: if ≥ 0.80 → "None", else "Check signals"
-- "Signal Completeness" → `signal_completeness_score.toFixed(2)`, status: ≥0.80 healthy, 0.60–0.80 watch, <0.60 failed
-- "Snowflake Credits MTD" → remove or replace with static note (no API)
+**What still needs work / known open issues:**
 
-**Tasks:**
-- [ ] Add `useQuery(['pipeline-status'], () => apiFetch('/pipeline/status', {}, accessToken))` and wire the 5 retained status cards
-- [ ] Add `useQuery(['pipeline-runs'], () => apiFetch('/admin/pipeline-runs', {}, accessToken))` and wire the run history table
-- [ ] Add `useQuery(['model-freshness'], () => apiFetch('/admin/model-freshness', {}, accessToken))` and wire the model artifacts table
-- [ ] Wire "Invalidate Cache" button to `POST /admin/cache/invalidate`; show loading + success toast
-- [ ] Wire "Refresh" button to invalidate all three queries via `queryClient.invalidateQueries()`
-- [ ] Remove Snowflake credits bar chart section; replace with a static text note
-- [ ] Remove `MOCK_DATA`
+- **Auth guard missing:** the admin page is accessible to any authenticated user. Needs Cognito group check (`admin` group) — either in API Gateway JWT authorizer or a middleware check. Until then, any beta user who navigates to `/admin` can see it.
+- **`userEmail` hardcoded:** `<Nav ... userEmail="user@example.com" />` — should read from `useAuth()`.
+- **Pipeline run `notes` are sparse:** backend currently only populates `notes` for failed runs. Success/warning notes require parsing Dagster step tags — not done yet.
+- **`DAGSTER_CLOUD_API_TOKEN` not yet in Lambda:** must be added in the AWS console; `/admin/pipeline-runs` returns 503 until then.
+- **End-to-end testing not done:** admin page has not been tested against the live prod API with the new endpoints deployed.
+
+**Remaining tasks before story is complete:**
+- [ ] Deploy backend with new endpoints (lambda deploy)
+- [ ] Add `DAGSTER_CLOUD_API_TOKEN` to Lambda env vars in AWS console
+- [ ] Add Cognito `admin` group check to admin routes (or API Gateway route-level authorizer)
+- [ ] Read `userEmail` from `useAuth()` in the admin page Nav call
+- [ ] Test against prod API — confirm status cards, run table, and model freshness show real data
 
 **Acceptance criteria:**
 - [ ] Status cards show real pipeline status from `GET /pipeline/status`; `indicator` field drives the status dot color
@@ -10701,42 +10678,29 @@ Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` 
 - [ ] Model freshness table shows real `days_since_training` and status badges
 - [ ] Invalidate Cache button calls `POST /admin/cache/invalidate` and shows feedback
 - [ ] No `MOCK_DATA` remains
+- [ ] Admin routes reject non-admin users
 
 **Session prompt:**
 ```
 You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 App Router, React 19, TypeScript, TanStack Query v5, shadcn/ui, Tailwind CSS v4. Backend API at https://api.credencesports.com. Auth in frontend/lib/auth-context.tsx, API client in frontend/lib/api.ts. Repo root: baseball_betting_and_fantasy/.
 
-Task: A0.4.14 — Wire the admin page to real pipeline status, run history, and model freshness APIs.
+Task: A0.4.14 — Finish and validate the admin page wiring.
+
+Context: Backend endpoints GET /admin/pipeline-runs and GET /admin/model-freshness were built on 2026-06-12 (app/backend/routers/admin.py). Frontend admin page (frontend/app/admin/page.tsx) was also rewritten on the same date with three useQuery hooks and no MOCK_DATA. The remaining work is operational + auth.
 
 Files to read first:
-- frontend/app/admin/page.tsx  (full file)
-- frontend/lib/api.ts
+- frontend/app/admin/page.tsx
+- app/backend/routers/admin.py
+- infrastructure/aws_resources.md
 
-APIs:
-1. GET /pipeline/status → { run_date, predictions_ready, lineup_confirmed, last_updated_at, n_games_scored, n_qualified_bets, signal_completeness_score, avg_feature_coverage_score, pipeline_status, indicator, message }
-2. GET /admin/pipeline-runs → [{ run_id, timestamp_et, job_name, duration_seconds, status, notes }]
-3. GET /admin/model-freshness → [{ model_name, version, last_trained_date, days_since_training, status }]
-4. POST /admin/cache/invalidate → 200 { invalidated: true }
+Remaining tasks:
+1. Deploy updated backend (./infrastructure/lambda/deploy.sh)
+2. Confirm DAGSTER_CLOUD_API_TOKEN is in Lambda env vars (see aws_resources.md)
+3. Fix hardcoded userEmail="user@example.com" in Nav call — read from useAuth()
+4. Add Cognito admin group guard to admin routes
+5. Smoke-test against prod: status cards, run table, model freshness all show real data
 
-Status card mapping from GET /pipeline/status:
-- "Last Dagster Run" → format last_updated_at as local time
-- "Predictions Generated" → n_games_scored + " of X games" (X from actual game count if available, else just n_games_scored)
-- "Qualified Bets" → n_qualified_bets
-- "Stale Signals" → signal_completeness_score >= 0.80 ? "None" : "Check signals"; status: >= 0.80 healthy, else watch
-- "Signal Completeness" → signal_completeness_score?.toFixed(2); status from indicator field
-
-Work:
-1. const { accessToken } = useAuth(); const qc = useQueryClient()
-2. Three useQuery calls for the three GET endpoints above.
-3. Wire status cards from pipelineStatus data (drop the Snowflake credits card — replace with a static text row: "Snowflake credits: monitor in Snowflake admin console").
-4. Wire pipeline run table from pipelineRuns data.
-5. Wire model artifacts table from modelFreshness data.
-6. Wire Invalidate Cache button: useMutation calling POST /admin/cache/invalidate; on success show toast "Cache invalidated".
-7. Wire Refresh button: onClick={() => qc.invalidateQueries()}.
-8. Remove MOCK_DATA const.
-9. Remove the Recharts credit bar chart section entirely; replace with: <p className="text-sm text-gray-500 py-4">Snowflake credit usage is monitored in the Snowflake admin console — not available via API.</p>
-
-Done when: status cards, run table, and model table show real data; cache invalidation button works; no MOCK_DATA remains.
+Done when: all three data sections show live prod data and non-admin users are blocked.
 ```
 
 ---
@@ -10843,6 +10807,99 @@ Clickable player names and team names across the app navigate to dedicated profi
 - [ ] Both pages use the same nav/layout as other authenticated pages
 - [ ] Pages return a graceful 404 if the player/team ID is not found
 - [ ] No raw Snowflake queries at request time — data is served from pre-materialized cache
+
+---
+
+#### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL
+
+**Problem:** Users who visit the home page before lineups confirm (~90 min before first pitch, typically 12–2pm ET) see "No qualified pick today — check back after lineups confirm." This dead window can span the entire morning even though we have enough data to make a useful early prediction. A naive user has no idea that lineups are a prerequisite — they just see nothing and leave.
+
+**Solution:** Run a "morning mode" prediction after the morning ingestion pipeline completes (~7–9am ET). This prediction uses only features available before batting orders and probable starters are announced, and is shown on the home page with an explicit "Preliminary — lineups not yet confirmed" label. When the post-lineup model fires (after official lineup confirmation), it silently overwrites the morning prediction and the badge disappears.
+
+**Background:** Story 30.3 established that ~30% of the current feature matrix is imputed to constants at morning serve time (slot-level batting stats, starter-specific ERA/xFIP, handedness matchups, archetype clusters). This story uses the same underlying champion models but substitutes team-level averages for those imputed features — a more principled imputation strategy than constants. Story 30.8 will replace this with a dedicated pre-lineup model trained on only morning-available features; this story is the interim solution that ships the UX improvement now.
+
+**Status (2026-06-12):** Display/UX half COMPLETE; pipeline half BLOCKED on model retraining (must happen before 30.8 models exist).
+- ✅ Done: tasks 3 (backend `is_preliminary`/`is_stale`/`pick_date` fields), 5 (frontend amber badge), 6 (stale fallback + state machine), 7 (tiered state machine in `GET /picks/featured`)
+- 🔴 Blocked on models/30.8: tasks 1 (`predict_today.py` morning mode with Class A features), 2 (`prediction_timing` DDL column), 4 (`PRE_LINEUP_EDGE_THRESHOLD` env var)
+
+**Morning-available features (Class A — can serve at 7–9am ET):**
+- Team rolling stats (wRC+, OPS, ERA, WHIP, xFIP — L7/L14/L30; from `mart_team_rolling_stats`)
+- ELO ratings (from `feature_pregame_team_features`)
+- Park factors (static per venue)
+- Bullpen freshness from **yesterday's game**: pitches thrown by each team's bullpen (`bullpen_pitches_yesterday`), rest days per arm, inherited-runner performance from the prior game — available after morning ingestion
+- Opening odds line (Bovada; available overnight)
+- Umpire tendency (posted ~11am ET — treat as optional, impute to zero-effect if not yet available)
+
+**Features excluded from morning run (Class B — require lineup/starter confirmation):**
+- `home_starter_*` / `away_starter_*` ERA, xFIP, K%, BB%, pitch-mix columns (specific pitcher not known)
+- `home_lineup_*` / `away_lineup_*` batting order and slot-level stats
+- `home_batter_archetype_*` / handedness matchup columns
+- `lineup_quality_index`, `lineup_depth_score`, per-slot EB posteriors
+
+**Implementation:**
+
+1. **Feature assembly change (`predict_today.py` morning run):** When running in `prediction_timing='pre_lineup'` mode, replace all Class B features with team-level seasonal averages (pulled from `mart_team_rolling_stats`) rather than the current constant imputation. This reduces the number of materially imputed features from ~30% to approximately the bullpen-freshness and umpire columns only. Stamp `imputed_feature_count` and `is_degraded = True` accordingly.
+
+2. **`prediction_timing` column:** Add `prediction_timing VARCHAR(20)` to `daily_model_predictions` (values: `'pre_lineup'` | `'post_lineup'`). Morning run writes `'pre_lineup'`; post-lineup sensor run writes `'post_lineup'` and overwrites the row for the same `(game_pk, market_type)`. This column already appears in Story 30.8's task list — coordinate DDL to avoid a second migration.
+
+3. **Backend response field:** Extend `FeaturedPickResponse` to include `is_preliminary: bool` (derived: `prediction_timing == 'pre_lineup'`). No schema change required if `is_preliminary` is computed at query time.
+
+4. **`GET /picks/featured` update:** When the best qualifying pick has `prediction_timing = 'pre_lineup'`, include `is_preliminary: True` in the response. The qualification gate (conviction threshold, edge threshold) may need to be loosened for pre-lineup picks since CI will be wider — add a configurable `PRE_LINEUP_EDGE_THRESHOLD` env var (default: 0.5× post-lineup threshold).
+
+5. **Frontend `FeaturedPickCard` update:** When `is_preliminary === true`, render a "Preliminary" badge above the matchup:
+   ```
+   ⚠ Preliminary — Lineups Not Yet Confirmed
+   ```
+   Style it with amber/yellow tones (distinct from the green HIGH CONVICTION badge) to visually signal reduced confidence. The conviction badge and CI bar still render — they reflect the model's honest uncertainty given available data.
+
+6. **Fallback to yesterday's champion pick.** When no qualifying pick exists for today at all (neither pre-lineup nor post-lineup — e.g. off-day, pipeline gap, or very early morning before any ingestion), `GET /picks/featured` should fall back to yesterday's top qualified pick rather than returning `{ game_pk: null }`. The response includes a `is_stale: bool` flag (`True` when the pick is from a prior date) and the `pick_date` field so the frontend knows. Frontend rendering:
+   - Show the pick card normally (matchup, edge, conviction, CI bar)
+   - Replace the "Today's Pick" header label with the pick's actual date: e.g. "Jun 11 Pick"
+   - Show a banner inside the card: **"Today's analysis is processing — new picks arrive after lineup confirmation."** Use a muted info tone (gray/blue, not amber — this is a system status message, not a model-confidence signal)
+   - Do NOT show the conviction badge for a stale pick (don't oversell a day-old result)
+
+7. **Tiered state machine for `GET /picks/featured`:**
+   - No picks today, no picks yesterday → return `{ game_pk: null }` (true off-season / multi-day gap)
+   - No picks today, picks exist yesterday → return yesterday's champion pick with `is_stale: true`
+   - Picks today, `prediction_timing = 'pre_lineup'` → return today's pick with `is_preliminary: true, is_stale: false`
+   - Picks today, `prediction_timing = 'post_lineup'` → return today's pick with `is_preliminary: false, is_stale: false`
+
+**Dependencies:**
+- Morning ingestion pipeline must complete before this runs (yesterday's game data, bullpen logs)
+- `prediction_timing` column DDL (can be done in this story; Story 30.8 must not re-add it)
+- `GET /picks/featured` endpoint must already exist (A0.4.12)
+
+**Acceptance criteria:**
+- 🔴 BLOCKED `prediction_timing` column added to `daily_model_predictions`; morning writes `'pre_lineup'`, post-lineup sensor writes `'post_lineup'` — blocked on model retraining / 30.8
+- 🔴 BLOCKED `predict_today.py` morning run imputes Class B features from team-level averages (not constants); `is_degraded = True` stamped on all pre-lineup rows — blocked on model retraining / 30.8
+- [x] `GET /picks/featured` returns `is_preliminary: true` for pre-lineup picks; `is_stale: true` when falling back to a prior-day pick; `is_stale: false` otherwise
+- [x] Home page always shows a pick card (never a blank) unless there are genuinely no picks in the last 2 days
+- [x] When `is_stale: true`: card header shows pick date, conviction badge hidden, "Today's analysis is processing" banner shown
+- [x] When `is_preliminary: true`: amber "Preliminary — Lineups Not Yet Confirmed" badge shown
+- [x] When both `false`: standard card with no extra badges
+- 🔴 BLOCKED `PRE_LINEUP_EDGE_THRESHOLD` is configurable via env var; default 0.5× post-lineup threshold — blocked on model retraining / 30.8
+- 🔴 BLOCKED No feature regression to Story 30.8: the `prediction_timing` DDL this story adds is compatible with 30.8's later use of the same column — blocked on model retraining / 30.8
+
+**Sequencing note:** Story 30.8 will replace the champion-with-imputation approach here with a dedicated pre-lineup model trained only on Class A features. When 30.8 is promoted, the morning prediction quality improves automatically without any further frontend changes — the `is_preliminary` badge and the `prediction_timing` column remain valid and carry forward.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A0.4.17 standalone:
+
+```
+You are picking up Story A0.4.17 of the MLB betting & fantasy project.
+
+Before writing any code, read:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story A0.4.17 (this story) AND Story 30.8 (pre-lineup model infrastructure), AND Story 30.3 (serving-skew root cause)
+  2. scripts/predict_today.py (or betting_ml/scripts/predict_today.py — check which is canonical per 30.7)
+  3. app/backend/routers/picks.py — specifically the GET /picks/featured endpoint
+  4. frontend/app/page.tsx — FeaturedPickCard component
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+
+The goal is to show a morning "Preliminary" pick on the home page after morning ingestion but before
+lineup confirmation, clearly labeled so naive users understand it is an early estimate.
+```
 
 ---
 
@@ -12624,10 +12681,28 @@ main-line betting. **This story does NOT re-run the NUTS/Kalman with another lag
    construction and are the honest re-open-criterion-(b) candidates a *new signal type* (not a new architecture)
    was always specified to require.
 
+**⭐ GROUNDING (2026-06-12, monthly league run env 2021–2026 via MCP) — reshapes the scope.** The league run
+environment HAS real, detectable regimes: a clean **2022→2023 step (+0.65 runs**, the rule-change regime:
+pitch clock + bigger bases + shift ban) and a **repeatable within-season arc** (April ~8.1–8.7 → summer
+~9.0–9.4, ~0.7–0.9 amplitude). Season means (game-wtd): 2021≈9.06, 2022≈8.57, 2023≈9.22, 2024≈8.76,
+2025≈8.85, 2026≈8.85(partial). **BUT the league rate does NOT explain the totals model's +0.67 over-bias on
+the 2025 fold** (Story 30.10): the 2025 fold trains on 2021–2024 (mean ≈8.90) and evals 2025 (≈8.85) — a
++0.05 league gap vs a +0.67 model bias. The missing ~0.6 runs is a **feature→runs RELATIONSHIP shift** (the
+model over-predicts 2025 matchups; adding 2025 to training fixes it — 2026 fold bias is +0.08), invisible to a
+league-rate series. So the league-rate monitor serves the PROMOTION GATE (real regimes exist) but does NOT by
+itself produce the regime-adjusted bias 30.10 needs — that requires the separate feature-relationship
+diagnostic below. (Two distinct "regimes": league-LEVEL, which the monitor sees, and feature-RELATIONSHIP,
+which it doesn't.)
+
 **Tasks:**
 - [ ] **Monitor:** a changepoint/CUSUM detector on the league-wide (and per-team) run-scoring rate writing a
   `run_env_regime_state` series + a `regime_shift_flag` (with magnitude + detection lag). Calibrate on 2021–2025
-  (known year-to-year shifts) so the false-alarm rate is bounded; report detection lag in games.
+  (the 2022→2023 step is the anchor known shift) so the false-alarm rate is bounded; report detection lag in games.
+- [ ] **Diagnose the totals feature-relationship bias (NEW, from grounding):** isolate WHY the totals model
+  over-predicts 2025 by ~0.6 runs when the league rate is flat — which features over-contribute (per-season
+  mean-residual decomposition / per-feature contribution delta train-vs-2025), and whether that shift is a
+  *learnable* relationship-regime signal or just the lag of training on past seasons. This is what an actual
+  regime-ADJUSTED totals bias (the 30.10 unblock) depends on — the league-rate monitor alone will not deliver it.
 - [ ] **Wire to the promotion gate:** expose the flag so `evaluate_promotion`'s current-season corroboration can
   cite an active regime shift (turn the "watch" into a logged, queryable signal), and so the ~Oct `delta_2026`
   totals re-eval has a programmatic trigger instead of a calendar guess.
@@ -12644,6 +12719,18 @@ main-line betting. **This story does NOT re-run the NUTS/Kalman with another lag
   signal carried into a kill-criterion re-run (else recorded as exhausted, escalating fully to re-open (a)).
 - [ ] Explicit statement that this does NOT re-attempt in-season regime *prediction* from lagging signals
   (settled by Epic 17/27.3/10.8) — monitoring + exogenous leads only.
+- [ ] **⭐ Closes Story 30.10 (totals projection promotion).** 30.10 proved the market-blind totals model is
+  spread-calibrated but over-projects on LEVEL = regime lag (pooled bias +0.37, driven by the 2025 fold;
+  2026 ≈ neutral), and the `promotion_gate_eval.py --eval-calibration` bias/pct_over checks were DEMOTED to
+  diagnostic-only *until this story yields a regime-adjusted bias*. So 27.6 MUST deliver a **regime-adjusted
+  bias** — mean(pred − actual) measured against the run-env regime baseline (not pooled across regimes) — and
+  on delivery: (a) RE-PROMOTE bias from diagnostic to a HARD gate in `_run_calibration` (re-enable the
+  `_BIAS_MAX` check, regime-adjusted), and (b) re-run `promotion_gate_eval.py --target total_runs
+  --eval-calibration`; if the regime-adjusted bias clears, promote the market-blind totals model as the
+  PROJECTION source via the runbook + `record_promotion` (Story 30.7). `bet_paused` is UNCHANGED by this —
+  it is a projection-source promotion, not a betting un-pause (main-line totals un-pause still needs the
+  three-layer/Layer-4 gate per the Epic-10 pause). If no regime-adjusted bias is achievable, record totals as
+  HELD-indefinitely and say so explicitly so 30.10 is not left dangling.
 
 ---
 
@@ -14120,7 +14207,15 @@ with fully-qualified db.schema.table names and no USE statements; hand any scrip
 back to the user to run and show the command; do not git commit or push (the user handles git).
 ```
 
-**Status:** 🟦 CODE COMPLETE — ablation + retrain HANDED OFF (2026-06-12). Full write-up:
+**Status:** ✅ DONE 2026-06-12 — all 3 retrained + promote-decision made per target. **home_win → PROMOTED
+v5** (211-feat market-blind, live) and **run_differential → PROMOTED v5** (169-feat, live), BOTH via
+correctness override (gate HELD on accuracy — sub-noise — but they remove 9 market leaks + 3 identifiers at
+confirmed non-regression; S3 + registry + Snowflake lineage recorded). **total_runs → HELD** (Normal
+market-blind refit calibrated on SPREAD but over-projects on level = run-environment REGIME LAG, not
+distribution; ~10th regime confirmation) → **branched to Story 30.10, blocked on Story 27.6**; `bet_paused`
+stays true. Spawned governance follow-ons this cycle: **30.7** (model/prediction provenance — built),
+**30.9** (learned h2h stack — specced, gated on alpha>0), **30.10** (totals Normal refit — HELD). ⬇ Original
+hand-off detail retained below. 🟦 CODE COMPLETE — ablation + retrain HANDED OFF (2026-06-12). Full write-up:
 `betting_ml/evaluation/feature_selection/story_30_4_market_blind_deadweight.md`. ⭐ The market leak is **9
 columns, not 6**: the 6 named in the spec + `over_american`/`under_american` (confirmed in-contract per the
 spec UPDATE) + **`total_line_std`** — a NEW name-collision finding (the consensus stddev from
@@ -14449,6 +14544,337 @@ back to the user to run and show the command; do not git commit or push (the use
 - [ ] Pick-of-the-day feature (A0.4.12) is gated on this story — do not promote a morning pick as a "pick of the day" until the pre-lineup model is live and the `prediction_timing` field is populated
 
 **Sequencing:** Do NOT start the pre-lineup model training until Story 30.4 (market-blind contract) is fully promoted and stable — the pre-lineup contract is a subset of the post-lineup market-blind contract; training on a different feature set while the contract is still shifting creates unnecessary rework. The interim UI badge (Task 6) can be shipped independently at any time.
+
+---
+
+### 30.9 — Learned h2h ensemble stack (replace the hand-set 50/50 blend)  `[Home: Epic 30 / architecture]`  ⬜
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.9 standalone:
+
+```
+You are picking up Story 30.9 of the MLB betting & fantasy project.
+
+Before writing any code, read these end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — the Epic 30 header IN FULL (esp. the
+     "⭐ MODEL PROMOTION GATE" / "Champion selection policy → Case 3" block), then the Story 30.9
+     Goal/Tasks/Acceptance below. Also read Story 30.3 (serving-skew) and Story 30.7 (provenance).
+  2. betting_ml/utils/promotion_gate.py + betting_ml/scripts/promotion_gate_eval.py (the codified
+     walk-forward gate you will judge the stack with; note PredictiveOutput + calibration_report).
+  3. The h2h consensus code: betting_ml/scripts/predict_today.py AND scripts/predict_today.py
+     (search `cons_win = ngb_win * 0.5 + clf_win * 0.5`) and betting_ml/utils/probability_layer.py.
+
+THE PROBLEM (verified 2026-06-12):
+  - The live h2h "consensus" probability is a HARD-CODED equal blend:
+    `cons_win = P(run_diff>0) * 0.5 + P_classifier * 0.5`, then Platt-calibrated → calibrated_win_prob.
+    The 0.5 is a literal with NO justifying comment, introduced in an early bulk commit, NEVER tuned.
+    Nothing optimizes it — the `best_alpha` tuner optimizes a DIFFERENT parameter (the model-vs-MARKET
+    posterior blend), not the ngb-vs-clf weight.
+  - Why 0.5 is suboptimal HERE (even though equal-weight is a strong blind default / the "1/N" result):
+    the two estimators are NEITHER independent NOR equally accurate. P(run_diff>0) is a DERIVED proxy
+    for the same win probability the classifier estimates directly → highly correlated, small marginal
+    info from averaging; and they have different held-out Brier. A bad weight degrades DISCRIMINATION
+    (AUC), which the downstream monotonic Platt calibrator CANNOT recover (it fixes calibration, not
+    ranking). This is the deferred Phase 9 "stacked ensemble" idea, scoped down to the h2h head.
+
+  - ⚠️ GATE/SEQUENCING CHECK FIRST: with `best_alpha = 0` (live model currently gets ZERO weight vs the
+    market — the serving-skew/zero-skill issue, Stories 30.3/30.6), the ENTIRE consensus is neutralized
+    against the market, so optimizing the internal blend has NO live bet payoff yet. Confirm `best_alpha
+    > 0` (betting_ml/models/best_alpha.json) BEFORE treating this as live-impactful. If alpha is still 0,
+    build + validate the stack OFFLINE through the gate and SHELVE the wiring behind the same alpha-lift
+    that unblocks run_diff — do not claim a live improvement that alpha=0 erases.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP with
+fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min (incl.
+read-only Snowflake queries) back to the user to run and show the command; test any new Snowflake-querying
+script with real creds before merge; do not git commit or push (the user handles git).
+```
+
+**Status:** ⬜ OPEN — specced 2026-06-12 from the run_diff-usage review. **Gated:** the live payoff is unlocked
+only when `best_alpha > 0` (same unlock as run_diff itself — see Stories 30.3/30.6 and
+[[project_prod_model_audit_jun2026]]); the OFFLINE stack + gate eval can be built any time, but do not wire it
+live (or claim a live lift) while alpha=0 neutralizes the whole consensus vs the market.
+
+**Why it exists.** The h2h win probability that feeds the displayed Model Win%, the Layer-4 decision direction,
+and the conviction-gate agreement check is a **hand-set 50/50 average** of two correlated, unequally-accurate
+estimators — P(run_diff>0) from the run_diff NGBoost and P_home_win from the classifier. Equal weighting is a
+fine blind default but is demonstrably wrong when the components are correlated and differ in accuracy; the
+right object is a **learned stack** (a weight, or a 2-input logistic regression on
+`[P(run_diff>0), P_classifier]`) fit on held-out seasons, which learns the weight AND the calibration jointly,
+respects the correlation, and is judged through the existing promotion gate like any other challenger.
+
+**Tasks:**
+- [ ] **Quantify the status quo.** On the gate's walk-forward folds (`all_season_splits`, held-out 2024/2025;
+  2026 corroboration only), score the current `0.5·P(run_diff>0) + 0.5·P_classifier` → Platt pipeline vs each
+  component ALONE (classifier-only, run_diff-only) on Brier/NLL/AUC. Establishes whether the blend even beats
+  the classifier alone (it may not — if run_diff is a strictly worse correlated proxy, 0.5 weight is a drag).
+- [ ] **Fit the stack** as a new challenger recipe: a 2-input `LogisticRegression` on
+  `[P(run_diff>0), P_classifier]` (the meta-learner subsumes both the weight and a calibration; compare to a
+  1-param convex weight `w·ngb + (1−w)·clf` + Platt as a simpler variant). Train per fold inside the
+  walk-forward — NO leakage: the meta-learner fits on the train seasons' base-model OOF predictions, scores the
+  held-out season. Reuse `promotion_gate_eval.py` adapters (add a `StackSpec` ModelSpec returning a
+  `PredictiveOutput.binary`).
+- [ ] **Judge through the gate.** Run the stack vs the current 50/50 champion through `evaluate_promotion`
+  (metric=brier). Promote ONLY on the gate's own terms (effect size + paired-bootstrap significance +
+  no completed-season regression + hysteresis) — there is no correctness-override here (this is an accuracy
+  refinement, not a compliance fix), so it must clear the bars honestly.
+- [ ] **Calibration check.** Report Brier/NLL + reliability (the calibration is now inside the meta-learner);
+  confirm the stack is at least as calibrated as the existing cons_win → Platt pipeline.
+- [ ] **Wire (gated on alpha>0).** If the gate PROMOTEs AND `best_alpha > 0`, replace the literal
+  `cons_win = ngb_win*0.5 + clf_win*0.5` in BOTH `predict_today.py` copies with the persisted stack; record the
+  promotion via the Story 30.7 `record_promotion` lineage + registry. If alpha=0, persist the artifact + eval
+  doc and SHELVE the wiring with a one-line note on the unlock condition.
+- [ ] **Reconcile the two predict_today.py copies** so the consensus is computed identically in both (the
+  drift flagged in Story 30.7).
+
+**Acceptance criteria:**
+- [ ] Status-quo table written: 50/50-blend vs classifier-only vs run_diff-only on held-out 2024/2025
+  (Brier/NLL/AUC), so we KNOW whether the blend beats its best component.
+- [ ] Leak-free walk-forward stack trained (meta-learner fit on train-season OOF base preds only) and judged via
+  `promotion_gate.evaluate_promotion` (metric=brier); verdict + JSON written under
+  `betting_ml/evaluation/feature_selection/promotion_gate/`.
+- [ ] Decision recorded: PROMOTE only if it clears the gate's accuracy bars (no override); if it does not beat
+  the 50/50 blend beyond the noise floor, HOLD and document that equal-weight stands.
+- [ ] If wired live: both `predict_today.py` copies use the stack identically, lineage recorded via
+  `record_promotion`, and a post-deploy run shows the new `calibrated_win_prob` provenance. If shelved: artifact
+  + eval doc persisted with the explicit `best_alpha > 0` unlock condition.
+
+**Notes.** This is the Phase 9 "stacked ensemble" candidate ([[project_phase9_model_architecture]]) scoped to the
+h2h head only. Keep it small: a 2-input meta-learner, not a full multi-model stack. The same logic could later
+extend to totals, but totals is a point-accuracy product (no two-estimator blend today), so it is out of scope here.
+
+---
+
+### 30.10 — Totals projection-source refit: Normal market-blind (kill the LogNormal over-projection)  `[Home: Epic 30 / totals]`  ⬜
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.10 standalone:
+
+```
+You are picking up Story 30.10 of the MLB betting & fantasy project.
+
+Before writing any code, read these end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — the Epic 30 header, Story 30.4
+     (market-blind retrain), the "Champion selection policy → Case 3" block, and the Story 30.10
+     Goal/Tasks/Acceptance below.
+  2. betting_ml/evaluation/feature_selection/promotion_gate/calibration_total_runs.json (the 30.4
+     LogNormal challenger's calibration result that triggered this story).
+  3. betting_ml/scripts/run_ngboost_total_runs_search.py (now takes `--dist Normal`) and
+     betting_ml/scripts/promotion_gate_eval.py (`--eval-calibration`, with the directional-bias gate).
+
+CONTEXT (verified 2026-06-12):
+  - The 30.4 market-blind totals challenger was retrained as NGBoost LogNormal (the search picks the
+    distribution by CV MAE alone) and the accuracy gate HELD (ΔMAE -0.0069, sub-noise; override-eligible
+    on hygiene). But the calibration check FAILED on direction: spread was honest (cov80 0.79, PIT flat,
+    CRPS fine) yet the CENTER over-projects — pct_over model=0.702 vs actual=0.484 (+22 pts), bias +0.284
+    (vs champion +0.150). Root cause is structural: a LogNormal's mean = exp(μ+σ²/2) sits above its
+    median, so surfacing the predictive MEAN as the projected total systematically leans over. This is
+    the same reason run_diff EXCLUDES LogNormal.
+  - The totals product surfaces the predictive mean as the projection (user decides over/under BY HAND —
+    there is NO auto-betting, ever; US-manual-only). A directionally-biased projection is disqualifying
+    even though MAE/spread look fine — so a symmetric Normal (mean=median, no inflation) is required.
+  - Tooling already in place: `run_ngboost_total_runs_search.py --dist Normal` forces a Normal-only
+    grid on the market-blind contract; `promotion_gate_eval.py --target total_runs --eval-calibration`
+    now gates on |bias|≤0.25 AND |pct_over gap|≤0.10 in addition to coverage/NLL.
+  - total_runs stays bet_paused throughout; this only decides whether the Normal market-blind model
+    becomes the PROJECTION source (it does NOT enable any betting).
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP with
+fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min (incl.
+read-only Snowflake queries) back to the user to run and show the command; test any new Snowflake-querying
+script with real creds before merge; do not git commit or push (the user handles git).
+```
+
+**Status:** 🔒 HELD 2026-06-12 — refit + calibration RAN; totals NOT promoted. The Normal market-blind
+refit (`--dist Normal`, 111 feats market-blind, CV MAE 3.3620) **disproved the LogNormal hypothesis**: a
+symmetric Normal still over-projects (pooled bias **+0.367**, even higher than the LogNormal's +0.284), so
+the bias was never distributional. The per-fold breakdown shows **run-environment REGIME LAG**: 2024 bias
++0.17, **2025 +0.67 (the regime miss)**, 2026 +0.08 — a model trained on past seasons lags a within-season
+run-env shift by ~a season, and going market-blind removes the market line (the only LIVE regime anchor),
+~doubling the lag vs the market-aware champion (+0.17). Spread calibration PASSES (coverage_80 0.772, NLL
+non-regress). ~**10th independent confirmation** of the Epic 10/17/27 totals-regime finding. **DECISION
+(operator): HOLD totals; keep the current champion as the projection basis; do not promote the market-blind
+challenger until the regime is understood.** **BLOCKED on Story 27.6** (run-environment regime monitoring +
+exogenous leading indicators). The directional bias/pct_over checks in `promotion_gate_eval.py
+--eval-calibration` were DEMOTED to diagnostic-only (regime-confounded; coverage+NLL stay hard) — re-promote
+them to hard gates once 27.6 yields a regime-adjusted bias. `bet_paused` stays true. See
+[[project_totals_model_directional_bias]], [[project_epic10_totals_verdict]], Story 27.6, Epic 29.
+
+**Why it exists.** 30.4 produced a market-blind (compliant) totals challenger, but as a **LogNormal** it
+over-projects the total (pct_over 0.702 vs 0.484 actual; bias +0.284) because the surfaced projection is the
+predictive **mean**, and a LogNormal's mean sits above its median. A projection that leans over ~70% when
+reality is ~48% is unusable as a decision-support number even though its MAE and spread calibration are fine.
+The fix is a **Normal** market-blind totals model (symmetric → mean=median → no inflation).
+
+**Tasks:**
+- [ ] **Refit Normal market-blind.** Re-run the totals search forced to Normal on the 30.4 market-blind
+  contract (the script already restricts the grid):
+  `uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --dist Normal`
+  (hand-off; >1 min). Confirm the persisted contract is market-blind + dead-weight-pruned (no `_MARKET_LEAK_30_4`
+  cols) and the post-imputation dim is recorded for CONTRACT-GUARD.
+- [ ] **Calibrate-gate it.** `uv run python betting_ml/scripts/promotion_gate_eval.py --target total_runs
+  --eval-calibration` — REQUIRE `CALIBRATION OK` under the tightened gate: coverage_80∈[0.75,0.85], NLL
+  non-regress, **|bias|≤0.25 AND |pct_over gap|≤0.10**. The Normal should pull pct_over toward ~0.50 and bias
+  toward 0; if it does not, the totals model is not ready and stays HOLD.
+- [ ] **Accuracy-gate it.** Run the standard `--target total_runs` accuracy gate (point MAE) vs the champion;
+  the Normal market-blind challenger should not regress on completed seasons. Promotion is on hygiene
+  (correctness override: removes market leaks) PROVIDED both the accuracy non-regression AND the calibration
+  gate pass — the calibration gate is a hard add-on for a projection source.
+- [ ] **Promote as projection source only (no betting).** If both gates pass, promote via the runbook
+  (S3 + registry + `record_promotion` lineage, Story 30.7) as the totals PROJECTION source. `bet_paused`
+  stays true; nothing about betting changes.
+
+**Acceptance criteria:**
+- [ ] Normal market-blind totals model trained; contract market-blind + dim recorded; `--dist Normal` run logged.
+- [ ] `--eval-calibration` prints `CALIBRATION OK` (all four checks pass, including the directional ones) —
+  i.e. pct_over gap ≤ 0.10 and |bias| ≤ 0.25, a measurable improvement over the LogNormal's 0.218 / 0.284.
+- [ ] Accuracy gate shows no completed-season regression vs champion.
+- [ ] Decision recorded: promote as projection source (lineage via `record_promotion`) OR HOLD with the
+  failing check named. `bet_paused` unchanged either way.
+
+**Notes.** If the Normal market-blind model passes calibration but is no more accurate than the champion, it
+still PROMOTES on hygiene (it removes the market leaks the champion carries) — the calibration gate just
+guarantees the projection it surfaces is directionally honest. Future alt-line / F5 / team-totals offerings
+(Epic 29) build on this Normal projection base, not the LogNormal.
+
+---
+
+### 30.11 — Per-prediction SHAP feature drivers (serve-time explainability)  `[Home: Epic 30 / UI transparency]`  ⬜
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.11 standalone:
+
+```
+You are picking up Story 30.11 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 30.11 section;
+     its Goal, Tasks, and Acceptance criteria are your contract for this story.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+Then:
+  - Identify every file associated with Story 30.11 (betting_ml/scripts/predict_today.py, the model
+    artifact loader, app/backend/routers/picks.py, app/backend/models/picks.py, and
+    frontend/app/picks/[game_pk]/page.tsx) by tracing the Tasks list.
+  - Implement each Task listed under Story 30.11 exactly.
+  - Your work MUST conform to every item in the Story 30.11 Acceptance criteria — treat them as the
+    definition of done; do not consider the story complete until each criterion is verified.
+
+CONTEXT:
+  - SHAP is currently computed only at training time (stored as parquet artifacts per model version).
+    predict_today.py has no SHAP step; the game detail page (picks/[game_pk]) has no per-pick driver
+    breakdown — it shows static model metadata only.
+  - A2.5 (DONE 2026-06-10) already writes five imputation columns to daily_model_predictions:
+    imputed_feature_count, imputed_discriminative_count, discriminative_coverage, is_degraded,
+    imputed_features (comma-joined list of core features that were imputed). This story must cross-
+    reference that list to mark imputed drivers clearly in the UI.
+  - The home_win and totals (NGBoost) models use XGBoost as the base learner — TreeSHAP via
+    shap.TreeExplainer applies. Run shap.TreeExplainer on the first base learner (model.learners_[0])
+    to obtain additive Shapley values. The run_diff NGBoost is also XGBoost-backed; include it too.
+  - Volume: ~15–30 games/day. TreeSHAP on a tree ensemble of this size is sub-second per game.
+    Adding SHAP to predict_today.py does NOT make it a long-running script under this volume.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Compute per-game SHAP values at serve time in `predict_today.py` and persist the top-N
+feature drivers as structured JSON to `daily_model_predictions`. The game detail page
+(`/picks/[game_pk]`) then fetches and renders a "Key Drivers" breakdown — e.g. *"Starting pitcher ERA+
+(+4.2pp), Park run factor (−1.8pp), Lineup quality vs SP (+2.1pp)"* — turning each pick's card from a
+static probability display into a self-explaining summary of why the model has edge.
+
+**Background.** Story A2.5 proved the model already flags *which features were imputed* at serve time.
+This story adds the complementary question: *which features drove the probability in the first place*.
+The two columns together give the UI everything it needs: show the top drivers, mark imputed ones with
+a ⚠️ uncertainty flag, and let users judge how much to trust a pick whose top driver was imputed.
+
+**Tasks:**
+
+- [ ] **Add DDL columns to `daily_model_predictions`.** In `predict_today.py`'s `_run_migrations()`
+  block, add idempotent ALTER statements:
+  ```sql
+  ALTER TABLE {schema}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_top_drivers    VARIANT;
+  ALTER TABLE {schema}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_top_drivers VARIANT;
+  ALTER TABLE {schema}.daily_model_predictions ADD COLUMN IF NOT EXISTS run_diff_top_drivers VARIANT;
+  ```
+  Update `_CREATE_TABLE` so new tables get the columns from the start.
+
+- [ ] **Compute SHAP at serve time in `predict_today.py`.** After the existing predict step, for each
+  model (home_win, totals, run_diff):
+  1. Instantiate `shap.TreeExplainer(model.learners_[0])` (NGBoost base learner is XGBoost tree).
+  2. Call `explainer.shap_values(X_today_imp)` — post-imputation matrix, same input the model saw.
+  3. For each game row, sort features by `|shap_value|` descending; keep top 10.
+  4. Serialize to a list of dicts:
+     ```json
+     [
+       {"feature": "home_starter_era_plus_adj", "shap_value": 0.042, "direction": "home",
+        "is_imputed": false},
+       {"feature": "park_run_factor", "shap_value": -0.018, "direction": "away",
+        "is_imputed": false},
+       ...
+     ]
+     ```
+     Cross-reference A2.5's `imputed_features` set (already computed in the same scoring run) to set
+     `is_imputed: true` on any driver that appears in the imputed feature list.
+  5. Write the JSON string into the `h2h_top_drivers` / `totals_top_drivers` / `run_diff_top_drivers`
+     parameter dict for `_INSERT_PREDICTION`. Use `json.dumps(driver_list)` — Snowflake VARIANT
+     accepts a JSON string in a parameterized INSERT.
+
+  Guard: wrap the whole SHAP block in a try/except so a SHAP failure (e.g. unsupported model type
+  after a retrain) logs a warning and writes NULL to the column rather than killing the scoring run.
+
+- [ ] **Update `_INSERT_PREDICTION` and `_CREATE_TABLE`.** Add the three new column names + `%(...)s`
+  placeholders to the INSERT statement. Default to `None` → NULL if SHAP block was skipped.
+
+- [ ] **Expose drivers from the game detail endpoint.** In `app/backend/models/picks.py`, add to
+  `GameDetailResponse`:
+  ```python
+  h2h_top_drivers:    list[dict] | None = None
+  totals_top_drivers: list[dict] | None = None
+  ```
+  In `app/backend/routers/picks.py`'s game-detail query, SELECT the two columns from
+  `daily_model_predictions` and parse the VARIANT JSON string (Snowflake returns it as a Python dict
+  already via the connector; fall back to `json.loads` if it arrives as a string).
+
+- [ ] **Render a "Key Drivers" panel on the game detail page.** In
+  `frontend/app/picks/[game_pk]/page.tsx`, add a `KeyDrivers` sub-component that:
+  - Renders only when `h2h_top_drivers` or `totals_top_drivers` is non-null with ≥1 entry.
+  - Shows a horizontal bar or labeled chip per driver: feature display name, signed shap_value
+    formatted as `+X.Xpp` / `−X.Xpp` (multiply by 100 for readability), colored green for the
+    pick direction and gray against.
+  - Marks any driver with `is_imputed: true` with a small `⚠️` tooltip: *"This feature was imputed
+    at serve time — value may not reflect today's game."*
+  - Uses a feature-name display map (`FEATURE_DISPLAY_NAMES`) to convert raw column names
+    (`home_starter_era_plus_adj`) to human-readable labels (`Home starter ERA+`). Seed the map with
+    the top ~30 most common features from the training SHAP artifacts; leave unknown names as
+    title-cased with underscores replaced by spaces as a fallback.
+
+- [ ] **Smoke-test the end-to-end path.** After adding the columns, run one scoring day (either real
+  or by re-running predict_today.py against a past game_date in dev) and verify:
+  - `h2h_top_drivers` is non-NULL and parses as a valid JSON array.
+  - The `/picks/{game_pk}` response includes `h2h_top_drivers` with ≥1 driver.
+  - The game detail page renders the Key Drivers panel without a 500 or blank render.
+
+**Acceptance criteria:**
+- [ ] `h2h_top_drivers`, `totals_top_drivers`, `run_diff_top_drivers` columns exist in
+  `daily_model_predictions`; idempotent ADD COLUMN IF NOT EXISTS migrations in `_run_migrations()`.
+- [ ] `predict_today.py` computes TreeSHAP for all three models; top-10 drivers per game written as
+  VARIANT JSON; SHAP failures log a warning and write NULL (non-fatal).
+- [ ] `is_imputed` flag is correctly set on drivers cross-referenced against A2.5's
+  `imputed_features` list (same scoring run).
+- [ ] `GET /picks/{game_pk}` response includes `h2h_top_drivers` (list of dicts with `feature`,
+  `shap_value`, `direction`, `is_imputed`); existing response fields unchanged.
+- [ ] Game detail page renders a "Key Drivers" panel showing ≥1 labeled driver chip with signed pp
+  contribution; imputed drivers show ⚠️ badge; panel is absent (not blank/error) when drivers are NULL.
+- [ ] Scoring run wall-clock does not increase by more than 30 s for a full day's slate.
+
+**Sequencing/gating:** Tier 2 (UI transparency). Blocked on the model artifacts being stable —
+do NOT build this during an active retrain cycle (the SHAP explainer must match the currently-loaded
+model artifact). Safe to start after Story 30.4 retrains are fully promoted and stable. Pairs with
+Story 30.6 (post-imputation feature snapshot) — once 30.6 ships, SHAP values will reflect the
+point-in-time feature vector, not morning-imputed constants; until then, imputed drivers are expected
+and the ⚠️ flag is the user-facing mitigation.
 
 ---
 
