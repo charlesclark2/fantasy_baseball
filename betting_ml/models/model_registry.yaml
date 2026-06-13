@@ -520,7 +520,7 @@ total_runs:
     '
   artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_seasonnorm_2026.pkl
   prev_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
-  backfill_date: null
+  backfill_date: '2026-06-13'
   cv_mae: 3.3251
   deployed_date: '2026-06-13'
   promoted_at: '2026-06-13T00:00:00Z'
