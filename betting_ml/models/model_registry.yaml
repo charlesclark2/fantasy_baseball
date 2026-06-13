@@ -518,29 +518,38 @@ total_runs:
     the prod artifact.)
 
     '
-  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
-  backfill_date: '2026-06-01'
-  cv_mae: 3.4008
-  deployed_date: '2026-06-02'
+  artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_tuned_seasonnorm_2026.pkl
+  prev_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
+  backfill_date: null
+  cv_mae: 3.3251
+  deployed_date: '2026-06-13'
+  promoted_at: '2026-06-13T00:00:00Z'
   dist: Normal
   eval_year: 2026
-  feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
-  features: 369
+  feature_columns_path: betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json
+  features: 113
   max_depth: 3
-  model_name: ngboost_eb_enriched
-  model_version: v4
+  model_name: ngboost_tuned_seasonnorm
+  model_version: v5
   n_estimators: 500
-  notes: 'Epic 7.M EB-enriched market-blind retrain promoted 2026-06-02. NGBoost Normal,
-    n=500, 369 features (367 base = feature_selection.md − 7 market cols; + has_starter_platoon_data,
-    is_new_venue from imputation pipeline). All EB posteriors present. CV MAE 3.4008
-    vs v3 champion 3.5521 (Δ −0.151, apples-to-apples market-blind). Offline comparison
-    on held-out 2024+ data: MAE Δ −0.039, Pct_Over_Line 61.7% (healthy range), verdict
-    PROMOTE. Rollback: ngboost_market_blind_2026.pkl (v3, 307 features, S3).
+  notes: 'Story 27.7 / 30.10 season-normalized PROJECTION-source promotion (2026-06-13).
+    NGBoost Normal n=500, 111 market-blind features (34 contact-quality cols swapped to
+    their leakage-safe dbt _seasonnorm versions, +2 imputation indicators = 113 contract
+    dim). Fixes the contact->runs CONVERSION-regime over-bias: the 2025 fold bias falls
+    from v4 +0.703 to +0.190, WITHOUT a 2024 normal-year tax (v4 -0.323 -> +0.119).
+    Beats v4 on every gate axis — CV MAE 3.3251 vs 3.4008; pooled calibration NLL 2.8605
+    vs 2.8685, CRPS 2.3505 vs 2.3757, coverage_80 0.7825, distributional pct_over gap
+    0.063; market review (consensus line) pooled MAE-edge +0.086 vs +0.045, dir_acc 0.584
+    vs 0.563. Passes the re-armed regime-adjusted calibration gate (|bias|<=0.25 HARD).
+    bet_paused STAYS true — this is a point-accuracy PROJECTION source, NOT a betting
+    un-pause (the unpause_conditions above are unchanged). 2026-so-far is competitive but
+    does NOT beat the market on point MAE (edge -0.028, n_lined 407) — acceptable for a
+    projection. Rollback: ngboost_eb_enriched_2026.pkl (v4, 369 feats, S3).
 
     '
-  rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_market_blind_2026.pkl
-  rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_market_blind.json
-  selected_at: '2026-06-02T00:00:00Z'
+  rollback_artifact_path: s3://baseball-betting-ml-artifacts/total_runs/ngboost_eb_enriched_2026.pkl
+  rollback_feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
+  selected_at: '2026-06-13T00:00:00Z'
   training_cutoff: 2021+
   training_rows: 10264
   wave5_gates:

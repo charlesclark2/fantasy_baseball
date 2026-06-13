@@ -63,6 +63,14 @@ _MARKET_LEAK_30_4 = {
 }
 _OLD_MARKET_EXCLUDE = set(_MARKET_COLS_TO_EXCLUDE) - _MARKET_LEAK_30_4
 
+# Story 27.7 — season-normalization is now PRODUCTIONIZED in dbt (the leakage-safe AS-OF
+# league baseline in feature_league_contact_baseline → `<col>_seasonnorm` columns). The
+# `--season-normalize` flag therefore points the totals challenger at the contract trained on
+# those `_seasonnorm` columns (see _run_calibration), instead of the old offline in-pandas
+# within-season z-score (which was leaky — it used each season's full mean — and only valid to
+# prove the mechanism; see betting_ml/scripts/regime/totals_season_norm_fix.py for that history).
+# The canonical contact-column list lives in betting_ml/utils/season_normalization.py.
+
 _OUT_DIR = PROJECT_ROOT / "betting_ml" / "evaluation" / "feature_selection" / "promotion_gate"
 
 _TARGETS = {
@@ -81,6 +89,11 @@ _TARGETS = {
     "total_runs": {
         "kind": "regression", "target_col": "total_runs", "metric": "mae",
         "challenger_contract": "betting_ml/models/total_runs/feature_columns_ngboost_tuned_2026.json",
+        # Story 27.7: --season-normalize swaps the challenger to the contract trained on the
+        # dbt `_seasonnorm` contact columns (written by run_ngboost_total_runs_search.py
+        # --season-normalize). Champion stays the deployed raw lineage → deployed-vs-normalized.
+        "challenger_contract_seasonnorm":
+            "betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json",
         "challenger_tuning": "betting_ml/evaluation/tuning_results_ngboost_total_runs.json",
         # totals champion is the eb_enriched lineage (S3 source), NOT a reconstruct.
         "champion_kind": "contract",
@@ -245,6 +258,18 @@ def walk_forward_gate(df, target_col, *, champion: ModelSpec, challenger: ModelS
 
 _TOTALS_LINE_COL = "total_line_consensus"   # market line for the directional pct_over check
 
+# Calibration thresholds. coverage_80 + NLL are HARD spread-calibration gates (regime-robust —
+# they judge distribution SHAPE/uncertainty, not level). _BIAS_MAX + _PCT_OVER_GAP_MAX are
+# DIAGNOSTIC-ONLY as of 2026-06-12 (operator decision): the totals center-bias WAS run-environment
+# REGIME LAG, not a model flaw (Normal refit did NOT fix it — disproved the LogNormal hypothesis),
+# and the gate could not yet separate regime lag from real bias. Story 27.7 yielded the regime-
+# ADJUSTED bias (the season-normalized contact features), so under --season-normalize these two
+# become HARD gates again (see _run_calibration; center_hard); without it they stay DIAGNOSTIC-ONLY.
+_COVERAGE_BAND = (0.75, 0.85)   # [HARD] central-80% PI empirical coverage must land here
+_NLL_TOL = 0.02                 # [HARD] challenger NLL may not exceed champion NLL by more than this
+_BIAS_MAX = 0.25                # |mean(pred) − mean(actual)| ceiling (runs) — HARD under --season-normalize
+_PCT_OVER_GAP_MAX = 0.10        # |model_pct_over − actual_pct_over| ceiling — HARD under --season-normalize
+
 
 def _pooled_output(outs: list[PredictiveOutput]) -> PredictiveOutput:
     """Concatenate per-fold predictive outputs (same kind) into one for pooled scoring."""
@@ -262,15 +287,30 @@ def _pooled_output(outs: list[PredictiveOutput]) -> PredictiveOutput:
 
 
 def _pct_over(out: PredictiveOutput, y, line) -> dict:
-    """Directional check vs the market line: does the model lean over/under like reality?"""
+    """Directional check vs the market line: does the model lean over/under like reality?
+
+    Uses the model's DISTRIBUTIONAL P(Y > line), NOT mean>line. Run totals are right-skewed, so
+    mean>line over-counts overs for ANY unbiased mean predictor (the mean sits above the median-ish
+    line) — that made even a calibrated champion 'fail'. The predictive P(over) is the honest
+    comparison: a calibrated model's mean P(over) ≈ the actual over-rate.
+    """
     line = np.asarray(line, float)
+    y = np.asarray(y, float)
     ok = ~np.isnan(line)
     if ok.sum() == 0:
         return {"n_lined": 0}
+    if out.kind in ("normal", "lognormal"):
+        from scipy.stats import norm
+        arg = (np.log(np.maximum(line, 1e-9)) if out.kind == "lognormal" else line)
+        p_over = 1.0 - norm.cdf((arg - out.loc) / out.scale)
+    elif out.kind == "samples":
+        p_over = (out.samples > line[:, None]).mean(axis=1)
+    else:  # point/binary — no distribution, fall back to the (skew-contaminated) indicator
+        p_over = (out.mean > line).astype(float)
     return {
         "n_lined": int(ok.sum()),
-        "model_pct_over": float(np.mean(out.mean[ok] > line[ok])),
-        "actual_pct_over": float(np.mean(np.asarray(y, float)[ok] > line[ok])),
+        "model_pct_over": float(np.mean(p_over[ok])),
+        "actual_pct_over": float(np.mean(y[ok] > line[ok])),
     }
 
 
@@ -310,14 +350,21 @@ def walk_forward_calibration(df, target_col, *, champion: ModelSpec, challenger:
     return {"per_season": per_season, "pooled": pooled}
 
 
-def _run_calibration(name: str, df: pd.DataFrame) -> dict:
-    """Distribution-calibration comparison (champion vs 30.4 challenger) for a regression
-    target. The verdict the totals override needs: is the challenger's PREDICTED SPREAD
-    honest, not just its point MAE?"""
+def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False) -> dict:
+    """Distribution-calibration comparison (champion vs challenger) for a regression target.
+    The verdict the totals projection promotion needs: is the challenger's PREDICTED SPREAD
+    honest, not just its point MAE? With season_normalize=True (Story 27.7), the challenger is
+    the contract trained on the dbt `_seasonnorm` contact columns (leakage-safe, AS-OF league
+    baseline) — the champion stays the deployed raw lineage, so this is a deployed-vs-normalized
+    comparison."""
     cfg = _TARGETS[name]
     if cfg["kind"] != "regression":
         raise SystemExit(f"--eval-calibration is for distributional regression targets; {name} is {cfg['kind']}.")
-    chal_cols = _contract_cols(cfg["challenger_contract"], df)
+    chal_contract = cfg["challenger_contract"]
+    if season_normalize:
+        chal_contract = cfg.get("challenger_contract_seasonnorm", chal_contract)
+        print(f"  [Story 27.7] challenger = season-normalized contract: {chal_contract}")
+    chal_cols = _contract_cols(chal_contract, df)
     champ_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
                   else _contract_cols(cfg["champion_contract"], df))
     champion, challenger = _build_specs(name, cfg)
@@ -342,21 +389,67 @@ def _run_calibration(name: str, df: pd.DataFrame) -> dict:
     _row("bias (pred-actual)", pc["bias"], ph["bias"], "{:+.4f}", "≈0 = unbiased mean")
     print(f"    PIT hist champ : {pc['pit_hist']}")
     print(f"    PIT hist chal  : {ph['pit_hist']}   (flat≈calibrated; U=overconfident; dome=underconfident)")
+    pct_over_gap = None
     if "pct_over" in ph and ph["pct_over"].get("n_lined"):
-        po = ph["pct_over"]
-        print(f"    pct_over (chal): model={po['model_pct_over']:.3f} vs actual={po['actual_pct_over']:.3f} "
-              f"(n_lined={po['n_lined']}; large gap ⇒ directional over/under bias)")
+        poh = ph["pct_over"]
+        poc = pc.get("pct_over", {})
+        pct_over_gap = abs(poh["model_pct_over"] - poh["actual_pct_over"])
+        if poc.get("n_lined"):
+            print(f"    pct_over champ : model={poc['model_pct_over']:.3f} vs actual={poc['actual_pct_over']:.3f}")
+        print(f"    pct_over chal  : model={poh['model_pct_over']:.3f} vs actual={poh['actual_pct_over']:.3f} "
+              f"(gap={pct_over_gap:.3f}; n_lined={poh['n_lined']}; gap>{_PCT_OVER_GAP_MAX} ⇒ directional bias)")
 
-    # Calibration verdict heuristic (advisory — the operator decides the override).
-    calibrated = (0.75 <= ph["coverage"] <= 0.85)
-    no_nll_regress = ph["nll_mean"] <= pc["nll_mean"] + 0.02
-    verdict = ("CALIBRATION OK — challenger PI is honest; safe to use as projection source"
-               if calibrated and no_nll_regress else
-               "CALIBRATION CONCERN — re-check before using as projection source")
+    # ── Verdict ──────────────────────────────────────────────────────────────
+    # HARD GATES — spread calibration only (coverage_80 + NLL non-regress). These ask "is my
+    # UNCERTAINTY honest?" and are regime-ROBUST (distribution SHAPE, not level), so they fairly
+    # gate a projection source.
+    #
+    # DIAGNOSTIC ONLY — bias + pct_over (the CENTER / directional checks). Operator decision
+    # 2026-06-12: these are NOT gating until the run-environment regime is understood (Story 27.6).
+    # The totals over-bias is REGIME LAG, not a model flaw — a model trained on past seasons lags a
+    # within-season run-environment shift by ~a season (the 2025 fold drives the pooled bias; 2026
+    # ≈ neutral), and market-blind totals lose the market line, the only LIVE regime anchor. A hard
+    # pooled-bias gate would reject good market-blind models for a historical regime miss the gate
+    # cannot yet separate from real bias. Reported per-season + pooled so a human reads them; once
+    # 27.6 gives a regime-ADJUSTED bias, re-promote this to a hard gate. (pct_over is also skew-
+    # contaminated — a mean predictor naturally exceeds a median-ish line >50% on right-skewed
+    # totals; even the champion "fails" the raw gap. Prefer distributional P(over) when regularized.)
+    calibrated = (_COVERAGE_BAND[0] <= ph["coverage"] <= _COVERAGE_BAND[1])
+    no_nll_regress = ph["nll_mean"] <= pc["nll_mean"] + _NLL_TOL
+    bias_ok = abs(ph["bias"]) <= _BIAS_MAX
+    pct_over_ok = (pct_over_gap is None) or (pct_over_gap <= _PCT_OVER_GAP_MAX)
+    # Story 27.7: with --season-normalize the contact features are REGIME-ADJUSTED (the
+    # leakage-safe AS-OF league baseline), so the center-bias is no longer regime-confounded —
+    # bias + pct_over become HARD gates again (as the operator deferred them to be, 2026-06-12).
+    # Without --season-normalize they stay DIAGNOSTIC-ONLY (the prior behavior).
+    center_hard = bool(season_normalize)
+    ok = bool(calibrated and no_nll_regress and (not center_hard or (bias_ok and pct_over_ok)))
+    tier = "HARD" if center_hard else "DIAG"
+    if ok:
+        verdict = (f"CALIBRATION OK — coverage_80 + NLL pass"
+                   + (f"; bias + pct_over pass as HARD gates (regime-adjusted, Story 27.7)."
+                      if center_hard else
+                      " (spread). ⚠ DIRECTIONAL bias/pct_over DIAGNOSTIC-ONLY (regime-confounded; "
+                      "Story 27.6) — read the per-season bias table before using as a projection source."))
+    else:
+        problems = [None if calibrated else "coverage_80 outside [0.75,0.85]",
+                    None if no_nll_regress else "NLL regresses vs champion",
+                    None if (not center_hard or bias_ok) else f"|bias|>{_BIAS_MAX}",
+                    None if (not center_hard or pct_over_ok) else f"pct_over_gap>{_PCT_OVER_GAP_MAX}"]
+        verdict = ("CALIBRATION CONCERN — " + "; ".join(p for p in problems if p)
+                   + (" — regime-adjusted, so center bias now gates (Story 27.7)." if center_hard
+                      else " — spread calibration itself is off, not just the center."))
     print(f"\n  → {verdict}")
-    print(f"     coverage_80 in [0.75,0.85]={calibrated}  NLL non-regress(≤champ+0.02)={no_nll_regress}")
+    print(f"     [HARD]  coverage_80∈[0.75,0.85]={calibrated}  NLL_non_regress={no_nll_regress}")
+    print(f"     [{tier}]  |bias|≤{_BIAS_MAX}={bias_ok} (|bias|={abs(ph['bias']):.3f})  "
+          f"pct_over_gap≤{_PCT_OVER_GAP_MAX}={pct_over_ok}"
+          + (f" (gap={pct_over_gap:.3f})" if pct_over_gap is not None else "")
+          + ("  — HARD (regime-adjusted, 27.7)" if center_hard else "  — NOT gating until regime understood (27.6)"))
     return {"target": name, "pooled": res["pooled"], "per_season": res["per_season"],
-            "calibration_ok": bool(calibrated and no_nll_regress), "verdict": verdict}
+            "calibration_ok": ok, "verdict": verdict,
+            "hard_gates": {"calibrated": calibrated, "no_nll_regress": no_nll_regress},
+            "diagnostics": {"bias_ok": bias_ok, "pct_over_ok": pct_over_ok,
+                            "note": "regime-confounded; not gating until Story 27.6"}}
 
 
 def _build_specs(name: str, cfg: dict) -> tuple[ModelSpec, ModelSpec]:
@@ -416,6 +509,10 @@ def main() -> None:
                          "diagnostics (coverage_80 / PIT / NLL / CRPS / directional bias) for "
                          "champion vs 30.4 challenger. Use for distributional regression targets "
                          "(e.g. total_runs LogNormal) before they become a projection source.")
+    ap.add_argument("--season-normalize", action="store_true",
+                    help="Story 27.6: z-score the contact-quality features within season before "
+                         "the calibration eval — validates the season-normalization fix for the "
+                         "totals run-environment-regime over-bias. Only affects --eval-calibration.")
     args = ap.parse_args()
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -426,7 +523,7 @@ def main() -> None:
     targets = ["home_win", "run_diff", "total_runs"] if args.target == "all" else [args.target]
 
     if args.eval_calibration:
-        results = {t: _run_calibration(t, df) for t in targets}
+        results = {t: _run_calibration(t, df, season_normalize=args.season_normalize) for t in targets}
         out = _OUT_DIR / (f"calibration_{args.target}.json")
         out.write_text(json.dumps(results, indent=2, default=float))
         print(f"\nWrote {out}")

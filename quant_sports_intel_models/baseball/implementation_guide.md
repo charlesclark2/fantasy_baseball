@@ -10373,26 +10373,25 @@ Done when: game dropdown shows real games, prefill from URL params still works, 
 
 ---
 
-#### A0.4.9 — Vercel deployment + custom domain ⬜
+#### A0.4.9 — Vercel deployment + custom domain ✅ (2026-06-13)
 
-Configure `app.credencesports.com` in Vercel with production env vars.
+Deploy frontend to Vercel and wire `credencesports.com` as the production domain.
 
 **Dependencies:** A0.4.1 complete (Cognito env var values known)
 **Note:** Console + DNS task — no code files to edit.
 
-**Local dev CORS note:** API Gateway has CORS configured for `https://app.credencesports.com` only — `localhost:3000` is not in the allowed origins. For local development, point `NEXT_PUBLIC_API_URL` at a local uvicorn instance (`http://localhost:8000`) instead of the production API Gateway URL. Add `NEXT_PUBLIC_API_URL=http://localhost:8000` to `frontend/.env.local` for local dev; Vercel production uses `https://api.credencesports.com`.
+**Local dev CORS note:** For local development, point `NEXT_PUBLIC_API_URL` at a local uvicorn instance (`http://localhost:8000`) instead of the production API Gateway URL. Add `NEXT_PUBLIC_API_URL=http://localhost:8000` to `frontend/.env.local` for local dev; Vercel production uses `https://api.credencesports.com`.
 
-**Tasks:**
-- [ ] In Vercel dashboard → Project Settings → Environment Variables, add for Production: `NEXT_PUBLIC_API_URL=https://api.credencesports.com`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID=<from Cognito console>`, `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID=<from Cognito console>`
-- [ ] In Vercel → Domains, add `app.credencesports.com`; copy the CNAME target Vercel provides
-- [ ] Add the CNAME record in Route 53 hosted zone for `credencesports.com`
-- [ ] Trigger a Vercel redeploy after env vars are set
-- [ ] Confirm `https://app.credencesports.com` loads the login page with valid SSL
+**What was done:**
+- Deployed to Vercel; production branch is `main`
+- Added `credencesports.com` (A record → `216.198.79.1`) and `www.credencesports.com` (CNAME → `5211f442e289ba62.vercel-dns-017.com`) in Route 53; Vercel auto-provisioned SSL
+- Set production env vars in Vercel: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID`, `NEXT_PUBLIC_COGNITO_APP_CLIENT_ID`
+- Added `https://www.credencesports.com` to FastAPI `CORSMiddleware` allow_origins in `app/backend/main.py`
 
 **Acceptance criteria:**
-- [ ] `https://app.credencesports.com` loads with valid SSL
-- [ ] Login authenticates against Cognito (not a stub)
-- [ ] Dashboard loads real picks (confirms `NEXT_PUBLIC_API_URL` is set)
+- [x] `https://credencesports.com` loads with valid SSL
+- [x] Login authenticates against Cognito (not a stub)
+- [x] Dashboard loads real picks (confirms `NEXT_PUBLIC_API_URL` is set)
 
 ---
 
@@ -10911,6 +10910,30 @@ lineup confirmation, clearly labeled so naive users understand it is an early es
 - [ ] `next build` passes with zero errors
 - [ ] `https://app.credencesports.com` is live
 
+#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)
+
+Customize the Cognito invite email so beta users receive a branded welcome message, then provision initial beta accounts.
+
+**Dependencies:** A0.4.9 complete (`credencesports.com` live)
+
+**What was done (2026-06-13):**
+- Customized Cognito invitation message template (Branding → Message templates → Invitation message) with branded HTML email — green header, credentials table, "Get Started" CTA button linking to `https://www.credencesports.com/login`
+- Verified `credencesports.com` as a sending identity in SES with DKIM (RSA-2048) and custom MAIL FROM domain; DNS records auto-pushed to Route 53
+- Configured Cognito to send via SES using `noreply@credencesports.com` (via AWS CLI `update-user-pool --email-configuration`)
+- Submitted SES production access request (AWS support case open as of 2026-06-13); awaiting approval
+
+**Remaining tasks (blocked on SES production access approval):**
+- [ ] Confirm SES production access granted
+- [ ] Send test invite to own email and verify it arrives from `noreply@credencesports.com` without hitting spam
+- [ ] Provision each beta user via Cognito console (Users → Create user → send invitation email)
+- [ ] Confirm each beta user can log in and reach the dashboard
+
+**Acceptance criteria:**
+- [x] Invite email shows Credence Sports branding (not the default AWS template)
+- [ ] Invite email arrives from `noreply@credencesports.com` (not `no-reply@verificationemail.com`)
+- [x] Temp-password login flow works on `https://www.credencesports.com`
+- [ ] All beta users provisioned and able to authenticate
+
 ---
 
 ### A0.5 — Brand Identity & Communications Setup
@@ -10935,14 +10958,18 @@ Tasks:
 
 #### Email Setup
 
-Tasks:
+**Progress as of 2026-06-13 (done during A0.4.18):**
+- [x] `credencesports.com` verified as SES sending identity (DKIM RSA-2048 + custom MAIL FROM domain); DNS records in Route 53
+- [x] Cognito wired to send via SES using `noreply@credencesports.com`
+- [x] SES production access requested (support case open; awaiting approval)
+
+**Remaining tasks:**
 - [ ] Create a Google Workspace account for credencesports.com — $6/user/month Business Starter tier is sufficient for beta
 - [ ] Add the required DNS records (MX, SPF, DKIM, DMARC) to the Route 53 hosted zone — Google Workspace setup wizard generates these automatically; add them as records in Route 53
 - [ ] Create the following mailboxes:
   - `hello@credencesports.com` — primary contact, linked from login page mailto and footer
-  - `noreply@credencesports.com` — outbound notifications and system emails (used by SES in A1.7)
   - `charlie@credencesports.com` — personal Credence Sports address
-- [ ] Verify credencesports.com as a sending identity in AWS SES (us-east-1) — required for A1.7. SES domain verification adds a TXT record to Route 53; request production access at the same time to exit SES sandbox
+  - `noreply@credencesports.com` — outbound notifications/system emails (SES sending identity already configured; no inbox needed)
 - [ ] Update the `mailto:hello@credencesports.com` link on the login page to confirm the mailbox is live and receiving before beta launch
 - [ ] Add email signature to `charlie@credencesports.com`:
   ```
@@ -11037,6 +11064,39 @@ Acceptance criteria:
 - [ ] Test Stripe checkout flow in test mode: complete a test subscription, confirm user is moved to `subscriber` group, confirm access is granted
 - [ ] Test subscription cancellation: confirm access is revoked after Stripe webhook fires
 - [ ] Beta testers with `beta_tester` group bypass the paywall entirely — never see Stripe Checkout
+
+---
+
+### A0.8 — Lambda → Snowflake Network Security (VPC + NAT + Static EIP) ⬜
+
+**Overview:** Lambda currently connects to Snowflake from AWS-managed rotating IPs. To lock down the Snowflake account's network policy, Lambda must egress through a single static Elastic IP. This requires placing the Lambda function inside a VPC with a private subnet and a NAT Gateway that has an Elastic IP attached. The Snowflake network policy (`MY_POLICY`) is then re-enabled at the account level, allowlisting only that EIP.
+
+**Current state (2026-06-13):** `MY_POLICY` was unset at the account level (`ALTER ACCOUNT UNSET NETWORK_POLICY`) to unblock the beta deployment. Snowflake is currently open to all IPs — this must be locked down before real user data or paid subscriptions go live.
+
+**Why this matters:** Without a network policy, anyone with valid Snowflake credentials (e.g. a leaked private key) can connect from any IP. The EIP + network policy combination adds a second factor: credentials alone are insufficient without also coming from the known egress IP.
+
+**Tasks:**
+- [ ] Create a VPC in `us-east-1` with a private subnet and a public subnet
+- [ ] Provision a NAT Gateway in the public subnet with an Elastic IP
+- [ ] Add a route in the private subnet route table: `0.0.0.0/0 → NAT Gateway`
+- [ ] Attach the Lambda function to the private subnet (Lambda console → Configuration → VPC)
+- [ ] Grant the Lambda execution role `ec2:CreateNetworkInterface`, `ec2:DescribeNetworkInterfaces`, `ec2:DeleteNetworkInterface` (required for VPC-attached Lambda)
+- [ ] Confirm Lambda egress IP is the EIP: invoke `/health` and check egress in VPC flow logs or a test echo endpoint
+- [ ] Update `MY_POLICY` in Snowflake to allowlist the EIP:
+  ```sql
+  ALTER NETWORK POLICY MY_POLICY SET ALLOWED_IP_LIST = ('<EIP>/32');
+  ALTER ACCOUNT SET NETWORK_POLICY = MY_POLICY;
+  ```
+- [ ] Verify Lambda can still reach Snowflake after policy is re-applied: hit `/picks/today` and confirm 200
+- [ ] Update `infrastructure/aws_resources.md` with VPC, subnet, NAT GW, and EIP resource IDs
+
+**Acceptance criteria:**
+- [ ] `ALTER ACCOUNT SET NETWORK_POLICY = MY_POLICY` is active (confirmed via `SHOW PARAMETERS LIKE 'NETWORK_POLICY' IN ACCOUNT`)
+- [ ] `MY_POLICY` allowlist contains only the Lambda EIP — no `0.0.0.0/0`
+- [ ] `/picks/today` returns 200 with the policy active
+- [ ] A connection attempt from a non-allowlisted IP is rejected by Snowflake with error 250001
+
+**Note:** VPC attachment increases Lambda cold start by ~200ms and adds ~$30–50/month in NAT Gateway data costs at low beta traffic. Both are acceptable before paid subscriptions justify a VPC endpoint (which eliminates the NAT cost).
 
 ---
 
@@ -12731,6 +12791,148 @@ which it doesn't.)
   it is a projection-source promotion, not a betting un-pause (main-line totals un-pause still needs the
   three-layer/Layer-4 gate per the Epic-10 pause). If no regime-adjusted bias is achievable, record totals as
   HELD-indefinitely and say so explicitly so 30.10 is not left dangling.
+
+---
+
+### 27.7 — Productionize season-normalized contact-quality features in dbt (+ retrain totals)  `[Home: Epic 27]`  ⬜
+
+**▶ New-session prompt:**
+```
+You are picking up Story 27.7 of the MLB betting & fantasy project.
+
+Read first: implementation_guide.md Epic 27 header + Stories 27.6 (the regime grounding/diagnostic that
+produced this), 27.7 (below), 30.10 (the totals hold this closes); the validated prototype
+betting_ml/scripts/regime/totals_season_norm_fix.py and the `--season-normalize` path in
+betting_ml/scripts/promotion_gate_eval.py; the dbt feature models dbt/models/feature/
+feature_pregame_team_features.sql + feature_pregame_game_features.sql; the regime monitor
+betting_ml/scripts/regime/run_env_regime_monitor.py (Task 1) and mart_bullpen_effectiveness.
+
+CONTEXT (verified 2026-06-12): the totals 2025 over-bias (+0.67) is a REAL contact→runs CONVERSION
+regime — 2025 contact got harder (hard-hit% +1.6pts, K% down, xwOBA up) but runs stayed flat (a
+ball-carry/drag change), so the contact-quality feature family inflated in LEVEL without more runs.
+Season-normalizing those features (z-score within season) is VALIDATED offline: totals pooled bias
++0.367→+0.111 (under the 0.25 gate), spread gates pass. OPERATOR DECISION (2026-06-12): productionize
+GLOBALLY in dbt (not contained to totals) so all base models share regime-adjusted semantics.
+
+⚠ THE CRUX — LIVE BASELINE / LEAKAGE: the offline prototype z-scored using each season's FULL mean
+(valid only to test the mechanism). Production MUST use a strictly-prior AS-OF current-season league
+baseline (no future games in the mean), prior-season-anchored early via shrinkage so live serving has a
+baseline before the season accrues. THIS BASELINE IS Task 1's run_env_regime_state (the as-of league
+level) — reuse it, do not invent a second one. Early-season detection lag (~2 wks per the monitor) means
+early-season normalization lags a fresh regime; document it. The dbt feature models already use strict-
+prior as-of joins — follow that pattern.
+
+Conventions: dbtf not dbt; Snowflake via MCP only, fully-qualified, no USE; hand off >1min scripts;
+test Snowflake scripts with real creds before merge; do not git commit/push (user does).
+```
+
+**Status:** ✅ DONE — built, deployed to dbt, retrained + gated + PROMOTED 2026-06-13 (totals v5 projection
+source). **Closes Story 30.10.** Operator chose **global dbt normalization** over contained/Task-3.
+**Ripple:** all base models consume the contact features → totals retrained here; **home_win + run_diff
+retrain in Story 27.8** (the live-model ripple — next).
+
+**Outcome (2026-06-13):** the season-normalized totals challenger (`ngboost_tuned_seasonnorm`, 111
+market-blind feats, contract dim 113) beat the deployed v4 on every axis and PROMOTED as the projection
+source (v5; `bet_paused` STAYS true — projection, not a betting un-pause):
+- Regime fix proven: **2025 fold bias +0.703 (v4) → +0.190 (v5)** with NO 2024 normal-year tax (v4 −0.323 → v5 +0.119).
+- CV MAE 3.3251 vs 3.4008; calibration gate PASS with the **re-armed regime-adjusted bias HARD gate**
+  (|bias|=0.114 ≤ 0.25; coverage_80 0.7825; NLL 2.8605 < champ 2.8685; distributional pct_over gap 0.063).
+- Market review (consensus line): pooled MAE-edge **+0.086** vs champ +0.045, dir_acc 0.584 vs 0.563. Honest
+  caveat: 2026-so-far does NOT beat the market on point MAE (edge −0.028, n_lined 407) — fine for a projection.
+- Leakage-safe dbt baseline live + verified (`home_bp_eb_xwoba_seasonnorm` season means ≈0, sd≈1, zero nulls).
+
+**Build log (2026-06-13) — DDL + wiring complete, all compiles/tests green offline:**
+- `dbt/macros/season_normalize_contact.sql` — `contact_quality_columns()` (canonical 34-name list) +
+  `as_of_contact_baseline()` (strictly-prior AS-OF league mean/std generator; K-shrinkage toward prior season
+  via var `contact_baseline_shrinkage_k`, default 200; window frame excludes the current date = no same-day leak).
+- `feature_pregame_game_features_raw` — the heavy assembly, moved verbatim (public name preserved).
+- `feature_league_contact_baseline` (Task-1 model) — per (game_year, game_date) `<col>__mu`/`<col>__sd` + `n_asof_min`.
+- `feature_pregame_game_features` — thin wrapper: `_raw.*` + 34 `<col>_seasonnorm` z-scores; every consumer transparently gains them.
+- Leakage test `tests/assert_contact_baseline_no_lookahead.sql` (first game_date of each season ⇒ n_asof_min = 0/NULL).
+- `betting_ml/utils/season_normalization.py` (shared Python list + `swap_contact_to_seasonnorm`); drift-guard
+  `test_season_norm_parity` PASSES (dbt macro list == python list, identical order).
+- Retrain/gate wiring: `run_ngboost_total_runs_search.py --season-normalize` (swaps raw contact cols → `_seasonnorm`,
+  writes `feature_columns_ngboost_tuned_seasonnorm_2026.json`); `promotion_gate_eval.py --season-normalize`
+  points the totals challenger at that contract (champion stays deployed raw v5 → deployed-vs-normalized).
+- `baseball_data_mart_inventory.md` refreshed (3 new models + 7 pre-existing undocumented models).
+
+**REMAINING (handoff — each >1 min):** (1) `dbtf build` the 3 models + tests; (2) totals retrain
+`--season-normalize`; (3) `promotion_gate_eval.py --target total_runs --eval-calibration --season-normalize`
+(bias is a HARD gate again — require |bias| ≤0.25 + small distributional pct_over gap + no spread regression);
+(4) if PASS → re-promote totals as projection source (runbook + `record_promotion`), **closes Story 30.10**.
+
+**Goal.** Add leakage-safe, AS-OF season-normalized versions of the contact-quality feature family (xwOBA /
+hard-hit / barrel / exit-velo) to the dbt feature marts, baselined on the strictly-prior current-season
+league level (= Task 1's `run_env_regime_state`, prior-season-anchored early). Retrain + re-promote TOTALS on
+the normalized contract → **closes Story 30.10**.
+
+**Tasks:**
+- [ ] dbt model for the strictly-prior AS-OF league contact baseline (mean+std per contact feature, season-to-
+  date with a prior-season shrinkage anchor) — leakage-safe (no future games), reusing Task 1's run_env state.
+- [ ] Add season-normalized columns for the contact-quality family in `feature_pregame_*`; keep raw columns
+  (so we can compare). Record the POST-imputation contract dim (CONTRACT-GUARD).
+- [ ] Retrain totals (NGBoost Normal, market-blind) on the normalized contract; re-run
+  `promotion_gate_eval.py --target total_runs --eval-calibration` (now bias can be a HARD gate again, regime-
+  adjusted) — REQUIRE bias ≤0.25 AND distributional pct_over gap small AND spread gates pass.
+- [ ] Re-promote totals as the PROJECTION source (runbook + `record_promotion`, Story 30.7). `bet_paused`
+  stays true (projection promotion, not a betting un-pause).
+
+**Acceptance criteria:**
+- [ ] Normalized contact features live in dbt, leakage-safe (strict-prior as-of baseline), raw retained.
+- [ ] Totals retrained; calibration passes (bias + distributional pct_over both clean), no spread regression.
+- [ ] Story 30.10 closed; totals promoted as projection source with lineage recorded; `bet_paused` unchanged.
+
+---
+
+### 27.8 — Retrain home_win (h2h) + run_diff on the normalized contract  `[Home: Epic 27 → feeds Story 30.9]`  ⬜
+
+**▶ New-session prompt:**
+```
+You are picking up Story 27.8 of the MLB betting & fantasy project.
+
+Read first: implementation_guide.md Stories 27.7 (the global dbt normalization this depends on), 27.8
+(below), 30.9 (the learned h2h blend this feeds), 30.4 (the v5 market-blind models being re-promoted);
+the promotion gate betting_ml/utils/promotion_gate.py + betting_ml/scripts/promotion_gate_eval.py; the
+runbook docs/model_promotion_runbook.md (incl. the contract deploy-parity check + Step 3b record_promotion).
+
+CONTEXT (2026-06-12): Story 27.7 globally season-normalizes the contact-quality feature family in dbt to
+fix a run-environment regime over-bias. home_win (xgb_platt) and run_diff (NGBoost Normal) BOTH carry
+those features (home_bp_eb_xwoba etc.) and were just promoted v5 (2026-06-12). They must be RE-trained +
+RE-gated on the normalized contract so all base models share consistent regime-adjusted semantics.
+
+SEQUENCING (important): retrain BOTH base models on the normalized contract and re-gate them FIRST; only
+THEN run Story 30.9 (the learned h2h stack that replaces the hard-set 0.5/0.5 blend) — learning the blend
+on soon-to-be-retrained base models would be wasted. 27.8 (retrain) → 30.9 (re-learn the blend).
+```
+
+**Status:** ⬜ OPEN — specced 2026-06-12 per operator request. The live-model ripple of the 27.7 global
+normalization. **Depends on 27.7** (normalized features must exist). **Sequences before / feeds Story 30.9**
+(the h2h blend re-learn — the user noted 30.9 already re-examines the run_diff×classifier blend, so do the
+retrain first, then 30.9 learns the blend on the retrained models).
+
+**Goal.** Retrain home_win + run_diff on the 27.7 season-normalized contract and re-promote through the
+promotion gate, so the live h2h consensus + run_diff projection ride regime-adjusted features consistent with
+totals.
+
+**Tasks:**
+- [ ] Retrain home_win (xgb_platt recipe) and run_diff (NGBoost Normal) on the normalized contract (one
+  `--target` per invocation — parallelizable; see retrain-per-target convention).
+- [ ] Gate each via `promotion_gate_eval.py --target {home_win,run_diff}` (accuracy: Brier / MAE) — champion =
+  current v5 vs challenger = normalized retrain. Promote on the gate's OWN bars (this is a feature-quality /
+  regime-robustness change, NOT a market-leakage compliance fix — so NO correctness override; it must clear
+  the accuracy bars OR be HELD). Watch the 2024 normal-year tax: if the normalization does not help (or hurts)
+  a target on the gate, HOLD that target and record it — global semantics is the goal, but not at an accuracy
+  regression.
+- [ ] For any target that PROMOTEs: runbook S3 + registry + the contract deploy-parity check + kill-window
+  resets + `record_promotion` lineage (Story 30.7). Bump to v6.
+- [ ] Hand off to Story 30.9 (learned h2h stack) once both base models are settled on the normalized contract.
+
+**Acceptance criteria:**
+- [ ] home_win + run_diff retrained on the normalized contract; per-target gate verdict recorded (PROMOTE/HOLD
+  on the gate's accuracy bars, no override).
+- [ ] Any promotion fully executed (S3 + registry + parity check + kill-window reset + lineage), CONTRACT-GUARD
+  dims correct.
+- [ ] Story 30.9 explicitly sequenced after this (blend re-learn on the retrained base models).
 
 ---
 
@@ -14593,6 +14795,9 @@ script with real creds before merge; do not git commit or push (the user handles
 only when `best_alpha > 0` (same unlock as run_diff itself — see Stories 30.3/30.6 and
 [[project_prod_model_audit_jun2026]]); the OFFLINE stack + gate eval can be built any time, but do not wire it
 live (or claim a live lift) while alpha=0 neutralizes the whole consensus vs the market.
+**⚠ SEQUENCE AFTER Story 27.8:** the two base models (home_win + run_diff) are being retrained on the
+season-normalized contract in 27.8 — learn the blend on the RETRAINED models, not the current v5 ones, or this
+work is wasted. 27.8 (retrain base models) → 30.9 (re-learn the blend).
 
 **Why it exists.** The h2h win probability that feeds the displayed Model Win%, the Layer-4 decision direction,
 and the conviction-gate agreement check is a **hand-set 50/50 average** of two correlated, unequally-accurate
