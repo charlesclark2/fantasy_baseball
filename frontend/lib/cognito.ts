@@ -16,4 +16,8 @@ export function getCognitoUser(email: string) {
   return new CognitoUser({ Username: email, Pool: getPool() })
 }
 
+export function getCurrentCognitoUser() {
+  return getPool().getCurrentUser()
+}
+
 export { AuthenticationDetails }
