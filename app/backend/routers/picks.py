@@ -77,12 +77,12 @@ h2h AS (
         b.game_pk,
         b.home_team,
         b.away_team,
-        'h2h'                                             AS market_type,
-        b.calibrated_win_prob                             AS model_prob,
-        b.h2h_market_implied_prob                         AS market_prob,
-        b.calibrated_win_prob - b.h2h_market_implied_prob AS edge,
-        NULL::FLOAT                                       AS win_prob_ci_low,
-        NULL::FLOAT                                       AS win_prob_ci_high,
+        'h2h'                                                         AS market_type,
+        b.calibrated_win_prob                                         AS model_prob,
+        b.h2h_market_implied_prob                                     AS market_prob,
+        ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
+        NULL::FLOAT                                                   AS win_prob_ci_low,
+        NULL::FLOAT                                                   AS win_prob_ci_high,
         b.game_datetime,
         b.game_date,
         b.prediction_type
@@ -95,10 +95,10 @@ totals AS (
         b.game_pk,
         b.home_team,
         b.away_team,
-        'totals'                                           AS market_type,
-        b.totals_model_prob                                AS model_prob,
-        b.over_prob_consensus                              AS market_prob,
-        b.totals_model_prob - b.over_prob_consensus        AS edge,
+        'totals'                                                       AS market_type,
+        b.totals_model_prob                                            AS model_prob,
+        b.over_prob_consensus                                          AS market_prob,
+        ABS(b.totals_model_prob - b.over_prob_consensus)               AS edge,
         NULL::FLOAT                                        AS win_prob_ci_low,
         NULL::FLOAT                                        AS win_prob_ci_high,
         b.game_datetime,
@@ -130,7 +130,7 @@ WITH ranked AS (
                 p.inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions p
-    WHERE p.game_date = DATEADD(day, -1, CURRENT_DATE)
+    WHERE p.game_date = DATEADD(day, -1, %(today)s::DATE)
       AND p.prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
@@ -139,16 +139,19 @@ h2h AS (
         b.game_pk,
         b.home_team,
         b.away_team,
-        'h2h'                                             AS market_type,
-        b.calibrated_win_prob                             AS model_prob,
-        b.h2h_market_implied_prob                         AS market_prob,
-        b.calibrated_win_prob - b.h2h_market_implied_prob AS edge,
-        NULL::FLOAT                                       AS win_prob_ci_low,
-        NULL::FLOAT                                       AS win_prob_ci_high,
+        'h2h'                                                         AS market_type,
+        b.calibrated_win_prob                                         AS model_prob,
+        b.h2h_market_implied_prob                                     AS market_prob,
+        ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
+        NULL::FLOAT                                                   AS win_prob_ci_low,
+        NULL::FLOAT                                                   AS win_prob_ci_high,
         b.game_datetime,
         b.game_date,
-        b.prediction_type
+        b.prediction_type,
+        clv.actual_outcome
     FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_h2h_decision IN ('home', 'away')
 ),
@@ -157,27 +160,32 @@ totals AS (
         b.game_pk,
         b.home_team,
         b.away_team,
-        'totals'                                           AS market_type,
-        b.totals_model_prob                                AS model_prob,
-        b.over_prob_consensus                              AS market_prob,
-        b.totals_model_prob - b.over_prob_consensus        AS edge,
+        'totals'                                                       AS market_type,
+        b.totals_model_prob                                            AS model_prob,
+        b.over_prob_consensus                                          AS market_prob,
+        ABS(b.totals_model_prob - b.over_prob_consensus)               AS edge,
         NULL::FLOAT                                        AS win_prob_ci_low,
         NULL::FLOAT                                        AS win_prob_ci_high,
         b.game_datetime,
         b.game_date,
-        b.prediction_type
+        b.prediction_type,
+        clv.actual_outcome
     FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
-       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
+       actual_outcome
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
-       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
+       actual_outcome
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST
 LIMIT 1
 """
 
@@ -190,7 +198,7 @@ WITH ranked AS (
             ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
-    WHERE game_date = DATEADD(day, -1, CURRENT_DATE)
+    WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
       AND qualified_bet = TRUE
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
@@ -213,7 +221,7 @@ totals AS (
 SELECT * FROM h2h
 UNION ALL
 SELECT * FROM totals
-ORDER BY game_pk, market_type
+ORDER BY actual_outcome DESC NULLS LAST, game_pk, market_type
 LIMIT 1
 """
 
@@ -284,14 +292,14 @@ def _build_featured_result(
 
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
-    today = date.today().isoformat()
+    today = datetime.now(_ET).date().isoformat()
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None:
         return FeaturedPickResponse(**cached)
 
     try:
         rows = execute_query(_FEATURED_TODAY_QUERY, params={"today": today})
-        yesterday_rows = execute_query(_FEATURED_YESTERDAY_QUERY)
+        yesterday_rows = execute_query(_FEATURED_YESTERDAY_QUERY, params={"today": today})
     except Exception as exc:
         logger.exception("Snowflake query failed for /picks/featured")
         raise HTTPException(status_code=503, detail="Data unavailable") from exc
@@ -316,7 +324,7 @@ def get_featured_pick() -> FeaturedPickResponse:
 
     # No picks today — fall back to yesterday's champion pick (don't cache: re-check on next request)
     try:
-        stale_rows = execute_query(_FEATURED_STALE_FALLBACK_QUERY)
+        stale_rows = execute_query(_FEATURED_STALE_FALLBACK_QUERY, params={"today": today})
     except Exception:
         logger.exception("Snowflake query failed for /picks/featured stale fallback")
         return FeaturedPickResponse(game_pk=None)
@@ -1091,7 +1099,7 @@ def get_picks_today() -> TodayPicksResponse:
     if cached is not None:
         return TodayPicksResponse(**cached)
 
-    today = date.today().isoformat()
+    today = datetime.now(_ET).date().isoformat()
     try:
         rows = execute_query(_TODAY_QUERY, params={"today": today})
         freshness = execute_query(_FRESHNESS_QUERY, params={"today": today})
@@ -1176,11 +1184,10 @@ def get_picks_history() -> HistoryPicksResponse:
 
 @router.get("/ev", response_model=EVPicksResponse)
 def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
-    from datetime import date as _date
-    today_str = _date.today().isoformat()
+    today_str = datetime.now(_ET).date().isoformat()
     if date:
         try:
-            _date.fromisoformat(date)
+            datetime.strptime(date, "%Y-%m-%d")
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
         query = _EV_QUERY_DATE

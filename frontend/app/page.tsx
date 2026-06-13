@@ -106,8 +106,16 @@ function HeroSection() {
 function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
   const edgeStr =
     pick.game_pk !== null && pick.edge != null
-      ? (pick.edge >= 0 ? "+" : "") + pick.edge.toFixed(1) + "%"
+      ? "+" + Math.abs(pick.edge).toFixed(1) + "%"
       : ""
+
+  // model_prob is always P(home wins) for h2h, or P(over) for totals.
+  // When < 0.5 the pick is on the away team / under — flip to the picked side.
+  const awayOrUnder = pick.model_prob != null && pick.model_prob < 0.5
+  const displayModelProb = awayOrUnder && pick.model_prob != null ? 1 - pick.model_prob : pick.model_prob
+  const displayMarketProb = awayOrUnder && pick.market_prob != null ? 1 - pick.market_prob : pick.market_prob
+  const displayCiLow = awayOrUnder && pick.ci_high != null ? 1 - pick.ci_high : pick.ci_low
+  const displayCiHigh = awayOrUnder && pick.ci_low != null ? 1 - pick.ci_low : pick.ci_high
 
   return (
     <section id="featured-pick" className="py-16 md:py-24">
@@ -176,19 +184,19 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                       </span>
                     </div>
                   )}
-                  {pick.model_prob != null && (
+                  {displayModelProb != null && (
                     <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
                       <span className="text-xs uppercase tracking-wider text-gray-500">Model</span>
                       <span className="font-mono text-sm font-semibold text-white">
-                        {(pick.model_prob * 100).toFixed(1)}%
+                        {(displayModelProb * 100).toFixed(1)}%
                       </span>
                     </div>
                   )}
-                  {pick.market_prob != null && (
+                  {displayMarketProb != null && (
                     <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
                       <span className="text-xs uppercase tracking-wider text-gray-500">Market</span>
                       <span className="font-mono text-sm text-gray-400">
-                        {(pick.market_prob * 100).toFixed(1)}%
+                        {(displayMarketProb * 100).toFixed(1)}%
                       </span>
                     </div>
                   )}
@@ -209,13 +217,13 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                 </div>
 
                 {/* Probability bar */}
-                {pick.model_prob != null && pick.market_prob != null && (
+                {displayModelProb != null && displayMarketProb != null && (
                   <div className="mt-6">
                     <ProbabilityBar
-                      ciLow={pick.ci_low}
-                      ciHigh={pick.ci_high}
-                      modelProb={pick.model_prob}
-                      marketProb={pick.market_prob}
+                      ciLow={displayCiLow}
+                      ciHigh={displayCiHigh}
+                      modelProb={displayModelProb}
+                      marketProb={displayMarketProb}
                       showHighConviction={false}
                     />
                   </div>
@@ -444,9 +452,11 @@ function Footer() {
 
 export default async function LandingPage() {
   const base = process.env.NEXT_PUBLIC_API_URL ?? ""
-  const featuredRes = await fetch(`${base}/picks/featured`, { cache: "no-store" }).then((r) =>
-    r.json()
-  )
+  const featuredRes = base
+    ? await fetch(`${base}/picks/featured`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : { game_pk: null }))
+        .catch(() => ({ game_pk: null }))
+    : { game_pk: null }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
