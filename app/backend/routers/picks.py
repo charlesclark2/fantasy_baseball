@@ -284,7 +284,7 @@ def _build_featured_result(
 
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
-    today = date.today().isoformat()
+    today = datetime.now(_ET).date().isoformat()
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None:
         return FeaturedPickResponse(**cached)
@@ -1091,7 +1091,7 @@ def get_picks_today() -> TodayPicksResponse:
     if cached is not None:
         return TodayPicksResponse(**cached)
 
-    today = date.today().isoformat()
+    today = datetime.now(_ET).date().isoformat()
     try:
         rows = execute_query(_TODAY_QUERY, params={"today": today})
         freshness = execute_query(_FRESHNESS_QUERY, params={"today": today})
@@ -1176,8 +1176,7 @@ def get_picks_history() -> HistoryPicksResponse:
 
 @router.get("/ev", response_model=EVPicksResponse)
 def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaults to today")) -> EVPicksResponse:
-    from datetime import date as _date
-    today_str = _date.today().isoformat()
+    today_str = datetime.now(_ET).date().isoformat()
     if date:
         try:
             _date.fromisoformat(date)

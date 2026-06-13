@@ -42,6 +42,7 @@ app.add_middleware(
         "https://app.credencesports.com",
         "http://localhost:3000",
     ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
