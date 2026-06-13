@@ -154,11 +154,38 @@ def main() -> None:
         }
         log.info("Already triggered today: %d", len(already_triggered))
 
+        # Step 2b — games that have a post_lineup prediction written for today.
+        # A game can be in lineup_monitor_state but still lack a post_lineup row if
+        # the lineup_monitor_job failed after recording the trigger but before
+        # lineup_predict completed (e.g., a dbt step errored mid-run). Without this
+        # check, the game is skipped forever on subsequent ticks because it's already
+        # in already_triggered.
+        cur.execute(
+            """
+            SELECT DISTINCT game_pk
+            FROM baseball_data.betting_ml.daily_model_predictions
+            WHERE game_date = %s::date
+              AND prediction_type = 'post_lineup'
+            """,
+            [today],
+        )
+        games_with_post_lineup: set[int] = {row[0] for row in cur.fetchall()}
+        log.info("Games with existing post_lineup prediction: %d", len(games_with_post_lineup))
+
         new_game_pks: list[int] = []
         pitcher_change_pks: list[int] = []
 
         for pk, (home_starter, away_starter) in confirmed.items():
             if pk not in already_triggered:
+                new_game_pks.append(pk)
+            elif pk not in games_with_post_lineup:
+                # Triggered but post_lineup prediction never written — job must have
+                # failed mid-run. Re-trigger so the prediction is produced.
+                log.info(
+                    "Re-triggering game_pk=%d: in lineup_monitor_state but no "
+                    "post_lineup prediction found.",
+                    pk,
+                )
                 new_game_pks.append(pk)
             else:
                 stored_home, stored_away = already_triggered[pk]

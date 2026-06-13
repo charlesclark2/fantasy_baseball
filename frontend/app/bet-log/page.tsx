@@ -378,16 +378,13 @@ function BetLogInner() {
   const [calOpen, setCalOpen]     = useState(false)
 
   const selectedDateStr = format(date, "yyyy-MM-dd")
-  const todayStr        = format(new Date(), "yyyy-MM-dd")
 
   // ── Data fetching ────────────────────────────────────────────────────────
   // EV data for selected date — drives game dropdown AND Bovada odds auto-fill
+  // Always pass explicit date so the S3 cache key matches the EV tracker's key.
   const { data: evData } = useQuery<EVPicksResponse>({
-    queryKey: ["picks-ev", accessToken, selectedDateStr],
-    queryFn:  () => apiFetch(
-      selectedDateStr === todayStr ? "/picks/ev" : `/picks/ev?date=${selectedDateStr}`,
-      {}, accessToken,
-    ),
+    queryKey: ["picks-ev", selectedDateStr],
+    queryFn:  () => apiFetch(`/picks/ev?date=${selectedDateStr}`, {}, accessToken),
     enabled:  !!accessToken,
     staleTime: 5 * 60 * 1000,
   })
@@ -746,6 +743,7 @@ function BetLogInner() {
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Date</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Game</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Market</TableHead>
+                        <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Runs</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">Bookmaker</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Odds</TableHead>
                         <TableHead className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-gray-500 text-right whitespace-nowrap">Stake</TableHead>
@@ -767,6 +765,9 @@ function BetLogInner() {
                             <TableCell className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">{bet.score_date}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-white whitespace-nowrap">{bet.matchup ?? "—"}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">{marketDisplay(bet.market)}</TableCell>
+                            <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">
+                              {bet.total_line != null ? bet.total_line : "—"}
+                            </TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">{bet.bookmaker ?? "—"}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">{fmtOdds(bet.american_odds)}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">${bet.stake}</TableCell>
