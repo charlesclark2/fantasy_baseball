@@ -1079,7 +1079,14 @@ models:
 
   - name: feature_pregame_game_features
     description: >
-      Master pre-game ML feature assembly. One row per game_pk (regular season only).
+      Master pre-game ML feature surface (public name). One row per game_pk (regular
+      season only). Story 27.7: this is now a THIN wrapper over
+      feature_pregame_game_features_raw (the heavy assembly) that passes every raw
+      column through unchanged and ADDS a season-normalized `<col>_seasonnorm` version
+      of each contact-quality feature (the contact->runs conversion regime fix). The
+      season-norm columns z-score each contact feature against a strictly-prior, AS-OF
+      league baseline (feature_league_contact_baseline). Raw columns are retained.
+
       Joins all four upstream feature tables into a single wide row per game:
         - feature_pregame_lineup_features   (home_ / away_ prefix)
         - feature_pregame_starter_features  (home_starter_ / away_starter_ prefix)
@@ -2597,6 +2604,52 @@ models:
         description: Away lineup's 30-day rolling strikeout rate (K/PA) vs left-handed pitchers ending strictly before game_date. Null when no away batters have plate appearances vs LHP in the rolling window.
       - name: has_starter_platoon_data
         description: True when both home and away starters have prior-season xwOBA-against platoon splits (vs LHB and vs RHB) available. False when either starter is a debut or first-season pitcher with no prior-season data; used to flag whether the platoon-adjusted lineup features are populated.
+
+  - name: feature_pregame_game_features_raw
+    description: >
+      RAW pre-game ML feature assembly (Story 27.7). Holds the heavy as-of joins
+      that were previously in feature_pregame_game_features; that public name is now
+      a thin wrapper that adds season-normalized contact columns on top of this model.
+      One row per game_pk. Do NOT add new consumers here — read the public
+      feature_pregame_game_features (it is a superset). Split out so the expensive
+      assembly compiles exactly once.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk]
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+          - unique
+
+  - name: feature_league_contact_baseline
+    description: >
+      Story 27.7, Task 1. Strictly-prior AS-OF league baseline (mean + std) for every
+      contact-quality feature, one row per (game_year, game_date). Used to
+      season-normalize the contact family in feature_pregame_game_features (the
+      contact->runs conversion regime fix). Leakage-safe: each date's stats are
+      computed over STRICTLY-PRIOR same-season games only (window frame excludes the
+      current date), shrunk toward the prior season's full-season stats with pseudo-
+      count `contact_baseline_shrinkage_k` (default 200) so a baseline exists before
+      the current season accrues. Counterpart of the Task-1 run_env_regime_monitor.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_year, game_date]
+    columns:
+      - name: game_year
+        tests:
+          - not_null
+      - name: game_date
+        tests:
+          - not_null
+      - name: n_asof_min
+        description: >
+          Minimum strictly-prior as-of game count across all contact columns for this
+          (season, date). 0/NULL on the first game_date of a season (no prior games) —
+          asserted by the season_normalize_no_lookahead singular test, which guards the
+          leakage-safety of the as-of window.
 
   - name: feature_pregame_odds_features
     description: >

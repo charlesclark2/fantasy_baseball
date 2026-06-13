@@ -6,11 +6,19 @@ a picks table to stdout, and write predictions to Snowflake.
 Run from project root:
     uv run python scripts/predict_today.py
     uv run python scripts/predict_today.py --date 2026-05-01
+
+RANGE / BACKFILL mode (Story 30.7) — score every completed-game date in a window in ONE
+process (models, historical features, and the imputation pipeline are built once and reused
+per date, not reloaded per date), writing is_backfill=TRUE rows. Set TARGET_ENV=prod to write
+the prod schema:
+    TARGET_ENV=prod uv run python scripts/predict_today.py --start 2024-01-01 --is-backfill --no-log-snowflake
+    TARGET_ENV=prod uv run python scripts/predict_today.py --start 2026-03-01 --end 2026-06-12 --is-backfill --no-log-snowflake
 """
 
 from __future__ import annotations
 
 import argparse
+import functools as _functools
 import json
 import math
 import os
@@ -241,7 +249,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(imputed_feature_count)s, %(imputed_discriminative_count)s,
     %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s,
     %(qualified_bet)s,
-    FALSE
+    %(is_backfill)s
 )
 """
 
@@ -575,6 +583,7 @@ def _write_predictions_to_snowflake(
     prediction_type: str,
     lineup_confirmed: bool,
     scoped_game_pks: list[int] | None,
+    is_backfill: bool,
     p_home_win_ngb: np.ndarray,
     p_home_win_clf: np.ndarray,
     loc_tot: np.ndarray,
@@ -788,6 +797,7 @@ def _write_predictions_to_snowflake(
                 (l4_h2h_decision is not None and l4_h2h_decision != "abstain")
                 or (l4_tot_decision is not None and l4_tot_decision != "abstain")
             ),
+            "is_backfill": is_backfill,
         }))
 
     if _n_serving_guard:
@@ -853,6 +863,18 @@ def _write_predictions_to_snowflake(
                 _scope = (f"game_pks {sorted(scoped_game_pks)} (scoped overwrite)"
                           if scoped_game_pks else "(full-slate overwrite)")
                 print(f"  Deleted existing {prediction_type} rows for {target_date} {_scope}")
+            if is_backfill:
+                # Story 30.7 — idempotent backfill: clear ONLY prior is_backfill rows of THIS
+                # model_version for this date, so re-runs don't accumulate duplicates. Scoped by
+                # (score_date, model_version, is_backfill=TRUE) → never touches live rows
+                # (is_backfill=FALSE) or any other version's backfill.
+                cur.execute(
+                    f"DELETE FROM {_ML_SCHEMA}.daily_model_predictions "
+                    f"WHERE score_date = %(d)s AND model_version = %(mv)s AND is_backfill = TRUE",
+                    {"d": target_date, "mv": MODEL_VERSION},
+                )
+                print(f"  [is_backfill] cleared prior backfill rows for {target_date} "
+                      f"model_version={MODEL_VERSION} ({cur.rowcount} row(s))")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
             print(f"\nWrote {len(rows)} prediction row(s) to "
@@ -1128,6 +1150,23 @@ def _parse_args() -> argparse.Namespace:
         help="Target game date (default: today)",
     )
     parser.add_argument(
+        "--start",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help=(
+            "RANGE mode: score every completed-game date from --start through --end "
+            "(default today) in ONE process — the registry models, historical features, and "
+            "imputation pipeline are built once and reused per date. Intended for the Story 30.7 "
+            "backfill: combine with --is-backfill. Overrides --date when set."
+        ),
+    )
+    parser.add_argument(
+        "--end",
+        metavar="YYYY-MM-DD",
+        default=None,
+        help="RANGE mode end date (inclusive; default today). Only used with --start.",
+    )
+    parser.add_argument(
         "--no-log-snowflake",
         action="store_true",
         default=False,
@@ -1155,7 +1194,79 @@ def _parse_args() -> argparse.Namespace:
             "are confirmed (post-lineup re-run via lineup_monitor_sensor)."
         ),
     )
+    parser.add_argument(
+        "--is-backfill",
+        action="store_true",
+        default=False,
+        help=(
+            "Story 30.7 — mark these rows is_backfill=TRUE (generated after the fact for a "
+            "historical --date, NOT served live). Idempotent: re-running a date deletes only "
+            "the prior is_backfill rows of THIS model_version for that date (never live rows "
+            "or other versions) before inserting. Use ONLY to backfill a promoted model over "
+            "past games; never for live morning/post_lineup runs."
+        ),
+    )
     return parser.parse_args()
+
+
+# ---------------------------------------------------------------------------
+# Setup memoization — the registry models, the historical feature pull, and the
+# fitted imputation pipeline are date-INDEPENDENT. Caching them lets a multi-date
+# backfill (--start/--end) build them ONCE and reuse across every date instead of
+# re-loading + re-fitting per date (the dominant cost). A single live --date run
+# hits each cache exactly once, so behaviour is unchanged.
+# ---------------------------------------------------------------------------
+
+_PIPELINE_CACHE: dict = {}
+
+
+@_functools.lru_cache(maxsize=2)
+def _load_hist_features_cached(min_games_played: int) -> pd.DataFrame:
+    return load_features(min_games_played=min_games_played)
+
+
+@_functools.lru_cache(maxsize=8)
+def _load_model_cached(target: str, variant: str):
+    return load_model(target, variant)
+
+
+def _fit_pipeline_cached(X_hist: pd.DataFrame):
+    """Fit the imputation pipeline ONCE per (column-set) and cache (pipeline, imputed-cols).
+    X_hist is derived from the cached historical frame, so the same column set means the
+    same data → a cached fit is valid."""
+    key = tuple(X_hist.columns)
+    hit = _PIPELINE_CACHE.get(key)
+    if hit is None:
+        pipeline = build_imputation_pipeline()
+        X_hist_imp = pipeline.fit_transform(X_hist)
+        X_hist_imp = X_hist_imp.select_dtypes(include=[np.number])
+        hit = (pipeline, X_hist_imp)
+        _PIPELINE_CACHE[key] = hit
+    return hit
+
+
+def _resolve_target_dates(args) -> list[str]:
+    """Single --date (default) or the list of completed-game dates in [--start, --end].
+    Range mode powers the Story 30.7 backfill: one process, setup built once."""
+    if not getattr(args, "start", None):
+        return [args.date]
+    end = args.end or date.today().isoformat()
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT DISTINCT game_date FROM baseball_data.betting.mart_game_results "
+            "WHERE game_date BETWEEN %(s)s AND %(e)s "
+            "AND home_final_score IS NOT NULL AND away_final_score IS NOT NULL "
+            "ORDER BY game_date",
+            {"s": args.start, "e": end},
+        )
+        dates = [r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])
+                 for r in cur.fetchall()]
+    finally:
+        conn.close()
+    print(f"Range mode: {len(dates)} completed-game date(s) {args.start} → {end}")
+    return dates
 
 
 # ---------------------------------------------------------------------------
@@ -1163,16 +1274,14 @@ def _parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
-    args = _parse_args()
-    target_date = args.date
+def main(target_date: str, args) -> None:
     print(f"Scoring games for {target_date}")
 
     df_today = load_todays_features(target_date)
 
     if df_today.empty:
         print(f"No games found for {target_date}.")
-        sys.exit(0)
+        return
 
     print(f"  Found {len(df_today)} game(s) for {target_date}")
 
@@ -1194,7 +1303,7 @@ def main() -> None:
             print(f"  Lineup-confirmed filter: {before} → {len(df_today)} game(s) with both lineups confirmed")
             if df_today.empty:
                 print("No games with confirmed lineups found.")
-                sys.exit(0)
+                return
         else:
             print("[WARN] --lineup-confirmed set but has_full_lineup columns absent; not filtering.")
 
@@ -1207,7 +1316,7 @@ def main() -> None:
         print(f"  game-pks filter: {before} → {len(df_today)} game(s) matching {sorted(target_pks)}")
         if df_today.empty:
             print("No matching games found for the specified game_pks.")
-            sys.exit(0)
+            return
         # A1.12 — remember the explicit subset so the post_lineup overwrite DELETE
         # is scoped to just these games (and doesn't wipe the rest of the slate).
         scoped_game_pks = sorted(int(pk) for pk in df_today["game_pk"].tolist())
@@ -1244,7 +1353,7 @@ def main() -> None:
     print(f"  home_win features={len(hw_feat_cols)}")
 
     print("Loading historical features for imputation pipeline fitting...")
-    df_hist = load_features(min_games_played=15)
+    df_hist = _load_hist_features_cached(15)   # cached across dates in a backfill range
     print(f"  Loaded {len(df_hist):,} historical rows")
 
     # Build a superset of all features needed by any NGBoost model so the imputer
@@ -1266,9 +1375,7 @@ def main() -> None:
     X_today_raw = df_today[[c for c in feature_cols_today if c in df_today.columns]]
     X_today_raw = X_today_raw.reindex(columns=X_hist.columns, fill_value=np.nan)
 
-    pipeline = build_imputation_pipeline()
-    X_hist_imp = pipeline.fit_transform(X_hist)
-    X_hist_imp = X_hist_imp.select_dtypes(include=[np.number])
+    pipeline, X_hist_imp = _fit_pipeline_cached(X_hist)   # fit once, reused across dates
 
     X_today_imp = pipeline.transform(X_today_raw)
     X_today_imp = X_today_imp.reindex(columns=X_hist_imp.columns, fill_value=0.0)
@@ -1287,9 +1394,9 @@ def main() -> None:
     )
 
     print("Loading production models from registry...")
-    ngb_total = load_model("total_runs", "prod")
-    ngb_diff  = load_model("run_differential", "prod")
-    clf_hw    = load_model("home_win", "prod")
+    ngb_total = _load_model_cached("total_runs", "prod")
+    ngb_diff  = _load_model_cached("run_differential", "prod")
+    clf_hw    = _load_model_cached("home_win", "prod")
     print(f"  total_runs: {type(ngb_total).__name__}")
     print(f"  run_differential: {type(ngb_diff).__name__}")
     print(f"  home_win: {type(clf_hw).__name__}")
@@ -1552,6 +1659,7 @@ def main() -> None:
         prediction_type=args.prediction_type,
         lineup_confirmed=args.lineup_confirmed,
         scoped_game_pks=scoped_game_pks,
+        is_backfill=args.is_backfill,
         p_home_win_ngb=p_home_win_ngb,
         p_home_win_clf=p_home_win_clf,
         loc_tot=loc_tot,
@@ -1570,4 +1678,20 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    _args = _parse_args()
+    _dates = _resolve_target_dates(_args)
+    _failures: list[str] = []
+    for _i, _d in enumerate(_dates, 1):
+        if len(_dates) > 1:
+            print(f"\n===== [{_i}/{len(_dates)}] {_d} =====")
+        try:
+            main(_d, _args)
+        except Exception as _exc:  # one bad date must not abort a multi-date backfill
+            if len(_dates) == 1:
+                raise
+            print(f"  ✗ {_d} failed: {_exc} — continuing")
+            _failures.append(_d)
+    if _failures:
+        print(f"\n{len(_failures)}/{len(_dates)} date(s) failed (re-run is idempotent per "
+              f"date+version): {_failures}")
+        sys.exit(1)

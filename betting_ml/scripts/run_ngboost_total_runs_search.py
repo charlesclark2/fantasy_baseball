@@ -72,10 +72,25 @@ def _prepare_folds(df, feature_cols: list[str]) -> list[dict]:
     return folds
 
 
-def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) -> None:
+def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True,
+               dist_grid: list[str] | None = None, season_normalize: bool = False) -> None:
     from ngboost import NGBRegressor
 
+    from betting_ml.utils.season_normalization import swap_contact_to_seasonnorm
+
+    # Story 30.4 follow-up: the totals PROJECTION product surfaces the predictive MEAN, so a
+    # right-skewed LogNormal (mean=exp(μ+σ²/2) > median) systematically over-projects the total
+    # — the 30.4 LogNormal challenger leaned over 70% vs 48% actual (calibration_total_runs.json).
+    # Restrict to Normal for a directionally-neutral projection. `--dist Normal` forces this;
+    # default keeps both for diagnostic comparison.
+    grid = dist_grid if dist_grid else _DIST_GRID
+
     model_name = "ngboost_nonseq" if exclude_sequential else "ngboost_tuned"
+    if season_normalize:
+        # Story 27.7: train on the dbt-provided season-normalized contact columns.
+        # Distinct model_name so the contract/artifact don't clobber the raw v5
+        # champion until this is gated + promoted.
+        model_name += "_seasonnorm"
 
     print("Loading features from Snowflake...")
     df = load_features()
@@ -110,6 +125,18 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
             f"--exclude-sequential: dropped {len(seq_removed)} sequential cols "
             f"→ faithful no-sequential baseline (documented champion). model_name={model_name}"
         )
+    if season_normalize:
+        # Swap each contact-quality column for its leakage-safe dbt `_seasonnorm`
+        # counterpart (Story 27.7). The saved contract then records the `_seasonnorm`
+        # names so predict_today serves the same normalized values (train/serve parity).
+        feature_cols, _swapped, _missing = swap_contact_to_seasonnorm(feature_cols, df.columns)
+        print(f"Story 27.7: season-normalized {len(_swapped)} contact cols → _seasonnorm")
+        if _missing:
+            raise SystemExit(
+                f"--season-normalize: {len(_missing)} contact cols have no _seasonnorm column in "
+                f"feature_pregame_game_features (dbt Story 27.7 build stale?): {_missing}. "
+                "Run the dbt build before retraining.")
+
     print(f"Using {len(feature_cols)} features (market-blind)")
     print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
 
@@ -123,12 +150,13 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
     grid_results = []
     best_viable = None
 
-    print("\nRunning NGBoost grid search — total_runs (4 combinations)...")
+    print(f"\nRunning NGBoost grid search — total_runs "
+          f"({len(_N_ESTIMATORS_GRID) * len(grid)} combinations, dist∈{grid})...")
     print(f"{'n_estimators':>12}  {'dist':>10}  {'CV MAE':>10}  {'viable':>6}")
     print("-" * 48)
 
     for n_est in _N_ESTIMATORS_GRID:
-        for dist_name in _DIST_GRID:
+        for dist_name in grid:
             dist_cls = _get_dist_class(dist_name)
             fold_maes = []
             viable = True
@@ -436,7 +464,19 @@ if __name__ == "__main__":
     if "--report-only" in sys.argv:
         generate_report()
     else:
+        # --dist Normal|LogNormal restricts the search grid to one distribution.
+        # Story 30.4 follow-up: use `--dist Normal` for the totals projection-source retrain
+        # (avoids LogNormal's over-projecting right-skewed mean — see calibration check).
+        dist_grid = None
+        if "--dist" in sys.argv:
+            i = sys.argv.index("--dist")
+            if i + 1 < len(sys.argv) and sys.argv[i + 1] in _DIST_GRID:
+                dist_grid = [sys.argv[i + 1]]
+            else:
+                raise SystemExit(f"--dist must be one of {_DIST_GRID}")
         run_search(
             exclude_sequential="--exclude-sequential" in sys.argv,
             mlflow_enabled="--no-mlflow" not in sys.argv,
+            dist_grid=dist_grid,
+            season_normalize="--season-normalize" in sys.argv,
         )

@@ -5,43 +5,29 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.4171923323662825,
-      "viable": true,
-      "lognormal_note": null
-    },
-    {
-      "n_estimators": 200,
-      "dist": "LogNormal",
-      "cv_mae": 3.448667198014288,
+      "cv_mae": 3.3643362986616197,
       "viable": true,
       "lognormal_note": null
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.367500920674336,
-      "viable": true,
-      "lognormal_note": null
-    },
-    {
-      "n_estimators": 500,
-      "dist": "LogNormal",
-      "cv_mae": 3.397140462351057,
+      "cv_mae": 3.325100843168874,
       "viable": true,
       "lognormal_note": null
     }
   ],
   "best_n_estimators": 500,
   "best_dist": "Normal",
-  "best_cv_mae": 3.367500920674336,
-  "exclude_sequential": true,
-  "mlflow_run_id": "9e90b9b69caf44b6bbeeecd43df29b4c",
+  "best_cv_mae": 3.325100843168874,
+  "exclude_sequential": false,
+  "mlflow_run_id": "2dab019ba844485dbca3a2cf64d1d2cc",
   "persisted_models": [
     {
       "target": "total_runs",
-      "model_name": "ngboost_nonseq",
+      "model_name": "ngboost_tuned_seasonnorm",
       "eval_year": 2026,
-      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_nonseq_2026.pkl"
+      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_seasonnorm_2026.pkl"
     }
   ]
 }

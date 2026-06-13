@@ -1,0 +1,231 @@
+{
+  "total_runs": {
+    "target": "total_runs",
+    "pooled": {
+      "champion": {
+        "n": 4781,
+        "level": 0.8,
+        "coverage": 0.7774524158125915,
+        "coverage_gap": -0.022547584187408543,
+        "pit_ks": 0.0710782277396873,
+        "pit_hist": [
+          526,
+          668,
+          563,
+          472,
+          456,
+          410,
+          381,
+          385,
+          382,
+          538
+        ],
+        "nll_mean": 2.8684944739919636,
+        "crps_mean": 2.3757106743919545,
+        "mean_pred": 9.00193253768436,
+        "mean_actual": 8.829115247856096,
+        "bias": 0.17281728982826294,
+        "pct_over": {
+          "n_lined": 3443,
+          "model_pct_over": 0.5548138418514744,
+          "actual_pct_over": 0.48388033691548066
+        }
+      },
+      "challenger": {
+        "n": 4781,
+        "level": 0.8,
+        "coverage": 0.7824722861326082,
+        "coverage_gap": -0.017527713867391825,
+        "pit_ks": 0.06536122825165291,
+        "pit_hist": [
+          499,
+          664,
+          564,
+          492,
+          451,
+          425,
+          391,
+          370,
+          384,
+          541
+        ],
+        "nll_mean": 2.8605202108975956,
+        "crps_mean": 2.350539719718959,
+        "mean_pred": 8.942776285916384,
+        "mean_actual": 8.829115247856096,
+        "bias": 0.11366103806028782,
+        "pct_over": {
+          "n_lined": 3443,
+          "model_pct_over": 0.54710736891996,
+          "actual_pct_over": 0.48388033691548066
+        }
+      }
+    },
+    "per_season": [
+      {
+        "season": 2024,
+        "champion": {
+          "n": 2003,
+          "level": 0.8,
+          "coverage": 0.8017973040439341,
+          "coverage_gap": 0.0017973040439340782,
+          "pit_ks": 0.03389658402440433,
+          "pit_hist": [
+            145,
+            251,
+            235,
+            200,
+            186,
+            177,
+            186,
+            186,
+            185,
+            252
+          ],
+          "nll_mean": 2.824619621842908,
+          "crps_mean": 2.264724302678986,
+          "mean_pred": 8.39591735631875,
+          "mean_actual": 8.716425361957064,
+          "bias": -0.32050800563831494
+        },
+        "challenger": {
+          "n": 2003,
+          "level": 0.8,
+          "coverage": 0.7858212680978532,
+          "coverage_gap": -0.014178731902146802,
+          "pit_ks": 0.05904503739957451,
+          "pit_hist": [
+            210,
+            266,
+            229,
+            213,
+            191,
+            177,
+            183,
+            142,
+            173,
+            219
+          ],
+          "nll_mean": 2.82484311763142,
+          "crps_mean": 2.2724030758754203,
+          "mean_pred": 8.834977716156871,
+          "mean_actual": 8.716425361957064,
+          "bias": 0.11855235419980659
+        }
+      },
+      {
+        "season": 2025,
+        "champion": {
+          "n": 2027,
+          "level": 0.8,
+          "coverage": 0.7390231869758264,
+          "coverage_gap": -0.06097681302417368,
+          "pit_ks": 0.13170815508625572,
+          "pit_hist": [
+            319,
+            311,
+            242,
+            192,
+            189,
+            166,
+            134,
+            137,
+            127,
+            210
+          ],
+          "nll_mean": 2.9192712290815197,
+          "crps_mean": 2.494421928089566,
+          "mean_pred": 9.589579419761314,
+          "mean_actual": 8.886038480513074,
+          "bias": 0.7035409392482403
+        },
+        "challenger": {
+          "n": 2027,
+          "level": 0.8,
+          "coverage": 0.7710902812037493,
+          "coverage_gap": -0.028909718796250705,
+          "pit_ks": 0.08972482279603766,
+          "pit_hist": [
+            227,
+            301,
+            248,
+            201,
+            181,
+            172,
+            156,
+            162,
+            142,
+            237
+          ],
+          "nll_mean": 2.8993567675378684,
+          "crps_mean": 2.4306982580144934,
+          "mean_pred": 9.075632230005564,
+          "mean_actual": 8.886038480513074,
+          "bias": 0.18959374949248975
+        }
+      },
+      {
+        "season": 2026,
+        "champion": {
+          "n": 751,
+          "level": 0.8,
+          "coverage": 0.8162450066577897,
+          "coverage_gap": 0.016245006657789607,
+          "pit_ks": 0.06469479271442374,
+          "pit_hist": [
+            62,
+            106,
+            86,
+            80,
+            81,
+            67,
+            61,
+            62,
+            70,
+            76
+          ],
+          "nll_mean": 2.848463643483346,
+          "crps_mean": 2.351313858541113,
+          "mean_pred": 9.032143161260029,
+          "mean_actual": 8.976031957390147,
+          "bias": 0.05611120386988233
+        },
+        "challenger": {
+          "n": 751,
+          "level": 0.8,
+          "coverage": 0.8042609853528628,
+          "coverage_gap": 0.0042609853528627895,
+          "pit_ks": 0.043998574817579184,
+          "pit_hist": [
+            62,
+            97,
+            87,
+            78,
+            79,
+            76,
+            52,
+            66,
+            69,
+            85
+          ],
+          "nll_mean": 2.8508524579046752,
+          "crps_mean": 2.3425854460752302,
+          "mean_pred": 8.871699770016978,
+          "mean_actual": 8.976031957390147,
+          "bias": -0.10433218737316885
+        }
+      }
+    ],
+    "calibration_ok": true,
+    "verdict": "CALIBRATION OK (spread) \u2014 coverage_80 + NLL pass. \u26a0 DIRECTIONAL bias/pct_over are DIAGNOSTIC-ONLY (regime-confounded; Story 27.6) \u2014 read the per-season bias table before using as a projection source.",
+    "hard_gates": {
+      "calibrated": true,
+      "no_nll_regress": true
+    },
+    "diagnostics": {
+      "bias_ok": true,
+      "pct_over_ok": true,
+      "note": "regime-confounded; not gating until Story 27.6"
+    }
+  }
+}
