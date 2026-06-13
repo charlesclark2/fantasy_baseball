@@ -1,83 +1,51 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { ProbabilityBar } from "@/components/probability-bar"
+import { Nav } from "@/components/nav"
 import {
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   Database,
+  Eye,
   FlaskConical,
+  ShieldCheck,
   Zap,
 } from "lucide-react"
 
 // ---------------------------------------------------------------------------
-// MOCK DATA — replace with API calls when backend is wired up
+// API types
 // ---------------------------------------------------------------------------
-export const MOCK_DATA = {
-  todaysPick: {
-    matchup: "HOU @ NYM",
-    gameTime: "7:10 PM ET",
-    market: "Totals Over 8.5",
-    edge: "+4.2%",
-    modelProb: 0.583,
-    marketProb: 0.541,
-    ciLow: 0.48,
-    ciHigh: 0.61,
-    conviction: "HIGH CONVICTION" as const,
-    justification:
-      "Starter suppression signals are elevated — Houston's rotation carries a significant xwOBA advantage over NYM's lineup in this matchup. The 80% credible interval sits entirely above the Bovada implied probability, satisfying the high-conviction gate.",
-  },
-  yesterdaysResult: {
-    label: "Yesterday",
-    matchup: "NYY @ BOS Under 8.0",
-    outcome: "Won" as const,
-  },
-  trackRecord: {
-    totalPicks: 247,
-    winRate: "54.3%",
-    meanClv: "+2.1%",
-    netPnl: "+$312",
-  },
+
+type YesterdayResult = {
+  matchup: string
+  market_type: string
+  outcome: string
+}
+
+type FeaturedPick = {
+  game_pk: string | null
+  matchup: string
+  game_time_et: string
+  market_type: string
+  edge: number
+  model_prob: number
+  market_prob: number
+  ci_low: number
+  ci_high: number
+  conviction_label: string
+  ai_summary: string
+  yesterday: YesterdayResult | null
+  is_stale?: boolean
+  is_preliminary?: boolean
+  pick_date?: string | null
 }
 
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function Navbar() {
-  return (
-    <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        {/* Wordmark */}
-        <Link href="/" className="flex items-center gap-0 text-lg font-bold tracking-tight">
-          <span className="text-[#10b981]">Credence</span>
-          <span className="text-white"> Sports</span>
-        </Link>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            asChild
-            className="text-gray-400 hover:text-white hover:bg-[#141414]"
-          >
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button
-            size="sm"
-            asChild
-            className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
-          >
-            <Link href="/login">Join Beta</Link>
-          </Button>
-        </div>
-      </div>
-    </nav>
-  )
-}
 
 function HeroSection() {
   return (
@@ -135,20 +103,29 @@ function HeroSection() {
   )
 }
 
-function FeaturedPickCard() {
-  const { todaysPick: pick, yesterdaysResult: yesterday } = MOCK_DATA
+function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
+  const edgeStr =
+    pick.game_pk !== null && pick.edge != null
+      ? (pick.edge >= 0 ? "+" : "") + pick.edge.toFixed(1) + "%"
+      : ""
 
   return (
     <section id="featured-pick" className="py-16 md:py-24">
       <div className="mx-auto max-w-2xl px-4">
-        <div className="rounded-xl border border-[#262626] bg-[#141414] shadow-xl shadow-black/40"
+        <div
+          className="rounded-xl border border-[#262626] bg-[#141414] shadow-xl shadow-black/40"
           style={{ borderLeft: "3px solid #10b981" }}
         >
           <div className="p-6 md:p-8">
             {/* Header row */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-widest text-[#10b981]">
-                Today&apos;s Pick
+                {pick.is_stale && pick.pick_date
+                  ? new Date(pick.pick_date + "T12:00:00").toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    }) + " Pick"
+                  : "Today’s Pick"}
               </span>
               <span className="text-xs text-gray-500">
                 {new Date().toLocaleDateString("en-US", {
@@ -159,78 +136,113 @@ function FeaturedPickCard() {
               </span>
             </div>
 
-            {/* Matchup */}
-            <div className="mt-4">
-              <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-                {pick.matchup}
-              </h2>
-              <p className="mt-1 text-sm text-gray-500">{pick.gameTime}</p>
-            </div>
-
-            {/* Market badge */}
-            <div className="mt-4">
-              <Badge className="bg-blue-500/15 text-blue-400 border border-blue-500/25 text-sm font-medium">
-                {pick.market}
-              </Badge>
-            </div>
-
-            {/* Stat chips */}
-            <div className="mt-5 flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                <span className="text-xs uppercase tracking-wider text-gray-500">Edge</span>
-                <span className="font-mono text-sm font-bold text-[#10b981]">
-                  {pick.edge}
-                </span>
+            {/* Stale banner */}
+            {pick.is_stale && pick.game_pk !== null && (
+              <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#111] px-3 py-2">
+                <p className="text-xs text-gray-400">
+                  Today&apos;s analysis is processing — new picks arrive after lineup confirmation.
+                </p>
               </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                <span className="text-xs uppercase tracking-wider text-gray-500">Model</span>
-                <span className="font-mono text-sm font-semibold text-white">
-                  {(pick.modelProb * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                <span className="text-xs uppercase tracking-wider text-gray-500">Market</span>
-                <span className="font-mono text-sm text-gray-400">
-                  {(pick.marketProb * 100).toFixed(1)}%
-                </span>
-              </div>
-            </div>
+            )}
 
-            {/* Conviction badge */}
-            <div className="mt-5">
-              <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 text-xs font-bold uppercase tracking-widest">
-                {pick.conviction}
-              </Badge>
-            </div>
+            {pick.game_pk === null ? (
+              <p className="mt-6 text-sm leading-relaxed text-gray-400">
+                No picks available right now — check back after ~9am ET when the morning pipeline runs.
+              </p>
+            ) : (
+              <>
+                {/* Matchup */}
+                <div className="mt-4">
+                  <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
+                    {pick.matchup}
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">{pick.game_time_et}</p>
+                </div>
 
-            {/* Probability bar */}
-            <div className="mt-6">
-              <ProbabilityBar
-                ciLow={pick.ciLow}
-                ciHigh={pick.ciHigh}
-                modelProb={pick.modelProb}
-                marketProb={pick.marketProb}
-              />
-            </div>
+                {/* Market badge */}
+                <div className="mt-4">
+                  <Badge className="bg-blue-500/15 text-blue-400 border border-blue-500/25 text-sm font-medium">
+                    {pick.market_type}
+                  </Badge>
+                </div>
 
-            {/* Justification */}
-            <p className="mt-6 text-sm leading-relaxed text-gray-400">
-              {pick.justification}
-            </p>
+                {/* Stat chips */}
+                <div className="mt-5 flex flex-wrap gap-3">
+                  {edgeStr && (
+                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
+                      <span className="text-xs uppercase tracking-wider text-gray-500">Edge</span>
+                      <span className="font-mono text-sm font-bold text-[#10b981]">
+                        {edgeStr}
+                      </span>
+                    </div>
+                  )}
+                  {pick.model_prob != null && (
+                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
+                      <span className="text-xs uppercase tracking-wider text-gray-500">Model</span>
+                      <span className="font-mono text-sm font-semibold text-white">
+                        {(pick.model_prob * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                  {pick.market_prob != null && (
+                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
+                      <span className="text-xs uppercase tracking-wider text-gray-500">Market</span>
+                      <span className="font-mono text-sm text-gray-400">
+                        {(pick.market_prob * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-            <Separator className="my-6 bg-[#262626]" />
+                {/* Conviction / preliminary badge */}
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {!pick.is_stale && pick.conviction_label && (
+                    <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 text-xs font-bold uppercase tracking-widest">
+                      {pick.conviction_label}
+                    </Badge>
+                  )}
+                  {pick.is_preliminary && (
+                    <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/25 text-xs font-semibold">
+                      Preliminary — Lineups Not Yet Confirmed
+                    </Badge>
+                  )}
+                </div>
 
-            {/* Yesterday's result */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-xs text-gray-500">
-                <span className="text-gray-400 font-medium">{yesterday.label}:</span>{" "}
-                {yesterday.matchup}
-              </span>
-              <Badge className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/25 text-xs">
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                Won
-              </Badge>
-            </div>
+                {/* Probability bar */}
+                {pick.model_prob != null && pick.market_prob != null && (
+                  <div className="mt-6">
+                    <ProbabilityBar
+                      ciLow={pick.ci_low}
+                      ciHigh={pick.ci_high}
+                      modelProb={pick.model_prob}
+                      marketProb={pick.market_prob}
+                      showHighConviction={false}
+                    />
+                  </div>
+                )}
+
+                {/* AI summary */}
+                <p className="mt-6 text-sm leading-relaxed text-gray-400">
+                  {pick.ai_summary}
+                </p>
+
+                {pick.yesterday && (
+                  <>
+                    <Separator className="my-6 bg-[#262626]" />
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="text-xs text-gray-500">
+                        <span className="text-gray-400 font-medium">Yesterday:</span>{" "}
+                        {pick.yesterday.matchup}
+                      </span>
+                      <Badge className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/25 text-xs">
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        {pick.yesterday.outcome}
+                      </Badge>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -248,35 +260,45 @@ function FeaturedPickCard() {
   )
 }
 
-function TrackRecordStrip() {
-  const tr = MOCK_DATA.trackRecord
-
-  const stats = [
-    { label: "Total Picks", value: tr.totalPicks.toString(), accent: false },
-    { label: "Win Rate", value: tr.winRate, accent: false },
-    { label: "Mean CLV", value: tr.meanClv, accent: true },
-    { label: "Net P&L", value: tr.netPnl, accent: true },
+function WhyCredenceStrip() {
+  const pillars = [
+    {
+      icon: Eye,
+      title: "Transparent",
+      description:
+        "Every pick shows the model probability, market probability, and the full uncertainty range — not just a directional call.",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Rigorous",
+      description:
+        "Only picks where the entire credible interval clears the market line reach the dashboard. Marginal calls stay out.",
+    },
+    {
+      icon: BookOpen,
+      title: "Shows its work",
+      description:
+        "Bayesian sub-models for pitching, offense, bullpen, and run environment — every factor is visible and labeled.",
+    },
   ]
 
   return (
-    <section className="py-10 md:py-14 border-y border-[#262626]">
+    <section className="border-y border-[#262626] py-10 md:py-14">
       <div className="mx-auto max-w-4xl px-4">
-        <div className="grid grid-cols-2 gap-px bg-[#262626] rounded-xl overflow-hidden sm:grid-cols-4">
-          {stats.map((stat) => (
+        <h2 className="text-balance text-center text-2xl font-bold text-white md:text-3xl mb-10">
+          Why Credence
+        </h2>
+        <div className="grid gap-px bg-[#262626] sm:grid-cols-3 rounded-xl overflow-hidden">
+          {pillars.map(({ icon: Icon, title, description }) => (
             <div
-              key={stat.label}
-              className="flex flex-col items-center justify-center bg-[#141414] px-6 py-6 gap-1"
+              key={title}
+              className="flex flex-col gap-3 bg-[#141414] px-6 py-7"
             >
-              <span
-                className={`text-2xl font-bold font-mono tracking-tight ${
-                  stat.accent ? "text-[#10b981]" : "text-white"
-                }`}
-              >
-                {stat.value}
-              </span>
-              <span className="text-xs uppercase tracking-wider text-gray-500">
-                {stat.label}
-              </span>
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 shrink-0 text-[#10b981]" />
+                <span className="text-sm font-semibold text-white">{title}</span>
+              </div>
+              <p className="text-sm leading-relaxed text-gray-500">{description}</p>
             </div>
           ))}
         </div>
@@ -420,14 +442,19 @@ function Footer() {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const base = process.env.NEXT_PUBLIC_API_URL ?? ""
+  const featuredRes = await fetch(`${base}/picks/featured`, { cache: "no-store" }).then((r) =>
+    r.json()
+  )
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
-      <Navbar />
+      <Nav />
       <main>
         <HeroSection />
-        <FeaturedPickCard />
-        <TrackRecordStrip />
+        <FeaturedPickCard pick={featuredRes as FeaturedPick} />
+        <WhyCredenceStrip />
         <HowItWorks />
         <TrustSection />
         <FooterCta />

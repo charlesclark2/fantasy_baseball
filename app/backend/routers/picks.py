@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -20,6 +21,8 @@ from app.backend.models.picks import (
     DataQuality,
     EVPick,
     EVPicksResponse,
+    FeaturedPickResponse,
+    FeaturedYesterday,
     GameContext,
     GameDetailResponse,
     GameLineups,
@@ -53,6 +56,276 @@ _ML_SCHEMA = (
     if _TARGET_ENV == "prod"
     else "baseball_data.betting_ml_dev"
 )
+
+_FEATURED_TODAY_QUERY = f"""
+WITH ranked AS (
+    SELECT
+        p.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY p.game_pk
+            ORDER BY
+                CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                p.inserted_at DESC
+        ) AS _rn
+    FROM {_ML_SCHEMA}.daily_model_predictions p
+    WHERE p.game_date = %(today)s
+      AND p.prediction_type IN ('post_lineup', 'morning')
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT
+        b.game_pk,
+        b.home_team,
+        b.away_team,
+        'h2h'                                             AS market_type,
+        b.calibrated_win_prob                             AS model_prob,
+        b.h2h_market_implied_prob                         AS market_prob,
+        b.calibrated_win_prob - b.h2h_market_implied_prob AS edge,
+        NULL::FLOAT                                       AS win_prob_ci_low,
+        NULL::FLOAT                                       AS win_prob_ci_high,
+        b.game_datetime,
+        b.game_date,
+        b.prediction_type
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT
+        b.game_pk,
+        b.home_team,
+        b.away_team,
+        'totals'                                           AS market_type,
+        b.totals_model_prob                                AS model_prob,
+        b.over_prob_consensus                              AS market_prob,
+        b.totals_model_prob - b.over_prob_consensus        AS edge,
+        NULL::FLOAT                                        AS win_prob_ci_low,
+        NULL::FLOAT                                        AS win_prob_ci_high,
+        b.game_datetime,
+        b.game_date,
+        b.prediction_type
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+FROM h2h
+UNION ALL
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+FROM totals
+ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+LIMIT 1
+"""
+
+_FEATURED_STALE_FALLBACK_QUERY = f"""
+WITH ranked AS (
+    SELECT
+        p.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY p.game_pk
+            ORDER BY
+                CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                p.inserted_at DESC
+        ) AS _rn
+    FROM {_ML_SCHEMA}.daily_model_predictions p
+    WHERE p.game_date = DATEADD(day, -1, CURRENT_DATE)
+      AND p.prediction_type IN ('post_lineup', 'morning')
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT
+        b.game_pk,
+        b.home_team,
+        b.away_team,
+        'h2h'                                             AS market_type,
+        b.calibrated_win_prob                             AS model_prob,
+        b.h2h_market_implied_prob                         AS market_prob,
+        b.calibrated_win_prob - b.h2h_market_implied_prob AS edge,
+        NULL::FLOAT                                       AS win_prob_ci_low,
+        NULL::FLOAT                                       AS win_prob_ci_high,
+        b.game_datetime,
+        b.game_date,
+        b.prediction_type
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT
+        b.game_pk,
+        b.home_team,
+        b.away_team,
+        'totals'                                           AS market_type,
+        b.totals_model_prob                                AS model_prob,
+        b.over_prob_consensus                              AS market_prob,
+        b.totals_model_prob - b.over_prob_consensus        AS edge,
+        NULL::FLOAT                                        AS win_prob_ci_low,
+        NULL::FLOAT                                        AS win_prob_ci_high,
+        b.game_datetime,
+        b.game_date,
+        b.prediction_type
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+FROM h2h
+UNION ALL
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+FROM totals
+ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+LIMIT 1
+"""
+
+_FEATURED_YESTERDAY_QUERY = f"""
+WITH ranked AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
+        ) AS _rn
+    FROM {_ML_SCHEMA}.daily_model_predictions
+    WHERE game_date = DATEADD(day, -1, CURRENT_DATE)
+      AND qualified_bet = TRUE
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
+           clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
+    WHERE b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
+           clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
+    WHERE b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT * FROM h2h
+UNION ALL
+SELECT * FROM totals
+ORDER BY game_pk, market_type
+LIMIT 1
+"""
+
+_ET = ZoneInfo("America/New_York")
+
+
+def _format_game_time_et(game_start_utc: datetime | None) -> str | None:
+    if game_start_utc is None:
+        return None
+    try:
+        if game_start_utc.tzinfo is None:
+            game_start_utc = game_start_utc.replace(tzinfo=timezone.utc)
+        et = game_start_utc.astimezone(_ET)
+        return et.strftime("%-I:%M %p ET")
+    except Exception:
+        return None
+
+
+def _ai_summary(market_type: str, model_prob: float | None, edge: float | None) -> str:
+    mp = round((model_prob or 0) * 100, 1)
+    ep = round((edge or 0) * 100, 1)
+    sign = "+" if ep >= 0 else ""
+    if market_type == "h2h":
+        return (
+            f"Model assigns {mp}% win probability — "
+            f"a {sign}{ep}pp edge over the Bovada closing line."
+        )
+    return (
+        f"Totals model assigns {mp}% probability this game goes over — "
+        f"a {sign}{ep}pp edge over the consensus line."
+    )
+
+
+def _build_featured_result(
+    r: dict,
+    yesterday_obj: "FeaturedYesterday | None",
+    is_stale: bool,
+) -> FeaturedPickResponse:
+    edge_raw = r.get("EDGE")
+    model_prob = r.get("MODEL_PROB")
+    market_type = r.get("MARKET_TYPE") or ""
+    away = r.get("AWAY_TEAM") or ""
+    home = r.get("HOME_TEAM") or ""
+    prediction_type = r.get("PREDICTION_TYPE") or ""
+    game_date_raw = r.get("GAME_DATE")
+    if hasattr(game_date_raw, "isoformat"):
+        pick_date: str | None = game_date_raw.isoformat()
+    else:
+        pick_date = str(game_date_raw) if game_date_raw else None
+    return FeaturedPickResponse(
+        game_pk=r.get("GAME_PK"),
+        matchup=f"{away} @ {home}",
+        game_time_et=_format_game_time_et(r.get("GAME_DATETIME")),
+        market_type=market_type,
+        edge=round(edge_raw * 100, 2) if edge_raw is not None else None,
+        model_prob=model_prob,
+        market_prob=r.get("MARKET_PROB"),
+        ci_low=r.get("WIN_PROB_CI_LOW"),
+        ci_high=r.get("WIN_PROB_CI_HIGH"),
+        conviction_label="HIGH CONVICTION",
+        ai_summary=_ai_summary(market_type, model_prob, edge_raw),
+        yesterday=None if is_stale else yesterday_obj,
+        is_stale=is_stale,
+        is_preliminary=not is_stale and prediction_type == "morning",
+        pick_date=pick_date,
+    )
+
+
+@router.get("/featured", response_model=FeaturedPickResponse)
+def get_featured_pick() -> FeaturedPickResponse:
+    today = date.today().isoformat()
+    cached = get_cache(f"picks/featured_{today}.json")
+    if cached is not None and cached.get("game_pk") is not None:
+        return FeaturedPickResponse(**cached)
+
+    try:
+        rows = execute_query(_FEATURED_TODAY_QUERY, params={"today": today})
+        yesterday_rows = execute_query(_FEATURED_YESTERDAY_QUERY)
+    except Exception as exc:
+        logger.exception("Snowflake query failed for /picks/featured")
+        raise HTTPException(status_code=503, detail="Data unavailable") from exc
+
+    yesterday: FeaturedYesterday | None = None
+    if yesterday_rows:
+        yr = yesterday_rows[0]
+        outcome_flag = yr.get("ACTUAL_OUTCOME")
+        if outcome_flag is not None:
+            away = yr.get("AWAY_TEAM") or ""
+            home = yr.get("HOME_TEAM") or ""
+            yesterday = FeaturedYesterday(
+                matchup=f"{away} @ {home}",
+                market_type=yr.get("MARKET_TYPE") or "",
+                outcome="Won" if outcome_flag == 1 else "Lost",
+            )
+
+    if rows:
+        result = _build_featured_result(rows[0], yesterday, is_stale=False)
+        set_cache(f"picks/featured_{today}.json", result.model_dump(mode="json"))
+        return result
+
+    # No picks today — fall back to yesterday's champion pick (don't cache: re-check on next request)
+    try:
+        stale_rows = execute_query(_FEATURED_STALE_FALLBACK_QUERY)
+    except Exception:
+        logger.exception("Snowflake query failed for /picks/featured stale fallback")
+        return FeaturedPickResponse(game_pk=None)
+
+    if not stale_rows:
+        return FeaturedPickResponse(game_pk=None)
+
+    return _build_featured_result(stale_rows[0], None, is_stale=True)
+
 
 _TODAY_QUERY = f"""
 WITH ranked AS (

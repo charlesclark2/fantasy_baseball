@@ -36,6 +36,30 @@ class TodayPicksResponse(BaseModel):
     data_quality: DataQuality
 
 
+class FeaturedYesterday(BaseModel):
+    matchup: str
+    market_type: str
+    outcome: str
+
+
+class FeaturedPickResponse(BaseModel):
+    game_pk: int | None = None
+    matchup: str | None = None
+    game_time_et: str | None = None
+    market_type: str | None = None
+    edge: float | None = None
+    model_prob: float | None = None
+    market_prob: float | None = None
+    ci_low: float | None = None
+    ci_high: float | None = None
+    conviction_label: str | None = None
+    ai_summary: str | None = None
+    yesterday: FeaturedYesterday | None = None
+    is_stale: bool = False
+    is_preliminary: bool = False
+    pick_date: str | None = None
+
+
 class HistoricalPick(Pick):
     clv: float | None = None
     clv_positive: bool | None = None

@@ -1,10 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useQuery } from "@tanstack/react-query"
+import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -13,106 +16,45 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { ProbabilityBar } from "@/components/probability-bar"
+import { PipelineStatusDot } from "@/components/pipeline-status-dot"
+import { Nav } from "@/components/nav"
+import { AuthGuard } from "@/components/auth-guard"
+import { useAuth } from "@/lib/auth-context"
+import { apiFetch } from "@/lib/api"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { ProbabilityBar } from "@/components/probability-bar"
-import { PipelineStatusDot } from "@/components/pipeline-status-dot"
-import { ChevronDown, Info, LogOut, TrendingUp } from "lucide-react"
+import { CalendarIcon, TrendingUp } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { cn } from "@/lib/utils"
+import { useSelectedDate } from "@/lib/date-context"
 
 // ---------------------------------------------------------------------------
-// TODO: replace with useQuery hook — GET /picks/today
+// Types
 // ---------------------------------------------------------------------------
-const MOCK_DATA = {
-  date: "Friday, June 5, 2026",
-  qualifiedPicks: [
-    {
-      game_pk: 1001,
-      game: "HOU @ NYM",
-      time: "7:10 PM ET",
-      minutesUntilFirstPitch: 134,
-      market: "Totals Over 8.5",
-      marketType: "total",
-      modelProb: 0.583,
-      marketProb: 0.541,
-      edge: 0.042,
-      conviction: "HIGH",
-      ciLow: 0.48,
-      ciHigh: 0.61,
-    },
-    {
-      game_pk: 1002,
-      game: "LAD @ SF",
-      time: "9:45 PM ET",
-      minutesUntilFirstPitch: 349,
-      market: "Home ML",
-      marketType: "moneyline",
-      modelProb: 0.612,
-      marketProb: 0.571,
-      edge: 0.041,
-      conviction: "MED",
-      ciLow: 0.54,
-      ciHigh: 0.68,
-    },
-    {
-      game_pk: 1003,
-      game: "ATL @ PHI",
-      time: "7:05 PM ET",
-      minutesUntilFirstPitch: 25,
-      market: "Away ML",
-      marketType: "moneyline",
-      modelProb: 0.534,
-      marketProb: 0.502,
-      edge: 0.032,
-      conviction: "LOW",
-      ciLow: 0.49,
-      ciHigh: 0.58,
-    },
-  ],
-  nonQualifiedGames: [
-    {
-      game_pk: 1004,
-      game: "NYY @ BOS",
-      time: "7:10 PM ET",
-      market: "Totals Under 8.0",
-      marketType: "total",
-      modelProb: 0.481,
-      marketProb: 0.51,
-      edge: -0.029,
-    },
-    {
-      game_pk: 1005,
-      game: "CHC @ MIL",
-      time: "8:10 PM ET",
-      market: "Home ML",
-      marketType: "moneyline",
-      modelProb: 0.523,
-      marketProb: 0.541,
-      edge: -0.018,
-    },
-    {
-      game_pk: 1006,
-      game: "SEA @ TEX",
-      time: "8:05 PM ET",
-      market: "Totals Over 7.5",
-      marketType: "total",
-      modelProb: 0.498,
-      marketProb: 0.512,
-      edge: -0.014,
-    },
-  ],
-  signalFreshness: {
-    lastUpdated: "Today 8:14 AM EDT",
-    status: "fresh" as "fresh" | "stale" | "missing",
-  },
+
+type Pick = {
+  game_pk: number
+  game_date: string
+  market_type: string
+  model_prob: number
+  bovada_devig_prob: number
+  edge: number
+  game_conviction_score: number
+  win_prob_ci_low: number | null
+  win_prob_ci_high: number | null
+  lineup_confirmed: boolean
+  home_team: string
+  away_team: string
+  pick_side: string | null
+  game_start_utc: string | null
+  model_total_runs: number | null
+  market_total_line: number | null
 }
 
 // ---------------------------------------------------------------------------
@@ -123,53 +65,115 @@ function fmt(val: number) {
   return `${(val * 100).toFixed(1)}%`
 }
 
-function formatCountdown(minutes: number): string {
-  if (minutes < 60) return `${minutes}m`
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  return m === 0 ? `${h}h` : `${h}h ${m}m`
+/** Returns true if the pick side flips the raw home/over probability. */
+function isSideFlipped(pick: Pick): boolean {
+  return pick.pick_side === "away" || pick.pick_side === "under"
 }
 
-function MarketBadge({ market, type }: { market: string; type: string }) {
-  if (type === "total") {
-    return (
-      <Badge className="bg-teal-500/10 text-teal-400 border border-teal-500/20 text-xs font-medium whitespace-nowrap">
-        {market}
-      </Badge>
-    )
+/**
+ * Display probability as distance above 50/50 from the pick side's perspective.
+ * e.g. away pick with model_prob=0.314 (home) → away_prob=0.686 → display "+18.6%"
+ */
+function fmtPickSideProb(pick: Pick, rawProb: number | null): string {
+  if (rawProb == null) return "—"
+  const sideProb = isSideFlipped(pick) ? 1 - rawProb : rawProb
+  const delta = (sideProb - 0.5) * 100
+  return `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`
+}
+
+/** Edge from the pick side's perspective — always positive for a favorable bet. */
+function fmtPickSideEdge(pick: Pick): string {
+  if (pick.edge == null) return "—"
+  // h2h edge is in home-win space; totals edge is in over space. Negate for flipped sides.
+  const val = isSideFlipped(pick) ? -pick.edge : pick.edge
+  return `${val >= 0 ? "+" : ""}${pick.market_type === "totals" ? val.toFixed(2) : (val * 100).toFixed(1) + "%"}`
+}
+
+function fmtGameTime(utc: string | null): string | null {
+  if (!utc) return null
+  const iso = utc.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(utc) ? utc : utc + "Z"
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return null
+  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+}
+
+function conviction(score: number): string {
+  if (score > 0.70) return "HIGH"
+  if (score > 0.50) return "MED"
+  return "LOW"
+}
+
+function pickSideLabel(pick: Pick): string {
+  if (pick.market_type === "totals") {
+    return pick.pick_side === "over" ? "Over" : "Under"
   }
-  return (
-    <Badge className="bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-medium whitespace-nowrap">
-      {market}
-    </Badge>
-  )
+  if (pick.pick_side === "home") return pick.home_team ?? "Home"
+  if (pick.pick_side === "away") return pick.away_team ?? "Away"
+  return ""
 }
 
-function ConvictionBadge({ conviction }: { conviction: string }) {
-  if (conviction === "HIGH") {
-    return (
-      <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold uppercase tracking-widest">
+
+function normalizeEVPick(p: any): Pick {
+  const edge = p.edge ?? 0
+  const isTotal = p.market_type === "totals"
+  const pick_side = isTotal ? (edge >= 0 ? "over" : "under") : (edge >= 0 ? "home" : "away")
+  return {
+    game_pk: p.game_pk,
+    game_date: p.game_date ?? "",
+    market_type: p.market_type ?? "h2h",
+    model_prob: p.model_prob ?? 0,
+    bovada_devig_prob: p.bovada_devig_prob ?? 0,
+    edge,
+    game_conviction_score: p.game_conviction_score ?? 0,
+    win_prob_ci_low: null,
+    win_prob_ci_high: null,
+    lineup_confirmed: p.lineup_confirmed ?? false,
+    home_team: p.home_team ?? "",
+    away_team: p.away_team ?? "",
+    pick_side,
+    game_start_utc: p.game_start_utc ?? null,
+    model_total_runs: p.pred_total_runs ?? null,
+    market_total_line: p.total_line_consensus ?? null,
+  }
+}
+
+const CONVICTION_TOOLTIP: Record<string, string> = {
+  HIGH: "Multiple model signals agree — strong confidence in the edge. Higher priority play.",
+  MED: "Most signals align but with some uncertainty. Moderate confidence.",
+  LOW: "Edge detected but signals are mixed. Smaller or less certain advantage.",
+}
+
+function ConvictionBadge({ level }: { level: string }) {
+  const badge =
+    level === "HIGH" ? (
+      <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold uppercase tracking-widest cursor-default">
         HIGH
       </Badge>
-    )
-  }
-  if (conviction === "MED") {
-    return (
+    ) : level === "MED" ? (
       <Badge
         variant="outline"
-        className="border-[#f59e0b] text-[#f59e0b] text-xs font-bold uppercase tracking-widest"
+        className="border-[#f59e0b] text-[#f59e0b] text-xs font-bold uppercase tracking-widest cursor-default"
       >
         MED
       </Badge>
+    ) : (
+      <Badge
+        variant="outline"
+        className="border-gray-600 text-gray-500 text-xs font-bold uppercase tracking-widest cursor-default"
+      >
+        LOW
+      </Badge>
     )
-  }
+
   return (
-    <Badge
-      variant="outline"
-      className="border-gray-600 text-gray-500 text-xs font-bold uppercase tracking-widest"
-    >
-      LOW
-    </Badge>
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>{badge}</TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px] text-xs text-center text-white bg-[#1a1a1a] border-[#262626]">
+          {CONVICTION_TOOLTIP[level] ?? ""}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 
@@ -177,355 +181,320 @@ function ConvictionBadge({ conviction }: { conviction: string }) {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function Navbar() {
+
+function PageHeader({ picks, isLoading, rightSlot }: { picks: Pick[]; isLoading: boolean; rightSlot: React.ReactNode }) {
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        <Link
-          href="/"
-          className="flex items-center gap-0 text-lg font-bold tracking-tight"
-        >
-          <span className="text-[#10b981]">Credence</span>
-          <span className="text-white"> Sports</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-gray-500 sm:block">
-            user@example.com
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-gray-400 hover:text-white hover:bg-[#141414]"
-            asChild
-          >
-            <Link href="/">
-              <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              Sign Out
-            </Link>
-          </Button>
+    <div className="mx-auto max-w-6xl px-4 pt-4 pb-3 flex items-center justify-between">
+      <PipelineStatusDot picks={picks} isLoading={isLoading} />
+      {rightSlot}
+    </div>
+  )
+}
+
+const TH = "text-xs uppercase tracking-wider text-gray-500 font-medium"
+
+function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRouter> }) {
+  const level = conviction(pick.game_conviction_score)
+  const isTotals = pick.market_type === "totals"
+  const edgeDisplay = fmtPickSideEdge(pick)
+  const edgeIsPos = !edgeDisplay.startsWith("-")
+
+  return (
+    <TableRow
+      key={`${pick.game_pk}_${pick.market_type}`}
+      className="cursor-pointer border-[#262626] bg-[#141414] hover:bg-[#1a1a1a] transition-colors"
+      style={{ borderLeft: "2px solid #10b981" }}
+      onClick={() => router.push(`/picks/${pick.game_pk}`)}
+    >
+      {/* Game */}
+      <TableCell className="pl-4 py-4">
+        <div className="font-semibold text-white text-sm whitespace-nowrap">
+          {pick.away_team} @ {pick.home_team}
+        </div>
+        <div className="text-xs text-gray-500 mt-0.5">
+          {fmtGameTime(pick.game_start_utc) ?? pick.game_date}
+        </div>
+      </TableCell>
+
+      {/* Pick side */}
+      <TableCell className="py-4">
+        <span className="text-sm font-semibold text-white whitespace-nowrap">
+          {pickSideLabel(pick)}
+        </span>
+      </TableCell>
+
+      {/* Model */}
+      <TableCell className="py-4 text-right font-mono text-sm font-semibold text-[#10b981] whitespace-nowrap">
+        {isTotals && pick.model_total_runs != null
+          ? pick.model_total_runs.toFixed(1)
+          : fmtPickSideProb(pick, pick.model_prob)}
+      </TableCell>
+
+      {/* Market / Line */}
+      <TableCell className="py-4 text-right font-mono text-sm text-gray-400 whitespace-nowrap">
+        {isTotals && pick.market_total_line != null
+          ? pick.market_total_line.toFixed(1)
+          : fmtPickSideProb(pick, pick.bovada_devig_prob)}
+      </TableCell>
+
+      {/* Edge */}
+      <TableCell className="py-4 text-right font-mono text-sm font-semibold whitespace-nowrap">
+        <span className={edgeIsPos ? "text-[#10b981]" : "text-[#ef4444]"}>{edgeDisplay}</span>
+      </TableCell>
+
+      {/* Conviction */}
+      <TableCell className="py-4 text-center">
+        <ConvictionBadge level={level} />
+      </TableCell>
+
+      {/* Bar — hidden on mobile */}
+      <TableCell className="hidden md:table-cell py-4 pr-5 min-w-[180px]">
+        <ProbabilityBar
+          ciLow={pick.win_prob_ci_low}
+          ciHigh={pick.win_prob_ci_high}
+          modelProb={pick.model_prob}
+          marketProb={pick.bovada_devig_prob}
+          showLabels={true}
+          showHighConviction={false}
+        />
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function PickCard({ pick, router }: { pick: Pick; router: ReturnType<typeof useRouter> }) {
+  const level = conviction(pick.game_conviction_score)
+  const isTotals = pick.market_type === "totals"
+  const edgeDisplay = fmtPickSideEdge(pick)
+  const edgeIsPos = !edgeDisplay.startsWith("-")
+
+  return (
+    <div
+      className="cursor-pointer rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors active:bg-[#10b98108]"
+      style={{ borderLeft: "2px solid #10b981" }}
+      onClick={() => router.push(`/picks/${pick.game_pk}`)}
+    >
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-white">{pick.away_team} @ {pick.home_team}</p>
+          <p className="text-xs text-gray-500 mt-0.5">{fmtGameTime(pick.game_start_utc) ?? pick.game_date}</p>
+        </div>
+        <ConvictionBadge level={level} />
+      </div>
+      <p className="mb-3 text-base font-bold text-white">{pickSideLabel(pick)}</p>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">
+            {isTotals ? "Model Runs" : "Model Win%"}
+          </p>
+          <p className="mt-0.5 text-sm font-semibold text-[#10b981]">
+            {isTotals && pick.model_total_runs != null
+              ? pick.model_total_runs.toFixed(1)
+              : fmtPickSideProb(pick, pick.model_prob)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">
+            {isTotals ? "O/U Line" : "Bovada%"}
+          </p>
+          <p className="mt-0.5 text-sm text-gray-400">
+            {isTotals && pick.market_total_line != null
+              ? pick.market_total_line.toFixed(1)
+              : fmtPickSideProb(pick, pick.bovada_devig_prob)}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
+          <p className={cn("mt-0.5 text-sm font-semibold", edgeIsPos ? "text-[#10b981]" : "text-[#ef4444]")}>
+            {edgeDisplay}
+          </p>
         </div>
       </div>
-      {/* Sub-nav */}
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
-        <Link
-          href="/dashboard"
-          className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
-        >
-          Dashboard
-        </Link>
-        <Link
-          href="/performance"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Performance
-        </Link>
-        <Link
-          href="/settings"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Settings
-        </Link>
-      </div>
-    </nav>
+    </div>
   )
 }
 
-function PageHeader({
-  date,
-  qualifiedCount,
-  totalGames,
+function PicksSection({
+  title,
+  picks,
+  modelHeader,
+  marketHeader,
+  router,
 }: {
-  date: string
-  qualifiedCount: number
-  totalGames: number
+  title: string
+  picks: Pick[]
+  modelHeader: string
+  marketHeader: string
+  router: ReturnType<typeof useRouter>
 }) {
+  if (picks.length === 0) return null
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-10 pb-6">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
-        <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-          Dashboard
-        </h1>
-        <span className="text-sm text-gray-500">{date}</span>
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold px-2 py-0.5">
+          {picks.length}
+        </Badge>
       </div>
-      <p className="mt-2 text-sm text-gray-400">
-        <span className="font-semibold text-[#10b981]">{qualifiedCount} qualified picks</span>
-        <span className="text-gray-600"> &middot; </span>
-        <span>{totalGames} total games today</span>
-      </p>
-      {/* A1.4 — live pipeline freshness indicator (green/yellow/red) */}
-      <div className="mt-3">
-        <PipelineStatusDot />
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-[#262626]">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-[#262626] hover:bg-transparent">
+              <TableHead className={`${TH} pl-5`}>Game</TableHead>
+              <TableHead className={TH}>Pick</TableHead>
+              <TableHead className={`${TH} text-right`}>{modelHeader}</TableHead>
+              <TableHead className={`${TH} text-right`}>{marketHeader}</TableHead>
+              <TableHead className={`${TH} text-right`}>Edge</TableHead>
+              <TableHead className={`${TH} text-center`}>Conviction</TableHead>
+              <TableHead className={`${TH} hidden md:table-cell min-w-[180px] text-center`}>Bar</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {picks.map((pick) => (
+              <PickRow key={`${pick.game_pk}_${pick.market_type}`} pick={pick} router={router} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden space-y-3">
+        {picks.map((pick) => (
+          <PickCard key={`${pick.game_pk}_${pick.market_type}`} pick={pick} router={router} />
+        ))}
       </div>
     </div>
   )
 }
 
-function SignalFreshness({
-  freshness,
-}: {
-  freshness: typeof MOCK_DATA.signalFreshness
-}) {
-  const dotColor =
-    freshness.status === "fresh"
-      ? "bg-[#10b981]"
-      : freshness.status === "stale"
-      ? "bg-[#f59e0b]"
-      : "bg-[#ef4444]"
-
+function SkeletonTable() {
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-4 pb-2">
-      <div className="flex items-center gap-2">
-        <span className={`h-2 w-2 rounded-full ${dotColor} shrink-0`} />
-        <span className="text-xs text-gray-500">
-          Signals last updated:{" "}
-          <span className="text-gray-400">{freshness.lastUpdated}</span>
-        </span>
-        <TooltipProvider delayDuration={200}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="h-3 w-3 text-gray-600 cursor-default" />
-            </TooltipTrigger>
-            <TooltipContent
-              side="right"
-              className="max-w-xs bg-[#141414] border-[#262626] text-gray-300 text-xs leading-relaxed"
-            >
-              Signals are generated each morning after lineup confirmation.
-              Predictions update again after lineups are confirmed ~90 minutes
-              before first pitch.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
+    <div className="overflow-x-auto rounded-xl border border-[#262626]">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-[#262626] hover:bg-transparent">
+            <TableHead className={`${TH} pl-5`}>Game</TableHead>
+            <TableHead className={TH}>Pick</TableHead>
+            <TableHead className={`${TH} text-right`}>Model</TableHead>
+            <TableHead className={`${TH} text-right`}>Line</TableHead>
+            <TableHead className={`${TH} text-right`}>Edge</TableHead>
+            <TableHead className={`${TH} text-center`}>Conviction</TableHead>
+            <TableHead className={`${TH} hidden md:table-cell min-w-[180px] text-center`}>Bar</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {[0, 1, 2].map((i) => (
+            <TableRow key={i} className="border-[#262626] bg-[#141414]">
+              <TableCell className="pl-4 py-4"><Skeleton className="h-4 w-28" /></TableCell>
+              <TableCell className="py-4"><Skeleton className="h-4 w-12" /></TableCell>
+              <TableCell className="py-4 text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+              <TableCell className="py-4 text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+              <TableCell className="py-4 text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
+              <TableCell className="py-4 text-center"><Skeleton className="h-5 w-12 mx-auto rounded-full" /></TableCell>
+              <TableCell className="hidden md:table-cell py-4 pr-5"><Skeleton className="h-4 w-full" /></TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
 
-function QualifiedPicksTable() {
+function QualifiedPicksTable({
+  picks,
+  isLoading,
+  isError,
+}: {
+  picks: Pick[]
+  isLoading: boolean
+  isError: boolean
+}) {
   const router = useRouter()
-  const picks = MOCK_DATA.qualifiedPicks
 
-  if (picks.length === 0) {
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 flex flex-col gap-8">
+        {[3, 2].map((count, idx) => (
+          <div key={idx}>
+            <div className="mb-3 h-5 w-32 animate-pulse rounded bg-[#262626]" />
+            <div className="hidden md:block"><SkeletonTable /></div>
+            <div className="md:hidden space-y-3">
+              {Array.from({ length: count }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-[#262626] bg-[#141414] p-4 space-y-3">
+                  <Skeleton className="h-4 w-48" />
+                  <Skeleton className="h-5 w-20" />
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <Skeleton className="h-10 rounded-lg" />
+                    <Skeleton className="h-10 rounded-lg" />
+                    <Skeleton className="h-10 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
     return (
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex flex-col items-center justify-center rounded-xl border border-[#262626] bg-[#141414] py-16 text-center">
           <TrendingUp className="h-10 w-10 text-gray-700 mb-4" />
-          <h3 className="text-base font-semibold text-white">
-            No qualified picks today
-          </h3>
+          <h3 className="text-base font-semibold text-white">Unable to load picks</h3>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
-            The model found no edges that clear all gate criteria for
-            today&apos;s games.
+            Could not reach the predictions API. Try refreshing the page.
           </p>
         </div>
       </div>
     )
   }
 
-  return (
-    <div className="mx-auto max-w-6xl px-4">
-      {/* Section heading */}
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-white">Today&apos;s Picks</h2>
-          <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold px-2 py-0.5">
-            {picks.length}
-          </Badge>
+  if (picks.length === 0) {
+    return (
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="flex flex-col items-center justify-center rounded-xl border border-[#262626] bg-[#141414] py-16 text-center">
+          <TrendingUp className="h-10 w-10 text-gray-700 mb-4" />
+          <h3 className="text-base font-semibold text-white">No qualified picks for today</h3>
+          <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
+            Check back after the morning pipeline runs.
+          </p>
         </div>
-        <Link
-          href="/ev-tracker"
-          className="text-xs font-medium text-[#10b981] hover:text-[#059669] transition-colors"
-        >
-          EV Tracker &rarr;
-        </Link>
       </div>
+    )
+  }
 
-      {/* Scrollable table wrapper */}
-      <div className="overflow-x-auto rounded-xl border border-[#262626]">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#262626] hover:bg-transparent">
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium pl-5">
-                Game
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium">
-                Market
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                Model
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                Market
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                Edge
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium">
-                Conviction
-              </TableHead>
-              <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                Time
-              </TableHead>
-              <TableHead className="hidden md:table-cell text-xs uppercase tracking-wider text-gray-500 font-medium min-w-[160px]">
-                Bar
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {picks.map((pick) => {
-              const timeIsUrgent = pick.minutesUntilFirstPitch < 30
-              return (
-                <TableRow
-                  key={pick.game_pk}
-                  className="cursor-pointer border-[#262626] bg-[#141414] hover:bg-[#1a1a1a] transition-colors"
-                  style={{ borderLeft: "2px solid #10b981" }}
-                  onClick={() => router.push(`/picks/${pick.game_pk}`)}
-                >
-                  {/* Game */}
-                  <TableCell className="pl-4 py-4">
-                    <div className="font-semibold text-white text-sm whitespace-nowrap">
-                      {pick.game}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-0.5">
-                      {pick.time}
-                    </div>
-                  </TableCell>
-
-                  {/* Market */}
-                  <TableCell className="py-4">
-                    <MarketBadge market={pick.market} type={pick.marketType} />
-                  </TableCell>
-
-                  {/* Model prob */}
-                  <TableCell className="py-4 text-right font-mono text-sm font-semibold text-[#10b981] whitespace-nowrap">
-                    {fmt(pick.modelProb)}
-                  </TableCell>
-
-                  {/* Market prob */}
-                  <TableCell className="py-4 text-right font-mono text-sm text-gray-400 whitespace-nowrap">
-                    {fmt(pick.marketProb)}
-                  </TableCell>
-
-                  {/* Edge */}
-                  <TableCell className="py-4 text-right font-mono text-sm font-semibold whitespace-nowrap">
-                    <span
-                      className={
-                        pick.edge >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
-                      }
-                    >
-                      {pick.edge >= 0 ? "+" : ""}
-                      {(pick.edge * 100).toFixed(1)}%
-                    </span>
-                  </TableCell>
-
-                  {/* Conviction */}
-                  <TableCell className="py-4">
-                    <ConvictionBadge conviction={pick.conviction} />
-                  </TableCell>
-
-                  {/* Time */}
-                  <TableCell className="py-4 text-right font-mono text-sm whitespace-nowrap">
-                    <span
-                      className={
-                        timeIsUrgent ? "text-[#ef4444]" : "text-gray-400"
-                      }
-                    >
-                      {formatCountdown(pick.minutesUntilFirstPitch)}
-                    </span>
-                  </TableCell>
-
-                  {/* Bar — compact, hidden on mobile */}
-                  <TableCell className="hidden md:table-cell py-4 pr-5 min-w-[160px]">
-                    <ProbabilityBar
-                      ciLow={pick.ciLow}
-                      ciHigh={pick.ciHigh}
-                      modelProb={pick.modelProb}
-                      marketProb={pick.marketProb}
-                      showLabels={false}
-                      showHighConviction={false}
-                    />
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  )
-}
-
-function NonQualifiedSection() {
-  const [isOpen, setIsOpen] = useState(false)
-  const games = MOCK_DATA.nonQualifiedGames
+  const h2hPicks = picks.filter((p) => p.market_type === "h2h")
+  const totalsPicks = picks.filter((p) => p.market_type === "totals")
 
   return (
     <div className="mx-auto max-w-6xl px-4">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
-          <span className="text-sm text-gray-500">
-            Non-Qualified Games ({games.length})
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 text-gray-600 transition-transform duration-200 ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 overflow-x-auto rounded-xl border border-[#262626] opacity-50">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-[#262626] hover:bg-transparent">
-                  <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium pl-5">
-                    Game
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium">
-                    Market
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                    Model
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                    Market
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider text-gray-500 font-medium text-right">
-                    Edge
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {games.map((game) => (
-                  <TableRow
-                    key={game.game_pk}
-                    className="border-[#262626] bg-[#141414]"
-                  >
-                    <TableCell className="pl-4 py-3">
-                      <div className="font-semibold text-white text-sm whitespace-nowrap">
-                        {game.game}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-0.5">
-                        {game.time}
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-3">
-                      <MarketBadge market={game.market} type={game.marketType} />
-                    </TableCell>
-                    <TableCell className="py-3 text-right font-mono text-sm text-gray-400 whitespace-nowrap">
-                      {fmt(game.modelProb)}
-                    </TableCell>
-                    <TableCell className="py-3 text-right font-mono text-sm text-gray-400 whitespace-nowrap">
-                      {fmt(game.marketProb)}
-                    </TableCell>
-                    <TableCell className="py-3 text-right font-mono text-sm font-semibold text-[#ef4444] whitespace-nowrap">
-                      {(game.edge * 100).toFixed(1)}%
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      <div className="mb-4 flex items-center gap-2">
+        <h2 className="text-base font-semibold text-white">Today&apos;s Picks</h2>
+        <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold px-2 py-0.5">
+          {picks.length}
+        </Badge>
+      </div>
+
+      <div className="flex flex-col gap-8">
+        <PicksSection
+          title="Moneyline"
+          picks={h2hPicks}
+          modelHeader="Model Win %"
+          marketHeader="Bovada Win %"
+          router={router}
+        />
+        <PicksSection
+          title="Total Runs"
+          picks={totalsPicks}
+          modelHeader="Model Runs"
+          marketHeader="O/U Line"
+          router={router}
+        />
+      </div>
     </div>
   )
 }
@@ -535,25 +504,65 @@ function NonQualifiedSection() {
 // ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
-  const qualifiedCount = MOCK_DATA.qualifiedPicks.length
-  const totalGames =
-    MOCK_DATA.qualifiedPicks.length + MOCK_DATA.nonQualifiedGames.length
+  const { accessToken, email } = useAuth()
+  const { selectedDate, setSelectedDate, isoDate, isToday } = useSelectedDate()
+  const [calOpen, setCalOpen] = useState(false)
+  const todayIso = format(new Date(), "yyyy-MM-dd")
+
+  const { data: todayData, isLoading: todayLoading, isError: todayError } = useQuery({
+    queryKey: ["picks-today", accessToken, todayIso],
+    queryFn: () => apiFetch("/picks/today", {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken && isToday,
+  })
+
+  const { data: evData, isLoading: evLoading, isError: evError } = useQuery({
+    queryKey: ["picks-ev", isoDate, accessToken],
+    queryFn: () => apiFetch(`/picks/ev?date=${isoDate}`, {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+    enabled: !!accessToken && !isToday,
+  })
+
+  const isLoading = isToday ? todayLoading : evLoading
+  const isError = isToday ? todayError : evError
+  const picks: Pick[] = isToday
+    ? (todayData?.picks ?? [])
+    : (evData?.picks ?? []).filter((p: any) => p.qualified_bet === true).map(normalizeEVPick)
+
+  const datePicker = (
+    <Popover open={calOpen} onOpenChange={setCalOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className="h-8 justify-start gap-2 border-[#262626] bg-[#141414] text-left text-sm font-normal text-gray-400 hover:bg-[#1a1a1a] hover:text-white"
+        >
+          <CalendarIcon className="h-3.5 w-3.5 text-gray-500" />
+          {isToday ? "Today" : format(selectedDate, "MMM d, yyyy")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto border-[#262626] bg-[#141414] p-0" align="end">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(d) => { if (d) { setSelectedDate(d); setCalOpen(false) } }}
+          toDate={new Date()}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  )
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] font-sans">
-      <Navbar />
-      <main className="pb-16">
-        <PageHeader
-          date={MOCK_DATA.date}
-          qualifiedCount={qualifiedCount}
-          totalGames={totalGames}
-        />
-        <SignalFreshness freshness={MOCK_DATA.signalFreshness} />
-        <div className="mt-6 flex flex-col gap-8">
-          <QualifiedPicksTable />
-          <NonQualifiedSection />
-        </div>
-      </main>
-    </div>
+    <AuthGuard>
+      <div className="min-h-screen bg-[#0a0a0a] font-sans">
+        <Nav authenticated activeLink="dashboard" userEmail={email} />
+        <main className="pb-16">
+          <PageHeader picks={picks} isLoading={isLoading} rightSlot={datePicker} />
+          <div className="mt-6">
+            <QualifiedPicksTable picks={picks} isLoading={isLoading} isError={isError} />
+          </div>
+        </main>
+      </div>
+    </AuthGuard>
   )
 }

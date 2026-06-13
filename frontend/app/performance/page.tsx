@@ -1,10 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
+import { useQuery } from "@tanstack/react-query"
+import { AuthGuard } from "@/components/auth-guard"
+import { useAuth } from "@/lib/auth-context"
+import { Nav } from "@/components/nav"
+import { apiFetch } from "@/lib/api"
 import {
   LineChart,
   Line,
+  BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -23,189 +31,141 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { LogOut } from "lucide-react"
-
-// ---------------------------------------------------------------------------
-// TODO: replace with useQuery hooks — GET /performance/summary and GET /performance/by-model
-// ---------------------------------------------------------------------------
-const MOCK_DATA = {
-  summary: {
-    totalBets: 247,
-    winRate: 0.543,
-    meanCLV: 0.021,
-    netPnlFlat: 312,
-    netPnlKelly: 428,
-    netPnlPortfolioKelly: 391,
-  },
-  plCurveFlat: [
-    { date: "Apr 12", pnl: 0 },
-    { date: "Apr 19", pnl: 42 },
-    { date: "Apr 26", pnl: 18 },
-    { date: "May 1", pnl: 31 },
-    { date: "May 10", pnl: 89 },
-    { date: "May 17", pnl: 156 },
-    { date: "May 24", pnl: 203 },
-    { date: "May 31", pnl: 271 },
-    { date: "Jun 5", pnl: 312 },
-  ],
-  byMarket: [
-    { market: "Totals Over", bets: 89, winRate: 0.562, meanCLV: 0.031, netPnl: 147 },
-    { market: "Totals Under", bets: 67, winRate: 0.537, meanCLV: 0.018, netPnl: 84 },
-    { market: "Home ML", bets: 54, winRate: 0.519, meanCLV: 0.011, netPnl: 52 },
-    { market: "Away ML", bets: 37, winRate: 0.541, meanCLV: 0.024, netPnl: 29 },
-  ],
-  byConviction: [
-    { tier: "HIGH", bets: 43, winRate: 0.581, meanCLV: 0.038, netPnl: 187 },
-    { tier: "MED", bets: 98, winRate: 0.531, meanCLV: 0.014, netPnl: 89 },
-    { tier: "LOW", bets: 106, winRate: 0.510, meanCLV: -0.003, netPnl: -24 },
-  ],
-  bySignal: [
-    { signal: "Run Environment", bets: 71, winRate: 0.563, meanCLV: 0.029, netPnl: 118 },
-    { signal: "Starter Quality", bets: 89, winRate: 0.551, meanCLV: 0.024, netPnl: 143 },
-    { signal: "Offense Advantage", bets: 43, winRate: 0.512, meanCLV: 0.008, netPnl: 31 },
-    { signal: "Bullpen State", bets: 28, winRate: 0.536, meanCLV: 0.019, netPnl: 38 },
-    { signal: "Matchup", bets: 16, winRate: 0.500, meanCLV: 0.001, netPnl: -18 },
-  ],
-  recentResults: [
-    { date: "Jun 4", game: "NYY @ BOS", market: "Totals Under 8.0", side: "Under", modelProb: 0.531, bovadaProb: 0.510, edge: 0.021, result: "Won", clv: 0.018 },
-    { date: "Jun 4", game: "LAD @ SF", market: "Home ML", side: "LAD", modelProb: 0.612, bovadaProb: 0.571, edge: 0.041, result: "Lost", clv: 0.033 },
-    { date: "Jun 3", game: "HOU @ NYM", market: "Totals Over 8.5", side: "Over", modelProb: 0.583, bovadaProb: 0.541, edge: 0.042, result: "Won", clv: 0.038 },
-    { date: "Jun 3", game: "ATL @ PHI", market: "Away ML", side: "ATL", modelProb: 0.534, bovadaProb: 0.502, edge: 0.032, result: "Won", clv: 0.021 },
-    { date: "Jun 2", game: "CHC @ MIL", market: "Totals Over 7.5", side: "Over", modelProb: 0.521, bovadaProb: 0.498, edge: 0.023, result: "Lost", clv: -0.011 },
-    { date: "Jun 1", game: "SEA @ TEX", market: "Home ML", side: "TEX", modelProb: 0.548, bovadaProb: 0.519, edge: 0.029, result: "Push", clv: 0.014 },
-    { date: "Jun 1", game: "NYM @ WSH", market: "Totals Under 7.0", side: "Under", modelProb: 0.562, bovadaProb: 0.531, edge: 0.031, result: "Won", clv: 0.027 },
-    { date: "May 31", game: "BOS @ TOR", market: "Away ML", side: "BOS", modelProb: 0.541, bovadaProb: 0.512, edge: 0.029, result: "Won", clv: 0.019 },
-    { date: "May 31", game: "MIN @ CLE", market: "Totals Over 8.0", side: "Over", modelProb: 0.519, bovadaProb: 0.501, edge: 0.018, result: "Lost", clv: -0.004 },
-    { date: "May 30", game: "SF @ COL", market: "Away ML", side: "SF", modelProb: 0.571, bovadaProb: 0.538, edge: 0.033, result: "Won", clv: 0.029 },
-  ],
-}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type SizingMethod = "Flat" | "Kelly" | "Portfolio Kelly"
+interface MarketMetrics {
+  season: number
+  market_type: string
+  n_predictions: number
+  brier_score: number | null
+  avg_clv: number | null
+  clv_positive_pct: number | null
+  win_rate: number | null
+}
+
+interface ModelMetricsResponse {
+  season: number | null
+  markets: MarketMetrics[]
+}
+
+interface PerformanceBet {
+  bet_id: string
+  game_pk: number
+  score_date: string
+  matchup: string | null
+  market: string
+  bookmaker: string | null
+  american_odds: number | null
+  stake: number
+  outcome: string | null
+  profit_loss: number | null
+  ev: number | null
+  model_prob: number | null
+  placed_at: string
+}
+
+interface PerformanceBetsResponse {
+  season: number | null
+  bets: PerformanceBet[]
+  total: number
+  settled_count: number
+  net_pnl: number | null
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function fmtPct(val: number) {
+function fmtPct(val: number | null | undefined) {
+  if (val == null) return "—"
   return `${(val * 100).toFixed(1)}%`
 }
 
-function fmtPnl(val: number) {
-  return val >= 0 ? `+$${val}` : `-$${Math.abs(val)}`
+function fmtSignedPct(val: number | null | undefined) {
+  if (val == null) return "—"
+  return `${val >= 0 ? "+" : ""}${(val * 100).toFixed(1)}%`
 }
 
-function clvColor(val: number) {
-  return val >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
+function fmtPnl(val: number | null | undefined) {
+  if (val == null) return "—"
+  const rounded = Math.round(val)
+  return rounded >= 0 ? `+$${rounded}` : `-$${Math.abs(rounded)}`
 }
 
-function pnlColor(val: number) {
-  return val >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
+function fmtPnlExact(val: number | null | undefined) {
+  if (val == null) return "—"
+  const abs = Math.abs(val).toFixed(2)
+  return val >= 0 ? `+$${abs}` : `-$${abs}`
 }
 
-function winRateColor(val: number) {
+function fmtOdds(val: number | null | undefined) {
+  if (val == null) return "—"
+  return val > 0 ? `+${val}` : `${val}`
+}
+
+function clvColor(val: number | null | undefined) {
+  return (val ?? 0) >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
+}
+
+function pnlColor(val: number | null | undefined) {
+  return (val ?? 0) >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
+}
+
+function winRateColor(val: number | null | undefined) {
+  if (val == null) return "text-gray-400"
   if (val > 0.52) return "text-[#10b981]"
-  if (val >= 0.50) return "text-[#f59e0b]"
+  if (val >= 0.5) return "text-[#f59e0b]"
   return "text-[#ef4444]"
 }
 
-function deriveKellySeries(flat: typeof MOCK_DATA.plCurveFlat, multiplier: number) {
-  return flat.map((d) => ({ date: d.date, pnl: Math.round(d.pnl * multiplier) }))
-}
-
 // ---------------------------------------------------------------------------
-// Sparkline — simple SVG polyline for stat tiles
+// Info tooltip — white bg, black text, appears above on hover
 // ---------------------------------------------------------------------------
 
-function Sparkline({ data, color }: { data: number[]; color: string }) {
-  const w = 80
-  const h = 28
-  const min = Math.min(...data)
-  const max = Math.max(...data)
-  const range = max - min || 1
-  const pts = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * w
-      const y = h - ((v - min) / range) * h
-      return `${x},${y}`
-    })
-    .join(" ")
-
+function InfoTooltip({ text }: { text: string }) {
   return (
-    <svg width={w} height={h} className="overflow-visible">
-      <polyline
-        points={pts}
-        fill="none"
-        stroke={color}
-        strokeWidth={1.5}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        opacity={0.7}
-      />
-    </svg>
+    <span className="group relative inline-block">
+      <span className="ml-1 cursor-help select-none text-gray-600 text-xs hover:text-gray-400">ⓘ</span>
+      <span className="pointer-events-none invisible group-hover:visible absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-md bg-white px-3 py-2 text-xs text-black shadow-xl leading-relaxed">
+        {text}
+        <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white" />
+      </span>
+    </span>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Conviction badge (matches dashboard style exactly)
+// Result badge — outcome is "win" / "loss" / "push" (strings from settle op)
 // ---------------------------------------------------------------------------
 
-function ConvictionBadge({ tier }: { tier: string }) {
-  if (tier === "HIGH") {
-    return (
-      <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-bold uppercase tracking-widest">
-        HIGH
-      </Badge>
-    )
-  }
-  if (tier === "MED") {
-    return (
-      <Badge
-        variant="outline"
-        className="border-[#f59e0b] text-[#f59e0b] text-xs font-bold uppercase tracking-widest"
-      >
-        MED
-      </Badge>
-    )
-  }
-  return (
-    <Badge
-      variant="outline"
-      className="border-gray-600 text-gray-500 text-xs font-bold uppercase tracking-widest"
-    >
-      LOW
-    </Badge>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Result badge
-// ---------------------------------------------------------------------------
-
-function ResultBadge({ result }: { result: string }) {
-  if (result === "Won") {
+function ResultBadge({ outcome }: { outcome: string | null }) {
+  if (outcome === "win") {
     return (
       <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 text-xs font-semibold">
-        Won
+        Win
       </Badge>
     )
   }
-  if (result === "Lost") {
+  if (outcome === "loss") {
     return (
       <Badge className="bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/30 text-xs font-semibold">
-        Lost
+        Loss
+      </Badge>
+    )
+  }
+  if (outcome === "push") {
+    return (
+      <Badge variant="outline" className="border-gray-600 text-gray-500 text-xs font-semibold">
+        Push
       </Badge>
     )
   }
   return (
-    <Badge
-      variant="outline"
-      className="border-gray-600 text-gray-500 text-xs font-semibold"
-    >
-      Push
+    <Badge variant="outline" className="border-[#f59e0b]/30 text-[#f59e0b] text-xs font-semibold">
+      Pending
     </Badge>
   )
 }
@@ -227,114 +187,115 @@ function ChartTooltip({ active, payload, label }: any) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Navbar
-// ---------------------------------------------------------------------------
-
-function Navbar() {
+function BrierTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        <Link
-          href="/"
-          className="flex items-center gap-0 text-lg font-bold tracking-tight"
-        >
-          <span className="text-[#10b981]">Credence</span>
-          <span className="text-white"> Sports</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-gray-500 sm:block">
-            user@example.com
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-gray-400 hover:text-white hover:bg-[#141414]"
-            asChild
-          >
-            <Link href="/">
-              <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              Sign Out
-            </Link>
-          </Button>
-        </div>
-      </div>
-      {/* Sub-nav */}
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
-        <Link
-          href="/dashboard"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Dashboard
-        </Link>
-        <Link
-          href="/performance"
-          className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
-        >
-          Performance
-        </Link>
-        <Link
-          href="/settings"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Settings
-        </Link>
-      </div>
-    </nav>
+    <div className="rounded-lg border border-[#262626] bg-[#141414] px-3 py-2 shadow-xl">
+      <p className="text-xs text-gray-400 mb-1">{label}</p>
+      {payload.map((p: any) => (
+        <p key={p.dataKey ?? p.name} className="text-sm font-semibold font-mono text-gray-200">
+          {p.name}: <span className="text-white">{p.value?.toFixed(3)}</span>
+        </p>
+      ))}
+    </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Stat tiles
+// Season selector
 // ---------------------------------------------------------------------------
 
-function StatTiles({
-  sizing,
+type Season = number | null
+
+const SEASON_OPTIONS: { label: string; value: Season }[] = [
+  { label: "2026", value: 2026 },
+  { label: "2025", value: 2025 },
+  { label: "2024", value: 2024 },
+  { label: "2023", value: 2023 },
+  { label: "All", value: null },
+]
+
+function SeasonSelector({
+  season,
+  onChange,
 }: {
-  sizing: SizingMethod
+  season: Season
+  onChange: (s: Season) => void
 }) {
-  const { summary } = MOCK_DATA
-  const netPnl =
-    sizing === "Flat"
-      ? summary.netPnlFlat
-      : sizing === "Kelly"
-      ? summary.netPnlKelly
-      : summary.netPnlPortfolioKelly
+  return (
+    <div className="flex shrink-0 rounded-lg border border-[#262626] bg-[#141414] p-1">
+      {SEASON_OPTIONS.map((opt) => (
+        <button
+          key={String(opt.value)}
+          onClick={() => onChange(opt.value)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+            season === opt.value
+              ? "bg-[#10b981] text-[#0a0a0a]"
+              : "text-gray-500 hover:text-gray-300"
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
-  // Sparkline data — derived from plCurveFlat counts/rates
-  const betCountSpark = [12, 28, 41, 67, 103, 148, 191, 224, 247]
-  const winRateSpark = [0.50, 0.52, 0.49, 0.53, 0.55, 0.54, 0.543, 0.542, 0.543]
-  const clvSpark = [0.008, 0.012, 0.009, 0.018, 0.021, 0.019, 0.022, 0.020, 0.021]
-  const pnlSpark = MOCK_DATA.plCurveFlat.map((d) => d.pnl)
+// ---------------------------------------------------------------------------
+// Summary tiles — driven by /performance/bets per-user data
+// ---------------------------------------------------------------------------
 
+interface BetSummary {
+  wins: number
+  losses: number
+  pushes: number
+  settled: number
+  winRate: number | null
+  netPnl: number | null
+  totalStake: number
+  roi: number | null
+  total: number
+}
+
+function deriveSummary(data: PerformanceBetsResponse | undefined): BetSummary {
+  const bets = data?.bets ?? []
+  const wins = bets.filter(b => b.outcome === "win").length
+  const losses = bets.filter(b => b.outcome === "loss").length
+  const pushes = bets.filter(b => b.outcome === "push").length
+  const settled = data?.settled_count ?? 0
+  const decisive = wins + losses
+  const winRate = decisive > 0 ? wins / decisive : null
+  const netPnl = data?.net_pnl ?? null
+  const totalStake = bets.reduce((s, b) => s + (b.stake ?? 0), 0)
+  const roi = totalStake > 0 && netPnl != null ? netPnl / totalStake : null
+  return { wins, losses, pushes, settled, winRate, netPnl, totalStake, roi, total: data?.total ?? 0 }
+}
+
+function StatTiles({ summary }: { summary: BetSummary }) {
   const tiles = [
     {
-      label: "Total Bets",
-      value: summary.totalBets.toString(),
+      label: "Settled Bets",
+      value: summary.settled.toString(),
+      sub: `${summary.wins}W · ${summary.losses}L · ${summary.pushes}P`,
       valueClass: "text-white",
-      spark: betCountSpark,
-      sparkColor: "#6b7280",
     },
     {
       label: "Win Rate",
       value: fmtPct(summary.winRate),
+      sub: "excl. pushes",
       valueClass: winRateColor(summary.winRate),
-      spark: winRateSpark,
-      sparkColor: winRateColor(summary.winRate) === "text-[#10b981]" ? "#10b981" : winRateColor(summary.winRate) === "text-[#f59e0b]" ? "#f59e0b" : "#ef4444",
     },
     {
-      label: "Mean CLV",
-      value: `+${fmtPct(summary.meanCLV)}`,
-      valueClass: clvColor(summary.meanCLV),
-      spark: clvSpark,
-      sparkColor: "#10b981",
+      label: "Net P&L",
+      value: fmtPnlExact(summary.netPnl),
+      sub: summary.roi != null ? `${fmtSignedPct(summary.roi)} ROI` : undefined,
+      valueClass: pnlColor(summary.netPnl),
     },
     {
-      label: `Net P&L (${sizing})`,
-      value: fmtPnl(netPnl),
-      valueClass: pnlColor(netPnl),
-      spark: pnlSpark,
-      sparkColor: netPnl >= 0 ? "#10b981" : "#ef4444",
+      label: "Total Staked",
+      value: `$${summary.totalStake.toFixed(0)}`,
+      sub: `${summary.total} total bets`,
+      valueClass: "text-gray-300",
     },
   ]
 
@@ -345,15 +306,15 @@ function StatTiles({
           key={tile.label}
           className="flex flex-col justify-between rounded-xl border border-[#262626] bg-[#141414] px-5 py-4"
         >
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs uppercase tracking-wider text-gray-500 font-medium leading-relaxed">
-              {tile.label}
-            </p>
-            <Sparkline data={tile.spark} color={tile.sparkColor} />
-          </div>
-          <p className={`mt-3 text-3xl font-bold tracking-tight font-mono ${tile.valueClass}`}>
+          <p className="text-xs uppercase tracking-wider text-gray-500 font-medium leading-relaxed">
+            {tile.label}
+          </p>
+          <p className={`mt-2 text-3xl font-bold tracking-tight font-mono ${tile.valueClass}`}>
             {tile.value}
           </p>
+          {tile.sub && (
+            <p className="mt-1 text-xs text-gray-500">{tile.sub}</p>
+          )}
         </div>
       ))}
     </div>
@@ -361,163 +322,466 @@ function StatTiles({
 }
 
 // ---------------------------------------------------------------------------
-// P&L Curve
+// Model skill strip — driven by /performance/model (global, all picks)
 // ---------------------------------------------------------------------------
 
-function PLCurve({ sizing }: { sizing: SizingMethod }) {
-  const flat = MOCK_DATA.plCurveFlat
-  const data =
-    sizing === "Flat"
-      ? flat
-      : sizing === "Kelly"
-      ? deriveKellySeries(flat, 1.37)
-      : deriveKellySeries(flat, 1.25)
+const TOOLTIP_BRIER =
+  "Brier Score measures calibration — how close model probabilities are to actual outcomes. Lower is better. A perfect model = 0; random guessing ≈ 0.25."
+const TOOLTIP_CLV =
+  "Closing Line Value (CLV): positive means we bet at better odds than the market settled at — a sign of predictive edge over the market."
+const TOOLTIP_CLVPCT =
+  "% of bets where we beat the closing line. Above 50% indicates we're consistently finding value before the market corrects."
+const TOOLTIP_WINRATE =
+  "% of picks that won. Each row is one directional pick (either Over OR Under for totals, or home/away for H2H) — never both sides of the same game. Excludes pushes."
+const TOOLTIP_TOTALS =
+  "Totals predictions include both Over and Under as separate picks, so counts are roughly 5–6× higher than H2H (which is one pick per game)."
+
+function MarketCard({ m }: { m: MarketMetrics }) {
+  const isTotals = m.market_type !== "h2h"
+  return (
+    <div className="rounded-lg border border-[#1f1f1f] bg-[#0f0f0f] px-4 py-3">
+      <div className="flex items-center gap-1 mb-3">
+        <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+          {isTotals ? "Totals (Over / Under)" : "Moneyline (H2H)"}
+        </p>
+        {isTotals && <InfoTooltip text={TOOLTIP_TOTALS} />}
+      </div>
+      <div className="grid grid-cols-5 gap-2 text-center">
+        <div>
+          <p className="text-xs text-gray-500">Picks</p>
+          <p className="mt-0.5 font-mono text-sm text-white">
+            {m.n_predictions.toLocaleString()}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 flex items-center justify-center">
+            Brier<InfoTooltip text={TOOLTIP_BRIER} />
+          </p>
+          <p className="mt-0.5 font-mono text-sm text-gray-300">
+            {m.brier_score?.toFixed(3) ?? "—"}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 flex items-center justify-center">
+            Avg CLV<InfoTooltip text={TOOLTIP_CLV} />
+          </p>
+          <p className={`mt-0.5 font-mono text-sm ${clvColor(m.avg_clv)}`}>
+            {fmtSignedPct(m.avg_clv)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 flex items-center justify-center">
+            CLV+%<InfoTooltip text={TOOLTIP_CLVPCT} />
+          </p>
+          <p className={`mt-0.5 font-mono text-sm ${(m.clv_positive_pct ?? 0) >= 0.5 ? "text-[#10b981]" : "text-gray-300"}`}>
+            {fmtPct(m.clv_positive_pct)}
+          </p>
+        </div>
+        <div>
+          <p className="text-xs text-gray-500 flex items-center justify-center">
+            Win %<InfoTooltip text={TOOLTIP_WINRATE} />
+          </p>
+          <p className={`mt-0.5 font-mono text-sm ${winRateColor(m.win_rate)}`}>
+            {fmtPct(m.win_rate)}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AllSeasonsGrid({ markets }: { markets: MarketMetrics[] }) {
+  const byYear = new Map<number, MarketMetrics[]>()
+  for (const m of markets) {
+    if (!byYear.has(m.season)) byYear.set(m.season, [])
+    byYear.get(m.season)!.push(m)
+  }
+  const years = Array.from(byYear.keys()).sort((a, b) => b - a)
 
   return (
-    <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 pt-5 pb-4">
-      <h2 className="mb-4 text-sm font-semibold text-white">
-        Cumulative P&amp;L — {sizing}
-      </h2>
-      <ResponsiveContainer width="100%" height={240}>
-        <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
+    <div className="space-y-4">
+      {years.map((year) => (
+        <div key={year}>
+          <p className="text-xs font-mono text-gray-300 font-semibold mb-2">{year}</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {(byYear.get(year) ?? []).map((m) => (
+              <div
+                key={m.market_type}
+                className="rounded-lg border border-[#1f1f1f] bg-[#0f0f0f] px-3 py-2.5"
+              >
+                <p className="text-xs font-semibold text-gray-400 mb-2.5">
+                  {m.market_type === "h2h" ? "Moneyline" : "Totals"}
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  <div>
+                    <p className="text-xs text-gray-600">Picks</p>
+                    <p className="font-mono text-sm text-gray-300 mt-0.5">
+                      {m.n_predictions.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 flex items-center gap-0.5">
+                      Brier<InfoTooltip text={TOOLTIP_BRIER} />
+                    </p>
+                    <p className="font-mono text-sm text-gray-300 mt-0.5">
+                      {m.brier_score?.toFixed(3) ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 flex items-center gap-0.5">
+                      Avg CLV<InfoTooltip text={TOOLTIP_CLV} />
+                    </p>
+                    <p className={`font-mono text-sm mt-0.5 ${clvColor(m.avg_clv)}`}>
+                      {fmtSignedPct(m.avg_clv)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-600 flex items-center gap-0.5">
+                      Win %<InfoTooltip text={TOOLTIP_WINRATE} />
+                    </p>
+                    <p className={`font-mono text-sm mt-0.5 ${winRateColor(m.win_rate)}`}>
+                      {fmtPct(m.win_rate)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const BRIER_Y_DOMAIN: [number, number] = [0.17, 0.27]
+
+function BrierChart({ markets, season }: { markets: MarketMetrics[]; season: Season }) {
+  const valid = markets.filter((m) => m.brier_score != null)
+  if (valid.length === 0) return null
+
+  if (season === null) {
+    // All seasons: grouped vertical bar chart — one group per year, H2H + Totals bars
+    const byYear = new Map<number, { h2h?: number; totals?: number }>()
+    for (const m of valid) {
+      if (!byYear.has(m.season)) byYear.set(m.season, {})
+      const entry = byYear.get(m.season)!
+      if (m.market_type === "h2h") entry.h2h = m.brier_score!
+      else entry.totals = m.brier_score!
+    }
+    const data = Array.from(byYear.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([year, vals]) => ({ year: String(year), Moneyline: vals.h2h, Totals: vals.totals }))
+
+    return (
+      <div className="mt-6 pt-5 border-t border-[#1f1f1f]">
+        <div className="flex items-center gap-1 mb-4">
+          <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+            Brier Score by Season
+          </p>
+          <InfoTooltip text="Brier Score measures probability calibration. Lower is better — a perfect model = 0.0, random guessing ≈ 0.25. The dashed red line marks the random baseline." />
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={data} barCategoryGap="35%" barGap={3} margin={{ top: 4, right: 24, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
+            <XAxis dataKey="year" tick={{ fill: "#6b7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis
+              domain={BRIER_Y_DOMAIN}
+              tick={{ fill: "#6b7280", fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v: number) => v.toFixed(2)}
+              width={40}
+            />
+            <Tooltip content={<BrierTooltip />} />
+            <ReferenceLine
+              y={0.25}
+              stroke="#ef4444"
+              strokeDasharray="4 3"
+              label={{ value: "random", position: "insideTopRight", fill: "#ef4444", fontSize: 10 }}
+            />
+            <Bar dataKey="Moneyline" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="Totals" fill="#f59e0b" radius={[3, 3, 0, 0]} maxBarSize={28} />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="flex items-center gap-5 mt-2 justify-center">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#10b981]" />
+            Moneyline
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[#f59e0b]" />
+            Totals
+          </span>
+          <span className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className="inline-block w-7 border-t border-dashed border-[#ef4444]" />
+            Random
+          </span>
+        </div>
+        <p className="text-xs text-gray-600 mt-3">
+          * 2026 is our first live prediction season. Prior seasons reflect model development and backtesting — those Brier scores are in-sample estimates, not forward predictions.
+        </p>
+      </div>
+    )
+  }
+
+  // Single season: horizontal bar chart — two rows (Moneyline / Totals), X = Brier score
+  const data = valid.map((m) => ({
+    market: m.market_type === "h2h" ? "Moneyline" : "Totals",
+    brier: m.brier_score!,
+    color: m.market_type === "h2h" ? "#10b981" : "#f59e0b",
+  }))
+
+  return (
+    <div className="mt-6 pt-5 border-t border-[#1f1f1f]">
+      <div className="flex items-center gap-1 mb-4">
+        <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+          Brier Score — {season}
+        </p>
+        <InfoTooltip text="Brier Score measures probability calibration. Lower is better — a perfect model = 0.0, random guessing ≈ 0.25. The dashed red line marks the random baseline." />
+      </div>
+      <ResponsiveContainer width="100%" height={120}>
+        <BarChart
+          layout="vertical"
+          data={data}
+          barCategoryGap="40%"
+          margin={{ top: 4, right: 48, left: 0, bottom: 0 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#262626" horizontal={false} />
           <XAxis
-            dataKey="date"
+            type="number"
+            domain={BRIER_Y_DOMAIN}
             tick={{ fill: "#6b7280", fontSize: 11 }}
             axisLine={false}
             tickLine={false}
-            dy={6}
+            tickFormatter={(v: number) => v.toFixed(2)}
           />
           <YAxis
-            tick={{ fill: "#6b7280", fontSize: 11 }}
+            type="category"
+            dataKey="market"
+            tick={{ fill: "#9ca3af", fontSize: 12 }}
             axisLine={false}
             tickLine={false}
-            tickFormatter={(v) => `$${v}`}
-            width={44}
+            width={72}
           />
-          <Tooltip content={<ChartTooltip />} />
-          {/* Zero baseline */}
-          <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 3" />
-          {/* Layer 3 live annotation */}
+          <Tooltip content={<BrierTooltip />} />
           <ReferenceLine
-            x="May 1"
-            stroke="#f59e0b"
+            x={0.25}
+            stroke="#ef4444"
             strokeDasharray="4 3"
-            label={{
-              value: "Layer 3 live",
-              position: "insideTopRight",
-              fill: "#f59e0b",
-              fontSize: 10,
-              dy: -4,
-            }}
+            label={{ value: "random", position: "top", fill: "#ef4444", fontSize: 10 }}
           />
-          <Line
-            type="monotone"
-            dataKey="pnl"
-            stroke="#10b981"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, fill: "#10b981", stroke: "#0a0a0a", strokeWidth: 2 }}
-          />
-        </LineChart>
+          <Bar dataKey="brier" name="Brier" radius={[0, 3, 3, 0]} maxBarSize={24}>
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     </div>
   )
 }
 
+function ModelSkillStrip({ data, season }: { data: ModelMetricsResponse | undefined; season: Season }) {
+  const markets = data?.markets ?? []
+  const isAllSeasons = season === null
+  return (
+    <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 py-4">
+      <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-4">
+        {isAllSeasons ? "Model Skill — All Seasons" : "Model Skill — All Picks"}
+      </p>
+      {markets.length === 0 ? (
+        <p className="text-sm text-gray-500">No model data available.</p>
+      ) : isAllSeasons ? (
+        <>
+          <AllSeasonsGrid markets={markets} />
+          <BrierChart markets={markets} season={null} />
+        </>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {markets.map((m) => (
+              <MarketCard key={`${m.season}-${m.market_type}`} m={m} />
+            ))}
+          </div>
+          <BrierChart markets={markets} season={season} />
+        </>
+      )}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
-// Breakdown tabs
+// P&L curve — real $ from /performance/bets profit_loss, with market filter
 // ---------------------------------------------------------------------------
+
+type MarketFilter = "all" | "h2h" | "totals"
+
+const MARKET_FILTER_LABELS: Record<MarketFilter, string> = {
+  all: "All",
+  h2h: "H2H",
+  totals: "Totals",
+}
+
+function PLCurve({ bets }: { bets: PerformanceBet[] }) {
+  const [filter, setFilter] = useState<MarketFilter>("all")
+
+  const data = useMemo(() => {
+    const filtered = filter === "all" ? bets : bets.filter(b => marketKey(b.market) === filter)
+    const settled = filtered
+      .filter(b => b.outcome != null && b.profit_loss != null)
+      .sort((a, b) => a.score_date.localeCompare(b.score_date))
+    let running = 0
+    return settled.map(b => {
+      running += b.profit_loss!
+      return { date: b.score_date, pnl: Math.round(running * 100) / 100 }
+    })
+  }, [bets, filter])
+
+  return (
+    <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 pt-5 pb-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h2 className="text-sm font-semibold text-white whitespace-nowrap">
+            Cumulative P&amp;L — Flat Stake
+          </h2>
+          <InfoTooltip text="Running total of profit/loss over time, assuming the same flat stake on every bet. The green line is cumulative dollars gained or lost. Use the filters to see how H2H vs. Totals bets each contribute." />
+        </div>
+        <div className="flex shrink-0 rounded-md border border-[#262626] bg-[#0a0a0a] p-0.5">
+          {(Object.keys(MARKET_FILTER_LABELS) as MarketFilter[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                filter === f
+                  ? "bg-[#10b981] text-[#0a0a0a]"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              {MARKET_FILTER_LABELS[f]}
+            </button>
+          ))}
+        </div>
+      </div>
+      {data.length === 0 ? (
+        <div className="flex h-[240px] items-center justify-center text-sm text-gray-500">
+          No settled bets yet.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#262626" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fill: "#6b7280", fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              dy={6}
+              minTickGap={24}
+            />
+            <YAxis
+              tick={{ fill: "#6b7280", fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => `$${v}`}
+              width={52}
+            />
+            <Tooltip content={<ChartTooltip />} />
+            <ReferenceLine y={0} stroke="#374151" strokeDasharray="4 3" />
+            <Line
+              type="monotone"
+              dataKey="pnl"
+              stroke="#10b981"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: "#10b981", stroke: "#0a0a0a", strokeWidth: 2 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// By-market breakdown — computed client-side from bets list
+// ---------------------------------------------------------------------------
+
+interface MarketAgg {
+  market_type: string
+  total: number
+  wins: number
+  losses: number
+  pushes: number
+  win_rate: number | null
+  net_pnl: number
+}
+
+function marketKey(market: string): string {
+  if (market.startsWith("h2h")) return "h2h"
+  if (market === "over" || market === "under") return "totals"
+  return market
+}
+
+function computeByMarket(bets: PerformanceBet[]): MarketAgg[] {
+  const map = new Map<string, MarketAgg>()
+  for (const b of bets) {
+    if (b.outcome == null) continue
+    const key = marketKey(b.market)
+    if (!map.has(key)) {
+      map.set(key, { market_type: key, total: 0, wins: 0, losses: 0, pushes: 0, win_rate: null, net_pnl: 0 })
+    }
+    const agg = map.get(key)!
+    agg.total++
+    if (b.outcome === "win") agg.wins++
+    else if (b.outcome === "loss") agg.losses++
+    else agg.pushes++
+    agg.net_pnl += b.profit_loss ?? 0
+  }
+  for (const agg of map.values()) {
+    const decisive = agg.wins + agg.losses
+    agg.win_rate = decisive > 0 ? agg.wins / decisive : null
+  }
+  return Array.from(map.values()).sort((a, b) => a.market_type.localeCompare(b.market_type))
+}
 
 const thClass = "text-xs uppercase tracking-wider text-gray-500 font-medium"
 const tdBase = "py-3 font-mono text-sm"
 
-function ByMarketTable() {
-  return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-[#262626] hover:bg-transparent">
-            <TableHead className={`${thClass} pl-0`}>Market Type</TableHead>
-            <TableHead className={`${thClass} text-right`}>Bets</TableHead>
-            <TableHead className={`${thClass} text-right`}>Win Rate</TableHead>
-            <TableHead className={`${thClass} text-right`}>Mean CLV</TableHead>
-            <TableHead className={`${thClass} text-right`}>Net P&L</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {MOCK_DATA.byMarket.map((row) => (
-            <TableRow key={row.market} className="border-[#262626] hover:bg-[#1a1a1a]">
-              <TableCell className="py-3 text-sm text-gray-300 pl-0">{row.market}</TableCell>
-              <TableCell className={`${tdBase} text-right text-gray-400`}>{row.bets}</TableCell>
-              <TableCell className={`${tdBase} text-right ${winRateColor(row.winRate)}`}>{fmtPct(row.winRate)}</TableCell>
-              <TableCell className={`${tdBase} text-right ${clvColor(row.meanCLV)}`}>{row.meanCLV >= 0 ? "+" : ""}{fmtPct(row.meanCLV)}</TableCell>
-              <TableCell className={`${tdBase} text-right ${pnlColor(row.netPnl)}`}>{fmtPnl(row.netPnl)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
-
-function ByConvictionTable() {
-  return (
-    <div>
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#262626] hover:bg-transparent">
-              <TableHead className={`${thClass} pl-0`}>Conviction</TableHead>
-              <TableHead className={`${thClass} text-right`}>Bets</TableHead>
-              <TableHead className={`${thClass} text-right`}>Win Rate</TableHead>
-              <TableHead className={`${thClass} text-right`}>Mean CLV</TableHead>
-              <TableHead className={`${thClass} text-right`}>Net P&L</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {MOCK_DATA.byConviction.map((row) => (
-              <TableRow key={row.tier} className="border-[#262626] hover:bg-[#1a1a1a]">
-                <TableCell className="py-3 pl-0">
-                  <ConvictionBadge tier={row.tier} />
-                </TableCell>
-                <TableCell className={`${tdBase} text-right text-gray-400`}>{row.bets}</TableCell>
-                <TableCell className={`${tdBase} text-right ${winRateColor(row.winRate)}`}>{fmtPct(row.winRate)}</TableCell>
-                <TableCell className={`${tdBase} text-right ${clvColor(row.meanCLV)}`}>{row.meanCLV >= 0 ? "+" : ""}{fmtPct(row.meanCLV)}</TableCell>
-                <TableCell className={`${tdBase} text-right ${pnlColor(row.netPnl)}`}>{fmtPnl(row.netPnl)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+function ByMarketTable({ bets }: { bets: PerformanceBet[] }) {
+  const rows = useMemo(() => computeByMarket(bets), [bets])
+  if (rows.length === 0) {
+    return (
+      <div className="text-sm text-gray-500 py-8 text-center">
+        No settled bets yet.
       </div>
-      <p className="mt-4 text-xs leading-relaxed text-gray-600">
-        Conviction tiers reflect the model&apos;s gate criteria score at prediction time. HIGH = all 5 gates fired. MED = 4 gates. LOW = 3 gates.
-      </p>
-    </div>
-  )
-}
-
-function BySignalTable() {
+    )
+  }
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow className="border-[#262626] hover:bg-transparent">
-            <TableHead className={`${thClass} pl-0`}>Signal Group</TableHead>
+            <TableHead className={`${thClass} pl-0`}>Market</TableHead>
             <TableHead className={`${thClass} text-right`}>Bets</TableHead>
+            <TableHead className={`${thClass} text-right`}>Record</TableHead>
             <TableHead className={`${thClass} text-right`}>Win Rate</TableHead>
-            <TableHead className={`${thClass} text-right`}>Mean CLV</TableHead>
             <TableHead className={`${thClass} text-right`}>Net P&L</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {MOCK_DATA.bySignal.map((row) => (
-            <TableRow key={row.signal} className="border-[#262626] hover:bg-[#1a1a1a]">
-              <TableCell className="py-3 text-sm text-gray-300 pl-0">{row.signal}</TableCell>
-              <TableCell className={`${tdBase} text-right text-gray-400`}>{row.bets}</TableCell>
-              <TableCell className={`${tdBase} text-right ${winRateColor(row.winRate)}`}>{fmtPct(row.winRate)}</TableCell>
-              <TableCell className={`${tdBase} text-right ${clvColor(row.meanCLV)}`}>{row.meanCLV >= 0 ? "+" : ""}{fmtPct(row.meanCLV)}</TableCell>
-              <TableCell className={`${tdBase} text-right ${pnlColor(row.netPnl)}`}>{fmtPnl(row.netPnl)}</TableCell>
+          {rows.map((r) => (
+            <TableRow key={r.market_type} className="border-[#262626] hover:bg-[#1a1a1a]">
+              <TableCell className="py-3 text-sm text-gray-300 pl-0">{r.market_type}</TableCell>
+              <TableCell className={`${tdBase} text-right text-gray-400`}>{r.total}</TableCell>
+              <TableCell className={`${tdBase} text-right text-gray-400`}>
+                {r.wins}W–{r.losses}L{r.pushes > 0 ? `–${r.pushes}P` : ""}
+              </TableCell>
+              <TableCell className={`${tdBase} text-right ${winRateColor(r.win_rate)}`}>
+                {fmtPct(r.win_rate)}
+              </TableCell>
+              <TableCell className={`${tdBase} text-right ${pnlColor(r.net_pnl)}`}>
+                {fmtPnlExact(r.net_pnl)}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -526,29 +790,42 @@ function BySignalTable() {
   )
 }
 
-function BreakdownTabs() {
+function BreakdownTabs({ bets }: { bets: PerformanceBet[] }) {
   return (
     <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 py-5">
-      <Tabs defaultValue="conviction">
+      <Tabs defaultValue="market">
         <TabsList className="bg-[#0a0a0a] border border-[#262626] mb-5">
-          <TabsTrigger value="market" className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white">
+          <TabsTrigger
+            value="market"
+            className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white"
+          >
             By Market
           </TabsTrigger>
-          <TabsTrigger value="conviction" className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white">
+          <TabsTrigger
+            value="conviction"
+            className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white"
+          >
             By Conviction
           </TabsTrigger>
-          <TabsTrigger value="signal" className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white">
+          <TabsTrigger
+            value="signal"
+            className="text-xs data-[state=active]:bg-[#141414] data-[state=active]:text-white"
+          >
             By Signal
           </TabsTrigger>
         </TabsList>
         <TabsContent value="market">
-          <ByMarketTable />
+          <ByMarketTable bets={bets} />
         </TabsContent>
         <TabsContent value="conviction">
-          <ByConvictionTable />
+          <div className="text-sm text-gray-500 py-8 text-center">
+            Per-conviction breakdowns coming in a future release.
+          </div>
         </TabsContent>
         <TabsContent value="signal">
-          <BySignalTable />
+          <div className="text-sm text-gray-500 py-8 text-center">
+            Per-signal breakdowns coming in a future release.
+          </div>
         </TabsContent>
       </Tabs>
     </div>
@@ -556,51 +833,94 @@ function BreakdownTabs() {
 }
 
 // ---------------------------------------------------------------------------
-// Recent results
+// Bet log — all settled bets newest-first
 // ---------------------------------------------------------------------------
 
-function RecentResults() {
-  const results = MOCK_DATA.recentResults
+function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
+  const sorted = useMemo(
+    () => [...bets].sort((a, b) => b.score_date.localeCompare(a.score_date)),
+    [bets]
+  )
   return (
     <div>
-      <h2 className="mb-4 text-base font-semibold text-white">Recent Results</h2>
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-base font-semibold text-white">Bet Log</h2>
+        <InfoTooltip text="Model Prob is the probability our model assigned at bet time. EV is the expected value edge over the offered odds. These show what signals we were reading when the pick was made." />
+      </div>
       <div className="overflow-x-auto rounded-xl border border-[#262626] bg-[#141414]">
-        <Table>
-          <TableHeader>
-            <TableRow className="border-[#262626] hover:bg-transparent">
-              <TableHead className={`${thClass} pl-5`}>Date</TableHead>
-              <TableHead className={thClass}>Game</TableHead>
-              <TableHead className={thClass}>Market</TableHead>
-              <TableHead className={thClass}>Side</TableHead>
-              <TableHead className={`${thClass} text-right`}>Model%</TableHead>
-              <TableHead className={`${thClass} text-right`}>Bovada%</TableHead>
-              <TableHead className={`${thClass} text-right`}>Edge</TableHead>
-              <TableHead className={thClass}>Result</TableHead>
-              <TableHead className={`${thClass} text-right pr-5`}>CLV</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {results.map((r, i) => (
-              <TableRow key={i} className="border-[#262626] hover:bg-[#1a1a1a]">
-                <TableCell className="py-3 pl-5 text-xs text-gray-500 whitespace-nowrap">{r.date}</TableCell>
-                <TableCell className="py-3 text-sm text-gray-300 whitespace-nowrap font-medium">{r.game}</TableCell>
-                <TableCell className="py-3 text-xs text-gray-400 whitespace-nowrap">{r.market}</TableCell>
-                <TableCell className="py-3 text-xs text-gray-400 whitespace-nowrap">{r.side}</TableCell>
-                <TableCell className="py-3 text-right font-mono text-sm text-[#10b981] whitespace-nowrap">{fmtPct(r.modelProb)}</TableCell>
-                <TableCell className="py-3 text-right font-mono text-sm text-gray-400 whitespace-nowrap">{fmtPct(r.bovadaProb)}</TableCell>
-                <TableCell className="py-3 text-right font-mono text-sm text-gray-300 whitespace-nowrap">
-                  {r.edge >= 0 ? "+" : ""}{fmtPct(r.edge)}
-                </TableCell>
-                <TableCell className="py-3">
-                  <ResultBadge result={r.result} />
-                </TableCell>
-                <TableCell className={`py-3 pr-5 text-right font-mono text-sm whitespace-nowrap ${clvColor(r.clv)}`}>
-                  {r.clv >= 0 ? "+" : ""}{fmtPct(r.clv)}
-                </TableCell>
+        {sorted.length === 0 ? (
+          <div className="py-8 text-center text-sm text-gray-500">
+            No settled bets yet.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="border-[#262626] hover:bg-transparent">
+                <TableHead className={`${thClass} pl-5`}>Date</TableHead>
+                <TableHead className={thClass}>Game</TableHead>
+                <TableHead className={`${thClass} hidden sm:table-cell`}>Market</TableHead>
+                <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Odds</TableHead>
+                <TableHead className={`${thClass} text-right hidden sm:table-cell`}>Stake</TableHead>
+                <TableHead className={`${thClass} text-right hidden md:table-cell`}>Model</TableHead>
+                <TableHead className={thClass}>Result</TableHead>
+                <TableHead className={`${thClass} text-right pr-5`}>P&L</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((b) => (
+                <TableRow key={b.bet_id} className="border-[#262626] hover:bg-[#1a1a1a]">
+                  <TableCell className="py-3 pl-5 text-xs text-gray-500 whitespace-nowrap">
+                    {b.score_date}
+                  </TableCell>
+                  <TableCell className="py-3 text-sm text-gray-300 whitespace-nowrap font-medium">
+                    {b.matchup ?? `Game ${b.game_pk}`}
+                    <div className="sm:hidden text-xs text-gray-500 font-normal mt-0.5">{b.market}</div>
+                  </TableCell>
+                  <TableCell className="py-3 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">
+                    {b.market}
+                  </TableCell>
+                  <TableCell className="py-3 text-right font-mono text-sm text-gray-300 whitespace-nowrap hidden sm:table-cell">
+                    {fmtOdds(b.american_odds)}
+                  </TableCell>
+                  <TableCell className="py-3 text-right font-mono text-sm text-gray-400 whitespace-nowrap hidden sm:table-cell">
+                    ${b.stake.toFixed(0)}
+                  </TableCell>
+                  <TableCell className="py-3 text-right whitespace-nowrap hidden md:table-cell">
+                    {b.model_prob != null ? (
+                      <span className="font-mono text-sm text-gray-300">
+                        {fmtPct(b.model_prob)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-600">—</span>
+                    )}
+                    {b.ev != null && (
+                      <span className={`ml-1.5 font-mono text-xs ${clvColor(b.ev)}`}>
+                        {fmtSignedPct(b.ev)}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-3">
+                    <ResultBadge outcome={b.outcome} />
+                    {/* Model context shown on mobile when Model column is hidden */}
+                    {b.model_prob != null && (
+                      <div className="md:hidden mt-1 flex items-center gap-1.5">
+                        <span className="font-mono text-xs text-gray-400">{fmtPct(b.model_prob)}</span>
+                        {b.ev != null && (
+                          <span className={`font-mono text-xs ${clvColor(b.ev)}`}>{fmtSignedPct(b.ev)}</span>
+                        )}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className={`py-3 pr-5 text-right font-mono text-sm whitespace-nowrap ${pnlColor(b.profit_loss)}`}
+                  >
+                    {fmtPnlExact(b.profit_loss)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
     </div>
   )
@@ -611,59 +931,65 @@ function RecentResults() {
 // ---------------------------------------------------------------------------
 
 export default function PerformancePage() {
-  const [sizing, setSizing] = useState<SizingMethod>("Flat")
-  const sizingOptions: SizingMethod[] = ["Flat", "Kelly", "Portfolio Kelly"]
+  const { accessToken, email } = useAuth()
+  const [season, setSeason] = useState<Season>(2026)
+  const seasonParam = season != null ? `?season=${season}` : ""
+
+  const { data: betsData } = useQuery<PerformanceBetsResponse>({
+    queryKey: ["perf-bets", season],
+    queryFn: () => apiFetch(`/performance/bets${seasonParam}`, {}, accessToken),
+  })
+
+  const { data: modelData, isFetching: modelFetching } = useQuery<ModelMetricsResponse>({
+    queryKey: ["perf-model", season],
+    queryFn: () => apiFetch(`/performance/model${seasonParam}`, {}, accessToken),
+  })
+
+  const summary = useMemo(() => deriveSummary(betsData), [betsData])
+  const bets = betsData?.bets ?? []
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] font-sans">
-      <Navbar />
-      <main className="mx-auto max-w-6xl px-4 pb-20">
-        {/* Page header */}
-        <div className="flex flex-col gap-4 pt-10 pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-              Performance
-            </h1>
-            <p className="mt-2 text-sm text-gray-400">
-              Season record from first qualified pick through today.
-            </p>
+    <AuthGuard>
+      <div className="min-h-screen bg-[#0a0a0a] font-sans">
+        <Nav authenticated activeLink="performance" userEmail={email} />
+        <main className="mx-auto max-w-6xl px-4 pb-20">
+          {/* Page header */}
+          <div className="flex flex-col gap-4 pt-10 pb-6 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
+                Performance
+              </h1>
+              <p className="mt-2 text-sm text-gray-400">
+                Your bet results and model skill metrics.
+              </p>
+            </div>
+            <SeasonSelector season={season} onChange={setSeason} />
           </div>
-          {/* Sizing toggle */}
-          <div className="flex shrink-0 rounded-lg border border-[#262626] bg-[#141414] p-1">
-            {sizingOptions.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => setSizing(opt)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  sizing === opt
-                    ? "bg-[#10b981] text-[#0a0a0a]"
-                    : "text-gray-500 hover:text-gray-300"
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+
+          {/* Summary tiles */}
+          <StatTiles summary={summary} />
+
+          {/* Model skill strip */}
+          <div className={`mt-5 transition-opacity duration-200 ${modelFetching ? "opacity-50" : "opacity-100"}`}>
+            <ModelSkillStrip data={modelData} season={season} />
           </div>
-        </div>
 
-        {/* Stat tiles */}
-        <StatTiles sizing={sizing} />
+          {/* P&L curve */}
+          <div className="mt-5">
+            <PLCurve bets={bets} />
+          </div>
 
-        {/* P&L curve */}
-        <div className="mt-5">
-          <PLCurve sizing={sizing} />
-        </div>
+          {/* Breakdown tabs */}
+          <div className="mt-5">
+            <BreakdownTabs bets={bets} />
+          </div>
 
-        {/* Breakdown tabs */}
-        <div className="mt-5">
-          <BreakdownTabs />
-        </div>
-
-        {/* Recent results */}
-        <div className="mt-8">
-          <RecentResults />
-        </div>
-      </main>
-    </div>
+          {/* Bet log */}
+          <div className="mt-8">
+            <BetLogTable bets={bets} />
+          </div>
+        </main>
+      </div>
+    </AuthGuard>
   )
 }

@@ -1,10 +1,16 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
-import { CalendarIcon, ChevronDown, ChevronUp, ChevronsUpDown, LogOut } from "lucide-react"
+import { CalendarIcon, ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
+import { AuthGuard } from "@/components/auth-guard"
+import { useAuth } from "@/lib/auth-context"
+import { Nav } from "@/components/nav"
+import { useSelectedDate } from "@/lib/date-context"
+import { apiFetch } from "@/lib/api"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -18,41 +24,61 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 // ---------------------------------------------------------------------------
-// Mock data — replace with useQuery hook in A0.4
+// API types
 // ---------------------------------------------------------------------------
-const MOCK_DATA = {
-  bankrollDefault: 1000,
-  markets: [
-    { game_pk: 1001, game: "HOU @ NYM", time: "7:10 PM ET", market: "Totals Over 8.5",  marketType: "total",     side: "Over",  modelProb: 0.583, bovadaProb: 0.541, qualified: true  },
-    { game_pk: 1001, game: "HOU @ NYM", time: "7:10 PM ET", market: "Totals Under 8.5", marketType: "total",     side: "Under", modelProb: 0.417, bovadaProb: 0.459, qualified: false },
-    { game_pk: 1001, game: "HOU @ NYM", time: "7:10 PM ET", market: "Home ML",          marketType: "moneyline", side: "Home",  modelProb: 0.524, bovadaProb: 0.541, qualified: false },
-    { game_pk: 1001, game: "HOU @ NYM", time: "7:10 PM ET", market: "Away ML",          marketType: "moneyline", side: "Away",  modelProb: 0.476, bovadaProb: 0.459, qualified: false },
-    { game_pk: 1002, game: "LAD @ SF",  time: "9:45 PM ET", market: "Home ML",          marketType: "moneyline", side: "Home",  modelProb: 0.612, bovadaProb: 0.571, qualified: true  },
-    { game_pk: 1002, game: "LAD @ SF",  time: "9:45 PM ET", market: "Away ML",          marketType: "moneyline", side: "Away",  modelProb: 0.388, bovadaProb: 0.429, qualified: false },
-    { game_pk: 1002, game: "LAD @ SF",  time: "9:45 PM ET", market: "Totals Over 7.5",  marketType: "total",     side: "Over",  modelProb: 0.531, bovadaProb: 0.510, qualified: true  },
-    { game_pk: 1002, game: "LAD @ SF",  time: "9:45 PM ET", market: "Totals Under 7.5", marketType: "total",     side: "Under", modelProb: 0.469, bovadaProb: 0.490, qualified: false },
-    { game_pk: 1003, game: "ATL @ PHI", time: "7:05 PM ET", market: "Away ML",          marketType: "moneyline", side: "Away",  modelProb: 0.534, bovadaProb: 0.502, qualified: true  },
-    { game_pk: 1003, game: "ATL @ PHI", time: "7:05 PM ET", market: "Home ML",          marketType: "moneyline", side: "Home",  modelProb: 0.466, bovadaProb: 0.498, qualified: false },
-    { game_pk: 1003, game: "ATL @ PHI", time: "7:05 PM ET", market: "Totals Over 8.0",  marketType: "total",     side: "Over",  modelProb: 0.498, bovadaProb: 0.510, qualified: false },
-    { game_pk: 1004, game: "NYY @ BOS", time: "7:10 PM ET", market: "Totals Under 8.0", marketType: "total",     side: "Under", modelProb: 0.481, bovadaProb: 0.510, qualified: false },
-    { game_pk: 1004, game: "NYY @ BOS", time: "7:10 PM ET", market: "Home ML",          marketType: "moneyline", side: "Home",  modelProb: 0.523, bovadaProb: 0.541, qualified: false },
-    { game_pk: 1005, game: "CHC @ MIL", time: "8:10 PM ET", market: "Home ML",          marketType: "moneyline", side: "Home",  modelProb: 0.498, bovadaProb: 0.519, qualified: false },
-    { game_pk: 1005, game: "CHC @ MIL", time: "8:10 PM ET", market: "Totals Over 7.5",  marketType: "total",     side: "Over",  modelProb: 0.541, bovadaProb: 0.510, qualified: true  },
-  ],
+interface EVPick {
+  game_pk: number
+  game_date: string
+  game_start_utc: string | null
+  market_type: string
+  model_prob: number | null
+  bovada_devig_prob: number | null
+  edge: number | null
+  game_conviction_score: number | null
+  lineup_confirmed: boolean | null
+  qualified_bet: boolean | null
+  home_team: string | null
+  away_team: string | null
+  kelly_fraction: number | null
+  total_line_consensus: number | null
+  pred_total_runs: number | null
+}
+
+interface EVPicksResponse {
+  picks: EVPick[]
+  total: number
 }
 
 // ---------------------------------------------------------------------------
-// Types
+// Sort types — shared across both tables
 // ---------------------------------------------------------------------------
 type SortKey =
   | "game"
   | "market"
-  | "side"
-  | "modelProb"
-  | "bovadaProb"
+  | "modelProb"    // h2h: sort by model probability
+  | "bovadaProb"   // h2h: sort by book probability
+  | "predRuns"     // totals: sort by model's projected total
   | "edge"
   | "ev"
   | "rawKelly"
@@ -61,105 +87,183 @@ type SortKey =
 
 type SortDir = "asc" | "desc"
 
+// ---------------------------------------------------------------------------
+// ComputedRow
+// ---------------------------------------------------------------------------
 interface ComputedRow {
   game_pk: number
+  game_date: string | null
   game: string
   time: string
+  gameStartUtc: string | null
   market: string
   marketType: string
   side: string
   modelProb: number
   bovadaProb: number
+  sideModelDisplay: string
+  sideBovadaDisplay: string
   qualified: boolean
-  edge: number
+  highConviction: boolean
+  edge: number          // modelProb - bovadaProb (signed; negative = away/under favored)
+  displayEdge: number   // Math.abs(edge) — always positive for display
   ev: number
   rawKelly: number
   cappedKelly: number
+  predTotalRuns: number | null
+  totalLineConsensus: number | null
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function pct(v: number) {
-  return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`
-}
 function pctRaw(v: number) {
   return `${(v * 100).toFixed(1)}%`
 }
 function usd(v: number) {
   return `$${v.toFixed(2)}`
 }
-
-function americanOdds(bovadaProb: number): string {
-  if (bovadaProb >= 0.5) {
-    return String(Math.round(-(bovadaProb / (1 - bovadaProb)) * 100))
-  }
-  return `+${Math.round(((1 - bovadaProb) / bovadaProb) * 100)}`
+function fmtEdge(v: number) {
+  return `+${(v * 100).toFixed(1)}%`
+}
+function fmtEV(v: number) {
+  return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`
 }
 
-function computeRow(m: (typeof MOCK_DATA.markets)[0]): ComputedRow {
-  const edge = m.modelProb - m.bovadaProb
-  const ev = m.modelProb * (1 / m.bovadaProb - 1) - (1 - m.modelProb)
-  const rawKelly = ((m.modelProb - m.bovadaProb) / (1 - m.bovadaProb)) * 100
-  const cappedKelly = Math.min(Math.max(rawKelly, 0), 5)
-  return { ...m, edge, ev, rawKelly, cappedKelly }
-}
-
-const COMPUTED_ROWS: ComputedRow[] = MOCK_DATA.markets.map(computeRow)
-
 // ---------------------------------------------------------------------------
-// Navbar
+// Column header with tooltip
 // ---------------------------------------------------------------------------
-function Navbar() {
+function ColHeaderTip({ label, tip }: { label: string; tip: string }) {
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        <Link href="/" className="flex items-center gap-0 text-lg font-bold tracking-tight">
-          <span className="text-[#10b981]">Credence</span>
-          <span className="text-white"> Sports</span>
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="hidden text-xs text-gray-500 sm:block">user@example.com</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-gray-400 hover:text-white hover:bg-[#141414]"
-            asChild
-          >
-            <Link href="/">
-              <LogOut className="mr-1.5 h-3.5 w-3.5" />
-              Sign Out
-            </Link>
-          </Button>
-        </div>
-      </div>
-      {/* Sub-nav — all inactive; EV Tracker accessed from dashboard */}
-      <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
-        <Link
-          href="/dashboard"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Dashboard
-        </Link>
-        <Link
-          href="/performance"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Performance
-        </Link>
-        <Link
-          href="/settings"
-          className="border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-        >
-          Settings
-        </Link>
-      </div>
-    </nav>
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help border-b border-dotted border-gray-700">{label}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[220px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+          {tip}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 
+function americanOdds(prob: number): string {
+  if (prob <= 0 || prob >= 1) return "—"
+  if (prob >= 0.5) return String(Math.round(-(prob / (1 - prob)) * 100))
+  return `+${Math.round(((1 - prob) / prob) * 100)}`
+}
+
+function formatGameTime(isoString: string | null): string {
+  if (!isoString) return ""
+  const d = new Date(isoString)
+  if (isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+}
+
+function computeRow(pick: EVPick, maxKelly: number): ComputedRow {
+  const homeTeam = pick.home_team ?? "Home"
+  const awayTeam = pick.away_team ?? "Away"
+  const game = `${awayTeam} @ ${homeTeam}`
+  const isTotal = pick.market_type === "totals"
+  const modelProb = pick.model_prob ?? 0
+  const bovadaProb = pick.bovada_devig_prob ?? 0
+
+  // Always compute edge from probabilities; the DB layer4_totals_over_signal is on a
+  // different scale and causes >100% display issues when used directly.
+  const edge = modelProb - bovadaProb
+  const side = isTotal ? (edge >= 0 ? "Over" : "Under") : (edge >= 0 ? "Home" : "Away")
+
+  const lineDisplay = pick.total_line_consensus != null
+    ? Number(pick.total_line_consensus).toFixed(1) : "?"
+  const market = isTotal
+    ? `${side} ${lineDisplay}`
+    : `${side === "Home" ? homeTeam : awayTeam} ML`
+
+  // Pick-side perspective: delta from 50% for h2h; raw prob for totals
+  let sideModelDisplay: string
+  let sideBovadaDisplay: string
+  if (isTotal) {
+    sideModelDisplay = pctRaw(modelProb)
+    sideBovadaDisplay = pctRaw(bovadaProb)
+  } else {
+    const sideModel = side === "Home" ? modelProb : 1 - modelProb
+    const sideBook  = side === "Home" ? bovadaProb : 1 - bovadaProb
+    const mDelta = (sideModel - 0.5) * 100
+    const bDelta = (sideBook - 0.5) * 100
+    sideModelDisplay = `${mDelta >= 0 ? "+" : ""}${mDelta.toFixed(1)}%`
+    sideBovadaDisplay = `${bDelta >= 0 ? "+" : ""}${bDelta.toFixed(1)}%`
+  }
+
+  // EV and Kelly must be computed from the PICKED side's perspective.
+  // DB model_prob / bovada_devig_prob are always the home (h2h) or over (totals) probability.
+  // For Away / Under picks the edge is negative, so we flip both to get the correct side.
+  const pickedModelProb = edge >= 0 ? modelProb : 1 - modelProb
+  const pickedBovadaProb = edge >= 0 ? bovadaProb : 1 - bovadaProb
+
+  const ev = pickedBovadaProb > 0
+    ? pickedModelProb * (1 / pickedBovadaProb - 1) - (1 - pickedModelProb)
+    : 0
+
+  // Always derive Kelly from picked-side probs. The DB kelly_fraction is stored from the
+  // home perspective and is negative for away picks, which produces a $0 stake incorrectly.
+  const rawKelly = pickedBovadaProb < 1
+    ? ((pickedModelProb - pickedBovadaProb) / (1 - pickedBovadaProb)) * 100
+    : 0
+  // Only qualified bets get a non-zero stake recommendation.
+  const cappedKelly = (pick.qualified_bet ?? false)
+    ? Math.min(Math.max(rawKelly, 0), maxKelly)
+    : 0
+
+  const highConviction = (pick.game_conviction_score ?? 0) >= 0.8
+
+  // Append T12:00:00 so the date is parsed as local noon, not UTC midnight (avoids day shift)
+  const gameDate = format(new Date(pick.game_date + "T12:00:00"), "MMM d")
+  const gameTime = formatGameTime(pick.game_start_utc)
+  const time = gameTime ? `${gameDate} · ${gameTime}` : gameDate
+
+  return {
+    game_pk: pick.game_pk,
+    game_date: pick.game_date,
+    game, time, gameStartUtc: pick.game_start_utc,
+    market, marketType: pick.market_type, side,
+    modelProb, bovadaProb, sideModelDisplay, sideBovadaDisplay,
+    qualified: pick.qualified_bet ?? false,
+    highConviction,
+    edge,
+    displayEdge: Math.abs(edge),
+    ev, rawKelly, cappedKelly,
+    predTotalRuns: pick.pred_total_runs ?? null,
+    totalLineConsensus: pick.total_line_consensus ?? null,
+  }
+}
+
+function applySort(rows: ComputedRow[], key: SortKey, dir: SortDir, bankroll: number): ComputedRow[] {
+  return [...rows].sort((a, b) => {
+    let av: number | string
+    let bv: number | string
+    switch (key) {
+      case "game":        av = a.gameStartUtc ?? "9999-" + a.game; bv = b.gameStartUtc ?? "9999-" + b.game; break
+      case "market":      av = a.market;              bv = b.market;              break
+      case "modelProb":   av = a.modelProb;           bv = b.modelProb;           break
+      case "bovadaProb":  av = a.bovadaProb;          bv = b.bovadaProb;          break
+      case "predRuns":    av = a.predTotalRuns ?? -1; bv = b.predTotalRuns ?? -1; break
+      case "edge":        av = a.displayEdge;         bv = b.displayEdge;         break
+      case "ev":          av = a.ev;                  bv = b.ev;                  break
+      case "rawKelly":    av = a.rawKelly;            bv = b.rawKelly;            break
+      case "cappedKelly": av = a.cappedKelly;         bv = b.cappedKelly;         break
+      case "stake":       av = (a.cappedKelly / 100) * bankroll; bv = (b.cappedKelly / 100) * bankroll; break
+      default:            av = a.displayEdge;         bv = b.displayEdge;
+    }
+    if (typeof av === "string" && typeof bv === "string") {
+      return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av)
+    }
+    return dir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number)
+  })
+}
+
 // ---------------------------------------------------------------------------
-// Sort indicator icon
+// Sort icon
 // ---------------------------------------------------------------------------
 function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
   if (col !== sortKey) return <ChevronsUpDown className="ml-1 inline h-3 w-3 text-gray-600" />
@@ -172,17 +276,178 @@ function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; s
 // Market badge
 // ---------------------------------------------------------------------------
 function MarketBadge({ type, label }: { type: string; label: string }) {
-  const cls =
-    type === "total"
-      ? "bg-teal-950 text-teal-400 border-teal-800"
-      : "bg-blue-950 text-blue-400 border-blue-800"
+  const cls = type === "totals"
+    ? "bg-teal-950 text-teal-400 border-teal-800"
+    : "bg-blue-950 text-blue-400 border-blue-800"
   return (
-    <Badge
-      variant="outline"
-      className={cn("text-[10px] font-medium uppercase tracking-wide border px-1.5 py-0", cls)}
-    >
+    <Badge variant="outline" className={cn("text-[10px] font-medium uppercase tracking-wide border px-1.5 py-0", cls)}>
       {label}
     </Badge>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Capped Kelly cell — tooltip when 0
+// ---------------------------------------------------------------------------
+function CappedKellyCell({ cappedKelly, rawKelly }: { cappedKelly: number; rawKelly: number }) {
+  const display = `${cappedKelly.toFixed(1)}%`
+  if (cappedKelly > 0) return <span className="text-sm text-gray-400">{display}</span>
+  const reason = rawKelly < 0
+    ? "Negative edge — model does not favor this side from a Kelly perspective."
+    : "Edge is below Kelly threshold — no stake recommended."
+  return (
+    <TooltipProvider delayDuration={200}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help text-sm text-gray-600 underline decoration-dotted">{display}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px] text-xs text-center text-white border-[#262626] bg-[#1a1a1a]">{reason}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Log Bet action — confirmation for unqualified bets
+// ---------------------------------------------------------------------------
+function LogBetAction({ row, onLog }: { row: ComputedRow; onLog: () => void }) {
+  if (row.qualified) {
+    return (
+      <Button variant="outline" size="sm"
+        onClick={(e) => { e.stopPropagation(); onLog() }}
+        className="h-8 border-[#10b981] bg-transparent px-3 text-xs font-medium text-[#10b981] hover:bg-[#10b98115] hover:text-[#10b981]">
+        Log Bet
+      </Button>
+    )
+  }
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" onClick={(e) => e.stopPropagation()}
+          className="h-8 border-gray-700 bg-transparent px-3 text-xs font-medium text-gray-500 hover:bg-[#1a1a1a] hover:text-gray-300">
+          Log Bet
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="border-[#262626] bg-[#141414]">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-white">Log unqualified bet?</AlertDialogTitle>
+          <AlertDialogDescription className="text-gray-400">
+            This market does not meet the model&apos;s qualification threshold. No stake is recommended. Are you sure you want to log this bet?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="border-[#262626] bg-transparent text-gray-400 hover:bg-[#1a1a1a] hover:text-white">Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onLog} className="bg-[#10b981] text-[#0a0a0a] hover:bg-[#059669]">Log Anyway</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Section divider between qualified and unqualified rows
+// ---------------------------------------------------------------------------
+function NotRecommendedDivider({ colSpan }: { colSpan: number }) {
+  return (
+    <TableRow className="border-0 hover:bg-transparent">
+      <TableCell colSpan={colSpan} className="px-3 py-2">
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#262626]" />
+          <span className="text-[10px] font-medium uppercase tracking-widest text-gray-600">Not Recommended</span>
+          <div className="h-px flex-1 bg-[#262626]" />
+        </div>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Skeleton rows
+// ---------------------------------------------------------------------------
+function SkeletonRows({ cols }: { cols: number }) {
+  return (
+    <>
+      {Array.from({ length: 4 }).map((_, i) => (
+        <TableRow key={i} className="border-b border-[#262626]">
+          {Array.from({ length: cols }).map((_, j) => (
+            <TableCell key={j} className="px-3 py-3">
+              <Skeleton className="h-4 w-full bg-[#262626]" />
+            </TableCell>
+          ))}
+        </TableRow>
+      ))}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Mobile sort pills — shown above card stacks on small screens
+// ---------------------------------------------------------------------------
+function MobileSortPills({
+  sortKey, sortDir, onSort, options,
+}: {
+  sortKey: SortKey
+  sortDir: SortDir
+  onSort: (k: SortKey) => void
+  options: { key: SortKey; label: string }[]
+}) {
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      {options.map(opt => (
+        <button
+          key={opt.key}
+          onClick={() => onSort(opt.key)}
+          className={cn(
+            "flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+            sortKey === opt.key
+              ? "border-[#10b981] bg-[#10b98115] text-[#10b981]"
+              : "border-[#262626] bg-[#141414] text-gray-500 active:text-gray-300",
+          )}
+        >
+          {opt.label}
+          {sortKey === opt.key && (
+            sortDir === "asc"
+              ? <ChevronUp className="h-3 w-3" />
+              : <ChevronDown className="h-3 w-3" />
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Mobile skeleton cards
+// ---------------------------------------------------------------------------
+function SkeletonCards({ count }: { count?: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: count ?? 4 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border-[#262626] bg-[#141414] p-4 space-y-3">
+          <Skeleton className="h-4 w-2/3 bg-[#262626]" />
+          <Skeleton className="h-4 w-1/3 bg-[#262626]" />
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-8 bg-[#262626]" />
+            <Skeleton className="h-8 bg-[#262626]" />
+            <Skeleton className="h-8 bg-[#262626]" />
+            <Skeleton className="h-8 bg-[#262626]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Mobile section divider
+// ---------------------------------------------------------------------------
+function MobileNotRecommendedDivider() {
+  return (
+    <div className="flex items-center gap-3 py-1">
+      <div className="h-px flex-1 bg-[#262626]" />
+      <span className="text-[10px] font-medium uppercase tracking-widest text-gray-600">Not Recommended</span>
+      <div className="h-px flex-1 bg-[#262626]" />
+    </div>
   )
 }
 
@@ -191,68 +456,56 @@ function MarketBadge({ type, label }: { type: string; label: string }) {
 // ---------------------------------------------------------------------------
 export default function EVTrackerPage() {
   const router = useRouter()
-  const [date, setDate] = useState<Date>(new Date(2026, 5, 5)) // Jun 5 2026
+  const { selectedDate, setSelectedDate, isoDate } = useSelectedDate()
   const [calOpen, setCalOpen] = useState(false)
-  const [bankroll, setBankroll] = useState<number>(MOCK_DATA.bankrollDefault)
-  const [sortKey, setSortKey] = useState<SortKey>("edge")
-  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [bankroll, setBankroll] = useState<number>(1000)
+  const [maxKelly, setMaxKelly] = useState<number>(5)
 
-  // Derived summary values
-  const qualifiedCount = COMPUTED_ROWS.filter((r) => r.qualified).length
-  const totalCount = COMPUTED_ROWS.length
-  const estDailyEV = COMPUTED_ROWS.filter((r) => r.qualified).reduce((acc, r) => {
-    const stake = (Math.min(Math.max(r.rawKelly, 0), 5) / 100) * bankroll
-    return acc + r.ev * stake
+  // Separate sort state per table — default to game time ascending
+  const [h2hSort, setH2hSort] = useState<SortKey>("game")
+  const [h2hDir, setH2hDir] = useState<SortDir>("asc")
+  const [totalsSort, setTotalsSort] = useState<SortKey>("game")
+  const [totalsDir, setTotalsDir] = useState<SortDir>("asc")
+
+  const { accessToken, email } = useAuth()
+
+  const { data, isLoading } = useQuery<EVPicksResponse>({
+    queryKey: ["picks-ev", isoDate],
+    queryFn: () => apiFetch(`/picks/ev?date=${isoDate}`, {}, accessToken),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const allRows = useMemo(() => (data?.picks ?? []).map(p => computeRow(p, maxKelly)), [data, maxKelly])
+  const h2hRows = useMemo(() => allRows.filter(r => r.marketType === "h2h"), [allRows])
+  const totalsRows = useMemo(() => allRows.filter(r => r.marketType === "totals"), [allRows])
+
+  const sortedH2h = useMemo(() => applySort(h2hRows, h2hSort, h2hDir, bankroll), [h2hRows, h2hSort, h2hDir, bankroll])
+  const sortedTotals = useMemo(() => applySort(totalsRows, totalsSort, totalsDir, bankroll), [totalsRows, totalsSort, totalsDir, bankroll])
+
+  const qualifiedCount = allRows.filter(r => r.qualified).length
+  const totalCount = allRows.length
+  const estDailyEV = allRows.filter(r => r.qualified).reduce((acc, r) => {
+    return acc + r.ev * (r.cappedKelly / 100) * bankroll
   }, 0)
 
-  // Sorted rows
-  const sorted = useMemo(() => {
-    return [...COMPUTED_ROWS].sort((a, b) => {
-      let av: number | string
-      let bv: number | string
-      switch (sortKey) {
-        case "game":      av = a.game;        bv = b.game;        break
-        case "market":    av = a.market;      bv = b.market;      break
-        case "side":      av = a.side;        bv = b.side;        break
-        case "modelProb": av = a.modelProb;   bv = b.modelProb;   break
-        case "bovadaProb":av = a.bovadaProb;  bv = b.bovadaProb;  break
-        case "edge":      av = a.edge;        bv = b.edge;        break
-        case "ev":        av = a.ev;          bv = b.ev;          break
-        case "rawKelly":  av = a.rawKelly;    bv = b.rawKelly;    break
-        case "cappedKelly":av= a.cappedKelly; bv = b.cappedKelly; break
-        case "stake":
-          av = (a.cappedKelly / 100) * bankroll
-          bv = (b.cappedKelly / 100) * bankroll
-          break
-        default:          av = a.edge;        bv = b.edge
-      }
-      if (typeof av === "string" && typeof bv === "string") {
-        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av)
-      }
-      return sortDir === "asc"
-        ? (av as number) - (bv as number)
-        : (bv as number) - (av as number)
-    })
-  }, [sortKey, sortDir, bankroll])
-
-  function handleSort(col: SortKey) {
-    if (col === sortKey) {
-      // cycle: asc → desc → reset to default (edge desc)
-      if (sortDir === "asc") {
-        setSortDir("desc")
+  function makeHandleSort(
+    currentKey: SortKey, setKey: (k: SortKey) => void,
+    currentDir: SortDir, setDir: (d: SortDir) => void,
+  ) {
+    return (col: SortKey) => {
+      if (col === currentKey) {
+        // Toggle direction on repeated click — no reset to a different column
+        setDir(currentDir === "asc" ? "desc" : "asc")
       } else {
-        setSortKey("edge")
-        setSortDir("desc")
+        setKey(col)
+        // Time-based columns default asc (earliest first); numeric columns default desc (highest first)
+        setDir(col === "game" ? "asc" : "desc")
       }
-    } else {
-      setSortKey(col)
-      setSortDir("desc")
     }
   }
 
-  function handleBankrollChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setBankroll(Number(e.target.value))
-  }
+  const handleH2hSort = makeHandleSort(h2hSort, setH2hSort, h2hDir, setH2hDir)
+  const handleTotalsSort = makeHandleSort(totalsSort, setTotalsSort, totalsDir, setTotalsDir)
 
   function buildLogBetUrl(row: ComputedRow) {
     const params = new URLSearchParams({
@@ -262,70 +515,388 @@ export default function EVTrackerPage() {
       modelProb: String(row.modelProb),
       bovadaProb: String(row.bovadaProb),
     })
+    if (row.game_date) params.set("game_date", row.game_date)
     return `/bet-log?${params.toString()}`
   }
 
-  const thCls =
-    "cursor-pointer select-none whitespace-nowrap text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-300 transition-colors px-3 py-3"
+  // Render rows for a table, inserting the "Not Recommended" divider between
+  // qualified and unqualified rows.
+  function renderTableBody(
+    sorted: ComputedRow[],
+    renderRow: (row: ComputedRow) => React.ReactNode,
+    dividerColSpan: number,
+    emptyMessage: string,
+    cols: number,
+  ) {
+    if (isLoading) return <SkeletonRows cols={cols} />
+    if (sorted.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={cols} className="py-12 text-center text-sm text-gray-500">
+            {emptyMessage}
+          </TableCell>
+        </TableRow>
+      )
+    }
+    const qualified = sorted.filter(r => r.qualified)
+    const unqualified = sorted.filter(r => !r.qualified)
+    const all = [...qualified, ...unqualified]
+    const nodes: React.ReactNode[] = []
+    all.forEach((row, i) => {
+      if (qualified.length > 0 && unqualified.length > 0 && i === qualified.length) {
+        nodes.push(<NotRecommendedDivider key="divider" colSpan={dividerColSpan} />)
+      }
+      nodes.push(renderRow(row))
+    })
+    return <>{nodes}</>
+  }
+
+  const thCls = "cursor-pointer select-none whitespace-nowrap text-xs font-medium text-gray-500 uppercase tracking-wide hover:text-gray-300 transition-colors px-3 py-3"
+  const thNoCls = "select-none whitespace-nowrap text-xs font-medium text-gray-500 uppercase tracking-wide px-3 py-3"
+
+  function renderH2hRow(row: ComputedRow) {
+    const stake = (row.cappedKelly / 100) * bankroll
+    const isQualified = row.qualified
+    const sideProb = row.side === "Home" ? row.bovadaProb : 1 - row.bovadaProb
+    return (
+      <TableRow
+        key={`h2h-${row.game_pk}`}
+        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        className={cn(
+          "border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#10b98108]",
+          !isQualified && "opacity-60",
+        )}
+      >
+        <TableCell className="py-3 pl-4 pr-3">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-white">{row.game}</p>
+            {row.highConviction && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold uppercase tracking-wide bg-amber-950 text-amber-400 border border-amber-800 cursor-help">HC</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[180px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                    High Conviction — model signals are strong and lineup is confirmed
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">{row.time}</p>
+        </TableCell>
+        <TableCell className="px-3 py-3">
+          <MarketBadge type={row.marketType} label={row.market} />
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-medium", "text-[#10b981]")}>
+          {row.sideModelDisplay}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+          {row.sideBovadaDisplay}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
+          {americanOdds(sideProb)}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.displayEdge > 0.01 ? "text-[#10b981]" : "text-gray-500")}>
+          {fmtEdge(row.displayEdge)}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
+          {fmtEV(row.ev)}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+          {row.rawKelly >= 0 ? `+${row.rawKelly.toFixed(1)}%` : `${row.rawKelly.toFixed(1)}%`}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right">
+          {isQualified
+            ? <CappedKellyCell cappedKelly={row.cappedKelly} rawKelly={row.rawKelly} />
+            : <span className="text-sm text-gray-600">—</span>}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-medium", isQualified ? "text-[#10b981]" : "text-gray-600")}>
+          {isQualified ? usd(stake) : "—"}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-center">
+          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  function renderTotalsRow(row: ComputedRow) {
+    const stake = (row.cappedKelly / 100) * bankroll
+    const isQualified = row.qualified
+    return (
+      <TableRow
+        key={`totals-${row.game_pk}`}
+        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        className={cn(
+          "border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#10b98108]",
+          !isQualified && "opacity-60",
+        )}
+      >
+        <TableCell className="py-3 pl-4 pr-3">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-white">{row.game}</p>
+            {row.highConviction && (
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold uppercase tracking-wide bg-amber-950 text-amber-400 border border-amber-800 cursor-help">HC</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[180px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                    High Conviction — model signals are strong and lineup is confirmed
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
+          <p className="text-xs text-gray-500">{row.time}</p>
+        </TableCell>
+        <TableCell className="px-3 py-3">
+          <MarketBadge type={row.marketType} label={row.market} />
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right text-sm font-medium tabular-nums text-[#10b981]">
+          {row.predTotalRuns != null ? row.predTotalRuns.toFixed(1) : "—"}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.displayEdge > 0.01 ? "text-[#10b981]" : "text-gray-500")}>
+          {fmtEdge(row.displayEdge)}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
+          {fmtEV(row.ev)}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+          {row.rawKelly >= 0 ? `+${row.rawKelly.toFixed(1)}%` : `${row.rawKelly.toFixed(1)}%`}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-right">
+          {isQualified
+            ? <CappedKellyCell cappedKelly={row.cappedKelly} rawKelly={row.rawKelly} />
+            : <span className="text-sm text-gray-600">—</span>}
+        </TableCell>
+        <TableCell className={cn("px-3 py-3 text-right text-sm font-medium", isQualified ? "text-[#10b981]" : "text-gray-600")}>
+          {isQualified ? usd(stake) : "—"}
+        </TableCell>
+        <TableCell className="px-3 py-3 text-center">
+          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+        </TableCell>
+      </TableRow>
+    )
+  }
+
+  // -------------------------------------------------------------------------
+  // Mobile card renderers
+  // -------------------------------------------------------------------------
+  function renderH2hCard(row: ComputedRow) {
+    const stake = (row.cappedKelly / 100) * bankroll
+    const isQualified = row.qualified
+    return (
+      <div
+        key={`h2h-card-${row.game_pk}`}
+        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        className={cn(
+          "rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors cursor-pointer active:bg-[#10b98108]",
+          !isQualified && "opacity-60",
+        )}
+      >
+        {/* Game header */}
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium text-white">{row.game}</span>
+            {row.highConviction && (
+              <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold uppercase tracking-wide bg-amber-950 text-amber-400 border border-amber-800">HC</span>
+            )}
+          </div>
+          <span className="shrink-0 text-xs text-gray-500">{row.time}</span>
+        </div>
+        {/* Pick badge */}
+        <div className="mb-3">
+          <MarketBadge type={row.marketType} label={row.market} />
+        </div>
+        {/* Stat grid */}
+        <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
+            <p className={cn("mt-0.5 text-sm font-semibold", row.displayEdge > 0.01 ? "text-[#10b981]" : "text-gray-500")}>
+              {fmtEdge(row.displayEdge)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">EV</p>
+            <p className={cn("mt-0.5 text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
+              {fmtEV(row.ev)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Capped Kelly</p>
+            <p className="mt-0.5 text-sm text-gray-400">{isQualified ? `${row.cappedKelly.toFixed(1)}%` : "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Stake</p>
+            <p className={cn("mt-0.5 text-sm font-medium", isQualified ? "text-[#10b981]" : "text-gray-600")}>
+              {isQualified ? usd(stake) : "—"}
+            </p>
+          </div>
+        </div>
+        {/* Action */}
+        <div className="flex justify-end">
+          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+        </div>
+      </div>
+    )
+  }
+
+  function renderTotalsCard(row: ComputedRow) {
+    const stake = (row.cappedKelly / 100) * bankroll
+    const isQualified = row.qualified
+    return (
+      <div
+        key={`totals-card-${row.game_pk}`}
+        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        className={cn(
+          "rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors cursor-pointer active:bg-[#10b98108]",
+          !isQualified && "opacity-60",
+        )}
+      >
+        {/* Game header */}
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-sm font-medium text-white">{row.game}</span>
+            {row.highConviction && (
+              <span className="inline-flex items-center rounded px-1 py-0 text-[9px] font-semibold uppercase tracking-wide bg-amber-950 text-amber-400 border border-amber-800">HC</span>
+            )}
+          </div>
+          <span className="shrink-0 text-xs text-gray-500">{row.time}</span>
+        </div>
+        {/* Pick badge + projected runs inline */}
+        <div className="mb-3 flex items-center gap-2">
+          <MarketBadge type={row.marketType} label={row.market} />
+          {row.predTotalRuns != null && (
+            <span className="text-xs text-gray-500">
+              Proj. <span className="font-medium text-[#10b981]">{row.predTotalRuns.toFixed(1)}</span>
+            </span>
+          )}
+        </div>
+        {/* Stat grid */}
+        <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Edge</p>
+            <p className={cn("mt-0.5 text-sm font-semibold", row.displayEdge > 0.01 ? "text-[#10b981]" : "text-gray-500")}>
+              {fmtEdge(row.displayEdge)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">EV</p>
+            <p className={cn("mt-0.5 text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
+              {fmtEV(row.ev)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Capped Kelly</p>
+            <p className="mt-0.5 text-sm text-gray-400">{isQualified ? `${row.cappedKelly.toFixed(1)}%` : "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-gray-600">Stake</p>
+            <p className={cn("mt-0.5 text-sm font-medium", isQualified ? "text-[#10b981]" : "text-gray-600")}>
+              {isQualified ? usd(stake) : "—"}
+            </p>
+          </div>
+        </div>
+        {/* Action */}
+        <div className="flex justify-end">
+          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+        </div>
+      </div>
+    )
+  }
+
+  function renderMobileSection(
+    sorted: ComputedRow[],
+    renderCard: (row: ComputedRow) => React.ReactNode,
+    emptyMessage: string,
+  ) {
+    if (isLoading) return <SkeletonCards />
+    if (sorted.length === 0) {
+      return <p className="py-8 text-center text-sm text-gray-500">{emptyMessage}</p>
+    }
+    const qualified = sorted.filter(r => r.qualified)
+    const unqualified = sorted.filter(r => !r.qualified)
+    return (
+      <div className="space-y-3">
+        {qualified.map(row => renderCard(row))}
+        {qualified.length > 0 && unqualified.length > 0 && <MobileNotRecommendedDivider />}
+        {unqualified.map(row => renderCard(row))}
+      </div>
+    )
+  }
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-[#0a0a0a] font-sans text-white">
-      <Navbar />
+      <Nav authenticated activeLink="ev-tracker" userEmail={email} />
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         {/* ----------------------------------------------------------------
-            Page header
+            Page header + controls
         ---------------------------------------------------------------- */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">EV Tracker</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Expected Value Tracker</h1>
             <p className="mt-0.5 text-sm text-gray-500">
               All markets · Kelly-sized stakes · Full model transparency
             </p>
           </div>
 
-          {/* Controls */}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Date picker */}
             <Popover open={calOpen} onOpenChange={setCalOpen}>
               <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-[160px] justify-start gap-2 border-[#262626] bg-[#141414] text-left text-sm font-normal text-white hover:bg-[#1a1a1a]"
-                >
+                <Button variant="outline"
+                  className="h-9 w-[156px] justify-start gap-2 border-[#262626] bg-[#141414] text-left text-sm font-normal text-white hover:bg-[#1a1a1a]">
                   <CalendarIcon className="h-4 w-4 text-gray-500" />
-                  {format(date, "MMM d, yyyy")}
+                  {format(selectedDate, "MMM d, yyyy")}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent
-                className="w-auto border-[#262626] bg-[#141414] p-0"
-                align="end"
-              >
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={(d) => {
-                    if (d) { setDate(d); setCalOpen(false) }
-                  }}
-                  initialFocus
-                />
+              <PopoverContent className="w-auto border-[#262626] bg-[#141414] p-0" align="end">
+                <Calendar mode="single" selected={selectedDate}
+                  onSelect={(d) => { if (d) { setSelectedDate(d); setCalOpen(false) } }}
+                  toDate={new Date()}
+                  initialFocus />
               </PopoverContent>
             </Popover>
 
-            {/* Bankroll input */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">Bankroll</span>
-              <div className="flex items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
-                <span className="text-sm text-gray-500">$</span>
-                <input
-                  type="number"
-                  min={0}
-                  step={100}
-                  value={bankroll}
-                  onChange={handleBankrollChange}
-                  className="w-24 bg-transparent py-1.5 pl-1 text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-              </div>
+            {/* Bankroll — label inside border for consistent alignment */}
+            <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
+              <span className="mr-1.5 text-xs text-gray-500">Bankroll</span>
+              <span className="text-sm text-gray-500">$</span>
+              <input
+                type="number" min={0} step={100} value={bankroll}
+                onChange={(e) => setBankroll(Number(e.target.value))}
+                className="w-20 bg-transparent pl-0.5 text-sm text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
+
+            {/* Max Kelly cap — label inside border */}
+            <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="mr-1.5 cursor-help text-xs text-gray-500 border-b border-dotted border-gray-700">Kelly cap</span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[200px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                    Maximum stake as % of bankroll per bet. Kelly stakes above this are capped.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <input
+                type="number" min={1} max={25} step={1} value={maxKelly}
+                onChange={(e) => setMaxKelly(Math.max(1, Math.min(25, Number(e.target.value))))}
+                className="w-8 bg-transparent text-sm text-white outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <span className="text-sm text-gray-500">%</span>
+            </div>
+
+            {/* Book (Bovada only — DraftKings/FanDuel require separate data modeling) */}
+            <div className="flex h-9 items-center rounded-md border border-[#262626] bg-[#141414] px-2.5">
+              <span className="mr-1.5 text-xs text-gray-500">Book</span>
+              <span className="text-sm text-gray-400">Bovada</span>
             </div>
           </div>
         </div>
@@ -342,17 +913,22 @@ export default function EVTrackerPage() {
             <span className="text-gray-700">·</span>
             <span>
               <span className="font-semibold text-gray-300">{totalCount}</span>
-              <span className="text-gray-500"> total markets today</span>
+              <span className="text-gray-500"> total markets</span>
             </span>
             <span className="text-gray-700">·</span>
             <span>
-              <span className="text-gray-500">Est. daily EV: </span>
-              <span
-                className={cn(
-                  "font-semibold",
-                  estDailyEV >= 0 ? "text-[#10b981]" : "text-[#ef4444]"
-                )}
-              >
+              <TooltipProvider delayDuration={150}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help text-gray-500 border-b border-dotted border-gray-700">Est. daily EV</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[260px] text-center text-xs text-white border-[#262626] bg-[#1a1a1a]">
+                  Sum of (EV × Stake) across all qualified bets. If the model is accurate over many bets, this is the expected dollar gain today at your bankroll size.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <span className="text-gray-700">: </span>
+              <span className={cn("font-semibold", estDailyEV >= 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
                 {estDailyEV >= 0 ? "+" : ""}${estDailyEV.toFixed(2)}
               </span>
             </span>
@@ -360,168 +936,137 @@ export default function EVTrackerPage() {
         </div>
 
         {/* ----------------------------------------------------------------
-            Main EV table
+            Moneyline
         ---------------------------------------------------------------- */}
-        <div className="rounded-xl border border-[#262626] bg-[#141414]">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-[#262626] hover:bg-transparent">
-                  <TableHead className={thCls} onClick={() => handleSort("game")}>
-                    Game <SortIcon col="game" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={thCls} onClick={() => handleSort("market")}>
-                    Market <SortIcon col="market" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={thCls} onClick={() => handleSort("side")}>
-                    Side <SortIcon col="side" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("modelProb")}>
-                    Model% <SortIcon col="modelProb" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("bovadaProb")}>
-                    <span className="block">BOOK%</span>
-                    <span className="block text-[10px] font-normal text-gray-600 normal-case tracking-normal">Bovada</span>
-                    <SortIcon col="bovadaProb" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")}>
-                    Line
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("edge")}>
-                    Edge <SortIcon col="edge" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("ev")}>
-                    EV <SortIcon col="ev" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("rawKelly")}>
-                    Raw Kelly% <SortIcon col="rawKelly" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("cappedKelly")}>
-                    Capped Kelly% <SortIcon col="cappedKelly" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-right")} onClick={() => handleSort("stake")}>
-                    Stake ($) <SortIcon col="stake" sortKey={sortKey} sortDir={sortDir} />
-                  </TableHead>
-                  <TableHead className={cn(thCls, "text-center")}>
-                    Action
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+        <div className="mb-8">
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="text-base font-semibold text-white">Moneyline</h2>
+            <Badge variant="outline" className="border-blue-800 bg-blue-950 text-blue-400 text-[10px] font-medium px-2 py-0">
+              {sortedH2h.length}
+            </Badge>
+          </div>
 
-              <TableBody>
-                {sorted.map((row, i) => {
-                  const stake = (row.cappedKelly / 100) * bankroll
-                  const isQualified = row.qualified
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="sticky top-0 z-20 bg-[#141414]">
+                  <TableRow className="border-b border-[#262626] hover:bg-transparent">
+                    <TableHead className={thCls} onClick={() => handleH2hSort("game")}>Game <SortIcon col="game" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                    <TableHead className={thCls} onClick={() => handleH2hSort("market")}>Pick <SortIcon col="market" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("modelProb")}>
+                      <ColHeaderTip label="Model%" tip="Model's win probability for the picked team, shown as ±% from 50%." /> <SortIcon col="modelProb" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("bovadaProb")}>
+                      <ColHeaderTip label="Book%" tip="Bovada's de-vigged (fair) implied probability for the picked team, shown as ±% from 50%." /> <SortIcon col="bovadaProb" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thNoCls, "text-right")}>Line</TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("edge")}>
+                      <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side. Larger = stronger model-vs-market disagreement." /> <SortIcon col="edge" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("ev")}>
+                      <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("rawKelly")}>
+                      <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("cappedKelly")}>
+                      <ColHeaderTip label={`Capped%`} tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={h2hSort} sortDir={h2hDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("stake")}>Stake <SortIcon col="stake" sortKey={h2hSort} sortDir={h2hDir} /></TableHead>
+                    <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="[&>tr:last-child>td]:border-b-0">
+                  {renderTableBody(sortedH2h, renderH2hRow, 11, "No moneyline markets for this date", 11)}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
-                  return (
-                    <TableRow
-                      key={`${row.game_pk}-${row.market}-${row.side}`}
-                      onClick={() => isQualified && router.push(`/picks/${row.game_pk}`)}
-                      className={cn(
-                        "border-b border-[#262626] transition-colors",
-                        isQualified
-                          ? "cursor-pointer border-l-2 border-l-[#10b981] hover:bg-[#10b98108]"
-                          : "cursor-default opacity-60",
-                        i === sorted.length - 1 && "border-b-0"
-                      )}
-                    >
-                      {/* Game */}
-                      <TableCell className="py-3 pl-4 pr-3">
-                        <p className="text-sm font-medium text-white">{row.game}</p>
-                        <p className="text-xs text-gray-500">{row.time}</p>
-                      </TableCell>
-
-                      {/* Market */}
-                      <TableCell className="px-3 py-3">
-                        <MarketBadge type={row.marketType} label={row.market} />
-                      </TableCell>
-
-                      {/* Side */}
-                      <TableCell className="px-3 py-3 text-sm text-gray-400">
-                        {row.side}
-                      </TableCell>
-
-                      {/* Model% */}
-                      <TableCell className={cn(
-                        "px-3 py-3 text-right text-sm font-medium",
-                        row.edge > 0 ? "text-[#10b981]" : "text-gray-400"
-                      )}>
-                        {pctRaw(row.modelProb)}
-                      </TableCell>
-
-                      {/* Bovada% / BOOK% */}
-                      <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
-                        {pctRaw(row.bovadaProb)}
-                      </TableCell>
-
-                      {/* Line */}
-                      <TableCell className="px-3 py-3 text-right text-sm text-gray-500">
-                        {americanOdds(row.bovadaProb)}
-                      </TableCell>
-
-                      {/* Edge */}
-                      <TableCell className={cn(
-                        "px-3 py-3 text-right text-sm font-semibold",
-                        row.edge > 0 ? "text-[#10b981]" : "text-[#ef4444]"
-                      )}>
-                        {pct(row.edge)}
-                      </TableCell>
-
-                      {/* EV */}
-                      <TableCell className={cn(
-                        "px-3 py-3 text-right text-sm font-semibold",
-                        row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]"
-                      )}>
-                        {pct(row.ev)}
-                      </TableCell>
-
-                      {/* Raw Kelly% */}
-                      <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
-                        {row.rawKelly >= 0 ? `+${row.rawKelly.toFixed(1)}%` : `${row.rawKelly.toFixed(1)}%`}
-                      </TableCell>
-
-                      {/* Capped Kelly% */}
-                      <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
-                        {row.cappedKelly.toFixed(1)}%
-                      </TableCell>
-
-                      {/* Stake */}
-                      <TableCell className={cn(
-                        "px-3 py-3 text-right text-sm font-medium",
-                        isQualified ? "text-[#10b981]" : "text-gray-400"
-                      )}>
-                        {usd(stake)}
-                      </TableCell>
-
-                      {/* Action */}
-                      <TableCell className="px-3 py-3 text-center">
-                        {isQualified ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              router.push(buildLogBetUrl(row))
-                            }}
-                            className="h-7 border-[#10b981] bg-transparent px-2.5 text-[11px] font-medium text-[#10b981] hover:bg-[#10b98115] hover:text-[#10b981]"
-                          >
-                            Log Bet
-                          </Button>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
+          {/* Mobile cards */}
+          <div className="md:hidden">
+            <MobileSortPills
+              sortKey={h2hSort} sortDir={h2hDir} onSort={handleH2hSort}
+              options={[
+                { key: "game", label: "Time" },
+                { key: "edge", label: "Edge" },
+                { key: "ev", label: "EV" },
+                { key: "stake", label: "Stake" },
+              ]}
+            />
+            {renderMobileSection(sortedH2h, renderH2hCard, "No moneyline markets for this date")}
           </div>
         </div>
 
-        {/* Footer note */}
+        {/* ----------------------------------------------------------------
+            Total Runs
+        ---------------------------------------------------------------- */}
+        <div>
+          <div className="mb-3 flex items-center gap-3">
+            <h2 className="text-base font-semibold text-white">Total Runs</h2>
+            <Badge variant="outline" className="border-teal-800 bg-teal-950 text-teal-400 text-[10px] font-medium px-2 py-0">
+              {sortedTotals.length}
+            </Badge>
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block rounded-xl border border-[#262626] bg-[#141414]">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="sticky top-0 z-20 bg-[#141414]">
+                  <TableRow className="border-b border-[#262626] hover:bg-transparent">
+                    <TableHead className={thCls} onClick={() => handleTotalsSort("game")}>Game <SortIcon col="game" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                    <TableHead className={thCls} onClick={() => handleTotalsSort("market")}>Pick <SortIcon col="market" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("predRuns")}>
+                      <ColHeaderTip label="Proj. Runs" tip="Model's predicted total combined runs for the game. Compare to the book line in the Pick badge." /> <SortIcon col="predRuns" sortKey={totalsSort} sortDir={totalsDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("edge")}>
+                      <ColHeaderTip label="Edge" tip="Model probability minus book implied probability for the picked side (Over or Under). Larger = stronger disagreement." /> <SortIcon col="edge" sortKey={totalsSort} sortDir={totalsDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("ev")}>
+                      <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={totalsSort} sortDir={totalsDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("rawKelly")}>
+                      <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={totalsSort} sortDir={totalsDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("cappedKelly")}>
+                      <ColHeaderTip label="Capped%" tip={`Kelly% capped at your max (${maxKelly}%). This is the recommended stake size — it limits downside if the model is temporarily wrong.`} /> <SortIcon col="cappedKelly" sortKey={totalsSort} sortDir={totalsDir} />
+                    </TableHead>
+                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("stake")}>Stake <SortIcon col="stake" sortKey={totalsSort} sortDir={totalsDir} /></TableHead>
+                    <TableHead className={cn(thNoCls, "text-center")}>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="[&>tr:last-child>td]:border-b-0">
+                  {renderTableBody(sortedTotals, renderTotalsRow, 9, "No total runs markets for this date", 9)}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden">
+            <MobileSortPills
+              sortKey={totalsSort} sortDir={totalsDir} onSort={handleTotalsSort}
+              options={[
+                { key: "game", label: "Time" },
+                { key: "predRuns", label: "Proj. Runs" },
+                { key: "edge", label: "Edge" },
+                { key: "ev", label: "EV" },
+                { key: "stake", label: "Stake" },
+              ]}
+            />
+            {renderMobileSection(sortedTotals, renderTotalsCard, "No total runs markets for this date")}
+          </div>
+        </div>
+
+        {/* Footer */}
         <p className="mt-4 text-center text-xs text-gray-600">
-          Kelly stakes capped at 5% max bankroll per bet. EV and Kelly calculated from model vs. Bovada implied probabilities. Not financial advice.
+          Kelly stakes capped at {maxKelly}% per bet. EV and Kelly calculated from model vs. Bovada implied probabilities.
+          HC = High Conviction (strong multi-signal agreement). Not financial advice.
         </p>
       </main>
     </div>
+    </AuthGuard>
   )
 }
