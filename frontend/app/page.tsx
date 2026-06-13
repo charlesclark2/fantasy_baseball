@@ -444,9 +444,11 @@ function Footer() {
 
 export default async function LandingPage() {
   const base = process.env.NEXT_PUBLIC_API_URL ?? ""
-  const featuredRes = await fetch(`${base}/picks/featured`, { cache: "no-store" }).then((r) =>
-    r.json()
-  )
+  const featuredRes = base
+    ? await fetch(`${base}/picks/featured`, { cache: "no-store" })
+        .then((r) => r.json())
+        .catch(() => ({ game_pk: null }))
+    : { game_pk: null }
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
