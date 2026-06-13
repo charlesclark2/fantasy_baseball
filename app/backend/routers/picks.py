@@ -1179,7 +1179,7 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
     today_str = datetime.now(_ET).date().isoformat()
     if date:
         try:
-            _date.fromisoformat(date)
+            date.fromisoformat(date)
         except ValueError:
             raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
         query = _EV_QUERY_DATE
