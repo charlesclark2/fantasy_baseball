@@ -39,6 +39,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://credencesports.com",
+        "https://www.credencesports.com",
         "https://app.credencesports.com",
         "http://localhost:3000",
     ],
