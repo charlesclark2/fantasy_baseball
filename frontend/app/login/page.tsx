@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getCognitoUser, AuthenticationDetails } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
+import { apiFetch } from "@/lib/api"
 import { Nav } from "@/components/nav"
 import type { CognitoUser } from "amazon-cognito-identity-js"
 
@@ -44,10 +45,10 @@ function LoginInner() {
 
     cognitoUser.authenticateUser(authDetails, {
       onSuccess(session) {
-        onLoginSuccess(
-          session.getAccessToken().getJwtToken(),
-          session.getIdToken().getJwtToken()
-        )
+        const accessToken = session.getAccessToken().getJwtToken()
+        const idToken     = session.getIdToken().getJwtToken()
+        onLoginSuccess(accessToken, idToken)
+        apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
       onFailure(err) {
@@ -70,10 +71,10 @@ function LoginInner() {
 
     pendingUser.current.completeNewPasswordChallenge(newPassword, {}, {
       onSuccess(session) {
-        onLoginSuccess(
-          session.getAccessToken().getJwtToken(),
-          session.getIdToken().getJwtToken()
-        )
+        const accessToken = session.getAccessToken().getJwtToken()
+        const idToken     = session.getIdToken().getJwtToken()
+        onLoginSuccess(accessToken, idToken)
+        apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
       onFailure(err) {

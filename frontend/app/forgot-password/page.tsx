@@ -37,7 +37,18 @@ export default function ForgotPasswordPage() {
       },
       onFailure(err) {
         setIsLoading(false)
-        setError(err.message ?? "Something went wrong. Please try again.")
+        const msg = err.message ?? ""
+        if (msg.includes("no registered/verified email") || msg.includes("email_verified")) {
+          setError(
+            "Your account email hasn't been verified yet. Contact the admin to verify your account before resetting your password.",
+          )
+        } else if (msg.includes("UserNotFoundException") || msg.includes("user does not exist")) {
+          setError("No account found for that email address.")
+        } else if (msg.includes("LimitExceededException")) {
+          setError("Too many attempts. Please wait a few minutes and try again.")
+        } else {
+          setError(msg || "Something went wrong. Please try again.")
+        }
       },
     })
   }
