@@ -13,9 +13,10 @@ import logging
 import os
 import urllib.request
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.backend.dependencies import get_admin_user
 from app.backend.services.s3_cache import invalidate_today
 from app.backend.services.snowflake import execute_query
 
@@ -55,7 +56,7 @@ class ModelFreshness(BaseModel):
 
 
 @router.post("/cache/invalidate")
-def invalidate_cache() -> dict:
+def invalidate_cache(_: str = Depends(get_admin_user)) -> dict:
     """Invalidates today's S3 cache — forces next request to re-query Snowflake."""
     invalidate_today()
     return {"status": "ok", "message": "Cache invalidated — next request will re-query Snowflake"}
@@ -104,7 +105,7 @@ def _format_ts(unix: float | None) -> str:
 
 
 @router.get("/pipeline-runs", response_model=list[PipelineRun])
-def pipeline_runs() -> list[PipelineRun]:
+def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
     """Last 14 Dagster run entries across daily_ingestion_job and lineup_monitor_sensor."""
     token = os.getenv("DAGSTER_CLOUD_API_TOKEN", "")
     if not token:
@@ -151,7 +152,7 @@ def pipeline_runs() -> list[PipelineRun]:
 
 
 @router.get("/model-freshness", response_model=list[ModelFreshness])
-def model_freshness() -> list[ModelFreshness]:
+def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
     """Current champion models from model_registry with days_since_training."""
     rows = execute_query(
         f"""

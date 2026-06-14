@@ -1,9 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { Suspense, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,11 +12,15 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getCognitoUser, AuthenticationDetails } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
+import { apiFetch } from "@/lib/api"
 import { Nav } from "@/components/nav"
 import type { CognitoUser } from "amazon-cognito-identity-js"
 
-export default function LoginPage() {
-  const router = useRouter()
+function LoginInner() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const didReset     = searchParams.get("reset") === "success"
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -27,6 +31,7 @@ export default function LoginPage() {
   const [step, setStep] = useState<"login" | "new-password">("login")
   const [newPassword, setNewPassword] = useState("")
   const [showNewPassword, setShowNewPassword] = useState(false)
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const pendingUser = useRef<CognitoUser | null>(null)
 
   const { onLoginSuccess } = useAuth()
@@ -41,10 +46,10 @@ export default function LoginPage() {
 
     cognitoUser.authenticateUser(authDetails, {
       onSuccess(session) {
-        onLoginSuccess(
-          session.getAccessToken().getJwtToken(),
-          session.getIdToken().getJwtToken()
-        )
+        const accessToken = session.getAccessToken().getJwtToken()
+        const idToken     = session.getIdToken().getJwtToken()
+        onLoginSuccess(accessToken, idToken)
+        apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
       onFailure(err) {
@@ -67,10 +72,11 @@ export default function LoginPage() {
 
     pendingUser.current.completeNewPasswordChallenge(newPassword, {}, {
       onSuccess(session) {
-        onLoginSuccess(
-          session.getAccessToken().getJwtToken(),
-          session.getIdToken().getJwtToken()
-        )
+        const accessToken = session.getAccessToken().getJwtToken()
+        const idToken     = session.getIdToken().getJwtToken()
+        onLoginSuccess(accessToken, idToken)
+        apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
+        apiFetch("/auth/accept-terms", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
       onFailure(err) {
@@ -118,6 +124,15 @@ export default function LoginPage() {
               </>
             )}
           </div>
+
+          {/* Password-reset success banner */}
+          {didReset && (
+            <Alert className="mb-5 border-[#10b981]/40 bg-[#10b981]/10">
+              <AlertDescription className="text-[#10b981]">
+                Password reset successfully. Sign in with your new password below.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Error alert */}
           {error && (
@@ -212,10 +227,31 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              <div className="flex items-start gap-2.5 pt-1">
+                <input
+                  id="agree-terms"
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  disabled={isLoading}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border border-input accent-[#10b981] cursor-pointer"
+                />
+                <label htmlFor="agree-terms" className="text-xs text-muted-foreground leading-snug cursor-pointer">
+                  I agree to the{" "}
+                  <Link href="/terms" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
-                disabled={isLoading || newPassword.length < 8}
+                disabled={isLoading || newPassword.length < 8 || !agreedToTerms}
               >
                 {isLoading ? (
                   <>
@@ -268,5 +304,17 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <span className="text-sm text-muted-foreground">Loading…</span>
+      </div>
+    }>
+      <LoginInner />
+    </Suspense>
   )
 }

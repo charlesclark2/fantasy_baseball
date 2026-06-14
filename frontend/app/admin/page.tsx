@@ -7,6 +7,7 @@ import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { AdminGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
 
 // ---------------------------------------------------------------------------
@@ -98,7 +99,7 @@ function indicatorToStatus(indicator: string): string {
 // ---------------------------------------------------------------------------
 
 export default function AdminPage() {
-  const { accessToken } = useAuth()
+  const { accessToken, isAdmin } = useAuth()
   const qc = useQueryClient()
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
 
@@ -106,18 +107,21 @@ export default function AdminPage() {
     queryKey: ["pipeline-status", accessToken],
     queryFn: () => apiFetch("/pipeline/status", {}, accessToken),
     staleTime: 60_000,
+    enabled: !!accessToken && isAdmin,
   })
 
   const { data: pipelineRuns, isLoading: runsLoading } = useQuery<PipelineRun[]>({
     queryKey: ["pipeline-runs", accessToken],
     queryFn: () => apiFetch("/admin/pipeline-runs", {}, accessToken),
     staleTime: 120_000,
+    enabled: !!accessToken && isAdmin,
   })
 
   const { data: modelFreshness, isLoading: freshnessLoading } = useQuery<ModelFreshness[]>({
     queryKey: ["model-freshness", accessToken],
     queryFn: () => apiFetch("/admin/model-freshness", {}, accessToken),
     staleTime: 300_000,
+    enabled: !!accessToken && isAdmin,
   })
 
   async function handleRefresh() {
@@ -175,6 +179,7 @@ export default function AdminPage() {
     : []
 
   return (
+    <AdminGuard>
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
       <Nav authenticated activeLink="admin" userEmail="user@example.com" />
 
@@ -367,5 +372,6 @@ export default function AdminPage() {
         </div>
       </main>
     </div>
+    </AdminGuard>
   )
 }
