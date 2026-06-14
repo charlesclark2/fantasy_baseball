@@ -1,9 +1,9 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { Suspense, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,8 +15,11 @@ import { useAuth } from "@/lib/auth-context"
 import { Nav } from "@/components/nav"
 import type { CognitoUser } from "amazon-cognito-identity-js"
 
-export default function LoginPage() {
-  const router = useRouter()
+function LoginInner() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const didReset     = searchParams.get("reset") === "success"
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -118,6 +121,15 @@ export default function LoginPage() {
               </>
             )}
           </div>
+
+          {/* Password-reset success banner */}
+          {didReset && (
+            <Alert className="mb-5 border-[#10b981]/40 bg-[#10b981]/10">
+              <AlertDescription className="text-[#10b981]">
+                Password reset successfully. Sign in with your new password below.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Error alert */}
           {error && (
@@ -268,5 +280,17 @@ export default function LoginPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <span className="text-sm text-muted-foreground">Loading…</span>
+      </div>
+    }>
+      <LoginInner />
+    </Suspense>
   )
 }
