@@ -431,10 +431,14 @@ function Footer() {
 
         {/* Links */}
         <nav className="flex items-center gap-4">
-          {["Privacy Policy", "Terms", "Contact"].map((label) => (
+          {[
+            { label: "Privacy Policy", href: "/privacy" },
+            { label: "Terms", href: "/terms" },
+            { label: "Contact", href: "mailto:hello@credencesports.com" },
+          ].map(({ label, href }) => (
             <Link
               key={label}
-              href="/login"
+              href={href}
               className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
             >
               {label}

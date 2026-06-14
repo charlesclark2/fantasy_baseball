@@ -31,6 +31,7 @@ function LoginInner() {
   const [step, setStep] = useState<"login" | "new-password">("login")
   const [newPassword, setNewPassword] = useState("")
   const [showNewPassword, setShowNewPassword] = useState(false)
+  const [agreedToTerms, setAgreedToTerms] = useState(false)
   const pendingUser = useRef<CognitoUser | null>(null)
 
   const { onLoginSuccess } = useAuth()
@@ -225,10 +226,31 @@ function LoginInner() {
                 </div>
               </div>
 
+              <div className="flex items-start gap-2.5 pt-1">
+                <input
+                  id="agree-terms"
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  disabled={isLoading}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border border-input accent-[#10b981] cursor-pointer"
+                />
+                <label htmlFor="agree-terms" className="text-xs text-muted-foreground leading-snug cursor-pointer">
+                  I agree to the{" "}
+                  <Link href="/terms" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Privacy Policy
+                  </Link>
+                </label>
+              </div>
+
               <Button
                 type="submit"
                 className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
-                disabled={isLoading || newPassword.length < 8}
+                disabled={isLoading || newPassword.length < 8 || !agreedToTerms}
               >
                 {isLoading ? (
                   <>
