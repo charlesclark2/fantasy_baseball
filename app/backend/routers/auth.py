@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_user_id
+from app.backend.services.dynamo import record_tos_acceptance
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -78,3 +79,20 @@ def verify_email(user_id: str = Depends(get_user_id)) -> None:
     except ClientError:
         # Best-effort — don't fail the login flow if this call errors
         logger.warning("verify_email: admin_update_user_attributes failed for %s", user_id)
+
+
+_TOS_VERSION = "2026-06-14"
+
+
+@router.post("/accept-terms", status_code=204)
+def accept_terms(user_id: str = Depends(get_user_id)) -> None:
+    """Record ToS acceptance for the calling user.
+
+    Called fire-and-forget from the frontend on completion of the first-login
+    new-password flow. Writes tos_accepted_at (if_not_exists) and tos_version
+    to credence-prod-dynamo-users. Safe to call multiple times.
+    """
+    try:
+        record_tos_acceptance(user_id, _TOS_VERSION)
+    except Exception:
+        logger.warning("accept_terms: failed to record acceptance for %s", user_id)

@@ -150,3 +150,16 @@ def upsert_user(user_id: str, email: str | None) -> None:
         ExpressionAttributeNames=names,
         ExpressionAttributeValues=values,
     )
+
+
+def record_tos_acceptance(user_id: str, tos_version: str) -> None:
+    """Record first-time ToS acceptance. Preserves the original tos_accepted_at if
+    already set (if_not_exists) so re-runs don't overwrite the canonical timestamp.
+    tos_version is always updated so we track the latest version agreed to."""
+    now = _now_iso()
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #ta = if_not_exists(#ta, :now), #tv = :ver",
+        ExpressionAttributeNames={"#ta": "tos_accepted_at", "#tv": "tos_version"},
+        ExpressionAttributeValues={":now": now, ":ver": tos_version},
+    )

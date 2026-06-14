@@ -76,6 +76,7 @@ function LoginInner() {
         const idToken     = session.getIdToken().getJwtToken()
         onLoginSuccess(accessToken, idToken)
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
+        apiFetch("/auth/accept-terms", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
       onFailure(err) {
