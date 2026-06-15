@@ -2869,11 +2869,17 @@ models:
   - name: feature_pregame_weather_features
     description: >
       Pre-game weather features for MLB outdoor parks. Grain: one row per
-      game_pk (games in weather_raw only). Dome parks have is_dome = TRUE
-      and NULL wind_component_mph. Outdoor and convertible-roof parks have
-      non-null wind_component_mph when coordinates and weather data are
-      available. Re-pointed to feature_pregame_weather_status (SCD-2) in
-      Epic 15 story 15.5; reads is_current = true rows.
+      game_pk. Dome parks have is_dome = TRUE and NULL wind_component_mph.
+      Outdoor and convertible-roof parks have non-null wind_component_mph when
+      coordinates and weather data are available. DUAL SOURCE (Story 31.4
+      weather repair): live games use the pregame FORECAST via
+      feature_pregame_weather_status (SCD-2, is_current = true, 2026-05-01+);
+      pre-2026 history is backfilled from the realized first-pitch OBSERVED
+      weather (observed_at_first_pitch in weather_raw), since forecast_pregame
+      did not exist before Epic T.2 and the feature was otherwise ~100% null
+      across the training window. Observed is a near-unbiased stand-in for the
+      forecast (2026 overlap: temp corr 0.97, wind corr 0.73). weather_
+      observation_type marks which source produced each row.
 
     columns:
       - name: game_pk

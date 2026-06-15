@@ -39,7 +39,8 @@ capped until point-in-time serving lands.
 
 | Story | What | Effort | Notes |
 |---|---|---|---|
-| **30.12** | Feature-store completeness audit & backfill-degradation policy | S/M | Specced 2026-06-13 (surfaced by the v5 backfill). Quantifies which features are sparse when → **directly feeds 30.6 + 30.8**. Can run in parallel with Phase 0. Known lead: `pythagorean_win_exp_diff` ~6.5% persistent mid-season null floor (`[[project_pythagorean_null_floor]]`). |
+| **30.12** | Feature-store completeness audit & backfill-degradation policy | S/M | Specced 2026-06-13 (surfaced by the v5 backfill). Quantifies which features are sparse when → **directly feeds 30.6 + 30.8 + 31.0**. Can run in parallel with Phase 0. Known lead: `pythagorean_win_exp_diff` ~6.5% persistent mid-season null floor (`[[project_pythagorean_null_floor]]`). |
+| **31.0** | Data-expansion scoping spike — ingested-data utilization & orthogonality audit | S (spike) | Specced 2026-06-15. **Cheap, read-only, run now (parallel with Phase 0/30.12).** Recon finding: the orthogonal classes (weather, OAA, framing, bat-tracking, granular park) are ALREADY ingested but were **pruned from the promoted seasonnorm contracts** — totals has 0 weather/OAA/framing, home_win 0 weather/framing/park. The spike decides per class: tapped-out vs skew-pruned (false negative) vs under-wired vs new-needed. **Its action items (31.1/31.2) are gated on serving honesty; the audit itself is not.** |
 | **30.6** | ⭐ Serving-skew fix (live-ceiling lift) | **L** | The keystone — CONFIRMED 2026-06-14: same model scores corr **0.61 offline-dense vs 0.016 served** (not an illusory ceiling). Mechanism = starter-EB + lineup blocks NULL at serve (stale SCD-2 starter chain), NOT value-shift → **fix serve density, not forward-capture**. Fix (A) **shipped + verified** 2026-06-14: starter_id null 80%→0; **today's serve-time starter-EB null 62.5%→0.13 (bleed stopped for today's bet)**. Residual +1/+2-day EB gap = posterior-staleness → folded into A2.11. **NEXT: Lever 2** (post_lineup re-score binding) → forward re-measure live skill (~0→~0.6) → alpha re-tune → 27.8/30.9 v6 bundle. |
 | **30.13** | ⭐ Feature-store freshness guarantee (build-ordering + serve-time freshness gate) | M | **HIGH** — the durable other half of 30.6 fix (A). Guarantees serving-path feature models rebuild from the latest ingestion BEFORE predict_today + a serve-time freshness gate (abstain on staleness), so the keystone lift can't silently regress. Generalizes the SCD-2 staleness → the posterior-staleness class. Sequence right after the 30.6 re-measure. |
 | **30.8** | Pre-lineup and post-lineup prediction contracts | M | Tightly coupled to 30.6 (morning projected-lineup vs confirmed-lineup confidence tiers; don't let the morning pick degrade to imputed output). |
@@ -53,10 +54,14 @@ Do these **after** Phase 1 — sub-model gains only show up in production once s
 
 | Story | What | Effort | Notes |
 |---|---|---|---|
-| **30.2** | Wire sub-model distributional outputs into the base models (Bayesian-leverage audit) | M | The bridge into the Track B revisit. |
+| **30.2** | Wire sub-model distributional outputs into the base models (Bayesian-leverage audit) | M | The bridge into the Track B revisit. **The biggest "use what we have better" lever** — sub-models already emit σ; the base models discard it. Directly attacks the totals variance-deficiency (29.1). Retrains Layer 2 only (no sub-model retrain). **Gated behind 30.6 + 30.8** — σ-features are NULL-pre-lineup, the exact serving trap. |
+| **31.1** | Re-evaluate skew-pruned data classes on honest serving data | M | The action half of 31.0. Re-run feature selection per target with the (B) skew-pruned classes forced back in, AFTER serving is honest. **Gated on 30.6 + 30.12 + 31.0** — re-running on skewed data just re-prunes. |
+| **31.2** | Wire catcher framing (run-prevention) into totals + h2h | S/M | The clearest under-wired class — framing in `mart_catcher_framing`, 0 promoted contracts, and totals has zero run-prevention input. Additive wiring + ablate. Soft-gated on 31.0's orthogonality finding. |
+| **31.4** | Weather pipeline repair + totals retrain | S | Pipeline FIXED + DQ-validated 2026-06-15 (`[[project_weather_repair_and_team_oaa]]`): not a join bug — forecast_pregame-only filter excluded all pre-2026 history; dual-source fix (observed backfill) lifts coverage 396 → 12,708 games. NGBoost `--force-weather` retrain wired, awaiting run. Team-OAA-for-totals CLOSED (deadweight, corr −0.023). h2h does NOT use weather. |
+| **31.4b** | LightGBM-monotone weather challenger (totals) | S | CONDITIONAL, gated on 31.4's NGBoost result. The only base-learner swap worth doing — monotone constraints (`temp_f`+, `wind_component_mph`+) NGBoost can't express; regularizes thin weather regimes. RUN only if weather is signal-bearing-but-noisy in NGBoost. Reuses 10.10 quantile-LGBM infra. If it still misses the market → 3rd estimator-swap confirmation the gap is architecture (30.2 → Epic 32), not the learner. |
 | **3A.3** | Park-type hierarchical prior | S | Run-environment sub-model. |
 | **5A.6** | Continuous aging-curve EB prior | S | Starter sub-model (replaces age-band points with a continuous curve). |
-| **7.6** | Pitcher-cluster coverage (cold-start / unclustered-starter fallback) | M | Surfaced by 30.12: ~24.7% of games have the opposing starter unclustered (prior-season-lag join → rookies/low-IP/relievers) → the `*_vs_cluster` matchup family is null for a quarter of games. Leakage-safe AS-OF + arsenal cold-start fallback; ablate. Batter-archetype coverage is the same shape (fold in or sibling). |
+| **7.6** | Pitcher-cluster coverage (cold-start / unclustered-starter fallback) | M | Surfaced by 30.12: ~24.7% of games have the opposing starter unclustered (prior-season-lag join → rookies/low-IP/relievers) → the `*_vs_cluster` matchup family is null for a quarter of games. Leakage-safe AS-OF + arsenal cold-start fallback; ablate. Batter-archetype coverage is the same shape (fold in or sibling). **(D)-bucket source = Story 31.3 prospect/minor-league arsenal.** |
 | → | **Track B revisit** — all sub-models + the Layer 3 section | L | Strategic theme. Sequence it here: take the learnings (market-blindness, regime-normalization, serving parity) back to every sub-model and the Layer-3 blend. |
 
 ---
@@ -66,6 +71,8 @@ Do these **after** Phase 1 — sub-model gains only show up in production once s
 | Story | What | Effort | Notes |
 |---|---|---|---|
 | **27.9** | Exogenous run-environment leading indicators — ball-CoR scoping spike | S (spike) → ? | Promoted from 27.6 Task 4. The **causal** successor to 27.7's pragmatic season-norm fix: model the ball/run-environment driver directly via an exogenous *leading* signal (the one untried data class). It's a **scoping spike first** (inventory + orthogonality), cheap to start; only proceeds to modeling if a signal clears coverage + orthogonality, gated on the unchanged kill criterion. Payoff is downstream of serving honesty (30.6) and totals stays `bet_paused`, so it's genuinely low-urgency — do it when curiosity or a slow week allows, not on the critical path. |
+| **31.3** | Genuinely-new-class scouting (prospect arsenal · injury/roster · run-env) | S (spike) | The (D) new-needed bucket from 31.0 — the only items needing net-new ingestion. Prospect arsenal feeds 7.6 cold-start; injury/roster feed complements 30.6; folds 27.9 (ball-CoR) as the run-env member. LOW — only after the (B)/(C) re-use list is exhausted (re-using ingested data is strictly cheaper than new ingestion). |
+| **A2.14** | Migrate archetype posteriors to dbt (KMeans-in-SQL) | M-L | DEFERRED follow-on of A2.11 (which migrated the 3 closed-form EB families). Archetype is a **sklearn KMeans soft-assignment** (centroids + StandardScaler + Gaussian softmax + Dirichlet prior + VARIANT JSON) — a categorically harder, higher-risk SQL port, carved out for its own design+validation. **Pull forward ONLY if** the archetype Python op becomes a measurable COMPUTE_WH line item OR a train/serve skew shows up in the `*_vs_cluster`/archetype features; else it stays here. Spec stub in the impl guide. |
 
 ---
 
@@ -102,8 +109,8 @@ predictions learns nothing. Don't start 12.4 until serving is fixed *and* the li
 ## Recommended start order
 
 1. **Phase 0** (27.8 → 30.9 → v6 re-backfill) — cheap, closes the in-flight loop, consistent base-model semantics.
-2. **30.12** (parallelizable with Phase 0) → **Phase 1** (30.6 keystone + 30.8 + A2.11).
-3. **Phase 2** (30.2 → 3A.3 / 5A.6 → Track B revisit).
+2. **30.12 + 31.0** (both cheap, read-only, parallelizable with Phase 0) → **Phase 1** (30.6 keystone + 30.8 + A2.11).
+3. **Phase 2** (30.2 → 31.1 / 31.2 → 7.6 → 3A.3 / 5A.6 → Track B revisit).
 4. Trigger the **gated 12.x / 19.3** track as live counts clear *and* 30.6 has landed.
 
 **Alternative if maximizing live-skill-per-hour:** jump straight to **30.12 → 30.6** and return to 27.8/30.9

@@ -14,6 +14,15 @@ IF NOT:      artifacts archived to models/total_runs/archive/; NGBoost v2 unchan
 
 Run from project root:
     uv run python betting_ml/scripts/train_quantile_totals.py [--weighted]
+
+Story 31.4b — weather ABLATION in the quantile family (the monotone-LightGBM plan is
+not buildable: LightGBM rejects monotone_constraints under the quantile objective).
+The 4 weather features are already in the retained pool, so:
+    uv run python betting_ml/scripts/train_quantile_totals.py --force-weather   # weather IN  (_wx)
+    uv run python betting_ml/scripts/train_quantile_totals.py --drop-weather    # weather OUT (_noweather)
+Compare CV MAE(q50) / std(pred) / coverage between the two to isolate weather's
+effect on the (variance-healthy) quantile model now that weather is populated.
+Distinct `_wx` / `_noweather` artifacts + reports leave the 10.10 baseline untouched.
 """
 from __future__ import annotations
 
@@ -41,6 +50,7 @@ _MODEL_DIR     = PROJECT_ROOT / "betting_ml" / "models" / "total_runs"
 _EVAL_DIR      = PROJECT_ROOT / "betting_ml" / "evaluation"
 _REGISTRY_PATH = PROJECT_ROOT / "betting_ml" / "models" / "model_registry.yaml"
 _REPORT_PATH   = _EVAL_DIR / "quantile_regression_vs_ngboost.md"
+# (Story 31.4b: reassigned to a distinct report path under --force-weather; see below.)
 
 ALPHAS = [0.10, 0.25, 0.50, 0.75, 0.90]
 
@@ -55,6 +65,28 @@ _LGB_PARAMS = dict(
 )
 
 _WEIGHTED_FLAG = "--weighted" in sys.argv
+
+# Story 31.4b — weather ablation in the quantile family.
+#
+# ORIGINAL PLAN (monotone-constrained LightGBM-quantile) is NOT BUILDABLE: LightGBM
+# rejects `monotone_constraints` under `objective='quantile'` ("Cannot use
+# monotone_constraints in quantile objective"). So the one inductive bias NGBoost
+# couldn't express can't be added here either — a true-monotone weather model would
+# need XGBoost (`reg:quantileerror` + monotone) or a monotone MEAN regressor with a
+# separate spread, both a bigger build (see 31.4b notes).
+#
+# ALSO: the 4 weather features are ALREADY in the retained candidate pool
+# (evaluation/feature_selection.md), so the quantile model already trains on weather
+# — 10.10 just had ~null weather pre-repair (Story 31.4). The honest remaining cheap
+# test is therefore a clean ABLATION on the NOW-POPULATED weather, unconstrained:
+#   --force-weather  → weather IN  (tag `_wx`)      } same folds; compare CV MAE(q50)/
+#   --drop-weather   → weather OUT (tag `_noweather`)} std/coverage to isolate weather.
+_WEATHER_FEATURES = ["temp_f", "wind_speed_mph", "wind_component_mph", "humidity_pct"]
+_FORCE_WEATHER = "--force-weather" in sys.argv
+_DROP_WEATHER = "--drop-weather" in sys.argv
+_MODEL_TAG = "_noweather" if _DROP_WEATHER else ("_wx" if _FORCE_WEATHER else "")
+if _FORCE_WEATHER or _DROP_WEATHER:
+    _REPORT_PATH = _EVAL_DIR / f"quantile_weather_31_4b{_MODEL_TAG}.md"
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +217,28 @@ def main() -> None:
 
     retained = load_retained_features()
     feature_cols = [f for f in retained if f in df.columns]
+    # Story 31.4b — weather ablation. NOTE: monotone constraints are UNSUPPORTED under
+    # LightGBM's quantile objective, so the run is unconstrained (true-monotone needs
+    # XGBoost / a mean-model variant). The 4 weather cols are already in the retained
+    # pool, so --force-weather is the "weather IN" arm and --drop-weather the baseline.
+    if _FORCE_WEATHER:
+        missing = [c for c in _WEATHER_FEATURES if c not in df.columns]
+        if missing:
+            sys.exit(
+                f"--force-weather: {missing} not in feature_pregame_game_features. "
+                "Rebuild the dbt weather feature (Story 31.4: "
+                "`dbtf run --select feature_pregame_weather_features+ --full-refresh`) first."
+            )
+        present = [c for c in _WEATHER_FEATURES if c in feature_cols]
+        added = [c for c in _WEATHER_FEATURES if c not in feature_cols]
+        feature_cols += added
+        print(f"  Story 31.4b [weather IN]: {len(present)} weather cols already retained, "
+              f"{len(added)} force-added → {sorted(set(present) | set(added))}")
+        print("  NOTE: monotone constraints SKIPPED — unsupported with LightGBM quantile objective.")
+    elif _DROP_WEATHER:
+        dropped = [c for c in _WEATHER_FEATURES if c in feature_cols]
+        feature_cols = [c for c in feature_cols if c not in _WEATHER_FEATURES]
+        print(f"  Story 31.4b [weather OUT — baseline]: dropped {len(dropped)} weather cols: {dropped}")
     print(f"  {len(feature_cols)} retained features")
 
     ngboost_mae = _ngboost_baseline()
@@ -310,13 +364,13 @@ def main() -> None:
         model = lgb.LGBMRegressor(alpha=alpha, **_LGB_PARAMS)
         model.fit(X_full.values, y_full, sample_weight=sw_full)
         elapsed = time.time() - t0
-        path = _MODEL_DIR / f"lgb_quantile_{alpha:.2f}.pkl"
+        path = _MODEL_DIR / f"lgb_quantile{_MODEL_TAG}_{alpha:.2f}.pkl"
         joblib.dump(model, path)
         final_models[alpha]   = model
         artifact_paths[alpha] = path
         print(f"  q={alpha:.2f}: {elapsed:.0f}s  → {path.name}")
 
-    feat_cols_path = _MODEL_DIR / "lgb_quantile_feature_columns.json"
+    feat_cols_path = _MODEL_DIR / f"lgb_quantile{_MODEL_TAG}_feature_columns.json"
     feat_cols_path.write_text(json.dumps(final_feature_cols, indent=0))
     print(f"  Feature columns: {feat_cols_path.name} ({len(final_feature_cols)} cols)")
 
@@ -327,7 +381,7 @@ def main() -> None:
     now_str = datetime.now(timezone.utc).isoformat()
 
     if all_pass:
-        reg["total_runs_quantile"] = {
+        reg[f"total_runs_quantile{_MODEL_TAG}"] = {
             "model_type": "lgb_quantile",
             "alphas": ALPHAS,
             "artifacts": [str(artifact_paths[a].relative_to(PROJECT_ROOT)) for a in ALPHAS],
@@ -352,12 +406,12 @@ def main() -> None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         for alpha in ALPHAS:
             src = artifact_paths[alpha]
-            dst = archive_dir / f"lgb_quantile_{alpha:.2f}_{ts}.pkl"
+            dst = archive_dir / f"lgb_quantile{_MODEL_TAG}_{alpha:.2f}_{ts}.pkl"
             src.rename(dst)
             artifact_paths[alpha] = dst
 
         failed_gates = [g for g, p in [("MAE", gate_mae), ("std", gate_std), ("residual", gate_resid)] if not p]
-        reg["total_runs_quantile"] = {
+        reg[f"total_runs_quantile{_MODEL_TAG}"] = {
             "model_type": "lgb_quantile",
             "promoted": False,
             "gate_mae_pass":   gate_mae,

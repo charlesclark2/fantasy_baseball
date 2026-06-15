@@ -358,7 +358,8 @@ def walk_forward_calibration(df, target_col, *, champion: ModelSpec, challenger:
     return {"per_season": per_season, "pooled": pooled}
 
 
-def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False) -> dict:
+def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False,
+                     challenger_contract_override: str | None = None) -> dict:
     """Distribution-calibration comparison (champion vs challenger) for a regression target.
     The verdict the totals projection promotion needs: is the challenger's PREDICTED SPREAD
     honest, not just its point MAE? With season_normalize=True (Story 27.7), the challenger is
@@ -372,6 +373,11 @@ def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False
     if season_normalize:
         chal_contract = cfg.get("challenger_contract_seasonnorm", chal_contract)
         print(f"  [Story 27.7] challenger = season-normalized contract: {chal_contract}")
+    if challenger_contract_override:
+        # Story 31.4: evaluate an ad-hoc challenger contract (e.g. the `_wx` weather
+        # variant) without churning the committed config. Champion arm is unchanged.
+        chal_contract = challenger_contract_override
+        print(f"  [--challenger-contract] override challenger contract: {chal_contract}")
     chal_cols = _contract_cols(chal_contract, df)
     champ_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
                   else _contract_cols(cfg["champion_contract"], df))
@@ -481,13 +487,20 @@ def _build_specs(name: str, cfg: dict, seed: int = 42) -> tuple[ModelSpec, Model
 
 
 def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = None,
-                season_normalize: bool = False, seed: int = 42) -> dict:
+                season_normalize: bool = False, seed: int = 42,
+                challenger_contract_override: str | None = None,
+                champion_contract_override: str | None = None) -> dict:
     cfg = _TARGETS[name]
     chal_contract = cfg["challenger_contract"]
     if season_normalize:
         # Story 27.8: challenger = the season-normalized retrain; champion stays deployed raw v5.
         chal_contract = cfg.get("challenger_contract_seasonnorm", chal_contract)
         print(f"  [Story 27.8] {name} challenger = season-normalized contract: {chal_contract}")
+    if challenger_contract_override:
+        # Story 31.4: evaluate an ad-hoc challenger (e.g. the `_wx` weather variant)
+        # without churning the committed config. Champion arm is unchanged.
+        chal_contract = challenger_contract_override
+        print(f"  [--challenger-contract] {name} override challenger contract: {chal_contract}")
     chal_cols = _contract_cols(chal_contract, df)
     if season_normalize:
         # Story 27.8: ISOLATE the seasonnorm swap. Champion = the DEPLOYED model's contract
@@ -500,6 +513,13 @@ def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = 
     else:
         champ_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
                       else _contract_cols(cfg["champion_contract"], df))
+    if champion_contract_override:
+        # Story 31.4: pin the champion arm to an explicit contract so a single feature
+        # group can be ISOLATED — e.g. champion = seasonnorm-no-weather vs challenger =
+        # seasonnorm+weather attributes the whole Δ to weather alone. Takes precedence
+        # over the season_normalize repoint above.
+        champ_cols = _contract_cols(champion_contract_override, df)
+        print(f"  [--champion-contract] {name} override champion contract: {champion_contract_override}")
     champion, challenger = _build_specs(name, cfg, seed=seed)
     if seed != 42:
         print(f"  [hysteresis] seed={seed} (independent re-fit; 42 is the default pass)")
@@ -548,7 +568,21 @@ def main() -> None:
                     help="Story 27.6: z-score the contact-quality features within season before "
                          "the calibration eval — validates the season-normalization fix for the "
                          "totals run-environment-regime over-bias. Only affects --eval-calibration.")
+    ap.add_argument("--challenger-contract", default=None,
+                    help="Story 31.4: evaluate an ad-hoc challenger feature-contract JSON (e.g. the "
+                         "`_wx` weather variant) against the deployed champion, without editing the "
+                         "committed config. Requires a single --target (not 'all').")
+    ap.add_argument("--champion-contract", default=None,
+                    help="Story 31.4: pin the champion arm to an explicit contract JSON to ISOLATE a "
+                         "feature group (e.g. champion = seasonnorm-no-weather vs --challenger-contract "
+                         "seasonnorm+weather attributes the whole Δ to weather). Accuracy gate only "
+                         "(not --eval-calibration). Requires a single --target.")
     args = ap.parse_args()
+    if (args.challenger_contract or args.champion_contract) and args.target == "all":
+        raise SystemExit("--challenger-contract/--champion-contract require a single --target (not 'all').")
+    if args.champion_contract and args.eval_calibration:
+        raise SystemExit("--champion-contract is for the accuracy gate; the calibration gate keeps the "
+                         "deployed champion (the honest-spread reference). Drop --eval-calibration.")
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("Loading features from Snowflake...")
@@ -558,7 +592,9 @@ def main() -> None:
     targets = ["home_win", "run_diff", "total_runs"] if args.target == "all" else [args.target]
 
     if args.eval_calibration:
-        results = {t: _run_calibration(t, df, season_normalize=args.season_normalize) for t in targets}
+        results = {t: _run_calibration(t, df, season_normalize=args.season_normalize,
+                                       challenger_contract_override=args.challenger_contract)
+                   for t in targets}
         out = _OUT_DIR / (f"calibration_{args.target}.json")
         out.write_text(json.dumps(results, indent=2, default=float))
         print(f"\nWrote {out}")
@@ -568,7 +604,9 @@ def main() -> None:
         return
 
     results = {t: _run_target(t, df, args.correctness_override,
-                              season_normalize=args.season_normalize, seed=args.seed) for t in targets}
+                              season_normalize=args.season_normalize, seed=args.seed,
+                              challenger_contract_override=args.challenger_contract,
+                              champion_contract_override=args.champion_contract) for t in targets}
 
     out = _OUT_DIR / ("promotion_gate_all.json" if args.target == "all"
                       else f"promotion_gate_{args.target}.json")
