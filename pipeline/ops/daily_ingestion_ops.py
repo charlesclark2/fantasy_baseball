@@ -84,6 +84,16 @@ def _dbt_daily_build_args() -> list[str]:
     target = ["--target", "baseball_betting_and_fantasy"]
     if today.weekday() == 6:  # Sunday: weekly full rebuild + full test suite
         return ["build", "--full-refresh"] + target
+    # Story A2.15 (2026-06-15): the dbt TEST suite was the single biggest Snowflake +
+    # Dagster cost driver — tests ran on every intraday/catchup tick via the scattered
+    # `build` ops (now all converted to `run`). This op is the ONE place the test suite
+    # runs: the Sunday full-refresh build above, plus a lightweight (no --full-refresh)
+    # test build every 3rd day as a midweek data-quality checkpoint. Every other day →
+    # models-only `run`. Dial the cadence with the modulus (% 2 = every other day; drop
+    # this block = Sunday-only/weekly). The whole-project build here covers the tests for
+    # every model the daily/intraday `run` ops rebuild.
+    if today.toordinal() % 3 == 0:
+        return ["build"] + target
     return ["run"] + target
 
 
@@ -324,7 +334,7 @@ def generate_defense_quality_signals_op(context):
 def dbt_sub_model_signals_rebuild(context):
     # Fan-in: refresh the wide PIVOT once all eight signal tables are written.
     _run_dbt(context, [
-        "build",
+        "run",
         "--select", "feature_pregame_sub_model_signals",
         "--target", "baseball_betting_and_fantasy",
     ])
@@ -394,7 +404,7 @@ _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_build_bullpen_posteriors_op(context):
     _run_dbt(context, [
-        "build", "--select",
+        "run", "--select",
         "int_bullpen_ali_by_season",
         "eb_bullpen_posteriors",
         "eb_bullpen_team_posteriors",
@@ -473,7 +483,7 @@ def dbt_umpire_feature_rebuild(context):
     # update ops. Incremental → only the recent window is recomputed. dbt resolves
     # build order from the ref graph.
     _run_dbt(context, [
-        "build",
+        "run",
         "--select",
         "stg_statsapi_umpire_game_log",
         "feature_pregame_umpire_features",
@@ -506,7 +516,7 @@ def check_prediction_coverage(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_mart_prediction_clv(context):
-    _run_dbt(context, ["build", "--select", "mart_prediction_clv", "--target", "baseball_betting_and_fantasy"])
+    _run_dbt(context, ["run", "--select", "mart_prediction_clv", "--target", "baseball_betting_and_fantasy"])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -551,7 +561,7 @@ def dbt_pregame_odds_rebuild(context):
     # Rebuild feature_pregame_odds_features (and its dependents) now that the
     # SCD-2 table has been updated with today's line state.
     _run_dbt(context, [
-        "build",
+        "run",
         "--select", "feature_pregame_odds_features+",
         "--target", "baseball_betting_and_fantasy",
     ])
@@ -571,7 +581,7 @@ def dbt_lineup_feature_rebuild(context):
     # Selecting from the upstream injury model ensures both are rebuilt in
     # dependency order in a single dbt invocation.
     _run_dbt(context, [
-        "build",
+        "run",
         "--select", "feature_pregame_injury_status+",
         "--target", "baseball_betting_and_fantasy",
     ])
