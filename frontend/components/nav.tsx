@@ -105,7 +105,7 @@ export function Nav({
 
       {/* Sub-nav — authenticated only */}
       {authenticated && (
-        <div className="mx-auto flex max-w-6xl gap-6 px-4 pb-0">
+        <div className="mx-auto flex max-w-6xl gap-6 overflow-x-auto px-4 pb-0">
           {SUB_NAV_ITEMS.map(({ label, href, key }) => (
             <Link
               key={key}

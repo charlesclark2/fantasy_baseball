@@ -791,12 +791,12 @@ function BetLogInner() {
                             <TableCell className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <Button variant="ghost" size="sm"
-                                  className="h-7 w-7 p-0 text-gray-500 hover:text-white hover:bg-[#1e1e1e]"
+                                  className="h-8 w-8 p-0 text-gray-500 hover:text-white hover:bg-[#1e1e1e]"
                                   onClick={() => setEditingBet(bet)}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button variant="ghost" size="sm"
-                                  className="h-7 w-7 p-0 text-gray-500 hover:text-[#ef4444] hover:bg-[#1e1e1e]"
+                                  className="h-8 w-8 p-0 text-gray-500 hover:text-[#ef4444] hover:bg-[#1e1e1e]"
                                   onClick={() => setDeletingBetId(bet.bet_id)}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>

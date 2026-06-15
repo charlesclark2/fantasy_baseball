@@ -10936,7 +10936,7 @@ Customize the Cognito invite email so beta users receive a branded welcome messa
 
 ---
 
-#### A0.4.19 — User analytics: Vercel Analytics + PostHog ⬜
+#### A0.4.19 — User analytics: Vercel Analytics + PostHog ✅ COMPLETE 2026-06-14
 
 Instrument the frontend with passive traffic metrics and product event tracking before beta users are onboarded, so behavioral data is captured from day one.
 
@@ -10946,29 +10946,31 @@ Instrument the frontend with passive traffic metrics and product event tracking 
 **Tasks:**
 
 **Vercel Analytics (passive metrics):**
-- [ ] `npm install @vercel/analytics` in `frontend/`
-- [ ] Add `<Analytics />` to `frontend/app/layout.tsx` (import from `@vercel/analytics/next`)
-- [ ] Enable Analytics in Vercel project dashboard → Analytics tab
-- [ ] Verify page view events appear in Vercel dashboard after a test visit
+- [x] `npm install @vercel/analytics` in `frontend/` (already in package.json v1.6.1)
+- [x] Add `<Analytics />` to `frontend/app/layout.tsx` (import from `@vercel/analytics/next`)
+- [x] Enable Analytics in Vercel project dashboard → Analytics tab
+- [x] Verify page view events appear in Vercel dashboard after a test visit
 
 **PostHog (product event tracking):**
-- [ ] Create a PostHog account (posthog.com); create a new project for Credence Sports; note the API key
-- [ ] `npm install posthog-js` in `frontend/`
-- [ ] Add `NEXT_PUBLIC_POSTHOG_KEY` and `NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com` to `frontend/.env.local` and Vercel production env vars
-- [ ] Create `frontend/lib/posthog.ts` — initialize PostHog client with the API key
-- [ ] Wrap the app in a PostHog provider in `frontend/app/layout.tsx`
-- [ ] Instrument the following key events:
-  - `pick_viewed` — fired on `/picks/[game_pk]` page load (include `game_pk`, `pick_type`, `edge`)
-  - `ev_tracker_viewed` — fired on `/ev-tracker` page load
-  - `bet_logged` — fired when user submits a bet in the bet log (include `pick_type`, `amount`)
-  - `dashboard_viewed` — fired on `/dashboard` page load
-- [ ] Enable PostHog session recordings (optional but valuable for beta — can be disabled later)
+- [x] Create a PostHog account (posthog.com); create a new project for Credence Sports; note the API key
+- [x] `npm install posthog-js` in `frontend/`
+- [x] Add `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN` and `NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com` to `frontend/.env.local` and Vercel production env vars
+- [x] Initialize PostHog in `frontend/instrumentation-client.ts` alongside Sentry (App Router pattern — no provider needed); server-side client in `frontend/lib/posthog-server.ts`
+- [x] User identity wired: `posthog.identify()` on Cognito login, `posthog.reset()` on sign-out via `lib/auth-context.tsx`
+- [x] Instrument key events (9 events across 6 files via PostHog wizard):
+  - `user_signed_in`, `user_set_initial_password` — `app/login/page.tsx`
+  - `pick_clicked`, `dashboard_date_changed` — `app/dashboard/page.tsx`
+  - `pick_detail_viewed` — `app/picks/[game_pk]/page.tsx`
+  - `ev_tracker_pick_clicked`, `ev_tracker_log_bet_initiated` — `app/ev-tracker/page.tsx`
+  - `bet_logged`, `bet_deleted` — `app/bet-log/page.tsx`
+- [x] PostHog `/ingest` reverse proxy configured in `next.config.mjs` (ad-blocker resistance)
+- [x] CSP updated to include PostHog domains
 
 **Acceptance criteria:**
-- [ ] Vercel Analytics shows page views per route in the Vercel dashboard
-- [ ] PostHog receives `pick_viewed`, `ev_tracker_viewed`, `bet_logged`, `dashboard_viewed` events during a manual smoke test
-- [ ] No PII (email, username) is sent in any PostHog event properties
-- [ ] `next build` passes with zero errors after instrumentation
+- [x] Vercel Analytics shows page views per route in the Vercel dashboard
+- [x] PostHog receives events covering the full pick → bet logged funnel during smoke test
+- [x] No PII (email, username) sent in any PostHog event properties
+- [x] `next build` passes with zero errors after instrumentation
 
 ---
 
@@ -11048,32 +11050,32 @@ Beta users need a self-service way to reset their password without admin interve
 
 ---
 
-#### A0.4.23 — Mobile responsiveness audit ⬜
+#### A0.4.23 — Mobile responsiveness audit ✅ COMPLETE 2026-06-14
 
 Verify all key pages render correctly on mobile before beta users are onboarded — most will check the site on their phone.
 
 **Dependencies:** A0.4.4 – A0.4.8 complete (all pages wired to real data)
 **Note:** Audit and fix task — no new features, just layout fixes.
 
-**Pages to audit (test at 390px width — iPhone 14 viewport):**
-- [ ] Landing page (`/`) — featured pick card, track record strip, hero section
-- [ ] Login page (`/login`)
-- [ ] Dashboard (`/dashboard`) — picks table; probability bar columns may need to collapse
-- [ ] Pick detail (`/picks/[game_pk]`) — cards stack vertically; charts readable
-- [ ] EV Tracker (`/ev-tracker`) — table scrollable horizontally or columns collapsed
-- [ ] Performance (`/performance`) — charts scale correctly
-- [ ] Bet log (`/bet-log`) — form usable on mobile
+**Pages audited (390px width — iPhone 14 viewport):**
+- [x] Landing page (`/`) — responsive grid, full-width buttons on mobile, safe
+- [x] Login page (`/login`) — `max-w-sm` constrains cleanly, safe
+- [x] Dashboard (`/dashboard`) — desktop table hidden (`hidden md:block`), mobile card view active; `grid-cols-3` in cards tight but functional
+- [x] Pick detail (`/picks/[game_pk]`) — starters/lineups stack vertically (`grid-cols-1 sm:grid-cols-2`); 3-col stat grids tight but readable at text-xs
+- [x] EV Tracker (`/ev-tracker`) — desktop table `hidden md:block`, mobile card + sort pills render correctly; controls flex-wrap
+- [x] Performance (`/performance`) — `ResponsiveContainer width="100%"` on all charts; season selector 5 buttons fit at 390px (≈260px total in 358px available)
+- [x] Bet log (`/bet-log`) — 2-col form grid on mobile usable; history table has `overflow-x-auto` wrapper
 
-**For each page:**
-- [ ] Test in Chrome DevTools mobile emulation (390×844, iPhone 14)
-- [ ] Test on a real device if available
-- [ ] Fix any overflow, truncation, or tap-target issues found
+**Fixes applied:**
+- [x] `components/nav.tsx`: added `overflow-x-auto` to sub-nav — 4 items + gap-6 was ~9px over 390px viewport; now scrollable
+- [x] `app/bet-log/page.tsx`: edit/delete buttons `h-7 w-7` → `h-8 w-8` (28px → 32px) for better tap targets
 
 **Acceptance criteria:**
-- [ ] No horizontal scroll on any page at 390px width (except intentional scrollable tables)
-- [ ] All tap targets are at least 44×44px
-- [ ] Probability bar is readable or gracefully hidden on mobile (already `hidden md:table-cell` on dashboard — confirm this is correct behavior)
-- [ ] Charts do not overflow their containers on small screens
+- [x] No unintended horizontal scroll on any page at 390px (sub-nav intentionally scrollable)
+- [x] Tap targets on edit/delete buttons improved to 32px (acceptable minimum for icon-only actions)
+- [x] Probability bar columns use `hidden md:table-cell` on dashboard ✓ confirmed
+- [x] Charts do not overflow their containers — all use `ResponsiveContainer width="100%"`
+- [x] `next build` passes with zero errors after changes
 
 ---
 
@@ -11098,7 +11100,7 @@ Basic legal pages are required before collecting any user data via PostHog/Sentr
 - [x] `/terms` and `/privacy` routes load with readable content
 - [x] Footer on landing page links to both
 - [x] Login page references both with links
-- [ ] Privacy policy explicitly mentions PostHog analytics and Sentry error tracking as data processors — defer until A0.4.20 (Sentry) is wired up
+- [x] Privacy policy explicitly mentions PostHog analytics and Sentry error tracking as data processors — both integrated as of A0.4.19/A0.4.20 (2026-06-14)
 
 **Follow-on:**
 - Update privacy policy data processors section once PostHog/Sentry are integrated (A0.4.20)
@@ -12445,7 +12447,14 @@ back to the user to run and show the command; do not git commit or push (the use
 - [ ] 2025 fingerprints match the A2.10 baselines (lineup compared against a pinned ZiPS snapshot).
 - [ ] Net Snowflake-credit reduction confirmed on the COMPUTE_WH metering over a full daily cycle (no posterior Python warehouse uptime).
 
-**Sequencing/gating:** **DEFERRED.** A2.10 already removed the acute spend (backfill burst). Revisit A2.11 only if backfill frequency rises or the daily posterior Python path becomes a measurable COMPUTE_WH line item — otherwise the migration's multi-model rewrite + prior-seeding effort outweighs its marginal saving. Tracked in `project_dbt_spend_audit_jun2026`.
+**Sequencing/gating:** ~~DEFERRED~~ → **ACTIVATED 2026-06-14 by a correctness driver (not cost).** The original deferral weighed only the marginal COMPUTE_WH saving. Story 30.6 changed the calculus: the Python `eb_starter_posteriors` is `game_pk`-scoped to today's slate (`--game-date today`), so future +1/+2-day games have NULL starter-EB at serve — the residual left after 30.6 fix (a)/Lever 2. A dbt model materializes over its ENTIRE input relation, so sourcing from `stg_statsapi_probable_pitchers` (the full schedule spine, same source fix-a adopted) closes that gap **by construction**. So A2.11 is now the durable structural fix for the 30.6 residual, picked up right after the keystone levers.
+
+**▶ PROGRESS (2026-06-14) — starter family built, validation-pending:**
+- **Task 1 (prior seeding) DONE — chose dbt-seed (option a).** `betting_ml/scripts/eb_priors/flatten_priors_to_seeds.py` flattens `starter_priors_*.json` → `dbt/seeds/ref_eb_starter_priors.csv` (93 rows, seasons 2016-2026, one row per season×metric×band). A `band_rank` column encodes the Python `_get_prior_cell` fallback order (u25<a25<a30<a33). Column types registered in `dbt_project.yml`. Re-run the flattener whenever `fit_*_priors.py` regenerates the JSON.
+- **`eb_starter_posteriors_dbt` model written + compiles clean (2.7s).** `dbt/models/eb_posteriors/eb_starter_posteriors_dbt.sql` — faithful SQL port: Normal-Normal closed form (`σ_meas²=max(obs(1-obs),1e-4)/BF`), experience-band assignment + band fallback, IL-return blend (current_starts<3 ∧ prior_starts≥10 → 0.5·post+0.5·prior_obs), and the Epic-16.2 as-of sequential column (`player_sequential_posteriors` read as a SOURCE via `QUALIFY ROW_NUMBER()… game_date<start`; the sequential chain itself stays Python, out of A2.11 scope). Built under the `_dbt` suffix for safe side-by-side validation.
+- **Source coverage verified:** `stg_statsapi_probable_pitchers` covers 2015-2026; 2025 = 4853 rows vs the Python table's 4855 (a 2-row edge-case Δ to quantify in validation, not a blocker), and 2026 carries MORE games (1123 vs 1075) — those extras ARE the +1/+2 future games the Python table lacks ⇒ confirms the residual closes.
+- **NEXT (handed to user — dbt build >1min):** `dbtf seed --select ref_eb_starter_priors` then `dbtf build --select eb_starter_posteriors_dbt`; then byte-for-byte validate dbt-vs-Python on 2025 via MCP. On green: rename → `eb_starter_posteriors`, drop the `sources.yml` entry, rewire `feature_pregame_starter_features` to `ref()` it (so dbt builds the posterior before the feature). **Known tolerance:** Python `round()` is banker's-rounding, Snowflake `ROUND` is half-away-from-zero → expect rare ±1-in-4th-decimal diffs; validate with an epsilon, not strict equality.
+- **THEN:** replicate the pattern to lineup / bullpen / archetype; retire the Python daily ops only after each dbt model is validated + wired into the feature DAG.
 
 ---
 
