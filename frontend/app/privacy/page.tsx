@@ -29,7 +29,7 @@ export default function PrivacyPage() {
             <p><strong>Account information.</strong> When you create an account, we collect your email address and a password (stored as a secure hash — we never store your password in plain text). We use AWS Cognito to manage authentication.</p>
             <p><strong>Profile information.</strong> If you choose to provide it, we may collect your name and notification preferences including phone number for SMS alerts.</p>
             <p><strong>Bet log data.</strong> If you use the bet logging feature, we collect the bet records you enter including game, market, odds, stake, and outcome. This data is stored to provide you with performance tracking and is not shared with third parties.</p>
-            <p><strong>Communications.</strong> If you contact us at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a>, we retain those communications to respond to your inquiry and improve the Service.</p>
+            <p><strong>Communications.</strong> If you contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>, we retain those communications to respond to your inquiry and improve the Service.</p>
             <p><strong>Feedback.</strong> During the beta period, we may collect feedback you provide through the Service or directly to us.</p>
 
             <h3 className="text-sm font-semibold text-gray-200 mt-4 mb-2">Information Collected Automatically</h3>
@@ -83,7 +83,7 @@ export default function PrivacyPage() {
               <li>Usage logs are retained for up to 12 months for security and debugging purposes</li>
               <li>Email communications are retained for up to 3 years</li>
             </ul>
-            <p>You may request deletion of your account and associated data at any time by contacting us at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a>. We will process deletion requests within 30 days.</p>
+            <p>You may request deletion of your account and associated data at any time by contacting us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>. We will process deletion requests within 30 days.</p>
           </Section>
 
           <Section title="6. Data Security">
@@ -105,7 +105,7 @@ export default function PrivacyPage() {
             <p><strong>Portability.</strong> You may request that we provide your personal information in a portable format.</p>
             <p><strong>Opt-out of communications.</strong> You may opt out of non-essential communications at any time through your account settings or by contacting us.</p>
             <p><strong>Notification preferences.</strong> You can manage your push notification and email alert preferences in the Settings section of the Service at any time.</p>
-            <p>To exercise any of these rights, contact us at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a>. We will respond to your request within 30 days.</p>
+            <p>To exercise any of these rights, contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>. We will respond to your request within 30 days.</p>
           </Section>
 
           <Section title="8. Cookies">
@@ -121,7 +121,7 @@ export default function PrivacyPage() {
 
           <Section title="10. Children's Privacy">
             <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from anyone under 18. If we become aware that we have collected personal information from a person under 18, we will take steps to delete that information promptly.</p>
-            <p>If you believe we may have inadvertently collected information from a minor, please contact us at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a>.</p>
+            <p>If you believe we may have inadvertently collected information from a minor, please contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>.</p>
           </Section>
 
           <Section title="11. California Privacy Rights">
@@ -132,7 +132,7 @@ export default function PrivacyPage() {
               <li>The right to opt out of the sale of your personal information (we do not sell personal information)</li>
               <li>The right to non-discrimination for exercising your privacy rights</li>
             </ul>
-            <p>To exercise your California privacy rights, contact us at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a>.</p>
+            <p>To exercise your California privacy rights, contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>.</p>
           </Section>
 
           <Section title="12. Changes to This Privacy Policy">
@@ -144,7 +144,7 @@ export default function PrivacyPage() {
             <p>For questions, concerns, or requests regarding this Privacy Policy or our data practices, contact us at:</p>
             <address className="not-italic mt-2 text-gray-400">
               Penumbra Partners / Credence Sports<br />
-              <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a><br />
+              <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a><br />
               <a href="https://credencesports.com" className="text-[#10b981] hover:underline">credencesports.com</a>
             </address>
           </Section>
