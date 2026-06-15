@@ -206,12 +206,14 @@ WITH ranked AS (
         g.game_date AS game_start_utc,
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
-            ORDER BY p.inserted_at DESC
+            ORDER BY
+                CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                p.inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions p
     LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = p.game_pk
     WHERE p.game_date = %(today)s
-      AND p.prediction_type = 'post_lineup'
+      AND p.prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
@@ -230,7 +232,8 @@ h2h AS (
         b.game_start_utc,
         b.inserted_at,
         NULL::FLOAT                                  AS model_total_runs,
-        NULL::FLOAT                                  AS market_total_line
+        NULL::FLOAT                                  AS market_total_line,
+        b.prediction_type
     FROM base b
     WHERE b.layer4_h2h_decision IN ('home', 'away')
 ),
@@ -250,7 +253,8 @@ totals AS (
         b.game_start_utc,
         b.inserted_at,
         b.pred_total_runs                            AS model_total_runs,
-        b.total_line_consensus                       AS market_total_line
+        b.total_line_consensus                       AS market_total_line,
+        b.prediction_type
     FROM base b
     WHERE b.layer4_totals_decision IN ('over', 'under')
 )
@@ -264,11 +268,13 @@ WITH ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY inserted_at DESC
+            ORDER BY
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE game_date = %(today)s
-      AND prediction_type = 'post_lineup'
+      AND prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (
     SELECT r.*, g.game_date AS game_start_utc
@@ -289,7 +295,8 @@ h2h AS (
         b.home_team, b.away_team,
         b.h2h_kelly_fraction                         AS kelly_fraction,
         b.total_line_consensus,
-        NULL::FLOAT                                  AS pred_total_runs
+        NULL::FLOAT                                  AS pred_total_runs,
+        b.prediction_type
     FROM base b
     WHERE b.h2h_market_implied_prob IS NOT NULL
 ),
@@ -306,7 +313,8 @@ totals AS (
         b.home_team, b.away_team,
         b.totals_kelly_fraction                      AS kelly_fraction,
         b.total_line_consensus,
-        b.pred_total_runs
+        b.pred_total_runs,
+        b.prediction_type
     FROM base b
     WHERE b.over_prob_consensus IS NOT NULL
 )
@@ -834,8 +842,12 @@ def _build_picks_payload(rows: list[dict], freshness_rows: list[dict]) -> dict:
         }
         for r in rows
     ]
+    is_preliminary = bool(rows) and any(
+        (r.get("PREDICTION_TYPE") or "") == "morning" for r in rows
+    )
     return {"picks": picks, "data_quality": {"signal_completeness_score": None,
-        "last_updated_at": last_updated_at, "pipeline_status": pipeline_status}}
+        "last_updated_at": last_updated_at, "pipeline_status": pipeline_status},
+        "is_preliminary": is_preliminary}
 
 
 def _build_ev_payload(rows: list[dict]) -> dict:
@@ -852,7 +864,10 @@ def _build_ev_payload(rows: list[dict]) -> dict:
         }
         for r in rows
     ]
-    return {"picks": picks, "total": len(picks)}
+    is_preliminary = bool(rows) and any(
+        (r.get("PREDICTION_TYPE") or "") == "morning" for r in rows
+    )
+    return {"picks": picks, "total": len(picks), "is_preliminary": is_preliminary}
 
 
 def _build_history_payload(rows: list[dict]) -> dict:

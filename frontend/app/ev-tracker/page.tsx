@@ -69,6 +69,7 @@ interface EVPick {
 interface EVPicksResponse {
   picks: EVPick[]
   total: number
+  is_preliminary?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -953,6 +954,19 @@ export default function EVTrackerPage() {
             </span>
           </div>
         </div>
+
+        {/* ----------------------------------------------------------------
+            Preliminary banner
+        ---------------------------------------------------------------- */}
+        {data?.is_preliminary && (
+          <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-amber-800 bg-amber-950 px-4 py-3 text-sm text-amber-300">
+            <span className="mt-0.5 shrink-0 font-bold">⚠</span>
+            <span>
+              <span className="font-semibold">Preliminary predictions</span> — lineups not yet confirmed.
+              These picks are based on probable pitchers only. Do not bet until confirmed lineups are posted (~90 min before first pitch).
+            </span>
+          </div>
+        )}
 
         {/* ----------------------------------------------------------------
             Moneyline
