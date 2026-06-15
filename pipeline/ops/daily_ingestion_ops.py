@@ -196,7 +196,16 @@ def ingest_transactions(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_oaa(context):
-    _run_script(context, "ingest_oaa.py", ["--season", str(date.today().year)])
+    # Story A2.16-D3 (2026-06-15) — soft-fail (mirrors ingest_weather / settle_user_-
+    # bets). OAA is a Baseball Savant scrape that occasionally 5xx/timeouts; it was the
+    # one remaining non-critical external-API ingest still HARD-failing the whole daily
+    # job (e.g. 2x on 2026-06-02 → no predictions those runs + manual re-runs). OAA is
+    # a season-CUMULATIVE defense metric that moves slowly and imputes if stale, so a
+    # missed daily refresh just reuses yesterday's value — never worth blocking predict.
+    try:
+        _run_script(context, "ingest_oaa.py", ["--season", str(date.today().year)])
+    except Exception as e:
+        context.log.warning(f"OAA ingest failed (non-fatal, predictions use prior OAA): {e}")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

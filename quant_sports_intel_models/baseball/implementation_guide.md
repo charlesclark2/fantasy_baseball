@@ -9892,6 +9892,11 @@ Acceptance criteria:
 
 **Sub-task sequencing:** A0.4.1 → A0.4.2 → A0.4.3 must complete in order. A0.4.4 – A0.4.8 can run in parallel once A0.4.3 is done. A0.4.9 can run once A0.4.1 Cognito env vars are known.
 
+**Remaining story priority (as of 2026-06-15):**
+- **P1 — Beta launch blockers:** A0.4.18 (SES production access approval → beta user provisioning; literal gate to inviting anyone), A0.4.13 (marketing pages — footer links on the live home page currently point nowhere), A0.4.11 (settings page — small, fully unblocked, user-facing)
+- **P2 — Beta quality:** A0.4.14 (admin page — backend already built; needs Lambda deploy + `DAGSTER_CLOUD_API_TOKEN` + Cognito admin-group guard), A0.4.15 (data quality bug reports — closes the beta feedback loop)
+- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 (player/team detail pages — post-beta scope; A2.12 Railway PG serving store SHIPPED 2026-06-15 so the data-path gate is now cleared)
+
 ---
 
 #### A0.4.1 — Cognito login ✅ (2026-06-11)
@@ -10440,7 +10445,7 @@ These are cosmetic polish items and do not block any functionality.
 
 ---
 
-#### A0.4.11 — Settings: wire user profile + notification preferences ⬜
+#### A0.4.11 — Settings: wire user profile + notification preferences ⬜  **[P1]**
 
 Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist. `alert_timing` and `hours_before_game` have no backend model yet — keep as local state.
 
@@ -10562,7 +10567,7 @@ Done when: pick card and track record show real data, no MOCK_DATA remains.
 
 ---
 
-#### A0.4.13 — Marketing pages: FAQ, Contact Us, Blog ⬜
+#### A0.4.13 — Marketing pages: FAQ, Contact Us, Blog ⬜  **[P1]**
 
 Add three new public pages to `frontend/app/`: `/faq`, `/contact`, `/blog`. These are static Server Components for beta — no backend required. Contact form uses a `mailto:` link for now (SES wiring is deferred to A0.6).
 
@@ -10629,7 +10634,7 @@ Done when all 6 new pages render, footer links route correctly, no link goes to 
 
 ---
 
-#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)
+#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)  **[P2]**
 
 Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` exists and covers the status cards. Pipeline run history, model artifact freshness, and Snowflake credit chart require new backend endpoints — spec'd below.
 
@@ -10710,7 +10715,7 @@ Done when: all three data sections show live prod data and non-admin users are b
 
 ---
 
-#### A0.4.15 — Data quality bug report ⬜
+#### A0.4.15 — Data quality bug report ⬜  **[P2]**
 
 Allow beta users to flag data errors (wrong scores, missing lines, bad umpire stats, etc.) without leaving the page. Captures context automatically so nothing has to be described from scratch.
 
@@ -10776,11 +10781,11 @@ Done when: clicking the link, filling in text, and submitting creates a DynamoDB
 
 ---
 
-#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*
+#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*  **[P3]**
 
-Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement — do not start until the serving layer story (A2.12) is underway, since player/team pages would add significant new Snowflake query surface if not built against a pre-materialized data path.
+Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement. The A2.12 Railway PG serving store gate is now CLEARED (shipped 2026-06-15) — player/team pages can use the PG cache rather than live Snowflake queries. Do not start until after beta launch.
 
-**Dependencies:** A0.4.7 complete; A2.12 serving layer in place or committed.
+**Dependencies:** A0.4.7 complete; A2.12 COMPLETE (2026-06-15) — Railway PG serving store live.
 
 **Player profile page** (`/player/[player_id]`):
 - Season stats: PA, OPS, xwOBA, K%, BB%, wRC+
@@ -10801,7 +10806,7 @@ Clickable player names and team names across the app navigate to dedicated profi
 
 **Tasks:**
 - [ ] Audit what data is available per-player and per-team from existing feature marts before designing API schemas
-- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data, not live Snowflake queries at request time (see A2.12)
+- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data served from Railway PG (A2.12 SHIPPED), not live Snowflake queries at request time
 - [ ] Create `frontend/app/player/[player_id]/page.tsx` and `frontend/app/team/[team_id]/page.tsx`
 - [ ] Make player names in the game detail lineup card link to `/player/{player_id}`
 - [ ] Make team names/logos in the game detail header link to `/team/{team_id}`
@@ -10815,7 +10820,7 @@ Clickable player names and team names across the app navigate to dedicated profi
 
 ---
 
-#### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL
+#### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL  **[P3 — blocked on 30.8]**
 
 **Problem:** Users who visit the home page before lineups confirm (~90 min before first pitch, typically 12–2pm ET) see "No qualified pick today — check back after lineups confirm." This dead window can span the entire morning even though we have enough data to make a useful early prediction. A naive user has no idea that lineups are a prerequisite — they just see nothing and leave.
 
@@ -10916,7 +10921,7 @@ lineup confirmation, clearly labeled so naive users understand it is an early es
 - [ ] `next build` passes with zero errors
 - [ ] `https://app.credencesports.com` is live
 
-#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)
+#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)  **[P1]**
 
 Customize the Cognito invite email so beta users receive a branded welcome message, then provision initial beta accounts.
 
@@ -12522,7 +12527,7 @@ the Python-written mart_player_archetype_posteriors before any cutover.
 
 ---
 
-### Story A2.12 — Railway PostgreSQL serving store + portfolio-weighted views  `[Home: Epic A2 / infrastructure]`  ⬜
+### Story A2.12 — Railway PostgreSQL serving store + portfolio-weighted views  `[Home: Epic A2 / infrastructure]`  ✅ (2026-06-15)
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.12 standalone:
 
@@ -12631,14 +12636,14 @@ first provision and whenever tables need to be rebuilt.
 
 **Tasks:**
 
-- [ ] **1. Railway PG provisioning.** Add the Postgres plugin to the existing Railway project
+- [x] **1. Railway PG provisioning.** Add the Postgres plugin to the existing Railway project
   (where FlareSolverr lives). Record the `DATABASE_URL` (Railway-formatted connection string).
   Add `DATABASE_URL` to Lambda env vars in the AWS console and to Dagster secrets.
   Verify connectivity with `psql $DATABASE_URL` locally. Create `infrastructure/pg/` directory
   and write `create_serving_tables.sql` (idempotent DDL above). Run the DDL against the new
   database to initialize the schema.
 
-- [ ] **2. FastAPI service layer — `app/backend/services/pg.py`.** New module using `asyncpg`
+- [x] **2. FastAPI service layer — `app/backend/services/pg.py`.** New module using `asyncpg`
   (async connection pool, initialized in FastAPI `lifespan`). Public functions:
   - `get_today_picks(date) → list[dict] | None`
   - `get_ev_ranked(date) → list[dict] | None`
@@ -12653,7 +12658,7 @@ first provision and whenever tables need to be rebuilt.
   - Pool is initialized once in the FastAPI `lifespan` context manager (avoids Lambda cold-start
     connection overhead on every invocation — pool is reused across warm Lambda instances).
 
-- [ ] **3. Router updates — picks and performance.** Update `app/backend/routers/picks.py` and
+- [x] **3. Router updates — picks and performance.** Update `app/backend/routers/picks.py` and
   `app/backend/routers/performance.py` to use the PG service as the primary read path:
   - `GET /picks/today` → `pg.get_today_picks()` → on `None`, fall back to Snowflake + write to PG
   - `GET /picks/ev` → `pg.get_ev_ranked()` → on `None`, fall back to Snowflake + write to PG
@@ -12662,7 +12667,7 @@ first provision and whenever tables need to be rebuilt.
   - Keep S3 fallback in place during transition (read order: PG → S3 → Snowflake).
   - On any Snowflake fallback hit, write result to PG so next request is a PG hit.
 
-- [ ] **4. Portfolio endpoints — `app/backend/routers/portfolio.py`.** New router registered
+- [x] **4. Portfolio endpoints — `app/backend/routers/portfolio.py`.** New router registered
   in `main.py` under `/portfolio`:
   - `GET /portfolio/preferences` — returns authenticated user's portfolio row (or defaults if
     not yet set). Auth via existing `get_current_user` dependency.
@@ -12672,7 +12677,7 @@ first provision and whenever tables need to be rebuilt.
     fetches the user's portfolio from PG and applies EV threshold + market filter before returning.
     Requires authenticated request.
 
-- [ ] **5. Dagster write-path — `scripts/write_serving_store.py`.** New script (replaces
+- [x] **5. Dagster write-path — `scripts/write_serving_store.py`.** New script (replaces
   `write_api_cache.py` for prediction data; both coexist during transition):
   - Connects to Railway PG via `DATABASE_URL` env var using `psycopg` (sync, matches existing
     Snowflake connector pattern in write_api_cache.py — no async needed in a Dagster script).
@@ -12688,7 +12693,7 @@ first provision and whenever tables need to be rebuilt.
     `performance_summary`.
   - Add `psycopg[binary]` (psycopg3) to dependencies.
 
-- [ ] **6. New Dagster op — `write_serving_store_op`.** Add to
+- [x] **6. New Dagster op — `write_serving_store_op`.** Add to
   `pipeline/ops/daily_ingestion_ops.py` alongside the existing `write_api_cache_op`:
   ```python
   @op(ins={"predict_done": In(Nothing)}, out=Out(Nothing))
@@ -12703,7 +12708,7 @@ first provision and whenever tables need to be rebuilt.
   - `statcast_catchup_job`: capture `predict_today_morning` result and pass to
     `write_serving_store_op(predict_done=<predict_result>)`
 
-- [ ] **7. Admin invalidation extension.** Extend `POST /admin/cache/invalidate` in
+- [x] **7. Admin invalidation extension.** Extend `POST /admin/cache/invalidate` in
   `app/backend/routers/admin.py` to accept `?game_pk=<N>`:
   - With `game_pk`: delete `game_detail` row for `(game_pk, today)` from PG + call existing
     `s3_cache.invalidate_game(game_pk)` (add `invalidate_game` to `s3_cache.py`). Next request
@@ -12711,7 +12716,7 @@ first provision and whenever tables need to be rebuilt.
   - Without `game_pk`: existing behaviour (clear all of today's S3 cache). Also truncate today's
     `daily_picks` and `game_detail` rows from PG (non-final only — `WHERE is_final = FALSE`).
 
-- [ ] **8. Infrastructure docs.** Add a "Railway PostgreSQL (A2.12)" section to
+- [x] **8. Infrastructure docs.** Add a "Railway PostgreSQL (A2.12)" section to
   `infrastructure/aws_resources.md` documenting: plugin URL, table inventory, how to run the
   DDL migration, `DATABASE_URL` env var name. Update Lambda env var table with `DATABASE_URL`.
 
@@ -12866,7 +12871,7 @@ real creds before merge; do not git commit or push; in-process Dagster ops may o
 **Tasks:**
 - [x] **D1 — ✅ SHIPPED 2026-06-15** — added `run_monitoring: {enabled: true, max_runtime_seconds: 14400}` (4h) to `dagster_home/dagster.yaml`. Global cap on EVERY run, incl. ad-hoc `__ASSET_JOB` materializations → a hung/runaway run self-terminates at 4h instead of the 16h that was 44% of trial compute. Tunable; per-job override via `dagster/max_runtime` tag. User deploys (agent restart).
 - [ ] **D2 — SHARED with A2.15:** reduce `odds_snapshot` cadence (`*/30`→`*/60`, or gate on odds movement) and gate `lineup_monitor` rebuilds on actual new-lineup arrival. These are the top-2 recurring drivers on BOTH bills.
-- [x] **D3 (catchup half) — ✅ SHIPPED 2026-06-15 via A2.15-L1** — `statcast_catchup`'s `catchup_dbt_rebuild` now runs `dbtf run`, ending the test-failure-since-06-11 that exhausted 3 retries every run. ⬜ STILL OPEN: root-cause the `daily_ingestion` 29% fail rate (separate cause — investigate its run-summary tails).
+- [x] **D3 — ✅ RESOLVED 2026-06-15.** (catchup half via A2.15-L1: `catchup_dbt_rebuild` now `dbtf run`, ending the test-failure-since-06-11 + its 3× retries.) **`daily_ingestion` 29% investigated** (Dagster GraphQL, 12 failed runs over the trial): NOT one systemic bug — scattered across 9 steps, inflated by re-run clusters (06-02 had 4 failed runs in ~20min). Breakdown: (a) external-API ingests `ingest_weather`/`ingest_umpires_late`/`settle_user_bets` were already soft-failed (those failures predate the fixes); (b) `dbt_pregame_odds_rebuild` test-failures (06-03) are killed by A2.15-L1 (`build`→`run`); (c) `ingest_oaa` was the one remaining hard-failing non-critical external-API op → **now soft-failed** (mirrors weather; OAA is slow-moving + imputes); (d) `generate_*_signals_op` + Sunday `dbt_daily_build` failures are **fail-SAFE by design** (signal-freshness gate + data-quality tests catching real issues — correct to fail, not waste). Net: after this fix the only remaining hard-fails are the intentional safety gates.
 - [ ] **D4 — consolidate the 868 tiny runs:** do `intraday_schedule` (542) + `intraday_weather` (326) need separate every-30-min jobs? Merge into fewer/less-frequent runs to amortize Serverless per-run startup overhead.
 
 **Acceptance criteria:**
