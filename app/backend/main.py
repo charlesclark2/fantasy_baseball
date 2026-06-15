@@ -74,7 +74,7 @@ app.include_router(admin.router)
 app.include_router(pipeline.router)
 
 
-@app.get("/health", tags=["health"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])
 def health() -> dict:
     return {"status": "ok", "environment": _TARGET_ENV}
 

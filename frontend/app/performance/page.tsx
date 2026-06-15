@@ -581,14 +581,37 @@ function BrierChart({ markets, season }: { markets: MarketMetrics[]; season: Sea
   )
 }
 
-function ModelSkillStrip({ data, season }: { data: ModelMetricsResponse | undefined; season: Season }) {
+function ModelSkillStrip({
+  data,
+  season,
+  includeDegraded,
+  onToggleDegraded,
+}: {
+  data: ModelMetricsResponse | undefined
+  season: Season
+  includeDegraded: boolean
+  onToggleDegraded: () => void
+}) {
   const markets = data?.markets ?? []
   const isAllSeasons = season === null
   return (
     <div className="rounded-xl border border-[#262626] bg-[#141414] px-5 py-4">
-      <p className="text-xs uppercase tracking-wider text-gray-500 font-medium mb-4">
-        {isAllSeasons ? "Model Skill — All Seasons" : "Model Skill — All Picks"}
-      </p>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs uppercase tracking-wider text-gray-500 font-medium">
+          {isAllSeasons ? "Model Skill — All Seasons" : "Model Skill — All Picks"}
+        </p>
+        <button
+          onClick={onToggleDegraded}
+          className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+            includeDegraded
+              ? "border-[#f59e0b]/40 text-[#f59e0b] bg-[#f59e0b]/10 hover:bg-[#f59e0b]/20"
+              : "border-[#262626] text-gray-600 hover:text-gray-400 hover:border-gray-600"
+          }`}
+          title={includeDegraded ? "Degraded predictions included — click to exclude" : "Degraded predictions excluded — click to include"}
+        >
+          {includeDegraded ? "incl. degraded" : "excl. degraded"}
+        </button>
+      </div>
       {markets.length === 0 ? (
         <p className="text-sm text-gray-500">No model data available.</p>
       ) : isAllSeasons ? (
@@ -933,6 +956,7 @@ function BetLogTable({ bets }: { bets: PerformanceBet[] }) {
 export default function PerformancePage() {
   const { accessToken, email } = useAuth()
   const [season, setSeason] = useState<Season>(2026)
+  const [includeDegraded, setIncludeDegraded] = useState(false)
   const seasonParam = season != null ? `?season=${season}` : ""
 
   const { data: betsData } = useQuery<PerformanceBetsResponse>({
@@ -941,8 +965,14 @@ export default function PerformancePage() {
   })
 
   const { data: modelData, isFetching: modelFetching } = useQuery<ModelMetricsResponse>({
-    queryKey: ["perf-model", season],
-    queryFn: () => apiFetch(`/performance/model${seasonParam}`, {}, accessToken),
+    queryKey: ["perf-model", season, includeDegraded],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (season != null) params.set("season", String(season))
+      if (includeDegraded) params.set("include_degraded", "true")
+      const qs = params.toString() ? `?${params.toString()}` : ""
+      return apiFetch(`/performance/model${qs}`, {}, accessToken)
+    },
   })
 
   const summary = useMemo(() => deriveSummary(betsData), [betsData])
@@ -971,7 +1001,12 @@ export default function PerformancePage() {
 
           {/* Model skill strip */}
           <div className={`mt-5 transition-opacity duration-200 ${modelFetching ? "opacity-50" : "opacity-100"}`}>
-            <ModelSkillStrip data={modelData} season={season} />
+            <ModelSkillStrip
+              data={modelData}
+              season={season}
+              includeDegraded={includeDegraded}
+              onToggleDegraded={() => setIncludeDegraded(v => !v)}
+            />
           </div>
 
           {/* P&L curve */}
