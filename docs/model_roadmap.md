@@ -26,9 +26,9 @@ Closes the loop opened by Story 27.7 (season-normalized contact features, totals
 
 | Story | What | Effort | Notes |
 |---|---|---|---|
-| **27.8** | Retrain home_win + run_diff on the normalized contract | M | Ready now (depends on 27.7 ✓). Bumps the pipeline to v6. **No correctness override** — must clear the gate's accuracy bars or be HELD. Watch the 2024 "normal-year tax". |
-| **30.9** | Learned h2h ensemble (replace the hand-set 50/50 blend) | M | **Sequence AFTER 27.8** — learn the blend on the *retrained* base models, not the v5 ones, or the work is wasted. |
-| *(op)* | Re-run the v6 prediction backfill | S | Machinery already built: `TARGET_ENV=prod predict_today --start … --is-backfill` (in-process range mode, idempotent per date+version). |
+| **27.8** | Retrain home_win + run_diff on the normalized contract | M | ✅ GATED 2026-06-14 — **split: home_win PROMOTE (Δbrier −0.0048, clean) → v6; run_diff HOLD** (Δmae −0.0185 sub-floor + 2026 regresses → stays v5 raw). No override applied. Seasonnorm run_diff contract shelved. |
+| **30.9** | Learned h2h ensemble (replace the hand-set 50/50 blend) | M | 🟢 **Offline build UNBLOCKED** — both inputs now final (home_win v6 seasonnorm local artifact + run_diff v5). ⚠ **Live wiring SHELVED: `best_alpha=0.0`** (posterior = pure market) → no live payoff until the 30.6 alpha-unlock. Build+gate offline, persist artifact+eval, defer wiring. Calibrator must be refit when w changes (Platt fit on 50/50). |
+| *(op)* | Re-run the v6 prediction backfill | S | **Deferrable** — at `best_alpha=0` the only value is refreshing recorded h2h columns (CLV bookkeeping); bundle with the 30.6 alpha-unlock cycle to avoid a double backfill. Machinery: `TARGET_ENV=prod predict_today --start … --is-backfill` (idempotent per date+version). |
 
 ⚠ Live payoff of Phase 0 is **gated on Phase 1** — these improve the offline models, whose live skill stays
 capped until point-in-time serving lands.
@@ -40,9 +40,10 @@ capped until point-in-time serving lands.
 | Story | What | Effort | Notes |
 |---|---|---|---|
 | **30.12** | Feature-store completeness audit & backfill-degradation policy | S/M | Specced 2026-06-13 (surfaced by the v5 backfill). Quantifies which features are sparse when → **directly feeds 30.6 + 30.8**. Can run in parallel with Phase 0. Known lead: `pythagorean_win_exp_diff` ~6.5% persistent mid-season null floor (`[[project_pythagorean_null_floor]]`). |
-| **30.6** | ⭐ Point-in-time AS-OF feature snapshot + AS-OF retraining (the live-ceiling lift) | **L** | The keystone. Fixes the 0.42-offline-vs-0.001-live gap. Everything downstream's *live* value depends on this. |
+| **30.6** | ⭐ Serving-skew fix (live-ceiling lift) | **L** | The keystone — CONFIRMED 2026-06-14: same model scores corr **0.61 offline-dense vs 0.016 served** (not an illusory ceiling). Mechanism = starter-EB + lineup blocks NULL at serve (stale SCD-2 starter chain), NOT value-shift → **fix serve density, not forward-capture**. Fix (A) **shipped + verified** 2026-06-14: starter_id null 80%→0; **today's serve-time starter-EB null 62.5%→0.13 (bleed stopped for today's bet)**. Residual +1/+2-day EB gap = posterior-staleness → folded into A2.11. **NEXT: Lever 2** (post_lineup re-score binding) → forward re-measure live skill (~0→~0.6) → alpha re-tune → 27.8/30.9 v6 bundle. |
+| **30.13** | ⭐ Feature-store freshness guarantee (build-ordering + serve-time freshness gate) | M | **HIGH** — the durable other half of 30.6 fix (A). Guarantees serving-path feature models rebuild from the latest ingestion BEFORE predict_today + a serve-time freshness gate (abstain on staleness), so the keystone lift can't silently regress. Generalizes the SCD-2 staleness → the posterior-staleness class. Sequence right after the 30.6 re-measure. |
 | **30.8** | Pre-lineup and post-lineup prediction contracts | M | Tightly coupled to 30.6 (morning projected-lineup vs confirmed-lineup confidence tiers; don't let the morning pick degrade to imputed output). |
-| **A2.11** | Migrate EB posteriors from Python compute to dbt models | M | Removes the posterior-staleness fragility (`[[project_posterior_staleness_jun2026]]`) that silently corrupts serving when the Python compute scripts stall. |
+| **A2.11** | Migrate EB posteriors from Python compute to dbt models | M | Removes the posterior-staleness fragility (`[[project_posterior_staleness_jun2026]]`) that silently corrupts serving when the Python compute scripts stall. **Now also owns the 30.6 residual:** `eb_starter_posteriors` is game_pk-keyed + written only for today's slate → starter-EB NULL for all +1/+2-day games (verified 2026-06-14). dbt as-of model keyed on `(pitcher_id, as-of)` closes it structurally — future game_pk inherits the starter's latest posterior. Bump priority toward Phase 1 (it's the durable half of the keystone, alongside 30.13). |
 
 ---
 
@@ -55,6 +56,7 @@ Do these **after** Phase 1 — sub-model gains only show up in production once s
 | **30.2** | Wire sub-model distributional outputs into the base models (Bayesian-leverage audit) | M | The bridge into the Track B revisit. |
 | **3A.3** | Park-type hierarchical prior | S | Run-environment sub-model. |
 | **5A.6** | Continuous aging-curve EB prior | S | Starter sub-model (replaces age-band points with a continuous curve). |
+| **7.6** | Pitcher-cluster coverage (cold-start / unclustered-starter fallback) | M | Surfaced by 30.12: ~24.7% of games have the opposing starter unclustered (prior-season-lag join → rookies/low-IP/relievers) → the `*_vs_cluster` matchup family is null for a quarter of games. Leakage-safe AS-OF + arsenal cold-start fallback; ablate. Batter-archetype coverage is the same shape (fold in or sibling). |
 | → | **Track B revisit** — all sub-models + the Layer 3 section | L | Strategic theme. Sequence it here: take the learnings (market-blindness, regime-normalization, serving parity) back to every sub-model and the Layer-3 blend. |
 
 ---

@@ -77,12 +77,18 @@ _TARGETS = {
     "home_win": {
         "kind": "classification", "target_col": "home_win", "metric": "brier",
         "challenger_contract": "betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json",
+        # Story 27.8: --season-normalize points the challenger at the contract trained on the
+        # dbt `_seasonnorm` contact columns. Champion stays the deployed raw v5 (deployed-vs-normalized).
+        "challenger_contract_seasonnorm":
+            "betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_seasonnorm_2026.json",
         "challenger_tuning": "betting_ml/evaluation/tuning_results_xgb_home_win.json",
         "champion_kind": "reconstruct",   # pre-30.4 contract
     },
     "run_diff": {
         "kind": "regression", "target_col": "run_differential", "metric": "mae",
         "challenger_contract": "betting_ml/models/run_differential/feature_columns_ngboost_tuned_2026.json",
+        "challenger_contract_seasonnorm":
+            "betting_ml/models/run_differential/feature_columns_ngboost_tuned_seasonnorm_2026.json",
         "challenger_tuning": "betting_ml/evaluation/tuning_results_ngboost_run_diff.json",
         "champion_kind": "reconstruct",
     },
@@ -175,12 +181,14 @@ class NGBoostSpec:
     n_estimators: int = 500
     dist: str = "Normal"
     name: str = "ngboost"
+    seed: int = 42
 
     def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput:
         from ngboost import NGBRegressor
         from ngboost.distns import LogNormal, Normal
         D = {"Normal": Normal, "LogNormal": LogNormal}[self.dist]
-        m = NGBRegressor(n_estimators=self.n_estimators, Dist=D, verbose=False)
+        m = NGBRegressor(n_estimators=self.n_estimators, Dist=D, verbose=False,
+                         random_state=self.seed)
         m.fit(Xtr.values, ytr)
         pred = np.asarray(m.predict(Xev.values), float)
         try:
@@ -452,26 +460,49 @@ def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False
                             "note": "regime-confounded; not gating until Story 27.6"}}
 
 
-def _build_specs(name: str, cfg: dict) -> tuple[ModelSpec, ModelSpec]:
+def _build_specs(name: str, cfg: dict, seed: int = 42) -> tuple[ModelSpec, ModelSpec]:
     """Champion + challenger adapters for a base target. Swapping a target to a new
-    architecture (e.g. a Bayesian challenger) is just a different spec here."""
+    architecture (e.g. a Bayesian challenger) is just a different spec here.
+
+    `seed` perturbs the MODEL-FIT randomness (XGB tree/column subsampling, NGBoost RNG) so a
+    hysteresis re-run is a genuinely INDEPENDENT evaluation, not a byte-identical re-run — the
+    bootstrap CI (a separate seed in evaluate_promotion) only captures eval-sample variance."""
     if cfg["kind"] == "classification":
-        champion = XGBPlattSpec(_CHAMP_HP[name]["xgb_params"], name="xgb_platt(champion)")
-        challenger = XGBPlattSpec(_challenger_xgb(cfg["challenger_tuning"]), name="xgb_platt(challenger)")
+        champion = XGBPlattSpec(dict(_CHAMP_HP[name]["xgb_params"], random_state=seed),
+                                name="xgb_platt(champion)")
+        challenger = XGBPlattSpec(dict(_challenger_xgb(cfg["challenger_tuning"]), random_state=seed),
+                                  name="xgb_platt(challenger)")
     else:
         cn = cfg.get("champion_ngb", {"n_estimators": 500, "dist": "Normal"})
         hn = _challenger_ngb(cfg["challenger_tuning"])
-        champion = NGBoostSpec(cn["n_estimators"], cn["dist"], name=f"ngboost-{cn['dist']}(champion)")
-        challenger = NGBoostSpec(hn["n_estimators"], hn["dist"], name=f"ngboost-{hn['dist']}(challenger)")
+        champion = NGBoostSpec(cn["n_estimators"], cn["dist"], name=f"ngboost-{cn['dist']}(champion)", seed=seed)
+        challenger = NGBoostSpec(hn["n_estimators"], hn["dist"], name=f"ngboost-{hn['dist']}(challenger)", seed=seed)
     return champion, challenger
 
 
-def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = None) -> dict:
+def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = None,
+                season_normalize: bool = False, seed: int = 42) -> dict:
     cfg = _TARGETS[name]
-    chal_cols = _contract_cols(cfg["challenger_contract"], df)
-    champ_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
-                  else _contract_cols(cfg["champion_contract"], df))
-    champion, challenger = _build_specs(name, cfg)
+    chal_contract = cfg["challenger_contract"]
+    if season_normalize:
+        # Story 27.8: challenger = the season-normalized retrain; champion stays deployed raw v5.
+        chal_contract = cfg.get("challenger_contract_seasonnorm", chal_contract)
+        print(f"  [Story 27.8] {name} challenger = season-normalized contract: {chal_contract}")
+    chal_cols = _contract_cols(chal_contract, df)
+    if season_normalize:
+        # Story 27.8: ISOLATE the seasonnorm swap. Champion = the DEPLOYED model's contract
+        # (`challenger_contract` == the v5 raw contract: identical feature set, RAW contact cols),
+        # NOT the pre-30.4 reconstruct — otherwise the gate re-measures the already-shipped 30.4
+        # hygiene gain instead of the contact-normalization effect (the 27.8 question).
+        champ_cols = _contract_cols(cfg["challenger_contract"], df)
+        print(f"  [Story 27.8] {name} champion = deployed v5 RAW contract "
+              f"({len(champ_cols)} feats) — isolates seasonnorm-vs-raw, not the 30.4 gain")
+    else:
+        champ_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
+                      else _contract_cols(cfg["champion_contract"], df))
+    champion, challenger = _build_specs(name, cfg, seed=seed)
+    if seed != 42:
+        print(f"  [hysteresis] seed={seed} (independent re-fit; 42 is the default pass)")
 
     print(f"\n=== {name} ({cfg['kind']}, metric={cfg['metric']}) ===")
     print(f"  champion:   {len(champ_cols):3d} feats, {champion.name}")
@@ -482,7 +513,7 @@ def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = 
     verdict = walk_forward_gate(
         df, cfg["target_col"], champion=champion, challenger=challenger,
         champion_cols=champ_cols, challenger_cols=chal_cols, metric=cfg["metric"],
-        correctness_override=correctness_override)
+        correctness_override=correctness_override, seed=seed)
     print(verdict)
     return {
         "target": name, "metric": cfg["metric"],
@@ -509,6 +540,10 @@ def main() -> None:
                          "diagnostics (coverage_80 / PIT / NLL / CRPS / directional bias) for "
                          "champion vs 30.4 challenger. Use for distributional regression targets "
                          "(e.g. total_runs LogNormal) before they become a projection source.")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="Model-fit + bootstrap seed. Re-run with a DIFFERENT seed for a "
+                         "hysteresis pass #2: an independent re-fit (not a byte-identical re-run) — "
+                         "a PROMOTE that survives a seed change is robust to model-fit randomness.")
     ap.add_argument("--season-normalize", action="store_true",
                     help="Story 27.6: z-score the contact-quality features within season before "
                          "the calibration eval — validates the season-normalization fix for the "
@@ -532,7 +567,8 @@ def main() -> None:
             print(f"  {t:12s} {'OK' if r['calibration_ok'] else 'CONCERN'}  — {r['verdict']}")
         return
 
-    results = {t: _run_target(t, df, args.correctness_override) for t in targets}
+    results = {t: _run_target(t, df, args.correctness_override,
+                              season_normalize=args.season_normalize, seed=args.seed) for t in targets}
 
     out = _OUT_DIR / ("promotion_gate_all.json" if args.target == "all"
                       else f"promotion_gate_{args.target}.json")

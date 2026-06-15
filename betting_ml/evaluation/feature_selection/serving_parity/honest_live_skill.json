@@ -1,0 +1,212 @@
+{
+  "since": "2026-01-01",
+  "offline_home_win_corr_CEILING": 0.42,
+  "honest_live_surface": "prediction_type='post_lineup' AND data_source='feature_store'",
+  "honest_live": {
+    "h2h": {
+      "n": 15,
+      "base_rate": 0.667,
+      "accuracy": 0.533,
+      "brier": 0.2988,
+      "nll": 0.8059,
+      "corr": -0.105,
+      "ece": 0.4599
+    },
+    "totals": {
+      "n": 15,
+      "rmse": 4.603,
+      "mae": 3.379,
+      "medae": 3.555,
+      "mean_pred": 9.05,
+      "mean_actual": 10.0,
+      "calib_80": 0.867,
+      "calib_80_n": 15
+    }
+  },
+  "by_path": [
+    {
+      "prediction_type": "backfill",
+      "data_source": "(unstamped)",
+      "h2h": {
+        "n": 357,
+        "base_rate": 0.524,
+        "accuracy": 0.538,
+        "brier": 0.245,
+        "nll": 0.6828,
+        "corr": 0.134,
+        "ece": 0.0264
+      },
+      "totals": {
+        "n": 357,
+        "rmse": 3.174,
+        "mae": 2.616,
+        "medae": 2.238,
+        "mean_pred": 9.2,
+        "mean_actual": 9.06,
+        "calib_80": 0.826,
+        "calib_80_n": 357
+      }
+    },
+    {
+      "prediction_type": "morning",
+      "data_source": "(unstamped)",
+      "h2h": {
+        "n": 2823,
+        "base_rate": 0.53,
+        "accuracy": 0.527,
+        "brier": 0.252,
+        "nll": 0.6977,
+        "corr": 0.042,
+        "ece": 0.0374
+      },
+      "totals": {
+        "n": 3090,
+        "rmse": 4.71,
+        "mae": 3.699,
+        "medae": 3.123,
+        "mean_pred": 8.01,
+        "mean_actual": 8.96,
+        "calib_80": 0.653,
+        "calib_80_n": 3090
+      }
+    },
+    {
+      "prediction_type": "morning",
+      "data_source": "feature_store",
+      "h2h": {
+        "n": 45,
+        "base_rate": 0.667,
+        "accuracy": 0.533,
+        "brier": 0.2961,
+        "nll": 0.7991,
+        "corr": -0.085,
+        "ece": 0.4513
+      },
+      "totals": {
+        "n": 45,
+        "rmse": 4.609,
+        "mae": 3.405,
+        "medae": 3.659,
+        "mean_pred": 9.0,
+        "mean_actual": 10.0,
+        "calib_80": 0.867,
+        "calib_80_n": 45
+      }
+    },
+    {
+      "prediction_type": "morning",
+      "data_source": "intraday_fallback",
+      "h2h": {
+        "n": 15,
+        "base_rate": 0.4,
+        "accuracy": 0.533,
+        "brier": 0.2391,
+        "nll": 0.6709,
+        "corr": 0.303,
+        "ece": 0.1431
+      },
+      "totals": {
+        "n": 15,
+        "rmse": 4.393,
+        "mae": 3.76,
+        "medae": 3.715,
+        "mean_pred": 7.98,
+        "mean_actual": 8.4,
+        "calib_80": 0.067,
+        "calib_80_n": 15
+      }
+    },
+    {
+      "prediction_type": "post_lineup",
+      "data_source": "(unstamped)",
+      "h2h": {
+        "n": 94,
+        "base_rate": 0.489,
+        "accuracy": 0.404,
+        "brier": 0.267,
+        "nll": 0.7294,
+        "corr": -0.055,
+        "ece": 0.1804
+      },
+      "totals": {
+        "n": 94,
+        "rmse": 5.504,
+        "mae": 4.233,
+        "medae": 3.209,
+        "mean_pred": 9.23,
+        "mean_actual": 8.77,
+        "calib_80": 0.787,
+        "calib_80_n": 94
+      }
+    },
+    {
+      "prediction_type": "post_lineup",
+      "data_source": "feature_store",
+      "h2h": {
+        "n": 15,
+        "base_rate": 0.667,
+        "accuracy": 0.533,
+        "brier": 0.2988,
+        "nll": 0.8059,
+        "corr": -0.105,
+        "ece": 0.4599
+      },
+      "totals": {
+        "n": 15,
+        "rmse": 4.603,
+        "mae": 3.379,
+        "medae": 3.555,
+        "mean_pred": 9.05,
+        "mean_actual": 10.0,
+        "calib_80": 0.867,
+        "calib_80_n": 15
+      }
+    },
+    {
+      "prediction_type": "post_lineup",
+      "data_source": "intraday_assembly",
+      "h2h": {
+        "n": 15,
+        "base_rate": 0.6,
+        "accuracy": 0.533,
+        "brier": 0.2464,
+        "nll": 0.6767,
+        "corr": 0.184,
+        "ece": 0.2905
+      },
+      "totals": {
+        "n": 15,
+        "rmse": 3.805,
+        "mae": 3.116,
+        "medae": 2.4,
+        "mean_pred": 9.18,
+        "mean_actual": 9.93,
+        "calib_80": 0.867,
+        "calib_80_n": 15
+      }
+    },
+    {
+      "prediction_type": NaN,
+      "data_source": "intraday_fallback",
+      "h2h": {
+        "n": 249,
+        "base_rate": 0.51,
+        "accuracy": 0.522,
+        "brier": 0.2599,
+        "nll": 0.7157,
+        "corr": 0.043,
+        "ece": 0.0771
+      },
+      "totals": {
+        "n": 249,
+        "rmse": 4.363,
+        "mae": 3.298,
+        "medae": 2.81,
+        "mean_pred": 8.54,
+        "mean_actual": 8.69,
+        "calib_80": 0.566,
+        "calib_80_n": 249
+      }
+    }
+  ]
+}

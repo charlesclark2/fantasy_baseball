@@ -124,8 +124,16 @@ def _make_objective(folds: list[dict], df):
     return objective
 
 
-def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) -> None:
+def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True,
+               season_normalize: bool = False) -> None:
+    from betting_ml.utils.season_normalization import swap_contact_to_seasonnorm
+
     model_name = "xgb_classifier_nonseq" if exclude_sequential else "xgb_classifier_tuned"
+    if season_normalize:
+        # Story 27.8: train on the dbt-provided season-normalized contact columns.
+        # Distinct model_name so the contract/artifact don't clobber the raw v5
+        # champion until this is gated + promoted.
+        model_name += "_seasonnorm"
 
     print("Loading features from Snowflake...")
     df = load_features()
@@ -167,6 +175,18 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True) ->
             f"--exclude-sequential: dropped {len(seq_removed)} sequential cols "
             f"→ faithful no-sequential baseline (documented champion). model_name={model_name}"
         )
+    if season_normalize:
+        # Swap each contact-quality column for its leakage-safe dbt `_seasonnorm`
+        # counterpart (Story 27.8 / 27.7). The saved contract records the `_seasonnorm`
+        # names so predict_today serves the same normalized values (train/serve parity).
+        feature_cols, _swapped, _missing = swap_contact_to_seasonnorm(feature_cols, df.columns)
+        print(f"Story 27.8: season-normalized {len(_swapped)} contact cols → _seasonnorm")
+        if _missing:
+            raise SystemExit(
+                f"--season-normalize: {len(_missing)} contact cols have no _seasonnorm column in "
+                f"feature_pregame_game_features (dbt Story 27.7 build stale?): {_missing}. "
+                "Run the dbt build before retraining.")
+
     print(f"Using {len(feature_cols)} features (market-blind)")
     print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
 
@@ -480,5 +500,6 @@ if __name__ == "__main__":
         run_search(
             exclude_sequential="--exclude-sequential" in sys.argv,
             mlflow_enabled="--no-mlflow" not in sys.argv,
+            season_normalize="--season-normalize" in sys.argv,
         )
         generate_report()

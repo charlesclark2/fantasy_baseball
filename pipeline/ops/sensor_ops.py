@@ -148,9 +148,9 @@ def lineup_compute_posteriors(context: OpExecutionContext) -> None:
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
-    """Rebuild the lineup + downstream game features with the fresh confirmed-
-    lineup posteriors, BEFORE lineup_predict reads the feature store — so the
-    post-lineup prediction reflects who is actually playing. Both models are
+    """Rebuild the lineup + starter + downstream game features with the fresh
+    confirmed-lineup posteriors, BEFORE lineup_predict reads the feature store —
+    so the post-lineup prediction reflects who is actually playing. Models are
     table-materialized; the full rebuild re-reads eb_batter_posteriors_raw."""
     _run_dbt(context, [
         "build",
@@ -160,6 +160,16 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
         # picks up today's umpire. dbt resolves order via refs.
         "stg_statsapi_umpire_game_log",
         "feature_pregame_umpire_features",
+        # Story 30.6 LEVER 2 (2026-06-14) — rebuild starter_features on the
+        # post-lineup path too, NOT just in the morning daily job. The prior
+        # lineup_dbt_staging_rebuild step just refreshed stg_statsapi_probable_-
+        # pitchers; without this the actionable post-lineup bet re-reads the
+        # MORNING starter table and never sees a starter scratched/announced
+        # after the morning build. feature_pregame_starter_features now sources
+        # the fresh staging directly (fix A), so this makes the bet's starter
+        # block consistent with the just-refreshed probable. Symmetric completion
+        # of fix A; closes the scratch/late-probable serve-time gap.
+        "feature_pregame_starter_features",
         "feature_pregame_lineup_features",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
