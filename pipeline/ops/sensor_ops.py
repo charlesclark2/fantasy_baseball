@@ -26,6 +26,17 @@ _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 # needs surfacing, the daily build is the gate, not every catch-up tick.
 _CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
 
+# Incident 2026-06-15 — a `lineup_dbt_clv_rebuild` `dbtf run` subprocess WEDGED
+# (no active Snowflake query; the dbt-fusion CLI process simply stopped exiting).
+# Both subprocess helpers ran with NO timeout, so the op — and the whole
+# lineup_monitor_job run — hung indefinitely (in_process_executor), while the
+# 10-min sensor stacked fresh runs on top. A hard subprocess ceiling converts an
+# infinite hang into a fast, visible op failure (retryable / surfaced in the cloud
+# logs). Intraday lineup dbt rebuilds are incremental (minutes); the catch-up
+# rebuild over stg_batter_pitches+ is the longest healthy run, so 30 min is a
+# generous ceiling that still bounds the hang far below the 4h run_monitoring cap.
+_SUBPROCESS_TIMEOUT = 1800  # seconds (30 min) — hard ceiling per subprocess op
+
 
 def _failure_detail(result) -> str:
     """Diagnostic tail for a failed subprocess. dbt-fusion writes everything to
@@ -43,11 +54,26 @@ def _today() -> str:
     return date.today().strftime("%Y-%m-%d")
 
 
-def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None) -> None:
+def _run(cmd: list[str], timeout: int = _SUBPROCESS_TIMEOUT):
+    """subprocess.run with a hard timeout. On timeout the child is killed and a
+    clear Exception is raised so the op FAILS FAST (retryable / visible) instead of
+    hanging the run forever (incident 2026-06-15)."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        tail = (e.stdout or "")[-2000:] if isinstance(e.stdout, str) else ""
+        raise Exception(
+            f"subprocess exceeded {timeout}s hard timeout and was killed: "
+            f"{' '.join(cmd[:3])}…\n(stdout tail)\n{tail}"
+        ) from e
+
+
+def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None,
+                timeout: int = _SUBPROCESS_TIMEOUT) -> None:
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
     cmd = [sys.executable, path] + (args or [])
     context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    result = _run(cmd, timeout=timeout)
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:
@@ -56,10 +82,10 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
         raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{_failure_detail(result)}")
 
 
-def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
+def _run_dbt(context: OpExecutionContext, args: list[str], timeout: int = _SUBPROCESS_TIMEOUT) -> None:
     cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
     context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    result = _run(cmd, timeout=timeout)
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:

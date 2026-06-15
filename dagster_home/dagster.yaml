@@ -9,3 +9,17 @@ dagster_cloud_api:
 user_code_launcher:
   module: dagster_cloud.workspace.user_code_launcher.process
   class: ProcessUserCodeLauncher
+
+# Story A2.16 (2026-06-15) — global run-timeout guard. The Dagster+ trial's single
+# biggest compute event was a MANUAL __ASSET_JOB materialization that ran ~16h before
+# being cancelled (2026-05-19) = 44% of all trial compute. With no max-runtime, a hung
+# or runaway run silently burns credits until someone notices. run_monitoring enforces
+# a hard cap on EVERY run (defined jobs AND ad-hoc asset materializations), terminating
+# anything that exceeds it. 4h (14400s) is ~8x the longest legitimate run (the Sunday
+# full-refresh build; normal ticks avg <10min), so it catches the runaway class with a
+# wide margin without threatening real runs. Raise max_runtime_seconds if a genuinely
+# long run is ever killed (the failure surfaces in the UI, not silently). A single job
+# can override via the `dagster/max_runtime` run tag.
+run_monitoring:
+  enabled: true
+  max_runtime_seconds: 14400
