@@ -54,6 +54,14 @@ from pipeline.ops.daily_ingestion_ops import (
 
 @job(executor_def=in_process_executor, hooks={signal_freshness_failure_hook})
 def daily_ingestion_job():
+    """BUILD-ORDERING INVARIANT (Story 30.13): every serving-path feature block is
+    rebuilt from the latest ingestion BEFORE predict_today_morning. The op chain below
+    encodes it — ingest_* → dbt_daily_build → sub-model signals → SCD-2 lineup/odds
+    rebuilds → bullpen EB → sequential posteriors → dbt_umpire_feature_rebuild (feature
+    store + today's EB starter/lineup posteriors) → predict_today_morning. Do NOT move
+    predict (or write_api_cache/write_serving_store) ahead of any rebuild op; the
+    `start=`/`predict_done=` threading is the guarantee. Serve-time freshness is the
+    backstop if a rebuild silently fails (Story 30.13 Task 4 gate in predict_today)."""
     s1 = ingest_parlay_events()
     s2 = ingest_parlay_canonical_events(start=s1)
     s3 = ingest_parlay_odds(start=s2)

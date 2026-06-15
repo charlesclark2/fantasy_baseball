@@ -20,6 +20,17 @@
 -- rows carry sentinel valid_from = 1970-01-01 and represent a single "first
 -- known state" snapshot with no change history.
 -- =============================================================================
+-- ⭐ STORY 30.13 OWNERSHIP DECISION (2026-06-15) — HISTORICAL-REPLAY ONLY.
+-- This SCD-2 chain (stg_statsapi_starter_snapshots → here) is NOT on the live
+-- serving path. The 30.6 fix repointed feature_pregame_starter_features AND
+-- eb_starter_posteriors to `stg_statsapi_probable_pitchers`, which is the
+-- CANONICAL current-probable source (it tracks the latest monthly_schedule
+-- before the feature build + serve; the SCD-2's is_current lagged it ~80% null
+-- for +1/+2-day games — the serving-skew that 30.6 diagnosed). Keep this model
+-- for point-in-time HISTORICAL replay (use is_current=false with the join pattern
+-- above) ONLY. Do NOT add it to any serving-path feature model. If you need
+-- "the current projected starter" at serve time, ref stg_statsapi_probable_pitchers.
+-- =============================================================================
 
 {{ config(materialized='table') }}
 

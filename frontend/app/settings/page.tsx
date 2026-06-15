@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/toaster"
-import { Bell, ShieldCheck } from "lucide-react"
+import { Bell, Check, ShieldCheck } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 
@@ -33,6 +34,14 @@ export default function SettingsPage() {
   const router = useRouter()
   const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
   const [kellyCap, setKellyCap] = useLocalStorage<number>("ev_kelly_cap", 5)
+  const [savedVisible, setSavedVisible] = useState(false)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function markSaved() {
+    if (savedTimer.current) clearTimeout(savedTimer.current)
+    setSavedVisible(true)
+    savedTimer.current = setTimeout(() => setSavedVisible(false), 2000)
+  }
 
   function handleSignOut() {
     signOut()
@@ -143,9 +152,17 @@ export default function SettingsPage() {
         {/* ---------------------------------------------------------------- */}
         <section className="rounded-lg border border-[#262626] bg-[#141414]">
           <div className="px-6 pt-6 pb-4">
-            <h2 className="text-base font-semibold text-white">Betting Defaults</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-base font-semibold text-white">Betting Defaults</h2>
+              {savedVisible && (
+                <span className="flex items-center gap-1 text-xs text-[#10b981] transition-opacity">
+                  <Check className="h-3 w-3" />
+                  Saved
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-xs text-gray-500">
-              Used in the EV Tracker to calculate stake sizes. Saved locally in your browser.
+              Used in the EV Tracker to calculate stake sizes. Changes save automatically.
             </p>
           </div>
 

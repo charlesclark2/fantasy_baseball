@@ -1,0 +1,10 @@
+block,class,lineup_dependent,build_table,build_last_altered,built_today,intraday_source,source_latest_ingestion,staleness_lag_min,null_today,null_plus1,null_plus2
+starter_eb,fresh,False,BETTING.EB_STARTER_POSTERIORS,2026-06-15 16:09,True,probable_pitchers,2026-06-15 16:08,-0.7,0.0,6.7,14.3
+starter_sequential,fresh,False,BETTING.EB_STARTER_POSTERIORS,2026-06-15 16:09,True,probable_pitchers,2026-06-15 16:08,-0.7,0.0,0.0,7.1
+bullpen_eb,fresh,False,BETTING.EB_BULLPEN_POSTERIORS,2026-06-15 09:35,True,(overnight),(overnight),,0.0,0.0,0.0
+team_sequential,fresh,False,BETTING_FEATURES.FEATURE_PREGAME_GAME_FEATURES_RAW,2026-06-15 16:15,True,(overnight),(overnight),,0.0,0.0,0.0
+pythagorean,fresh,False,BETTING_FEATURES.FEATURE_PREGAME_GAME_FEATURES_RAW,2026-06-15 16:15,True,(overnight),(overnight),,0.0,0.0,0.0
+elo,fresh,False,BETTING_FEATURES.FEATURE_PREGAME_GAME_FEATURES_RAW,2026-06-15 16:15,True,(overnight),(overnight),,0.0,0.0,0.0
+batter_sequential,point_in_time,True,BETTING_FEATURES.FEATURE_PREGAME_LINEUP_FEATURES,2026-06-15 16:15,True,lineups,2026-06-15 16:08,-6.6,0.0,100.0,100.0
+lineup_archetype,point_in_time,True,BETTING_FEATURES.FEATURE_PREGAME_LINEUP_FEATURES,2026-06-15 16:15,True,lineups,2026-06-15 16:08,-6.6,40.0,100.0,100.0
+lineup_statcast,point_in_time,True,BETTING_FEATURES.FEATURE_PREGAME_LINEUP_FEATURES,2026-06-15 16:15,True,lineups,2026-06-15 16:08,-6.6,0.0,100.0,100.0

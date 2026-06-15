@@ -553,6 +553,12 @@ models:
       Grain: one row per (game_pk, side, valid_from) — a new row is inserted each
       time the probable_pitcher_id changes between ingestion snapshots.
 
+      ⭐ Story 30.13 (2026-06-15): HISTORICAL-REPLAY ONLY — NOT on the live serving
+      path. The canonical current-probable source is stg_statsapi_probable_pitchers
+      (feature_pregame_starter_features + eb_starter_posteriors source from it after
+      the 30.6 fix). Use this SCD-2 only for point-in-time historical replay; do not
+      add it to any serving-path feature model.
+
       Point-in-time join pattern (use is_current = false for historical replay):
         ON  ss.game_pk    = game_pk
         AND ss.side       = side
