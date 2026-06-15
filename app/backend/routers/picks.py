@@ -651,8 +651,8 @@ h2h AS (
         NULLIF(b.layer4_h2h_decision, 'abstain')    AS pick_side,
         b.game_start_utc,
         b.inserted_at,
-        NULL::FLOAT                                  AS model_total_runs,
-        NULL::FLOAT                                  AS market_total_line
+        b.pred_total_runs                            AS model_total_runs,
+        b.total_line_consensus                       AS market_total_line
     FROM base b
     WHERE b.h2h_market_implied_prob IS NOT NULL
 ),

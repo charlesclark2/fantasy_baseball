@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.backend.dependencies import get_user_id
 from app.backend.models.bets import Bet, BetCreate, BetUpdate, BetsResponse, LoginSyncRequest
 from app.backend.services.dynamo import delete_bet, list_bets, put_bet, update_bet, upsert_user
+from app.backend.services.snowflake import execute_query
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["bets"])
@@ -39,6 +40,31 @@ def get_bets(user_id: str = Depends(get_user_id)) -> BetsResponse:
     except ClientError as exc:
         logger.exception("DynamoDB list_bets failed")
         raise HTTPException(status_code=503, detail="Bets unavailable") from exc
+
+    # Auto-void pending bets whose games were postponed or cancelled
+    pending = [b for b in bets if b.get("outcome") is None and b.get("game_pk")]
+    if pending:
+        game_pks = list({b["game_pk"] for b in pending})
+        pks_csv = ",".join(str(pk) for pk in game_pks)
+        try:
+            rows = execute_query(f"""
+                SELECT game_pk
+                FROM baseball_data.betting.stg_statsapi_games
+                WHERE game_pk IN ({pks_csv})
+                  AND abstract_game_state IN ('Postponed', 'Cancelled', 'Suspended')
+            """)
+            voided_pks = {r["GAME_PK"] for r in rows}
+            for bet in pending:
+                if bet["game_pk"] in voided_pks:
+                    try:
+                        update_bet(user_id, bet["bet_id"], {"outcome": "void", "profit_loss": 0.0})
+                        bet["outcome"] = "void"
+                        bet["profit_loss"] = 0.0
+                    except Exception:
+                        logger.warning("Could not auto-void bet %s", bet["bet_id"])
+        except Exception:
+            logger.warning("Could not check game statuses for auto-void", exc_info=True)
+
     return BetsResponse(bets=[Bet(**b) for b in bets], total=len(bets))
 
 

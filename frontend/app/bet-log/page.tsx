@@ -32,7 +32,7 @@ import { apiFetch } from "@/lib/api"
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-type BetStatus = "Won" | "Lost" | "Push" | "Open"
+type BetStatus = "Won" | "Lost" | "Push" | "Open" | "Void"
 
 interface GameOption {
   game_pk: number
@@ -80,6 +80,53 @@ interface EVPicksResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Team name normalization (full name → abbreviation)
+// ---------------------------------------------------------------------------
+const _TEAM_ABBREV: Record<string, string> = {
+  "Arizona Diamondbacks": "AZ",
+  "Atlanta Braves": "ATL",
+  "Baltimore Orioles": "BAL",
+  "Boston Red Sox": "BOS",
+  "Chicago Cubs": "CHC",
+  "Chicago White Sox": "CWS",
+  "Cincinnati Reds": "CIN",
+  "Cleveland Guardians": "CLE",
+  "Colorado Rockies": "COL",
+  "Detroit Tigers": "DET",
+  "Houston Astros": "HOU",
+  "Kansas City Royals": "KC",
+  "Los Angeles Angels": "LAA",
+  "Los Angeles Dodgers": "LAD",
+  "Miami Marlins": "MIA",
+  "Milwaukee Brewers": "MIL",
+  "Minnesota Twins": "MIN",
+  "New York Mets": "NYM",
+  "New York Yankees": "NYY",
+  "Athletics": "ATH",
+  "Oakland Athletics": "ATH",
+  "Philadelphia Phillies": "PHI",
+  "Pittsburgh Pirates": "PIT",
+  "San Diego Padres": "SD",
+  "San Francisco Giants": "SF",
+  "Seattle Mariners": "SEA",
+  "St. Louis Cardinals": "STL",
+  "Tampa Bay Rays": "TB",
+  "Texas Rangers": "TEX",
+  "Toronto Blue Jays": "TOR",
+  "Washington Nationals": "WSH",
+}
+
+function normalizeTeam(name: string): string {
+  return _TEAM_ABBREV[name] ?? name
+}
+
+function normalizeMatchup(matchup: string): string {
+  const parts = matchup.split(" @ ")
+  if (parts.length !== 2) return matchup
+  return `${normalizeTeam(parts[0])} @ ${normalizeTeam(parts[1])}`
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 // Values must match the API validator: {"h2h home","h2h away","over","under"}
@@ -109,6 +156,7 @@ function outcomeToStatus(outcome: string | null): BetStatus {
   if (outcome === "win")  return "Won"
   if (outcome === "loss") return "Lost"
   if (outcome === "push") return "Push"
+  if (outcome === "void") return "Void"
   return "Open"
 }
 
@@ -179,10 +227,11 @@ function fmtEv(ev: number | null): { text: string; cls: string } {
 // Edit Bet modal
 // ---------------------------------------------------------------------------
 const OUTCOME_OPTIONS = [
-  { label: "Pending", value: "pending" },
-  { label: "Won",     value: "win" },
-  { label: "Lost",    value: "loss" },
-  { label: "Push",    value: "push" },
+  { label: "Pending",            value: "pending" },
+  { label: "Won",                value: "win" },
+  { label: "Lost",               value: "loss" },
+  { label: "Push",               value: "push" },
+  { label: "Void (postponed)",   value: "void" },
 ]
 
 function EditBetModal({
@@ -324,6 +373,7 @@ function StatusBadge({ status }: { status: BetStatus }) {
   if (status === "Won")  return <Badge className="bg-[#10b981] text-[#0a0a0a] text-xs font-semibold">Won</Badge>
   if (status === "Lost") return <Badge className="bg-[#ef4444] text-white text-xs font-semibold">Lost</Badge>
   if (status === "Push") return <Badge variant="outline" className="border-[#f59e0b] text-[#f59e0b] text-xs">Push</Badge>
+  if (status === "Void") return <Badge variant="outline" className="border-[#6366f1] text-[#6366f1] text-xs">Void</Badge>
   return <Badge variant="outline" className="border-[#404040] text-gray-400 text-xs">Open</Badge>
 }
 
@@ -331,7 +381,7 @@ function StatusBadge({ status }: { status: BetStatus }) {
 // Summary tiles — computed from live API bets
 // ---------------------------------------------------------------------------
 function SummaryTiles({ bets }: { bets: ApiBet[] }) {
-  const settled    = bets.filter(b => b.outcome !== null)
+  const settled    = bets.filter(b => b.outcome !== null && b.outcome !== "void")
   const won        = bets.filter(b => b.outcome === "win")
   const netPnl     = settled.reduce((acc, b) => acc + (b.profit_loss ?? 0), 0)
   const totalStaked = settled.reduce((acc, b) => acc + b.stake, 0)
@@ -404,7 +454,7 @@ function BetLogInner() {
       .filter(p => { if (seen.has(p.game_pk)) return false; seen.add(p.game_pk); return true })
       .map(p => ({
         game_pk:    p.game_pk,
-        label:      `${p.away_team ?? "Away"} @ ${p.home_team ?? "Home"}`,
+        label:      `${normalizeTeam(p.away_team ?? "Away")} @ ${normalizeTeam(p.home_team ?? "Home")}`,
         score_date: p.game_date ? String(p.game_date).slice(0, 10) : selectedDateStr,
       }))
   }, [evData, selectedDateStr])
@@ -773,7 +823,7 @@ function BetLogInner() {
                         return (
                           <TableRow key={bet.bet_id} className="border-b border-[#1a1a1a] hover:bg-[#1a1a1a] transition-colors">
                             <TableCell className="px-4 py-3 text-sm text-gray-400 whitespace-nowrap">{bet.score_date}</TableCell>
-                            <TableCell className="px-4 py-3 text-sm text-white whitespace-nowrap">{bet.matchup ?? "—"}</TableCell>
+                            <TableCell className="px-4 py-3 text-sm text-white whitespace-nowrap">{bet.matchup ? normalizeMatchup(bet.matchup) : "—"}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 whitespace-nowrap">{marketDisplay(bet.market)}</TableCell>
                             <TableCell className="px-4 py-3 text-sm text-gray-300 text-right whitespace-nowrap">
                               {bet.total_line != null ? bet.total_line : "—"}

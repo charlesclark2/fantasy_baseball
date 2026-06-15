@@ -12,7 +12,7 @@ const securityHeaders = [
       // Next.js requires unsafe-inline for its inline scripts/styles
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
+      "img-src 'self' data: blob: https://a.espncdn.com https://img.mlbstatic.com",
       "font-src 'self'",
       // Cognito + our own API + PostHog + Sentry
       [
