@@ -598,6 +598,19 @@ def write_api_cache_op(context):
     _run_script(context, "write_api_cache.py")
 
 
+@op(
+    ins={"predict_done": In(Nothing)},
+    out=Out(Nothing),
+    description="Writes prediction outputs to Railway PostgreSQL serving store "
+                "after predictions complete. Primary read path for all FastAPI endpoints.",
+)
+def write_serving_store_op(context):
+    """Queries Snowflake and writes picks/today, picks/ev, game detail, and
+    performance/summary to the Railway PG api_cache + daily_picks tables.
+    Also writes to S3 during the transition period."""
+    _run_script(context, "write_serving_store.py")
+
+
 # ── User bet settlement (Performance page redesign, story B1) ─────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

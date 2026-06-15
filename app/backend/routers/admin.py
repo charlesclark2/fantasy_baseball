@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_admin_user
+from app.backend.services import pg
+from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
 from app.backend.services.s3_cache import invalidate_today
 from app.backend.services.snowflake import execute_query
 
@@ -56,9 +58,22 @@ class ModelFreshness(BaseModel):
 
 
 @router.post("/cache/invalidate")
-def invalidate_cache(_: str = Depends(get_admin_user)) -> dict:
-    """Invalidates today's S3 cache — forces next request to re-query Snowflake."""
+def invalidate_cache(
+    game_pk: int | None = None,
+    _: str = Depends(get_admin_user),
+) -> dict:
+    """Invalidates today's cache (PG + S3).
+
+    If game_pk is provided, invalidates only that game's detail blob.
+    Otherwise invalidates the full day's non-permanent cache.
+    """
+    today_str = datetime.date.today().isoformat()
+    if game_pk is not None:
+        pg.invalidate_game(game_pk, today_str)
+        s3_invalidate_game(game_pk)
+        return {"status": "ok", "message": f"Game {game_pk} cache invalidated"}
     invalidate_today()
+    pg.invalidate_today(today_str)
     return {"status": "ok", "message": "Cache invalidated — next request will re-query Snowflake"}
 
 

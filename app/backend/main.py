@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bets, picks, performance, pipeline
+from app.backend.routers import admin, alerts, auth, bets, picks, performance, pipeline, portfolio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -80,6 +80,7 @@ app.include_router(bets.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(pipeline.router)
+app.include_router(portfolio.router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])

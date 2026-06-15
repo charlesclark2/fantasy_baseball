@@ -23,6 +23,7 @@ from app.backend.models.performance import (
     PerformanceByModelResponse,
     PerformanceSummary,
 )
+from app.backend.services import pg
 from app.backend.services.dynamo import list_bets
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
@@ -76,6 +77,18 @@ ORDER BY market_type
 
 @router.get("/summary", response_model=PerformanceSummary)
 def get_performance_summary() -> PerformanceSummary:
+    from datetime import date
+    today_str = date.today().isoformat()
+
+    # PG primary read path (A2.12)
+    pg_hit = pg.get_cache("performance/summary", today_str)
+    if pg_hit is not None:
+        try:
+            return PerformanceSummary(**pg_hit)
+        except Exception:
+            logger.warning("PG performance/summary invalid — falling through")
+
+    # S3 secondary
     cached = get_cache("performance/summary.json")
     if cached is not None:
         return PerformanceSummary(**cached)
@@ -94,7 +107,9 @@ def get_performance_summary() -> PerformanceSummary:
                 sharpe_ratio=r.get("SHARPE_RATIO"),
                 source="mart_bankroll_state",
             )
-            set_cache("performance/summary.json", result.model_dump(mode="json"))
+            payload = result.model_dump(mode="json")
+            pg.set_cache("performance/summary", today_str, payload)
+            set_cache("performance/summary.json", payload)
             return result
     except Exception:
         logger.warning("mart_bankroll_state unavailable — falling back to mart_clv_labeled_games")
@@ -119,7 +134,9 @@ def get_performance_summary() -> PerformanceSummary:
         net_pnl_flat=r.get("NET_PNL_FLAT"),
         source="mart_clv_labeled_games",
     )
-    set_cache("performance/summary.json", result.model_dump(mode="json"))
+    payload = result.model_dump(mode="json")
+    pg.set_cache("performance/summary", today_str, payload)
+    set_cache("performance/summary.json", payload)
     return result
 
 
