@@ -3,7 +3,6 @@ from dagster import in_process_executor, job
 from pipeline.ops.sensor_ops import (
     catchup_dbt_rebuild,
     catchup_ingest_statcast,
-    lineup_compute_posteriors,
     lineup_dbt_clv_rebuild,
     lineup_dbt_feature_rebuild,
     lineup_dbt_staging_rebuild,
@@ -15,10 +14,8 @@ from pipeline.ops.sensor_ops import (
     pregame_odds_snapshot,
 )
 from pipeline.ops.daily_ingestion_ops import (
-    compute_eb_bullpen_posteriors_op,
     compute_elo,
-    compute_lineup_posteriors_op,
-    compute_starter_posteriors_op,
+    dbt_build_bullpen_posteriors_op,
     dbt_umpire_feature_rebuild,
     predict_today_morning,
     update_matchup_cell_posteriors_op,
@@ -35,11 +32,11 @@ def lineup_monitor_job():
     # actual umpire. The 07:00 daily ops run too early to ever catch it.
     s1u = lineup_ingest_umpires(start=s1)
     s2 = lineup_dbt_staging_rebuild(start=s1u)
-    # A1.11 Stage 4 — recompute EB lineup posteriors on the now-confirmed lineups
-    # and rebuild the lineup/game features before predicting, so the post-lineup
-    # prediction reflects the actual batters (not the morning best-effort pass).
-    s2b = lineup_compute_posteriors(start=s2)
-    s2c = lineup_dbt_feature_rebuild(start=s2b)
+    # Story A2.11 — the EB lineup/starter posteriors are now dbt models built INSIDE
+    # lineup_dbt_feature_rebuild (incremental → recomputes the confirmed-lineup games)
+    # before the features that ref() them, so the post-lineup prediction reflects the
+    # actual batters. (Was a separate lineup_compute_posteriors Python op.)
+    s2c = lineup_dbt_feature_rebuild(start=s2)
     s3 = lineup_predict(start=s2c)
     s4 = lineup_odds_snapshot(start=s3)
     lineup_dbt_clv_rebuild(start=s4)
@@ -59,16 +56,17 @@ def statcast_catchup_job():
     # marts → re-score today so the live slate reflects the caught-up data.
     s1 = catchup_ingest_statcast()
     s2 = catchup_dbt_rebuild(start=s1)
-    eb = compute_eb_bullpen_posteriors_op(start=s2)
+    # Story A2.11 — bullpen EB posteriors (dbt) before the sequential team update.
+    eb = dbt_build_bullpen_posteriors_op(start=s2)
     pp = update_player_posteriors_op(start=eb)
     pt = update_team_posteriors_op(start=pp)
     pm = update_matchup_cell_posteriors_op(start=pt)
-    ps = compute_starter_posteriors_op(start=pm)
-    pl = compute_lineup_posteriors_op(start=ps)
     # A2.3: recompute Elo on the now-current mart_game_results (compute_elo reads
     # mart_game_results, which is pitch-derived and therefore lagged by the same
     # Statcast availability gap this catch-up resolves). Without this, Elo stays
     # stale until the next 07:00 daily run even after the catch-up self-heals.
-    el = compute_elo(start=pl)
+    # Story A2.11 — starter/lineup EB posteriors are now built inside
+    # dbt_umpire_feature_rebuild (after the sequential ops), so no separate ops here.
+    el = compute_elo(start=pm)
     s3 = dbt_umpire_feature_rebuild(start=el)
     predict_today_morning(start=s3)

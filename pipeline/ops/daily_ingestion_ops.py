@@ -376,27 +376,30 @@ def signal_freshness_failure_hook(context: HookContext) -> None:
 # rows).
 #
 # The team bullpen_xwoba metric depends on eb_bullpen_posteriors (reliever-PA
-# membership), which is produced by compute_bullpen_posteriors.py (Epic 6A) — NOT
-# by any sequential script. That refresh was never wired into this job, so
-# eb_bullpen_posteriors / eb_bullpen_team_posteriors went stale (last 2026-05-28)
-# while off_xwoba + win_prob kept advancing, leaving the team bullpen-seq feature
-# AND the deployed champion's team_eb_bullpen_xwoba imputed on live games. Fixed by
-# compute_eb_bullpen_posteriors_op below, which MUST run before
+# membership). Story A2.11: this is now a dbt model, refreshed by
+# dbt_build_bullpen_posteriors_op below, which MUST run before
 # update_team_posteriors_op (bullpen branch reads it) and before the
-# dbt_umpire_feature_rebuild that rebuilds feature_pregame_game_features. The script
-# MERGE-upserts both tables, so a daily --game-date is idempotent/re-runnable.
+# dbt_umpire_feature_rebuild that rebuilds feature_pregame_game_features. The models
+# are incremental (merge on grain), so a daily build is idempotent/re-runnable.
 
 _SEQ_DIR = "/app/betting_ml/scripts/sequential_bayes"
 _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 
 
+# Story A2.11 — the EB bullpen posteriors are now dbt models (replaced
+# compute_bullpen_posteriors.py). Built HERE, before update_team_posteriors_op,
+# whose bullpen_xwoba branch reads eb_bullpen_posteriors. Incremental models, so a
+# daily build only recomputes the current window. int_bullpen_ali_by_season is the
+# aLI-leverage support model (recomputes current+prior season).
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def compute_eb_bullpen_posteriors_op(context):
-    _run_script(
-        context,
-        f"{_EB_DIR}/compute_bullpen_posteriors.py",
-        ["--game-date", _one_day_ago()],
-    )
+def dbt_build_bullpen_posteriors_op(context):
+    _run_dbt(context, [
+        "build", "--select",
+        "int_bullpen_ali_by_season",
+        "eb_bullpen_posteriors",
+        "eb_bullpen_team_posteriors",
+        "--target", "baseball_betting_and_fantasy",
+    ])
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -414,29 +417,13 @@ def update_matchup_cell_posteriors_op(context):
     _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py", ["--date", _one_day_ago()])
 
 
-# A1.11 Stage 4 — forward-looking EB posteriors for TODAY's slate (the games
-# being predicted), NOT yesterday's results. This is the key difference from the
-# sequential/bullpen ops above (which advance yesterday's beliefs via
-# _one_day_ago): a lineup/starter EB posterior is specific to today's confirmed
-# lineup / probable pitcher, so it must be COMPUTED for today and cannot carry
-# forward. Both scripts MERGE on natural keys ((game_pk, batting_slot, batter_id)
-# and (game_pk, pitcher_id)), so a daily --game-date is idempotent/re-runnable —
-# which also lets the lineup_monitor sensor safely recompute lineups once they
-# confirm. Outputs feed feature_pregame_starter_features /
-# feature_pregame_lineup_features, rebuilt in dbt_umpire_feature_rebuild below.
-# Before this op existed these tables went stale (compute_*_posteriors.py had no
-# Dagster op at all) — same failure class as compute_eb_bullpen_posteriors_op
-# above. See project_posterior_staleness_jun2026 / reference_bullpen_freshness_chain.
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def compute_starter_posteriors_op(context):
-    _run_script(context, f"{_EB_DIR}/compute_starter_posteriors.py", ["--game-date", _today()])
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def compute_lineup_posteriors_op(context):
-    # Best-effort morning pass on whatever lineups have posted; the lineup_monitor
-    # sensor recomputes authoritatively once each game's lineup is confirmed.
-    _run_script(context, f"{_EB_DIR}/compute_lineup_posteriors.py", ["--game-date", _today()])
+# Story A2.11 — the forward-looking TODAY's-slate EB posteriors (starter + lineup)
+# are now dbt models: eb_starter_posteriors (sourced from the full probable-pitcher
+# spine → covers +1/+2-day games, closing the Story 30.6 residual) and
+# eb_batter_posteriors_raw. They are built inside dbt_umpire_feature_rebuild below
+# (incremental, so daily/lineup-tick builds only recompute the recent window), which
+# runs AFTER the sequential update ops so the as-of sequential column is fresh.
+# The old compute_{starter,lineup}_posteriors_op Python ops were removed here.
 
 
 # ── Predict phase ────────────────────────────────────────────────────────────
@@ -472,18 +459,19 @@ def ingest_umpire_scorecards(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_umpire_feature_rebuild(context):
     # mart_bullpen_effectiveness + feature_pregame_team_features are rebuilt HERE
-    # (after compute_eb_bullpen_posteriors_op writes yesterday's EB posteriors at
+    # (after dbt_build_bullpen_posteriors_op writes yesterday's EB posteriors at
     # s17) — not just at dbt_daily_build (s16, which runs before that source exists).
     # The mart's 7-day lookback merge-updates yesterday's row from NULL eb to the
     # freshly-written value; the two table-materialized features then pass it through
     # to feature_pregame_game_features.{home,away}_bp_eb_xwoba. dbt resolves build
     # order from the ref graph. See reference_bullpen_freshness_chain.
     #
-    # A1.11 Stage 4 — also rebuild the lineup + starter features here so today's
-    # forward-looking EB posteriors (written by compute_lineup/starter_posteriors_op
-    # in the posterior cluster just above) land in feature_pregame_game_features.
-    # Both are table-materialized, so the full rebuild simply re-reads the fresh
-    # eb_batter_posteriors_raw / eb_starter_posteriors sources.
+    # Story A2.11 — build the forward-looking TODAY's-slate EB posteriors here too
+    # (eb_starter_posteriors + eb_batter_posteriors_raw, now dbt models), so they
+    # land in feature_pregame_{starter,lineup,game}_features. They ref()
+    # player_sequential_posteriors (as-of), so this op runs AFTER the sequential
+    # update ops. Incremental → only the recent window is recomputed. dbt resolves
+    # build order from the ref graph.
     _run_dbt(context, [
         "build",
         "--select",
@@ -491,6 +479,8 @@ def dbt_umpire_feature_rebuild(context):
         "feature_pregame_umpire_features",
         "mart_bullpen_effectiveness",
         "feature_pregame_team_features",
+        "eb_starter_posteriors",
+        "eb_batter_posteriors_raw",
         "feature_pregame_starter_features",
         "feature_pregame_lineup_features",
         "feature_pregame_game_features",

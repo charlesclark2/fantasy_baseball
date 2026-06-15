@@ -401,7 +401,9 @@ eb_posteriors as (
         eb_xwoba_uncertainty,
         eb_data_source,
         posterior_source
-    from baseball_data.betting.eb_starter_posteriors
+    -- Story A2.11: eb_starter_posteriors is now a dbt model (was a Python table);
+    -- ref() so dbt builds the posterior before this feature.
+    from {{ ref('eb_starter_posteriors') }}
 ),
 
 -- Prior-season platoon splits vs RHB

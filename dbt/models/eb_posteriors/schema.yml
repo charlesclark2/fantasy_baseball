@@ -1,0 +1,333 @@
+version: 2
+
+# ============================================================================
+# EB Posteriors — Story A2.11 (dbt migration of the Python compute_*_posteriors)
+# ============================================================================
+# Models here materialize into baseball_data.betting (default target schema),
+# replacing the per-date Python EB compute. Grain + key columns mirror the
+# Python-written tables exactly so downstream feature models are unaffected on
+# cutover. Tests split by intent:
+#   • structural integrity (grain, not_null, accepted_values) → ERROR (hard fail)
+#   • distributional sanity (value ranges)                    → WARN (surfaced,
+#     non-blocking — a daily build shouldn't break on a rare prior-drift edge)
+# dbt-fusion: every generic-test param is nested under `arguments:`.
+# ============================================================================
+
+models:
+
+  - name: eb_starter_posteriors
+    description: >
+      Per-starter Empirical Bayes posteriors for xwOBA-against, K%, and BB%
+      (Normal-Normal conjugate shrinkage toward experience-band priors), plus the
+      Epic-16.2 as-of sequential xwOBA-against posterior. Story A2.11 dbt port of
+      compute_starter_posteriors.py. Validated byte-for-byte against the Python
+      eb_starter_posteriors on 2025 (0 value diffs across 4836 matched rows).
+      Sourced from stg_statsapi_probable_pitchers (full schedule spine) so future
+      +1/+2-day games populate — closing the Story 30.6 serving residual the
+      game_pk-scoped Python compute left open. Grain: (game_pk, pitcher_id).
+      NOTE: rename to eb_starter_posteriors at cutover (update this name + drop the
+      sources.yml entry + rewire feature_pregame_starter_features to ref() it).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, pitcher_id]
+
+    columns:
+      - name: game_pk
+        description: StatsAPI game identifier (VARCHAR; mirrors the Python key type).
+        tests:
+          - not_null
+      - name: side
+        description: home | away.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: pitcher_id
+        description: Probable starter MLBAM id (VARCHAR).
+        tests:
+          - not_null
+      - name: season
+        tests:
+          - not_null
+      - name: game_date
+        tests:
+          - not_null
+      - name: age_band
+        description: Experience band (u25/a25/a30/a33) driving the prior cell.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['u25', 'a25', 'a30', 'a33']
+      - name: eb_data_source
+        description: prior_only | il_return_blend | full_eb.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['prior_only', 'il_return_blend', 'full_eb']
+      - name: posterior_source
+        description: sequential | season_eb | prior_only (Epic 16.2 provenance).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['sequential', 'season_eb', 'prior_only']
+      - name: eb_xwoba_against
+        description: EB posterior mean xwOBA-against (0 nulls observed; not_null = hard).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.10
+                max_value: 0.50
+              config:
+                severity: warn
+      - name: eb_k_pct
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.60
+              config:
+                severity: warn
+      - name: eb_bb_pct
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.30
+              config:
+                severity: warn
+      - name: eb_xwoba_uncertainty
+        description: Posterior std (prior sigma in the prior_only branch). Always > 0.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.20
+              config:
+                severity: warn
+      # eb_xwoba_against_sequential is intentionally NULL when no prior-game
+      # sequential posterior exists (~49% of rows) — no not_null test.
+
+  - name: eb_batter_posteriors_raw
+    description: >
+      Per-batter-slot Empirical Bayes posteriors — Beta-Binomial (wOBA/K%/BB%) +
+      Normal-Normal (ISO), ZiPS-blended at low PA, plus the Epic-16.2 as-of
+      sequential wOBA posterior. Story A2.11 dbt port of compute_lineup_posteriors.py.
+      Sourced from confirmed stg_statsapi_lineups (no future-game spine — lineups
+      post ~3h pre-game). Grain: (game_pk, batting_slot, batter_id). EB-value
+      not_null + ranges are WARN pending the post-build validation (ZiPS-snapshot
+      drift expected on zips_blend rows). Rename to eb_batter_posteriors_raw at cutover.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, batting_slot, batter_id]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+      - name: batting_slot
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 9
+      - name: batter_id
+        tests:
+          - not_null
+      - name: season
+        tests:
+          - not_null
+      - name: game_date
+        tests:
+          - not_null
+      - name: eb_data_source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['prior_only', 'zips_blend', 'full_eb']
+      - name: posterior_source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['sequential', 'season_eb', 'prior_only']
+      - name: pa_weight
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 1.0
+      - name: eb_woba
+        tests:
+          - not_null:
+              config:
+                severity: warn
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.70
+              config:
+                severity: warn
+      - name: eb_k_pct
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.70
+              config:
+                severity: warn
+      - name: eb_bb_pct
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.40
+              config:
+                severity: warn
+      - name: eb_iso
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.50
+              config:
+                severity: warn
+      - name: eb_woba_uncertainty
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.20
+              config:
+                severity: warn
+
+  - name: int_bullpen_ali_by_season
+    description: >
+      Normalized average Leverage Index (aLI) per reliever-season (≥20 apps).
+      Support model for the bullpen posteriors; full-season aLI to match the
+      backfill path. Grain: (season, pitcher_id).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [season, pitcher_id]
+    columns:
+      - name: season
+        tests: [not_null]
+      - name: pitcher_id
+        tests: [not_null]
+      - name: normalized_ali
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 5.0
+              config:
+                severity: warn
+
+  - name: eb_bullpen_posteriors
+    description: >
+      Per-reliever Normal-Normal EB posteriors (xwOBA-against/K%/BB%) toward
+      (leverage_role × age_band) priors. Story A2.11 port of compute_bullpen_-
+      posteriors.py (individual grain). Retrospective (reliever set = who pitched);
+      no future-game spine. Grain: (game_pk, pitcher_id). Rename to
+      eb_bullpen_posteriors at cutover. EB-value ranges are WARN pending validation.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, pitcher_id]
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: pitcher_id
+        tests: [not_null]
+      - name: game_date
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: leverage_role
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['closer_tier', 'high_leverage', 'low_leverage', 'no_prior_season']
+      - name: eb_data_source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['prior_only', 'full_eb']
+      - name: role_changed
+        tests: [not_null]
+      - name: eb_xwoba_against
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.10
+                max_value: 0.50
+              config:
+                severity: warn
+      - name: eb_k_pct
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.60
+              config:
+                severity: warn
+      - name: eb_bb_pct
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.0
+                max_value: 0.30
+              config:
+                severity: warn
+      # age_band is intentionally NULL when mode_age is unavailable — no not_null.
+
+  - name: eb_bullpen_team_posteriors
+    description: >
+      Outs-weighted team bullpen aggregate from eb_bullpen_posteriors. Story
+      A2.11 port of _aggregate_to_team. Grain: (game_pk, team). Rename to
+      eb_bullpen_team_posteriors at cutover.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, team]
+    columns:
+      - name: game_pk
+        tests: [not_null]
+      - name: team
+        tests: [not_null]
+      - name: game_date
+        tests: [not_null]
+      - name: season
+        tests: [not_null]
+      - name: n_relievers
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+      - name: team_eb_bullpen_xwoba
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0.10
+                max_value: 0.50
+              config:
+                severity: warn

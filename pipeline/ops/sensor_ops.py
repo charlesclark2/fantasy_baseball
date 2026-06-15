@@ -135,15 +135,10 @@ def lineup_ingest_umpires(context: OpExecutionContext) -> None:
         context.log.warning(f"Lineup-path umpire assignment ingest failed (non-fatal): {e}")
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def lineup_compute_posteriors(context: OpExecutionContext) -> None:
-    """A1.11 Stage 4 — recompute EB lineup posteriors now that lineups are
-    CONFIRMED (lineup_dbt_staging_rebuild just refreshed stg_statsapi_lineups).
-    This is the authoritative pass: the morning daily job's compute_lineup_-
-    posteriors_op runs best-effort on whatever had posted then. MERGE-keyed on
-    (game_pk, batting_slot, batter_id), so re-running each sensor tick is
-    idempotent. See project_posterior_staleness_jun2026."""
-    _run_script(context, f"{_EB_DIR}/compute_lineup_posteriors.py", ["--game-date", _today()])
+# Story A2.11 — the EB lineup/starter posteriors are now dbt models built inside
+# lineup_dbt_feature_rebuild (the eb_* models are incremental and merge-keyed on the
+# natural grain, so a confirmed-lineup re-score is idempotent). The standalone
+# lineup_compute_posteriors Python op was removed.
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
@@ -169,6 +164,12 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
         # the fresh staging directly (fix A), so this makes the bet's starter
         # block consistent with the just-refreshed probable. Symmetric completion
         # of fix A; closes the scratch/late-probable serve-time gap.
+        # Story A2.11 — build the EB starter/lineup posteriors (now dbt models)
+        # here too, before the features that ref() them, so the confirmed-lineup
+        # re-score reflects the actual batters/probable. Incremental → only the
+        # confirmed games are recomputed.
+        "eb_starter_posteriors",
+        "eb_batter_posteriors_raw",
         "feature_pregame_starter_features",
         "feature_pregame_lineup_features",
         "feature_pregame_game_features",

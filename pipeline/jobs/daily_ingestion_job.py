@@ -4,11 +4,9 @@ from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
     check_data_freshness,
     check_prediction_coverage,
-    compute_eb_bullpen_posteriors_op,
     compute_elo,
-    compute_lineup_posteriors_op,
     compute_model_health,
-    compute_starter_posteriors_op,
+    dbt_build_bullpen_posteriors_op,
     dbt_daily_build,
     dbt_lineup_feature_rebuild,
     dbt_mart_prediction_clv,
@@ -120,26 +118,22 @@ def daily_ingestion_job():
     # after the assignment retry and before dbt_umpire_feature_rebuild, so the
     # trailing-3yr ump z-scores recompute on current data. Soft-fail (non-critical).
     s17u = ingest_umpire_scorecards(start=s17)
-    # Epic 6A — refresh yesterday's EB bullpen posteriors (eb_bullpen_posteriors +
-    # eb_bullpen_team_posteriors) BEFORE the sequential team update, whose
-    # bullpen_xwoba branch reads eb_bullpen_posteriors for reliever-PA membership,
-    # and before dbt_umpire_feature_rebuild, which rebuilds the bullpen features.
-    # Missing op was the cause of the 2026-05-29 bullpen-seq / champion-bullpen stall.
-    eb_bullpen = compute_eb_bullpen_posteriors_op(start=s17u)
+    # Story A2.11 — refresh the EB bullpen posteriors (now dbt models) BEFORE the
+    # sequential team update, whose bullpen_xwoba branch reads eb_bullpen_posteriors.
+    # (Was compute_eb_bullpen_posteriors_op; see the 2026-05-29 stall.)
+    eb_bullpen = dbt_build_bullpen_posteriors_op(start=s17u)
     # Epic O.4 / 16.4 — advance yesterday's sequential posteriors after pitch data
     # (dbt_daily_build) lands and before feature_pregame_game_features is rebuilt
     # in dbt_umpire_feature_rebuild, so it picks up the fresh team posteriors.
     p_player  = update_player_posteriors_op(start=eb_bullpen)
     p_team    = update_team_posteriors_op(start=p_player)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
-    # A1.11 Stage 4 — forward-looking today's-slate EB posteriors (starter +
-    # best-effort lineup), chained after the yesterday-advancing posteriors and
-    # before dbt_umpire_feature_rebuild so their outputs land in the rebuilt
-    # lineup/starter/game features. Lineup confirmations after this point are
+    # Story A2.11 — the forward-looking today's-slate EB posteriors (starter +
+    # lineup) are now dbt models built INSIDE dbt_umpire_feature_rebuild, after the
+    # sequential update ops (so their as-of sequential column is fresh) and before
+    # the features that ref() them. Lineup confirmations after this point are still
     # handled authoritatively by the lineup_monitor sensor.
-    p_starter = compute_starter_posteriors_op(start=p_matchup)
-    p_lineup  = compute_lineup_posteriors_op(start=p_starter)
-    s18 = dbt_umpire_feature_rebuild(start=p_lineup)
+    s18 = dbt_umpire_feature_rebuild(start=p_matchup)
     s19 = predict_today_morning(start=s18)
     write_api_cache_op(predict_done=s19)
     s19b = update_pipeline_status(start=s19)
