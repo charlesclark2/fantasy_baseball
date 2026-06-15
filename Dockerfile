@@ -55,7 +55,9 @@ RUN pip install --no-cache-dir \
     catboost \
     requests \
     pyyaml \
-    mlflow
+    mlflow \
+    boto3 \
+    psycopg2-binary
 
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`
