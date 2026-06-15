@@ -34,6 +34,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useSelectedDate } from "@/lib/date-context"
+import { normalizeTeam } from "@/lib/teams"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -129,8 +130,8 @@ function normalizeEVPick(p: any): Pick {
     win_prob_ci_low: null,
     win_prob_ci_high: null,
     lineup_confirmed: p.lineup_confirmed ?? false,
-    home_team: p.home_team ?? "",
-    away_team: p.away_team ?? "",
+    home_team: normalizeTeam(p.home_team ?? ""),
+    away_team: normalizeTeam(p.away_team ?? ""),
     pick_side,
     game_start_utc: p.game_start_utc ?? null,
     model_total_runs: p.pred_total_runs ?? null,
@@ -558,7 +559,11 @@ export default function DashboardPage() {
   const isLoading = isToday ? todayLoading : evLoading
   const isError = isToday ? todayError : evError
   const picks: Pick[] = isToday
-    ? (todayData?.picks ?? [])
+    ? (todayData?.picks ?? []).map((p: Pick) => ({
+        ...p,
+        home_team: normalizeTeam(p.home_team),
+        away_team: normalizeTeam(p.away_team),
+      }))
     : (evData?.picks ?? []).filter((p: any) => p.qualified_bet === true).map(normalizeEVPick)
 
   const datePicker = (
