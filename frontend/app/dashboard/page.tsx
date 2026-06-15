@@ -3,6 +3,7 @@
 import React, { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
 import { Badge } from "@/components/ui/badge"
@@ -204,7 +205,15 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
       key={`${pick.game_pk}_${pick.market_type}`}
       className="cursor-pointer border-[#262626] bg-[#141414] hover:bg-[#1a1a1a] transition-colors"
       style={{ borderLeft: "2px solid #10b981" }}
-      onClick={() => router.push(`/picks/${pick.game_pk}`)}
+      onClick={() => {
+        posthog.capture("pick_clicked", {
+          game_pk: pick.game_pk,
+          market_type: pick.market_type,
+          pick_side: pick.pick_side,
+          conviction: conviction(pick.game_conviction_score),
+        })
+        router.push(`/picks/${pick.game_pk}`)
+      }}
     >
       {/* Game */}
       <TableCell className="pl-4 py-4">
@@ -281,7 +290,15 @@ function PickCard({ pick, router }: { pick: Pick; router: ReturnType<typeof useR
     <div
       className="cursor-pointer rounded-xl border border-[#262626] bg-[#141414] p-4 transition-colors active:bg-[#10b98108]"
       style={{ borderLeft: "2px solid #10b981" }}
-      onClick={() => router.push(`/picks/${pick.game_pk}`)}
+      onClick={() => {
+        posthog.capture("pick_clicked", {
+          game_pk: pick.game_pk,
+          market_type: pick.market_type,
+          pick_side: pick.pick_side,
+          conviction: conviction(pick.game_conviction_score),
+        })
+        router.push(`/picks/${pick.game_pk}`)
+      }}
     >
       <div className="mb-2 flex items-start justify-between gap-2">
         <div>
@@ -553,7 +570,7 @@ export default function DashboardPage() {
         <Calendar
           mode="single"
           selected={selectedDate}
-          onSelect={(d) => { if (d) { setSelectedDate(d); setCalOpen(false) } }}
+          onSelect={(d) => { if (d) { setSelectedDate(d); setCalOpen(false); posthog.capture("dashboard_date_changed", { date: format(d, "yyyy-MM-dd") }) } }}
           toDate={new Date()}
           initialFocus
         />

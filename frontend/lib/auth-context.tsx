@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react"
 import type { CognitoUserSession } from "amazon-cognito-identity-js"
+import posthog from "posthog-js"
 import { queryClient } from "@/lib/query-client"
 import { getCurrentCognitoUser } from "@/lib/cognito"
 
@@ -66,13 +67,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   function onLoginSuccess(at: string, it: string) {
+    const userEmail = decodeEmail(it)
     setAccessToken(at)
-    setEmail(decodeEmail(it))
+    setEmail(userEmail)
+    if (userEmail) {
+      posthog.identify(userEmail, { email: userEmail })
+    }
   }
 
   function signOut() {
     const user = getCurrentCognitoUser()
     user?.signOut()
+    posthog.reset()
     queryClient.clear()
     setAccessToken(null)
     setEmail(null)

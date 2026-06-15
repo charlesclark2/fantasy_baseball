@@ -14,13 +14,15 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self'",
-      // Cognito + our own API + future analytics (PostHog/Sentry placeholders)
+      // Cognito + our own API + PostHog + Sentry
       [
         "connect-src 'self'",
         "https://api.credencesports.com",
         "https://cognito-idp.us-east-1.amazonaws.com",
-        "https://app.posthog.com",       // placeholder — add when PostHog is wired up
-        "https://*.sentry.io",           // placeholder — add when Sentry is wired up
+        "https://us.i.posthog.com",
+        "https://us-assets.i.posthog.com",
+        "https://app.posthog.com",
+        "https://*.sentry.io",
       ].join(" "),
       "frame-ancestors 'none'",
     ].join("; "),
@@ -42,6 +44,23 @@ const nextConfig = {
       },
     ]
   },
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/array/:path*",
+        destination: "https://us-assets.i.posthog.com/array/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ]
+  },
+  skipTrailingSlashRedirect: true,
 }
 
 export default withSentryConfig(nextConfig, {

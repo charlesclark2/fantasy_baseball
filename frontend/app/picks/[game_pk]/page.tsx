@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
+import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
@@ -403,6 +404,17 @@ export default function PickDetailPage() {
 
   const picks = data?.picks ?? []
   const firstPick = picks[0]
+
+  useEffect(() => {
+    if (firstPick) {
+      posthog.capture("pick_detail_viewed", {
+        game_pk: gamePk,
+        home_team: firstPick.home_team,
+        away_team: firstPick.away_team,
+        markets: picks.map((p) => p.market_type),
+      })
+    }
+  }, [gamePk, firstPick])
 
   const homeFullName = data?.home_team_name ?? firstPick?.home_team ?? "Home"
   const awayFullName = data?.away_team_name ?? firstPick?.away_team ?? "Away"

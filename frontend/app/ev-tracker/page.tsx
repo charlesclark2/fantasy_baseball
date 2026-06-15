@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -561,7 +562,16 @@ export default function EVTrackerPage() {
     return (
       <TableRow
         key={`h2h-${row.game_pk}`}
-        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        onClick={() => {
+          posthog.capture("ev_tracker_pick_clicked", {
+            game_pk: row.game_pk,
+            market_type: row.marketType,
+            side: row.side,
+            qualified: row.qualified,
+            high_conviction: row.highConviction,
+          })
+          router.push(`/picks/${row.game_pk}`)
+        }}
         className={cn(
           "border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#10b98108]",
           !isQualified && "opacity-60",
@@ -615,7 +625,7 @@ export default function EVTrackerPage() {
           {isQualified ? usd(stake) : "—"}
         </TableCell>
         <TableCell className="px-3 py-3 text-center">
-          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+          <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </TableCell>
       </TableRow>
     )
@@ -627,7 +637,16 @@ export default function EVTrackerPage() {
     return (
       <TableRow
         key={`totals-${row.game_pk}`}
-        onClick={() => router.push(`/picks/${row.game_pk}`)}
+        onClick={() => {
+          posthog.capture("ev_tracker_pick_clicked", {
+            game_pk: row.game_pk,
+            market_type: row.marketType,
+            side: row.side,
+            qualified: row.qualified,
+            high_conviction: row.highConviction,
+          })
+          router.push(`/picks/${row.game_pk}`)
+        }}
         className={cn(
           "border-b border-[#262626] transition-colors cursor-pointer hover:bg-[#10b98108]",
           !isQualified && "opacity-60",
@@ -675,7 +694,7 @@ export default function EVTrackerPage() {
           {isQualified ? usd(stake) : "—"}
         </TableCell>
         <TableCell className="px-3 py-3 text-center">
-          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+          <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </TableCell>
       </TableRow>
     )
@@ -737,7 +756,7 @@ export default function EVTrackerPage() {
         </div>
         {/* Action */}
         <div className="flex justify-end">
-          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+          <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </div>
       </div>
     )
@@ -801,7 +820,7 @@ export default function EVTrackerPage() {
         </div>
         {/* Action */}
         <div className="flex justify-end">
-          <LogBetAction row={row} onLog={() => router.push(buildLogBetUrl(row))} />
+          <LogBetAction row={row} onLog={() => { posthog.capture("ev_tracker_log_bet_initiated", { game_pk: row.game_pk, market_type: row.marketType, side: row.side, qualified: row.qualified }); router.push(buildLogBetUrl(row)) }} />
         </div>
       </div>
     )
