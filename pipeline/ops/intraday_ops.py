@@ -100,6 +100,7 @@ def odds_snapshot_dbt_rebuild(context: OpExecutionContext) -> None:
         "run",
         "--select",
         "stg_parlayapi_odds",
+        "mart_odds_outcomes",
         "mart_closing_line_value",
         "mart_prediction_clv",
         "--target", "baseball_betting_and_fantasy",
