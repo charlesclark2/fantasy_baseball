@@ -41,7 +41,7 @@ with lineups as (
     from {{ ref('stg_statsapi_lineups') }}
     where batting_order between 1 and 9
       and year(official_date) between 2015 and year(current_date())
-    {% if is_incremental %}
+    {% if is_incremental() %}
       and official_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
     {% endif %}
 ),

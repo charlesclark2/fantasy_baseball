@@ -33,7 +33,7 @@ with reliever_at_bats as (
     where bp.game_type = 'R'
       and ppe.delta_home_win_exp is not null
       and bp.game_year between 2015 and year(current_date())
-    {% if is_incremental %}
+    {% if is_incremental() %}
       and bp.game_year >= year(current_date()) - 1
     {% endif %}
 ),

@@ -34,7 +34,7 @@ with game_pitches as (
     from {{ ref('stg_batter_pitches') }} bp
     where bp.game_type = 'R'
       and bp.game_year between 2016 and year(current_date())
-    {% if is_incremental %}
+    {% if is_incremental() %}
       -- current+prior season covers any recent game's full season-to-date
       and bp.game_year >= year(current_date()) - 1
     {% endif %}
@@ -81,7 +81,7 @@ game_relievers as (
         sum(is_out)        as outs_recorded,
         mode(pitcher_age)  as mode_age
     from pa_level
-    {% if is_incremental %}
+    {% if is_incremental() %}
       -- output spine scoped to recent games; pitcher_game_lines (below) stays full
       -- season so the as-of season-to-date sum remains complete
       where game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})

@@ -62,7 +62,7 @@ starters as (
         year(game_date)      as season
     from probable
     where year(game_date) between 2016 and year(current_date())
-    {% if is_incremental %}
+    {% if is_incremental() %}
       and game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
     {% endif %}
 ),

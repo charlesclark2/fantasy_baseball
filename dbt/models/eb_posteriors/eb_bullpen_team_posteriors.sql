@@ -13,7 +13,7 @@
 
 with base as (
     select * from {{ ref('eb_bullpen_posteriors') }}
-    {% if is_incremental %}
+    {% if is_incremental() %}
     where game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
     {% endif %}
 ),
