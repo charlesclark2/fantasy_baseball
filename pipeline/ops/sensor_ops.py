@@ -13,14 +13,17 @@ _EB_DIR = "/app/betting_ml/scripts/eb_priors"
 # Epic A1 (Pipeline SLA & Reliability): the sensor-fired catch-up ops are idempotent
 # re-attempts (incremental ingestion + MERGE-keyed dbt rebuilds), so a transient
 # Snowflake hiccup (warehouse resume, incremental-MERGE lock, network blip) should
-# self-heal rather than page. The 2026-06-11 single failure looked like a textbook
-# transient — but it did NOT self-heal: catchup_dbt_rebuild has failed EVERY run
-# since 2026-06-11 05:17 (all 3 attempts exhausted). Root cause is NOT transient: it
-# runs `dbtf build` (models + TESTS) on the stg_batter_pitches+ subtree, whereas the
-# weekday daily build runs `dbtf run` (models only) — so a data-quality TEST failing
-# on the recent statcast batch reds the catchup while the daily job stays green. The
-# retry just 3x's the runtime and delays surfacing it; the actual failing test is in
-# the dbt run-summary tail (see _failure_detail + the _run_dbt ERROR-log of it).
+# self-heal rather than page.
+#
+# Story A2.15 (2026-06-15) — FIXED the recurring failure this comment used to
+# describe: catchup_dbt_rebuild had failed EVERY run since 2026-06-11 (all 3 retries
+# exhausted) because it ran `dbtf build` (models + TESTS) on the stg_batter_pitches+
+# subtree, so a single data-quality TEST failing on the recent statcast batch redded
+# the whole catchup (and the 3× retry tripled the wasted Snowflake + Dagster compute)
+# while the weekday daily job — which runs `dbtf run` — stayed green. catchup_dbt_-
+# rebuild now also runs `dbtf run` (models only); the test suite runs once in the
+# daily job's build op (see _dbt_daily_build_args). If a real data-quality issue
+# needs surfacing, the daily build is the gate, not every catch-up tick.
 _CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
 
 
@@ -91,7 +94,7 @@ def catchup_dbt_rebuild(context: OpExecutionContext) -> None:
     Posteriors run next (they read mart_game_results), then dbt_umpire_feature_-
     rebuild folds them into the feature marts before the re-score."""
     _run_dbt(context, [
-        "build",
+        "run",
         "--select", "stg_batter_pitches+",
         "--target", "baseball_betting_and_fantasy",
     ])
@@ -148,7 +151,7 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
     so the post-lineup prediction reflects who is actually playing. Models are
     table-materialized; the full rebuild re-reads eb_batter_posteriors_raw."""
     _run_dbt(context, [
-        "build",
+        "run",
         "--select",
         # Story 30.5 — recompute the ump z-scores from the just-ingested HP
         # assignment (lineup_ingest_umpires) so feature_pregame_game_features

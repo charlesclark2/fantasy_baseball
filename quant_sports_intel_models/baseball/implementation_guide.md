@@ -12774,6 +12774,104 @@ Conventions: Snowflake MCP only; fully-qualified names; no USE statements; do no
 
 ---
 
+### Story A2.15 — Intraday compute-frequency reduction (Snowflake spend)  `[Home: Epic A2 / infrastructure]`  ⬜ SPIKED 2026-06-15
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.15 standalone:
+
+```
+You are picking up Story A2.15 of the MLB betting & fantasy project. Goal: cut Snowflake COMPUTE_WH spend.
+The audit/spike is DONE (see SPIKE FINDINGS below + memory project_dbt_spend_audit_jun2026). Your job is to
+SHIP the ranked levers, validating each is value-preserving, lowest-risk first.
+
+Before any code, read:
+  1. This Story A2.15 section (contract) + memory project_dbt_spend_audit_jun2026.md (the 2026-06-15 re-audit).
+  2. pipeline/ops/sensor_ops.py + pipeline/ops/daily_ingestion_ops.py (the dbt op invocations).
+  3. pipeline/sensors/ + pipeline/schedules/ (cadences).
+
+ROOT CAUSE (already diagnosed): spend is FREQUENCY-driven, not per-build speed (speed was fixed in A2.8). The
+intraday jobs re-run full-CTAS staging/feature models AND a full `dbtf build` TEST suite on every tick; ~60% of
+metered credits are warehouse idle/spin from frequent resumes for ~8,900 statements/day.
+
+SHIP IN THIS ORDER (stop-and-measure after each; re-run the WAREHOUSE_METERING daily-trend query between):
+  Lever 1 (biggest, lowest-risk): in pipeline/ops/sensor_ops.py + daily_ingestion_ops.py, change the intraday
+    feature rebuilds (`lineup_dbt_feature_rebuild`, `catchup_dbt_rebuild`) from `dbtf build` → `dbtf run` (models
+    only). Move the full test suite to ONE daily run (the morning daily job, or a dedicated nightly `dbtf test`).
+    Keep any genuinely safety-critical tests as a curated `--select` subset if needed. AC: intraday ticks no
+    longer emit the `count(*) as failures … should_error` test SELECTs (verify in QUERY_HISTORY post-deploy).
+  Lever 2: gate the intraday feature rebuild so it only fires when NEW lineups/probables landed since the last
+    tick (compare max ingestion/updated_at vs last run), instead of every lineup_monitor poll. Don't rebuild
+    feature_pregame_* on a no-op tick. (Or lengthen the lineup-monitor cadence to match real lineup arrival.)
+  Lever 3: make stg_parlayapi_line_movement incremental (append on ingestion_ts > max; the prior audit proved
+    byte-safe — old rows never change). 42min/wk in CI alone.
+  Lever 4: scope CI (dbt_build_ci.yml) to PR / merge-to-main only, not every push; confirm state:modified+ isn't
+    dragging unrelated heavy ci_betting.* statcast marts.
+  Lever 5: incremental-convert the append-only staging models (stg_statsapi_lineups / _probable_pitchers) if
+    Levers 1–2 don't already make their rebuild cost negligible.
+  Lever 6 (LARGER BET — scope before building): DuckDB-in-Dagster for the high-frequency intraday recompute.
+    predict_today reads features FROM Snowflake (feature_pregame_sub_model_signals / game_features), so this only
+    pays off if the serving read ALSO moves local — dovetails with A2.12's Railway-PG serving store. Pilot on ONE
+    path (e.g. odds→CLV or lineup→features), measure, don't big-bang. DuckDB precedent: betting_ml/utils/training_cache.py.
+
+VALIDATION DISCIPLINE: every model change must be value-preserving — re-run the relevant grain+fingerprint check
+(COUNT(*)/COUNT(DISTINCT key)/ROUND(SUM(<float>),3)) before vs after, like the A2.10/A2.11 validations.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; Snowflake via the MCP only, fully-qualified names, no USE
+statements; hand any >1min script/query to the user and show the command; test Snowflake-querying scripts with
+real creds before merge; do not git commit or push; in-process Dagster ops may only import packaged code
+([[feedback_dagster_import_only_packaged_code]]).
+```
+
+**SPIKE FINDINGS (2026-06-15) — already gathered, do not re-derive:**
+- Single warehouse **COMPUTE_WH** (X-Small, auto_suspend already 60s floor → no warehouse-config lever). Spend ~100% `DBT_RW`. **June 1–14 ≈ 87 credits/$175 MTD and rising** (last 5d 7–8.6cr/day vs late-May 2–4). User bumped `BASEBALL_MONTHLY_CAP` 2026-06-15.
+- **88,699 queries/10d (~8,900/day); ~60% of credits = idle/spin** (59 metered vs 23.5 attributed/10d).
+- **SELECTs 76,716/32hrs** — diffuse; dominated by **dbt TEST queries**, date-probes, predict reads. **CTAS 6,919/22hrs** — full `create or replace transient table` rebuilds re-run by intraday jobs: `stg_statsapi_lineups` 372×/wk, `stg_statsapi_probable_pitchers` 290×, `mart_closing_line_value` 242×, `feature_pregame_game_features` ~117×, `lineup_features` ~209×. **ALTER_TABLE_ADD_COLUMN 12,378** (dbt-fusion schema churn).
+- **Cadence multiplier:** odds_snapshot `*/30 14-23`+overnight ≈28/day; intraday_schedule `*/30`; weather hourly; lineup_monitor sensor ~53 fires/day. `lineup_dbt_feature_rebuild` + `catchup_dbt_rebuild` use `dbtf build` (models **+ tests**) — the test-SELECT source.
+- **Softeners:** this week inflated by our A2.11 full-refresh + CI-on-every-push + validation queries; A2.11's incremental EB migration should drop the 11.7k INSERT + 2.4k MERGE going forward. **Re-measure 2026-06-22.**
+
+**Goal:** Reduce COMPUTE_WH monthly credits materially (target: back under the prior ~109/mo and trending down) by cutting intraday job FREQUENCY and per-tick work — without weakening data-quality coverage or changing any model output value.
+
+**Tasks (ship lowest-risk first, measure between each):**
+- [x] **L1 — ✅ SHIPPED 2026-06-15** — converted all 8 scattered `dbtf build` ops → `run` (sensor_ops: `catchup_dbt_rebuild`, `lineup_dbt_feature_rebuild`; daily_ingestion_ops: `dbt_sub_model_signals_rebuild`, `dbt_build_bullpen_posteriors_op`, `dbt_umpire_feature_rebuild`, `dbt_mart_prediction_clv`, `dbt_pregame_odds_rebuild`, `dbt_lineup_feature_rebuild`). Tests now run in ONE place — `_dbt_daily_build_args` — Sunday `build --full-refresh` + an every-3rd-day (`toordinal()%3`) lightweight test build; all other days/ticks `run`. Also fixed the recurring `catchup_dbt_rebuild` test-failure-since-06-11 (was burning 3× retry compute). User deploys.
+- [ ] **L2** — gate intraday feature rebuilds on actual new-lineup/probable arrival (no rebuild on no-op ticks).
+- [ ] **L3** — `stg_parlayapi_line_movement` → incremental (byte-safe `ingestion_ts` append).
+- [ ] **L4** — CI to PR/merge-only; verify `state:modified+` scope.
+- [ ] **L5** — incremental-convert append-only staging models (if still material after L1–L2).
+- [ ] **L6** — DuckDB-in-Dagster: scope + single-path pilot (gated on a measured-savings case; coupled to A2.12 serving store).
+
+**Acceptance criteria:**
+- [ ] Each shipped lever is value-preserving (grain+fingerprint diff before/after) and the daily-credit trend drops measurably vs the June 1–14 baseline.
+- [ ] Intraday ticks no longer emit the full dbt test suite (verified in QUERY_HISTORY); full tests still run ≥1×/day.
+- [ ] L6 is a written scoping decision (pilot or defer) with a measured savings estimate, not an unscoped build.
+
+**Sequencing:** **HIGH / near-term** — L1+L3 are contained dbt/Dagster edits, no A2.12 overlap, shippable now. L6 is a larger bet gated on a measured case + the A2.12 serving-store direction; defer unless L1–L5 leave spend above target. Re-audit 2026-06-22 verifies the impact.
+
+---
+
+### Story A2.16 — Dagster+ compute reduction  `[Home: Epic A2 / infrastructure]`  ⬜ SPIKED 2026-06-15
+
+**Sibling of A2.15** — the two cloud bills share one root cause (intraday job frequency + failed-run retries), so most A2.15 levers cut BOTH. This story owns the Dagster-SPECIFIC levers. Audit in memory `[[project_dagster_cost_audit_jun2026]]`.
+
+**SPIKE FINDINGS (2026-06-15) — Dagster+ GraphQL, trial window 2026-05-19→06-14, 1,428 runs / ~4,452 run-min; user-reported 3,673 credits / $146.92 @ $0.04:**
+- **44% (1,940 min) was a ONE-TIME runaway:** `__ASSET_JOB` = 2 manual UI launches (`dagster/from_ui=true`) on 2026-05-19, each ran ~16h then CANCELED. NOT recurring — but unguarded.
+- **Recurring (~2,512 min) = intraday frequency:** `odds_snapshot` 1,044min/329runs (42%), `lineup_monitor` 610/119 (24%), `daily_ingestion` 380/41 **(12 failures, 29%)**, `intraday_weather` 148/326 + `intraday_schedule` 136/542 = **868 tiny runs** (Serverless per-run startup overhead), `statcast_catchup` 74/13 (4 failures = the `build`→`run` test failure).
+
+**Goal:** Cut recurring Dagster compute and prevent runaway-credit events before the trial converts to paid.
+
+**Tasks:**
+- [ ] **D1 — run-timeout guard (the runaway lesson):** set a max-runtime (`dagster/max_runtime` run tag or job-level run-timeout) so a hung run self-cancels long before 16h; add a long-running-run alert. Cheap, prevents the single worst event class.
+- [ ] **D2 — SHARED with A2.15:** reduce `odds_snapshot` cadence (`*/30`→`*/60`, or gate on odds movement) and gate `lineup_monitor` rebuilds on actual new-lineup arrival. These are the top-2 recurring drivers on BOTH bills.
+- [x] **D3 (catchup half) — ✅ SHIPPED 2026-06-15 via A2.15-L1** — `statcast_catchup`'s `catchup_dbt_rebuild` now runs `dbtf run`, ending the test-failure-since-06-11 that exhausted 3 retries every run. ⬜ STILL OPEN: root-cause the `daily_ingestion` 29% fail rate (separate cause — investigate its run-summary tails).
+- [ ] **D4 — consolidate the 868 tiny runs:** do `intraday_schedule` (542) + `intraday_weather` (326) need separate every-30-min jobs? Merge into fewer/less-frequent runs to amortize Serverless per-run startup overhead.
+
+**Acceptance criteria:**
+- [ ] A run-timeout guard exists; no run can silently exceed a sane cap (e.g. 2h) without alerting.
+- [ ] Recurring run-minutes drop measurably vs the May 19–Jun 14 baseline at the 2026-06-22 re-audit; `daily_ingestion`/`statcast_catchup` failure rate falls.
+- [ ] Cross-referenced with A2.15 so shared levers (D2/D3) aren't double-implemented.
+
+**Sequencing:** **HIGH — trial converting to paid adds urgency.** D1 is a standalone quick win (no A2.15 overlap, ship now). D2/D3 are the same edits as A2.15-L1/L2 — do once, credit both stories. Re-audit 2026-06-22 (with Snowflake).
+
+---
+
 # Epic 27 — Within-Season Scoring-Environment State Signal
 
 **Status:** 🔄 IN PROGRESS (27.1 ✅ 2026-06-10; 27.3/27.5 ✅ DEFER/FAIL; **27.6 ⬜ NEW 2026-06-12 — the pivot:
@@ -16554,4 +16652,181 @@ cold-start and veteran-decline detection (the subgroups 5A.3's `il_return_blend`
 
 **Acceptance criteria:**
 - [ ] April-window and IL-return subgroup MAE ≤ current band-prior MAE; documented.
+
+---
+
+# Epic 31 — Orthogonal Data Expansion & Utilization
+
+**Thesis (the reason this Epic is shaped the way it is).** The instinct when totals/h2h plateau is "we need
+more data." A 2026-06-15 recon says the opposite is closer to true: **the obvious orthogonal data classes are
+already ingested AND were already wired into older base-model contracts — then pruned by feature selection.**
+
+Concretely, all of these already exist in the warehouse:
+- **Weather** — `ingest_weather.py` + `backfill_observed_weather.py` (wind / temp / humidity / air-density).
+- **Team defense** — `ingest_oaa.py` (Outs Above Average).
+- **Catcher framing** — `ingest_catcher_framing.py` → `mart_catcher_framing`.
+- **Bat-tracking** — `mart_batter_bat_tracking_profile` (bat speed, swing length; ~2024+ coverage).
+- **Granular park factors** — `ingest_savant_park_factors.py` → `eb_park_factors_granular`.
+
+But the **promoted season-normalized contracts dropped most of them.** As of 2026-06-15:
+- `total_runs` ngboost_tuned_seasonnorm (119 cols): `defensive`×2, `bat_speed`×3, `park`×1 — **zero weather,
+  zero OAA, zero framing** on a *run-total* model.
+- `home_win` xgb_tuned_seasonnorm (217 cols): `oaa`×1, `defensive`×1, `bat_speed`×2, `swing_length`×2 —
+  **zero weather, zero framing, zero park.**
+- Older contracts (`*_nonseq`, `*_eb`, `v2`) *did* carry wind/temp/humidity (10 files), OAA (14), framing (3).
+  Feature selection (the market-blind-deadweight / promotion-gate pass) **cut them.**
+
+So the first-order question is **not** "what new data do we ingest" — it's **"were these classes pruned because
+they're genuinely tapped out, or because they were degraded / NULL at serve when feature selection evaluated
+them?"** Feature selection that ran on serve-skewed data (the pre-30.6 world: ~30% of the matrix imputed to
+constants, weather/defense among the sparse-pre-lineup columns) would have *correctly-looking* pruned a feature
+that was simply absent at the evaluated rows — a false negative, not a true one. `[[project_prod_model_audit_jun2026]]`
+`[[project_epic30_3_status]]`
+
+**Consequence for sequencing.** The cheap audit (31.0) runs now. Its *action* items (re-run feature selection,
+re-introduce classes) are **gated on serving honesty (30.6 + 30.12)** — re-running feature selection on still-skewed
+data just re-prunes the same classes. And the deepest "use what we have better" lever is **30.2** (wire sub-model
+*distributional* σ in), which is a *utilization* win, not an ingestion one. Net ordering claim this Epic encodes:
+**utilization + re-evaluation (31.0/31.1/31.2 + 30.2) outranks net-new ingestion (31.3) for both targets**, because
+the orthogonal classes are already on disk.
+
+---
+
+### Story 31.0 — Scoping spike: ingested-data utilization & orthogonality audit  `[Home: Epic 31]`  ⬜ THE GATE
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 31.0 standalone:
+
+```
+You are picking up Story 31.0 of the MLB betting & fantasy project. This is a SCOPING SPIKE — the deliverable
+is an audit + a ranked go/no-go list, NOT model code. Do not retrain anything in this story.
+
+Before writing anything, read end-to-end:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — the Epic 31 thesis + this Story 31.0 section
+     (your contract). Also skim Stories 30.6, 30.12, 30.2.
+  2. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+  3. docs/model_roadmap.md — Phase 1 (serving) and Phase 2 (sub-model quality) ordering.
+
+CONTEXT (the finding that motivates this spike):
+  - The obvious orthogonal data classes are ALREADY ingested (weather: ingest_weather.py +
+    backfill_observed_weather.py; defense: ingest_oaa.py; catcher framing: ingest_catcher_framing.py →
+    mart_catcher_framing; bat-tracking: mart_batter_bat_tracking_profile; granular park: eb_park_factors_granular).
+  - The PROMOTED seasonnorm contracts pruned most of them: total_runs has 0 weather / 0 OAA / 0 framing;
+    home_win has 0 weather / 0 framing / 0 park (verify these counts yourself against
+    betting_ml/models/*/feature_columns_*_tuned_seasonnorm_2026.json — they may have shifted).
+  - The pruning ran during feature selection, possibly on SERVE-SKEWED data (pre-30.6). A class that was
+    NULL/imputed at the evaluated rows would look deadweight even if it carries real signal post-serving-fix.
+
+DELIVERABLE — a markdown report at quant_sports_intel_models/baseball/ablation_results/data_expansion_audit_31_0.md
+containing a single classification table. For EVERY ingested data class (the 5 above + sub-model σ outputs +
+anything else you find ingested-but-unused), assign exactly one bucket and justify it:
+  (A) TAPPED-OUT      — pruned and serve-time coverage is FINE → the prune was honest. Leave out.
+  (B) SKEW-PRUNED     — pruned but serve-time coverage is POOR (sparse/NULL pre-lineup) → false-negative
+                        candidate; flag for re-evaluation in 31.1 AFTER 30.6+30.12.
+  (C) UNDER-WIRED     — carries signal but never reached the promoted contract for a wiring reason (e.g. framing
+                        only in 3 old contracts, 0 promoted) → wire candidate (31.2).
+  (D) NEW-NEEDED      — genuinely not ingested; only the next-marginal class would add it (31.3).
+
+For each row, score: orthogonality to the RETAINED features (correlation against the promoted contract columns —
+a class redundant with what's kept is low-value even if predictive); serve-time coverage % (cross-reference the
+30.12 completeness audit if it exists, else compute null-rate at the morning-serve point-in-time); train-window
+cost (does the class only exist post-20XX → shrinks the clean window); ingest cost (0 for already-on-disk).
+
+METHOD (read-only; all heavy Snowflake hand-offs per conventions):
+  1. Map ingested raw/mart tables → feature_pregame_* models → promoted contracts. grep the contracts for each
+     class's column stems; build the "ingested but not in promoted contract" set.
+  2. For each pruned class, quantify serve-time coverage: the null/impute rate at the point-in-time the morning
+     serve reads it (this is the (A)-vs-(B) discriminator). Reuse the 30.3/30.6 serving_parity harness if present.
+  3. Orthogonality: correlate each candidate class's features against the retained promoted features on a
+     completed-season dense sample; report max |corr| and incremental-information heuristic.
+  4. Rank (B)+(C)+(D) into a single go/no-go list with the gate each is blocked on.
+
+GATE THIS STORY ENFORCES: 31.1/31.2 action items must declare their blocking story (30.6 + 30.12 for re-eval;
+nothing for pure wiring). Do NOT recommend re-running feature selection before serving is honest — say so explicitly
+in the report if 30.6/30.12 are not yet landed.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP with
+fully-qualified db.schema.table names and no USE statements; hand any script/query that runs >1 min back to the
+user to run and show the command; test new Snowflake-querying scripts with real creds before merge; do not git
+commit or push (the user handles git).
+```
+
+**Goal:** Decide, per already-ingested data class, whether the promoted contracts pruned it honestly (tapped-out)
+or wrongly (serve-skew false-negative / under-wired) — and produce a single ranked re-introduction + new-ingest
+list, each tagged with its blocking gate. This converts "should we expand data?" from a guess into a scored list.
+
+**Tasks:**
+- [ ] Build the ingested-class → feature model → promoted-contract map; identify the ingested-but-unused set.
+- [ ] Per pruned class, quantify serve-time coverage (the (A) tapped-out vs (B) skew-pruned discriminator).
+- [ ] Orthogonality score vs retained features (drop redundant candidates even if individually predictive).
+- [ ] Classification table (A/B/C/D) + ranked go/no-go list with per-item blocking gate → `data_expansion_audit_31_0.md`.
+
+**Acceptance criteria:**
+- [ ] Every ingested data class is in exactly one bucket with a coverage number and an orthogonality number behind it.
+- [ ] The report states explicitly that 31.1 re-evaluation is blocked on 30.6 + 30.12 (no feature-selection re-run
+      on skewed data).
+- [ ] Output is a prioritized list consumable directly into the Trello order (this is the spike's whole point).
+
+---
+
+### Story 31.1 — Re-evaluate skew-pruned data classes on honest serving data  `[Home: Epic 31]`  ⬜ GATED (30.6 + 30.12 + 31.0)
+
+**Goal:** For the classes 31.0 buckets as **(B) skew-pruned**, re-run feature selection / promotion-gate *after*
+serving is honest, so a class that was a false-negative (NULL at serve, not signal-free) gets a fair second look.
+
+**Tasks:**
+- [ ] Confirm 30.6 + 30.12 have landed (serve-time coverage of the candidate classes is now dense).
+- [ ] Re-run the market-blind-deadweight / promotion-gate feature selection per target (one `--target` per
+  invocation) with the (B) classes forced back into the candidate pool.
+- [ ] Promote only via the existing champion-delta gate (totals: + the calibration gate `|bias|≤0.25`,
+  `pct_over` gap `≤0.10`); ablate each re-introduced class's marginal contribution.
+
+**Acceptance criteria:**
+- [ ] Each (B) class is either re-admitted with a documented champion-delta win, or confirmed tapped-out on
+  *honest* data (which retires it for good — also a valuable result).
+
+**Gating/sequencing:** Blocked on 30.6 + 30.12 (running this on skewed data re-prunes the same classes — the whole
+point). Sequence in Phase 2, right after 30.2.
+
+---
+
+### Story 31.2 — Wire catcher framing (run-prevention) into the totals + h2h contracts  `[Home: Epic 31]`  ⬜ GATED (31.0)
+
+**Goal:** Framing is the clearest **(C) under-wired** class — present in `mart_catcher_framing`, in only ~3 old
+contracts and **0 promoted** ones, yet it's a run-*prevention* signal and the totals model currently has **zero**
+framing/OAA inputs despite being a run-total model. Wire it as a feature and ablate.
+
+**Tasks:**
+- [ ] Add team/starting-catcher framing-runs features to `feature_pregame_game_features` (leakage-safe AS-OF;
+  season-to-date, no full-season leak).
+- [ ] Add to the totals + h2h candidate pools; retrain per target (one `--target` per invocation); ablate.
+
+**Acceptance criteria:**
+- [ ] Framing clears the champion-delta gate on at least one target, or is documented as redundant with the
+  retained run-prevention features (OAA/bullpen) — orthogonality justified, not assumed.
+
+**Gating/sequencing:** Pure wiring → only soft-gated on 31.0's orthogonality finding (skip if 31.0 shows framing is
+redundant with OAA). Can run independently of the serving fix since it's additive, but its *live* payoff still waits
+on 30.6 like all offline gains.
+
+---
+
+### Story 31.3 — Genuinely-new-class scouting (prospect arsenal · injury/roster · run-env)  `[Home: Epic 31]`  ⬜ GATED (31.0) · LOW
+
+**Goal:** The **(D) new-needed** bucket — the only items requiring net-new ingestion. Scope, don't build.
+
+**Tasks:**
+- [ ] Minor-league / prospect arsenal data → directly feeds **Story 7.6** cold-start (the ~24.7% unclustered-starter
+  gap); evaluate as 7.6's data source, not a standalone class.
+- [ ] Real-time injury / roster-news feed → late-scratch and bullpen-availability signal (complements 30.6's
+  serve-time freshness).
+- [ ] Fold **Story 27.9** (exogenous ball-CoR / drag run-environment leading indicator) in as the run-env member
+  of this bucket — it is already specced as a spike; 31.3 just tracks it under the same orthogonality lens.
+
+**Acceptance criteria:**
+- [ ] Each candidate has a coverage + train-window + ingest-cost estimate and a go/no-go, ranked against re-using
+  what 31.0 already found on disk (the bar a new class must clear).
+
+**Gating/sequencing:** LOW — only pursue a (D) item once the (B)/(C) re-use list (31.1/31.2) is exhausted, since
+re-using ingested data is strictly cheaper than new ingestion. 27.9 may proceed independently on curiosity per its
+own spec.
 
