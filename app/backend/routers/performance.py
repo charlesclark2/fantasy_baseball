@@ -150,30 +150,44 @@ def get_performance_by_model() -> PerformanceByModelResponse:
 
 _MODEL_METRICS_QUERY = """
 SELECT
-    YEAR(game_date)                                           AS season,
-    market_type,
-    COUNT(*)                                                  AS n_predictions,
-    AVG(POWER(model_prob - actual_outcome, 2))                AS brier_score,
-    AVG(clv)                                                  AS avg_clv,
-    AVG(CASE WHEN clv_positive THEN 1.0 ELSE 0.0 END)        AS clv_positive_pct,
-    AVG(actual_outcome)                                       AS win_rate
-FROM baseball_data.betting.mart_clv_labeled_games
-WHERE actual_outcome IS NOT NULL
+    YEAR(m.game_date)                                             AS season,
+    m.market_type,
+    COUNT(*)                                                      AS n_predictions,
+    AVG(POWER(m.model_prob - m.actual_outcome, 2))               AS brier_score,
+    AVG(m.clv)                                                    AS avg_clv,
+    AVG(CASE WHEN m.clv_positive THEN 1.0 ELSE 0.0 END)          AS clv_positive_pct,
+    AVG(m.actual_outcome)                                         AS win_rate
+FROM baseball_data.betting.mart_clv_labeled_games m
+LEFT JOIN (
+    SELECT game_pk, MAX(CASE WHEN is_degraded THEN 1 ELSE 0 END) AS is_degraded
+    FROM baseball_data.betting_ml.daily_model_predictions
+    GROUP BY game_pk
+) d ON m.game_pk = d.game_pk
+WHERE m.actual_outcome IS NOT NULL
   {season_filter}
+  {degraded_filter}
 GROUP BY 1, 2
 ORDER BY 1, 2
 """
 
 
 @router.get("/model", response_model=ModelMetricsResponse)
-def get_model_metrics(season: Optional[int] = None) -> ModelMetricsResponse:
-    cache_key = f"performance/model_{season or 'all'}.json"
+def get_model_metrics(
+    season: Optional[int] = None,
+    include_degraded: bool = False,
+) -> ModelMetricsResponse:
+    degrad_tag = "incl" if include_degraded else "excl"
+    cache_key = f"performance/model_{season or 'all'}_{degrad_tag}.json"
     cached = get_cache(cache_key)
     if cached is not None:
         return ModelMetricsResponse(**cached)
 
-    season_filter = "AND YEAR(game_date) = %(season)s" if season else ""
-    query = _MODEL_METRICS_QUERY.format(season_filter=season_filter)
+    season_filter = "AND YEAR(m.game_date) = %(season)s" if season else ""
+    degraded_filter = "" if include_degraded else "AND COALESCE(d.is_degraded, 0) = 0"
+    query = _MODEL_METRICS_QUERY.format(
+        season_filter=season_filter,
+        degraded_filter=degraded_filter,
+    )
     params = {"season": season} if season else None
 
     try:
