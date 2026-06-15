@@ -32,6 +32,29 @@ echo "Region   : $REGION"
 [[ "$DRY_RUN" == "true" ]] && echo "Mode     : DRY RUN (skipping AWS CLI)"
 echo ""
 
+# ── 0. Import smoke test (fail-fast pre-flight) ───────────────────────────────
+# Guards against shipping code that crashes the Lambda at INIT. On 2026-06-15 a
+# missing `from fastapi import Depends` made app.backend.main fail at import time,
+# so every route 500'd (init crash) — yet packaging/zipping succeeded blindly and
+# the broken tree reached prod. We catch it here by actually IMPORTING the app:
+#   - `python -m py_compile` is NOT enough — a missing-name (NameError) at module
+#     load is not a syntax error, so it compiles fine and still crashes on import.
+#   - We import the SOURCE tree with the local interpreter (cwd = repo root, so
+#     `app.backend.main` resolves to ./app/backend/main.py — exactly what step 3
+#     copies into the package). The PACKAGED deps are Linux-only manylinux wheels
+#     that cannot import on macOS, so we deliberately test source-against-host-env.
+#   - Importing is side-effect-safe: routers/services (incl. pg) define lazily and
+#     do not open connections at import, so this needs no DB/network access.
+# `set -e` aborts the deploy on any non-zero exit, printing the offending traceback.
+echo "Running import smoke test (app.backend.main)..."
+SMOKE_PY='import app.backend.main; print("  smoke test OK: app.backend.main imports clean")'
+if command -v uv >/dev/null 2>&1; then
+  uv run python -c "$SMOKE_PY"
+else
+  python3 -c "$SMOKE_PY"
+fi
+echo ""
+
 # ── 1. Clean previous build ──────────────────────────────────────────────────
 rm -rf .lambda_build
 mkdir -p "$PACKAGE_DIR"
