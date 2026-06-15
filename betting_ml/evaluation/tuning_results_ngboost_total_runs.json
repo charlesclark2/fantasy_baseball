@@ -5,29 +5,29 @@
     {
       "n_estimators": 200,
       "dist": "Normal",
-      "cv_mae": 3.3643362986616197,
+      "cv_mae": 3.351713735635362,
       "viable": true,
       "lognormal_note": null
     },
     {
       "n_estimators": 500,
       "dist": "Normal",
-      "cv_mae": 3.325100843168874,
+      "cv_mae": 3.3112626531399165,
       "viable": true,
       "lognormal_note": null
     }
   ],
   "best_n_estimators": 500,
   "best_dist": "Normal",
-  "best_cv_mae": 3.325100843168874,
+  "best_cv_mae": 3.3112626531399165,
   "exclude_sequential": false,
-  "mlflow_run_id": "2dab019ba844485dbca3a2cf64d1d2cc",
+  "mlflow_run_id": "6df1d6e6463b48a0a44de7e4febdf595",
   "persisted_models": [
     {
       "target": "total_runs",
-      "model_name": "ngboost_tuned_seasonnorm",
+      "model_name": "ngboost_tuned_seasonnorm_wx",
       "eval_year": 2026,
-      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_seasonnorm_2026.pkl"
+      "path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_seasonnorm_wx_2026.pkl"
     }
   ]
 }

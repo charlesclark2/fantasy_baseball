@@ -63,7 +63,19 @@ starters as (
     from probable
     where year(game_date) between 2016 and year(current_date())
     {% if is_incremental() %}
-      and game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
+      -- Anchor the incremental window to PROCESSING time, NOT max(game_date).
+      -- Incident 2026-06-15: the spine (stg_statsapi_probable_pitchers) carries a
+      -- handful of far-future ANNOUNCED starters (marquee games months out), so
+      -- max(game_date) ran to 2026-09-22 and `max-7` = 2026-09-15 — every
+      -- incremental run skipped TODAY's slate entirely. The table held only 12
+      -- stray future-dated rows; today's 20 starters had no posterior →
+      -- home/away_starter_eb_xwoba_against served 100% NULL, re-breaking the exact
+      -- serving block Story 30.6 fixed. (The batter/bullpen EB models use the same
+      -- pattern but their spines are SETTLED game logs, so max(game_date) ≈ the
+      -- latest completed game and the window is correct — only the forward-looking
+      -- probable-pitcher spine poisons it.) current_date()-7 always recomputes the
+      -- recent window + all upcoming announced starters.
+      and game_date >= dateadd('day', -7, current_date())
     {% endif %}
 ),
 

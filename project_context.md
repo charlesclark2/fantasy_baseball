@@ -831,15 +831,15 @@ NGBoost outputs a full parametric distribution per prediction — P(total_runs >
 #### Card 4.12e Results — NGBoost run_differential Hyperparameter Tuning (Grid Search)
 
 - **best_ngboost_config_run_diff:** {n_estimators: 1000, dist: Normal}
-- **Best CV MAE:** 3.0591
+- **Best CV MAE:** 3.0623
 - **lognormal_viable:** false
-- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=1000, dist=Normal, CV MAE=3.0591; model persisted via model_io.py as `ngboost_tuned`.
+- **Summary:** NGBoost grid search (6 combos: 3 n_estimators × 2 distributions) for run_differential; LogNormal non-viable due to negative target support; best config n_estimators=1000, dist=Normal, CV MAE=3.0623; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12d Results — NGBoost total_runs Hyperparameter Tuning (Grid Search)
 
 - **best_ngboost_config_total_runs:** {n_estimators: 500, dist: Normal}
-- **Best CV MAE:** 3.3251
-- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=Normal with CV MAE=3.3251; model persisted via model_io.py as `ngboost_tuned`.
+- **Best CV MAE:** 3.3113
+- **Summary:** NGBoost grid search (4 combos: 2 n_estimators × 2 distributions) identified best config as n_estimators=500, dist=Normal with CV MAE=3.3113; model persisted via model_io.py as `ngboost_tuned`.
 
 #### Card 4.12c Results — XGBoost home_win Hyperparameter Tuning (Optuna TPE)
 
@@ -3646,10 +3646,10 @@ Apply a monotone uncertainty discount to the Kelly fraction at bet-sizing time, 
 
 #### XGBoost home_win — Hyperparameter Tuning Results (Optuna TPE)
 
-- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.1952 vs baseline=0.2459)
-- **Baseline Brier:** 0.2459 | **Tuned Brier:** 0.1952 | **Change:** +20.60%
-- **Best params:** max_depth=4, learning_rate=0.0310, n_estimators=355, subsample=0.805, colsample_bytree=0.895, reg_alpha=0.461, reg_lambda=0.736
-- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.1952 vs baseline=0.2459 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
+- **xgb_win_outcome_improved:** True — XGBoost home_win Brier improved ✓ (tuned=0.1951 vs baseline=0.2459)
+- **Baseline Brier:** 0.2459 | **Tuned Brier:** 0.1951 | **Change:** +20.64%
+- **Best params:** max_depth=6, learning_rate=0.0169, n_estimators=285, subsample=0.740, colsample_bytree=0.612, reg_alpha=0.398, reg_lambda=0.968
+- **Summary:** Optuna TPE (50 trials) tuned XGBoost (Platt) for home_win; tuned Brier=0.1951 vs baseline=0.2459 — improved ✓; tuned model persisted via model_io.py as `xgb_classifier_tuned`.
 - **Full results:** `betting_ml/evaluation/hyperparameter_tuning_xgb_home_win.md`, `betting_ml/evaluation/tuning_results_xgb_home_win.json`
 
 #### Card 8.G — Production Web Application (moved from Card 7.2)

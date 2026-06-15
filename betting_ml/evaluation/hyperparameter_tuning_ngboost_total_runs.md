@@ -7,16 +7,16 @@ Evaluation metric: mean absolute error (MAE) across temporal CV splits (min_trai
 
 | n_estimators | Dist | CV MAE | Viable |
 |-------------|------|--------|--------|
-| 200 | Normal | 3.3643 | Yes |
-| 500 | Normal | 3.3251 | Yes |
+| 200 | Normal | 3.3517 | Yes |
+| 500 | Normal | 3.3113 | Yes |
 
-**Best viable configuration:** n_estimators=500, dist=Normal, CV MAE=3.3251
+**Best viable configuration:** n_estimators=500, dist=Normal, CV MAE=3.3113
 
 ## Best NGBoost Configuration
 
 - **best_n_estimators:** 500
 - **best_dist:** Normal
-- **CV MAE:** 3.3251
+- **CV MAE:** 3.3113
 
 ## Persisted Model
 
@@ -24,7 +24,7 @@ The best NGBoost model was retrained on the last CV fold's training split and pe
 
 | Target | Model Name | Eval Year | Path |
 |--------|------------|-----------|------|
-| total_runs | ngboost_tuned_seasonnorm | 2026 | `/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_seasonnorm_2026.pkl` |
+| total_runs | ngboost_tuned_seasonnorm_wx | 2026 | `/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/betting_ml/models/total_runs/ngboost_tuned_seasonnorm_wx_2026.pkl` |
 
 Model saved successfully. ✓ (persisted)
 

@@ -10445,7 +10445,7 @@ These are cosmetic polish items and do not block any functionality.
 
 ---
 
-#### A0.4.11 — Settings: wire user profile + notification preferences ⬜  **[P1]**
+#### A0.4.11 — Settings: wire user profile + notification preferences ✅ (2026-06-15)  **[P1]**
 
 Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist. `alert_timing` and `hours_before_game` have no backend model yet — keep as local state.
 
@@ -10681,6 +10681,15 @@ Other fixes shipped alongside (not part of A0.4.14 proper):
 - [ ] Add Cognito `admin` group check to admin routes (or API Gateway route-level authorizer)
 - [ ] Read `userEmail` from `useAuth()` in the admin page Nav call
 - [ ] Test against prod API — confirm status cards, run table, and model freshness show real data
+
+**Blog WYSIWYG editor (decided 2026-06-15, to be implemented as part of this story):**
+- Storage: **DynamoDB** `blog_posts` table (consistent with existing bets/users infra)
+- Image uploads: **S3 presigned URL** flow — admin selects a file, frontend requests a presigned PUT URL from the API, uploads directly to S3, and the returned S3 object URL is inserted inline into the editor as an `<img>` src
+- Editor library: **TipTap** (React-first, has Image extension, outputs HTML, MIT licensed)
+- Layout: split-pane — editor on the left, live rendered HTML preview on the right
+- Post list management: list existing posts with edit/delete actions
+- Home page hook: the latest published post (title + excerpt + link) should appear as a teaser section on the landing page — driven by `GET /blog/posts?limit=1&published=true`
+- New backend endpoints needed: `GET /blog/posts`, `POST /blog/posts`, `PUT /blog/posts/{id}`, `DELETE /blog/posts/{id}`, `POST /blog/upload-image` (returns presigned S3 URL)
 
 **Acceptance criteria:**
 - [ ] Status cards show real pipeline status from `GET /pipeline/status`; `indicator` field drives the status dot color
@@ -11196,6 +11205,74 @@ Basic legal pages are required before collecting any user data via PostHog/Sentr
 - [x] Security headers deployed to production — A grade on securityheaders.com
 - [x] `.env` files absent from git history
 - [x] Lambda role scope documented in `aws_resources.md`
+
+---
+
+#### A0.4.26 — Weekly changelog page ⬜  **[P2]**
+
+Surface a user-facing `/changelog` page that shows incremental product improvements week by week. The goal is to demonstrate to users that the product is actively improving, and to give the admin a source of truth to reference in Monday blog posts.
+
+**Dependencies:** A0.4.13 complete (footer links, site-footer component)
+
+**Design decisions (locked 2026-06-15):**
+- Data source: **static JSON file** (`frontend/data/changelog.json`) — changelog entries are short labeled snippets, not rich text; version-controlled and zero-backend
+- Entry format: `{ week: "YYYY-MM-DD", title: "Week of ...", items: [{ tag, text }] }`
+- Tags: `new` (emerald), `improvement` (blue), `fix` (amber), `model` (purple), `data` (gray)
+- Admin workflow: edit `changelog.json` in the repo each week → deploy → reference `/changelog` in Monday blog post
+- No backend needed; no DynamoDB; renders as a static Next.js Server Component page
+
+**Tasks:**
+
+- [ ] Create `frontend/data/changelog.json` with the first entry covering the current week's shipped features (A0.4.11, A0.4.13 footer/FAQ/Contact, umpire feed fix, etc.)
+- [ ] Create `frontend/app/changelog/page.tsx` — Server Component; imports the JSON; renders week-by-week entries with tag badges; metadata title "Changelog — Credence Sports"
+- [ ] Tag badge colors: `new` → emerald (`bg-[#10b981]/15 text-[#10b981]`), `improvement` → blue (`bg-blue-500/10 text-blue-400`), `fix` → amber (`bg-amber-500/10 text-amber-400`), `model` → purple (`bg-purple-500/10 text-purple-400`), `data` → gray (`bg-[#262626] text-gray-400`)
+- [ ] Add "Changelog" link to `frontend/components/site-footer.tsx` (alongside FAQ, Blog, Privacy, Terms, Contact)
+- [ ] Add "What's New" dot indicator to the authenticated sub-nav in `frontend/components/nav.tsx` — show an emerald dot badge on the "Changelog" link when the latest entry's `week` date is within the last 7 days; link href `/changelog`
+- [ ] Add Changelog to `ActiveLink` type in `nav.tsx`
+
+**Entry format (reference):**
+```json
+[
+  {
+    "week": "2026-06-09",
+    "title": "Week of June 9",
+    "items": [
+      { "tag": "model", "text": "Umpire feature null rate dropped from 34.6% to 1.1% after new UmpScorecards feed" },
+      { "tag": "new", "text": "FAQ, Contact, and Changelog pages added to the site" },
+      { "tag": "improvement", "text": "Footer now visible on all authenticated pages" },
+      { "tag": "improvement", "text": "Settings page wired to real notification preferences — email and push toggles now persist" },
+      { "tag": "improvement", "text": "\"Join Beta\" replaced with \"Request Access\" email link; private beta context added to landing page" }
+    ]
+  }
+]
+```
+
+**Acceptance criteria:**
+- [ ] `/changelog` renders all entries from the JSON file with correct tag colors
+- [ ] Footer contains a "Changelog" link
+- [ ] Authenticated sub-nav shows a "What's New" dot when the latest entry is ≤7 days old
+- [ ] Adding a new entry to `changelog.json` and deploying is the only step required to update the page
+- [ ] Page is accessible to unauthenticated users (no auth guard)
+
+**Session prompt:**
+```
+You are working on Credence Sports — an MLB betting analytics web app. Frontend: Next.js 16.2.6 App Router, React 19, TypeScript, shadcn/ui, Tailwind CSS v4. Repo root: baseball_betting_and_fantasy/.
+
+Task: A0.4.26 — Weekly changelog page.
+
+Files to read first:
+- frontend/components/site-footer.tsx
+- frontend/components/nav.tsx
+- frontend/app/faq/page.tsx  (reference for page layout style)
+
+Work:
+1. Create frontend/data/changelog.json with the first weekly entry (week: "2026-06-09", items covering shipped features from the past week — umpire feed fix, FAQ/Contact pages, footer visibility fix, settings page wiring, Request Access CTA change)
+2. Create frontend/app/changelog/page.tsx as a Server Component: import the JSON, render each week as a section with a date header and a list of tag+text items; tag badge colors: new=emerald, improvement=blue, fix=amber, model=purple, data=gray
+3. Add "Changelog" link to frontend/components/site-footer.tsx (same style as existing nav links)
+4. In frontend/components/nav.tsx: add "changelog" to the ActiveLink type; add a "What's New" item to SUB_NAV_ITEMS with href="/changelog" and an emerald dot that appears when the latest changelog.json entry's week date is within 7 days of today (compute with Date comparison; import the JSON directly)
+
+Done when: /changelog renders entries with correct badge colors, footer links to it, and the sub-nav shows the dot for a recent entry.
+```
 
 ---
 
@@ -12872,10 +12949,13 @@ real creds before merge; do not git commit or push; in-process Dagster ops may o
 - [x] **D1 — ✅ SHIPPED 2026-06-15** — added `run_monitoring: {enabled: true, max_runtime_seconds: 14400}` (4h) to `dagster_home/dagster.yaml`. Global cap on EVERY run, incl. ad-hoc `__ASSET_JOB` materializations → a hung/runaway run self-terminates at 4h instead of the 16h that was 44% of trial compute. Tunable; per-job override via `dagster/max_runtime` tag. User deploys (agent restart).
 - [ ] **D2 — SHARED with A2.15:** reduce `odds_snapshot` cadence (`*/30`→`*/60`, or gate on odds movement) and gate `lineup_monitor` rebuilds on actual new-lineup arrival. These are the top-2 recurring drivers on BOTH bills.
 - [x] **D3 — ✅ RESOLVED 2026-06-15.** (catchup half via A2.15-L1: `catchup_dbt_rebuild` now `dbtf run`, ending the test-failure-since-06-11 + its 3× retries.) **`daily_ingestion` 29% investigated** (Dagster GraphQL, 12 failed runs over the trial): NOT one systemic bug — scattered across 9 steps, inflated by re-run clusters (06-02 had 4 failed runs in ~20min). Breakdown: (a) external-API ingests `ingest_weather`/`ingest_umpires_late`/`settle_user_bets` were already soft-failed (those failures predate the fixes); (b) `dbt_pregame_odds_rebuild` test-failures (06-03) are killed by A2.15-L1 (`build`→`run`); (c) `ingest_oaa` was the one remaining hard-failing non-critical external-API op → **now soft-failed** (mirrors weather; OAA is slow-moving + imputes); (d) `generate_*_signals_op` + Sunday `dbt_daily_build` failures are **fail-SAFE by design** (signal-freshness gate + data-quality tests catching real issues — correct to fail, not waste). Net: after this fix the only remaining hard-fails are the intentional safety gates.
-- [ ] **D4 — consolidate the 868 tiny runs:** do `intraday_schedule` (542) + `intraday_weather` (326) need separate every-30-min jobs? Merge into fewer/less-frequent runs to amortize Serverless per-run startup overhead.
+- [ ] **D4 — reduce cadence on the high-frequency cheap jobs:** `intraday_schedule` (542 runs) every 30min → hourly daytime ≈ halves the runs. NOTE (corrected 2026-06-15): this is **Hybrid** (`DagsterCloudAgentInstance` + `ProcessUserCodeLauncher`), so billing ≈ **run-minutes** (3,673 cr ≈ 4,452 run-min), NOT Serverless per-run container startup — so D4's value is the run-MINUTES saved, modest. Tradeoff: ~1h-later postponement detection.
+- [ ] **D5 — `@dbt_assets` footgun (surfaced by narev.ai "lower your Dagster bill" 2026-06-15):** `pipeline/assets/dbt_assets.py` `baseball_dbt_assets` uses `dbt.cli([...], context=context).stream()` → emits 117 per-model materializations per run, and is the asset behind BOTH 16h `__ASSET_JOB` runaways (manual-only; no schedule materializes it; redundant with the op-based `dbtf` builds). On Hybrid it's billed by minutes (D1's 4h cap now contains it) so NOT urgent — but it's a latent liability if we ever move to Serverless or Dagster extends per-materialization pricing. Fix: **(a) remove it** if manual full-rebuilds aren't used (ops already cover dbt build), or **(b) collapse the pattern** (drop `context=context` / use `.wait()` → one materialization, not 117). Low priority.
+  - *Article verdict: the narev.ai collapse tactic is **Serverless-specific** and does NOT apply to our recurring cost — we're Hybrid (per-run-minute) and the recurring pipeline is op-based (`_run_dbt` subprocess, zero per-model materializations), i.e. already "collapsed." It only validated that run-minute reduction (A2.16) is the right Hybrid lever, + flagged D5.*
+- [x] **D6 — ✅ SHIPPED 2026-06-15 (hanging-job incident).** A wedged `lineup_dbt_clv_rebuild` `dbtf run` (client-side process wedge — no active Snowflake query) hung its run indefinitely (no subprocess timeout), and the 10-min lineup sensor stacked **3 overlapping runs** that contended on the same Snowflake tables and multiplied run-minutes — the exact "silent runaway" D1 only half-caught (D1's 4h cap is far too coarse for a 10-min-cadence job). **Two-part fix:** (a) **subprocess hard timeout** — `_SUBPROCESS_TIMEOUT = 1800s` (30 min) on both `_run`/`_run_dbt`/`_run_script` in `pipeline/ops/sensor_ops.py`, so a wedge fails fast/visible/retryable instead of hanging; (b) **run-level concurrency cap** — `concurrency_group` run tag on all three sensor jobs (`pipeline/jobs/sensor_jobs.py`) + `run_queue.tag_concurrency_limits` (applyLimitPerUniqueValue → 1) in the new `dagster_home/deployment_settings.yaml`, so overlapping triggers QUEUE behind the in-flight run instead of stacking. **Deploy:** (a) lands on agent rebuild; (b) the tag lands on agent rebuild but the **limit only takes effect once the deployment-settings file is pushed** (`dagster-cloud deployment settings set-from-file …`, or UI Deployment→Settings) — set-from-file REPLACES the whole doc, so get-merge-set. This is the canonical Dagster+ home for run_queue **and** run_monitoring (agent dagster.yaml can't host run_queue).
 
 **Acceptance criteria:**
-- [ ] A run-timeout guard exists; no run can silently exceed a sane cap (e.g. 2h) without alerting.
+- [ ] A run-timeout guard exists; no run can silently exceed a sane cap (e.g. 2h) without alerting. *(D1 4h global cap + D6 30-min per-subprocess ceiling + D6 run-concurrency cap so a single wedge can't stack runs.)*
 - [ ] Recurring run-minutes drop measurably vs the May 19–Jun 14 baseline at the 2026-06-22 re-audit; `daily_ingestion`/`statcast_catchup` failure rate falls.
 - [ ] Cross-referenced with A2.15 so shared levers (D2/D3) aren't double-implemented.
 
@@ -15361,6 +15441,44 @@ to run and show the command; do not git commit or push (the user handles git).
 **Status:** 🟡 GATE-CHECK IN PROGRESS 2026-06-14 (EPIC-SIZED) — specced 2026-06-11 from the Story 30.3 finding.
 **Gated:** do NOT build snapshot infra until the A-vs-B gate check confirms serving (not an illusory ceiling).
 
+**⭐ VERIFICATION 2026-06-15 (operator "verify right away" before the 1–2-week skill window) — Levers 1+2 OK, but a NEW regression found + fixed.**
+- ✅ **Lever 1 (starter identity):** today's slate `home/away_starter_pitcher_id` **0% null at all horizons**. Holding.
+- ✅ **Lever 2 (post-lineup rebuilds starter_features):** DEPLOYED + running — today's 15:48 `lineup_dbt_feature_rebuild`
+  `--select` includes `eb_starter_posteriors eb_batter_posteriors_raw feature_pregame_starter_features … game_features`.
+- ❌ **CRITICAL: starter-EB *posterior* block serves 100% NULL** (today 10/10 games; settled 06-10→06-14 also 100% null;
+  offense-EB 2/10 & bullpen-EB 0/10 = fine, so it's starter-only). **Root cause = A2.11 incremental-watermark bug in
+  `dbt/models/eb_posteriors/eb_starter_posteriors.sql`:** the spine `stg_statsapi_probable_pitchers` carries a few
+  far-future announced starters, so `max(game_date)` ran to **2026-09-22** and the incremental filter
+  `game_date >= max-7` (= 2026-09-15) **skipped today's slate every run** → table held only **12 stray future-dated
+  rows**; only **1 of today's 20 starters** had a posterior. So 30.6's identity fix (which pitcher) was intact but the
+  *quality* signal (how good that pitcher = `starter_eb_xwoba_against`) served null — re-breaking the serving block.
+  **FIX SHIPPED:** re-anchored the incremental window to **`current_date()-7`** (processing-time, immune to the
+  forward-looking spine). Sibling batter/bullpen EB models share the pattern but their spines are settled game logs
+  (max(game_date) ≈ latest completed game) → not affected; left unchanged. `dbtf parse` clean.
+  **HAND-OFF (rebuild — >1 min):** `dbtf run --select eb_starter_posteriors feature_pregame_starter_features feature_pregame_game_features --project-dir dbt --profiles-dir dbt`
+  (incremental w/ the fixed filter repopulates today + recent + upcoming → serve goes dense; the model deploys durably
+  on the next agent rebuild since the lineup/daily jobs already rebuild it). **FOLLOW-UP (before any retrain using
+  starter-EB):** DROP + full rebuild to backfill 2016-current history (currently absent → offline/training surface is
+  also starter-EB-degraded right now). Connects to [[project_posterior_staleness_jun2026]] — the recurring class.
+  **Live-skill re-measure (`honest_live_skill.py`) is only meaningful AFTER this rebuild lands** — otherwise the
+  1–2-week window would have measured a still-null starter block and shown no lift.
+- ✅ **RESOLVED + VALIDATED 2026-06-15.** After the watermark fix, `eb_starter_posteriors` rebuilt to **280 rows /
+  166 pitchers** (was 12) and `feature_pregame_starter_features` went 0% null. **But a SECOND propagation hop was
+  missing:** `feature_pregame_game_features` is a passthrough of `feature_pregame_game_features_raw` (a TABLE, not
+  ephemeral) — `_raw` does the actual home/away starter+lineup JOINs. Rebuilding `game_features` without `_raw` left
+  it passing through the stale `_raw`. After rebuilding `feature_pregame_game_features_raw feature_pregame_game_features`,
+  served `home/away_starter_eb_xwoba_against` is **0% null today + 06-14 + tomorrow (avg ~0.32)** — serve fully dense. ✅
+- ⭐ **DURABILITY FIX (the recurrence cause) — `_raw` was MISSING from BOTH targeted rebuild `--select` lists:** the
+  morning `dbt_umpire_feature_rebuild` (`daily_ingestion_ops.py`) AND the post-lineup `lineup_dbt_feature_rebuild`
+  (`sensor_ops.py`) rebuilt the upstream `starter/lineup` feature tables + `game_features` but NOT `_raw` — so fresh
+  upstream values never reached the serve until the next FULL `dbtf build`. **Added `feature_pregame_game_features_raw`
+  to both selects (2026-06-15).** ⭐ Prime suspect for 30.6's open **"post_lineup serve still coinflip"** symptom — the
+  post-lineup re-score rebuilt confirmed-lineup features into a `_raw` it never refreshed, so the actionable bet never
+  saw them. **Deploy-pending (agent rebuild)** lands the watermark fix + both `_raw` select additions. **FOLLOW-UPS:**
+  (1) re-score TODAY so today's picks ride the dense matrix; (2) DROP + full `eb_starter_posteriors` rebuild to backfill
+  2016-current before any starter-EB retrain; (3) a freshness guard so empty `eb_starter_posteriors` / null starter-EB
+  can't recur silently. **NO base-model retrain needed (30.6 = fix serving density, NOT train-on-sparse).**
+
 **GATE-CHECK FINDINGS (2026-06-14):**
 - **The n≥30 live-skill gate CLEARED.** Honest surface (`prediction_type='post_lineup' AND data_source='feature_store'`,
   `is_backfill=FALSE`) now has **n=49** settled 2026 home_win games: **Brier 0.275, corr 0.074, acc 0.551** — weakly
@@ -15988,7 +16106,7 @@ and the ⚠️ flag is the user-facing mitigation.
 
 ---
 
-### 30.12 — Feature-store completeness audit & backfill-degradation policy  `[Home: Epic 30 / data-quality]`  ⬜
+### 30.12 — Feature-store completeness audit & backfill-degradation policy  `[Home: Epic 30 / data-quality]`  ✅ DONE 2026-06-14
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.12 standalone:
 ```
@@ -16016,8 +16134,10 @@ Conventions: dbtf not dbt; Snowflake via MCP only, fully-qualified, no USE; hand
 test Snowflake scripts with real creds before merge; do not git commit/push (user does).
 ```
 
-**Status:** 🟡 STARTED 2026-06-14 (parallel to 30.9). Distinct from A0.4.15 (that is a USER-FACING "report a
-data issue" widget; this is a backend feature-store completeness audit).
+**Status:** ✅ DONE 2026-06-14 (all 4 tasks + all ACs complete; Task 4 perf-page done in the app session). Two
+spillover actions handed to other stories: `left_ft`→`left_line_ft` swap folds into run_diff's next retrain;
+pitcher-cluster coverage promoted to Story 7.6. Distinct from A0.4.15 (USER-FACING "report a data issue" widget;
+this was the backend feature-store completeness audit).
 
 **EARLY FINDING (verified via Snowflake MCP, 2026-06-14) — the pythagorean floor is 2024-ONLY, not structural.**
 `pythagorean_win_exp_diff` mid-season null-rate: **2024 = 6.9/6.7/6.5/6.3/6.8% (May–Sep)** but **2025 = 0% and
@@ -16754,7 +16874,19 @@ the orthogonal classes are already on disk.
 
 ---
 
-### Story 31.0 — Scoping spike: ingested-data utilization & orthogonality audit  `[Home: Epic 31]`  ⬜ THE GATE
+### Story 31.0 — Scoping spike: ingested-data utilization & orthogonality audit  `[Home: Epic 31]`  ✅ DONE 2026-06-15
+
+**RESULT (full report: `ablation_results/data_expansion_audit_31_0.md`):** Mostly **tapped out** on base-model data,
+with ONE real exception. **⭐ WEATHER = (C) broken pipeline** — raw weather is plentiful (`STATSAPI.WEATHER_RAW`
+26.6k rows) but `stg_weather_raw_snapshots` collapses it to ~440 → 396 feature rows (~4%), so `temp_f/wind/humidity`
+read **100% NULL 2023–25, 65% NULL 2026** and feature-selection had nothing to keep. Fix the staging join → a genuine
+**totals** run-environment signal (→ spawn a weather-repair story; gate promotion on champion-delta + totals calib).
+**Everything else NO-GO:** framing (redundant w/ retained `catcher_defensive_runs`), sprint/defense-quality (~80%
+avail, dropped = tapped-out), wRC+/fWAR (redundant w/ wOBA), public-betting% (by-design **Layer-4** meta-model, not a
+base gap). **team-OAA-for-totals** = cheap forced-ablation, low prior. **Zero (B) skew-pruned** false-negatives ⇒
+**31.1 is effectively a no-op** for these classes. **H2H: no data rescue** (reinforces the 5+ no-edge confirmations →
+pivot h2h energy to bet-selection/Layer-4). **Totals: weather is the only new-data win; the rest is the variance/
+architecture track (30.2 → Epic 32).**
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 31.0 standalone:
 
@@ -16870,6 +17002,14 @@ framing/OAA inputs despite being a run-total model. Wire it as a feature and abl
 redundant with OAA). Can run independently of the serving fix since it's additive, but its *live* payoff still waits
 on 30.6 like all offline gains.
 
+**Related closed item — Team OAA for totals (❌ NO SIGNAL, 2026-06-15):** The sibling run-prevention candidate
+(`team_oaa_blended/prior`) is **deadweight for totals**, confirmed two ways without a retrain — Story 30.4b's
+multivariate deadweight ablation (joint ΔMAE −0.0015) **and** a direct univariate check (combined-OAA vs total
+runs corr −0.023 over 12,677 games). It stays in the totals deadweight exclusion and is **not** added to the
+Story 31.4 weather-retrain candidate pool. Run-prevention signal for totals already lives in bullpen xwOBA /
+pitcher quality; framing (above) is the only remaining run-prevention class worth a wiring test, and only if 31.0's
+redundancy caveat doesn't apply.
+
 ---
 
 ### Story 31.3 — Genuinely-new-class scouting (prospect arsenal · injury/roster · run-env)  `[Home: Epic 31]`  ⬜ GATED (31.0) · LOW
@@ -16891,4 +17031,185 @@ on 30.6 like all offline gains.
 **Gating/sequencing:** LOW — only pursue a (D) item once the (B)/(C) re-use list (31.1/31.2) is exhausted, since
 re-using ingested data is strictly cheaper than new ingestion. 27.9 may proceed independently on curiosity per its
 own spec.
+
+---
+
+### Story 31.4 — Weather pipeline repair (historical backfill via observed-at-first-pitch)  `[Home: Epic 31]`  🟡 PIPELINE FIXED 2026-06-15 · retrain pending
+
+**Goal:** 31.0 flagged weather as the single genuine new-totals signal on disk but mis-labelled the cause as a
+"broken join." The real cause (confirmed 2026-06-15): `feature_pregame_weather_features` only carried **396 games**
+because the whole SCD-2 chain filters `weather_observation_type = 'forecast_pregame'`, an observation type that
+**only exists from 2026-05-01** (Epic T.2). The abundant 2021–2025 history is all `observed_at_first_pitch`
+(~2,300 games/yr, 100% populated on temp/wind/humidity) and was excluded *by design* to avoid a train/serve
+mismatch. The fix is a **modeling decision, not a join repair**: train on historical `observed_at_first_pitch`,
+serve on live `forecast_pregame`.
+
+**Why the substitution is safe (quantified on the 406 2026 games that have both):** temp MAE 2.1°F / corr **0.97**
+(bias +0.3°F); wind MAE 2.0 mph / corr **0.73** (bias +0.6 mph); humidity MAE 8.1%. Near-unbiased for the
+run-environment drivers that matter to totals — the forecast is a faithful stand-in for the realized observation.
+
+**What shipped (the pipeline fix):**
+- [x] Reworked `feature_pregame_weather_features` into a `union all` of two branches: the existing live
+  **forecast** path (`feature_pregame_weather_status` SCD-2, `is_current = true`) untouched, plus an
+  **observed** backfill (dedup `observed_at_first_pitch` to one row/game, compute `wind_component_mph` +
+  `is_dome` via the identical `ref_venues` logic) for games the forecast path does not already cover.
+  `weather_observation_type` now marks each row's source.
+- [x] Schema.yml description updated to document the dual source; `game_pk` unique + `is_dome` not-null tests
+  preserved (observed branch is disjoint from forecast by `game_pk not in (select game_pk from forecast)`).
+- [x] Validated against Snowflake: coverage **396 → 12,708 games** (396 forecast + 12,312 observed),
+  every row with a computed `wind_component_mph`, `game_pk` unique. Zero dome rows in either source —
+  consistent with current prod (domes aren't weather-ingested; imputed in Python preprocessing). `dbtf compile` clean.
+
+**Remaining (retrain — the signal-capture step):**
+- [x] **Hand-off build ran + DQ-validated 2026-06-15.** `feature_pregame_weather_features` = 12,708 games
+  (396 forecast + 12,312 observed); downstream `feature_pregame_game_features` weather coverage went ~0% →
+  **94.8–96.6% present 2021–2025** (92.3% 2026); ~3.5% residual null = dome games (imputed in Python); 0 temp/
+  wind-component outliers; values physically sane (temp 27.7–111.9°F, wind_component −29.6 to +28.7).
+- [x] **Retrain wired (not yet run).** `run_ngboost_total_runs_search.py` gained a `--force-weather` flag that
+  injects `temp_f, wind_speed_mph, wind_component_mph, humidity_pct` into the candidate pool (wind_direction_deg
+  omitted — circular degrees; wind_component already encodes it) and writes a distinct `_wx` challenger contract so
+  it can't clobber the champion. **Hand-off command** (one `--target total_runs`, mirrors the seasonnorm/Normal
+  champion config):
+  `uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --season-normalize --dist Normal --force-weather`
+  → produces `total_runs/ngboost_tuned_seasonnorm_wx`.
+- [x] **Retrain ran 2026-06-15** → `total_runs/ngboost_tuned_seasonnorm_wx` (n_est=500, Normal, 117 feats =
+  113 seasonnorm + the 4 forced weather cols; in-script CV MAE 3.3113). `promotion_gate_eval.py` gained
+  `--challenger-contract` + `--champion-contract` overrides so the `_wx` variant is gated without churning the
+  committed config; the two seasonnorm contracts differ by EXACTLY the 4 weather cols (clean ablation).
+- [ ] **Gate the challenger (two hand-off commands, each >1 min — Snowflake + per-fold refit):**
+  - **Weather-isolation accuracy gate** (champion = seasonnorm-no-weather, challenger = seasonnorm+weather → Δ
+    attributable to weather alone):
+    `uv run python betting_ml/scripts/promotion_gate_eval.py --target total_runs --champion-contract betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json --challenger-contract betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_wx_2026.json`
+  - **Calibration gate** (HARD |bias| ≤ 0.25 + pct_over gap ≤ 0.10 + coverage_80, vs the deployed champion):
+    `uv run python betting_ml/scripts/promotion_gate_eval.py --target total_runs --eval-calibration --season-normalize --challenger-contract betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_wx_2026.json`
+  - **Promote only if BOTH pass.** Document the weather lift either way — first honest test of weather on populated
+    data (the 31.0 prune was on a structurally-empty column). If accuracy Δ ≈ 0 / fails calibration → weather is
+    confirmed non-predictive on real data, and 31.4b (LightGBM-monotone) is the next conditional lever.
+- [x] **GATED 2026-06-15 → HOLD (do not promote NGBoost `_wx`).** Clean weather isolation (champion =
+  seasonnorm-no-weather 111 feats vs challenger = seasonnorm+weather 115 feats): folds 2024 Δ−0.0170 / 2025
+  Δ+0.0033 / **2026 Δ−0.0286** (honest OOS, biggest gain); **pooled Δ−0.0068 MAE, 95% CI [−0.0146, +0.0014]** →
+  effect_size=False (below 0.02 floor), significant=False (CI crosses 0), consistency=True (never regresses).
+  **Calibration OK** — `_wx` passes all HARD gates and marginally BEATS the deployed champion: bias 0.195→**0.156**,
+  pct_over gap 0.073→**0.067**, NLL/CRPS/PIT-KS all lower. **Verdict:** weather is a GENUINE but TINY central-estimate
+  refinement (~0.2% pooled / ~0.9% 2026 MAE) — real-signed, never harmful, but sub-threshold → not promotable as an
+  NGBoost feature on its own, and far too small to touch the ~0.5 market gap. **This is the "signal-bearing but
+  noisy" signature → triggers Story 31.4b** (LightGBM-monotone). The dbt repair STANDS (weather is now correctly
+  populated + a valid candidate); only the NGBoost `_wx` artifact is shelved.
+
+**Acceptance criteria:**
+- [ ] `feature_pregame_weather_features` is populated for the full 2021–2026 train window (not ~null pre-2026).
+- [ ] Weather either clears the champion-delta gate on totals or is documented as non-predictive **on honest,
+  populated data** (the 31.0 prune was on a structurally-empty column, so this is the first real test).
+- [ ] The observed→forecast substitution is recorded as a known, quantified train/serve skew (corr 0.97/0.73).
+
+**Gating/sequencing:** Pipeline fix is independent and done. The retrain is additive and can run now; its *live*
+payoff still rides on 30.6 like all offline gains. This is the cheapest net-new-information move for totals and is
+**complementary to** (not a substitute for) the 30.2 variance work and Epic 32 — better central estimate vs honest
+distribution are different gaps.
+
+---
+
+### Story 31.4b — LightGBM-monotone weather challenger (totals)  `[Home: Epic 31]`  ❌ CLOSED 2026-06-15 — weather is NOISE for totals (two-family verdict)
+
+> **✅ VERDICT (2026-06-15): weather carries no usable signal for totals — close out.** Clean unconstrained ablation
+> in the quantile family: CV MAE(q50) weather IN **3.3394** vs OUT **3.3289** → weather is **WORSE by +0.0105**, and
+> worse in all 3 folds (2024 +0.0113 / 2025 +0.0126 / 2026 +0.0028). Combined with the NGBoost isolation (weather
+> **−0.0068**, tiny help): the effect is **sub-noise in BOTH families AND sign-flips between them** — the signature
+> of a net-zero/noise feature (a real signal helps consistently). Monotone constraints can't rescue a net-zero
+> feature, so the XGBoost `reg:quantileerror` true-monotone follow-up is **NOT worth pursuing**. The dbt weather
+> repair (Story 31.4) STILL stands — weather is now correctly populated and was honestly tested (vs the 31.0
+> structurally-empty non-test) — but it adds no predictive value. **Weather was the last untapped on-disk candidate
+> for totals (31.0); it's now exhausted. Totals improvement is an ARCHITECTURE/variance problem → route to 30.2
+> (sub-model σ-wiring) → Epic 32 (generative per-side). H2H has no data rescue. This closes the 31.x
+> data-expansion thread for the point models.** Artifacts (`lgb_quantile_{wx,noweather}_*`) archived; registry
+> entries `total_runs_quantile_{wx,noweather}` recorded promoted=False.
+
+> **⚠️ Blocker (2026-06-15):** the monotone-LightGBM-quantile plan is **NOT buildable** — LightGBM raises
+> `Cannot use monotone_constraints in quantile objective`. The one inductive bias NGBoost couldn't express can't be
+> added to a LightGBM quantile model either. A *true* monotone weather model would need **XGBoost**
+> (`reg:quantileerror` + monotone, uncertain composability) or a **monotone MEAN regressor + separate spread** — a
+> bigger build, deferred. **Also discovered:** the 4 weather cols are ALREADY in the retained candidate pool
+> (`evaluation/feature_selection.md`), so the quantile model already trains on weather (10.10 just had ~null weather
+> pre-repair). **Pivot:** `train_quantile_totals.py` now runs an unconstrained weather **ablation** —
+> `--force-weather` (weather IN, `_wx`) vs `--drop-weather` (weather OUT, `_noweather`), same folds — to isolate
+> weather's effect on the variance-healthy quantile family now that it's populated. Hand-off (two runs, >1 min each):
+> `uv run python betting_ml/scripts/train_quantile_totals.py --force-weather` and `… --drop-weather`; compare
+> CV MAE(q50) / std(pred) / coverage. If weather doesn't move them, it's confirmed immaterial in BOTH model
+> families (NGBoost HOLD + quantile flat) → **close weather out, route to 30.2 → Epic 32.**
+
+**Goal:** Give weather the one inductive bias the NGBoost base learner cannot cleanly express — **monotone
+constraints**. A free-form GBM can fit a non-physical, jagged weather response and overfit weather regimes thin in
+the training data (cold April nights, high-wind blow-out games); enforcing monotonicity both regularizes and makes
+the model extrapolate *correctly* into those sparse regimes. This is the **only base-learner swap worth doing right
+now**, and only *because* it pairs with a specific diagnosis (physical monotonicity of the freshly-repaired weather
+features) — not a blind estimator horse-race.
+
+**Why this and not a generic GBM bake-off:** Stories 10.2 (LightGBM+NegBin) and 10.10 (LightGBM quantile) already
+showed alternative learners beat NGBoost on its *internal* failure modes (variance shrinkage `std_pred` 3.73 vs
+0.77; Jensen floor removed) yet **none beat the market on 2026 OOS** — the gap is invariant to estimator. So a
+plain LightGBM retrain is not expected to help. The *new* lever here is monotone constraints on the new weather
+columns, which NGBoost's parametric form can't impose.
+
+**Trigger (do NOT start until 31.4's NGBoost `--force-weather` run reports):**
+- If weather is **flat deadweight** in NGBoost (clears nothing) → **SKIP** (no signal to constrain).
+- If the NGBoost weather challenger **cleanly promotes** → optional (try only if you want the monotone version as a
+  more robust serve-time variant; low urgency).
+- If weather **helps but is noisy / marginal** (improves CV but fails calibration or is unstable across folds) →
+  **RUN this** — that's the signature monotone constraints are built to fix.
+
+**✅ WIRED 2026-06-15 — hand-off command (NGBoost search runtime; >1 min):**
+`uv run python betting_ml/scripts/train_quantile_totals.py --force-weather`
+→ injects the 4 weather cols with monotone +1 on `temp_f`/`wind_component_mph`, writes `lgb_quantile_wx_*` artifacts
++ `evaluation/quantile_weather_31_4b.md` (10.10 no-weather baseline untouched). First read = the 8.P CV gates
+(MAE(q50) vs NGBoost registry, std≥1.5, |resid|≤0.5) + coverage; the deeper 2026-OOS-vs-market gate (calib_80,
+Brier vs Bovada) is the follow-up via `quantile_totals_layer3_oos.py` if the CV read is encouraging.
+
+**Approach:** Extend the existing quantile-LightGBM infra (`train_quantile_totals.py` +
+`quantile_totals_layer3_oos.py`, Story 10.10) — it already escapes the log-link Jensen floor and emits a
+distribution via pinball quantiles, so no new architecture. Add:
+- `monotone_constraints` on the physically-signed weather features only: `temp_f` **+1** (warmer, less-dense air →
+  ball carries → more runs), `wind_component_mph` **+1** (blowing out → more runs). Leave `wind_speed_mph` and
+  `humidity_pct` **unconstrained (0)** — raw wind speed is directionless (wind_component already encodes it) and
+  humidity's air-density effect is weak/ambiguous.
+- The same `--force-weather` candidate-pool injection as 31.4 (reuse the feature list).
+- Distinct artifact name (e.g. `lgb_quantile_wx`) so it never clobbers the NGBoost champion.
+
+**Acceptance criteria:**
+- [ ] Beats the **31.4 NGBoost weather challenger** AND the current champion on the totals point-accuracy +
+  calibration gate (|bias| ≤ 0.25, |pct_over gap| ≤ 0.10) on the leakage-free **2026 OOS** surface.
+- [ ] `calib_80` ∈ [0.75, 0.85] (the metric 10.10's free-form quantile model missed at 0.686) — the monotone
+  regularization should tighten coverage, not just shift the mean.
+- [ ] The fitted weather partial-dependence is **monotone in the constrained direction** (sanity that the
+  constraint took) and the per-feature lift is documented vs the unconstrained NGBoost fit.
+- [ ] If it still fails to beat the market on 2026, record it as the **3rd estimator-swap confirmation** that the
+  totals gap is information/architecture, not the learner → routes effort to 30.2 → Epic 32.
+
+**Gating/sequencing:** Strictly downstream of 31.4's NGBoost verdict (needs to know weather is signal-bearing-but-
+noisy before it's worth building). Reuses 10.10 infra → cheap. Does **not** block 30.2 or Epic 32; it's the last
+cheap base-learner lever before conceding the gap is structural.
+
+---
+
+# Epic 32 — Generative Per-Side Totals (Decomposed Scoring Model)
+
+**Status:** 🔬 RESEARCH / DEFERRED — placeholder, opened 2026-06-15. **Not scheduled; documents an architecture we may eventually investigate.** Do NOT start without an explicit go + clearing the gates below.
+
+**The thesis (why this is worth keeping on the board).** The production totals model is **monolithic** — one regressor emitting a point estimate, which is structurally *variance-deficient*: it trails the market line by ~0.53 RMSE and cannot manufacture an honest predictive *distribution* (Story 29.1; `[[project_totals_model_directional_bias]]`). A **generative per-side** model attacks that directly: model **home-team runs and away-team runs as separate count distributions** (e.g. NegBin/Poisson-mixture per side, conditioned on the Track-B sub-model inputs — offense, opposing starter, bullpen, park/run-env), then **convolve the two sides** into a full distribution over the game total. From that distribution you read `P(over)`/`P(under)` at *any* line — and naturally at **alt-lines / first-5 / team-totals** (the 29.2/29.3 track that's shelved precisely because the monolithic central estimate can't support an alt-line edge).
+
+**Why this is a DIFFERENT decomposition than the one that already failed.** The Layer-2/3 *stacking* ensemble (Epics 9/10 — sub-model signals → learned blend weights) was tried and showed **no edge** (near-uniform weights ⇒ signals weak/redundant). Epic 32 is **generative, not a re-weighting**: it changes what the model *emits* (a per-side count distribution → convolved total) rather than how existing point-signals are combined. It targets the *variance* failure mode the stacking work never addressed. It is the "decomposed micro-services model (home/away runs scored separately)" deferred to Phase 9 (`[[project_phase9_model_architecture]]`).
+
+**What it could unlock (if it works):**
+- Honest predictive **variance** → calibrated `P(over)` (the 29.1 gate) instead of an over-confident point.
+- **Alt-line / F5 / team-total** pricing for free from the same distribution (un-shelves 29.2/29.3).
+- A principled home for the Track-B sub-model posteriors as **per-side conditioning inputs** (offense/starter/bullpen/run-env), giving the decomposed architecture a job the stacking ensemble couldn't.
+
+**Hard gates before this is worth building (all must hold):**
+1. **31.0/31.1 must surface real new signal content** — if the data is genuinely tapped out, a fancier *output* distribution won't beat the market either; this becomes wasted effort. 31.0 is the prerequisite read.
+2. **30.2 (wire sub-model σ into the base model) is the cheaper first attempt at variance** — try the distributional wiring on the existing model FIRST; only escalate to a full generative rebuild if 30.2's variance gain is insufficient.
+3. **30.6 serving honesty confirmed** — no architecture verdict is trustworthy until the live re-measure lands (offline gains are capped by serving skew today).
+4. **Kill criterion (inherits 29.1 + the totals calibration gate):** the convolved central estimate must reach **market-RMSE parity** AND the distribution must pass calibration (`|bias|≤0.25`, `pct_over` gap `≤0.10`, PI coverage). Miss either ⇒ the variance was cosmetic; close it out like Epic 17.
+
+**Sketch (for whoever picks this up):** per-side count model (start simple — NegBin GLM / gradient-boosted count, or a small hierarchical Bayesian per side reusing the Epic-16/17 machinery) → conditional on the as-of Track-B inputs for that side → convolve home⊕away (numerical or MC) → total distribution → price every line. Validate per-side calibration BEFORE convolving (a miscalibrated side poisons the total). Benchmark vs market line + the monolithic v5 on point-accuracy AND distribution calibration.
+
+**Sequencing:** sits *behind* the 31.0 → 31.1 → 30.2 chain. If 30.2 closes the variance gap on the monolithic model, Epic 32 may never be needed — that's the cheaper win to try first. Kept here so the option isn't lost.
 

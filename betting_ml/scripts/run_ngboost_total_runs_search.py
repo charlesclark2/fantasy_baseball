@@ -8,6 +8,18 @@ temporal CV splits, persists the best NGBoost model, and writes:
 Usage:
     uv run python betting_ml/scripts/run_ngboost_total_runs_search.py
     uv run python betting_ml/scripts/run_ngboost_total_runs_search.py --report-only
+
+Flags:
+    --dist Normal|LogNormal   Restrict the distribution grid (Story 30.4: use Normal
+                              for the projection-source retrain).
+    --season-normalize        Train on the dbt `_seasonnorm` contact columns (Story 27.7).
+    --force-weather           Force the repaired weather run-environment features
+                              (temp_f, wind_speed_mph, wind_component_mph, humidity_pct)
+                              into the candidate pool and write a distinct `_wx`
+                              challenger contract (Story 31.4). Requires the dbt weather
+                              backfill to be built first.
+    --exclude-sequential      Build the no-sequential documented-champion baseline.
+    --no-mlflow               Disable MLflow logging.
 """
 
 from __future__ import annotations
@@ -39,6 +51,20 @@ _CONTEXT_PATH = PROJECT_ROOT / "project_context.md"
 
 _N_ESTIMATORS_GRID = [200, 500]
 _DIST_GRID = ["Normal", "LogNormal"]
+
+# Story 31.4 — weather run-environment features to FORCE into the totals candidate
+# pool under `--force-weather`. These were dropped from every contract while the
+# weather feature was structurally empty pre-2026 (forecast_pregame-only filter);
+# the dbt repair backfills 2021-2025 from observed_at_first_pitch, so this is the
+# first honest test of weather on populated data. wind_direction_deg is deliberately
+# omitted — it is circular degrees (0/360 wrap); wind_component_mph already projects
+# direction × speed onto the home-plate→CF axis, the model-friendly encoding.
+_WEATHER_FORCE_FEATURES: tuple[str, ...] = (
+    "temp_f",
+    "wind_speed_mph",
+    "wind_component_mph",
+    "humidity_pct",
+)
 
 
 def _get_dist_class(dist_name: str):
@@ -73,7 +99,8 @@ def _prepare_folds(df, feature_cols: list[str]) -> list[dict]:
 
 
 def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True,
-               dist_grid: list[str] | None = None, season_normalize: bool = False) -> None:
+               dist_grid: list[str] | None = None, season_normalize: bool = False,
+               force_weather: bool = False) -> None:
     from ngboost import NGBRegressor
 
     from betting_ml.utils.season_normalization import swap_contact_to_seasonnorm
@@ -91,6 +118,11 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True,
         # Distinct model_name so the contract/artifact don't clobber the raw v5
         # champion until this is gated + promoted.
         model_name += "_seasonnorm"
+    if force_weather:
+        # Story 31.4: distinct challenger artifact (`_wx`) so the weather retrain
+        # does NOT clobber the champion contract until it clears the champion-delta
+        # + totals calibration gate.
+        model_name += "_wx"
 
     print("Loading features from Snowflake...")
     df = load_features()
@@ -136,6 +168,22 @@ def run_search(exclude_sequential: bool = False, mlflow_enabled: bool = True,
                 f"--season-normalize: {len(_missing)} contact cols have no _seasonnorm column in "
                 f"feature_pregame_game_features (dbt Story 27.7 build stale?): {_missing}. "
                 "Run the dbt build before retraining.")
+
+    if force_weather:
+        # Story 31.4: weather was dropped from the retained list while structurally
+        # empty, so load_retained_features() omits it. Inject it explicitly now that
+        # the dbt repair populates 2021-2025. Appended last so it survives every
+        # upstream filter/swap above.
+        _wx_missing = [c for c in _WEATHER_FORCE_FEATURES if c not in df.columns]
+        if _wx_missing:
+            raise SystemExit(
+                f"--force-weather: {_wx_missing} not in feature_pregame_game_features. "
+                "Rebuild the dbt weather feature (Story 31.4: "
+                "`dbtf run --select feature_pregame_weather_features+ --full-refresh`) before retraining."
+            )
+        _wx_added = [c for c in _WEATHER_FORCE_FEATURES if c not in feature_cols]
+        feature_cols += _wx_added
+        print(f"Story 31.4: force-included {len(_wx_added)} weather cols: {_wx_added}")
 
     print(f"Using {len(feature_cols)} features (market-blind)")
     print(f"Market cols excluded: {len(market_removed)} — {market_removed}")
@@ -479,4 +527,6 @@ if __name__ == "__main__":
             mlflow_enabled="--no-mlflow" not in sys.argv,
             dist_grid=dist_grid,
             season_normalize="--season-normalize" in sys.argv,
+            # Story 31.4: force the repaired weather features into the candidate pool.
+            force_weather="--force-weather" in sys.argv,
         )

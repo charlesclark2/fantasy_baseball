@@ -201,6 +201,14 @@ def lineup_dbt_feature_rebuild(context: OpExecutionContext) -> None:
         "eb_batter_posteriors_raw",
         "feature_pregame_starter_features",
         "feature_pregame_lineup_features",
+        # Story 30.6 (2026-06-15) — feature_pregame_game_features is a PASSTHROUGH of
+        # feature_pregame_game_features_raw (a table): _raw does the actual home/away
+        # starter+lineup JOINs. Without _raw here, the post-lineup re-score rebuilt
+        # game_features from a STALE _raw, so the freshly-rebuilt confirmed-lineup +
+        # starter blocks NEVER reached the actionable bet — a prime suspect for the
+        # 30.6 "post_lineup serve still coinflip" symptom. Include _raw so the bet
+        # rides the confirmed-lineup matrix. dbt orders via refs.
+        "feature_pregame_game_features_raw",
         "feature_pregame_game_features",
         "--target", "baseball_betting_and_fantasy",
     ])

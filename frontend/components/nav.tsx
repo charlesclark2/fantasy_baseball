@@ -3,7 +3,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { LogOut } from "lucide-react"
+import { LogOut, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 
@@ -60,6 +60,17 @@ export function Nav({
               <span className="hidden text-xs text-gray-500 sm:block">
                 {userEmail ?? "—"}
               </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                asChild
+                className="text-gray-400 hover:text-white hover:bg-[#141414]"
+              >
+                <Link href="/settings">
+                  <Settings className="h-3.5 w-3.5" />
+                  <span className="sr-only">Settings</span>
+                </Link>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
