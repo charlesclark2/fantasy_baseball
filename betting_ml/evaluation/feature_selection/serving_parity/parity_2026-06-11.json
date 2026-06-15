@@ -1,0 +1,52 @@
+{
+  "date": "2026-06-11",
+  "data_source": "feature_store",
+  "n_games": 8,
+  "targets": {
+    "total_runs": {
+      "contract_len": 369,
+      "served": 369,
+      "absent": [],
+      "served_but_all_null": [
+        "over_american",
+        "under_implied_prob",
+        "ump_run_impact_zscore",
+        "under_american",
+        "ump_accuracy_zscore"
+      ],
+      "imputed_to_constant_frac": 0.014,
+      "order_ok": true,
+      "strong_tier_null_or_absent": []
+    },
+    "run_differential": {
+      "contract_len": 376,
+      "served": 376,
+      "absent": [],
+      "served_but_all_null": [
+        "over_american",
+        "under_implied_prob",
+        "ump_run_impact_zscore",
+        "under_american",
+        "ump_accuracy_zscore"
+      ],
+      "imputed_to_constant_frac": 0.013,
+      "order_ok": true,
+      "strong_tier_null_or_absent": []
+    },
+    "home_win": {
+      "contract_len": 376,
+      "served": 376,
+      "absent": [],
+      "served_but_all_null": [
+        "over_american",
+        "under_implied_prob",
+        "ump_run_impact_zscore",
+        "under_american",
+        "ump_accuracy_zscore"
+      ],
+      "imputed_to_constant_frac": 0.013,
+      "order_ok": true,
+      "strong_tier_null_or_absent": []
+    }
+  }
+}

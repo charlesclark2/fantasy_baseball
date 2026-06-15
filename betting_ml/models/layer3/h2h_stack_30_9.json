@@ -1,0 +1,15 @@
+{
+  "story": "30.9",
+  "status": "SHELVED (best_alpha=0.0)",
+  "decision": "PROMOTE",
+  "best_variant": "convex_w",
+  "params": {
+    "convex_w_on_clf": 1.0,
+    "logistic_coef": [
+      4.0863026887366765,
+      0.9092159396343534
+    ],
+    "logistic_intercept": -2.4738165646945105
+  },
+  "note": "Replaces cons_win=0.5*clf+0.5*rd in predict_today.py {632,1539,1602} ONLY after alpha>0 AND refitting the Platt calibrator (scripts/predict_today.py:84) on the new blend."
+}

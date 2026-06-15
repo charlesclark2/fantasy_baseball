@@ -5,52 +5,52 @@
     "champion_recipe": "xgb_platt(champion)",
     "challenger_recipe": "xgb_platt(challenger)",
     "n_features": {
-      "champion": 374,
+      "champion": 209,
       "challenger": 209
     },
     "decision": "PROMOTE",
-    "override_applied": true,
-    "correctness_override": "30.4: removes 9 market leaks + 3 identifiers (architecture Principle 3); gate-confirmed accuracy non-regression",
-    "overall_delta": -0.0015803264104400215,
+    "override_applied": false,
+    "correctness_override": null,
+    "overall_delta": -0.0053100728258004305,
     "boot_ci": [
-      -0.0035284674252557295,
-      0.00044995557362883593
+      -0.007635845548367309,
+      -0.0030450846662602132
     ],
     "per_season": [
       {
         "season": 2024,
         "n": 2003,
-        "champion": 0.1948290773908859,
-        "challenger": 0.19194780311711365,
-        "delta": -0.002881274273772244,
+        "champion": 0.19462122092562847,
+        "challenger": 0.19316016368899463,
+        "delta": -0.0014610572366338392,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2025,
         "n": 2027,
-        "champion": 0.19799988440841684,
-        "challenger": 0.19770510243322817,
-        "delta": -0.00029478197518867377,
+        "champion": 0.20073129011456176,
+        "challenger": 0.19161777465180985,
+        "delta": -0.009113515462751909,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2026,
-        "n": 751,
-        "champion": 0.20361232465294668,
-        "challenger": 0.19598921944121173,
-        "delta": -0.007623105211734954,
+        "n": 765,
+        "champion": 0.19621416954777274,
+        "challenger": 0.20376141904061265,
+        "delta": 0.007547249492839914,
         "complete": false,
         "regressed": false
       }
     ],
     "reasons": [
-      "Pooled improvement -0.0016 does NOT clear the 0.002 noise floor.",
-      "Paired bootstrap 95% CI upper bound +0.0004 \u2265 0 (not significant).",
+      "Pooled improvement -0.0053 clears the 0.002 noise floor.",
+      "Paired bootstrap 95% CI upper bound -0.0030 < 0 (significant).",
       "No completed season regresses beyond tolerance (cross-season consistent).",
-      "Current season 2026 corroborates (-0.0076).",
-      "\u2b50 CORRECTNESS OVERRIDE \u2014 30.4: removes 9 market leaks + 3 identifiers (architecture Principle 3); gate-confirmed accuracy non-regression. PROMOTE despite no significant accuracy gain: the fix is mandatory (compliance, not accuracy) and the gate confirms accuracy NON-REGRESSION (pooled \u0394 -0.0016, no completed-season regression). Effect-size/significance bars waived; record the override + violation."
+      "\u26a0 Current season 2026 REGRESSES (+0.0075) \u2014 does not block (corroboration only), but watch for a regime shift before promoting.",
+      "Single-eval criteria PASS \u2192 PROMOTE candidate. Confirm hysteresis (\u22652 consecutive passes) before deploy."
     ]
   }
 }

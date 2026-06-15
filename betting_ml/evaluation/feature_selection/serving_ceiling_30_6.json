@@ -1,0 +1,25 @@
+{
+  "story": "30.6_gate_check",
+  "since": "2026-01-01",
+  "n_matched": 46,
+  "offline_dense": {
+    "n": 46,
+    "brier": 0.1629,
+    "corr": 0.61,
+    "acc": 0.783,
+    "ece": 0.13,
+    "nll": 0.5071
+  },
+  "as_served": {
+    "n": 46,
+    "brier": 0.2874,
+    "corr": 0.016,
+    "acc": 0.522,
+    "ece": 0.252,
+    "nll": 0.7779
+  },
+  "verdict": "A_serving",
+  "rationale": "Dense re-score recovers skill (Brier 0.1629 vs served 0.2874, corr 0.61 vs 0.016) \u2192 serving skew persists at lineup-lock; 30.6 AS-OF retrain is the lever. Build forward-capture.",
+  "contract_len": 211,
+  "artifact": "s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_market_blind_2026.pkl"
+}

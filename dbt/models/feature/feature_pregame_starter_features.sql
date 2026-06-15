@@ -18,16 +18,36 @@
 
 with
 
+-- Story 30.6 (fix A, 2026-06-14): source the CURRENT probable from the FRESH
+-- stg_statsapi_probable_pitchers staging, NOT the SCD-2 feature_pregame_starter_status.
+-- The SCD-2 chain (stg_statsapi_starter_snapshots -> ...starter_status) lags the latest
+-- monthly_schedule ingestion (~80% null for +1/+2-day games vs 0% in stg_probable_pitchers),
+-- which left the entire starter-EB block NULL at serve time and collapsed live home_win to a
+-- coinflip (corr 0.016 served vs 0.61 offline-dense, same model). This model only used the
+-- SCD-2's is_current state (never its temporal replay), so repointing to the fresh staging
+-- restores serve-time density without changing historical training rows (for played games the
+-- latest probable == the SCD-2 final state). Take the LATEST ingestion per (game_pk, side) so
+-- scratches resolve to the most recent probable; filter null AFTER the latest pick so a
+-- scratched-to-null latest is excluded (master assembly then detects the missing starter).
+-- The durable build-ordering/freshness fix for the SCD-2 chain is tracked in Story 30.13.
 probable_pitchers as (
     select
         game_pk,
         game_date,
         side,
-        starter_player_id       as pitcher_id,
-        starter_player_name     as pitcher_name
-    from {{ ref('feature_pregame_starter_status') }}
-    where is_current = true
-      and starter_player_id is not null
+        probable_pitcher_id     as pitcher_id,
+        probable_pitcher_name   as pitcher_name
+    from (
+        select
+            game_pk, game_date, side, probable_pitcher_id, probable_pitcher_name,
+            row_number() over (
+                partition by game_pk, side
+                order by ingestion_ts desc nulls last
+            ) as rn
+        from {{ ref('stg_statsapi_probable_pitchers') }}
+    )
+    where rn = 1
+      and probable_pitcher_id is not null
 ),
 
 -- Most recent pre-game rolling stats row per pitcher (LEAKAGE GUARD applied)

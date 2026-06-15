@@ -1,0 +1,31 @@
+{
+  "story": "30.9",
+  "decision": "PROMOTE",
+  "best_variant": "convex_w",
+  "variant_brier": {
+    "convex_w": 0.19461551673302926,
+    "logistic": 0.19504012701835485
+  },
+  "overall_delta": -0.0037344475257033954,
+  "boot_ci": [
+    -0.0056218401457372195,
+    -0.001975918096533786
+  ],
+  "per_season": [
+    "SeasonDelta(season=2025, n=2027, champion=0.19528109451820935, challenger=0.19154664699250598, delta=-0.0037344475257033716, complete=True, regressed=False)",
+    "SeasonDelta(season=2026, n=765, champion=0.20189132064873855, challenger=0.20274701864680802, delta=0.0008556979980694768, complete=False, regressed=False)"
+  ],
+  "completed_seasons": [
+    2025
+  ],
+  "current_season": 2026,
+  "reasons": [
+    "Pooled improvement -0.0037 clears the 0.002 noise floor.",
+    "Paired bootstrap 95% CI upper bound -0.0020 < 0 (significant).",
+    "No completed season regresses beyond tolerance (cross-season consistent).",
+    "Current season 2026 corroborates (+0.0009).",
+    "Single-eval criteria PASS \u2192 PROMOTE candidate. Confirm hysteresis (\u22652 consecutive passes) before deploy."
+  ],
+  "shelved": true,
+  "shelve_reason": "best_alpha=0.0 \u2192 live posterior is pure market; wire on alpha>0 (Story 30.6)"
+}
