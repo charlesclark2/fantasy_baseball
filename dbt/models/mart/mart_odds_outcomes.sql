@@ -23,7 +23,8 @@
 
 {{
     config(
-        materialized = 'table'
+        materialized = 'incremental',
+        incremental_strategy = 'append',
     )
 }}
 
@@ -54,6 +55,9 @@ with odds_api as (
         outcome_price_decimal,
         outcome_point
     from {{ ref('stg_oddsapi_odds') }}
+    {% if is_incremental() %}
+    where ingestion_ts > (select max(ingestion_ts) from {{ this }})
+    {% endif %}
 
 ),
 
@@ -84,6 +88,9 @@ parlay_api as (
         outcome_price_decimal,
         outcome_point
     from {{ ref('stg_parlayapi_odds') }}
+    {% if is_incremental() %}
+    where ingestion_ts > (select max(ingestion_ts) from {{ this }})
+    {% endif %}
 
 ),
 

@@ -535,10 +535,31 @@ WITH pre_game AS (
     WHERE g.game_pk IN ({game_pk_list})
       AND o.bookmaker_key = 'bovada'
       AND o.ingestion_ts::TIMESTAMP_NTZ < g.game_date::TIMESTAMP_NTZ
+),
+-- Latest snapshot per game where BOTH home and away h2h outcomes exist.
+-- Falls back to an earlier snapshot rather than showing a one-sided line.
+best_h2h_snap AS (
+    SELECT game_pk, MAX(ingestion_ts) AS best_ts
+    FROM (
+        SELECT game_pk, ingestion_ts
+        FROM pre_game
+        WHERE market_key = 'h2h'
+        GROUP BY game_pk, ingestion_ts
+        HAVING SUM(CASE WHEN is_home_outcome     THEN 1 ELSE 0 END) >= 1
+           AND SUM(CASE WHEN NOT is_home_outcome THEN 1 ELSE 0 END) >= 1
+    ) paired
+    GROUP BY game_pk
 )
+SELECT p.game_pk, p.market_key, p.outcome_name, p.outcome_price_american, p.outcome_point,
+       p.is_home_outcome, p.ingestion_ts
+FROM pre_game p
+JOIN best_h2h_snap s ON s.game_pk = p.game_pk AND p.ingestion_ts = s.best_ts
+WHERE p.market_key = 'h2h'
+UNION ALL
 SELECT game_pk, market_key, outcome_name, outcome_price_american, outcome_point,
        is_home_outcome, ingestion_ts
 FROM pre_game
+WHERE market_key != 'h2h'
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY game_pk, market_key, outcome_name
     ORDER BY ingestion_ts DESC
