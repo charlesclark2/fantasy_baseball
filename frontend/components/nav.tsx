@@ -96,7 +96,7 @@ export function Nav({
                 asChild
                 className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
               >
-                <Link href="/login">Join Beta</Link>
+                <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">Request Access</a>
               </Button>
             </>
           )}

@@ -16,6 +16,10 @@ const FAQ_SECTIONS = [
     category: "What is Credence Sports?",
     items: [
       {
+        q: "What is Bayesian sports analytics?",
+        a: "Bayesian analytics treats predictions as probability distributions rather than single point estimates. Instead of outputting just \"62% home win,\" a Bayesian model also quantifies how confident it is in that estimate — and updates that confidence as new information arrives. At Credence, this means predictions tighten as the season progresses and more data accumulates, and uncertainty is carried through the model visibly rather than hidden behind a single number.",
+      },
+      {
         q: "What does Credence Sports actually do?",
         a: "Credence Sports is a baseball analytics tool. We build statistical models that estimate the true probability of game outcomes and compare those estimates against betting market odds to identify where the market may be mispriced. We surface those findings as picks — but we are an analytics tool, not a picks service. You decide what to do with the information.",
       },

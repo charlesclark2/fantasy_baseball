@@ -85,7 +85,7 @@ function HeroSection() {
             asChild
             className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] sm:w-auto"
           >
-            <Link href="/login">Join Beta</Link>
+            <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">Request Access</a>
           </Button>
           <Button
             variant="outline"
@@ -397,13 +397,25 @@ function FooterCta() {
         <h2 className="text-balance text-3xl font-bold text-white md:text-4xl">
           Ready to see every pick?
         </h2>
-        <div className="mt-8">
+        <p className="mt-4 text-sm text-gray-400">
+          Credence Sports is currently in private beta. Send an email to request access
+          and we&apos;ll be in touch.
+        </p>
+        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Button
             size="lg"
             asChild
             className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
           >
-            <Link href="/login">Join Beta</Link>
+            <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">Request Access</a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
+            asChild
+            className="text-gray-400 hover:text-white hover:bg-[#141414]"
+          >
+            <Link href="/login">Sign In</Link>
           </Button>
         </div>
         <p className="mt-6 text-xs leading-relaxed text-gray-600">
