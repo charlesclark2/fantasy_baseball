@@ -114,6 +114,7 @@ interface ComputedRow {
   cappedKelly: number
   predTotalRuns: number | null
   totalLineConsensus: number | null
+  lineupConfirmed: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +238,7 @@ function computeRow(pick: EVPick, maxKelly: number): ComputedRow {
     ev, rawKelly, cappedKelly,
     predTotalRuns: pick.pred_total_runs ?? null,
     totalLineConsensus: pick.total_line_consensus ?? null,
+    lineupConfirmed: pick.lineup_confirmed ?? false,
   }
 }
 
@@ -595,6 +597,12 @@ export default function EVTrackerPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">{row.time}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${row.lineupConfirmed ? "bg-[#10b981]" : "bg-[#f59e0b]"}`} />
+            <span className={`text-[10px] font-medium ${row.lineupConfirmed ? "text-[#10b981]" : "text-[#f59e0b]"}`}>
+              {row.lineupConfirmed ? "Confirmed" : "Projected"}
+            </span>
+          </div>
         </TableCell>
         <TableCell className="px-3 py-3">
           <MarketBadge type={row.marketType} label={row.market} />
@@ -670,6 +678,12 @@ export default function EVTrackerPage() {
             )}
           </div>
           <p className="text-xs text-gray-500">{row.time}</p>
+          <div className="flex items-center gap-1 mt-1">
+            <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${row.lineupConfirmed ? "bg-[#10b981]" : "bg-[#f59e0b]"}`} />
+            <span className={`text-[10px] font-medium ${row.lineupConfirmed ? "text-[#10b981]" : "text-[#f59e0b]"}`}>
+              {row.lineupConfirmed ? "Confirmed" : "Projected"}
+            </span>
+          </div>
         </TableCell>
         <TableCell className="px-3 py-3">
           <MarketBadge type={row.marketType} label={row.market} />

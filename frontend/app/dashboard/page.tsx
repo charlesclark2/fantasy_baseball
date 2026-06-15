@@ -223,6 +223,12 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
         <div className="text-xs text-gray-500 mt-0.5">
           {fmtGameTime(pick.game_start_utc) ?? pick.game_date}
         </div>
+        <div className="flex items-center gap-1 mt-1">
+          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${pick.lineup_confirmed ? "bg-[#10b981]" : "bg-[#f59e0b]"}`} />
+          <span className={`text-[10px] font-medium ${pick.lineup_confirmed ? "text-[#10b981]" : "text-[#f59e0b]"}`}>
+            {pick.lineup_confirmed ? "Confirmed" : "Projected"}
+          </span>
+        </div>
       </TableCell>
 
       {/* Pick side */}
