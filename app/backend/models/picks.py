@@ -34,6 +34,7 @@ class Pick(BaseModel):
 class TodayPicksResponse(BaseModel):
     picks: list[Pick]
     data_quality: DataQuality
+    is_preliminary: bool = False
 
 
 class FeaturedYesterday(BaseModel):
@@ -92,6 +93,7 @@ class EVPick(BaseModel):
 class EVPicksResponse(BaseModel):
     picks: list[EVPick]
     total: int
+    is_preliminary: bool = False
 
 
 class GamePicksResponse(BaseModel):

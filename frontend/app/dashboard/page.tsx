@@ -486,7 +486,7 @@ function QualifiedPicksTable({
           <TrendingUp className="h-10 w-10 text-gray-700 mb-4" />
           <h3 className="text-base font-semibold text-white">No qualified picks for today</h3>
           <p className="mt-2 max-w-sm text-sm leading-relaxed text-gray-500">
-            Check back after the morning pipeline runs.
+            Check back after the morning pipeline completes, or once lineups are confirmed.
           </p>
         </div>
       </div>
@@ -578,12 +578,25 @@ export default function DashboardPage() {
     </Popover>
   )
 
+  const isPreliminary = isToday && !isLoading && (todayData?.is_preliminary === true)
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-[#0a0a0a] font-sans">
         <Nav authenticated activeLink="dashboard" userEmail={email} />
         <main className="pb-16">
           <PageHeader picks={picks} isLoading={isLoading} rightSlot={datePicker} />
+          {isPreliminary && (
+            <div className="mx-auto max-w-6xl px-4 mt-3">
+              <div className="flex items-start gap-2.5 rounded-lg border border-amber-800 bg-amber-950 px-4 py-3 text-sm text-amber-300">
+                <span className="mt-0.5 shrink-0 font-bold">⚠</span>
+                <span>
+                  <span className="font-semibold">Preliminary predictions</span> — lineups not yet confirmed.
+                  These picks are based on probable pitchers only. Do not bet until confirmed lineups are posted (~90 min before first pitch).
+                </span>
+              </div>
+            </div>
+          )}
           <div className="mt-6">
             <QualifiedPicksTable picks={picks} isLoading={isLoading} isError={isError} />
           </div>
