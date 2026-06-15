@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import Link from "next/link"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
@@ -179,7 +179,7 @@ export default function SettingsPage() {
                   min={0}
                   step={100}
                   value={bankroll}
-                  onChange={(e) => setBankroll(Math.max(0, Number(e.target.value)))}
+                  onChange={(e) => { setBankroll(Math.max(0, Number(e.target.value))); markSaved() }}
                   className="pl-6 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
                 />
               </div>
@@ -197,7 +197,7 @@ export default function SettingsPage() {
                   max={25}
                   step={1}
                   value={kellyCap}
-                  onChange={(e) => setKellyCap(Math.min(25, Math.max(1, Number(e.target.value))))}
+                  onChange={(e) => { setKellyCap(Math.min(25, Math.max(1, Number(e.target.value)))); markSaved() }}
                   className="pr-8 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
                 />
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>

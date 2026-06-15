@@ -15761,7 +15761,32 @@ real-time and retroactively-scored rows, flattering or distorting the live recor
 
 ---
 
-### 30.8 — Pre-lineup and post-lineup prediction contracts  `[Home: Epic 30 / architecture]`  ⬜
+### 30.8 — Pre-lineup and post-lineup prediction contracts  `[Home: Epic 30 / architecture]`  🟦 Task 1 SCOPED 2026-06-15
+
+**Status:** 🟦 Task 1 (feature lineup-dependence classification) DONE 2026-06-15 — gating audit built + run;
+remaining tasks gated on ONE design decision (below). **Training is now UNBLOCKED** (the sequencing note —
+"don't train until 30.4 promoted" — is satisfied; 30.4 promoted the 211/169/113 contracts).
+
+**▶ TASK 1 — `betting_ml/scripts/audit_lineup_dependence_30_8.py`** (built + run; writes
+`ablation_results/lineup_dependence_30_8.{md,csv}` + 3 draft `feature_columns_pre_lineup_*.json`). Classifies
+every column of the 3 live contracts as Class-A (pre-lineup available) vs Class-B (requires confirmed lineup)
+EMPIRICALLY — null-rate over last-3-completed (confirmed) vs next-3-future (unconfirmed) games, TIGHT recent
+windows to dodge the rolling-window incremental confound (eb_starter only covers current_date-7, so a naive
+completed-vs-future split misreads it). Name-pattern is a cross-check only; the empirical Δnull is authoritative.
+**Result: 75 Class-B → first-cut pre-lineup contracts home_win 211→158, run_diff 169→127, total_runs 113→95.**
+- The empirical method BEAT name-matching (50 name/empirical disagreements are mostly lineup-gated features the
+  name heuristic missed). It cleanly separates `vs_lhp_woba_30d` (team-vs-handedness → A) from `avg_woba_vs_lhp`
+  (lineup-averaged → B).
+- ⭐ **THE GATING DESIGN DECISION:** a large chunk of Class-B is TEAM-OFFENSE ROLLING aggregates (`avg_woba_30d`,
+  `avg_eb_woba`, `n_power_pull`, `injured_player_count`…) that go null pre-lineup. Are these IRREDUCIBLY
+  lineup-averaged (→ a pre-lineup model genuinely can't have them; morning model is much weaker) or just BUILT in
+  the lineup dbt path and reconstructable at roster level (→ recover them pre-lineup for a stronger morning model)?
+  This decides how much signal the pre-lineup model keeps and must be resolved before training the challenger.
+- Two false-positive caveats to fix before writing the FINAL pre-lineup contracts: (a) `_seasonnorm` lineup
+  features classify A but are likely SEASON-FILL placeholders (non-null but constant → dead weight, verify before
+  trusting); (b) `ump_*_zscore` are Class-B for a DIFFERENT reason (game-day umpire ASSIGNMENT, not lineup) — a
+  third "unavailable-pre-lineup" category; out of the pre-lineup contract regardless.
+- The 3 `feature_columns_pre_lineup_*.json` are DRAFTS (Class-A subset) pending the design decision + caveat fixes.
 
 **Prerequisite for:** stable "pick of the day" UI feature; the morning pick shown to users should be clearly labeled by model confidence tier and must not degrade to a post-lineup model's stale or imputed output.
 
