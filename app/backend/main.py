@@ -13,12 +13,20 @@ import logging
 import os
 import time
 
+import sentry_sdk
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request, Response
 
 load_dotenv()  # no-op in Lambda (env vars already injected); loads .env for local uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+
+_SENTRY_DSN = os.getenv("SENTRY_DSN")
+if _SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        traces_sample_rate=0.1,
+    )
 
 from app.backend.routers import admin, alerts, auth, bets, picks, performance, pipeline
 
