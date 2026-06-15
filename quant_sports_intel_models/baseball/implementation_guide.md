@@ -1496,24 +1496,30 @@ Write targets by environment:
 
 ### I.5 — State-aware dbt builds (rebuild only models with updated upstream data)
 
-**Status:** ⬜ NOT STARTED (opened 2026-06-02). Infrastructure efficiency improvement; not urgent.
+**Status:** 🔄 IN PROGRESS — **Task 1 (CI manifest fix) ✅ SHIPPED 2026-06-15** (bootstraps on the next merge to main); **Task 2 (daily `source_status:fresher+`) ⬜ pending.** Re-prioritized HIGH after the cost re-audit found CI silently full-building all 117 models per PR (top Snowflake lever, alongside A2.15-L1). `[[project_dbt_spend_audit_jun2026]]`
 
-**Goal:** Cut daily warehouse cost and runtime by rebuilding only the models whose **upstream source data actually changed** since the last run, instead of running the full DAG every day.
+**Goal:** Build only what changed — on BOTH paths: the **CI path** (PRs → `state:modified+`, code diff) and the **daily Dagster path** (`source_status:fresher+`, data diff). Both depend on one thing: a **reliable persisted state artifact** (`manifest.json` / `sources.json`). That dependency is currently BROKEN for CI, which is why CI full-builds; fix it once and both paths benefit.
 
-**Feasibility:** Yes — dbt supports this natively via **`source_status:fresher+` selection** combined with `dbt source freshness` and **persisted state artifacts**. The flow: run `dbtf source freshness` to produce a `sources.json`, compare against the previous run's state, and select `--select source_status:fresher+` to build only models downstream of sources that received new data. This complements the run-vs-build cadence in `_dbt_daily_build_args()` (the daily op) and builds on the S3 artifact store (I.2) for state persistence and Dagster (0.5) for orchestration.
+---
 
-**Tasks:**
+**Task 1 — ⭐ FIX THE CI FULL-BUILD (urgent, do first).** `dbt_build_ci.yml` already selects `state:modified+ --defer`, but the `dbt-manifest` it diffs against is **expired**: 7-day artifact retention + its producer `dbt_daily_build.yml` was decommissioned to `workflow_dispatch`-only in the Dagster migration (last real run 2026-05-10). So the manifest-download step silently hits `falling back to full build` → `dbtf build` of all **117 models** on every PR (the real cause of the `ci_betting.*` full-CTAS costs in the audit).
+- [x] **Restore a reliable, long-retention manifest source — ✅ SHIPPED 2026-06-15.** Reused the existing `dbt-compile` job (already runs `dbtf compile`, which emits `manifest.json`) — added a `Publish manifest baseline (main only)` step uploading `dbt/target/manifest.json` as the `dbt-manifest` artifact at **90-day** retention, `if: github.ref == 'refs/heads/main'` (so PR manifests never overwrite the baseline). No new infra / AWS creds; CI's existing download step consumes it unchanged. Chose GH-artifact over the S3 approach for Task 1 (simpler, no creds); **S3 unification deferred to Task 2** where the daily `source_status` build needs it too.
+- [x] **Kill the silent fallback — ✅ SHIPPED 2026-06-15.** The no-manifest branch now emits a GitHub `::warning::` annotation (visible in PR checks) instead of silently full-building. Left as warn-not-hard-fail so a manifest-infra hiccup never blocks merges; one-line flip to `exit 1` documented inline if hard-block is preferred later.
+- [ ] **Validate (pending bootstrap):** after this merges to main and the first baseline is produced, confirm a PR touching one leaf model builds ~1–3 models in CI, not 117. (Until that first main-push, CI keeps full-building — now with the loud warning.)
+
+**Task 2 — daily Dagster path (`source_status:fresher+`, the original I.5 scope).** Layered on the same persisted-state mechanism from Task 1.
 - [ ] Configure source `freshness` + `loaded_at_field` on the high-volume sources (or rely on dbt-fusion's freshness support) so `dbtf source freshness` emits a usable `sources.json`.
-- [ ] Persist the prior successful run's artifacts (`manifest.json` + `sources.json`) to the I.2 S3 bucket, keyed by env; download them as the `--state` input at the start of the daily op.
+- [ ] Persist the prior successful run's `manifest.json` + `sources.json` to the I.2 S3 bucket, keyed by env; download as the `--state` input at the start of the daily op.
 - [ ] Change the daily `run`-day path to `dbtf build --select source_status:fresher+ --state <prev>` (build only descendants of fresher sources), with a first-run / missing-state fallback to a full run, and keep the weekly Sunday full `build --full-refresh` as the safety net.
-- [ ] **Confirm dbt-fusion supports `source_status` + `--state` selectors** in the deployed version; if not, fall back to `state:modified+` (code changes) and/or freshness-only gating, and revisit when fusion reaches parity.
-- [ ] Validate: a run after a no-op ingestion selects ~0 models; a run after one source's update selects only that source's descendants; measure cost/runtime vs the full build.
+- [ ] **Confirm dbt-fusion supports `source_status` + `--state` selectors** in the deployed version; if not, fall back to `state:modified+` and/or freshness-only gating, revisit when fusion reaches parity.
+- [ ] Validate: a run after a no-op ingestion selects ~0 models; after one source's update, only that source's descendants; measure cost/runtime vs the full build.
 
 **Acceptance criteria:**
-- [ ] The daily op rebuilds only models downstream of sources with new data; the weekly full build still runs as a safety net so nothing goes permanently stale.
-- [ ] Measured reduction in daily build runtime/credits vs the prior full-DAG run.
+- [ ] CI builds only the modified subtree per PR (verified ~1–3 models on a leaf change, not 117); no silent full-build fallback.
+- [ ] The daily op rebuilds only models downstream of sources with new data; the weekly full build still runs as the safety net.
+- [ ] Measured reduction in CI + daily build credits vs the full-DAG baseline (cross-check at the 2026-06-22 re-audit).
 
-**Caveat:** `source_status:fresher+` selects by *source* freshness, so models changed only by **logic** (not data) won't be picked up — the weekly full build covers that. This is a selection optimization layered on top of the existing daily op, not a replacement for the periodic full build.
+**Caveat:** `source_status:fresher+` selects by *source* freshness, so models changed only by **logic** won't be picked up by the daily path — the weekly full build covers that. CI's `state:modified+` covers code changes. Both are selection optimizations over the periodic full build, not replacements for it.
 
 ---
 
@@ -9886,6 +9892,11 @@ Acceptance criteria:
 
 **Sub-task sequencing:** A0.4.1 → A0.4.2 → A0.4.3 must complete in order. A0.4.4 – A0.4.8 can run in parallel once A0.4.3 is done. A0.4.9 can run once A0.4.1 Cognito env vars are known.
 
+**Remaining story priority (as of 2026-06-15):**
+- **P1 — Beta launch blockers:** A0.4.18 (SES production access approval → beta user provisioning; literal gate to inviting anyone), A0.4.13 (marketing pages — footer links on the live home page currently point nowhere), A0.4.11 (settings page — small, fully unblocked, user-facing)
+- **P2 — Beta quality:** A0.4.14 (admin page — backend already built; needs Lambda deploy + `DAGSTER_CLOUD_API_TOKEN` + Cognito admin-group guard), A0.4.15 (data quality bug reports — closes the beta feedback loop)
+- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 (player/team detail pages — post-beta scope; A2.12 Railway PG serving store SHIPPED 2026-06-15 so the data-path gate is now cleared)
+
 ---
 
 #### A0.4.1 — Cognito login ✅ (2026-06-11)
@@ -10434,7 +10445,7 @@ These are cosmetic polish items and do not block any functionality.
 
 ---
 
-#### A0.4.11 — Settings: wire user profile + notification preferences ⬜
+#### A0.4.11 — Settings: wire user profile + notification preferences ⬜  **[P1]**
 
 Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist. `alert_timing` and `hours_before_game` have no backend model yet — keep as local state.
 
@@ -10556,7 +10567,7 @@ Done when: pick card and track record show real data, no MOCK_DATA remains.
 
 ---
 
-#### A0.4.13 — Marketing pages: FAQ, Contact Us, Blog ⬜
+#### A0.4.13 — Marketing pages: FAQ, Contact Us, Blog ⬜  **[P1]**
 
 Add three new public pages to `frontend/app/`: `/faq`, `/contact`, `/blog`. These are static Server Components for beta — no backend required. Contact form uses a `mailto:` link for now (SES wiring is deferred to A0.6).
 
@@ -10623,7 +10634,7 @@ Done when all 6 new pages render, footer links route correctly, no link goes to 
 
 ---
 
-#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)
+#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)  **[P2]**
 
 Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` exists and covers the status cards. Pipeline run history, model artifact freshness, and Snowflake credit chart require new backend endpoints — spec'd below.
 
@@ -10704,7 +10715,7 @@ Done when: all three data sections show live prod data and non-admin users are b
 
 ---
 
-#### A0.4.15 — Data quality bug report ⬜
+#### A0.4.15 — Data quality bug report ⬜  **[P2]**
 
 Allow beta users to flag data errors (wrong scores, missing lines, bad umpire stats, etc.) without leaving the page. Captures context automatically so nothing has to be described from scratch.
 
@@ -10770,11 +10781,11 @@ Done when: clicking the link, filling in text, and submitting creates a DynamoDB
 
 ---
 
-#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*
+#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*  **[P3]**
 
-Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement — do not start until the serving layer story (A2.12) is underway, since player/team pages would add significant new Snowflake query surface if not built against a pre-materialized data path.
+Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement. The A2.12 Railway PG serving store gate is now CLEARED (shipped 2026-06-15) — player/team pages can use the PG cache rather than live Snowflake queries. Do not start until after beta launch.
 
-**Dependencies:** A0.4.7 complete; A2.12 serving layer in place or committed.
+**Dependencies:** A0.4.7 complete; A2.12 COMPLETE (2026-06-15) — Railway PG serving store live.
 
 **Player profile page** (`/player/[player_id]`):
 - Season stats: PA, OPS, xwOBA, K%, BB%, wRC+
@@ -10795,7 +10806,7 @@ Clickable player names and team names across the app navigate to dedicated profi
 
 **Tasks:**
 - [ ] Audit what data is available per-player and per-team from existing feature marts before designing API schemas
-- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data, not live Snowflake queries at request time (see A2.12)
+- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data served from Railway PG (A2.12 SHIPPED), not live Snowflake queries at request time
 - [ ] Create `frontend/app/player/[player_id]/page.tsx` and `frontend/app/team/[team_id]/page.tsx`
 - [ ] Make player names in the game detail lineup card link to `/player/{player_id}`
 - [ ] Make team names/logos in the game detail header link to `/team/{team_id}`
@@ -10809,7 +10820,7 @@ Clickable player names and team names across the app navigate to dedicated profi
 
 ---
 
-#### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL
+#### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL  **[P3 — blocked on 30.8]**
 
 **Problem:** Users who visit the home page before lineups confirm (~90 min before first pitch, typically 12–2pm ET) see "No qualified pick today — check back after lineups confirm." This dead window can span the entire morning even though we have enough data to make a useful early prediction. A naive user has no idea that lineups are a prerequisite — they just see nothing and leave.
 
@@ -10910,7 +10921,7 @@ lineup confirmation, clearly labeled so naive users understand it is an early es
 - [ ] `next build` passes with zero errors
 - [ ] `https://app.credencesports.com` is live
 
-#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)
+#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)  **[P1]**
 
 Customize the Cognito invite email so beta users receive a branded welcome message, then provision initial beta accounts.
 
@@ -12516,7 +12527,7 @@ the Python-written mart_player_archetype_posteriors before any cutover.
 
 ---
 
-### Story A2.12 — Railway PostgreSQL serving store + portfolio-weighted views  `[Home: Epic A2 / infrastructure]`  ⬜
+### Story A2.12 — Railway PostgreSQL serving store + portfolio-weighted views  `[Home: Epic A2 / infrastructure]`  ✅ (2026-06-15)
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A2.12 standalone:
 
@@ -12625,14 +12636,14 @@ first provision and whenever tables need to be rebuilt.
 
 **Tasks:**
 
-- [ ] **1. Railway PG provisioning.** Add the Postgres plugin to the existing Railway project
+- [x] **1. Railway PG provisioning.** Add the Postgres plugin to the existing Railway project
   (where FlareSolverr lives). Record the `DATABASE_URL` (Railway-formatted connection string).
   Add `DATABASE_URL` to Lambda env vars in the AWS console and to Dagster secrets.
   Verify connectivity with `psql $DATABASE_URL` locally. Create `infrastructure/pg/` directory
   and write `create_serving_tables.sql` (idempotent DDL above). Run the DDL against the new
   database to initialize the schema.
 
-- [ ] **2. FastAPI service layer — `app/backend/services/pg.py`.** New module using `asyncpg`
+- [x] **2. FastAPI service layer — `app/backend/services/pg.py`.** New module using `asyncpg`
   (async connection pool, initialized in FastAPI `lifespan`). Public functions:
   - `get_today_picks(date) → list[dict] | None`
   - `get_ev_ranked(date) → list[dict] | None`
@@ -12647,7 +12658,7 @@ first provision and whenever tables need to be rebuilt.
   - Pool is initialized once in the FastAPI `lifespan` context manager (avoids Lambda cold-start
     connection overhead on every invocation — pool is reused across warm Lambda instances).
 
-- [ ] **3. Router updates — picks and performance.** Update `app/backend/routers/picks.py` and
+- [x] **3. Router updates — picks and performance.** Update `app/backend/routers/picks.py` and
   `app/backend/routers/performance.py` to use the PG service as the primary read path:
   - `GET /picks/today` → `pg.get_today_picks()` → on `None`, fall back to Snowflake + write to PG
   - `GET /picks/ev` → `pg.get_ev_ranked()` → on `None`, fall back to Snowflake + write to PG
@@ -12656,7 +12667,7 @@ first provision and whenever tables need to be rebuilt.
   - Keep S3 fallback in place during transition (read order: PG → S3 → Snowflake).
   - On any Snowflake fallback hit, write result to PG so next request is a PG hit.
 
-- [ ] **4. Portfolio endpoints — `app/backend/routers/portfolio.py`.** New router registered
+- [x] **4. Portfolio endpoints — `app/backend/routers/portfolio.py`.** New router registered
   in `main.py` under `/portfolio`:
   - `GET /portfolio/preferences` — returns authenticated user's portfolio row (or defaults if
     not yet set). Auth via existing `get_current_user` dependency.
@@ -12666,7 +12677,7 @@ first provision and whenever tables need to be rebuilt.
     fetches the user's portfolio from PG and applies EV threshold + market filter before returning.
     Requires authenticated request.
 
-- [ ] **5. Dagster write-path — `scripts/write_serving_store.py`.** New script (replaces
+- [x] **5. Dagster write-path — `scripts/write_serving_store.py`.** New script (replaces
   `write_api_cache.py` for prediction data; both coexist during transition):
   - Connects to Railway PG via `DATABASE_URL` env var using `psycopg` (sync, matches existing
     Snowflake connector pattern in write_api_cache.py — no async needed in a Dagster script).
@@ -12682,7 +12693,7 @@ first provision and whenever tables need to be rebuilt.
     `performance_summary`.
   - Add `psycopg[binary]` (psycopg3) to dependencies.
 
-- [ ] **6. New Dagster op — `write_serving_store_op`.** Add to
+- [x] **6. New Dagster op — `write_serving_store_op`.** Add to
   `pipeline/ops/daily_ingestion_ops.py` alongside the existing `write_api_cache_op`:
   ```python
   @op(ins={"predict_done": In(Nothing)}, out=Out(Nothing))
@@ -12697,7 +12708,7 @@ first provision and whenever tables need to be rebuilt.
   - `statcast_catchup_job`: capture `predict_today_morning` result and pass to
     `write_serving_store_op(predict_done=<predict_result>)`
 
-- [ ] **7. Admin invalidation extension.** Extend `POST /admin/cache/invalidate` in
+- [x] **7. Admin invalidation extension.** Extend `POST /admin/cache/invalidate` in
   `app/backend/routers/admin.py` to accept `?game_pk=<N>`:
   - With `game_pk`: delete `game_detail` row for `(game_pk, today)` from PG + call existing
     `s3_cache.invalidate_game(game_pk)` (add `invalidate_game` to `s3_cache.py`). Next request
@@ -12705,7 +12716,7 @@ first provision and whenever tables need to be rebuilt.
   - Without `game_pk`: existing behaviour (clear all of today's S3 cache). Also truncate today's
     `daily_picks` and `game_detail` rows from PG (non-final only — `WHERE is_final = FALSE`).
 
-- [ ] **8. Infrastructure docs.** Add a "Railway PostgreSQL (A2.12)" section to
+- [x] **8. Infrastructure docs.** Add a "Railway PostgreSQL (A2.12)" section to
   `infrastructure/aws_resources.md` documenting: plugin URL, table inventory, how to run the
   DDL migration, `DATABASE_URL` env var name. Update Lambda env var table with `DATABASE_URL`.
 
@@ -12833,10 +12844,10 @@ real creds before merge; do not git commit or push; in-process Dagster ops may o
 **Tasks (ship lowest-risk first, measure between each):**
 - [x] **L1 — ✅ SHIPPED 2026-06-15** — converted all 8 scattered `dbtf build` ops → `run` (sensor_ops: `catchup_dbt_rebuild`, `lineup_dbt_feature_rebuild`; daily_ingestion_ops: `dbt_sub_model_signals_rebuild`, `dbt_build_bullpen_posteriors_op`, `dbt_umpire_feature_rebuild`, `dbt_mart_prediction_clv`, `dbt_pregame_odds_rebuild`, `dbt_lineup_feature_rebuild`). Tests now run in ONE place — `_dbt_daily_build_args` — Sunday `build --full-refresh` + an every-3rd-day (`toordinal()%3`) lightweight test build; all other days/ticks `run`. Also fixed the recurring `catchup_dbt_rebuild` test-failure-since-06-11 (was burning 3× retry compute). User deploys.
 - [ ] **L2** — gate intraday feature rebuilds on actual new-lineup/probable arrival (no rebuild on no-op ticks).
-- [ ] **L3** — `stg_parlayapi_line_movement` → incremental (byte-safe `ingestion_ts` append).
-- [ ] **L4** — CI to PR/merge-only; verify `state:modified+` scope.
+- [x] **L3 — ✅ ALREADY DONE (verified 2026-06-15)** — `stg_parlayapi_line_movement` is already `incremental`/`append` on `ingestion_ts` (committed `7501b4d`); the prior audit's "deferred" note was stale. The 42 min/wk in CI is NOT an incrementalization gap — CI drops+rebuilds `ci_betting` fresh each run, so a modified incremental model is a first-build full CTAS. CI is already optimally scoped (PR-only + `state:modified+` + `--defer` + teardown); the spike was transient high-PR-volume dev-week, not a fixable design flaw. No action.
+- [ ] **L4 — ⚠️ BROKEN, NOT DONE (corrected 2026-06-15)** — `dbt_build_ci.yml` IS PR-only with `state:modified+ --defer`, BUT its `dbt-manifest` artifact is **expired** (7-day retention) because the producer `dbt_daily_build.yml` was decommissioned to `workflow_dispatch`-only in the Dagster migration (last real run 2026-05-10). So the manifest-download step hits its `falling back to full build` branch and CI runs `dbtf build` of **all 117 models on every PR** — the true cause of the `ci_betting.*` full-CTAS costs in the audit (line_movement 42min, pitch marts 18× each = full builds, not modified+). **FIX = Story I.5** (state-aware builds): restore a reliable long-retention manifest source (lightweight scheduled `dbtf compile` + upload @ 90-day retention, or persist the Dagster build's manifest to S3 for CI to fetch), then `state:modified+ --defer` actually scopes. High-ROI; folds the CI half of this story into I.5.
 - [ ] **L5** — incremental-convert append-only staging models (if still material after L1–L2).
-- [ ] **L6** — DuckDB-in-Dagster: scope + single-path pilot (gated on a measured-savings case; coupled to A2.12 serving store).
+- [→] **L6 — PROMOTED to Story A2.17** (DuckDB-in-Dagster pilot). A2.12 serving store SHIPPED 2026-06-15, so it's now gated only on the 2026-06-22 re-audit (second-wave lever after L1 + I.5).
 
 **Acceptance criteria:**
 - [ ] Each shipped lever is value-preserving (grain+fingerprint diff before/after) and the daily-credit trend drops measurably vs the June 1–14 baseline.
@@ -12858,9 +12869,9 @@ real creds before merge; do not git commit or push; in-process Dagster ops may o
 **Goal:** Cut recurring Dagster compute and prevent runaway-credit events before the trial converts to paid.
 
 **Tasks:**
-- [ ] **D1 — run-timeout guard (the runaway lesson):** set a max-runtime (`dagster/max_runtime` run tag or job-level run-timeout) so a hung run self-cancels long before 16h; add a long-running-run alert. Cheap, prevents the single worst event class.
+- [x] **D1 — ✅ SHIPPED 2026-06-15** — added `run_monitoring: {enabled: true, max_runtime_seconds: 14400}` (4h) to `dagster_home/dagster.yaml`. Global cap on EVERY run, incl. ad-hoc `__ASSET_JOB` materializations → a hung/runaway run self-terminates at 4h instead of the 16h that was 44% of trial compute. Tunable; per-job override via `dagster/max_runtime` tag. User deploys (agent restart).
 - [ ] **D2 — SHARED with A2.15:** reduce `odds_snapshot` cadence (`*/30`→`*/60`, or gate on odds movement) and gate `lineup_monitor` rebuilds on actual new-lineup arrival. These are the top-2 recurring drivers on BOTH bills.
-- [x] **D3 (catchup half) — ✅ SHIPPED 2026-06-15 via A2.15-L1** — `statcast_catchup`'s `catchup_dbt_rebuild` now runs `dbtf run`, ending the test-failure-since-06-11 that exhausted 3 retries every run. ⬜ STILL OPEN: root-cause the `daily_ingestion` 29% fail rate (separate cause — investigate its run-summary tails).
+- [x] **D3 — ✅ RESOLVED 2026-06-15.** (catchup half via A2.15-L1: `catchup_dbt_rebuild` now `dbtf run`, ending the test-failure-since-06-11 + its 3× retries.) **`daily_ingestion` 29% investigated** (Dagster GraphQL, 12 failed runs over the trial): NOT one systemic bug — scattered across 9 steps, inflated by re-run clusters (06-02 had 4 failed runs in ~20min). Breakdown: (a) external-API ingests `ingest_weather`/`ingest_umpires_late`/`settle_user_bets` were already soft-failed (those failures predate the fixes); (b) `dbt_pregame_odds_rebuild` test-failures (06-03) are killed by A2.15-L1 (`build`→`run`); (c) `ingest_oaa` was the one remaining hard-failing non-critical external-API op → **now soft-failed** (mirrors weather; OAA is slow-moving + imputes); (d) `generate_*_signals_op` + Sunday `dbt_daily_build` failures are **fail-SAFE by design** (signal-freshness gate + data-quality tests catching real issues — correct to fail, not waste). Net: after this fix the only remaining hard-fails are the intentional safety gates.
 - [ ] **D4 — consolidate the 868 tiny runs:** do `intraday_schedule` (542) + `intraday_weather` (326) need separate every-30-min jobs? Merge into fewer/less-frequent runs to amortize Serverless per-run startup overhead.
 
 **Acceptance criteria:**
@@ -12869,6 +12880,57 @@ real creds before merge; do not git commit or push; in-process Dagster ops may o
 - [ ] Cross-referenced with A2.15 so shared levers (D2/D3) aren't double-implemented.
 
 **Sequencing:** **HIGH — trial converting to paid adds urgency.** D1 is a standalone quick win (no A2.15 overlap, ship now). D2/D3 are the same edits as A2.15-L1/L2 — do once, credit both stories. Re-audit 2026-06-22 (with Snowflake).
+
+---
+
+### Story A2.17 — DuckDB-in-Dagster analytics offload (pilot)  `[Home: Epic A2 / infrastructure]`  ⬜ GATED on the 2026-06-22 re-audit
+
+**Promoted from A2.15-L6.** The "gap save": replace billed Snowflake CTAS compute with free in-process DuckDB compute (columnar/OLAP — the right engine, unlike row-store Postgres) inside the Dagster job you already pay for. Precedent: `betting_ml/utils/training_cache.py` already uses DuckDB.
+
+**Why now-viable (and what's still coupled):** A2.12 (SHIPPED 2026-06-15, `[[project_serving_store_architecture]]`) moved the **API** read path off Snowflake → Railway PG, removing the *serving* coupling I originally gated this on. **BUT** `predict_today.py` still reads features (`feature_pregame_*`) FROM Snowflake for *scoring*; `write_serving_store_op` only reverse-ETLs the final picks to PG. So the heavy feature-DAG offload (the biggest win) still needs predict_today's feature-read repointed to the DuckDB/Parquet output — that's a phase of THIS story, not something A2.12 already did.
+
+**The honest cost calculus (from the audit):** the Snowflake bill is **frequency-driven** (intraday ticks × full rebuilds) more than per-transform heaviness. DuckDB attacks *heaviness*, not *frequency* — so A2.15-L1 + I.5 (frequency + CI full-builds) are the bigger, cheaper levers and come FIRST. DuckDB's clean unconditional win is the heavy *batch, non-serving* work (lower-frequency → smaller slice); its biggest win (heavy + frequent feature DAG) needs the predict-path repoint. Hence: pilot small, prove the pattern, then decide on the feature DAG based on the post-fix residual.
+
+**▶ New-session prompt:**
+```
+You are picking up Story A2.17 (DuckDB-in-Dagster analytics offload PILOT). GATE: only start if the
+2026-06-22 cost re-audit shows Snowflake residual still above target AFTER A2.15-L1 + I.5 shipped — DuckDB
+is the second-wave lever, not first. Read: this A2.17 section; memories project_dbt_spend_audit_jun2026,
+project_serving_store_architecture; betting_ml/utils/training_cache.py (DuckDB precedent).
+
+PILOT SCOPE (prove the pattern on ONE self-contained, NON-serving subtree — do NOT touch the feature DAG yet):
+  - Candidate: the Tier-3 Statcast batch marts (mart_pitch_* — heavy, ~weekly, no live-serving read) OR the
+    training-data prep (already DuckDB-adjacent). Pick whichever has the cleanest S3-Parquet boundary.
+  - Pattern: source data → Parquet on the I.2 S3 bucket → DuckDB (in the Dagster op) computes the transform →
+    write results to S3 Parquet AND/OR back to Snowflake for any downstream consumer. Use the dbt-duckdb
+    adapter if porting dbt models; else a direct DuckDB SQL op.
+  - MEASURE: per-run Snowflake credits saved vs DuckDB run-minutes added (Dagster compute is not free either —
+    it's just already-paid). Net savings only counts if Snowflake credits drop more than Dagster minutes rise.
+  - WATCH: DuckDB runs in the Dagster container's RAM — the 166M-row as-of windows may exceed a modest box
+    (DuckDB spills to disk, slower). Note any memory ceiling; do NOT size up the Dagster machine without
+    re-checking the savings math.
+
+PHASE 2 (only if pilot nets real savings): scope the feature-DAG offload — requires repointing predict_today's
+feature-read (feature_pregame_sub_model_signals / game_features) from Snowflake to the DuckDB/Parquet output or
+PG. This is the big win but the bigger change; spec it separately after the pilot proves out.
+
+Conventions: dbtf not dbt; Snowflake via MCP only, fully-qualified, no USE; hand >1min scripts to the user;
+do not git commit/push; Dagster in-process ops import packaged code only ([[feedback_dagster_import_only_packaged_code]]).
+```
+
+**Goal:** Prove the S3-Parquet + DuckDB-in-Dagster pattern saves net compute on one non-serving subtree, with a measured Snowflake-credits-saved vs Dagster-minutes-added number, before committing to the feature-DAG offload.
+
+**Tasks:**
+- [ ] **GATE:** confirm at the 2026-06-22 re-audit that Snowflake residual (post A2.15-L1 + I.5) still warrants this.
+- [ ] Pilot one non-serving subtree (Tier-3 Statcast marts or training prep) on the S3-Parquet → DuckDB → S3/Snowflake pattern.
+- [ ] Measure net savings (Snowflake credits down − Dagster minutes up); note memory ceilings.
+- [ ] Decide go/no-go on Phase 2 (feature-DAG offload + predict_today feature-read repoint).
+
+**Acceptance criteria:**
+- [ ] A working DuckDB-in-Dagster transform with a measured NET savings number (not just "Snowflake went down").
+- [ ] A written go/no-go for the feature-DAG offload, with the predict_today repoint scoped if go.
+
+**Sequencing:** **Second-wave, gated.** Strictly after A2.15-L1 + I.5 ship and the 06-22 re-audit. End state if it proves out: **Snowflake = residual OLAP not yet moved · Railway PG = OLTP serving (A2.12, done) · DuckDB = free in-Dagster analytics compute.**
 
 ---
 

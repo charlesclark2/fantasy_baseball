@@ -67,6 +67,24 @@ jobs:
       - name: Compile dbt project
         run: dbtf compile --project-dir dbt --profiles-dir dbt
 
+      # Story I.5 Task 1 (2026-06-15) — publish the compiled manifest as the state
+      # baseline the PR build job diffs against for `state:modified+ --defer`. The
+      # prior producer (dbt_daily_build.yml) was decommissioned to manual-only in the
+      # Dagster migration and its artifacts had 7-day retention, so by ~2026-06-08 the
+      # baseline was always expired and CI silently full-built all 117 models on every
+      # PR. Producing it here on every push to main (the moment the DAG actually
+      # changes) + 90-day retention keeps a fresh baseline available. Main-only so a
+      # PR's manifest never overwrites the baseline. Bootstraps on the next merge to
+      # main after this lands.
+      - name: Publish manifest baseline (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-manifest
+          path: dbt/target/manifest.json
+          retention-days: 90
+          if-no-files-found: error
+
   dbt-build-ci:
     name: dbt Build (CI — state:modified+)
     runs-on: ubuntu-latest
@@ -150,7 +168,13 @@ jobs:
               --state dbt/state \
               --defer
           else
-            echo "No manifest artifact found — falling back to full build"
+            # Story I.5 Task 1 — surface the fallback LOUDLY (GitHub warning
+            # annotation in the PR checks UI) instead of silently full-building all
+            # ~117 models. A silent fallback hid a 6-week cost regression (the
+            # decommissioned/expired manifest producer). Not a hard fail, so a
+            # manifest-infra hiccup never blocks merges — but it's now visible.
+            # Flip to `exit 1` if you'd rather hard-block once the producer is proven.
+            echo "::warning title=CI manifest missing — full build::No dbt-manifest baseline found, so CI is FULL-BUILDING all models (expensive). Producer = 'Publish manifest baseline' on push to main (I.5 Task 1); it may not have run since this landed, or the 90d artifact expired. Merge to main to refresh the baseline."
             dbtf build \
               --target ci \
               --project-dir dbt \
