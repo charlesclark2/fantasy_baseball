@@ -569,7 +569,7 @@ slot_eb as (
         eb.eb_woba_uncertainty,
         eb.posterior_source
     from lineup_slots ls
-    left join {{ source('betting', 'eb_batter_posteriors_raw') }} eb
+    left join {{ ref('eb_batter_posteriors_raw') }} eb  -- Story A2.11: dbt model (was source table)
         on  eb.game_pk      = ls.game_pk::varchar
         and eb.batting_slot = ls.slot
         and eb.batter_id    = ls.batter_id::varchar

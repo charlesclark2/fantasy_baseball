@@ -362,7 +362,7 @@ eb_bullpen as (
             n_relievers / nullif(n_relievers + n_prior_only, 0),
             4
         )                                                       as eb_bullpen_coverage_pct
-    from {{ source('betting', 'eb_bullpen_team_posteriors') }}
+    from {{ ref('eb_bullpen_team_posteriors') }}  -- Story A2.11: dbt model (was source table)
 
 )
 

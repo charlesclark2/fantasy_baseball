@@ -43,6 +43,29 @@ seeds:
       +column_types:
         venue_id:             integer
         park_facing_degrees:  integer
+    # Story A2.11 — EB priors flattened from betting_ml/models/eb_priors/*.json
+    # (flatten_priors_to_seeds.py). band_rank encodes the Python band-fallback order.
+    ref_eb_starter_priors:
+      +column_types:
+        season:      integer
+        band_rank:   integer
+        mu:          float
+        sigma:       float
+        n_starters:  integer
+    ref_eb_lineup_priors:
+      +column_types:
+        season: integer
+        alpha:  float
+        beta:   float
+        mu:     float
+        sigma:  float
+    ref_eb_bullpen_priors:
+      +column_types:
+        season:       integer
+        band_rank:    integer
+        mu:           float
+        sigma:        float
+        n_relievers:  integer
 
 models:
   baseball_betting_and_fantasy:

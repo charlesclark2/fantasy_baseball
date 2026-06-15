@@ -198,12 +198,21 @@ Writes `…/influence_report/influence_all.json` and
 Dead-weight prune lists persisted (no retrain) to `betting_ml/models/<t>/dead_weight_exclude.json`:
 home_win **156**, run_differential **198**, total_runs **254** cols.
 
-**home_win → PROMOTE cleaned (strict win).** Completing market-blindness (−9) + pruning
-156 dead features (376→209) costs +0.0005 CV Brier total (both halves inside the 0.001
-tol) and *improves* the honest 2026 surface on every axis: Brier 0.2059→0.2036, live
-corr 0.420→0.431, accuracy 0.667→0.671. The market-blind step alone already nudges live
-corr up (0.420→0.423), so the 4 still-"influential" market leaks were helping only the
-in-sample fit, not the honest surface. Hygiene thesis confirmed again (after 30.1).
+**home_win → PROMOTE via CORRECTNESS OVERRIDE (not an accuracy win).** ⚠ Corrected by the
+codified promotion gate (Case 3, `promotion_gate_eval.py`, 2026-06-12): on the **completed
+held-out seasons (2024+2025)** the cleaned challenger (retuned, 209f) vs the deployed
+champion (374f, still market-leaking) is **pooled ΔBrier −0.0016 — below the 0.002 noise
+floor and NOT bootstrap-significant** (CI [−0.0035, +0.0004]). The earlier "strict win"
+read leaned on the **partial 2026** surface (ΔBrier −0.0076), which the gate treats as
+corroboration only. So this is **NOT an accuracy win** — it's accuracy **parity** (the
+champion's leaks inflate its in-sample accuracy, so matching it while market-blind *is* the
+30.4a result). **Operator decision (2026-06-12): PROMOTE on the correctness override —
+market/identifier leakage is a Principle-3 violation that must be removed regardless of an
+accuracy win.** The gate confirmed accuracy **non-regression** (consistency_pass; no
+completed-season regression), which the override requires. Record: removes 9 market leaks +
+3 identifiers; 374→209 features; smaller serving surface. Re-run for the recorded artifact:
+`promotion_gate_eval.py --target home_win --correctness-override "30.4: removes 9 market leaks
++ 3 identifiers (architecture Principle 3); gate-confirmed accuracy non-regression"`.
 
 **run_differential → PROMOTE cleaned (the standout win).** The 198-col dead-weight prune
 (376→167, a 55% contract reduction) *lowers* CV MAE by 0.0127 AND live MAE by 0.038
@@ -222,11 +231,49 @@ to the *shelf* tuned model and its `dead_weight_exclude.json` feeds
 `run_ngboost_total_runs_search.py` for whenever Epic 19 unpauses totals. Do NOT push to S3
 now (bet_paused; no live exposure).
 
+> **⚠ Shelf-model distribution switched at retrain (2026-06-12):** the `total_runs`
+> search selected **LogNormal** n=500 (CV MAE 3.3531) over Normal (3.3617) — but the
+> 30.4 ablation only validated **Normal** (calib_80 0.806). The cleaned *contract*
+> (111 feats → 113 w/ indicators) is exactly what 30.4 promotes; the predictive
+> *distribution* is now LogNormal, whose calib_80 / PI coverage + the totals
+> directional-bias check (AVG pred vs AVG actual, pct_over_edge) are UNVALIDATED.
+> Shelf-only (bet_paused; deployed champion is eb_enriched/Normal), so no live impact —
+> but the Epic 19 unpause owner MUST re-check LogNormal calibration + directional bias
+> before any totals go-live. (run_diff keeps Normal — LogNormal is invalid there.)
+
 **Per-target narrative (to write):** state the market-blind accuracy cost and the
 edge-validity gain explicitly for each; for the dead-weight prune, the new feature count
 and the reduced serving surface; tie home_win/run_diff back to the honest live re-measure
 (§7). For total_runs note it is `bet_paused` (eb_enriched is the deployed champion;
 `tuned` is the local proxy) — the cleanup is hygiene + the 30.4a circularity fix.
+
+### ⚠️ Retrain "baseline Brier" is a NO-SKILL FLOOR, not the champion (+ follow-up)
+
+The home_win retrain printed `Baseline XGBoost Platt Brier: 0.2459` → `Tuned: 0.1952`
+→ "+20.60% IMPROVED". **Do NOT read 0.2459 as the prior champion.** It comes from
+`_load_baseline_brier()`:
+```sql
+SELECT AVG(brier_score) FROM baseball_data.betting_ml.cv_results_win_outcome WHERE model = 'xgb_platt'
+```
+That table holds the **baseline-model CV results** (`train_win_outcome_baselines.py`),
+6 rows (folds 2024–2026). Every baseline there clusters at 0.241–0.249 — barely below
+the `naive_baseline` (0.2494 = the home-field base-rate prior), i.e. **~zero skill**. So
+the "+20.6%" is the tuned model beating a coinflip floor — a sanity gate (the search
+exits non-zero only if it regresses >1% vs this floor), **not** a champion-vs-challenger
+result. The number that actually judges 30.4 home_win is the tuned CV Brier **0.1952** vs
+the **prior champion** (~0.199 in the 30.1 ablation; the 30.4 fixed-hp cleaned arm = 0.200)
+— a genuine but small improvement. The floor is static (populated once; never refreshed
+per retrain), so it stays ~0.246 no matter how good the champion gets.
+
+**⭐ FOLLOW-UP (behavior change needed — this floor-comparison is misleading):** the
+search trainers (`run_xgb_home_win_search.py` baseline-Brier; the run_diff/total_runs
+baseline-MAE equivalents) headline "+X% IMPROVED vs baseline" against a no-skill floor,
+which reads as a far bigger win than it is and can mask a real regression vs the deployed
+champion (a tuned model could *beat the floor* while *losing to the current champion* and
+still print "IMPROVED ✓"). Change the comparison to the **prior/deployed champion's CV
+metric** (and/or report BOTH: vs-floor as a sanity gate + vs-champion as the real delta),
+and gate promotion on the champion delta, not the floor. Tracked as a small Epic 30
+cleanup item.
 
 ---
 
