@@ -648,18 +648,36 @@ export default function PickDetailPage() {
                         <Badge className={`text-xs font-bold uppercase tracking-widest ${convictionBadgeClass(pick.game_conviction_score ?? 0)}`}>
                           {convictionLabel(pick.game_conviction_score ?? 0)}
                         </Badge>
-                        {pick.market_type === "totals" && pick.model_total_runs != null && (
-                          <span className="text-xs text-gray-500">
-                            Model total: <span className="font-mono text-gray-300">{pick.model_total_runs.toFixed(1)}</span>
-                          </span>
+                      </div>
+                      <div className="flex flex-col items-start sm:items-end gap-0.5">
+                        {pick.market_type === "h2h" ? (() => {
+                          const isAway = pick.pick_side === "away"
+                          const modelP = isAway ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
+                          const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
+                          const teamLabel = isAway ? (pick.away_team ?? "Away") : (pick.home_team ?? "Home")
+                          return (
+                            <p className="text-xs text-gray-500">
+                              <span className="text-gray-400">{teamLabel} win —</span>{" "}
+                              Model <span className="font-mono text-white">{(modelP * 100).toFixed(1)}%</span>
+                              {" "}· Market <span className="font-mono text-gray-400">{(mktP * 100).toFixed(1)}%</span>
+                            </p>
+                          )
+                        })() : (
+                          <p className="text-xs text-gray-500">
+                            Model <span className="font-mono text-white">{((pick.model_prob ?? 0) * 100).toFixed(1)}%</span>
+                            {" "}over · Market <span className="font-mono text-gray-400">{((pick.bovada_devig_prob ?? 0) * 100).toFixed(1)}%</span>
+                          </p>
+                        )}
+                        {pick.model_total_runs != null && (
+                          <p className="text-xs text-gray-500">
+                            Predicted total:{" "}
+                            <span className="font-mono text-gray-300">{pick.model_total_runs.toFixed(1)} runs</span>
+                            {pick.market_total_line != null && (
+                              <> · Line <span className="font-mono text-gray-500">{pick.market_total_line.toFixed(1)}</span></>
+                            )}
+                          </p>
                         )}
                       </div>
-                      <p className="text-xs text-gray-500">
-                        Model{" "}
-                        <span className="font-mono text-white">{((pick.model_prob ?? 0) * 100).toFixed(1)}%</span>
-                        {" "}vs Market{" "}
-                        <span className="font-mono text-gray-400">{((pick.bovada_devig_prob ?? 0) * 100).toFixed(1)}%</span>
-                      </p>
                     </div>
                   ))}
                 </div>

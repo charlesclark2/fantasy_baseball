@@ -622,7 +622,7 @@ export default function EVTrackerPage() {
         <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
           {fmtEV(row.ev)}
         </TableCell>
-        <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-400 hidden xl:table-cell">
           {row.rawKelly >= 0 ? `+${row.rawKelly.toFixed(1)}%` : `${row.rawKelly.toFixed(1)}%`}
         </TableCell>
         <TableCell className="px-3 py-3 text-right">
@@ -697,7 +697,7 @@ export default function EVTrackerPage() {
         <TableCell className={cn("px-3 py-3 text-right text-sm font-semibold", row.ev > 0 ? "text-[#10b981]" : "text-[#ef4444]")}>
           {fmtEV(row.ev)}
         </TableCell>
-        <TableCell className="px-3 py-3 text-right text-sm text-gray-400">
+        <TableCell className="px-3 py-3 text-right text-sm text-gray-400 hidden xl:table-cell">
           {row.rawKelly >= 0 ? `+${row.rawKelly.toFixed(1)}%` : `${row.rawKelly.toFixed(1)}%`}
         </TableCell>
         <TableCell className="px-3 py-3 text-right">
@@ -1014,7 +1014,7 @@ export default function EVTrackerPage() {
                     <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("ev")}>
                       <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={h2hSort} sortDir={h2hDir} />
                     </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("rawKelly")}>
+                    <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleH2hSort("rawKelly")}>
                       <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={h2hSort} sortDir={h2hDir} />
                     </TableHead>
                     <TableHead className={cn(thCls, "text-right")} onClick={() => handleH2hSort("cappedKelly")}>
@@ -1074,7 +1074,7 @@ export default function EVTrackerPage() {
                     <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("ev")}>
                       <ColHeaderTip label="EV" tip="Expected value per dollar bet. +5% means you expect to gain $0.05 per $1 wagered on average if the model is accurate over many bets." /> <SortIcon col="ev" sortKey={totalsSort} sortDir={totalsDir} />
                     </TableHead>
-                    <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("rawKelly")}>
+                    <TableHead className={cn(thCls, "text-right hidden xl:table-cell")} onClick={() => handleTotalsSort("rawKelly")}>
                       <ColHeaderTip label="Kelly%" tip="Full Kelly criterion — the mathematically optimal stake as % of bankroll. Can be volatile; higher values carry more risk." /> <SortIcon col="rawKelly" sortKey={totalsSort} sortDir={totalsDir} />
                     </TableHead>
                     <TableHead className={cn(thCls, "text-right")} onClick={() => handleTotalsSort("cappedKelly")}>

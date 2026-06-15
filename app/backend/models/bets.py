@@ -58,8 +58,8 @@ class BetUpdate(BaseModel):
     @field_validator("outcome")
     @classmethod
     def validate_outcome(cls, v: str | None) -> str | None:
-        if v is not None and v not in {"win", "loss", "push"}:
-            raise ValueError("outcome must be win, loss, or push")
+        if v is not None and v not in {"win", "loss", "push", "void"}:
+            raise ValueError("outcome must be win, loss, push, or void")
         return v
 
 
@@ -67,7 +67,7 @@ class Bet(BetCreate):
     bet_id: str
     user_id: str
     placed_at: str
-    outcome: str | None = None        # 'win' | 'loss' | 'push' | None (pending)
+    outcome: str | None = None        # 'win' | 'loss' | 'push' | 'void' | None (pending)
     profit_loss: float | None = None
 
 
