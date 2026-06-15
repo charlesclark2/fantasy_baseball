@@ -10,6 +10,7 @@ import { Nav } from "@/components/nav"
 import { apiFetch } from "@/lib/api"
 import Link from "next/link"
 import { ChevronLeft, ChevronDown, Info } from "lucide-react"
+import { normalizeTeam, espnLogoPath } from "@/lib/teams"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -418,8 +419,8 @@ export default function PickDetailPage() {
 
   const homeFullName = data?.home_team_name ?? firstPick?.home_team ?? "Home"
   const awayFullName = data?.away_team_name ?? firstPick?.away_team ?? "Away"
-  const homeAbbr = firstPick?.home_team ?? ""
-  const awayAbbr = firstPick?.away_team ?? ""
+  const homeAbbr = normalizeTeam(firstPick?.home_team ?? "")
+  const awayAbbr = normalizeTeam(firstPick?.away_team ?? "")
   const showAbbr = homeAbbr && awayAbbr && (homeAbbr !== homeFullName || awayAbbr !== awayFullName)
 
   const gameTime = firstPick ? fmtGameTime(firstPick.game_start_utc) : null
@@ -450,7 +451,7 @@ export default function PickDetailPage() {
   const ctx = data?.game_context
 
   function teamLogo(abbrev: string): string {
-    return `https://a.espncdn.com/i/teamlogos/mlb/500/${abbrev.toLowerCase()}.png`
+    return `https://a.espncdn.com/i/teamlogos/mlb/500/${espnLogoPath(abbrev)}.png`
   }
   function playerPhoto(id: number | null): string | null {
     if (!id) return null
@@ -656,27 +657,46 @@ export default function PickDetailPage() {
                           const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
                           const teamLabel = isAway ? (pick.away_team ?? "Away") : (pick.home_team ?? "Home")
                           return (
-                            <p className="text-xs text-gray-500">
-                              <span className="text-gray-400">{teamLabel} win —</span>{" "}
-                              Model <span className="font-mono text-white">{(modelP * 100).toFixed(1)}%</span>
-                              {" "}· Market <span className="font-mono text-gray-400">{(mktP * 100).toFixed(1)}%</span>
-                            </p>
+                            <>
+                              <p className="text-xs text-gray-500">
+                                <span className="text-gray-400">{teamLabel} win —</span>{" "}
+                                Model <span className="font-mono text-white">{(modelP * 100).toFixed(1)}%</span>
+                                {" "}· Market <span className="font-mono text-gray-400">{(mktP * 100).toFixed(1)}%</span>
+                              </p>
+                              {pick.model_total_runs != null && (
+                                <p className="text-xs text-gray-500">
+                                  Model total:{" "}
+                                  <span className="font-mono text-gray-300">{pick.model_total_runs.toFixed(1)} runs</span>
+                                  {pick.market_total_line != null && (
+                                    <> · Line <span className="font-mono text-gray-500">{pick.market_total_line.toFixed(1)}</span></>
+                                  )}
+                                </p>
+                              )}
+                            </>
                           )
-                        })() : (
-                          <p className="text-xs text-gray-500">
-                            Model <span className="font-mono text-white">{((pick.model_prob ?? 0) * 100).toFixed(1)}%</span>
-                            {" "}over · Market <span className="font-mono text-gray-400">{((pick.bovada_devig_prob ?? 0) * 100).toFixed(1)}%</span>
-                          </p>
-                        )}
-                        {pick.model_total_runs != null && (
-                          <p className="text-xs text-gray-500">
-                            Predicted total:{" "}
-                            <span className="font-mono text-gray-300">{pick.model_total_runs.toFixed(1)} runs</span>
-                            {pick.market_total_line != null && (
-                              <> · Line <span className="font-mono text-gray-500">{pick.market_total_line.toFixed(1)}</span></>
-                            )}
-                          </p>
-                        )}
+                        })() : (() => {
+                          const isUnder = pick.pick_side === "under"
+                          const modelP = isUnder ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
+                          const mktP = isUnder ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
+                          const direction = isUnder ? "under" : "over"
+                          return (
+                            <>
+                              {pick.model_total_runs != null && (
+                                <p className="text-xs text-gray-500">
+                                  Model total:{" "}
+                                  <span className="font-mono text-white">{pick.model_total_runs.toFixed(1)} runs</span>
+                                  {pick.market_total_line != null && (
+                                    <> · Line <span className="font-mono text-gray-500">{pick.market_total_line.toFixed(1)}</span></>
+                                  )}
+                                </p>
+                              )}
+                              <p className="text-xs text-gray-500">
+                                Model <span className="font-mono text-gray-300">{(modelP * 100).toFixed(1)}%</span>
+                                {" "}{direction} · Market <span className="font-mono text-gray-400">{(mktP * 100).toFixed(1)}%</span>
+                              </p>
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))}
