@@ -84,9 +84,9 @@ def _sf_connect() -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(**kwargs)
 
 
-def _sf_query(conn: snowflake.connector.SnowflakeConnection, sql: str) -> list[dict]:
+def _sf_query(conn: snowflake.connector.SnowflakeConnection, sql: str, params: dict | None = None) -> list[dict]:
     cur = conn.cursor(snowflake.connector.DictCursor)
-    cur.execute(sql)
+    cur.execute(sql, params)
     return cur.fetchall()
 
 
@@ -210,7 +210,7 @@ WITH ranked AS (
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions p
     LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = p.game_pk
-    WHERE p.game_date = CURRENT_DATE
+    WHERE p.game_date = %(today)s
       AND p.prediction_type = 'post_lineup'
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
@@ -267,7 +267,7 @@ WITH ranked AS (
             ORDER BY inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
-    WHERE game_date = CURRENT_DATE
+    WHERE game_date = %(today)s
       AND prediction_type = 'post_lineup'
 ),
 base AS (
@@ -372,7 +372,7 @@ ORDER BY game_date DESC, game_pk, market_type
 _FRESHNESS_SQL = """
 SELECT MAX(inserted_at) AS last_updated_at
 FROM baseball_data.betting_ml.daily_model_predictions
-WHERE game_date = CURRENT_DATE
+WHERE game_date = %(today)s
 """
 
 _BANKROLL_SQL = """
@@ -1222,14 +1222,17 @@ def main() -> int:
     # ── picks/today ─────────────────────────────────────────────────────────
     picks_rows: list[dict] = []
     try:
-        picks_rows = _sf_query(sf, _PICKS_TODAY_SQL)
-        fresh_rows = _sf_query(sf, _FRESHNESS_SQL)
-        payload = _build_picks_payload(picks_rows, fresh_rows)
-        if pg:
-            _pg_set_cache(pg, "picks/today", today, payload)
-            log.info("PG: picks/today written (%d picks)", len(picks_rows))
-        if bucket:
-            _write_s3(bucket, f"api-cache/{today}/picks/today.json", payload)
+        picks_rows = _sf_query(sf, _PICKS_TODAY_SQL, {"today": today})
+        fresh_rows = _sf_query(sf, _FRESHNESS_SQL, {"today": today})
+        if not picks_rows:
+            log.info("No predictions for %s — skipping picks/today cache write", today)
+        else:
+            payload = _build_picks_payload(picks_rows, fresh_rows)
+            if pg:
+                _pg_set_cache(pg, "picks/today", today, payload)
+                log.info("PG: picks/today written (%d picks)", len(picks_rows))
+            if bucket:
+                _write_s3(bucket, f"api-cache/{today}/picks/today.json", payload)
     except Exception:
         log.exception("Failed to write picks/today")
         errors += 1
@@ -1237,13 +1240,16 @@ def main() -> int:
     # ── picks/ev ────────────────────────────────────────────────────────────
     ev_rows: list[dict] = []
     try:
-        ev_rows = _sf_query(sf, _EV_TODAY_SQL)
-        payload = _build_ev_payload(ev_rows)
-        if pg:
-            _pg_set_cache(pg, "picks/ev", today, payload)
-            log.info("PG: picks/ev written (%d rows)", len(ev_rows))
-        if bucket:
-            _write_s3(bucket, f"api-cache/{today}/picks/ev.json", payload)
+        ev_rows = _sf_query(sf, _EV_TODAY_SQL, {"today": today})
+        if not ev_rows:
+            log.info("No EV rows for %s — skipping picks/ev cache write", today)
+        else:
+            payload = _build_ev_payload(ev_rows)
+            if pg:
+                _pg_set_cache(pg, "picks/ev", today, payload)
+                log.info("PG: picks/ev written (%d rows)", len(ev_rows))
+            if bucket:
+                _write_s3(bucket, f"api-cache/{today}/picks/ev.json", payload)
     except Exception:
         log.exception("Failed to write picks/ev")
         errors += 1
