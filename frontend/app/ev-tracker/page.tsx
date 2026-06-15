@@ -44,6 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { normalizeTeam } from "@/lib/teams"
 
 // ---------------------------------------------------------------------------
 // API types
@@ -165,8 +166,8 @@ function formatGameTime(isoString: string | null): string {
 }
 
 function computeRow(pick: EVPick, maxKelly: number): ComputedRow {
-  const homeTeam = pick.home_team ?? "Home"
-  const awayTeam = pick.away_team ?? "Away"
+  const homeTeam = normalizeTeam(pick.home_team ?? "Home")
+  const awayTeam = normalizeTeam(pick.away_team ?? "Away")
   const game = `${awayTeam} @ ${homeTeam}`
   const isTotal = pick.market_type === "totals"
   const modelProb = pick.model_prob ?? 0
