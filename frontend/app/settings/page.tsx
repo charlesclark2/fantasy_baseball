@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import Link from "next/link"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
@@ -12,66 +14,70 @@ import { Switch } from "@/components/ui/switch"
 import { Toaster } from "@/components/ui/toaster"
 import { useToast } from "@/components/ui/use-toast"
 import { CheckCircle2, ShieldCheck } from "lucide-react"
-
-// ---------------------------------------------------------------------------
-// TODO: wire to PUT /alerts/preferences and GET /auth/me
-// ---------------------------------------------------------------------------
-const MOCK_DATA = {
-  user: {
-    email: "user@example.com",
-    tier: "beta_tester",
-    emailVerified: true,
-  },
-  preferences: {
-    pushNotifications: false,
-    emailAlerts: true,
-    alertTiming: "lineup_confirmation" as "lineup_confirmation" | "hours_before",
-    hoursBeforeGame: 2,
-  },
-}
+import { useAuth } from "@/lib/auth-context"
+import { apiFetch } from "@/lib/api"
 
 export default function SettingsPage() {
+  const { accessToken, email, signOut } = useAuth()
+  const router = useRouter()
   const { toast } = useToast()
 
-  // Preference state
-  const [pushEnabled, setPushEnabled] = useState(MOCK_DATA.preferences.pushNotifications)
-  const [emailEnabled, setEmailEnabled] = useState(MOCK_DATA.preferences.emailAlerts)
-  const [alertTiming, setAlertTiming] = useState<"lineup_confirmation" | "hours_before">(
-    MOCK_DATA.preferences.alertTiming
-  )
-  const [hoursBeforeGame, setHoursBeforeGame] = useState(MOCK_DATA.preferences.hoursBeforeGame)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [emailEnabled, setEmailEnabled] = useState(true)
+  // TODO A0.4.11: alert_timing and hours_before_game not persisted — extend AlertPreferences model and PUT body when ready
+  const [alertTiming, setAlertTiming] = useState<"lineup_confirmation" | "hours_before">("lineup_confirmation")
+  const [hoursBeforeGame, setHoursBeforeGame] = useState(2)
 
-  // Dirty tracking
-  const isDirty =
-    pushEnabled !== MOCK_DATA.preferences.pushNotifications ||
-    emailEnabled !== MOCK_DATA.preferences.emailAlerts ||
-    alertTiming !== MOCK_DATA.preferences.alertTiming ||
-    hoursBeforeGame !== MOCK_DATA.preferences.hoursBeforeGame
-
-  // Save success state
   const [saved, setSaved] = useState(false)
 
+  const { data: prefs } = useQuery({
+    queryKey: ["alert-prefs"],
+    queryFn: () => apiFetch("/alerts/preferences", {}, accessToken),
+    enabled: !!accessToken,
+  })
+
+  useEffect(() => {
+    if (prefs) {
+      setPushEnabled(prefs.push_enabled)
+      setEmailEnabled(prefs.email_enabled)
+    }
+  }, [prefs])
+
+  const isDirty = prefs
+    ? pushEnabled !== prefs.push_enabled || emailEnabled !== prefs.email_enabled
+    : false
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      apiFetch(
+        "/alerts/preferences",
+        { method: "PUT", body: JSON.stringify({ email_enabled: emailEnabled, push_enabled: pushEnabled }) },
+        accessToken
+      ),
+    onSuccess: () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    },
+  })
+
   function handleSave() {
-    // TODO: call PUT /alerts/preferences
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+    saveMutation.mutate()
   }
 
   function handleSendTest() {
-    toast({
-      description: "Test notification sent",
-    })
+    toast({ description: "Test notification sent" })
+  }
+
+  function handleSignOut() {
+    signOut()
+    router.push("/login")
   }
 
   return (
     <>
-      <Nav authenticated activeLink="settings" userEmail={MOCK_DATA.user.email} />
+      <Nav authenticated activeLink="settings" userEmail={email} />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Page content                                                         */}
-      {/* ------------------------------------------------------------------ */}
       <main className="mx-auto max-w-2xl space-y-6 px-4 py-8">
-        {/* Page header */}
         <h1 className="text-2xl font-bold text-white">Settings</h1>
 
         {/* ---------------------------------------------------------------- */}
@@ -150,7 +156,6 @@ export default function SettingsPage() {
               }}
               className="space-y-3"
             >
-              {/* Option 1 */}
               <div className="flex items-start gap-3">
                 <RadioGroupItem
                   value="lineup_confirmation"
@@ -165,7 +170,6 @@ export default function SettingsPage() {
                 </Label>
               </div>
 
-              {/* Option 2 */}
               <div className="flex items-start gap-3">
                 <RadioGroupItem
                   value="hours_before"
@@ -181,7 +185,6 @@ export default function SettingsPage() {
               </div>
             </RadioGroup>
 
-            {/* Conditional hours input */}
             {alertTiming === "hours_before" && (
               <div className="mt-4 ml-7 flex items-center gap-3">
                 <Label
@@ -223,8 +226,8 @@ export default function SettingsPage() {
                 Email address
               </p>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-white">{MOCK_DATA.user.email}</span>
-                {MOCK_DATA.user.emailVerified && (
+                <span className="text-sm text-white">{email ?? "—"}</span>
+                {email && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-[#262626] px-2 py-0.5 text-[11px] font-medium text-gray-400">
                     <ShieldCheck className="h-3 w-3 text-[#10b981]" />
                     Verified
@@ -295,6 +298,7 @@ export default function SettingsPage() {
               variant="outline"
               size="sm"
               className="shrink-0 border-[#ef4444]/50 text-[#ef4444] hover:bg-[#ef4444]/10 hover:text-[#ef4444] hover:border-[#ef4444]"
+              onClick={handleSignOut}
             >
               Sign out everywhere
             </Button>
@@ -307,10 +311,10 @@ export default function SettingsPage() {
         <div className="space-y-2 pb-8">
           <Button
             className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] disabled:opacity-40"
-            disabled={!isDirty}
+            disabled={!isDirty || saveMutation.isPending}
             onClick={handleSave}
           >
-            Save preferences
+            {saveMutation.isPending ? "Saving…" : "Save preferences"}
           </Button>
           {saved && (
             <p className="flex items-center justify-center gap-1.5 text-sm text-[#10b981]">
