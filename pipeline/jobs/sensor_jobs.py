@@ -25,7 +25,16 @@ from pipeline.ops.daily_ingestion_ops import (
 )
 
 
-@job(executor_def=in_process_executor)
+# Story A2.16 (2026-06-15) — the `concurrency_group` run tag caps each sensor job at
+# ONE concurrent run via the deployment-settings run_queue.tag_concurrency_limits rule
+# (applyLimitPerUniqueValue: each distinct group value → limit 1). The lineup-monitor
+# sensor fires every 10 min in the active window; before this, a single wedged run
+# (incident 2026-06-15: lineup_dbt_clv_rebuild hung) let the sensor stack 3 overlapping
+# runs that contended on the same Snowflake tables and multiplied compute. With the
+# limit, overlapping triggers QUEUE behind the in-flight run instead of running
+# concurrently (and the new 30-min subprocess timeout bounds the wedge that starts it).
+# NB: RUN-level concurrency — distinct from the op-pool `dagster/concurrency_key` tag.
+@job(executor_def=in_process_executor, tags={"concurrency_group": "lineup_monitor"})
 def lineup_monitor_job():
     s1 = lineup_ingest_schedule()
     # Story 30.5 — ingest today's HP-umpire assignment here (afternoon, when MLB
@@ -44,13 +53,13 @@ def lineup_monitor_job():
     write_serving_store_op(predict_done=clv)
 
 
-@job(executor_def=in_process_executor)
+@job(executor_def=in_process_executor, tags={"concurrency_group": "pregame_snapshot"})
 def pregame_snapshot_job():
     start = pregame_odds_snapshot()
     pregame_dbt_clv_rebuild(start=start)
 
 
-@job(executor_def=in_process_executor)
+@job(executor_def=in_process_executor, tags={"concurrency_group": "statcast_catchup"})
 def statcast_catchup_job():
     # Fired by statcast_freshness_sensor once yesterday's Statcast finally lands.
     # Ingest pitches → rebuild the pitch-derived marts/feature store → refresh the

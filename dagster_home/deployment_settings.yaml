@@ -1,0 +1,42 @@
+# =============================================================================
+# Dagster+ DEPLOYMENT settings (Story A2.16) — server-side run queue + monitoring.
+#
+# These settings live in Dagster+ (the run coordinator queues runs centrally), NOT
+# in the agent's dagster.yaml. The agent dagster.yaml configures the agent itself
+# (user_code_launcher); run-level concurrency + run monitoring are enforced by
+# Dagster+ from THIS deployment-settings document.
+#
+# APPLY (set-from-file REPLACES the whole settings doc, so never push a partial
+# file — get current, merge, then set):
+#     dagster-cloud deployment settings get > /tmp/current_settings.yaml   # inspect/merge
+#     dagster-cloud deployment settings set-from-file dagster_home/deployment_settings.yaml
+#   …or paste the blocks below into Dagster+ UI → Deployment → Settings.
+#
+# Keep this file as the source of truth for the deployment settings so the run
+# queue / monitoring config is reviewable in-repo (the agent dagster.yaml can't
+# host run_queue for Dagster+).
+# =============================================================================
+
+# Cap each sensor job at ONE concurrent run. The `concurrency_group` RUN tag is set
+# in pipeline/jobs/sensor_jobs.py (lineup_monitor / pregame_snapshot / statcast_catchup).
+# applyLimitPerUniqueValue → each distinct group value is independently limited to 1,
+# so the three jobs don't block each other, but a job never runs concurrently with
+# itself. Overlapping sensor triggers QUEUE behind the in-flight run instead of
+# stacking (incident 2026-06-15: a wedged lineup_dbt_clv_rebuild let the 10-min
+# sensor pile up 3 overlapping runs that contended on Snowflake and multiplied cost).
+run_queue:
+  tag_concurrency_limits:
+    - key: "concurrency_group"
+      limit: 1
+      value:
+        applyLimitPerUniqueValue: true
+
+# Global hard run-timeout (A2.16-D1). Terminates any run — defined jobs AND ad-hoc
+# asset materializations — exceeding the cap, so a hung/runaway run can't silently
+# burn credits (the trial's single biggest event was a ~16h manual __ASSET_JOB =
+# 44% of trial compute). 4h is ~8x the longest legitimate run (Sunday full-refresh
+# build); a single run can override via the `dagster/max_runtime` tag. This is the
+# canonical Dagster+ location for run_monitoring — supersedes the copy in the agent
+# dagster.yaml (kept there harmlessly for local/OSS parity).
+run_monitoring:
+  max_runtime_seconds: 14400

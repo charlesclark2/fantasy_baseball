@@ -41,3 +41,15 @@ export function normalizeMatchup(matchup: string): string {
   if (parts.length !== 2) return matchup
   return `${normalizeTeam(parts[0])} @ ${normalizeTeam(parts[1])}`
 }
+
+// Maps our internal abbreviations → ESPN CDN logo paths (where they differ)
+const ESPN_CDN_OVERRIDE: Record<string, string> = {
+  "AZ":  "ari",
+  "CWS": "chw",
+  "ATH": "oak",
+}
+
+export function espnLogoPath(teamNameOrAbbrev: string): string {
+  const abbrev = normalizeTeam(teamNameOrAbbrev)
+  return ESPN_CDN_OVERRIDE[abbrev] ?? abbrev.toLowerCase()
+}
