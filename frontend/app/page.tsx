@@ -432,9 +432,11 @@ function Footer() {
         {/* Links */}
         <nav className="flex items-center gap-4">
           {[
+            { label: "FAQ", href: "/faq" },
+            { label: "Blog", href: "/blog" },
             { label: "Privacy Policy", href: "/privacy" },
             { label: "Terms", href: "/terms" },
-            { label: "Contact", href: "mailto:hello@credencesports.com" },
+            { label: "Contact", href: "/contact" },
           ].map(({ label, href }) => (
             <Link
               key={label}

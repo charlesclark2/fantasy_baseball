@@ -63,7 +63,7 @@ export default function TermsPage() {
 
           <Section title="5. Accounts and Security">
             <p><strong>Account Creation.</strong> To access the Service, you must create an account through our authentication system. You agree to provide accurate, current, and complete information during registration.</p>
-            <p><strong>Account Security.</strong> You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately at <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a> if you become aware of any unauthorized access to your account.</p>
+            <p><strong>Account Security.</strong> You are responsible for maintaining the confidentiality of your account credentials. You agree to notify us immediately at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a> if you become aware of any unauthorized access to your account.</p>
             <p><strong>Account Responsibility.</strong> You are responsible for all activity that occurs under your account, whether or not you authorized it. Penumbra Partners is not liable for any loss or damage arising from your failure to maintain account security.</p>
             <p><strong>Account Termination.</strong> We reserve the right to suspend or terminate your account at any time for any reason, including but not limited to violation of these Terms, suspicious activity, or at our sole discretion during the beta period.</p>
           </Section>
@@ -181,7 +181,7 @@ export default function TermsPage() {
             <p>For questions about these Terms, contact us at:</p>
             <address className="not-italic mt-2 text-gray-400">
               Penumbra Partners / Credence Sports<br />
-              <a href="mailto:hello@credencesports.com" className="text-[#10b981] hover:underline">hello@credencesports.com</a><br />
+              <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a><br />
               <a href="https://credencesports.com" className="text-[#10b981] hover:underline">credencesports.com</a>
             </address>
           </Section>
