@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ProbabilityBar } from "@/components/probability-bar"
 import { Nav } from "@/components/nav"
+import { LandingFaqSection } from "@/components/landing-faq"
 import {
   BookOpen,
   CheckCircle2,
@@ -414,44 +415,6 @@ function FooterCta() {
   )
 }
 
-function Footer() {
-  return (
-    <footer className="border-t border-[#262626] bg-[#0a0a0a]">
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-8 sm:flex-row sm:justify-between">
-        {/* Wordmark */}
-        <span className="text-sm font-bold">
-          <span className="text-[#10b981]">Credence</span>
-          <span className="text-white"> Sports</span>
-        </span>
-
-        {/* Copyright */}
-        <span className="text-xs text-gray-600">
-          &copy; 2026 Penumbra Partners
-        </span>
-
-        {/* Links */}
-        <nav className="flex items-center gap-4">
-          {[
-            { label: "FAQ", href: "/faq" },
-            { label: "Blog", href: "/blog" },
-            { label: "Privacy Policy", href: "/privacy" },
-            { label: "Terms", href: "/terms" },
-            { label: "Contact", href: "/contact" },
-          ].map(({ label, href }) => (
-            <Link
-              key={label}
-              href={href}
-              className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-    </footer>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -473,9 +436,9 @@ export default async function LandingPage() {
         <WhyCredenceStrip />
         <HowItWorks />
         <TrustSection />
+        <LandingFaqSection />
         <FooterCta />
       </main>
-      <Footer />
     </div>
   )
 }
