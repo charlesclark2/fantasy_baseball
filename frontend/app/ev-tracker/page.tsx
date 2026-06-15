@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useLocalStorage } from "@/hooks/use-local-storage"
 import posthog from "posthog-js"
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
@@ -128,10 +129,12 @@ function usd(v: number) {
   return `$${v.toFixed(2)}`
 }
 function fmtEdge(v: number) {
-  return `+${(v * 100).toFixed(1)}%`
+  const clamped = Math.min(v, 1)   // edge is model_prob - market_prob; max meaningful value is 1
+  return `+${(clamped * 100).toFixed(1)}%`
 }
 function fmtEV(v: number) {
-  return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`
+  const clamped = Math.max(-2, Math.min(v, 5)) // cap at +500% / -200% to guard against bad odds data
+  return `${clamped >= 0 ? "+" : ""}${(clamped * 100).toFixed(1)}%`
 }
 
 // ---------------------------------------------------------------------------
@@ -235,8 +238,9 @@ function computeRow(pick: EVPick, maxKelly: number): ComputedRow {
     qualified: pick.qualified_bet ?? false,
     highConviction,
     edge,
-    displayEdge: Math.abs(edge),
-    ev, rawKelly, cappedKelly,
+    displayEdge: Math.min(Math.abs(edge), 1), // probabilities can't exceed 1
+    ev: Math.max(-2, Math.min(ev, 5)),         // guard against degenerate odds data
+    rawKelly, cappedKelly,
     predTotalRuns: pick.pred_total_runs ?? null,
     totalLineConsensus: pick.total_line_consensus ?? null,
     lineupConfirmed: pick.lineup_confirmed ?? false,
@@ -463,8 +467,8 @@ export default function EVTrackerPage() {
   const router = useRouter()
   const { selectedDate, setSelectedDate, isoDate } = useSelectedDate()
   const [calOpen, setCalOpen] = useState(false)
-  const [bankroll, setBankroll] = useState<number>(1000)
-  const [maxKelly, setMaxKelly] = useState<number>(5)
+  const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
+  const [maxKelly, setMaxKelly] = useLocalStorage<number>("ev_kelly_cap", 5)
 
   // Separate sort state per table — default to game time ascending
   const [h2hSort, setH2hSort] = useState<SortKey>("game")
