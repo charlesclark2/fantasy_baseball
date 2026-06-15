@@ -12,7 +12,7 @@ import os
 from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.backend.models.picks import (
     BovadaH2H,
@@ -44,6 +44,8 @@ from app.backend.models.picks import (
     UmpireInfo,
     WeatherInfo,
 )
+from app.backend.dependencies import get_optional_user_id
+from app.backend.services import pg
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.snowflake import execute_query
 
@@ -1093,13 +1095,54 @@ def _pipeline_status(last_updated_at: datetime | None) -> str:
     return "ok" if age_hours < 6 else "stale"
 
 
+def _apply_portfolio_filter(result: "TodayPicksResponse", user_id: str) -> "TodayPicksResponse":
+    """Filter a TodayPicksResponse picks list by the user's portfolio preferences."""
+    try:
+        prefs = pg.get_user_portfolio(user_id)
+        min_ev = prefs.get("min_ev_threshold") or 0.02
+        markets = prefs.get("markets") or ["h2h", "totals"]
+        if isinstance(markets, str):
+            import json as _json
+            markets = _json.loads(markets)
+        filtered = [
+            p for p in result.picks
+            if p.market_type in markets and (p.edge is None or p.edge >= min_ev)
+        ]
+        return TodayPicksResponse(picks=filtered, data_quality=result.data_quality)
+    except Exception:
+        logger.warning("Portfolio filter failed for user=%s — returning unfiltered", user_id)
+        return result
+
+
 @router.get("/today", response_model=TodayPicksResponse)
-def get_picks_today() -> TodayPicksResponse:
+def get_picks_today(
+    apply_portfolio: bool = Query(False, description="Filter picks by the authenticated user's portfolio preferences"),
+    user_id: str | None = Depends(get_optional_user_id),
+) -> TodayPicksResponse:
+    today = datetime.now(_ET).date().isoformat()
+
+    # PG primary read path (A2.12)
+    pg_hit = pg.get_cache("picks/today", today)
+    if pg_hit is not None:
+        try:
+            result = TodayPicksResponse(**pg_hit)
+            if apply_portfolio and user_id:
+                result = _apply_portfolio_filter(result, user_id)
+            return result
+        except Exception:
+            logger.warning("PG picks/today invalid — falling through")
+
+    # S3 secondary
     cached = get_cache("picks/today.json")
     if cached is not None:
-        return TodayPicksResponse(**cached)
+        try:
+            result = TodayPicksResponse(**cached)
+            if apply_portfolio and user_id:
+                result = _apply_portfolio_filter(result, user_id)
+            return result
+        except Exception:
+            pass
 
-    today = datetime.now(_ET).date().isoformat()
     try:
         rows = execute_query(_TODAY_QUERY, params={"today": today})
         freshness = execute_query(_FRESHNESS_QUERY, params={"today": today})
@@ -1140,7 +1183,11 @@ def get_picks_today() -> TodayPicksResponse:
     )
 
     result = TodayPicksResponse(picks=picks, data_quality=data_quality)
-    set_cache("picks/today.json", result.model_dump(mode="json"))
+    payload = result.model_dump(mode="json")
+    pg.set_cache("picks/today", today, payload)
+    set_cache("picks/today.json", payload)
+    if apply_portfolio and user_id:
+        result = _apply_portfolio_filter(result, user_id)
     return result
 
 
@@ -1199,6 +1246,12 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
         cache_key = "picks/ev.json"
 
     if cache_key:
+        pg_hit = pg.get_cache("picks/ev", today_str)
+        if pg_hit is not None:
+            try:
+                return EVPicksResponse(**pg_hit)
+            except Exception:
+                logger.warning("PG picks/ev invalid — falling through")
         cached = get_cache(cache_key)
         if cached is not None:
             return EVPicksResponse(**cached)
@@ -1231,7 +1284,9 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
     ]
     result = EVPicksResponse(picks=picks, total=len(picks))
     if cache_key:
-        set_cache(cache_key, result.model_dump(mode="json"))
+        payload = result.model_dump(mode="json")
+        pg.set_cache("picks/ev", today_str, payload)
+        set_cache(cache_key, payload)
     return result
 
 
@@ -1239,14 +1294,25 @@ def get_picks_ev(date: str = Query(default=None, description="YYYY-MM-DD; defaul
 def get_game_detail(game_pk: int) -> GameDetailResponse:
     params = {"game_pk": game_pk}
 
-    # Cache check — permanent for Final games (immutable), date-scoped for live/preview
+    # Cache check — PG primary, then S3 (permanent for Final games, date-scoped for live)
+    from datetime import date as _date
+    _today_str = _date.today().isoformat()
+    _game_pg_key = f"picks/game/{game_pk}"
     _game_cache_key = f"picks/game/{game_pk}.json"
+
+    _pg_cached = pg.get_cache(_game_pg_key, _today_str)
+    if _pg_cached is not None:
+        try:
+            return GameDetailResponse(**_pg_cached)
+        except Exception:
+            logger.warning("PG stale/invalid for game_pk=%s, re-fetching", game_pk)
+
     _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
     if _cached is not None:
         try:
             return GameDetailResponse(**_cached)
         except Exception:
-            logger.warning("Stale/invalid cache for game_pk=%s, re-fetching", game_pk)
+            logger.warning("Stale/invalid S3 cache for game_pk=%s, re-fetching", game_pk)
 
     # Base picks
     try:
@@ -1650,9 +1716,11 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
         game_context=game_context,
     )
 
-    # Write to cache: Final games are immutable → permanent prefix; others → today's date prefix
+    # Write to cache: Final games are immutable → permanent; others → date-scoped
     _is_final = game_score is not None and game_score.status == "Final"
-    set_cache(_game_cache_key, result.model_dump(mode="json"), permanent=_is_final)
+    _payload = result.model_dump(mode="json")
+    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
+    set_cache(_game_cache_key, _payload, permanent=_is_final)
 
     return result
 

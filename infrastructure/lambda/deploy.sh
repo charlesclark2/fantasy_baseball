@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+# Force AWS CLI to use the named profile rather than any injected env-var credentials
+# (e.g. baseball-access-user keys that may be exported from .env in the current shell).
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
 FUNCTION_NAME="credence-prod-lambda-api"
 REGION="us-east-1"
 PACKAGE_DIR="$(pwd)/.lambda_build/package"
@@ -52,6 +56,7 @@ pip install \
   "cryptography>=41.0" \
   "python-dotenv>=1.0" \
   "sentry-sdk[fastapi]>=2.0.0" \
+  "psycopg2-binary>=2.9.0" \
   -t "$PACKAGE_DIR" \
   --quiet
 

@@ -78,6 +78,19 @@ def set_cache(key: str, data: dict | list, permanent: bool = False) -> bool:
         return False
 
 
+def invalidate_game(game_pk: int) -> None:
+    """Delete the date-scoped S3 cache entry for a single game (date-scoped only;
+    permanent Final-game blobs are intentionally preserved)."""
+    if not CACHE_BUCKET:
+        return
+    key = f"{_today_prefix()}/picks/game/{game_pk}.json"
+    try:
+        _s3.delete_object(Bucket=CACHE_BUCKET, Key=key)
+        logger.info("Game cache invalidated: %s", key)
+    except Exception as e:
+        logger.error("Game cache invalidation error for game_pk=%s: %s", game_pk, e)
+
+
 def invalidate_today() -> None:
     """Delete all cache keys for today. Used by /admin/cache/invalidate."""
     if not CACHE_BUCKET:

@@ -75,6 +75,18 @@ def get_user_id(request: Request) -> str:
     raise HTTPException(status_code=401, detail="Unable to determine user identity")
 
 
+def get_optional_user_id(request: Request) -> str | None:
+    """Like get_user_id, but returns None instead of raising 401 when unauthenticated.
+
+    Used by endpoints that support optional per-user behavior (e.g. portfolio filtering
+    on GET /picks/today?apply_portfolio=true).
+    """
+    try:
+        return get_user_id(request)
+    except Exception:
+        return None
+
+
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
     """Like get_user_id, but raises 403 if the caller is not in ADMIN_EMAILS.
 

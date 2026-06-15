@@ -261,6 +261,46 @@ the `~/.aws` power-user profile). Same actions/resources as policy #1.
 
 ---
 
+## Railway PostgreSQL Serving Store (A2.12)
+
+Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
+outputs to PG after each pipeline run; FastAPI reads PG first (sub-1ms), falls
+through to S3 then Snowflake on miss.
+
+| Resource | Value |
+|---|---|
+| Provider | Railway (same project as FlareSolverr) |
+| Plugin | PostgreSQL (Railway-managed) |
+| Connection string | `DATABASE_URL` env var — set in Lambda console and Dagster Cloud secrets |
+| Tables | `api_cache`, `daily_picks`, `user_portfolios` |
+| DDL | `infrastructure/pg/create_serving_tables.sql` |
+
+### Provision (run once)
+
+```bash
+# After Railway provisions the database, copy DATABASE_URL from the Railway dashboard
+psql $DATABASE_URL -f infrastructure/pg/create_serving_tables.sql
+```
+
+### Lambda environment variable to add
+
+Add `DATABASE_URL=<Railway connection string>` to the Lambda environment variables
+(Lambda console → credence-prod-lambda-api → Configuration → Environment variables).
+Set the same value in Dagster Cloud secrets for the write path (`write_serving_store_op`).
+
+### Table inventory
+
+| Table | Primary key | Purpose |
+|---|---|---|
+| `api_cache` | `(cache_key, cache_date)` | Blob store keyed by endpoint path + date; replaces S3 as primary read path |
+| `daily_picks` | `(game_pk, market, prediction_date)` | Individual pick rows for portfolio-side SQL filtering |
+| `user_portfolios` | `user_id` (Cognito sub) | Per-user min EV threshold, markets, bankroll, max Kelly |
+
+`api_cache.is_permanent = TRUE` on Final-game detail blobs so they survive date rollover
+without needing S3's permanent prefix. S3 remains as secondary fallback during transition.
+
+---
+
 ## API Cache — S3 (A0.3)
 
 | Resource | Value |

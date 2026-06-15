@@ -21,6 +21,7 @@ from pipeline.ops.daily_ingestion_ops import (
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
     update_team_posteriors_op,
+    write_serving_store_op,
 )
 
 
@@ -39,7 +40,8 @@ def lineup_monitor_job():
     s2c = lineup_dbt_feature_rebuild(start=s2)
     s3 = lineup_predict(start=s2c)
     s4 = lineup_odds_snapshot(start=s3)
-    lineup_dbt_clv_rebuild(start=s4)
+    clv = lineup_dbt_clv_rebuild(start=s4)
+    write_serving_store_op(predict_done=clv)
 
 
 @job(executor_def=in_process_executor)
@@ -69,4 +71,5 @@ def statcast_catchup_job():
     # dbt_umpire_feature_rebuild (after the sequential ops), so no separate ops here.
     el = compute_elo(start=pm)
     s3 = dbt_umpire_feature_rebuild(start=el)
-    predict_today_morning(start=s3)
+    s4 = predict_today_morning(start=s3)
+    write_serving_store_op(predict_done=s4)
