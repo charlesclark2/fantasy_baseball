@@ -5,9 +5,9 @@ JWT authorizer context. The authorizer validates the token before the Lambda is
 invoked, so the `sub` claim here is trusted. In local dev (uvicorn, no authorizer)
 falls back to X-User-Id header, then to the Bearer JWT sub claim (unverified decode).
 
-get_admin_user — same as get_user_id, but additionally checks that the caller's
-Cognito username (== email for admin-provisioned accounts) appears in the
-ADMIN_EMAILS env var (comma-separated). Raises 403 otherwise.
+get_admin_user — same as get_user_id, but additionally checks that the caller
+belongs to the Cognito "admin" group (preferred) or appears in the ADMIN_EMAILS
+env var (legacy fallback). Raises 403 otherwise.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from fastapi import Depends, HTTPException, Request
 logger = logging.getLogger(__name__)
 
 # Comma-separated list of Cognito usernames (emails) allowed to call admin endpoints.
-# Set in Lambda environment: ADMIN_EMAILS=alice@example.com,bob@example.com
+# Legacy fallback — prefer assigning users to the Cognito "admin" group instead.
 _ADMIN_EMAILS: frozenset[str] = frozenset(
     e.strip().lower()
     for e in os.getenv("ADMIN_EMAILS", "").split(",")
@@ -88,25 +88,38 @@ def get_optional_user_id(request: Request) -> str | None:
 
 
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
-    """Like get_user_id, but raises 403 if the caller is not in ADMIN_EMAILS.
+    """Like get_user_id, but raises 403 if the caller is not an admin.
 
-    Cognito access tokens carry a `username` claim equal to the Cognito username
-    (which is the email for admin-provisioned accounts). We check that against the
-    ADMIN_EMAILS env var. Falls back to X-Admin-Email header for local dev.
+    Preferred path: checks the caller belongs to the Cognito "admin" group via
+    the `cognito:groups` claim in the access token (set when the user is added to
+    the Cognito User Pool "admin" group).
+
+    Legacy fallback: ADMIN_EMAILS env var (comma-separated emails). Kept for
+    backwards compatibility during deployments that haven't set up Cognito groups.
+
+    Local dev fallback: X-Admin-Email request header.
     """
-    if not _ADMIN_EMAILS:
-        # ADMIN_EMAILS not configured — fail closed (deny all)
-        raise HTTPException(status_code=403, detail="Admin access not configured")
-
-    # Prod path: username claim from Cognito access token
     claims = _claims_from_event(request)
-    username = claims.get("username") or claims.get("cognito:username", "")
-    if username.lower() in _ADMIN_EMAILS:
+
+    # Primary: Cognito group membership ("admin" group)
+    groups = claims.get("cognito:groups") or []
+    if isinstance(groups, str):
+        # API Gateway may deliver a JSON array as a string
+        try:
+            groups = json.loads(groups)
+        except Exception:
+            groups = [groups]
+    if "admin" in groups:
         return user_id
 
-    # Local dev fallback: explicit header (never present in prod API Gateway requests)
-    dev_email = request.headers.get("X-Admin-Email", "")
-    if dev_email.lower() in _ADMIN_EMAILS:
-        return user_id
+    # Legacy: ADMIN_EMAILS env var
+    if _ADMIN_EMAILS:
+        username = claims.get("username") or claims.get("cognito:username", "")
+        if username.lower() in _ADMIN_EMAILS:
+            return user_id
+        # Local dev fallback: explicit header
+        dev_email = request.headers.get("X-Admin-Email", "")
+        if dev_email.lower() in _ADMIN_EMAILS:
+            return user_id
 
     raise HTTPException(status_code=403, detail="Admin access required")

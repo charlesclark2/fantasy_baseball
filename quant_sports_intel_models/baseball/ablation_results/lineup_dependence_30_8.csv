@@ -1,0 +1,318 @@
+feature,class,reason,null_dense,null_sparse,name_lineup,name_agrees
+away_avg_barrel_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_bb_pct_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_bb_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_bb_pct_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_eb_bb_pct,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_eb_iso,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_eb_woba,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_eb_woba_sequential,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_hard_hit_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_hard_hit_pct_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_hard_hit_pct_vs_rhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_k_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_k_pct_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_k_pct_vs_rhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_whiff_rate_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_woba_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_woba_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_woba_vs_rhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_avg_xwoba_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_xwoba_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_avg_xwoba_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_bp_bb_pct_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_bb_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_eb_coverage_pct,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_eb_uncertainty,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_eb_xwoba,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_eb_xwoba_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_innings_pitched_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_innings_pitched_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_k_pct_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_k_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_xwoba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bp_xwoba_against_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_bullpen_pitches_prev_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_catcher_defensive_runs,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_closer_used_prev_1d,A,present pre-lineup (null_sparse 0.00),0.136,0.0,False,True
+away_closer_used_prev_2d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_consecutive_away_games,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_elo,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_games_back,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_high_leverage_used_prev_2d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_injured_player_count,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_lineup_archetype_avg_woba,B,present-confirmed/absent-unconfirmed (Δnull +0.68),0.318,1.0,True,True
+away_lineup_archetype_pa_coverage,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_avg_attack_angle,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_avg_swing_length,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_avg_woba_vs_cluster,B,present-confirmed/absent-unconfirmed (Δnull +0.68),0.318,1.0,True,True
+away_lineup_avg_xwoba_vs_cluster,B,present-confirmed/absent-unconfirmed (Δnull +0.68),0.318,1.0,True,True
+away_lineup_bat_speed_vs_starter_velo,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_cluster_slot_coverage,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_iso_vs_starter_archetype,B,present-confirmed/absent-unconfirmed (Δnull +0.84),0.159,1.0,True,True
+away_lineup_k_pct_vs_starter_archetype,B,present-confirmed/absent-unconfirmed (Δnull +0.84),0.159,1.0,True,True
+away_lineup_vs_home_starter_h2h_xwoba,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+away_lineup_vs_home_starter_k_pct_adj,B,present-confirmed/absent-unconfirmed (Δnull +0.84),0.159,1.0,True,True
+away_lineup_vs_home_starter_xwoba_adj_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_lineup_xwoba_vs_starter_archetype,B,present-confirmed/absent-unconfirmed (Δnull +0.84),0.159,1.0,True,True
+away_losses,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_n_high_whiff,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_n_no_label,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_n_power_pull,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+away_off_barrel_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_bb_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_bb_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_hard_hit_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_hard_hit_pct_7d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_hard_hit_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_hard_hit_pct_std_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_k_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_runs_per_game_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_runs_per_game_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_xwoba_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_off_xwoba_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_barrel_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_bb_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_bb_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_bb_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_hard_hit_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_k_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_k_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_woba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_woba_against_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_woba_against_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_woba_against_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_xwoba_7d_minus_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_xwoba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_xwoba_against_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pit_xwoba_against_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_pythagorean_win_exp,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_avg_fastball_velo,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_avg_ip_last_3,A,present pre-lineup (null_sparse 0.10),0.045,0.103,False,True
+away_starter_avg_ip_season,A,present pre-lineup (null_sparse 0.10),0.091,0.103,False,True
+away_starter_batter_chase_rate_30d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_batter_chase_rate_std,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_bb_pct_30d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_bb_pct_7d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_bb_pct_std,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_changeup_stuff_plus,A,present pre-lineup (null_sparse 0.34),0.159,0.345,False,True
+away_starter_csw_pct_3start,A,present pre-lineup (null_sparse 0.14),0.023,0.138,False,True
+away_starter_csw_pct_season,A,present pre-lineup (null_sparse 0.14),0.023,0.138,False,True
+away_starter_curveball_stuff_plus,A,present pre-lineup (null_sparse 0.24),0.386,0.241,False,True
+away_starter_eb_bb_pct,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_eb_k_pct,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_eb_xwoba_against,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_eb_xwoba_against_sequential,A,present pre-lineup (null_sparse 0.14),0.091,0.138,False,True
+away_starter_eb_xwoba_against_sequential_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_eb_xwoba_uncertainty,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_eb_xwoba_uncertainty_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_hard_hit_pct_30d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_hard_hit_pct_7d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_hard_hit_pct_7d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_hard_hit_pct_std,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_hard_hit_pct_std_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_k_pct_30d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_k_pct_vs_lhb,A,present pre-lineup (null_sparse 0.21),0.068,0.207,False,True
+away_starter_k_pct_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.068,0.207,False,True
+away_starter_proj_fip,A,present pre-lineup (null_sparse 0.14),0.023,0.138,False,True
+away_starter_stuff_plus,A,present pre-lineup (null_sparse 0.10),0.0,0.103,False,True
+away_starter_trailing_ra9_30g,A,present pre-lineup (null_sparse 0.14),0.091,0.138,False,True
+away_starter_whiff_rate_14d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_whiff_rate_std,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_whiff_rate_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.068,0.207,False,True
+away_starter_xwoba_against_14d,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_xwoba_against_std,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+away_starter_xwoba_against_std_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_xwoba_vs_lhb_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_starter_xwoba_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.068,0.207,False,True
+away_team_oaa_prior_season,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_team_sequential_bullpen_xwoba,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_team_sequential_bullpen_xwoba_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_team_sequential_win_prob,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_team_sequential_woba,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_vs_lhp_bb_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_lhp_k_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_lhp_woba_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_lhp_xwoba_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_lhp_xwoba_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_lhp_xwoba_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_vs_rhp_woba_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+away_wins,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_woba_against_with_risp_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_woba_against_with_runners_on_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_woba_with_risp_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_xwoba_with_risp_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_xwoba_with_runners_on_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+away_xwoba_with_runners_on_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+center_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+elevation_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+elo_diff,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+has_starter_platoon_data,A,absent-from-store (imputation indicator),,,False,True
+home_avg_barrel_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_bb_pct_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_chase_rate_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_eb_bb_pct,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_eb_iso,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_eb_woba,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_eb_woba_sequential,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_avg_hard_hit_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_hard_hit_pct_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_avg_hard_hit_pct_vs_rhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_avg_k_pct_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_k_pct_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_avg_woba_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_woba_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_woba_vs_rhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_avg_xwoba_30d,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_xwoba_std,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_avg_xwoba_vs_lhp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_away_bp_xwoba_against_30d_pct_diff,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_away_injury_adj_avg_woba_30d_pct_diff,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_away_off_woba_30d_pct_diff,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_away_starter_k_pct_std_pct_diff,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+home_away_starter_xwoba_against_std_pct_diff,A,present pre-lineup (null_sparse 0.10),0.023,0.103,False,True
+home_bp_eb_coverage_pct,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_eb_uncertainty,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_eb_xwoba,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_eb_xwoba_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_bp_hard_hit_pct_14d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_hard_hit_pct_14d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_bp_hard_hit_pct_30d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_hard_hit_pct_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_bp_innings_pitched_30d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_k_pct_14d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_k_pct_30d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_whiff_rate_14d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_whiff_rate_30d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_xwoba_against_14d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_xwoba_against_14d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_bp_xwoba_against_30d,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_bp_xwoba_against_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_catcher_defensive_runs,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_elo,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_games_back,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_injured_player_count,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_lineup_archetype_pa_coverage,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_archetype_slot_coverage,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_avg_bat_speed,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_avg_swing_length,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_avg_woba_vs_cluster,B,present-confirmed/absent-unconfirmed (Δnull +0.93),0.068,1.0,True,True
+home_lineup_avg_xwoba_vs_cluster,B,present-confirmed/absent-unconfirmed (Δnull +0.93),0.068,1.0,True,True
+home_lineup_avg_xwoba_vs_cluster_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_lineup_bat_speed_vs_starter_velo,B,present-confirmed/absent-unconfirmed (Δnull +0.98),0.023,1.0,True,True
+home_lineup_iso_vs_starter_archetype,B,present-confirmed/absent-unconfirmed (Δnull +0.93),0.068,1.0,True,True
+home_lineup_k_pct_vs_starter_archetype,B,present-confirmed/absent-unconfirmed (Δnull +0.93),0.068,1.0,True,True
+home_lineup_vs_away_starter_bb_pct_adj,B,present-confirmed/absent-unconfirmed (Δnull +0.93),0.068,1.0,True,True
+home_lineup_vs_away_starter_h2h_woba,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_vs_away_starter_h2h_xwoba,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,True,True
+home_lineup_vs_away_starter_xwoba_adj_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_n_no_label,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_n_patient_obp,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_n_power_pull,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+home_off_barrel_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_barrel_pct_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_bb_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_bb_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_bb_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_hard_hit_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_hard_hit_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_runs_per_game_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_runs_per_game_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_runs_per_game_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_runs_per_game_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_xwoba_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_xwoba_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_xwoba_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_xwoba_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_off_xwoba_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_barrel_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_barrel_pct_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_bb_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_hard_hit_pct_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_hard_hit_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_hard_hit_pct_7d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_hard_hit_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_k_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_k_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_woba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_woba_against_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_woba_against_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_xwoba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_xwoba_against_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_xwoba_against_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_xwoba_against_7d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pit_xwoba_against_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pythagorean_residual_season,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_pythagorean_win_exp,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_appearances_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_avg_fastball_velo,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_avg_ip_last_3,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_starter_avg_ip_season,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+home_starter_barrel_pct_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_barrel_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_barrel_pct_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_barrel_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_barrel_pct_std_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_batter_chase_rate_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_batter_chase_rate_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_bb_pct_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_bb_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_bb_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_bb_pct_vs_lhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_bb_pct_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_changeup_stuff_plus,A,present pre-lineup (null_sparse 0.17),0.205,0.172,False,True
+home_starter_csw_pct_season,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_curveball_stuff_plus,A,present pre-lineup (null_sparse 0.34),0.432,0.345,False,True
+home_starter_eb_k_pct,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_eb_xwoba_against,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_eb_xwoba_against_sequential,A,present pre-lineup (null_sparse 0.00),0.045,0.0,False,True
+home_starter_eb_xwoba_against_sequential_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_eb_xwoba_uncertainty,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_fip_ra9_gap,A,present pre-lineup (null_sparse 0.00),0.045,0.0,False,True
+home_starter_hard_hit_pct_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_hard_hit_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_hard_hit_pct_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_k_pct_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_k_pct_vs_lhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_k_pct_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_proj_fip,A,present pre-lineup (null_sparse 0.03),0.045,0.034,False,True
+home_starter_slider_stuff_plus,A,present pre-lineup (null_sparse 0.10),0.114,0.103,False,True
+home_starter_stuff_plus,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_trailing_fip_30g,A,present pre-lineup (null_sparse 0.00),0.045,0.0,False,True
+home_starter_trailing_ra9_30g,A,present pre-lineup (null_sparse 0.00),0.045,0.0,False,True
+home_starter_whiff_rate_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_whiff_rate_vs_lhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_whiff_rate_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_xwoba_7d_minus_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_7d_minus_std_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_14d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_30d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_7d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_7d_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_against_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_starter_xwoba_vs_lhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_starter_xwoba_vs_rhb,A,present pre-lineup (null_sparse 0.21),0.159,0.207,False,True
+home_team_sequential_bullpen_xwoba,A,present pre-lineup (null_sparse 0.00),0.023,0.0,False,True
+home_team_sequential_bullpen_xwoba_seasonnorm,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_team_sequential_win_prob,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_team_sequential_woba,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_vs_lhp_slugging_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_vs_lhp_woba_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_vs_lhp_xwoba_std,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_vs_rhp_slugging_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,True,False
+home_win_rate_trailing_3yr,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_woba_against_with_risp_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+home_woba_with_risp_30d,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+is_new_venue,A,absent-from-store (imputation indicator),,,False,True
+left_center_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+left_ft,A,"null in BOTH windows — structural/rolling, not lineup-gated (sparse 0.72/dense 0.55)",0.545,0.724,False,True
+left_line_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+park_run_factor_3yr,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+pythagorean_win_exp_diff,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+right_center_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+right_line_ft,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+runs_per_game_at_park,A,present pre-lineup (null_sparse 0.00),0.068,0.0,False,True
+series_game_number,A,present pre-lineup (null_sparse 0.00),0.0,0.0,False,True
+ump_accuracy_zscore,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False
+ump_run_impact_zscore,B,present-confirmed/absent-unconfirmed (Δnull +1.00),0.0,1.0,False,False

@@ -6,16 +6,10 @@ import posthog from "posthog-js"
 import { queryClient } from "@/lib/query-client"
 import { getCurrentCognitoUser } from "@/lib/cognito"
 
-const _ADMIN_EMAILS: ReadonlySet<string> = new Set(
-  (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-)
-
 type AuthCtx = {
   accessToken: string | null
   email: string | null
+  groups: string[]
   isAdmin: boolean
   loading: boolean
   onLoginSuccess: (at: string, it: string) => void
@@ -25,29 +19,34 @@ type AuthCtx = {
 export const AuthContext = createContext<AuthCtx>({
   accessToken: null,
   email: null,
+  groups: [],
   isAdmin: false,
   loading: true,
   onLoginSuccess: () => {},
   signOut: () => {},
 })
 
-function decodeEmail(idToken: string): string | null {
+function decodeIdToken(idToken: string): { email: string | null; groups: string[] } {
   try {
     const payload = JSON.parse(
       atob(idToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))
     )
-    return (payload.email as string) ?? null
+    return {
+      email: (payload.email as string) ?? null,
+      groups: (payload["cognito:groups"] as string[]) ?? [],
+    }
   } catch {
-    return null
+    return { email: null, groups: [] }
   }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [email, setEmail] = useState<string | null>(null)
+  const [groups, setGroups] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
-  const isAdmin = email !== null && _ADMIN_EMAILS.has(email.toLowerCase())
+  const isAdmin = groups.includes("admin")
 
   useEffect(() => {
     const user = getCurrentCognitoUser()
@@ -59,17 +58,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!err && session?.isValid()) {
         const at = session.getAccessToken().getJwtToken()
         const it = session.getIdToken().getJwtToken()
+        const { email: userEmail, groups: userGroups } = decodeIdToken(it)
         setAccessToken(at)
-        setEmail(decodeEmail(it))
+        setEmail(userEmail)
+        setGroups(userGroups)
       }
       setLoading(false)
     })
   }, [])
 
   function onLoginSuccess(at: string, it: string) {
-    const userEmail = decodeEmail(it)
+    const { email: userEmail, groups: userGroups } = decodeIdToken(it)
     setAccessToken(at)
     setEmail(userEmail)
+    setGroups(userGroups)
     if (userEmail) {
       posthog.identify(userEmail, { email: userEmail })
     }
@@ -82,10 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     queryClient.clear()
     setAccessToken(null)
     setEmail(null)
+    setGroups([])
   }
 
   return (
-    <AuthContext.Provider value={{ accessToken, email, isAdmin, loading, onLoginSuccess, signOut }}>
+    <AuthContext.Provider value={{ accessToken, email, groups, isAdmin, loading, onLoginSuccess, signOut }}>
       {children}
     </AuthContext.Provider>
   )

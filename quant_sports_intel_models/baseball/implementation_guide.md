@@ -10445,7 +10445,7 @@ These are cosmetic polish items and do not block any functionality.
 
 ---
 
-#### A0.4.11 — Settings: wire user profile + notification preferences ✅ (2026-06-15)  **[P1]**
+#### A0.4.11 — Settings: wire user profile + notification preferences ⚠️ PARTIAL (2026-06-15)  **[P1 → BACKLOG]**
 
 Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist. `alert_timing` and `hours_before_game` have no backend model yet — keep as local state.
 
@@ -10455,22 +10455,21 @@ Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist.
 - `PUT /alerts/preferences` → same shape (partial update; only send changed fields)
 - User email: from `useAuth().email` (already decoded from the JWT)
 
-**Gap:** `alert_timing` and `hours_before_game` are not in the backend `AlertPreferences` model — they remain local-only state until the model is extended. Note this with a `// TODO` comment.
+**What shipped (2026-06-15):**
+- [x] Real Cognito email shown in Account section (`useAuth().email`)
+- [x] "Sign out everywhere" wired to `signOut()` + `router.push('/login')`
+- [x] `MOCK_DATA` removed entirely
+- [x] Gear icon added to the authenticated nav (top-right) linking to `/settings`
 
-**Tasks:**
-- [ ] Import `useAuth` and pull `accessToken`, `email`, `signOut`
-- [ ] Replace `MOCK_DATA.user.email` with `email` from `useAuth()`
-- [ ] Add `useQuery(['alert-prefs'], () => apiFetch('/alerts/preferences', {}, accessToken))` and seed switch initial states from the response (fall back to `MOCK_DATA.preferences` until loaded)
-- [ ] Replace `handleSave` stub with `useMutation` calling `PUT /alerts/preferences` with `{ email_enabled: emailEnabled, push_enabled: pushEnabled }`; on success show the existing "Preferences saved" feedback
-- [ ] Wire "Sign Out" button (and "Sign out everywhere") to call `signOut()` from `useAuth()` then `router.push('/login')` — remove the `<Link href="/">` wrapper
-- [ ] Add `// TODO A0.4.11: alert_timing and hours_before_game not persisted — extend AlertPreferences model before wiring` above the relevant state
-- [ ] Remove `MOCK_DATA` const (or reduce to only the two timing fields that have no backend yet, renaming it clearly)
+**What was deferred back to backlog (2026-06-15):**
+- Notification toggles (email + push) replaced with a "Coming soon" placeholder
+- Root causes: (1) SES still in sandbox — no emails will actually send until A0.4.18 SES production access is approved; (2) Lambda role missing `dynamodb:GetItem` on `credence-prod-dynamo-push-subscriptions` → `AccessDeniedException` on every settings page load → Sentry noise; (3) no browser push subscription flow exists yet (A0.6 scope)
+- `GET /alerts/preferences` and `PUT /alerts/preferences` calls removed from the frontend until the infrastructure is ready
+- Notification wiring to be revisited as part of A0.6 (push) and after SES production approval (email)
 
-**Acceptance criteria:**
-- [ ] Email address shown is the real Cognito email, not `user@example.com`
-- [ ] Toggle email/push switches and click Save — preferences persist across page reloads (verified via `GET /alerts/preferences`)
-- [ ] Sign Out button calls `signOut()` and navigates to `/login`
-- [ ] `alert_timing` and `hours_before_game` controls remain in the UI with a visible TODO comment in code
+**Acceptance criteria (remaining — blocked):**
+- [ ] Toggle email/push switches and click Save — preferences persist across page reloads (blocked on SES production + DynamoDB IAM fix)
+- [ ] `alert_timing` and `hours_before_game` controls wired when backend model is extended
 
 **Session prompt:**
 ```
@@ -11273,6 +11272,48 @@ Work:
 
 Done when: /changelog renders entries with correct badge colors, footer links to it, and the sub-nav shows the dot for a recent entry.
 ```
+
+---
+
+#### A0.4.27 — User groups: assign and display subscription tier  ⚠️ PARTIAL (2026-06-15)  **[P3 — backlog]**
+
+Assign authenticated users to named Cognito user groups (e.g. `beta_tester`, `paid`, `admin`) and surface the correct tier label in the Settings page Account card. Currently the tier is hardcoded as `"Beta Tester"` in the frontend with no dynamic source.
+
+**Note:** This story may be absorbed as a subtask of A0.7 (Stripe integration), since the paid tier gate is the primary driver for group assignment. Evaluate at the start of A0.7 — if Stripe webhooks are wiring Cognito group membership directly, this story can be closed as covered. If group management is needed independently (e.g. manually promoting beta testers), keep it separate.
+
+**Context — why this matters:**
+- Settings page Account card shows a static `"Beta Tester"` badge with no backend source
+- Future tiers (`paid`, `admin`) need different UI treatment and feature gates
+- Cognito user groups are the natural home for this — they flow through the JWT as `cognito:groups` claims, so the frontend can read them without an extra API call
+
+**Proposed approach:**
+- Cognito: create user groups `beta_tester`, `paid`, `admin` in the user pool
+- Assign existing beta users to `beta_tester` manually (or via a script targeting the Cognito API)
+- Frontend: decode `cognito:groups` from the ID token in `auth-context.tsx` alongside `email`; expose as `groups: string[]` on the `AuthCtx` type
+- Settings page: replace hardcoded `"Beta Tester"` badge with a label derived from `groups`
+- Feature gating: use `groups` to conditionally show/hide features as paid tiers are introduced
+
+**Backend gaps:**
+- A0.7 Stripe webhook (on `checkout.session.completed`) should call `cognito-idp:AdminAddUserToGroup` to move a user from `beta_tester` → `paid` automatically
+- Lambda role will need `cognito-idp:AdminAddUserToGroup` and `cognito-idp:AdminRemoveUserFromGroup` permissions
+
+**What shipped 2026-06-15:**
+- `auth-context.tsx`: `decodeIdToken()` now extracts both `email` and `cognito:groups` from the ID token; `groups: string[]` exposed on `AuthCtx`; `isAdmin` derived from `groups.includes("admin")` (email allowlist removed)
+- `nav.tsx`: Admin link in sub-nav now shown when `isAdmin` is true (previously only when `activeLink === "admin"`, which meant no navigation link existed to reach the admin page); active/inactive styles match other sub-nav items
+- `auth-guard.tsx` (`AdminGuard`) already reads `isAdmin` — no change needed
+
+**Remaining tasks:**
+- [ ] Create Cognito user groups: `beta_tester`, `paid`, `admin` in the user pool (AWS console or CLI)
+- [ ] Assign all current beta users to the `beta_tester` group (console or script)
+- [ ] Replace hardcoded tier badge in `frontend/app/settings/page.tsx` with a `groupLabel(groups)` helper that maps `["paid"] → "Pro"`, `["beta_tester"] → "Beta Tester"`, `[] → "Free"`
+- [ ] Document in `aws_resources.md`: Cognito group names, assignment process, and the A0.7 Stripe webhook hook point
+
+**Acceptance criteria:**
+- [x] `useAuth().groups` returns the user's Cognito groups from the JWT
+- [x] `isAdmin` derived from Cognito `admin` group, not hardcoded email list
+- [x] Admin sub-nav link visible to admin users, hidden from others
+- [ ] Settings page tier badge reads from `groups`, not a hardcoded string
+- [ ] Adding a user to the `paid` group in Cognito is reflected in their Settings page on next login
 
 ---
 
@@ -14962,6 +15003,24 @@ go-live; the older `model_deploy_runbook.md` predates the S3 mechanism). Key fac
 
 ### 30.2 — Bayesian-leverage audit (wire sub-model distributional outputs into the base models)
 
+**Status (2026-06-15): IN PROGRESS — harness built + smoke-passed; ablation retrains handed off.**
+Harness: `betting_ml/scripts/bayesian_leverage_ablation_30_2.py`. Controlled ablation — holds each
+target's tuned HP + 30.4-cleaned LIVE contract fixed (home_win 211 `xgb_classifier_tuned_2026` /
+run_diff 169 `ngboost_tuned_2026` / total_runs 113 `ngboost_tuned_seasonnorm_2026`) and adds ONLY the
+**52 sub-model distributional cols** (4 env-level + 6 families × 8 home/away: μ / dispersion-σ /
+uncertainty / available) pivoted from `feature_pregame_sub_model_signals` (long game_pk×side → wide).
+Coverage verified ~99-100% all seasons incl. 2026 (smoke: 13,217 games, 52/52 cols, all numeric).
+⚠ **BINDING METHODOLOGY DECISION — judge on the HONEST 2026 OOS ONLY.** The signals are generated by
+`generate_*_signals.py` scoring all 2021+ games with sub-models FIT on 2021-2025
+([[project_layer3_signal_leakage]]), so the 2024/2025 CV folds are **in-sample for the enriched arm** →
+CV favors enriched by construction and a CV "win" is meaningless. The harness flags those folds
+`[CONTAMINATED]` and keys the promote/reject/neutral decision on the 2026 Δ vs the champion
+(promote floor: MAE −0.02 / Brier −0.002). Strong prior = NEUTRAL (the static sub-model stack already
+fails to beat market on 2026 for both targets, `layer3_architecture_finding`); a flat 2026 confirms the
+Layer-3-only split is correct. Run ONE `--target` per invocation (NGBoost run_diff n=1000 / totals n=500
+are the slow ones). Next: read the 2026 column per target; only escalate a 2026-improving target to a
+full `--challenger-contract` promotion-gate pass + serving-path wiring.
+
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.2 standalone:
 
 ```
@@ -15476,8 +15535,12 @@ to run and show the command; do not git commit or push (the user handles git).
   post-lineup re-score rebuilt confirmed-lineup features into a `_raw` it never refreshed, so the actionable bet never
   saw them. **Deploy-pending (agent rebuild)** lands the watermark fix + both `_raw` select additions. **FOLLOW-UPS:**
   (1) re-score TODAY so today's picks ride the dense matrix; (2) DROP + full `eb_starter_posteriors` rebuild to backfill
-  2016-current before any starter-EB retrain; (3) a freshness guard so empty `eb_starter_posteriors` / null starter-EB
-  can't recur silently. **NO base-model retrain needed (30.6 = fix serving density, NOT train-on-sparse).**
+  2016-current before any starter-EB retrain; (3) ✅ **freshness guard BUILT 2026-06-15** —
+  `dbt/tests/assert_eb_starter_posteriors_covers_today.sql` (singular test, `severity='warn'`): flags any of today's
+  announced probable starters missing from `eb_starter_posteriors` (the exact watermark-collapse signature), runs under
+  `dbtf build`. Alert-only by design; the stronger guarantee (Dagster freshness sensor + serve-time gate across ALL
+  serving-path blocks, not just starter-EB) is **Story 30.13**, which this incident seeds.
+  **NO base-model retrain needed (30.6 = fix serving density, NOT train-on-sparse).**
 
 **GATE-CHECK FINDINGS (2026-06-14):**
 - **The n≥30 live-skill gate CLEARED.** Honest surface (`prediction_type='post_lineup' AND data_source='feature_store'`,
@@ -15698,7 +15761,32 @@ real-time and retroactively-scored rows, flattering or distorting the live recor
 
 ---
 
-### 30.8 — Pre-lineup and post-lineup prediction contracts  `[Home: Epic 30 / architecture]`  ⬜
+### 30.8 — Pre-lineup and post-lineup prediction contracts  `[Home: Epic 30 / architecture]`  🟦 Task 1 SCOPED 2026-06-15
+
+**Status:** 🟦 Task 1 (feature lineup-dependence classification) DONE 2026-06-15 — gating audit built + run;
+remaining tasks gated on ONE design decision (below). **Training is now UNBLOCKED** (the sequencing note —
+"don't train until 30.4 promoted" — is satisfied; 30.4 promoted the 211/169/113 contracts).
+
+**▶ TASK 1 — `betting_ml/scripts/audit_lineup_dependence_30_8.py`** (built + run; writes
+`ablation_results/lineup_dependence_30_8.{md,csv}` + 3 draft `feature_columns_pre_lineup_*.json`). Classifies
+every column of the 3 live contracts as Class-A (pre-lineup available) vs Class-B (requires confirmed lineup)
+EMPIRICALLY — null-rate over last-3-completed (confirmed) vs next-3-future (unconfirmed) games, TIGHT recent
+windows to dodge the rolling-window incremental confound (eb_starter only covers current_date-7, so a naive
+completed-vs-future split misreads it). Name-pattern is a cross-check only; the empirical Δnull is authoritative.
+**Result: 75 Class-B → first-cut pre-lineup contracts home_win 211→158, run_diff 169→127, total_runs 113→95.**
+- The empirical method BEAT name-matching (50 name/empirical disagreements are mostly lineup-gated features the
+  name heuristic missed). It cleanly separates `vs_lhp_woba_30d` (team-vs-handedness → A) from `avg_woba_vs_lhp`
+  (lineup-averaged → B).
+- ⭐ **THE GATING DESIGN DECISION:** a large chunk of Class-B is TEAM-OFFENSE ROLLING aggregates (`avg_woba_30d`,
+  `avg_eb_woba`, `n_power_pull`, `injured_player_count`…) that go null pre-lineup. Are these IRREDUCIBLY
+  lineup-averaged (→ a pre-lineup model genuinely can't have them; morning model is much weaker) or just BUILT in
+  the lineup dbt path and reconstructable at roster level (→ recover them pre-lineup for a stronger morning model)?
+  This decides how much signal the pre-lineup model keeps and must be resolved before training the challenger.
+- Two false-positive caveats to fix before writing the FINAL pre-lineup contracts: (a) `_seasonnorm` lineup
+  features classify A but are likely SEASON-FILL placeholders (non-null but constant → dead weight, verify before
+  trusting); (b) `ump_*_zscore` are Class-B for a DIFFERENT reason (game-day umpire ASSIGNMENT, not lineup) — a
+  third "unavailable-pre-lineup" category; out of the pre-lineup contract regardless.
+- The 3 `feature_columns_pre_lineup_*.json` are DRAFTS (Class-A subset) pending the design decision + caveat fixes.
 
 **Prerequisite for:** stable "pick of the day" UI feature; the morning pick shown to users should be clearly labeled by model confidence tier and must not degrade to a post-lineup model's stale or imputed output.
 
@@ -16277,8 +16365,74 @@ fully-qualified db.schema.table names and no USE statements; hand any script tha
 to run and show the command; test new Snowflake scripts with real creds before merge; do not git commit or push.
 ```
 
-**Status:** ⬜ OPEN — specced 2026-06-14, surfaced by the Story 30.6 keystone diagnosis. **⭐ HIGH / Phase 1** —
-the durability of the entire serving-skew fix (the single highest-leverage lever in the project) depends on it.
+**Status:** 🟢 CODE COMPLETE 2026-06-15 — **Tasks 1-4 ✅ DONE** (deploy-pending: next Dagster agent rebuild lands
+the predict_today serve-time gate + the job-docstring invariants; the dbt SCD-2 header/schema ship on the next dbt
+build). Re-verify AC (re-run the audit + `honest_live_skill.py` on the next settled post_lineup slates) stays open as
+a forward check. Specced 2026-06-14, surfaced by the Story 30.6 keystone diagnosis. **⭐ HIGH / Phase 1.** ⭐ KEY RE-SCOPING:
+the audit, done correctly, shows the build-ordering guarantee is **already largely ENCODED** in the Dagster job
+DAGs (the 30.13 spec was written BEFORE Stories A2.11 + A2.16 landed the ordered jobs). So Tasks 2-3 collapsed to
+*formalizing* what exists; the one genuinely-missing safety net is the **serve-time freshness GATE (Task 4)**.
+
+**▶ TASK 1 — freshness audit + map (`betting_ml/scripts/audit_serving_freshness_30_13.py`, built + tested; writes
+`ablation_results/serving_freshness_30_13.{md,csv}`).** Per serving-path block, compares build time
+(`information_schema.tables.LAST_ALTERED`) vs the source it ACTUALLY depends on intraday vs the upcoming-game
+(today/+1/+2) serve null-rate. **CORRECTED RESULT (after mapping each block to its true source):**
+- **Each block is judged vs its real dependency:** starter blocks vs `stg_statsapi_probable_pitchers` (intraday —
+  a starter can change), lineup blocks vs `stg_statsapi_lineups` (intraday), and **bullpen/team-seq/pythag/elo are
+  OVERNIGHT-sourced** (completed-game data) — they do NOT depend on intraday polls. ⚠️ An earlier pass mis-mapped
+  bullpen to the probable-pitcher poll and reported a **false 6.5h staleness**; corrected, `bullpen_eb` is fresh
+  (built in the morning job; same-day bullpen usage doesn't change). Lesson baked into the script's block map.
+- **Verdict: 0 `stale_now`, 0 `stale_overnight`, 0 `unguaranteed` — no current build-ordering defects.** The 3
+  point-in-time blocks (lineup archetype/statcast, batter-seq) are 100% null for +1/+2 BY DESIGN (lineups post
+  ~game day) → Story 30.8's pre/post-lineup contract; the serve-time gate must ABSTAIN (not alarm) on these.
+- **EB tables carry NO build-timestamp column** (only `LAST_ALTERED`); recommend adding a `computed_at` to the EB
+  computes so the Task-4 gate can assert per-row freshness directly.
+
+**▶ TASK 2 — SCD-2 ownership ✅ (option ii: probable_pitchers canonical).** The SCD-2
+`feature_pregame_starter_status` (stg_statsapi_starter_snapshots → …) is already OFF the serving path — 30.6 fix
+(A) repointed both `feature_pregame_starter_features` and `eb_starter_posteriors` to `stg_statsapi_probable_pitchers`
+(the canonical current-probable source; it tracks the latest monthly_schedule before build+serve, where the SCD-2's
+`is_current` lagged ~80% null for +1/+2-day games). Formalized the decision with a HISTORICAL-REPLAY-ONLY header on
+`dbt/models/feature/feature_pregame_starter_status.sql` + the schema.yml description (do NOT add it to any
+serving-path model).
+
+**▶ TASK 3 — build-ordering guarantee ✅ (verified already encoded + documented).** The 3 serving-path jobs encode
+the invariant via op `start=`/`predict_done=` threading: (1) `daily_ingestion_job` (morning) ingest → dbt_daily_build
+→ signals → SCD-2 lineup/odds → bullpen EB → sequential posteriors → `dbt_umpire_feature_rebuild` (feature store +
+today's EB starter/lineup) → `predict_today_morning`; (2) `lineup_monitor_job` (every ~10 min) re-ingest
+schedule/probables/lineups → rebuild staging → rebuild feature + EB starter/lineup → `lineup_predict` (intraday
+self-heal); (3) `statcast_catchup_job` (late Statcast) rebuild → bullpen/sequential EB → feature → predict. Added an
+explicit **BUILD-ORDERING INVARIANT docstring** to `daily_ingestion_job` + `lineup_monitor_job` so predict can't be
+silently reordered ahead of a rebuild. **Residual exposure (→ Task 4):** the only gaps are (a) the up-to-~10-min
+window between lineup_monitor cycles (self-healing) and (b) NO hard assertion if a rebuild op silently fails/no-ops —
+predict would still score on stale/null features. Both are closed by the serve-time gate.
+
+**▶ TASK 4 — serve-time freshness GATE ✅ (`scripts/predict_today.py`, tested vs real creds).** New
+`_serving_freshness_stale(target_date)` — a SLATE-LEVEL check run once before the scoring loop (skipped on
+`--is-backfill`). Fires on three conservative silent-rebuild-failure signatures: (1) `feature_pregame_game_features_raw`
+built > 3h before the latest probable-pitcher ingestion; (2) >25% of the slate's probable starters absent from
+`eb_starter_posteriors` (the 2026-06-15 watermark-collapse signature — same logic as the
+`assert_eb_starter_posteriors_covers_today` dbt test); (3) `eb_bullpen_posteriors` not rebuilt for the slate. On
+staleness it abstains the actionable h2h/totals edge + Kelly **slate-wide** (`game_actionable and not serving_stale`)
+— same stance as the 30.3 per-game SERVING-GUARD — and emits a loud `[30.13 FRESHNESS-GATE] SERVE IS STALE` warning
+with the reason + ACTION. Model probs + raw diagnostic edges still write (CLV/monitoring unaffected). **FAILS OPEN**
+on any check error (never a new blocker). **VERIFIED END-TO-END IN DEV 2026-06-15** (both paths, full scoring +
+write, dev schema `betting_ml_dev`, zero prod risk): (1) normal run scored 10 games, wrote 10 rows, NO freshness
+warning (matrix fresh — FEATURE-ALIGN 0 absent across all 3 contracts), no traceback; (2) a monkeypatched
+forced-stale run fired the `[30.13 FRESHNESS-GATE] SERVE IS STALE — 10/10 game(s) … ABSTAINED` warning and still
+wrote rows cleanly. The gate neither breaks the live path nor fails to abstain when stale. (Gate queries PROD
+feature tables even on a dev ML run — correct, since features always come from the prod store; TARGET_ENV only
+switches the predictions OUTPUT schema.) Lineup-block freshness is deliberately NOT gated here (pre-lineup absence = the
+`_lineups_confirmed` deferral → Story 30.8). The 3 conditions intentionally only cover NON-lineup blocks. **Stronger
+paging follow-up (optional):** a Dagster freshness sensor on the serving-path tables (the gate is per-serve; a sensor
+would page even when no serve runs). The EB `computed_at`-column recommendation (Task 1) would let the gate assert
+per-row freshness instead of table `LAST_ALTERED` — a future hardening.
+
+**Acceptance criteria status:** [x] freshness map written; [x] starter/lineup/EB ≤~5% null at serve (0 defects, the
+ordered jobs hold — durability now also gate-protected); [x] serve-time gate live (alerts + abstains, with a real-creds
+test); [x] build-ordering guarantee encoded + documented + SCD-2 ownership decided (option ii); [ ] live-skill re-measure
+on ≥1 fresh post_lineup slate — **forward check, re-run `honest_live_skill.py` + the audit after deploy.**
+
 Story 30.6 fix (A) stops the immediate bleed for the STARTER block by repointing to the fresh
 `stg_statsapi_probable_pitchers`, but that only works as long as that staging itself is fresh-before-serve — which
 is exactly the un-guaranteed build-ordering this story makes durable. Sequence it RIGHT AFTER confirming fix (A)
@@ -16320,6 +16474,79 @@ serve" gap that [[project_posterior_staleness_jun2026]] (EB/lineup posterior com
 **Notes.** This is the durable other half of Story 30.6 fix (A). It overlaps but is distinct from A2.11 (which moves
 EB posteriors Python→dbt, removing one staleness source) and 30.8 (pre/post-lineup CONTRACTS, the confidence-tier
 side) — 30.13 owns the FRESHNESS/ORDERING GUARANTEE + the serve-time gate across all serving-path feature blocks.
+
+---
+
+### 30.14 — Walk-forward (leakage-free) sub-model signal regeneration  `[Home: Epic 30 / architecture]`  ⬜  ⚠️ GATED on 30.2 (2026-positive)
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.14 standalone:
+
+```
+You are picking up Story 30.14 of the MLB betting & fantasy project.
+
+Before writing any code, read end-to-end:
+  1. implementation_guide.md — the Epic 30 header IN FULL (esp. the "⭐ EVALUATION ORDER — PRIMARY vs
+     SECONDARY" block, which BINDS this story to accuracy-to-truth first), then Story 30.2 (the parent —
+     this story exists ONLY to remove 30.2's signal contamination), then this Story 30.14 section.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. Memory [[project_layer3_signal_leakage]] (the contamination this fixes) and the
+     betting_ml/scripts/walk_forward_oos.py prior art (Story 10.5 — the per-game OOS-prediction
+     persistence pattern; reuse its expanding-window structure, do NOT reinvent).
+
+Then implement against the Goal/Tasks/Acceptance below. Conventions (non-negotiable): use `dbtf`, never
+`dbt`; query Snowflake only via the Snowflake MCP with fully-qualified db.schema.table names and no USE
+statements; hand any script that runs >1 min back to the user to run (show the command); retrain ONE
+sub-model / season-boundary per invocation where possible; do not git commit or push (user handles git).
+```
+
+**⚠️ GATE — do NOT start this story unless Story 30.2 shows a 2026 IMPROVEMENT for run_diff and/or
+total_runs.** home_win already REJECTED on the honest 2026 surface (Brier +0.0076, corr 0.4507→0.4144,
+2026-06-15) — weaker walk-forward signals cannot rescue a feature set that fails on the honest surface, so
+home_win is permanently out of scope here. If BOTH NGBoost targets also come back NEUTRAL/REJECT on 2026,
+this story is CLOSED-AS-MOOT and 30.2's "Layer-3-only architecture confirmed" verdict stands. Only a
+positive-2026 run_diff or totals result unlocks the cost below.
+
+**Goal:** Remove the in-sample contamination in the sub-model distributional signals so the base-model
+challenger trains on, and is evaluated against, **live-quality** signals across ALL seasons — not just 2026.
+
+**The bug (verified in 30.2).** `generate_*_signals.py` scores every 2021+ game with sub-models FIT on the
+FULL 2021-2025 span, so a 2024 game's signal was produced by a model that already saw 2024. Two leaks:
+(1) **Eval leak** — 2024/2025 base-model CV folds are in-sample (30.2 measured the gap directly: home_win
+enriched Brier 0.176-0.177 on contaminated folds vs 0.207 on honest 2026). (2) **Train/serve signal-quality
+skew** — the base model trains on over-informed 2021-2025 signals but serves against a 2026 signal only
+trained-through-2025, so it learns to over-trust a sharpness it never gets live (a plausible contributor to
+30.2's 2026 regression). 30.14 fixes BOTH by making signal quality identical in train, eval, and serve.
+
+**The fix — walk-forward (expanding-window) out-of-fold regeneration.** Season S is scored ONLY by
+sub-models trained on seasons `< S`: 2022←{2021}, 2023←{2021-22}, 2024←{2021-23}, 2025←{2021-24},
+2026←{2021-25}. No game's signal is ever produced by a model that saw it; the 2026 row matches exactly what
+is served live. (Mirror `walk_forward_oos.py`'s expanding-window loop; 2021 is train-only, no honest signal.)
+
+**Tasks:**
+- [ ] Add a `--train-through-season S` (expanding-window) mode to each of the 7 sub-model trainers
+  (run_env v4, offense/pred_runs v2, starter-suppression v1, starter-IP v1, bullpen v2, matchup v1,
+  defense v1). One trainer × one boundary per invocation (run_env v4 may be PyMC / >1hr — hand off).
+- [ ] Regenerate `feature_pregame_sub_model_signals` walk-forward for 2022-2026 into a SHADOW table
+  (e.g. `..._wf`), one-per-game-per-side, so the contaminated production table is untouched until verified.
+- [ ] Re-run the 30.2 ablation (`bayesian_leverage_ablation_30_2.py`) pointed at the shadow signals.
+  Now ALL of 2022-2026 are honest surfaces — judge on the pooled honest-multi-season Δ (not just 2026,
+  n≈4.5k instead of 792). Per-target promote/defer on the Epic-30 accuracy-to-truth gate.
+- [ ] Document the early-season caveat: 2022/2023 signals are produced by small-sample sub-models (weaker,
+  but realistically so — it is what a live model would have had). This is honest, not a defect.
+- [ ] If a target promotes: wire the walk-forward signal join into the dbt serving path
+  (`feature_pregame_game_features` ← shadow→production cutover) BEFORE the challenger goes to S3, so the
+  served 2026 signal matches the trained distribution. Then a full `--challenger-contract` promotion-gate pass.
+
+**Acceptance criteria:**
+- [ ] Shadow walk-forward signal table built for 2022-2026; coverage parity with production (~99-100%/season).
+- [ ] 30.2 ablation re-run on honest signals; per-target verdict on the pooled multi-season honest surface,
+  with the contaminated-vs-honest delta reported (quantifies how much of 30.2's original CV "gain" was leakage).
+- [ ] Explicit decision: promote (→ serving-path cutover + gate pass) OR confirm Layer-3-only on honest data.
+
+**Notes.** Cost is the reason this is GATED: 7 sub-models × ~5 season-boundaries = ~35 retrains + re-score +
+backfill, some expensive (NGBoost >1hr; run_env v4 possibly PyMC). Ceiling caveat: the sub-models were already
+shown (Epics 10.6 / 16 / 26) not to beat market on 2026, so this hardens/honest-ifies the signals — it does
+NOT manufacture a new edge. Parent: [[project_layer3_signal_leakage]] + Story 30.2.
 
 ---
 

@@ -99,7 +99,7 @@ function indicatorToStatus(indicator: string): string {
 // ---------------------------------------------------------------------------
 
 export default function AdminPage() {
-  const { accessToken, isAdmin } = useAuth()
+  const { accessToken, email, isAdmin } = useAuth()
   const qc = useQueryClient()
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
 
@@ -181,7 +181,7 @@ export default function AdminPage() {
   return (
     <AdminGuard>
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
-      <Nav authenticated activeLink="admin" userEmail="user@example.com" />
+      <Nav authenticated activeLink="admin" userEmail={email} />
 
       <main className="mx-auto max-w-6xl px-4 py-8 space-y-8">
         {/* Page header */}

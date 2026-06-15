@@ -1,0 +1,179 @@
+{
+  "total_runs": {
+    "target": "total_runs",
+    "kind": "regression",
+    "primary_metric": "mae",
+    "n_features_champion": 111,
+    "n_features_enriched": 163,
+    "n_enrichment_added": 52,
+    "enrichment_cols_added": [
+      "run_env_mu_v4",
+      "run_env_dispersion_v4",
+      "run_env_mu_v4_uncertainty",
+      "run_env_mu_v4_available",
+      "home_pred_runs_mu_v2",
+      "away_pred_runs_mu_v2",
+      "home_pred_runs_dispersion_v2",
+      "away_pred_runs_dispersion_v2",
+      "home_pred_runs_uncertainty_v2",
+      "away_pred_runs_uncertainty_v2",
+      "home_pred_runs_mu_v2_available",
+      "away_pred_runs_mu_v2_available",
+      "home_starter_suppression_mu_v1",
+      "away_starter_suppression_mu_v1",
+      "home_starter_suppression_sigma_v1",
+      "away_starter_suppression_sigma_v1",
+      "home_starter_uncertainty_v1",
+      "away_starter_uncertainty_v1",
+      "home_starter_suppression_mu_v1_available",
+      "away_starter_suppression_mu_v1_available",
+      "home_starter_ip_mu_v1",
+      "away_starter_ip_mu_v1",
+      "home_starter_ip_dispersion_v1",
+      "away_starter_ip_dispersion_v1",
+      "home_starter_ip_uncertainty_v1",
+      "away_starter_ip_uncertainty_v1",
+      "home_starter_ip_mu_v1_available",
+      "away_starter_ip_mu_v1_available",
+      "home_bullpen_mu_v2",
+      "away_bullpen_mu_v2",
+      "home_bullpen_dispersion_v2",
+      "away_bullpen_dispersion_v2",
+      "home_bullpen_uncertainty_v2",
+      "away_bullpen_uncertainty_v2",
+      "home_bullpen_mu_v2_available",
+      "away_bullpen_mu_v2_available",
+      "home_matchup_advantage_mu_v1",
+      "away_matchup_advantage_mu_v1",
+      "home_matchup_advantage_sigma_v1",
+      "away_matchup_advantage_sigma_v1",
+      "home_matchup_advantage_mu_v1_uncertainty",
+      "away_matchup_advantage_mu_v1_uncertainty",
+      "home_matchup_advantage_mu_v1_available",
+      "away_matchup_advantage_mu_v1_available",
+      "home_defense_quality_mu_v1",
+      "away_defense_quality_mu_v1",
+      "home_defense_quality_oaa_z_v1",
+      "away_defense_quality_oaa_z_v1",
+      "home_defense_quality_sprint_z_v1",
+      "away_defense_quality_sprint_z_v1",
+      "home_defense_quality_mu_v1_available",
+      "away_defense_quality_mu_v1_available"
+    ],
+    "enrichment_cols_missing": [],
+    "cv_contaminated_note": "2024/2025 folds are in-sample for the sub-models (trained 2021-2025); CV favors enriched by construction. Judge on live_2026.",
+    "cv": {
+      "champion": {
+        "mae": 3.3228234701820742,
+        "rmse": 4.182714339991727,
+        "medae": 2.842937594912628,
+        "bias": 0.111552376500345,
+        "pred_std": 1.285468778363122,
+        "calib_80": 0.7904085178087614
+      },
+      "enriched": {
+        "mae": 3.185259568417812,
+        "rmse": 4.035095442810761,
+        "medae": 2.715405740425224,
+        "bias": 0.02675281134941553,
+        "pred_std": 1.6590313685565004,
+        "calib_80": 0.7703716370996748
+      },
+      "delta_primary": -0.13756390176426203,
+      "folds_champion": [
+        {
+          "mae": 3.2391940032788633,
+          "rmse": 4.057069112186621,
+          "medae": 2.8087596651227003,
+          "mean_pred": 8.91524101938298,
+          "mean_actual": 8.719640179910044,
+          "bias": 0.19560083947293636,
+          "pred_std": 1.3582639574524418,
+          "calib_80": 0.7926036981509246,
+          "eval_year": 2024
+        },
+        {
+          "mae": 3.4391599883908803,
+          "rmse": 4.344671446729334,
+          "medae": 2.890685645256293,
+          "mean_pred": 9.100175033648815,
+          "mean_actual": 8.884995064165844,
+          "bias": 0.2151799694829719,
+          "pred_std": 1.2765695382529898,
+          "calib_80": 0.7680157946692991,
+          "eval_year": 2025
+        },
+        {
+          "mae": 3.29011641887648,
+          "rmse": 4.146402461059227,
+          "medae": 2.8293674743588912,
+          "mean_pred": 8.906199552868358,
+          "mean_actual": 8.982323232323232,
+          "bias": -0.07612367945487328,
+          "pred_std": 1.2215728393839338,
+          "calib_80": 0.8106060606060606,
+          "eval_year": 2026
+        }
+      ],
+      "folds_enriched": [
+        {
+          "mae": 2.9985135051421916,
+          "rmse": 3.8364572122263687,
+          "medae": 2.4818796065092146,
+          "mean_pred": 8.444831021984328,
+          "mean_actual": 8.719640179910044,
+          "bias": -0.27480915792571503,
+          "pred_std": 1.6715104435329387,
+          "calib_80": 0.7881059470264867,
+          "eval_year": 2024
+        },
+        {
+          "mae": 3.2130436924867842,
+          "rmse": 4.060099839408516,
+          "medae": 2.795820513314387,
+          "mean_pred": 9.410275849195664,
+          "mean_actual": 8.884995064165844,
+          "bias": 0.5252807850298182,
+          "pred_std": 1.7400015134656128,
+          "calib_80": 0.7704837117472852,
+          "eval_year": 2025
+        },
+        {
+          "mae": 3.3442215076244604,
+          "rmse": 4.208729276797398,
+          "medae": 2.8685171014520705,
+          "mean_pred": 8.812110039267376,
+          "mean_actual": 8.982323232323232,
+          "bias": -0.1702131930558566,
+          "pred_std": 1.5655821486709494,
+          "calib_80": 0.7525252525252525,
+          "eval_year": 2026
+        }
+      ]
+    },
+    "live_2026": {
+      "champion": {
+        "mae": 3.2894627592735057,
+        "rmse": 4.146102078417505,
+        "medae": 2.8293674743588886,
+        "mean_pred": 8.905807720678375,
+        "mean_actual": 8.982323232323232,
+        "bias": -0.07651551164485723,
+        "pred_std": 1.2214521168610053,
+        "calib_80": 0.8093434343434344
+      },
+      "enriched": {
+        "mae": 3.3442215076244604,
+        "rmse": 4.208729276797398,
+        "medae": 2.8685171014520714,
+        "mean_pred": 8.812110039267376,
+        "mean_actual": 8.982323232323232,
+        "bias": -0.17021319305585636,
+        "pred_std": 1.5655821486709487,
+        "calib_80": 0.7525252525252525
+      },
+      "delta_primary": 0.05475874835095462
+    },
+    "decision": "REJECT (2026 mae REGRESSED +0.0548)"
+  }
+}

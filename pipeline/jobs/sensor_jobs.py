@@ -36,6 +36,15 @@ from pipeline.ops.daily_ingestion_ops import (
 # NB: RUN-level concurrency — distinct from the op-pool `dagster/concurrency_key` tag.
 @job(executor_def=in_process_executor, tags={"concurrency_group": "lineup_monitor"})
 def lineup_monitor_job():
+    """BUILD-ORDERING INVARIANT (Story 30.13): the intraday self-heal path. Re-ingest
+    schedule/probables/lineups → rebuild staging → rebuild feature store + EB
+    starter/lineup posteriors → re-score. lineup_predict MUST stay last among the
+    rebuild ops (do NOT reorder). Fires every ~10 min in the active window, so an
+    intraday starter/lineup change is absorbed within one cycle (the residual
+    inter-cycle staleness is covered by the serve-time freshness gate, 30.13 Task 4).
+    Overnight-sourced blocks (bullpen/team/pythag/elo) are intentionally NOT rebuilt
+    here — they don't change intraday; they refresh in daily_ingestion_job /
+    statcast_catchup_job."""
     s1 = lineup_ingest_schedule()
     # Story 30.5 — ingest today's HP-umpire assignment here (afternoon, when MLB
     # has posted it), idempotently, so the confirmed-lineup re-score reflects the

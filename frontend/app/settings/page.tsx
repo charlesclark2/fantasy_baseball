@@ -1,19 +1,47 @@
 "use client"
 
-import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useRef, useState } from "react"
 import Link from "next/link"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Toaster } from "@/components/ui/toaster"
-import { Bell, ShieldCheck } from "lucide-react"
+import { Bell, Check, ShieldCheck } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { useLocalStorage } from "@/hooks/use-local-storage"
+
+function tierLabel(groups: string[]): string {
+  if (groups.includes("admin")) return "Admin"
+  if (groups.includes("subscriber")) return "Subscriber"
+  if (groups.includes("beta_tester")) return "Beta Tester"
+  if (groups.includes("churned")) return "Churned"
+  return "Free"
+}
+
+function tierStyle(groups: string[]): string {
+  if (groups.includes("admin")) return "border border-purple-500/30 bg-purple-500/10 text-purple-400 hover:bg-purple-500/10"
+  if (groups.includes("subscriber")) return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/10"
+  if (groups.includes("churned")) return "border border-gray-500/30 bg-gray-500/10 text-gray-400 hover:bg-gray-500/10"
+  return "border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/10"
+}
 
 export default function SettingsPage() {
-  const { email, signOut } = useAuth()
+  const { email, groups, signOut } = useAuth()
   const router = useRouter()
+  const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
+  const [kellyCap, setKellyCap] = useLocalStorage<number>("ev_kelly_cap", 5)
+  const [savedVisible, setSavedVisible] = useState(false)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function markSaved() {
+    if (savedTimer.current) clearTimeout(savedTimer.current)
+    setSavedVisible(true)
+    savedTimer.current = setTimeout(() => setSavedVisible(false), 2000)
+  }
 
   function handleSignOut() {
     signOut()
@@ -81,12 +109,16 @@ export default function SettingsPage() {
                 Subscription tier
               </p>
               <div className="flex items-center gap-2">
-                <Badge className="border border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/10">
-                  Beta Tester
+                <Badge className={tierStyle(groups)}>
+                  {tierLabel(groups)}
                 </Badge>
               </div>
               <p className="text-xs text-gray-500">
-                Full access during beta period. No billing required.
+                {groups.includes("subscriber")
+                  ? "Active subscription."
+                  : groups.includes("churned")
+                  ? "Subscription ended."
+                  : "Full access during beta period. No billing required."}
               </p>
             </div>
           </div>
@@ -112,6 +144,66 @@ export default function SettingsPage() {
             >
               <Link href="/billing">Manage billing</Link>
             </Button>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Betting defaults card                                             */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="rounded-lg border border-[#262626] bg-[#141414]">
+          <div className="px-6 pt-6 pb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="text-base font-semibold text-white">Betting Defaults</h2>
+              {savedVisible && (
+                <span className="flex items-center gap-1 text-xs text-[#10b981] transition-opacity">
+                  <Check className="h-3 w-3" />
+                  Saved
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              Used in the EV Tracker to calculate stake sizes. Changes save automatically.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-6 px-6 pb-6">
+            <div className="space-y-2">
+              <Label htmlFor="bankroll" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                Bankroll
+              </Label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                <Input
+                  id="bankroll"
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={bankroll}
+                  onChange={(e) => { setBankroll(Math.max(0, Number(e.target.value))); markSaved() }}
+                  className="pl-6 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="kelly-cap" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                Kelly Cap
+              </Label>
+              <div className="relative">
+                <Input
+                  id="kelly-cap"
+                  type="number"
+                  min={1}
+                  max={25}
+                  step={1}
+                  value={kellyCap}
+                  onChange={(e) => { setKellyCap(Math.min(25, Math.max(1, Number(e.target.value)))); markSaved() }}
+                  className="pr-8 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
+              </div>
+              <p className="text-[11px] text-gray-600">Max stake per bet as % of bankroll (1–25)</p>
+            </div>
           </div>
         </section>
 

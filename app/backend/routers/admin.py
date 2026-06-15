@@ -129,7 +129,7 @@ def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
     try:
         raw = (
             _dagster_runs_for_job(token, "daily_ingestion_job", 8)
-            + _dagster_runs_for_job(token, "lineup_monitor_sensor", 8)
+            + _dagster_runs_for_job(token, "lineup_monitor_job", 8)
         )
     except Exception as exc:
         logger.exception("Dagster API error")
@@ -169,23 +169,27 @@ def pipeline_runs(_: str = Depends(get_admin_user)) -> list[PipelineRun]:
 @router.get("/model-freshness", response_model=list[ModelFreshness])
 def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
     """Current champion models from model_registry with days_since_training."""
-    rows = execute_query(
-        f"""
-        SELECT
-            target,
-            model_name,
-            model_version,
-            promoted_date,
-            DATEDIFF('day', promoted_date, CURRENT_DATE) AS days_since
-        FROM {_REGISTRY}
-        WHERE is_current = TRUE
-        ORDER BY target
-        """
-    )
+    try:
+        rows = execute_query(
+            f"""
+            SELECT
+                target,
+                model_name,
+                model_version,
+                promoted_date,
+                DATEDIFF('day', promoted_date, CURRENT_DATE) AS days_since
+            FROM {_REGISTRY}
+            WHERE is_current = TRUE
+            ORDER BY target
+            """
+        )
+    except Exception:
+        logger.exception("model_registry query failed")
+        return []
 
     results: list[ModelFreshness] = []
     for row in rows:
-        days = int(row.get("days_since") or 0)
+        days = int(row.get("DAYS_SINCE") or 0)
         if days < 30:
             freshness_status = "healthy"
         elif days <= 60:
@@ -194,10 +198,10 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
             freshness_status = "stale"
 
         results.append(ModelFreshness(
-            model_name=str(row.get("model_name") or "—"),
-            target=str(row.get("target") or "—"),
-            version=str(row.get("model_version") or "—"),
-            last_trained_date=str(row.get("promoted_date") or "—"),
+            model_name=str(row.get("MODEL_NAME") or "—"),
+            target=str(row.get("TARGET") or "—"),
+            version=str(row.get("MODEL_VERSION") or "—"),
+            last_trained_date=str(row.get("PROMOTED_DATE") or "—"),
             days_since_training=days,
             status=freshness_status,
         ))

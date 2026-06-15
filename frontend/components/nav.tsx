@@ -34,7 +34,7 @@ export function Nav({
   authenticated = false,
   userEmail,
 }: NavProps) {
-  const { accessToken, signOut } = useAuth()
+  const { accessToken, isAdmin, signOut } = useAuth()
   const router = useRouter()
   const isSignedIn = !!accessToken
 
@@ -130,10 +130,14 @@ export function Nav({
               {label}
             </Link>
           ))}
-          {activeLink === "admin" && (
+          {isAdmin && (
             <Link
               href="/admin"
-              className="border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+              className={
+                activeLink === "admin"
+                  ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+                  : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              }
             >
               Admin
             </Link>

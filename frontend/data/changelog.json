@@ -1,0 +1,23 @@
+[
+  {
+    "version": "0.4.26",
+    "date": "2026-06-15",
+    "entries": [
+      {
+        "tag": "new",
+        "title": "Settings page",
+        "description": "Account settings now available from the gear icon in the top-right nav. Shows your verified email address, subscription tier, and sign-out controls."
+      },
+      {
+        "tag": "new",
+        "title": "FAQ & Contact pages",
+        "description": "Answers to common questions about the model, picks, and platform. Reach us at support@credencesports.com for anything not covered."
+      },
+      {
+        "tag": "improvement",
+        "title": "Admin tab visibility now Cognito-group aware",
+        "description": "The Admin link in the sub-nav is now shown only to users assigned to the admin Cognito group — no more hardcoded email list."
+      }
+    ]
+  }
+]

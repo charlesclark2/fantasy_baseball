@@ -558,6 +558,85 @@ def _serving_degraded(imp_summ: dict | None, has_full_data_val) -> tuple[bool, s
     return (bool(reasons), "; ".join(reasons))
 
 
+# Story 30.13 Task 4 — serve-time FRESHNESS gate. Generous so the normal ~10-min
+# lineup_monitor cycle never trips it; only a genuinely missed/failed rebuild does.
+_FRESHNESS_STALE_HOURS = 3.0
+_FRESHNESS_STARTER_MISS_TOL = 0.25   # >25% of today's probable starters absent from eb_starter = collapse
+
+_FRESHNESS_QUERY = """
+select
+  (select date_part(epoch_second, max(ingestion_ts)::timestamp_ntz)
+     from baseball_data.betting.stg_statsapi_probable_pitchers)                       as ingest_epoch,
+  (select date_part(epoch_second, max(last_altered)::timestamp_ntz)
+     from baseball_data.information_schema.tables
+     where table_schema='BETTING_FEATURES' and table_name='FEATURE_PREGAME_GAME_FEATURES_RAW') as gf_build_epoch,
+  (select to_varchar(max(last_altered)::timestamp_ntz,'YYYY-MM-DD')
+     from baseball_data.information_schema.tables
+     where table_schema='BETTING' and table_name='EB_BULLPEN_POSTERIORS')            as bullpen_build_date,
+  to_varchar(try_to_date(%(d)s),'YYYY-MM-DD')                                         as score_day,
+  (select count(*) from (
+      select distinct game_pk::varchar gpk, probable_pitcher_id::varchar pid
+      from baseball_data.betting.stg_statsapi_probable_pitchers
+      where probable_pitcher_id is not null and game_date::date = try_to_date(%(d)s)) p
+   left join baseball_data.betting.eb_starter_posteriors e
+     on e.game_pk::varchar = p.gpk and e.pitcher_id::varchar = p.pid
+   where e.pitcher_id is null)                                                        as starter_missing,
+  (select count(*) from (
+      select distinct game_pk, probable_pitcher_id
+      from baseball_data.betting.stg_statsapi_probable_pitchers
+      where probable_pitcher_id is not null and game_date::date = try_to_date(%(d)s)))  as starter_total
+"""
+
+
+def _serving_freshness_stale(target_date: str) -> tuple[bool, str]:
+    """Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate.
+
+    Asserts the NON-lineup serving-path blocks were rebuilt from the latest ingestion
+    before this serve. Catches the silent-rebuild-failure mode: a rebuild op no-ops or
+    fails but predict still runs, so a stale / coinflip pick ships undetected — the
+    Story 30.6 failure class. Three genuine-staleness conditions (all conservative so
+    the normal inter-cycle window never fires):
+      1. `feature_pregame_game_features_raw` built > _FRESHNESS_STALE_HOURS before the
+         latest probable-pitcher ingestion (a missed feature rebuild).
+      2. >25% of TODAY's probable starters absent from `eb_starter_posteriors` (the
+         watermark-collapse signature, incident 2026-06-15 — the same check as the
+         dbt test assert_eb_starter_posteriors_covers_today).
+      3. `eb_bullpen_posteriors` not rebuilt today (the overnight EB compute failed).
+
+    Lineup-block freshness is intentionally NOT checked here — pre-lineup absence is a
+    TIMING question handled by the `_lineups_confirmed` deferral (abstain, not alarm) →
+    Story 30.8. FAILS OPEN on any error (returns not-stale) so the gate is a safety net,
+    never a new blocker. Returns (stale, reason)."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_FRESHNESS_QUERY, {"d": target_date})
+            row = cur.fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return (False, "")
+        ingest_epoch, gf_build_epoch, bullpen_date, score_day, starter_missing, starter_total = row
+        reasons: list[str] = []
+        if ingest_epoch is not None and gf_build_epoch is not None:
+            lag_min = (float(ingest_epoch) - float(gf_build_epoch)) / 60.0
+            if lag_min > _FRESHNESS_STALE_HOURS * 60:
+                reasons.append(f"feature store {lag_min:.0f} min behind probable-pitcher ingestion")
+        if starter_total and int(starter_total) > 0:
+            miss_frac = int(starter_missing or 0) / int(starter_total)
+            if miss_frac > _FRESHNESS_STARTER_MISS_TOL:
+                reasons.append(
+                    f"eb_starter_posteriors missing {starter_missing}/{starter_total} of the slate's "
+                    f"probable starters ({miss_frac:.0%} — watermark collapse?)")
+        if bullpen_date is not None and score_day is not None and bullpen_date != score_day:
+            reasons.append(f"eb_bullpen_posteriors not rebuilt for the slate (built {bullpen_date} != {score_day})")
+        return (bool(reasons), "; ".join(reasons))
+    except Exception as exc:  # noqa: BLE001 — fail OPEN; the gate must never block scoring
+        print(f"  [30.13 FRESHNESS-GATE] check unavailable ({exc}); gate fails open (not-stale).")
+        return (False, "")
+
+
 def _lineups_confirmed(df: pd.DataFrame, i: int) -> bool | None:
     """Story 30.3 — are BOTH lineups confirmed for game-row i?
 
@@ -624,6 +703,12 @@ def _write_predictions_to_snowflake(
     bovada_ml = _load_bovada_ml_odds(target_date)  # Story 28.3 — actual Bovada ML for kill-criterion monitor
     _n_serving_guard = 0    # Story 30.3 — games abstained for value-degraded serving
     _n_lineup_deferred = 0  # Story 30.3 — pre-lineup games whose edge defers to the post_lineup re-score
+    # Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate (one check, not per game).
+    # Skipped for historical backfills (the check is about TODAY's build-vs-ingestion).
+    serving_stale, _serving_stale_reason = (False, "")
+    if not is_backfill:
+        serving_stale, _serving_stale_reason = _serving_freshness_stale(target_date)
+    _n_freshness_abstained = 0
 
     for i in range(len(df_today)):
         has_odds = bool(has_odds_col.iloc[i])
@@ -646,11 +731,16 @@ def _write_predictions_to_snowflake(
         # → don't gate on lineup state (fail-open to prior behavior).
         _lineups_ok = _lineups_confirmed(df_today, i)
         lineup_deferred = (_lineups_ok is False) and not game_degraded
-        game_actionable = (not game_degraded) and (_lineups_ok is not False)
+        # Story 30.13 Task 4 — a stale serve (failed/missed rebuild) abstains the
+        # actionable edge slate-wide, same stance as the per-game serving guard, so a
+        # degraded coinflip pick can never silently ship off an un-refreshed matrix.
+        game_actionable = (not game_degraded) and (_lineups_ok is not False) and (not serving_stale)
         if game_degraded:
             _n_serving_guard += 1
         if lineup_deferred:
             _n_lineup_deferred += 1
+        if serving_stale and not game_degraded and (_lineups_ok is not False):
+            _n_freshness_abstained += 1  # would-have-been-actionable game killed by staleness
 
         # H2H market values — use calibrated_win_prob as the live edge input.
         # A2.5 edge-artifact guard: the STORED/actionable edge is alpha-aware
@@ -817,6 +907,17 @@ def _write_predictions_to_snowflake(
             f"post_lineup re-score (Story 30.3: the morning matrix is ~30% imputed; the live "
             f"bet rides the post_lineup pass). Model probabilities + raw diagnostic edges still "
             f"written. This is expected on the morning run and clears as lineups post."
+        )
+    if serving_stale:
+        warnings.warn(
+            f"[30.13 FRESHNESS-GATE] SERVE IS STALE — {_n_freshness_abstained}/{len(df_today)} game(s) had their "
+            f"actionable h2h/totals edge + Kelly ABSTAINED (set NULL) because a serving-path block was not "
+            f"refreshed from the latest ingestion before this serve. Reason: {_serving_stale_reason}. This is the "
+            f"Story 30.6 silent-rebuild-failure backstop — a rebuild op likely no-op'd/failed while predict still "
+            f"ran. Model probabilities + raw diagnostic edges are still written for monitoring; only the actionable "
+            f"bet is suppressed. ACTION: re-run the upstream feature/EB rebuild, then re-score. (Stronger paging "
+            f"follow-up: a Dagster freshness sensor on the serving-path tables.)",
+            stacklevel=2,
         )
 
     try:
