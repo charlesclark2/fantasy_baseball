@@ -2,6 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
+import posthog from "posthog-js"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { AuthGuard } from "@/components/auth-guard"
@@ -444,7 +445,15 @@ function BetLogInner() {
   const saveMutation = useMutation({
     mutationFn: (body: object) =>
       apiFetch("/bets", { method: "POST", body: JSON.stringify(body) }, accessToken),
-    onSuccess: () => {
+    onSuccess: (_data, body) => {
+      const b = body as Record<string, unknown>
+      posthog.capture("bet_logged", {
+        market: b.market,
+        bookmaker: b.bookmaker,
+        american_odds: b.american_odds,
+        stake: b.stake,
+        ev: b.ev ?? null,
+      })
       qc.invalidateQueries({ queryKey: ["bets"] })
       setGamePk("")
       setMarket("")
@@ -465,7 +474,8 @@ function BetLogInner() {
   const deleteMutation = useMutation({
     mutationFn: (bet_id: string) =>
       apiFetch(`/bets/${bet_id}`, { method: "DELETE" }, accessToken),
-    onSuccess: () => {
+    onSuccess: (_data, bet_id) => {
+      posthog.capture("bet_deleted", { bet_id })
       qc.invalidateQueries({ queryKey: ["bets"] })
       setDeletingBetId(null)
     },

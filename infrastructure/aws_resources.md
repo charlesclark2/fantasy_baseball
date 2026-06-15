@@ -62,6 +62,9 @@ SNOWFLAKE_WAREHOUSE=COMPUTE_WH
 COGNITO_APP_CLIENT_ID=1qh95e78bd7g6ipqcvdcpf7ou6
 COGNITO_USER_POOL_ID=us-east-1_gG9zMbwQt
 
+# Comma-separated Cognito usernames (= emails) for admin-only endpoints (/admin/*)
+ADMIN_EMAILS=ctcb57@gmail.com
+
 DYNAMO_PUSH_SUBSCRIPTIONS_TABLE=credence-prod-dynamo-push-subscriptions
 USER_BETS_TABLE=credence-prod-dynamo-user-bets
 USERS_TABLE=credence-prod-dynamo-users

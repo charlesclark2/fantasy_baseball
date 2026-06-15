@@ -51,6 +51,7 @@ pip install \
   "pydantic>=2.0.0" \
   "cryptography>=41.0" \
   "python-dotenv>=1.0" \
+  "sentry-sdk[fastapi]>=2.0.0" \
   -t "$PACKAGE_DIR" \
   --quiet
 

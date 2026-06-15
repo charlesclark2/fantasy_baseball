@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
+import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,6 +50,7 @@ function LoginInner() {
         const accessToken = session.getAccessToken().getJwtToken()
         const idToken     = session.getIdToken().getJwtToken()
         onLoginSuccess(accessToken, idToken)
+        posthog.capture("user_signed_in", { method: "password" })
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
       },
@@ -75,6 +77,7 @@ function LoginInner() {
         const accessToken = session.getAccessToken().getJwtToken()
         const idToken     = session.getIdToken().getJwtToken()
         onLoginSuccess(accessToken, idToken)
+        posthog.capture("user_set_initial_password")
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         apiFetch("/auth/accept-terms", { method: "POST" }, accessToken).catch(() => {})
         router.push("/dashboard")
