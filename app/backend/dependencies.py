@@ -30,24 +30,38 @@ _ADMIN_EMAILS: frozenset[str] = frozenset(
 )
 
 
-def _sub_from_bearer(authorization: str | None) -> str | None:
-    """Extract sub claim from a Cognito JWT without signature verification.
+def _decode_jwt_payload(authorization: str | None) -> dict:
+    """Decode the payload of a Bearer JWT without signature verification.
 
-    Safe for local dev only — prod uses the API Gateway authorizer.
+    Safe in prod because API Gateway's JWT authorizer has already validated the
+    token before Lambda is invoked. Used as a fallback when the authorizer context
+    doesn't surface a specific claim (e.g. cognito:groups array flattening).
     """
     if not authorization or not authorization.startswith("Bearer "):
-        return None
+        return {}
     token = authorization.removeprefix("Bearer ")
     parts = token.split(".")
     if len(parts) != 3:
-        return None
+        return {}
     try:
-        # JWT payload is base64url encoded; pad to multiple of 4
         payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-        return payload.get("sub")
+        return json.loads(base64.urlsafe_b64decode(payload_b64))
     except Exception:
-        return None
+        return {}
+
+
+def _sub_from_bearer(authorization: str | None) -> str | None:
+    return _decode_jwt_payload(authorization).get("sub")
+
+
+def _groups_from_bearer(authorization: str | None) -> list[str]:
+    """Extract cognito:groups from the raw Bearer token payload."""
+    groups = _decode_jwt_payload(authorization).get("cognito:groups") or []
+    if isinstance(groups, list):
+        return groups
+    if isinstance(groups, str):
+        return [g.strip() for g in groups.split(",") if g.strip()]
+    return []
 
 
 def _claims_from_event(request: Request) -> dict:
@@ -101,15 +115,20 @@ def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str
     """
     claims = _claims_from_event(request)
 
-    # Primary: Cognito group membership ("admin" group)
-    groups = claims.get("cognito:groups") or []
-    if isinstance(groups, str):
-        # API Gateway may deliver a JSON array as a string
-        try:
-            groups = json.loads(groups)
-        except Exception:
-            groups = [groups]
-    if "admin" in groups:
+    # Primary: cognito:groups from API Gateway authorizer context.
+    # API Gateway HTTP API delivers JWT array claims as comma-separated strings,
+    # so split on comma rather than JSON-parse.
+    raw = claims.get("cognito:groups") or ""
+    if raw:
+        ctx_groups = [g.strip() for g in raw.split(",") if g.strip()]
+        if "admin" in ctx_groups:
+            return user_id
+
+    # Fallback: decode the Bearer token directly.
+    # Needed when API Gateway doesn't surface cognito:groups in the claims context
+    # (e.g. single-group users or authorizer config differences). Safe because the
+    # JWT has already been signature-validated by API Gateway before Lambda invokes.
+    if "admin" in _groups_from_bearer(request.headers.get("Authorization")):
         return user_id
 
     # Legacy: ADMIN_EMAILS env var
@@ -117,7 +136,6 @@ def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str
         username = claims.get("username") or claims.get("cognito:username", "")
         if username.lower() in _ADMIN_EMAILS:
             return user_id
-        # Local dev fallback: explicit header
         dev_email = request.headers.get("X-Admin-Email", "")
         if dev_email.lower() in _ADMIN_EMAILS:
             return user_id

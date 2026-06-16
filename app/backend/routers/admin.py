@@ -1,8 +1,9 @@
 """Admin endpoints.
 
-POST /admin/cache/invalidate  — invalidate today's S3 cache
-GET  /admin/pipeline-runs     — last 14 Dagster run entries (two jobs)
-GET  /admin/model-freshness   — champion model freshness from model_registry
+POST /admin/cache/invalidate    — invalidate today's S3 cache
+GET  /admin/pipeline-runs       — last 14 Dagster run entries (two jobs)
+GET  /admin/model-freshness     — champion model freshness from model_registry
+GET  /admin/snowflake-credits   — month-by-month Snowflake credit usage (last 6 months)
 """
 
 from __future__ import annotations
@@ -50,6 +51,14 @@ class ModelFreshness(BaseModel):
     last_trained_date: str
     days_since_training: int
     status: str  # "healthy" | "watch" | "stale"
+
+
+class SnowflakeCredits(BaseModel):
+    month: str          # "2026-06" formatted
+    month_label: str    # "Jun 2026" formatted
+    compute_credits: float
+    cloud_service_credits: float
+    total_credits: float
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +213,60 @@ def model_freshness(_: str = Depends(get_admin_user)) -> list[ModelFreshness]:
             last_trained_date=str(row.get("PROMOTED_DATE") or "—"),
             days_since_training=days,
             status=freshness_status,
+        ))
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Snowflake credit usage (ACCOUNT_USAGE.METERING_DAILY_HISTORY)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/snowflake-credits", response_model=list[SnowflakeCredits])
+def snowflake_credits(_: str = Depends(get_admin_user)) -> list[SnowflakeCredits]:
+    """Month-by-month Snowflake credit consumption for the last 6 months.
+
+    Requires the Lambda's Snowflake role to have IMPORTED PRIVILEGES on the
+    SNOWFLAKE database (i.e. GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO
+    ROLE <lambda_role>). Returns [] gracefully if the role lacks access.
+    """
+    try:
+        rows = execute_query(
+            """
+            SELECT
+                DATE_TRUNC('month', USAGE_DATE)              AS month,
+                SUM(CREDITS_USED_COMPUTE)                    AS compute_credits,
+                SUM(CREDITS_USED_CLOUD_SERVICES)             AS cloud_service_credits,
+                SUM(CREDITS_USED_COMPUTE
+                    + CREDITS_USED_CLOUD_SERVICES)           AS total_credits
+            FROM SNOWFLAKE.ACCOUNT_USAGE.METERING_DAILY_HISTORY
+            WHERE USAGE_DATE >= DATEADD('month', -6, CURRENT_DATE())
+            GROUP BY 1
+            ORDER BY 1 DESC
+            """
+        )
+    except Exception:
+        logger.warning("snowflake_credits query failed — role may lack IMPORTED PRIVILEGES")
+        return []
+
+    results: list[SnowflakeCredits] = []
+    for row in rows:
+        month_dt = row.get("MONTH")
+        if month_dt is None:
+            continue
+        if hasattr(month_dt, "strftime"):
+            month_key = month_dt.strftime("%Y-%m")
+            month_label = month_dt.strftime("%b %Y")
+        else:
+            month_key = str(month_dt)[:7]
+            month_label = str(month_dt)[:7]
+        results.append(SnowflakeCredits(
+            month=month_key,
+            month_label=month_label,
+            compute_credits=round(float(row.get("COMPUTE_CREDITS") or 0), 2),
+            cloud_service_credits=round(float(row.get("CLOUD_SERVICE_CREDITS") or 0), 2),
+            total_credits=round(float(row.get("TOTAL_CREDITS") or 0), 2),
         ))
 
     return results
