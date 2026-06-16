@@ -1135,8 +1135,16 @@ def _apply_portfolio_filter(result: "TodayPicksResponse", user_id: str) -> "Toda
 def get_picks_today(
     apply_portfolio: bool = Query(False, description="Filter picks by the authenticated user's portfolio preferences"),
     user_id: str | None = Depends(get_optional_user_id),
+    date: str | None = Query(None, description="YYYY-MM-DD; defaults to ET today. Pass the client's local date to avoid midnight timezone seams."),
 ) -> TodayPicksResponse:
-    today = datetime.now(_ET).date().isoformat()
+    if date:
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+            today = date
+        except ValueError:
+            raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    else:
+        today = datetime.now(_ET).date().isoformat()
 
     # PG primary read path (A2.12)
     pg_hit = pg.get_cache("picks/today", today)

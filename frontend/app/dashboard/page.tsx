@@ -544,7 +544,7 @@ export default function DashboardPage() {
 
   const { data: todayData, isLoading: todayLoading, isError: todayError } = useQuery({
     queryKey: ["picks-today", accessToken, todayIso],
-    queryFn: () => apiFetch("/picks/today", {}, accessToken),
+    queryFn: () => apiFetch(`/picks/today?date=${todayIso}`, {}, accessToken),
     staleTime: 5 * 60 * 1000,
     enabled: !!accessToken && isToday,
   })
