@@ -318,7 +318,7 @@ function TeamPageInner() {
 
   return (
     <>
-      <Nav authenticated activeLink={null} userEmail={email} />
+      <Nav authenticated activeLink="teams" userEmail={email} />
       <main className="mx-auto max-w-5xl px-4 py-8">
         {isLoading && (
           <div className="space-y-4">
@@ -340,23 +340,23 @@ function TeamPageInner() {
         {team && (
           <div className="space-y-8">
             {/* Header */}
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex items-center gap-4">
                 <img
                   src={teamLogoSrc(team.team_abbrev)}
                   alt={team.team_abbrev}
-                  className="h-16 w-16 object-contain"
+                  className="h-14 w-14 shrink-0 object-contain sm:h-16 sm:w-16"
                   onError={(e) => {
                     ;(e.target as HTMLImageElement).style.display = "none"
                   }}
                 />
                 <div>
-                  <h1 className="text-3xl font-bold text-white">{team.team_name}</h1>
-                  <p className="mt-1 text-sm text-gray-400">
+                  <h1 className="text-2xl font-bold text-white sm:text-3xl">{team.team_name}</h1>
+                  <p className="mt-0.5 text-sm text-gray-400">
                     {team.division} · {team.league}
                   </p>
                   {nextGame && (
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500">
+                    <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-500">
                       <span className="text-gray-600">Next:</span>
                       <span className="font-medium text-gray-300">
                         {nextGame.home_away === "home" ? "vs" : "@"} {nextGame.opponent}
@@ -369,11 +369,12 @@ function TeamPageInner() {
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold text-white tabular-nums">
+              {/* Record — left on mobile, right on desktop */}
+              <div className="shrink-0 sm:text-right">
+                <div className="text-2xl font-bold text-white tabular-nums whitespace-nowrap">
                   {team.record.wins}–{team.record.losses}
                 </div>
-                <div className="mt-0.5 flex items-center justify-end gap-2">
+                <div className="mt-0.5 flex items-center gap-2 sm:justify-end">
                   {team.record.streak_direction && team.record.streak_length && (
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs font-semibold ${

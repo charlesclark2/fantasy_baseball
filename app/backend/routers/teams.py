@@ -13,6 +13,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/teams", tags=["teams"])
 
 
+@router.get("")
+def list_teams(_: str = Depends(get_user_id)) -> list:
+    """Return a summary list of all team profiles (for the teams directory page)."""
+    payloads = pg.list_cache_by_prefix("team/")
+    return [
+        {
+            "team_id": p["team_id"],
+            "team_name": p["team_name"],
+            "team_abbrev": p["team_abbrev"],
+            "league": p["league"],
+            "division": p["division"],
+            "record": p.get("record"),
+        }
+        for p in payloads
+        if "team_id" in p
+    ]
+
+
 @router.get("/{team_id}")
 def get_team(team_id: int, _: str = Depends(get_user_id)) -> dict:
     """Return the cached team profile for a given MLB statsapi team_id.
