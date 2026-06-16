@@ -316,7 +316,7 @@ Add `dynamodb:PutItem` on this table to the Lambda execution role (`credence-pro
 ```json
 {
   "Effect": "Allow",
-  "Action": ["dynamodb:PutItem"],
+  "Action": ["dynamodb:PutItem", "dynamodb:Scan"],
   "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-dynamo-data-quality-reports"
 }
 ```

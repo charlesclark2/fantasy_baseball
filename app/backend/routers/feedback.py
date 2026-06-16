@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import boto3
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -38,6 +39,13 @@ def list_data_quality_reports(limit: int = 50) -> list[dict]:
         items = response.get("Items", [])
         items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         return items
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code == "ResourceNotFoundException":
+            logger.warning("data_quality_reports table not yet provisioned")
+            return []
+        logger.exception("DynamoDB scan failed for data_quality_reports (code=%s)", code)
+        raise HTTPException(status_code=503, detail="Could not fetch reports")
     except Exception:
         logger.exception("Failed to scan data_quality_reports")
         raise HTTPException(status_code=503, detail="Could not fetch reports")
