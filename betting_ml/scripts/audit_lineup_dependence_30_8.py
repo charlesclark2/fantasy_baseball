@@ -91,8 +91,11 @@ def _table_columns(conn) -> set[str]:
     return {r[0].lower() for r in cur.fetchall()}
 
 
-def _null_rates(conn, cols: list[str], lo_off: int, hi_off: int) -> pd.Series:
-    """null-rate per col over games with game_date in [current_date+lo_off, current_date+hi_off]."""
+def _window_stats(conn, cols: list[str], lo_off: int, hi_off: int) -> tuple[pd.Series, pd.Series]:
+    """(null-rate, distinct-non-null-count) per col over games in [current_date+lo, +hi].
+    nunique catches SEASON-FILL placeholders: a feature that's non-null but CONSTANT
+    pre-lineup (e.g. a `_seasonnorm` lineup twin filled with the season average) is dead
+    weight, not real signal — must be excluded from the pre-lineup contract."""
     sel = ", ".join(cols)
     sql = (f"SELECT {sel} FROM {_TABLE} "
            f"WHERE game_date >= dateadd('day',{lo_off},current_date()) "
@@ -102,8 +105,9 @@ def _null_rates(conn, cols: list[str], lo_off: int, hi_off: int) -> pd.Series:
     df = cur.fetch_pandas_all()
     df.columns = [c.lower() for c in df.columns]
     if df.empty:
-        return pd.Series({c: float("nan") for c in cols})
-    return df.isna().mean()
+        nan = pd.Series({c: float("nan") for c in cols})
+        return nan, nan
+    return df.isna().mean(), df.nunique(dropna=True)
 
 
 def main() -> None:
@@ -119,8 +123,8 @@ def main() -> None:
         absent = sorted(set(union) - set(present))
         if absent:
             print(f"  {len(absent)} contract cols ABSENT from the store (→ Class-A imputation indicators): {absent}")
-        dense = _null_rates(conn, present, -3, -1)    # completed, lineup-confirmed, recent
-        sparse = _null_rates(conn, present, 1, 3)     # future, unconfirmed, recent
+        dense_null, dense_nu = _window_stats(conn, present, -3, -1)   # completed, lineup-confirmed, recent
+        sparse_null, sparse_nu = _window_stats(conn, present, 1, 3)   # future, unconfirmed, recent
     finally:
         conn.close()
 
@@ -130,12 +134,17 @@ def main() -> None:
             rows.append({"feature": c, "class": "A", "reason": "absent-from-store (imputation indicator)",
                          "null_dense": None, "null_sparse": None, "name_lineup": False, "name_agrees": True})
             continue
-        nd, ns = float(dense.get(c, float("nan"))), float(sparse.get(c, float("nan")))
+        nd, ns = float(dense_null.get(c, float("nan"))), float(sparse_null.get(c, float("nan")))
+        d_nu, s_nu = int(dense_nu.get(c, 0) or 0), int(sparse_nu.get(c, 0) or 0)
         name_lineup = any(p in c for p in _LINEUP_PAT)
         if pd.notna(ns) and pd.notna(nd) and (ns - nd) > _DELTA_TOL:
             cls, reason = "B", f"present-confirmed/absent-unconfirmed (Δnull {ns-nd:+.2f})"
+        elif pd.notna(ns) and ns <= _PRESENT_TOL and s_nu <= 1 and d_nu > 1:
+            # non-null but CONSTANT pre-lineup while VARIED when confirmed = season-fill
+            # placeholder (e.g. a `_seasonnorm` lineup twin) → dead weight pre-lineup.
+            cls, reason = "B", f"season-fill placeholder (constant pre-lineup: nunique {s_nu} vs dense {d_nu})"
         elif pd.notna(ns) and ns <= _PRESENT_TOL:
-            cls, reason = "A", f"present pre-lineup (null_sparse {ns:.2f})"
+            cls, reason = "A", f"present pre-lineup (null_sparse {ns:.2f}, nunique {s_nu})"
         else:
             cls, reason = "A", f"null in BOTH windows — structural/rolling, not lineup-gated (sparse {ns:.2f}/dense {nd:.2f})"
         rows.append({"feature": c, "class": cls, "reason": reason,

@@ -59,6 +59,9 @@ class FeaturedPickResponse(BaseModel):
     is_stale: bool = False
     is_preliminary: bool = False
     pick_date: str | None = None
+    home_team: str | None = None
+    away_team: str | None = None
+    pick_side: str | None = None  # 'home'|'away' for h2h; 'over'|'under' for totals
 
 
 class HistoricalPick(Pick):

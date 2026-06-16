@@ -2,8 +2,8 @@
   "target": "run_differential",
   "model_name": "pre_lineup_run_diff",
   "story": "30.8",
-  "n_features": 127,
-  "derived_from": "run_differential live contract minus 42 Class-B lineup cols",
+  "n_features": 126,
+  "derived_from": "run_differential live contract minus 43 Class-B lineup cols",
   "feature_cols": [
     "home_bp_eb_xwoba",
     "away_bp_eb_xwoba",
@@ -12,7 +12,6 @@
     "away_bp_eb_uncertainty",
     "pythagorean_win_exp_diff",
     "away_elo",
-    "home_bp_eb_coverage_pct",
     "home_elo",
     "away_pit_woba_against_std",
     "away_bp_eb_coverage_pct",

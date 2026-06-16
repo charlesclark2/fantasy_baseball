@@ -608,6 +608,37 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     ))}
+                    {/* Annual totals row */}
+                    {(() => {
+                      const totals = finances.months.reduce(
+                        (acc, m) => ({
+                          fixed: acc.fixed + m.fixed_cost,
+                          total_cost: acc.total_cost + m.total_cost,
+                          betting_pl: acc.betting_pl + m.betting_pl,
+                          subs: acc.subs + m.subscription_revenue,
+                          net: acc.net + m.net,
+                        }),
+                        { fixed: 0, total_cost: 0, betting_pl: 0, subs: 0, net: 0 }
+                      )
+                      return (
+                        <tr className="border-t-2 border-[#333] bg-[#0f0f0f]">
+                          <td className="py-3 pr-4 text-xs font-bold text-gray-300 whitespace-nowrap uppercase tracking-widest">YTD Total</td>
+                          <td className="py-3 pr-4 text-xs font-medium text-gray-300 whitespace-nowrap">${totals.fixed.toFixed(2)}</td>
+                          <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-4 text-xs font-bold text-white whitespace-nowrap">${totals.total_cost.toFixed(2)}</td>
+                          <td className="py-3 pr-4 text-xs font-bold whitespace-nowrap">
+                            <PLCell value={totals.betting_pl} />
+                          </td>
+                          <td className="py-3 pr-4 text-xs font-medium text-gray-300 whitespace-nowrap">${totals.subs.toFixed(2)}</td>
+                          <td className="py-3 text-xs font-bold whitespace-nowrap">
+                            <PLCell value={totals.net} />
+                          </td>
+                        </tr>
+                      )
+                    })()}
                   </tbody>
                 </table>
               </div>

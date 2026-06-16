@@ -89,6 +89,14 @@ home_win:
   ece_raw: 0.043
   eval_year: 2026
   feature_columns_path: betting_ml/models/home_win/feature_columns_xgb_classifier_tuned_2026.json
+  # Story 33.0 — pre-lineup (morning) serving variant: Class-A-only model trained on the
+  # sparse-morning-matchable feature set; predict_today loads this when lineups are
+  # unconfirmed (see the SERVE-SPLIT block). Champion above is served post-lineup + backfill.
+  pre_lineup: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_pre_lineup_2026.pkl
+  pre_lineup_feature_columns_path: betting_ml/models/home_win/feature_columns_pre_lineup_home_win_fitted.json
+  # Story 33.0 — the pre-lineup model is its OWN version lineage (starts at v1), separate from
+  # the champion above. predict_today stamps morning pre-lineup rows model_version=pre_lineup_v1.
+  pre_lineup_model_version: v1
   features: 211
   mlflow_run_id: 523298ed749543bbabd339aa1e57cf68
   model_name: xgb_classifier_market_blind
@@ -280,6 +288,10 @@ run_differential:
   dist: Normal
   eval_year: 2026
   feature_columns_path: betting_ml/models/run_differential/feature_columns_ngboost_tuned_2026.json
+  # Story 33.0 — pre-lineup (morning) serving variant (NGBoost Normal n=500, Class-A only).
+  pre_lineup: s3://baseball-betting-ml-artifacts/run_differential/ngboost_pre_lineup_2026.pkl
+  pre_lineup_feature_columns_path: betting_ml/models/run_differential/feature_columns_pre_lineup_run_diff_fitted.json
+  pre_lineup_model_version: v1  # Story 33.0 — pre-lineup lineage, separate from the champion
   features: 169
   mlflow_run_id: d53106eca441428a814d477c73ae8d83
   model_name: ngboost_tuned_market_blind
@@ -450,6 +462,10 @@ total_runs:
   dist: Normal
   eval_year: 2026
   feature_columns_path: betting_ml/models/total_runs/feature_columns_ngboost_tuned_seasonnorm_2026.json
+  # Story 33.0 — pre-lineup (morning) serving variant (NGBoost Normal n=500, Class-A only).
+  pre_lineup: s3://baseball-betting-ml-artifacts/total_runs/ngboost_pre_lineup_2026.pkl
+  pre_lineup_feature_columns_path: betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs_fitted.json
+  pre_lineup_model_version: v1  # Story 33.0 — pre-lineup lineage, separate from the champion
   features: 113
   max_depth: 3
   model_name: ngboost_tuned_seasonnorm

@@ -12,6 +12,7 @@ import {
   Database,
   Eye,
   FlaskConical,
+  Pencil,
   ShieldCheck,
   Zap,
 } from "lucide-react"
@@ -42,6 +43,9 @@ type FeaturedPick = {
   is_stale?: boolean
   is_preliminary?: boolean
   pick_date?: string | null
+  home_team?: string | null
+  away_team?: string | null
+  pick_side?: string | null  // 'home'|'away' for h2h; 'over'|'under' for totals
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +169,13 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                   <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
                     {pick.matchup}
                   </h2>
+                  {pick.pick_side && (
+                    <p className="mt-1.5 text-base font-semibold text-[#10b981]">
+                      {pick.market_type === "h2h"
+                        ? `Picking: ${pick.pick_side === "home" ? pick.home_team : pick.away_team} to win`
+                        : `Picking: ${pick.pick_side.charAt(0).toUpperCase() + pick.pick_side.slice(1)}`}
+                    </p>
+                  )}
                   <p className="mt-1 text-sm text-gray-500">{pick.game_time_et}</p>
                 </div>
 
@@ -390,6 +401,34 @@ function TrustSection() {
   )
 }
 
+function LatestPost({ post }: { post: { post_id: string; title: string; excerpt?: string | null; published_at?: string | null } | null }) {
+  if (!post) return null
+  return (
+    <section className="py-12 md:py-16 border-t border-[#262626]">
+      <div className="mx-auto max-w-4xl px-4">
+        <div className="flex items-center gap-2 mb-5">
+          <Pencil className="h-4 w-4 text-[#10b981]" />
+          <span className="text-xs uppercase tracking-widest text-[#10b981] font-semibold">
+            From the Blog
+          </span>
+        </div>
+        <Link
+          href={`/blog/${post.post_id}`}
+          className="group block rounded-xl border border-[#262626] bg-[#141414] p-6 hover:border-[#10b981]/30 transition-colors"
+        >
+          <h3 className="text-lg font-bold text-white group-hover:text-[#10b981] transition-colors">
+            {post.title}
+          </h3>
+          {post.excerpt && (
+            <p className="mt-2 text-sm leading-relaxed text-gray-400 line-clamp-2">{post.excerpt}</p>
+          )}
+          <p className="mt-3 text-xs text-[#10b981]">Read more →</p>
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 function FooterCta() {
   return (
     <section className="py-20 md:py-28 border-t border-[#262626]">
@@ -433,17 +472,28 @@ function FooterCta() {
 
 export default async function LandingPage() {
   const base = process.env.NEXT_PUBLIC_API_URL ?? ""
-  const featuredRes = base
-    ? await fetch(`${base}/picks/featured`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : { game_pk: null }))
-        .catch(() => ({ game_pk: null }))
-    : { game_pk: null }
+
+  const [featuredRes, blogData] = await Promise.all([
+    base
+      ? fetch(`${base}/picks/featured`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : { game_pk: null }))
+          .catch(() => ({ game_pk: null }))
+      : Promise.resolve({ game_pk: null }),
+    base
+      ? fetch(`${base}/blog/posts`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : { posts: [] }))
+          .catch(() => ({ posts: [] }))
+      : Promise.resolve({ posts: [] }),
+  ])
+
+  const latestPost = (blogData.posts ?? [])[0] ?? null
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
       <Nav />
       <main>
         <HeroSection />
+        <LatestPost post={latestPost} />
         <FeaturedPickCard pick={featuredRes as FeaturedPick} />
         <WhyCredenceStrip />
         <HowItWorks />

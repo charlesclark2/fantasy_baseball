@@ -15003,7 +15003,17 @@ go-live; the older `model_deploy_runbook.md` predates the S3 mechanism). Key fac
 
 ### 30.2 — Bayesian-leverage audit (wire sub-model distributional outputs into the base models)
 
-**Status (2026-06-15): IN PROGRESS — harness built + smoke-passed; ablation retrains handed off.**
+**Status (2026-06-15): ✅ CLOSED — NO EDGE, Layer-3-only architecture CONFIRMED for ALL 3 targets.** Ablation
+ran on all three. Every target shows the same signature: a large CONTAMINATED-CV "gain" that REVERSES on the
+honest 2026 OOS → REJECT. **home_win** Brier +0.0076 (corr 0.4507→0.4144); **total_runs** MAE +0.0548 (calib_80
+0.809→0.753); **run_diff** MAE +0.1269 (calib_80 0.775→0.725). The 52 distributional sub-model cols add only
+overfitting on the honest surface for every base model — the Layer-3-only split is correct (6th+ no-edge
+confirmation alongside `layer3_architecture_finding`). **Story 30.14 (walk-forward signal regen) → CLOSED-AS-MOOT:**
+its gate required a 2026-positive target; none qualified, and walk-forward signals are only WEAKER than these
+over-informed ones, so they cannot rescue a feature set that fails on honest 2026. Do not retry base-model Bayesian
+enrichment. See `betting_ml/evaluation/feature_selection/bayesian_leverage_30_2/`.
+
+**Status (2026-06-15, superseded): IN PROGRESS — harness built + smoke-passed; ablation retrains handed off.**
 Harness: `betting_ml/scripts/bayesian_leverage_ablation_30_2.py`. Controlled ablation — holds each
 target's tuned HP + 30.4-cleaned LIVE contract fixed (home_win 211 `xgb_classifier_tuned_2026` /
 run_diff 169 `ngboost_tuned_2026` / total_runs 113 `ngboost_tuned_seasonnorm_2026`) and adds ONLY the
@@ -15816,17 +15826,118 @@ back to the user to run and show the command; do not git commit or push (the use
 - [ ] **Train the pre-lineup challenger.** Retrain `home_win` (and `run_diff`, `total_runs`) using ONLY the pre-lineup feature set, on the same train/val split as the current champion. Compare CV metrics pre-lineup vs post-lineup champion — the pre-lineup model will be weaker; that is expected and acceptable. Document the gap (e.g., "pre-lineup AUC 0.58 vs post-lineup 0.65 — 7pp trade-off for morning freshness").
 - [ ] **Add a `prediction_timing` field to `daily_model_predictions`** (values: `'pre_lineup'` | `'post_lineup'` — orthogonal to the existing `prediction_type` = `'morning'` | `'post_lineup'`; note the overlap in naming: reconcile via 30.7's DDL migration or add a new column). This field is required for the UI to distinguish confidence tiers.
 - [ ] **Wire two runs in `predict_today.py`**: (a) morning run uses the pre-lineup model + pre-lineup feature assembly path, stamps `prediction_timing='pre_lineup'`; (b) post-lineup sensor re-run uses the full post-lineup model + dense feature path, stamps `prediction_timing='post_lineup'`.
-- [ ] **Interim UI labeling.** Until the pre-lineup model is trained and promoted, update the web app's game detail page to show a "Lineup Unconfirmed — Prediction Preliminary" badge on any game where `lineup_confirmed = False`. This is a stop-gap so the UI does not present a degraded prediction as a confident pick.
+- [x] **Interim UI labeling — ✅ DONE in the app (2026-06-15).** The web app shows the "Lineup Unconfirmed — Prediction Preliminary" badge on games where `lineup_confirmed = False` (and gates featured/pick-of-the-day on `lineup_confirmed = True`). Stop-gap shipped ahead of the pre-lineup model.
 
 **Acceptance criteria:**
 - [ ] Feature classification table written: every column tagged Class-A or Class-B, with rationale
 - [ ] Pre-lineup feature contract file created and validated against the CONTRACT-GUARD
 - [ ] Pre-lineup model trained and CV metrics documented (expected weaker than post-lineup champion — this is correct behavior, not a failure)
 - [ ] `prediction_timing` column present on `daily_model_predictions`; morning writes `'pre_lineup'`, post-lineup sensor writes `'post_lineup'`
-- [ ] Web app shows "Lineup Unconfirmed — Prediction Preliminary" badge for pre-lineup-only games
+- [x] Web app shows "Lineup Unconfirmed — Prediction Preliminary" badge for pre-lineup-only games ✅ (app, 2026-06-15)
 - [ ] Pick-of-the-day feature (A0.4.12) is gated on this story — do not promote a morning pick as a "pick of the day" until the pre-lineup model is live and the `prediction_timing` field is populated
 
-**Sequencing:** Do NOT start the pre-lineup model training until Story 30.4 (market-blind contract) is fully promoted and stable — the pre-lineup contract is a subset of the post-lineup market-blind contract; training on a different feature set while the contract is still shifting creates unnecessary rework. The interim UI badge (Task 6) can be shipped independently at any time.
+**Sequencing:** Do NOT start the pre-lineup model training until Story 30.4 (market-blind contract) is fully promoted and stable — the pre-lineup contract is a subset of the post-lineup market-blind contract; training on a different feature set while the contract is still shifting creates unnecessary rework. The interim UI badge (Task 6) can be shipped independently at any time. **2026-06-15: 30.4 promoted → training unblocked; Task 1 classification done; the high-fidelity build of 30.8 option (ii) is scoped as Epic 33 below.**
+
+---
+
+## Epic 33 — Pregame Projection Layer (expected lineup + rotation)  `[Home: Epic 30 → projection]`  ⬜ SPECCED 2026-06-15
+
+**Status:** ⬜ Specced 2026-06-15 (decision: 30.8 option **(ii)** — recover the lineup-gated signal by PROJECTING it, not dropping it). Implements the high-fidelity half of Story 30.8. **Both a model input (a genuinely strong morning/pre-lineup model) AND a product differentiator (show users projected lineups/matchups).**
+
+**The core insight:** you do NOT need to predict the EXACT lineup — only the team's EXPECTED offensive AGGREGATE. Individual slot errors average out across 9 batters, so an expected-value aggregate (Σ over roster of P(player starts)·player_stat) is far more stable and predictable than any single slot, and far better than the current pre-lineup behavior (impute the lineup-gated features to a league constant). 30.8 Task 1 found ~53/42/18 lineup-gated cols in the home_win/run_diff/total_runs contracts; this Epic reconstructs them pre-lineup.
+
+**⛔ THE NON-NEGOTIABLE DISCIPLINE — POINT-IN-TIME / WALK-FORWARD.** The expected-lineup features MUST be computed as they would have been projected pre-lineup (as-of the morning), for the TRAINING set too — never from the post-hoc actual lineup. Training on actual-lineup aggregates while serving projected ones rebuilds the exact train/serve skew Stories 30.3/30.6/30.13 just eliminated (and the same leakage class that closed 30.2/30.14). Every feature in this Epic is built walk-forward or it is worthless. This is the dominant effort + correctness driver.
+
+**Data feasibility (verified available):** historical lineups (`stg_statsapi_lineups` → per-player start history → start rates), transactions/IL (`ingest_transactions`), opponent-starter handedness (from the probable/rotation projection), player stats (existing EB/Statcast batter features). No new ingestion required; the build is feature-engineering + projection modeling.
+
+**Stories (see ordering block at the end):**
+
+### 33.0 — Pre-lineup baseline model (the honest floor)  ✅ DONE 2026-06-15 (models + serving split dev-verified)
+**Goal:** Train the strict Class-A pre-lineup `home_win`/`run_diff`/`total_runs` models from the 30.8 Task-1 contracts (drop all Class-B lineup-gated cols; fix the two caveats — verify `_seasonnorm` lineup cols aren't season-fill dead weight; keep umpire z-scores out as game-day-assignment-gated). Document CV + honest-2026 vs the post-lineup champion (expected weaker — that's correct). Wire the pre/post serving split in `predict_today.py` (morning = pre-lineup model; post-lineup sensor = full model), reusing existing `prediction_type`/`lineup_confirmed` (do NOT add a redundant `prediction_timing` column). **This is the baseline every later story's lift is measured against — do it first.**
+
+**Progress (2026-06-15):**
+- ✅ **Both caveats resolved.** The `_seasonnorm` season-fill hypothesis was CONFIRMED empirically (e.g.
+  `home_lineup_avg_xwoba_vs_cluster_seasonnorm` = 1 distinct value / std 0.0 across pre-lineup games = a
+  constant placeholder, while the genuinely-team-level `away_vs_lhp_xwoba_30d_seasonnorm` = 27 distinct / std
+  0.52 = real). `audit_lineup_dependence_30_8.py` now carries a general zero-variance-pre-lineup check (varied
+  when confirmed + constant pre-lineup ⇒ Class-B) — caught 6 more placeholders. Umpire z-scores confirmed out.
+- ✅ **FINAL pre-lineup contracts written:** `feature_columns_pre_lineup_{home_win,run_diff,total_runs}.json`
+  = **156 / 126 / 89** features (drop 55 / 43 / 24 lineup-gated). Verified: 0 `lineup_*`, 0 `ump_*`.
+- ✅ **Gap-measurement harness built:** `betting_ml/scripts/pre_lineup_baseline_30_8.py` — fixed-HP ablation
+  (post-lineup full contract vs pre-lineup subset), walk-forward CV + honest-2026, per the 30.1/30.2 pattern.
+  **HAND-OFF (one --target per invocation):** `uv run python betting_ml/scripts/pre_lineup_baseline_30_8.py --target home_win`
+  (then run_diff, total_runs). Reports the honest-2026 accuracy gap + a serve-worthiness check (beats coinflip?).
+- ✅ **GAP MEASURED — all 3 SERVE-WORTHY (honest 2026):**
+  | target | post→pre feats | primary | post | pre | morning gap | calib_80 |
+  |---|---|---|---|---|---|---|
+  | home_win | 209→154 | Brier | 0.1973 | 0.2020 | **+0.0046** (corr 0.461→0.440) | — |
+  | total_runs | 111→87 | MAE | 3.2919 | 3.3180 | **+0.0261** | 0.809→0.785 |
+  | run_diff | 167→124 | MAE | 3.0408 | 3.1469 | **+0.1062** | 0.778→0.779 |
+  Every morning model beats the coinflip floor — so serving a pre-lineup pick is strictly better than today's
+  morning abstain. run_diff pays the largest accuracy toll (it's the most lineup-leveraged target) but its
+  calibration is unchanged, so the morning interval is still trustworthy. The gaps are the HONEST morning cost;
+  Epic 33.3/33.4 projection features are what shrink them.
+- ✅ **FINAL-artifact trainer built + validated (2026-06-15):** `betting_ml/scripts/train_pre_lineup_30_8.py`
+  (one `--target` per invocation). Mirrors each DEPLOYED champion's recipe on the Class-A contract — home_win:
+  tuned XGB + Platt in `PlattCalibratedXGBClassifier` (XGB on last-fold train, Platt on last-fold eval, exactly
+  like `run_xgb_home_win_search.py`); run_diff/total_runs: NGBoost Normal, friedman_mse depth-3 base, **n=500**
+  (registry champion n; the 33.0 gap harness used n=1000 for run_diff — gap direction holds, but the serving
+  artifact matches the champion so morning/post are directly comparable). Feature parity: builds the FULL imputed
+  matrix exactly as predict_today does, then SELECTS the pre-lineup contract → saved contract ⊆ pipeline output,
+  so `reindex(columns=contract)` is exact (validated synthetically: serving reindex == model.n_features). Writes
+  `{xgb_classifier,ngboost}_pre_lineup_2026.pkl` + `feature_columns_pre_lineup_*_fitted.json` + S3 upload; does
+  NOT touch the live champion. **HAND-OFF (one per invocation, minutes each):**
+  `uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target home_win` (then run_diff, total_runs).
+- ✅ **All 3 FINAL artifacts trained + uploaded (2026-06-15):** home_win 156 feats (XGB+Platt),
+  run_diff 126 feats (NGBoost n=500, 279s), total_runs 89 feats (NGBoost n=500, 223s). Each `*_pre_lineup_2026.pkl`
+  + `*_fitted.json` on S3. Offline-validated: model.n_features == fitted contract (156/126/89) for all 3 → the
+  predict_today CONTRACT-GUARD passes.
+- ✅ **SERVING SPLIT wired (2026-06-15):** `predict_today.py` `_resolve_serve_variant` — morning (live run,
+  lineups unconfirmed: `not lineup_confirmed and not is_backfill`) serves `load_model(target,'pre_lineup')` + the
+  `_fitted` contract; post-lineup (`--lineup-confirmed`) and backfill (`--is-backfill`) serve the champion.
+  FAIL-SAFE: any target without a `pre_lineup` registry variant falls back to the champion. `model_registry.yaml`
+  now has `pre_lineup` + `pre_lineup_feature_columns_path` for all 3 targets (S3 artifacts). The `[33.0 SERVE-SPLIT]`
+  log line reports the tier + variant + feature count per target. Story 30.15's `served_tier` now reflects the
+  ACTUAL pre-lineup model on morning runs (composes automatically).
+- ✅ **DEV-VERIFIED both branches (2026-06-15):** morning run logged `tier=PRE-LINEUP (morning)
+  total_runs=pre_lineup(89) run_diff=pre_lineup(126) home_win=pre_lineup(156)`, FEATURE-ALIGN 0 absent on all
+  three, no CONTRACT-GUARD error, 30.15 attribution 10/10, 10 rows to dev. `--lineup-confirmed` run logged
+  `tier=POST-LINEUP prod(113/169/211)` and overwrote the morning rows (A1.2). Sanity: the post-lineup model is
+  sharper than the morning one where lineup info matters (e.g. SD@STL 75%→80%, COL@CHC 73%→83%) — expected.
+  **33.0 DONE.** The morning Dagster serve picks up the pre-lineup models on the next agent rebuild.
+- ✅ **Distinct model-version lineage (2026-06-15):** the pre-lineup serve is its OWN product surface (bet ahead
+  of the market's reaction to lineups), so morning pre-lineup rows are stamped `model_version=pre_lineup_v1`
+  (vs the champion `v5`) — cleanly separable in `daily_model_predictions` + the Model Performance page. Each target
+  carries `pre_lineup_model_version: v1` in `model_registry.yaml`; predict_today derives the row label from
+  home_win's (the existing anchor) when the home_win serve resolves to `pre_lineup`. **Downstream to verify on
+  deploy (in the DEPLOYED Next.js + FastAPI app — the only surface, has live beta testers; no Streamlit):** any
+  consumer that filters `model_version='v5'` must also accept `pre_lineup_v1` (the picks API selects latest-per-
+  game = the desired morning→post-lineup progression, but check nothing hard-codes the champion version); the
+  app's model-performance view should split/label `pre_lineup_v1` vs `v5`. Folded into the 30.15 app prompt.
+- ⚠️ **Unrelated observation (NOT a 33.0 issue):** both dev runs fired the `[30.13 FRESHNESS-GATE]` stale warning
+  (feature store 224 min behind probable-pitcher ingestion) — expected for an off-cycle late-night MANUAL dev
+  run (the feature store wasn't rebuilt just before scoring). Moot for actionable edges right now anyway
+  (best_alpha=0 already zeroes them). The gate is working as designed (fail-safe observability).
+
+### 33.1 — Player playing-time probability model  ⬜
+**Goal:** Per roster player, P(starts today | healthy, vs opponent-SP handedness), point-in-time, from recent start-rate history + IL/transactions + platoon usage. Output a per-(game_pk, side, player) start-probability table, walk-forward for all history. Gates 33.3.
+
+### 33.2 — Rotation / probable-pitcher projection  ⬜ (opportunistic)
+**Goal:** Project the next starter from rotation cadence (5-man, days-rest, recent starts) for the ~7-14% of +1/+2-day games where the probable isn't yet announced. Lower priority — the same-day probable is already ~0% null; this only fills the look-ahead tail. Independent of the lineup stories.
+
+### 33.3 — Expected-lineup feature family (the core build)  ⬜
+**Goal:** A dbt feature family of EXPECTED offense aggregates = Σ P(start)·player_stat over the roster — expected wOBA/xwOBA/K%/ISO, platoon splits (vs LHP/RHP), archetype-matchup vs the projected opposing starter, lineup-construction proxies. Point-in-time/walk-forward for ALL seasons. These are the Class-B replacements: a pre-lineup column that approximates its confirmed-lineup counterpart. Depends on 33.1 (+ 33.2 for the opp-SP).
+
+### 33.4 — Team box-score rolling aggregates (robust offense floor)  ⬜
+**Goal:** Roster/team-level rolling offense from box-score data (team wOBA, runs/game, K%, last-N windows) — no lineup needed, simplest, partly already present (run_env / team-sequential). Cheaper than 33.3; ship as the first offense-recovery layer, with 33.3 as the per-matchup fidelity upgrade. Can run parallel to 33.1.
+
+### 33.5 — Retrain pre-lineup models on projection features + gate  ⬜
+**Goal:** Retrain the pre-lineup challengers (from 33.0) with the 33.3/33.4 projected features; measure lift vs the 33.0 floor AND vs the post-lineup champion on the honest-2026 surface; promote per the Case-3 gate (`promotion_gate.py`). Eval must be point-in-time (projected features, not actuals). Depends on 33.3/33.4.
+
+### 33.6 — Serving + product surface  ⬜
+**Goal:** Wire the projected features into the morning serve so the pre-lineup model uses them; re-verify live skill (`honest_live_skill.py`) lifts toward the post-lineup ceiling. Optionally expose projected lineups/matchups in the UI (the product differentiator — hand the UI half to the app session). Depends on 33.5.
+
+**Risks:** (1) projection error propagates into the model — but a noisy projection >> a constant impute, so net positive vs today; (2) point-in-time discipline is unforgiving (the make-or-break); (3) Epic-sized (multi-week) — sequence so each story is independently shippable + measurable. **Honest framing:** this is the right way to make a strong morning model, but it is NOT a quick win — the floor (33.0) ships fast; the high-fidelity projection (33.1→33.3→33.5) is the multi-week investment.
 
 ---
 
@@ -16477,7 +16588,7 @@ side) — 30.13 owns the FRESHNESS/ORDERING GUARANTEE + the serve-time gate acro
 
 ---
 
-### 30.14 — Walk-forward (leakage-free) sub-model signal regeneration  `[Home: Epic 30 / architecture]`  ⬜  ⚠️ GATED on 30.2 (2026-positive)
+### 30.14 — Walk-forward (leakage-free) sub-model signal regeneration  `[Home: Epic 30 / architecture]`  ❌ CLOSED-AS-MOOT 2026-06-15 (30.2 = 0/3 positive; gate never fired)
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 30.14 standalone:
 
@@ -16547,6 +16658,177 @@ is served live. (Mirror `walk_forward_oos.py`'s expanding-window loop; 2021 is t
 backfill, some expensive (NGBoost >1hr; run_env v4 possibly PyMC). Ceiling caveat: the sub-models were already
 shown (Epics 10.6 / 16 / 26) not to beat market on 2026, so this hardens/honest-ifies the signals — it does
 NOT manufacture a new edge. Parent: [[project_layer3_signal_leakage]] + Story 30.2.
+
+---
+
+### 30.15 — Per-pick feature attribution (explainable picks)  `[Home: Epic 30 / serving + product]`  🟢 SERVE-SIDE IMPLEMENTED 2026-06-15 (exact SHAP, all 3 targets) — pending dev-run verify + app render
+
+**Implementation status (2026-06-15).** Serve-side MVP built + unit-tested. The NGBoost
+"feasibility spike" RESOLVED TO EXACT SHAP — no approximation needed: NGBoost models the loc
+parameter as an additive DecisionTreeRegressor ensemble, and SHAP is additive over additive
+models, so summing per-stage TreeSHAP (scaled by `−lr·scaling_k`, scattered to each stage's
+column-subsample) gives EXACT loc-SHAP. Verified Σcontrib = loc − intercept to machine precision,
+and the full n=1000 ensemble explains a 15-game slate in **0.10s** (negligible at serve time). So
+home_win AND run_diff AND total_runs all ship exact local SHAP — not just home_win.
+- **`betting_ml/utils/pick_explanations.py`** (NEW): `home_win_shap` (TreeExplainer on the
+  `PlattCalibratedXGBClassifier.xgb_classifier`; margin space, monotone through Platt so sign +
+  ranking hold), `ngboost_loc_shap` (exact additive TreeSHAP + additivity self-check → fail-safe
+  `None`→'deferred'), `humanize_feature` (curated `_STEM_LABELS` overlay + generated fallback ⇒
+  total coverage of any top-N feature; families reuse `influence_report.py`'s `_infer_feature_group`),
+  `build_pick_explanations` (per-game payload: top-5 +/top-5 − signed drivers per target, served
+  tier, honesty disclaimer). Never raises into the scoring path.
+- **`scripts/predict_today.py`** (MODIFIED): computes attributions right after the model probs,
+  threads `pick_explanations` into `_write_predictions_to_snowflake`, persists JSON text to a NEW
+  unbounded `pick_explanation VARCHAR` column on `daily_model_predictions` (DDL + INSERT + idempotent
+  `ADD COLUMN IF NOT EXISTS`). `served_tier` = post_lineup/pre_lineup from `lineup_confirmed`.
+- **Honesty guard:** every payload carries `basis="model_reasoning"` + a disclaimer string ("explains
+  the model's reasoning, not a betting edge / expected profit"); no win-rate framing.
+- **⏳ PENDING:** (1) dev-schema verify run (hand-off below); (2) mirror the column into the A2.12
+  Railway PG serving store; (3) app-side render (separate session). The served-tier AC is PARTIAL —
+  serve TIMING is tracked now; the actual pre-lineup MODEL swap composes once Epic 33.x wires it.
+
+**▶ Dev-run verify (hand-off — Snowflake write, run WITHOUT `TARGET_ENV=prod` so it lands in the dev schema):**
+```
+uv run python scripts/predict_today.py --date <today>
+# then confirm the new column is populated + well-formed JSON:
+#   SELECT game_pk, LEFT(pick_explanation, 120) FROM <dev>.daily_model_predictions
+#   WHERE score_date = '<today>' AND pick_explanation IS NOT NULL LIMIT 3;
+# Look for: [30.15] log line "attribution computed for N/N game(s)"; targets{home_win,total_runs,run_diff}
+# each with method=treeshap_exact* and 5+5 labeled drivers.
+```
+
+
+**▶ New-session prompt** — copy the fenced block into a fresh Claude Code session to run Story 30.15 standalone:
+```
+You are picking up Story 30.15 of the MLB betting & fantasy project.
+
+Read first: implementation_guide.md Story 30.15 (below) IN FULL, plus Story A2.5 (per-game imputation
+transparency — the existing _build_imputation_summary in scripts/predict_today.py is the pattern + the
+storage precedent), Story A2.12 (Railway PG serving store — where the frontend reads per-game data), and
+Story 30.8 / Epic 33 (the served model is the pre-lineup model in the morning, the post-lineup model after
+lineups post — the attribution must reflect WHICHEVER model actually produced the served pick).
+betting_ml/scripts/influence_report.py has the per-target feature→family taxonomy to reuse for labels.
+
+Conventions: use `dbtf` not `dbt`; Snowflake only via the MCP, fully-qualified names, no USE; hand any
+script >1 min back to the user; test new Snowflake scripts with real creds; do not git commit/push.
+```
+
+**Why:** product differentiator — be transparent about WHY each pick is recommended. Show users the top
+feature drivers behind each game's model output ("strong home bullpen, weak away starter, hitter-friendly
+park…"), stored so the frontend can render it. Distinct from A2.5 (which features were *imputed* — a data
+COMPLETENESS signal) and from `influence_report.py` (GLOBAL importance) — this is PER-PICK, PER-GAME local
+attribution of the actual served prediction.
+
+**Goal:** At serve time, compute per-game local feature contributions for each target's prediction, reduce to
+the top-N signed drivers with human-readable labels, and persist them (alongside the pick) so the API/frontend
+can show "why this pick."
+
+**Tasks:**
+- [x] **Local attribution at serve time** in `predict_today.py`, per game × target, on the ACTUAL served model.
+  home_win exact TreeSHAP; run_diff/total_runs the FEASIBILITY SPIKE RESOLVED TO EXACT (additive loc-SHAP — see
+  the implementation-status block above). `betting_ml/utils/pick_explanations.py`.
+- [x] **Top-N reduction:** top-5 +/top-5 − signed contributors per (game_pk, target) with direction + `toward`.
+- [x] **Human-readable label dictionary:** `_STEM_LABELS` curated overlay + generated fallback (total coverage) +
+  family rescue; reuses `influence_report.py`'s `_infer_feature_group`. Pitching/bullpen labels phrased as
+  "…wOBA allowed" (not "quality") so a raw-feature SHAP direction never reads backwards.
+- [x] **Storage:** unbounded `pick_explanation VARCHAR` (JSON text) on `daily_model_predictions` (DDL + INSERT +
+  idempotent ADD COLUMN). **Still TODO:** mirror into the A2.12 Railway PG serving store (app-prompt below).
+- [x] **Honesty guard:** every payload carries `basis="model_reasoning"` + disclaimer; no win-rate/profit framing
+  ([[feedback_no_auto_betting]] + FAQ rule).
+
+**Acceptance criteria:**
+- [x] Per-game top-N signed feature attributions for the served model (all 3 exact SHAP) persisted per
+  (game_pk, score_date, target) — verified in dev 2026-06-15 (well-formed JSON, ~7.3 KB/game).
+- [x] Human-label dictionary covers every feature that can appear in a top-N list (generated fallback guarantees it).
+- [~] Attribution reflects the served tier — serve TIMING tracked now (`served_tier` ∈ pre_lineup/post_lineup/
+  backfill); the actual pre-lineup MODEL swap composes once Epic 33.x wires the morning model.
+- [ ] **Available in the A2.12 serving store for the frontend; no edge/win-rate framing.** ← APP SESSION (below).
+
+**Sequencing/notes:** serve-side DONE 2026-06-15; the remaining half is APP-SESSION work (LLM narrative + UI).
+Placed in Epic 30 (serving/transparency) because it spans ALL picks. Composes with Epic 33 (the morning
+explanation will reflect the 33.x pre-lineup model once wired).
+
+---
+
+**▶ APP-SESSION HANDOFF PROMPT** — copy the fenced block into a fresh app/frontend Claude Code session to build
+the consumer half (LLM narrative + UI). The serve side (SHAP attribution → `pick_explanation`) is already shipped.
+```
+You are completing the CONSUMER half of Story 30.15 (explainable picks) in the MLB betting & fantasy app.
+The MODEL side is DONE: every row of daily_model_predictions now has a `pick_explanation` VARCHAR holding
+JSON of the served model's exact-SHAP feature attribution per target. Your job: (1) turn that into a
+plain-English NARRATIVE via an LLM, and (2) surface both the narrative and the raw drivers in the UI.
+
+READ FIRST (ground yourself before building):
+  - implementation_guide.md → Story 30.15 (full section + the implementation-status block) and Story A2.12
+    (Railway PG serving store — the OLTP store the frontend should read; Snowflake is OLAP only).
+  - betting_ml/utils/pick_explanations.py — the EXACT payload schema you'll consume (don't reinvent it).
+  - app/backend/routers/picks.py + app/backend/models/picks.py — how the API sources daily_model_predictions
+    today (raw SQL) and the Pick / TodayPicksResponse / FeaturedPickResponse Pydantic models you'll extend.
+  - frontend/app/picks/[game_pk]/page.tsx (pick details screen), frontend/app/page.tsx (home / pick of the
+    day), frontend/components/picks-table.tsx + probability-bar.tsx (existing display patterns to match).
+  (The deployed Next.js + FastAPI app is the ONLY surface — it has live beta testers. There is no Streamlit
+  app in scope; build everything in frontend/ + app/backend/.)
+
+THE pick_explanation JSON CONTRACT (per game row):
+  { "served_tier": "pre_lineup" | "post_lineup" | "backfill",
+    "basis": "model_reasoning",
+    "disclaimer": "<honesty string — render or respect it; never override with edge/win-rate language>",
+    "targets": {
+      "home_win":   { "method": "treeshap_exact",     "units": "log_odds",
+                      "base_value": <float>, "prediction": <float, margin; sigmoid()→prob>,
+                      "toward": "home win probability",
+                      "drivers": [ { "feature": "<raw_col>", "label": "<plain English>",
+                                     "family": "Bullpen|Starting pitcher|Team offense|…",
+                                     "family_key": "<key>", "contribution": <signed float>,
+                                     "direction": "increases"|"decreases", "toward": "<outcome>" }, … up to 10 ] },
+      "total_runs": { "method": "treeshap_exact_loc", "units": "runs", … "toward": "projected total runs" },
+      "run_diff":   { "method": "treeshap_exact_loc", "units": "runs", … "toward": "home run differential" } } }
+  Notes: drivers are strongest-first, 5 positive + 5 negative. home_win contributions are in LOG-ODDS (margin);
+  totals/run_diff are in RUNS. A target may instead be {"method":"deferred","drivers":[],"note":"…"} on the rare
+  SHAP-failure path — handle the empty-drivers case gracefully.
+
+BUILD (4 deliverables):
+  1. LLM NARRATIVE GENERATION (cost-conscious). A mechanism that takes the model output + the pick_explanation
+     drivers + the RAW feature values feeding the model, and produces a short natural-language narrative of WHY
+     the model lands on this pick ("The model leans Rockies here mainly because the Padres bullpen has been
+     hit hard recently and …"). DEFAULT RECOMMENDATION: Snowflake Cortex COMPLETE (data already lives in
+     Snowflake → no egress, cheapest path; a smaller model like mistral-7b/llama is plenty for this); evaluate
+     alternatives only if Cortex quality is short. CRITICAL FOR COST: generate ONCE per (game_pk, score_date,
+     served_tier) and CACHE it — do NOT call the LLM per page view. Store the narrative next to the attribution
+     (new column on daily_model_predictions, or the daily_pick_explanations sidecar / A2.12 serving table). A
+     batch post-process after predict_today (or a Cortex SQL UDF over the day's rows) is the natural home.
+     HONESTY (hard constraint): the narrative explains MODEL REASONING only — never a guaranteed outcome,
+     edge, profit, or win-rate. Pin this in the LLM system prompt; cross-ref the FAQ no-win-rate rule and
+     [[feedback_no_auto_betting]]. Keep it a few sentences.
+  2. PICK DETAILS — NARRATIVE. On frontend/app/picks/[game_pk]/page.tsx, render the narrative as a "Why this
+     pick" / model-reasoning blurb directly UNDER the existing pick banner (the headline that says which side
+     the model favors). Plumb it through the picks API (extend the Pydantic model + the SQL select).
+  3. PICK DETAILS — FEATURE IMPORTANCES SECTION. A NEW section on the same screen (new frontend component) showing
+     the per-target drivers as a signed +/- list / bars grouped by family — per-pick and LOCAL (this game), not a
+     global importance chart. Use the `label`, `family`, `direction`, and relative |contribution| for the bars;
+     show the target the user is viewing (h2h → home_win, totals → total_runs). Respect units (log-odds vs runs):
+     don't print raw log-odds to users — render as relative magnitude / direction, not a number.
+  4. HOME PAGE PICK CARD. The featured "pick of the day" card on frontend/app/page.tsx (+ FeaturedPickResponse)
+     gets a condensed model-explanation section — the narrative (or its first line) + the top 2-3 drivers — so a
+     user sees WHY it's the model's pick without clicking through.
+
+DATA-SOURCE NOTE: pick_explanation lives in Snowflake daily_model_predictions today. Per A2.12 the frontend
+should read the Railway PG serving store, so include pick_explanation (+ the new narrative column) in whatever
+sync mirrors predictions into that store; until that sync exists, source it the same way picks.py sources the
+rest of the row.
+
+MODEL-VERSION NOTE (Story 33.0): daily_model_predictions now carries TWO model lineages — `pre_lineup_v1` for
+the MORNING pre-lineup serve (bet ahead of the market's reaction to lineups) and `v5` (the champion) for the
+post-lineup re-score + backfills, distinguished by `model_version` (and `served_tier` in the pick_explanation
+payload). The morning pre-lineup pick and the post-lineup pick are BOTH legitimate product surfaces; whatever
+selects "the current pick" should show the morning pre-lineup one early and the sharpened post-lineup one once
+lineups post (the picks API's latest-per-game ordering already does this). Do NOT hard-code `model_version='v5'`
+anywhere — it would silently drop the pre-lineup picks. Surface the served tier so users know whether they're
+seeing a pre-lineup or post-lineup pick.
+
+CONVENTIONS: use dbtf not dbt; Snowflake only via the MCP, fully-qualified names, no USE; do not git commit/push
+(the user handles git); test any new Snowflake/Cortex query with real creds before merge.
+```
 
 ---
 
