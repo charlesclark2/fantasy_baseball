@@ -16,11 +16,17 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-  PickExplanationSection,
-  ServedTierBadge,
-  type PickExplanationPayload,
-} from "@/components/pick-explanation"
+import dynamic from "next/dynamic"
+import type { PickExplanationPayload } from "@/components/pick-explanation"
+
+const PickExplanationSection = dynamic(
+  () => import("@/components/pick-explanation").then((m) => ({ default: m.PickExplanationSection })),
+  { ssr: false, loading: () => null },
+)
+const ServedTierBadge = dynamic(
+  () => import("@/components/pick-explanation").then((m) => ({ default: m.ServedTierBadge })),
+  { ssr: false, loading: () => null },
+)
 
 // ---------------------------------------------------------------------------
 // Types matching GameDetailResponse

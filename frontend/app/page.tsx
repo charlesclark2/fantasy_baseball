@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { ProbabilityBar } from "@/components/probability-bar"
 import { Nav } from "@/components/nav"
 import { LandingFaqSection } from "@/components/landing-faq"
-import { MiniDriverList, ServedTierBadge, type PickDriver } from "@/components/pick-explanation"
+import { FeaturedPickExplanation, type PickDriver } from "@/components/pick-explanation-home"
 import {
   BookOpen,
   CheckCircle2,
@@ -254,22 +254,11 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                 )}
 
                 {/* Story 30.15 — model narrative + top drivers */}
-                {(pick.model_narrative || (pick.top_drivers && pick.top_drivers.length > 0)) && (
-                  <div className="mt-4 rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
-                        Model reasoning
-                      </span>
-                      <ServedTierBadge tier={pick.served_tier} />
-                    </div>
-                    {pick.model_narrative && (
-                      <p className="text-xs leading-relaxed text-gray-400">{pick.model_narrative}</p>
-                    )}
-                    {pick.top_drivers && pick.top_drivers.length > 0 && (
-                      <MiniDriverList drivers={pick.top_drivers} />
-                    )}
-                  </div>
-                )}
+                <FeaturedPickExplanation
+                  narrative={pick.model_narrative}
+                  topDrivers={pick.top_drivers}
+                  servedTier={pick.served_tier}
+                />
 
                 {pick.yesterday && (
                   <>
