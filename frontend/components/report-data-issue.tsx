@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { Flag } from "lucide-react"
 import { useMutation } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -44,9 +45,10 @@ export function ReportDataIssue({ gamePk }: { gamePk: number | null }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="text-xs text-gray-600 hover:text-gray-400 transition-colors underline underline-offset-2"
+        className="flex items-center gap-1.5 rounded-md border border-[#2a2a2a] px-3 py-1.5 text-xs text-gray-400 transition-colors hover:border-[#3a3a3a] hover:text-gray-300"
       >
-        Report data issue
+        <Flag className="h-3 w-3" />
+        Report a data issue
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>

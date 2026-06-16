@@ -31,6 +31,18 @@ class DataQualityReportRequest(BaseModel):
     description: str
 
 
+@router.get("/admin/data-quality-reports")
+def list_data_quality_reports(limit: int = 50) -> list[dict]:
+    try:
+        response = _reports_table().scan(Limit=limit)
+        items = response.get("Items", [])
+        items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        return items
+    except Exception:
+        logger.exception("Failed to scan data_quality_reports")
+        raise HTTPException(status_code=503, detail="Could not fetch reports")
+
+
 @router.post("/feedback/data-quality", status_code=201)
 def create_data_quality_report(body: DataQualityReportRequest) -> dict:
     report_id = str(uuid4())

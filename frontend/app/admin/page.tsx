@@ -79,6 +79,15 @@ interface FinancesConfig {
   dagster_monthly_estimate: number
 }
 
+interface DataQualityReport {
+  report_id: string
+  user_email: string
+  page_url: string
+  description: string
+  created_at: string
+  game_pk?: number
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -189,6 +198,13 @@ export default function AdminPage() {
     queryKey: ["admin-finances-config", accessToken],
     queryFn: () => apiFetch("/admin/finances-config", {}, accessToken),
     staleTime: Infinity,
+    enabled: !!accessToken && isAdmin,
+  })
+
+  const { data: dataQualityReports, isLoading: reportsLoading } = useQuery<DataQualityReport[]>({
+    queryKey: ["admin-data-quality-reports", accessToken],
+    queryFn: () => apiFetch("/admin/data-quality-reports", {}, accessToken),
+    staleTime: 60_000,
     enabled: !!accessToken && isAdmin,
   })
 
@@ -652,6 +668,51 @@ export default function AdminPage() {
                 </ul>
               )}
             </>
+          )}
+        </section>
+
+        {/* Data Quality Reports */}
+        <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
+          <h2 className="mb-5 text-base font-semibold text-white">Data Quality Reports</h2>
+          {reportsLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-10 rounded bg-[#1a1a1a] animate-pulse" />
+              ))}
+            </div>
+          ) : !dataQualityReports || dataQualityReports.length === 0 ? (
+            <p className="text-sm text-gray-500">No reports submitted yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#262626] text-left text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                    <th className="pb-3 pr-4">Submitted</th>
+                    <th className="pb-3 pr-4">User</th>
+                    <th className="pb-3 pr-4">Page</th>
+                    <th className="pb-3">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1e1e1e]">
+                  {dataQualityReports.map((r) => (
+                    <tr key={r.report_id} className="text-gray-300">
+                      <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
+                        {new Date(r.created_at).toLocaleString("en-US", {
+                          month: "short", day: "numeric", hour: "numeric",
+                          minute: "2-digit", timeZoneName: "short",
+                        })}
+                      </td>
+                      <td className="py-3 pr-4 text-xs whitespace-nowrap">{r.user_email}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-500 max-w-[200px] truncate">
+                        {r.page_url.replace(/^https?:\/\/[^/]+/, "")}
+                        {r.game_pk ? <span className="ml-1 text-gray-600">(#{r.game_pk})</span> : null}
+                      </td>
+                      <td className="py-3 text-xs text-gray-400 max-w-[300px]">{r.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
