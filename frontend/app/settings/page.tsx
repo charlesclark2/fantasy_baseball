@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Toaster } from "@/components/ui/toaster"
 import { Bell, Check, ShieldCheck } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
@@ -233,7 +232,6 @@ export default function SettingsPage() {
         </section>
       </main>
 
-      <Toaster />
     </>
   )
 }

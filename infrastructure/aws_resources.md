@@ -40,7 +40,7 @@ JWT issuer URL: `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gG9zMbwQt
 
 | Resource | Value |
 |---|---|
-| Function name | `credence-prod-lambda-api` |
+| Function name | `credence-prod-lambda-execution-role` |
 | Runtime | `python3.12` |
 | Handler | `app.backend.main.handler` |
 | Architecture | `x86_64` |
@@ -114,7 +114,7 @@ GRANT ROLE CREDENCE_API_RO TO USER credence_api;
 ### IAM additions for /admin/finances
 
 The `GET /admin/finances` endpoint calls AWS Cost Explorer. Add this inline policy to
-the Lambda execution role (`credence-prod-lambda-api`) in the IAM console:
+the Lambda execution role (`credence-prod-lambda-execution-role`) in the IAM console:
 
 ```json
 {
@@ -168,7 +168,7 @@ Apply this authorizer to all routes except `GET /health`.
 | Setting | Value |
 |---|---|
 | Integration type | AWS Lambda |
-| Lambda function | `credence-prod-lambda-api` |
+| Lambda function | `credence-prod-lambda-execution-role` |
 | Payload format version | `2.0` (required for Mangum HTTP API v2) |
 | Timeout | 29 seconds |
 
@@ -241,7 +241,7 @@ reads final scores from Snowflake, and writes `outcome`/`profit_loss`.
 
 Three separate identities touch these tables; each needs its own grant.
 
-**1. Lambda execution role** (`credence-prod-lambda-api`) — used by the B2 API
+**1. Lambda execution role** (`credence-prod-lambda-execution-role`) — used by the B2 API
 endpoints (`POST /bets`, `GET /bets`, login-sync). Read/write the bets + users
 tables and Query the bets GSI:
 ```json
@@ -287,6 +287,50 @@ the `~/.aws` power-user profile). Same actions/resources as policy #1.
 
 ---
 
+## DynamoDB — Data Quality Reports (A0.4.15)
+
+User-submitted data issue reports from the picks detail page. Writes via `POST /feedback/data-quality`.
+Email notification to `support@credencesports.com` via SES is deferred (see A0.5 below).
+
+| Resource | Value |
+|---|---|
+| Table name | `credence-prod-dynamo-data-quality-reports` |
+| Partition key | `report_id` (String, UUID) |
+| Billing mode | Pay-per-request (on-demand) |
+| Region | `us-east-1` |
+
+```bash
+# Provision (run once with create-table IAM creds)
+aws dynamodb create-table \
+  --table-name credence-prod-dynamo-data-quality-reports \
+  --attribute-definitions AttributeName=report_id,AttributeType=S \
+  --key-schema AttributeName=report_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+```
+
+### Lambda IAM — inline policy addition
+
+Add `dynamodb:PutItem` on this table to the Lambda execution role (`credence-prod-lambda-execution-role`):
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["dynamodb:PutItem", "dynamodb:Scan", "dynamodb:UpdateItem"],
+  "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-dynamo-data-quality-reports"
+}
+```
+
+### Lambda environment variable
+
+| Variable | Value |
+|---|---|
+| `DATA_QUALITY_TABLE` | `credence-prod-dynamo-data-quality-reports` |
+
+Set via Lambda console → credence-prod-lambda-execution-role → Configuration → Environment variables.
+
+---
+
 ## Railway PostgreSQL Serving Store (A2.12)
 
 Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
@@ -311,7 +355,7 @@ psql $DATABASE_URL -f infrastructure/pg/create_serving_tables.sql
 ### Lambda environment variable to add
 
 Add `DATABASE_URL=<Railway connection string>` to the Lambda environment variables
-(Lambda console → credence-prod-lambda-api → Configuration → Environment variables).
+(Lambda console → credence-prod-lambda-execution-role → Configuration → Environment variables).
 Set the same value in Dagster Cloud secrets for the write path (`write_serving_store_op`).
 
 ### Table inventory

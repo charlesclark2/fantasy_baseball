@@ -6,6 +6,7 @@ import { AuthProvider } from '@/lib/auth-context'
 import { DateProvider } from '@/lib/date-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { CookieBanner } from '@/components/cookie-banner'
+import { Toaster } from '@/components/ui/toaster'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <TooltipProvider>
             {children}
             <CookieBanner />
+            <Toaster />
           </TooltipProvider>
         </QueryClientProvider>
       </DateProvider>
