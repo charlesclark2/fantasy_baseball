@@ -1378,7 +1378,8 @@ def main() -> int:
             detail_map = _assemble_game_detail_payloads(sf, game_pks, final_pks)
             for gp, (detail_payload, is_final) in detail_map.items():
                 cache_key = f"picks/game/{gp}"
-                _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=is_final)
+                _has_expl = bool(detail_payload.get("pick_explanation"))
+                _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=(is_final and _has_expl))
                 if bucket and is_final:
                     _write_s3(bucket, f"api-cache/permanent/{cache_key}.json", detail_payload)
                 elif bucket:
