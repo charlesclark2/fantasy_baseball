@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { Nav } from "@/components/nav"
 import changelog from "@/data/changelog.json"
 
@@ -66,14 +65,6 @@ export default function ChangelogPage() {
           ))}
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#262626] flex gap-6 text-sm text-muted-foreground">
-          <Link href="/faq" className="hover:text-foreground transition-colors">
-            FAQ
-          </Link>
-          <Link href="/contact" className="hover:text-foreground transition-colors">
-            Contact
-          </Link>
-        </div>
       </main>
     </div>
   )
