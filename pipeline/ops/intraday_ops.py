@@ -125,6 +125,26 @@ def odds_snapshot_dbt_rebuild(context: OpExecutionContext) -> None:
     ])
 
 
+@op(out=Out(Nothing))
+def odds_oddsapi_dbt_rebuild(context: OpExecutionContext) -> None:
+    """Rebuild the odds chain off the ODDS API staging model. Triggered by
+    `odds_rebuild_sensor` when the Railway capture service appends new rows to
+    `oddsapi.mlb_odds_raw` (Story 12.3.7 / A2.18 — the I/O-bound capture runs on
+    Railway, off the Dagster+ run-minute bill; Dagster only does this dbt rebuild).
+    Includes `mart_odds_line_movement` (the old odds_snapshot path omitted it) so the
+    CLV/movement mart stays fresh for the Epic-12 meta-model."""
+    _run_dbt(context, [
+        "run",
+        "--select",
+        "stg_oddsapi_odds",
+        "mart_odds_outcomes",
+        "mart_closing_line_value",
+        "mart_prediction_clv",
+        "mart_odds_line_movement",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
 # ── Intraday Weather ─────────────────────────────────────────────────────────
 
 @op(out=Out(Nothing))
