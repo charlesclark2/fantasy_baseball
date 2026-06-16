@@ -22,13 +22,13 @@ Railway cron (*/30)                          Dagster (daemon)
 
 ## Railway setup
 
-1. **New service** → Deploy from this repo. Set **Root Directory = repo root** and **Dockerfile Path = `services/odds_capture/Dockerfile`** (the build needs `scripts/` in context).
+1. **New service** → Deploy from this repo. Leave **Root Directory = repo root** (the build needs `scripts/` in context). Railway has no "Dockerfile Path" UI field and would otherwise auto-detect the repo-root `./Dockerfile` (the heavy Dagster/ML service) → "error deploying from source". Instead point this service at the scoped config: **Settings → Config-as-code (Railway Config File) = `services/odds_capture/railway.toml`**. That file pins `builder = DOCKERFILE`, `dockerfilePath = services/odds_capture/Dockerfile`, and the cron schedule.
 2. **Variables** (Settings → Variables):
    - `ODDS_API_KEY` — main Odds API key. **Live capture needs a *renewing* plan** (~3–8k credits/mo); the historical-backfill 100k expires 6/23, so confirm a sustaining monthly tier before relying on this for ongoing capture.
    - `ODDS_API_STARTER_KEY` — *optional*. By design the script tries this cheap key first for live `odds` and **auto-falls-back to `ODDS_API_KEY` on 401/422 (exhaustion)** — it preserves the main key's budget. Safe to set or omit.
    - `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_ROLE`
    - `SNOWFLAKE_PRIVATE_KEY` — the **full PEM contents** of the key-pair private key (entrypoint writes it to a file at runtime).
-3. **Cron Schedule** (Settings → Cron): `*/30 * * * *` (or `*/30 13-23 * * *` + an overnight entry for a tighter game-hours window).
+3. **Cron Schedule** — set in `railway.toml` (`cronSchedule = "*/30 * * * *"`); edit there for a tighter game-hours window (e.g. `*/30 13-23 * * *`). No UI step needed.
 4. Deploy. Watch the deploy logs for `[odds_capture] ... done` and a non-error exit.
 
 ## Validation (before cutover)
