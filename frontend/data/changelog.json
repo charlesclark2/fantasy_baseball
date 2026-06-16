@@ -1,5 +1,21 @@
 [
   {
+    "version": "0.4.27",
+    "date": "2026-06-16",
+    "entries": [
+      {
+        "tag": "new",
+        "title": "Model reasoning on pick details",
+        "description": "Pick detail pages now include a plain-English explanation of why the model favors a pick, plus a feature attribution section showing which factors most influenced the prediction — grouped by category (starting pitcher, bullpen, team offense, park & weather, etc.) with signed contribution bars."
+      },
+      {
+        "tag": "improvement",
+        "title": "Home page pick card shows model rationale",
+        "description": "The featured pick card now surfaces the model's narrative and top feature drivers. The static probability summary is hidden when a narrative explanation is available."
+      }
+    ]
+  },
+  {
     "version": "0.4.26",
     "date": "2026-06-15",
     "entries": [
