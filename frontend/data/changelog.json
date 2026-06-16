@@ -1,53 +1,50 @@
 [
   {
-    "version": "0.4.27",
-    "date": "2026-06-16",
-    "entries": [
+    "week": "2026-06-09",
+    "items": [
       {
         "tag": "new",
-        "title": "Model reasoning on pick details",
-        "description": "Pick detail pages now include a plain-English explanation of why the model favors a pick, plus a feature attribution section showing which factors most influenced the prediction — grouped by category (starting pitcher, bullpen, team offense, park & weather, etc.) with signed contribution bars."
+        "text": "Pick detail pages now show model reasoning: a plain-English narrative plus signed feature attribution bars grouped by category (starting pitcher, bullpen, team offense, park & weather)."
       },
       {
         "tag": "improvement",
-        "title": "Home page pick card shows model rationale",
-        "description": "The featured pick card now surfaces the model's narrative and top feature drivers. The static probability summary is hidden when a narrative explanation is available."
-      }
-    ]
-  },
-  {
-    "version": "0.4.26",
-    "date": "2026-06-15",
-    "entries": [
-      {
-        "tag": "new",
-        "title": "Blog",
-        "description": "Blog posts written in the admin editor are now publicly visible at /blog and /blog/[id]. The homepage now surfaces the latest published post as a teaser immediately below the hero."
-      },
-      {
-        "tag": "improvement",
-        "title": "Picks show correct date for late-night users",
-        "description": "Dashboard picks now reflect your local date rather than Eastern Time — users in CST, MT, and PT time zones will see the correct day's picks after 11 PM without waiting for midnight ET."
-      },
-      {
-        "tag": "improvement",
-        "title": "Admin pipeline monitoring live",
-        "description": "Admin page now shows real-time Dagster run history and model freshness from production. Mock data has been removed."
+        "text": "Featured pick card on the homepage surfaces the model's narrative and top feature drivers; the static probability summary is hidden when a narrative is available."
       },
       {
         "tag": "new",
-        "title": "Settings page",
-        "description": "Account settings now available from the gear icon in the top-right nav. Shows your verified email address, subscription tier, and sign-out controls."
-      },
-      {
-        "tag": "new",
-        "title": "FAQ & Contact pages",
-        "description": "Answers to common questions about the model, picks, and platform. Reach us at support@credencesports.com for anything not covered."
+        "text": "Blog posts written in the admin editor are now publicly visible at /blog and /blog/[slug]; the homepage surfaces the latest published post as a teaser below the hero."
       },
       {
         "tag": "improvement",
-        "title": "Admin tab visibility now Cognito-group aware",
-        "description": "The Admin link in the sub-nav is now shown only to users assigned to the admin Cognito group — no more hardcoded email list."
+        "text": "Dashboard picks now reflect your local date — users in CST, MT, and PT time zones see the correct day's picks after 11 PM without waiting for midnight ET."
+      },
+      {
+        "tag": "improvement",
+        "text": "Admin pipeline monitoring page now shows real-time Dagster run history and model freshness from production; mock data removed."
+      },
+      {
+        "tag": "new",
+        "text": "Settings page added under the gear icon in the top-right nav — shows verified email, subscription tier, and sign-out controls."
+      },
+      {
+        "tag": "new",
+        "text": "FAQ and Contact pages published — 15 questions across four categories covering model methodology, platform mechanics, and responsible use."
+      },
+      {
+        "tag": "improvement",
+        "text": "Admin sub-nav link is now shown only to users in the admin Cognito group, replacing the previous hardcoded email list."
+      },
+      {
+        "tag": "fix",
+        "text": "Umpire feed repair: home plate umpire zscore null rate dropped from 34.6% to 1.1% after wiring the UmpScorecards JSON loader and moving assignment ingestion to the afternoon lineup path."
+      },
+      {
+        "tag": "fix",
+        "text": "Footer now visible on all public pages; previous layout bug caused it to render below the viewport fold on short pages."
+      },
+      {
+        "tag": "improvement",
+        "text": "Request Access CTA updated to a direct-email link so beta applicants can reach us immediately without a form intermediary."
       }
     ]
   }

@@ -20,6 +20,7 @@ export function SiteFooter() {
           {[
             { label: "FAQ", href: "/faq" },
             { label: "Blog", href: "/blog" },
+            { label: "Changelog", href: "/changelog" },
             { label: "Privacy Policy", href: "/privacy" },
             { label: "Terms", href: "/terms" },
             { label: "Contact", href: "/contact" },
