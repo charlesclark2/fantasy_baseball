@@ -46,6 +46,14 @@ interface ModelFreshness {
   status: "healthy" | "watch" | "stale"
 }
 
+interface SnowflakeCredits {
+  month: string
+  month_label: string
+  compute_credits: number
+  cloud_service_credits: number
+  total_credits: number
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -121,6 +129,13 @@ export default function AdminPage() {
     queryKey: ["model-freshness", accessToken],
     queryFn: () => apiFetch("/admin/model-freshness", {}, accessToken),
     staleTime: 300_000,
+    enabled: !!accessToken && isAdmin,
+  })
+
+  const { data: sfCredits, isLoading: creditsLoading } = useQuery<SnowflakeCredits[]>({
+    queryKey: ["snowflake-credits", accessToken],
+    queryFn: () => apiFetch("/admin/snowflake-credits", {}, accessToken),
+    staleTime: 3_600_000,
     enabled: !!accessToken && isAdmin,
   })
 
@@ -356,18 +371,54 @@ export default function AdminPage() {
           </section>
 
           <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
-            <h2 className="mb-3 text-base font-semibold text-white">Snowflake Credit Usage</h2>
-            <p className="text-sm text-gray-500 py-4">
-              Snowflake credit usage is monitored in the Snowflake admin console — not available via API.
-            </p>
-            <Link
-              href="https://app.snowflake.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-xs text-[#10b981] hover:underline"
-            >
-              Open Snowflake console →
-            </Link>
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">Snowflake Credit Usage</h2>
+              <Link
+                href="https://app.snowflake.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-gray-500 hover:text-[#10b981] transition-colors"
+              >
+                Open console →
+              </Link>
+            </div>
+            {creditsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-8 rounded bg-[#1a1a1a] animate-pulse" />
+                ))}
+              </div>
+            ) : !sfCredits?.length ? (
+              <p className="text-sm text-gray-500">
+                No credit data — role may need{" "}
+                <code className="text-xs text-gray-400">IMPORTED PRIVILEGES</code> on the SNOWFLAKE database.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[#262626]">
+                    {["Month", "Compute cr.", "Cloud Svc cr.", "Total cr.", "Est. Cost"].map((h) => (
+                      <th key={h} className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-gray-500">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#1a1a1a]">
+                  {sfCredits.map((row) => (
+                    <tr key={row.month} className="hover:bg-[#1a1a1a]">
+                      <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">{row.month_label}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.compute_credits.toFixed(1)}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.cloud_service_credits.toFixed(1)}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.total_credits.toFixed(1)}</td>
+                      <td className="py-3 text-xs font-semibold text-[#10b981] whitespace-nowrap">
+                        ${(row.total_credits * 2).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </section>
         </div>
       </main>
