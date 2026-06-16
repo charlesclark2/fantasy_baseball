@@ -341,6 +341,8 @@ function BlogAdminInner() {
         setDraft(postToDraft(updated))
       }
       qc.invalidateQueries({ queryKey: ["admin-blog-posts"] })
+      // Bust the Next.js page cache so the published post appears immediately
+      fetch("/api/revalidate/blog", { method: "POST" }).catch(() => null)
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : "Save failed")
     } finally {

@@ -29,7 +29,7 @@ function formatDate(iso: string | null | undefined): string {
 export default async function BlogPage() {
   const base = process.env.NEXT_PUBLIC_API_URL ?? ""
   const data: { posts: BlogListItem[] } = base
-    ? await fetch(`${base}/blog/posts`, { next: { revalidate: 300 } })
+    ? await fetch(`${base}/blog/posts`, { next: { revalidate: 60 } })
         .then((r) => (r.ok ? r.json() : { posts: [] }))
         .catch(() => ({ posts: [] }))
     : { posts: [] }

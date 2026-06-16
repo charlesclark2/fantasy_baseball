@@ -480,7 +480,7 @@ export default async function LandingPage() {
           .catch(() => ({ game_pk: null }))
       : Promise.resolve({ game_pk: null }),
     base
-      ? fetch(`${base}/blog/posts`, { next: { revalidate: 300 } })
+      ? fetch(`${base}/blog/posts`, { next: { revalidate: 60 } })
           .then((r) => (r.ok ? r.json() : { posts: [] }))
           .catch(() => ({ posts: [] }))
       : Promise.resolve({ posts: [] }),
