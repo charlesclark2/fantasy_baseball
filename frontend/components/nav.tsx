@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { LogOut, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
+import changelog from "@/data/changelog.json"
 
 type ActiveLink =
   | "dashboard"
@@ -15,7 +16,15 @@ type ActiveLink =
   | "bet-log"
   | "admin"
   | "blog"
+  | "changelog"
   | null
+
+const latestWeek = changelog[0]?.week
+const isChangelogRecent = latestWeek
+  ? (Date.now() - new Date(latestWeek + "T00:00:00").getTime()) /
+      (1000 * 60 * 60 * 24) <=
+    7
+  : false
 
 interface NavProps {
   activeLink?: ActiveLink
@@ -124,7 +133,7 @@ export function Nav({
       </div>
 
       {/* Sub-nav — authenticated only */}
-      {authenticated && (
+      {(authenticated || isSignedIn) && (
         <div className="mx-auto flex max-w-6xl gap-6 overflow-x-auto px-4 pb-0">
           {SUB_NAV_ITEMS.map(({ label, href, key }) => (
             <Link
@@ -139,6 +148,19 @@ export function Nav({
               {label}
             </Link>
           ))}
+          <Link
+            href="/changelog"
+            className={
+              activeLink === "changelog"
+                ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors flex items-center gap-1.5"
+                : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1.5"
+            }
+          >
+            What&apos;s New
+            {isChangelogRecent && (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+            )}
+          </Link>
           {isAdmin && (
             <>
               <Link
