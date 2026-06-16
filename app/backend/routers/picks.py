@@ -371,7 +371,7 @@ def _build_featured_result(
 def get_featured_pick() -> FeaturedPickResponse:
     today = datetime.now(_ET).date().isoformat()
     cached = get_cache(f"picks/featured_{today}.json")
-    if cached is not None and cached.get("game_pk") is not None:
+    if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)
 
     try:
@@ -408,7 +408,10 @@ def get_featured_pick() -> FeaturedPickResponse:
                 logger.warning("Could not load explanation for featured pick game_pk=%s", game_pk_for_expl)
         result = _build_featured_result(rows[0], yesterday, is_stale=False,
                                         expl=expl_payload, narrative=narrative_str)
-        set_cache(f"picks/featured_{today}.json", result.model_dump(mode="json"))
+        # Only cache once explanation data is present; otherwise re-query on next request
+        # so the narrative populates as soon as generate_pick_narratives.py runs.
+        if narrative_str is not None:
+            set_cache(f"picks/featured_{today}.json", result.model_dump(mode="json"))
         return result
 
     # No picks today — fall back to yesterday's champion pick (don't cache: re-check on next request)
@@ -421,7 +424,19 @@ def get_featured_pick() -> FeaturedPickResponse:
     if not stale_rows:
         return FeaturedPickResponse(game_pk=None)
 
-    return _build_featured_result(stale_rows[0], None, is_stale=True)
+    stale_game_pk = stale_rows[0].get("GAME_PK")
+    stale_expl: PickExplanationPayload | None = None
+    stale_narrative: str | None = None
+    if stale_game_pk:
+        try:
+            stale_expl_rows = execute_query(_EXPLANATION_QUERY, params={"game_pk": stale_game_pk})
+            if stale_expl_rows:
+                stale_expl = _parse_explanation(stale_expl_rows[0].get("PICK_EXPLANATION"))
+                stale_narrative = stale_expl_rows[0].get("PICK_NARRATIVE")
+        except Exception:
+            logger.warning("Could not load explanation for stale pick game_pk=%s", stale_game_pk)
+    return _build_featured_result(stale_rows[0], None, is_stale=True,
+                                  expl=stale_expl, narrative=stale_narrative)
 
 
 _TODAY_QUERY = f"""
