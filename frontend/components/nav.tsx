@@ -171,7 +171,7 @@ export function Nav({
 
       {/* Desktop sub-nav */}
       {showSubNav && (
-        <div className="mx-auto hidden max-w-6xl items-center gap-6 overflow-x-auto px-4 pb-0 sm:flex">
+        <div className="mx-auto hidden max-w-6xl items-center gap-6 px-4 pb-0 sm:flex">
           {MAIN_NAV_ITEMS.map(({ label, href, key }) => (
             <Link key={key} href={href} className={flatLinkClass(key)}>
               {label}
