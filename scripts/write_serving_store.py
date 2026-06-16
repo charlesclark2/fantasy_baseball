@@ -785,11 +785,14 @@ WITH ranked AS (
     SELECT
         p.*,
         g.game_date AS game_start_utc,
-        ROW_NUMBER() OVER (PARTITION BY p.game_pk ORDER BY p.inserted_at DESC) AS _rn
+        ROW_NUMBER() OVER (
+            PARTITION BY p.game_pk
+            ORDER BY CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                     p.inserted_at DESC
+        ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions p
     LEFT JOIN baseball_data.betting.stg_statsapi_games g ON g.game_pk = p.game_pk
     WHERE p.game_pk IN ({game_pk_list})
-      AND p.prediction_type = 'post_lineup'
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
@@ -798,10 +801,10 @@ h2h AS (
         b.layer4_h2h_edge AS edge,
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed, NULL::FLOAT AS win_prob_ci_low, NULL::FLOAT AS win_prob_ci_high,
-        b.home_team, b.away_team, b.layer4_h2h_decision AS pick_side,
+        b.home_team, b.away_team, NULLIF(b.layer4_h2h_decision, 'abstain') AS pick_side,
         b.game_start_utc, b.inserted_at AS predicted_at,
         NULL::FLOAT AS model_total_runs, NULL::FLOAT AS market_total_line
-    FROM base b WHERE b.layer4_h2h_decision IN ('home','away')
+    FROM base b WHERE b.h2h_market_implied_prob IS NOT NULL
 ),
 totals AS (
     SELECT b.game_pk, b.game_date, 'totals' AS market_type,
@@ -809,10 +812,10 @@ totals AS (
         b.layer4_totals_over_signal AS edge,
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed, NULL::FLOAT AS win_prob_ci_low, NULL::FLOAT AS win_prob_ci_high,
-        b.home_team, b.away_team, b.layer4_totals_decision AS pick_side,
+        b.home_team, b.away_team, NULLIF(b.layer4_totals_decision, 'abstain') AS pick_side,
         b.game_start_utc, b.inserted_at AS predicted_at,
         b.pred_total_runs AS model_total_runs, b.total_line_consensus AS market_total_line
-    FROM base b WHERE b.layer4_totals_decision IN ('over','under')
+    FROM base b WHERE b.over_prob_consensus IS NOT NULL
 )
 SELECT * FROM h2h UNION ALL SELECT * FROM totals
 ORDER BY game_pk, market_type

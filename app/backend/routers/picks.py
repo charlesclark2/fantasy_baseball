@@ -1425,14 +1425,14 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     _game_cache_key = f"picks/game/{game_pk}.json"
 
     _pg_cached = pg.get_cache(_game_pg_key, _today_str)
-    if _pg_cached is not None and _pg_cached.get("pick_explanation") is not None:
+    if _pg_cached is not None and _pg_cached.get("picks") and _pg_cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_pg_cached)
         except Exception:
             logger.warning("PG stale/invalid for game_pk=%s, re-fetching", game_pk)
 
     _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
-    if _cached is not None and _cached.get("pick_explanation") is not None:
+    if _cached is not None and _cached.get("picks") and _cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_cached)
         except Exception:
