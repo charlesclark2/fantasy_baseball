@@ -3,6 +3,7 @@ from dagster import ScheduleDefinition
 from pipeline.jobs.intraday_jobs import (
     intraday_schedule_job,
     intraday_weather_job,
+    odds_clv_rebuild_job,
     odds_snapshot_job,
 )
 
@@ -45,6 +46,18 @@ odds_snapshot_schedules = [
     for cron, name in _ODDS_SNAPSHOT_CRONS
 ]
 
+# ── Odds-API CLV / line-movement rebuild (Story 12.3.7 / A2.18) ───────────────
+# The full-CTAS post-hoc marts (closing_line_value, prediction_clv, line_movement)
+# can't compute anything until the closing line locks at first pitch, so they're
+# split off the intraday current-odds path and rebuilt ONCE/day after the last game.
+# 08:00 UTC = 04:00 EDT, comfortably after west-coast late games + extra innings.
+# The live current-odds path is handled separately by odds_current_rebuild_sensor.
+odds_clv_rebuild_schedule = ScheduleDefinition(
+    job=odds_clv_rebuild_job,
+    cron_schedule="0 8 * * *",
+    name="odds_clv_rebuild_daily",
+)
+
 # ── Intraday Weather ──────────────────────────────────────────────────────────
 # Fires hourly 06:00–22:00 ET (10:00–02:00 UTC). Two cron expressions mirror
 # intraday_weather.yml since cron doesn't support wrapping midnight in one expr.
@@ -79,6 +92,7 @@ intraday_schedule_capture_overnight = ScheduleDefinition(
 all_intraday_schedules = (
     odds_snapshot_schedules
     + [
+        odds_clv_rebuild_schedule,
         intraday_weather_schedule_daytime,
         intraday_weather_schedule_overnight,
         intraday_schedule_capture_daytime,

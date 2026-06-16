@@ -126,13 +126,39 @@ def odds_snapshot_dbt_rebuild(context: OpExecutionContext) -> None:
 
 
 @op(out=Out(Nothing))
-def odds_oddsapi_dbt_rebuild(context: OpExecutionContext) -> None:
-    """Rebuild the odds chain off the ODDS API staging model. Triggered by
-    `odds_rebuild_sensor` when the Railway capture service appends new rows to
-    `oddsapi.mlb_odds_raw` (Story 12.3.7 / A2.18 — the I/O-bound capture runs on
-    Railway, off the Dagster+ run-minute bill; Dagster only does this dbt rebuild).
-    Includes `mart_odds_line_movement` (the old odds_snapshot path omitted it) so the
-    CLV/movement mart stays fresh for the Epic-12 meta-model."""
+def odds_current_dbt_rebuild(context: OpExecutionContext) -> None:
+    """LIGHT rebuild of the *current-odds* path off the Odds-API raw capture — only
+    `stg_oddsapi_odds` + `mart_odds_outcomes` (the lines a prediction/edge read).
+
+    Story 12.3.7 / A2.18 — the I/O-bound capture runs every 30 min on a Railway cron
+    (off the Dagster+ bill) into `oddsapi.mlb_odds_raw`. This op is fired by
+    `odds_current_rebuild_sensor` on a DYNAMIC game-hours window (hourly from 3h before
+    first pitch to last first pitch, + one near-close tick), NOT on every capture — so
+    Dagster pays for ~12-14 light rebuilds on a game day and 0 on dark days, instead of
+    ~48 full-chain rebuilds. The heavy post-hoc CLV/line-movement marts are split out to
+    `odds_clv_dbt_rebuild` (once/day post-game) since they can't compute anything until
+    the closing line locks at first pitch."""
+    _run_dbt(context, [
+        "run",
+        "--select",
+        "stg_oddsapi_odds",
+        "mart_odds_outcomes",
+        "--target", "baseball_betting_and_fantasy",
+    ])
+
+
+@op(out=Out(Nothing))
+def odds_clv_dbt_rebuild(context: OpExecutionContext) -> None:
+    """FULL post-game rebuild of the CLV / line-movement marts (Story 12.3.7 / A2.18).
+
+    `mart_closing_line_value`, `mart_prediction_clv`, `mart_odds_line_movement` are all
+    full-CTAS and all POST-HOC — the closing line doesn't exist until first pitch, so
+    rebuilding them intraday is wasted compute. `odds_clv_rebuild_schedule` runs this
+    ONCE/day after the last game (08:00 UTC). Re-runs the light path first so CLV is
+    computed on the complete day (including any final post-last-pitch snapshots that the
+    near-close current rebuild didn't catch). Includes `mart_odds_line_movement` (the old
+    Parlay odds_snapshot path omitted it) so the open/close series stays fresh for the
+    Epic-12 market meta-model."""
     _run_dbt(context, [
         "run",
         "--select",

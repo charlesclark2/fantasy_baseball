@@ -1,0 +1,75 @@
+{
+  "target": "run_diff",
+  "metric": "mae",
+  "n_floor": 124,
+  "n_confirmed_arm": 176,
+  "n_projected_arm": 176,
+  "n_swap_block": 52,
+  "per_year": {
+    "2024": {
+      "confirmed": 3.0265259847091768,
+      "projected": 3.021743607143062,
+      "n": 2003
+    },
+    "2025": {
+      "confirmed": 3.143299133482254,
+      "projected": 3.180318988212201,
+      "n": 2026
+    },
+    "2026": {
+      "confirmed": 3.1807334020390727,
+      "projected": 3.1588193277339873,
+      "n": 802
+    }
+  },
+  "actual_lineup_matters": false,
+  "headline": "PROJECTION \u2248 ACTUAL \u2014 the real lineup does NOT beat the projection beyond noise \u2192 the projection is as good as the confirmed lineup for the model \u2192 CLOSE the projection thread (33.6 floor is offense-optimal).",
+  "gate": {
+    "decision": "HOLD",
+    "single_eval_pass": false,
+    "overall_delta": -0.016238054956054994,
+    "boot_ci": [
+      -0.03086367814646765,
+      -0.00206886776064069
+    ],
+    "effect_size_pass": false,
+    "significant": true,
+    "consistency_pass": true,
+    "tolerance": 0.02,
+    "reasons": [
+      "Pooled improvement -0.0162 does NOT clear the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound -0.0021 < 0 (significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "\u26a0 Current season 2026 REGRESSES (+0.0219) \u2014 does not block (corroboration only), but watch for a regime shift before promoting."
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2003,
+        "champion": 3.021743607143062,
+        "challenger": 3.0265259847091768,
+        "delta": 0.0047823775661148815,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2026,
+        "champion": 3.180318988212201,
+        "challenger": 3.143299133482254,
+        "delta": -0.03701985472994718,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 802,
+        "champion": 3.1588193277339873,
+        "challenger": 3.1807334020390727,
+        "delta": 0.021914074305085407,
+        "complete": false,
+        "regressed": false
+      }
+    ]
+  }
+}

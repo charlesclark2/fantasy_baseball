@@ -6595,7 +6595,306 @@ Acceptance criteria:
 
 ---
 
+### 12.3.1 — Bovada line-movement coverage audit  ✅ FIRST-PASS DONE 2026-06-16  `[data-foundation for the CLV thesis]`
+**Why (the post-Epic-33 pivot).** 33.5/33.7 closed "model the game better" (lineup adds nothing) → the remaining edge is
+the MARKET-INTERACTION layer: a market-blind morning pick + watching the market's lead-up MOVEMENT (= the info we can't
+capture). This audit measures whether we HAVE the data to test that before committing to 12.4.
+
+**FINDINGS (MCP audit 2026-06-16, `baseball_data.betting.mart_odds_line_movement`):**
+- Game-level Bovada open→close movement: **9,342 games, 2021-2026, 1 book (Bovada — our target line)**, median **2 snapshots/game
+  (open + pregame, NOT dense intraday)**. h2h movement non-null 7,563; totals 6,183.
+- ⚠️ **Quality splits by era:** historical 2021-2025 = 8,846 games but avg |h2h prob move| **0.0136** (near-flat — matches
+  [[reference_bovada_h2h_line_quality]]: historical Bovada h2h lines are degraded). Live 2026 = 496 games, avg |h2h move|
+  **0.0288** (2× sharper). ⇒ the CLEAN h2h CLV-test sample is **~496 games — right at 12.3's 500-game power threshold**;
+  the 8,846 historical games add power but degraded h2h signal (may dilute). Totals move more historically (0.21) but
+  totals is market-dominated (29.1).
+- The 44M-row `stg_parlayapi_line_movement` is ~entirely PLAYER PROPS (~569 games) — NOT the game-level thesis data.
+- **⭐ DEEPER PASS (open-timestamp + density, 2026-06-16): the "9,342 games of movement" is a MIRAGE.** `mart_odds_line_movement`
+  derives open=earliest-snapshot / close=latest-before-commence, but genuine INTRADAY snapshot capture only started **May 2026**.
+  Monthly avg snaps/game from `mart_odds_outcomes` (bovada h2h/totals): **2026-04 = 1.0** (8,224-event bulk backfill, single
+  snapshot, NO movement), **2026-05 = 13.2** (68% ≥6 snaps — real capture kicked in), **2026-06 = 7.7** (43% — DEGRADING).
+  ⇒ the usable intraday-movement set is **~500-530 games (May-Jun 2026)**; everything historical/April is single-snapshot
+  (open=close). For those ~500 games open IS a genuine early line (first of ~13 daily captures) → pairing valid; elsewhere
+  there's nothing to pair. ⚠️ **June density drop 13.2→7.7 = a Parlay `odds_snapshot` capture-reliability bug to investigate**
+  (full June slate, not a partial-month artifact) — every thin day is movement data permanently lost.
+- **VERDICT: thesis is testable but DATA-STARVED — ~500 clean intraday games, accruing only a few hundred/month.** Powers up
+  slowly. **PROVIDER DECISION GATE (operator 2026-06-16):** do NOT pivot Parlay→Odds-API yet. (1) Odds-API IS the source of
+  the degraded 2021-25 historical movement — not obviously better; dense Odds-API snapshots cost per-request (why we left it,
+  Phase 0). (2) Provider choice is downstream of whether the thesis has signal at all — test on the ~500 games FIRST. (3) The
+  June drop is likely a fixable Parlay-side job throttle/failure, not an inherent provider flaw — investigate before concluding.
+  Fork the provider decision only AFTER thesis-signal confirmed AND capture-bug ruled out.
+- Follow-on (going forward): if the intraday TRAJECTORY (not just net open→close) is ever wanted, we must CAPTURE denser
+  snapshots live (ties to Story 12.11 Parlay streaming) — historical is 2-point only and unrecoverable.
+
+### 12.3.2 — Backfill point-in-time morning predictions for the CLV pre-test  ⬜ NEW (2026-06-16)  `[enables the 12.4 thesis test]`
+**⚠️ SCOPE CORRECTION (post-12.3.1 deeper pass):** the MOVEMENT thesis (morning edge → open→close CLV) can ONLY be tested
+on the **~500 intraday-tracked May-Jun 2026 games** — historical games are single-snapshot (no movement to pair), so
+backfilling 2021-2025 predictions does NOT enable the *movement* test. For those ~500 games we likely already have genuine
+live predictions (predict_today era) → the movement pre-test needs LITTLE/NO backfill; just join existing live morning
+predictions to `mart_odds_line_movement` (live rows). Backfill retains value ONLY for a SEPARATE, weaker check: morning edge
+vs the historical CLOSING line (CLV-vs-close, no movement needed) on the degraded 2021-25 set — powered but low-signal-quality.
+Prioritize the ~500-game live movement test FIRST; treat historical backfill as an optional powered-but-degraded secondary.
+
+**Goal.** Pair our MORNING (pre-lineup, market-blind) model edge with the existing 2021-2026 Bovada open→close movement
+(12.3.1) so the CLV thesis can be tested on a powered sample — not just the ~345 genuinely-live games. Backfill the
+pre-lineup model's per-game predictions for historical games via `predict_today.py --is-backfill` (Story 30.7 idempotent
+path), then join to `mart_odds_line_movement` and measure whether the morning RAW edge (`layer4_h2h_edge`, NOT the
+alpha-gated one) predicts favorable movement (open→close CLV).
+**HARD discipline (or it measures leakage, not signal):**
+- [ ] **Walk-forward / point-in-time only** — score year Y games with a pre-lineup model trained on `<Y` (the 33.0
+  artifact is all-data; for a clean historical backfill use per-fold models or the walk-forward harness, NOT the
+  deployed artifact on its own training span).
+- [ ] **Use the OPEN line as the "morning" anchor** only after 12.3.1's open-timestamp question is resolved; if OPEN
+  isn't a genuine pre-market-reaction line, the pairing is invalid.
+- [ ] Honest-data scoping: weight/flag the degraded 2021-2025 h2h movement vs the sharp 2026 live set; report the
+  morning-edge→CLV relationship SEPARATELY for historical vs live (don't let degraded history mask/inflate the live read).
+**AC:** a powered (or honestly-underpowered, stated) measurement of whether the market-blind morning edge predicts
+open→close CLV, split historical vs live — the empirical go/no-go input to 12.4 and to A0.4.28's trigger.
+
+---
+
+### 12.3.3 — Parlay `odds_snapshot` intraday capture-density investigation  ✅ ROOT-CAUSED 2026-06-16  `[protects the only thesis-testable data]`
+
+**🎯 TWO DISTINCT CAUSES — (1) a quota crunch that is now RESOLVED, (2) a residual config throttle still active.** The
+capture job is healthy (Dagster ~16 runs/day, ~all SUCCESS); the drop is NOT corruption, NOT Bovada-specific, NOT a Dagster
+failure.
+
+**(1) Quota crunch — REAL but RESOLVED.** Parlay credit-window quota (`x_requests_used+x_requests_remaining` header, recorded
+into `mart_odds_outcomes`) stepped **100,000 (May, = Pro tier) → 500 (from 2026-05-27, ≈free tier)** — a trial-tier lapse one
+day after migration completed (2026-05-26, [[project_parlay_api_migration]]). BUT a **live billed call 2026-06-16** (`GET
+/v1/sports/baseball_mlb/odds`, X-API-Key from `.env`) returns **x-requests-remaining 958,817 / used 41,183 → quota 1,000,000
+(Business tier)**. So the plan is now correct and quota is NOT today's bottleneck (4% used). The operator confirmed they hold
+the full Business plan (1M/mo, no rate limit, 90d history, WebSocket 1s, prediction markets — per parlay-api.com/docs tiers:
+Free 1k / Starter 20k / Pro 100k / Business 1M / Enterprise 5M / Scale 50M). The May→early-June thinness was this quota
+window; it self-resolved when the Business plan took effect. ⇒ **the "weird Parlay data quality" was a transient billing-state
+artifact, NOT inherent provider unreliability** — strongly AGAINST the Odds-API pivot.
+
+**(2) Residual throttle — STILL ACTIVE, the real open item.** June capture is still ~¼ of May (rows/day ~5-9k vs ~24-34k;
+5-book snaps/game 17.5→11.5) **even though quota is now ample** ⇒ a non-quota throttle remains. Evidence in `mart_odds_outcomes`:
+the explicit-region calls (`region_requested='us'` 335k rows + `'us2'` 231k rows in May, via `parlay_api_ingestion.py odds
+--regions us us2`) **STOPPED 2026-06-04**; June flows almost entirely through one `region_requested=null` path (~9.7k rows/day).
+Also the credit-header capture itself went **null after 2026-06-04** (and the script carries a provably-false comment "Parlay
+API does not return x-requests-used/remaining headers" — the live call above returns them) ⇒ a code/config path changed ~6/04.
+
+**PATH TRACED:** the intraday capture is `odds_snapshot_job` (17 cron entries, `pipeline/schedules/intraday_schedules.py`) →
+op `odds_snapshot_ingest` (`pipeline/ops/intraday_ops.py:106`) which runs `parlay_api_ingestion.py` `events` → `odds` →
+`line-movement`. The `odds` call passes **no `--regions`** so it uses `DEFAULT_REGIONS=["us","us2"]` / `DEFAULT_MARKETS=["h2h",
+"totals"]` (script defaults intact). The four "fix" commits (`5005bc5` reduce-spend, `70d74d0` prevent-bad-failures, `a6b3118`
+resolve-odds-gaps, `2d795fe` fix-odds-snapshot) are **all 2026-06-15** and added subprocess **timeouts** (A2.16 port — a hung
+Parlay request at 19:55 EDT was wedging the op) — they did NOT cut region/market breadth. ⇒ the June thinness is the quota
+crunch (now resolved), not a breadth regression in code; the `region_requested=null` June rows are the snapshot path's tagging,
+not a dropped region. **FIX (next step, code/ops not billing):** (a) breadth is config-bound, not the bottleneck — see
+**Story 12.3.5** to *widen* beyond us/us2 now that quota allows; (b) confirm no A2.15/A2.16 dbt-spend cadence cut (`odds_snapshot
+*/30→*/60`) reaches the Parlay capture — Parlay credits (1M) and Snowflake spend are separate budgets; (c) restore x-requests
+header logging + fix the stale comment so quota is monitorable; (d) recover the thinned window via **Story 12.3.4** (historical endpoints).
+
+**Evidence (MCP, `baseball_data.betting.mart_odds_outcomes`):**
+- Density (5 books, monthly): **May 17.5 → June 11.5 snaps/game**; loads/day 28.8→21.6 AND games/call (bovada median) **13→4**.
+- Feed-wide, not Bovada-specific: June snaps/game novig 13.0, fanduel 11.2, draftkings 8.2, **bovada 7.6 (mid-pack)**, betmgm 6.3.
+- Quota header: May quota 100k (avg remaining 41,736) → 500 from 5/27 → **live 6/16 = 1,000,000 (remaining 958,817)**.
+- Regions: May `us`+`us2` explicit (566k rows) → both stop 6/04; June ~all `region_requested=null` path.
+- Job health (`scripts/ops/dagster_runs.py odds_snapshot_job 40`): ~16 runs/day, ~all SUCCESS (2 transient fails/40).
+
+**Diagnostic frame & status:**
+- [x] **Job-health pass (Dagster+ GraphQL):** HEALTHY — drop is per-run COVERAGE, not cadence/failures.
+- [x] **Decompose the drop (Snowflake):** both fewer loads/day AND fewer games/call.
+- [x] **Per-book cut:** feed-wide, Bovada mid-pack — rules out a Bovada-specific provider problem.
+- [x] **Quota check (live + historical header):** crunch real (100k→500) but RESOLVED (now Business 1M, 4% used).
+- [ ] **Restore capture breadth (code/ops):** re-enable dropped region(s) on the intraday path; decouple from dbt-spend cadence cuts; restore header logging. Then re-verify snaps/game recovers toward May's ~13-17.
+
+**AC:** root cause named ✅ (quota crunch resolved; residual = a 6/04 config/region throttle, not billing). Remaining: restore
+the intraday capture breadth and confirm density recovers. Feeds the PROVIDER GATE — the Parlay issue is fixable config, argues
+AGAINST the Odds-API pivot. Captures the [[project_parlay_api_migration]] data-quality concern.
+
+<details><summary>Original IN-PROGRESS diagnostic frame (pre-root-cause)</summary>
+
+**Why.** 12.3.1's deeper pass found intraday snapshot density per game fell 2026-05 = 13.2 → 2026-06 = 7.7 snaps/game.
+**Why.** 12.3.1's deeper pass found intraday snapshot density per game fell **2026-05 = 13.2 → 2026-06 = 7.7** snaps/game.
+The ~500 May-Jun 2026 intraday games are the ONLY data that can test the CLV/movement thesis (12.4), and they accrue
+only a few hundred/month — every thin day is open→close movement detail permanently lost. This story finds the root
+cause and stops the bleed BEFORE we decide Parlay-vs-Odds-API (the [[reference_line_movement_coverage]] PROVIDER GATE).
+
+**Diagnostic frame (decompose `snaps/game` = `distinct capture-times/day` × `fraction of games each capture writes`):**
+- [x] **Job-health pass (Dagster+ GraphQL, `scripts/ops/dagster_runs.py odds_snapshot_job 40`):** job is HEALTHY — ~16
+  runs/day, ~SUCCESS throughout (only 2 transient `odds_snapshot_ingest` failures in 40 runs, 14-15 Jun). ⇒ the density
+  drop is **NOT missing/failed runs** — runs fire and succeed. Root cause is per-run COVERAGE (each successful run writes
+  fewer game rows), not cadence.
+- [ ] **Decompose the drop (Snowflake):** per day in May vs June, (a) # distinct snapshot timestamps, (b) avg games per
+  snapshot, (c) avg snapshots per game, (d) # events the Parlay `events` step returned. Pin whether June's loss is fewer
+  capture-times, fewer games-per-capture (Parlay returning thin/empty event lists), or a write/dedup regression.
+- [ ] **Inspect a thin-June vs dense-May run's step log** (`scripts/ops/dagster_steplog.py`) — row counts ingested per run.
+- [ ] **Game-start-time confounder check:** a game is only captured by runs BEFORE first pitch, so the daily game-time mix
+  changes the per-game average mechanically. Normalize by capture-window (snaps in the T-Nh→commence window) before
+  concluding a regression — rule this out before blaming Parlay.
+
+**AC:** root cause named (cadence vs coverage vs start-time-mix vs Parlay thinning), a fix or a "no-bug, mix artifact"
+verdict, and — if fixable — the bleed stopped. Feeds the PROVIDER GATE: a confirmed fixable Parlay job bug argues AGAINST
+the Odds-API pivot; an inherent Parlay coverage/thinning problem argues FOR re-examining it. Captures the [[project_parlay_api_migration]] data-quality concern.
+
+</details>
+
+---
+
+### 12.3.4 — Historical odds recovery  ✅ PROBED 2026-06-16 → NOT VIABLE via PARLAY, ✅ VIABLE via ODDS-API  `[recovery routes to Story 12.3.7]`
+> **⚡ UPDATE (2026-06-16): recovery IS possible — via THE ODDS API, not Parlay.** The Odds API historical endpoint returns
+> 5-min-grid Bovada h2h+totals snapshots back to 2020 (live-probed inside the lost window; see **Story 12.3.7** "HISTORICAL PROBE
+> — GAME-CHANGER"). The PARLAY-path analysis below stands (Parlay historical is daily-grade/lagged/no-Bovada), but the conclusion
+> "permanently unrecoverable" applies ONLY to Parlay. Do the backfill via Odds-API under 12.3.7.
+**Goal was:** recover the May 27–June window the quota crunch (12.3.3) thinned, via the Business-plan historical endpoints.
+**🎯 PROBE VERDICT — historical recovery CANNOT rescue the thesis movement window. Three independent killers (live-probed
+2026-06-16):**
+1. **Daily-grade, not intraday** — docs + payload: `/historical/sports/baseball_mlb/odds` returns "available pricing from that
+   day" with NO intraday snapshots and NO timestamp filtering ⇒ at best one snapshot/day, never open→close MOVEMENT.
+2. **~6-week publish lag** — free `/v1/historical/sports/baseball_mlb/coverage` + `/v1/historical/coverage` show the MLB archive's
+   `latest_played_date = 2026-05-07`, all `_an` sources end **2026-05-09**. Probes confirmed: matches for 2026-04-15 (n=98) /
+   03-20 (n=60) / 2025-09-15 (n=31) return data, but **2026-05-20 and 06-14 are EMPTY** — the thinned window isn't published yet.
+3. **No Bovada** — historical MLB sources are all Action-Network books (`draftkings_an`, `fanduel_an`, `caesars_an`, `betmgm_an`,
+   `bet365_an`, `fanatics_an`); **Bovada — our model target ([[project_target_bookmaker]]) — is not in the archive at all.**
+**Salvage value (small, optional):** `/v1/historical/closing-lines.json` (1 credit, bulk, 6h cache) + free `historical/coverage`
+are a cheap way to get *closing* lines for a CLV-vs-close check on the non-Bovada `_an` books back to 2024 — the WEAK check only,
+not movement, not Bovada. The script's existing `historical-odds`/`historical-matches` loop (20 cr/day each) is NOT worth running
+for this thesis.
+**⇒ ROUTING:** intraday movement for the crunch window is permanently unrecoverable; **the only path to reliable dense movement
+is forward-capture via streaming — see Story 12.11 (now elevated).** This probe is the empirical justification for prioritizing 12.11.
+
+### 12.3.5 — Maximize bookmaker + region coverage on the live capture  ⬜ NEW (2026-06-16)  `[breadth now that quota is 1M]`
+**Why.** Capture breadth was bounded by config, not the API: the intraday op runs `parlay_api_ingestion.py odds` with
+`DEFAULT_REGIONS=["us","us2"]`, `DEFAULT_MARKETS=["h2h","totals"]`, and **no explicit `bookmakers` filter**. We currently land
+**28 books** (bovada, pinnacle, draftkings, fanduel, novig, prophetx, kalshi, bet365, betmgm, caesars, fanatics, betrivers,
+parx, hardrock, polymarket, …). The docs (parlay-api.com/docs#bookmaker-keys) list region groups **us / us2 / uk / eu / au** and
+books we may be missing (e.g. `tipico` [eu], `pointsbet`, `stake`, `sugarhouse`, plus DFS/prop platforms `prizepicks`,
+`underdog`, `sleeper`, `pick6`, `parlayplay`). On the Business plan (1M credits, ~4% used) there's no quota reason to stay narrow.
+- [ ] Audit captured-vs-documented bookmaker keys; list exactly which documented books we DON'T get and which region unlocks each.
+- [ ] Add `uk,eu,au` to the odds `--regions` (and confirm whether a `bookmakers` param can request all books in one call) — measure the credit delta; with 1M headroom, favor breadth.
+- [ ] Keep **Bovada** the modeling target ([[project_target_bookmaker]]); the extra books power cross-book dispersion / sharp-vs-soft meta features (see `idea_notes.md` → `feature_pregame_market_microstructure_features`).
+**AC:** the live capture requests the maximal sensible book/region set, captured-book count rises toward the documented list,
+and the credit cost is quantified against the 1M budget. Feeds 12.4 (book dispersion is a meta-model signal).
+
+### 12.3.6 — Investigate additional Parlay endpoints for the meta-model  ⬜ SCOPED 2026-06-16 (costs known)  `[exploratory — feeds 12.4]`
+**Why.** The CLV/market-interaction thesis (12.4) wants signals beyond our own book lines — "incoming information we're not
+capturing." The OpenAPI spec (`parlay-api.com/openapi.json`, 191 paths, `x-credit-cost` per op) gives exact costs:
+
+| Endpoint | Cost | Signal for the meta-model |
+|---|---|---|
+| `/v1/sports/{sk}/consensus` | **3** | avg/best/worst odds + hold/vig across all books — "where Bovada stands vs market" (de-vig fair line) |
+| `/v1/sports/{sk}/live/disagreement` | **5** | per-(market,side) each book's line + deviation from median/Pinnacle — **cross-book dispersion** |
+| `/v1/sports/{sk}/live/book_latency` | **5** | per-book `lag_seconds` vs live game state — **which book leads/lags (a leading indicator)** |
+| `/v1/sports/{sk}/ev` | **10** | +EV = sharp (Pinnacle) vs soft (DK/FD/Caesars/Bovada) gaps — sharp-vs-soft, ties [[Story 12.10′]] |
+| `/v1/sports/{sk}/arbitrage` / `/v1/inplay/arbs` | **10 / 5** | combined-implied-prob <100% — market inefficiency flags |
+| `/v1/sports/{sk}/props` | **3** | player props from 10+ books — FANTASY/prop product, NOT game-line CLV |
+| `/v1/sports/{sk}/live/source-health` | **1** | per-source freshness — could replace our own freshness monitor |
+| `/v1/exchanges`, `/v1/event-markets/search` | **FREE / beta** | exchange list; non-standard event markets (discovery) |
+
+- [ ] Pull one sample payload per endpoint (cheap on 1M plan); record shape, MLB coverage, cadence, leading-vs-lagging.
+- [ ] **Top candidates for 12.4 meta-features:** `consensus` (fair-line gap), `live/disagreement` (dispersion), `book_latency`
+  (lead/lag) — all cheap, all plausibly *leading*. `ev`/`arbitrage` are inefficiency flags. Rank by signal × cost.
+- [ ] Player-props/DFS line: FUTURE fantasy/prop product, NOT the game-line CLV thesis (44M prop table already separate, [[reference_line_movement_coverage]]).
+**AC:** one-page scoping with a prioritized shortlist for 12.4's meta-feature set (`idea_notes.md` → `feature_pregame_market_microstructure_features`
+already names ml_book_dispersion / sharp_soft_delta / open→close — map each to an endpoint above). No ingestion built until 12.4 shows signal.
+
+### 12.3.7 — Evaluate reverting to The Odds API (dual-source + failover)  ⬜ NEW (2026-06-16)  `[provider-trust + reliability for the live product]`
+**Why — the gate moved.** Earlier guidance (12.3.1) was "don't pivot Parlay→Odds-API until the thesis shows signal." That gate
+is **superseded by product stage:** we now have a live product with **beta users**, so odds **reliability is paramount and cost is
+secondary** (operator 2026-06-16: "I don't care about cost on The Odds API right now"). The 12.3.3 incident (a silent ~2-week
+Business-key quota downgrade, 100k→500, no alert, unrecoverable data loss) plus reported thin vendor support
+(r/ParlayAPI) materially lowered our trust in Parlay as a sole provider. This story evaluates The Odds API as a primary or
+co-primary source. [[project_parlay_api_migration]]
+**Recommended architecture (engineer's take): DUAL-SOURCE, not a hard rip-and-replace.** The root failure 12.3.3 exposed is
+**single-vendor dependence with no failover**. Standing up The Odds API *alongside* Parlay — both writing to the
+`mart_odds_outcomes` union via `mart_game_odds_bridge` (the bridge already supports multi-source, used in the original migration) —
+gives redundancy so a future Parlay (or Odds-API) outage degrades gracefully instead of silently losing weeks. A hard switch
+re-creates the same single-point-of-failure with a different vendor.
+**Honest carry-forward facts (don't relitigate):** (1) The Odds API IS the source of our *degraded historical* 2021-25 Bovada h2h
+lines ([[reference_bovada_h2h_line_quality]]) — but going-forward live capture quality is a function of OUR snapshot cadence, which
+we control; (2) per-request pricing was the original reason we left (Phase 0) — now explicitly acceptable; (3) the credit/quota
+opacity we just hit is itself an argument for a provider with clearer metering.
+**✅ COVERAGE PROBE DONE (2026-06-16, key `1142c1…4dbc`, subscription active w/ 100k credits):** STRONG GREEN.
+- `GET /v4/sports/baseball_mlb/odds/?regions=us&markets=h2h,totals&bookmakers=bovada` → **27 games; Bovada present on 15 with
+  BOTH h2h + totals**, fresh `last_update` (18:55Z, point-in-time — the other 12 are later games not yet lined by most US books;
+  only fanduel/lowvig/betonlineag had all 27). So Bovada h2h+totals IS available and fresh; coverage fills in through the day like Parlay.
+- **Transparent metering (the thing Parlay lacked):** `x-requests-remaining 99998 / used 2 / last 2` — clean, sensible headers; cost = markets×regions = 2/call.
+- **Breadth:** 19 distinct us/us2 books (fanduel, draftkings, betmgm, betrivers, bovada, fanatics, espnbet, williamhill_us,
+  hardrock, fliff, …) — comparable to Parlay. ⚠️ **Pinnacle is NOT in us/us2** (Odds API puts it in `eu`); add `regions=eu` if we want Pinnacle for sharp-vs-soft (12.10′/ev).
+- **Cost at cadence (100k/mo budget):** Bovada-only h2h+totals (2 cr/call) × 17 snaps/day ≈ **1,020/mo**; full us+us2 (4 cr) ≈
+  **2,040/mo**; +eu for Pinnacle (6 cr) ≈ **3,060/mo**. Even 30-min cadence (~34/day) stays ~4k/mo — all trivial vs 100k.
+**🚀 HISTORICAL PROBE — GAME-CHANGER (2026-06-16): The Odds API historical RECOVERS what Parlay's could not.**
+`GET /v4/historical/sports/baseball_mlb/odds/?date=2026-05-30T18:00:00Z&regions=us&markets=h2h,totals&bookmakers=bovada` (a date
+INSIDE the lost crunch window) returned a real snapshot: `timestamp 2026-05-30T17:55:37Z`, `previous_timestamp`/`next_timestamp`
+**5 minutes apart**, **29 games, Bovada present with h2h + totals**, fresh `last_update`. Per docs: **5-minute snapshot grid
+(10-min pre-Sept-2022), back to 2020-06-06, snapshot-as-of-timestamp with prev/next navigation.** This is everything Parlay's
+historical lacked (which was daily-grade, ~6-wk lagged, no Bovada — [[reference_line_movement_coverage]] / Story 12.3.4):
+- **Recovers the lost May 27–June movement window** at intraday granularity, with Bovada — the data 12.3.4 declared unrecoverable
+  via Parlay IS recoverable via Odds-API.
+- **Backfills the thesis dataset with REAL movement** far beyond the ~500 live games — query a series of timestamps/day to
+  reconstruct open→close per game, back years (2026 sharp Bovada is the priority; 2024-25 Bovada h2h lines are soft per
+  [[reference_bovada_h2h_line_quality]] but totals + movement structure are real).
+- **Cost:** 10×markets×regions = **20 credits/snapshot** (ALL games per call; probe showed `x-requests-last: 20`). Reconstructing
+  the lost ~3-wk window at hourly pregame granularity ≈ 21 days × ~12 snaps × 20 ≈ **5k credits**; full 2026 season-to-date hourly
+  ≈ **~18k** — both trivial vs 100k/mo. (5-min granularity is available but unnecessary; hourly captures the trajectory.)
+- ⇒ this single capability arguably justifies Odds-API on its own: it's both the reliability failover AND a thesis-enabling
+  backfill source Parlay structurally can't match. Feeds a REVIVED Story 12.3.4 (recovery now viable) + powers up 12.4.
+
+**Remaining tasks:**
+- [ ] **Backfill spike (revives 12.3.4 via Odds-API):** reconstruct the lost May 27–June window + 2026 season-to-date as hourly
+  Bovada h2h+totals snapshots → land in `mart_odds_outcomes` (data_source='odds_api') → re-measure usable movement-game count.
+- [ ] **Reliability/SLA:** document The Odds API uptime/limits and historical depth (back to 2020-06-06 ✅, Bovada ✅).
+  Metering transparency already confirmed ✅ (clean `x-requests-*`).
+- [x] **⭐ LIVE RE-WIRING — BUILT 2026-06-16 (pending Railway deploy + cutover).** Architecture (operator-chosen): **Railway
+  cron container + Dagster sensor** — NOT GitHub Actions (repo going private → metered minutes) and NOT a Dagster capture job
+  (keeps the I/O-bound HTTP poll off the Dagster+ run-minute bill = A2.18). Built: `services/odds_capture/` (lean Dockerfile +
+  entrypoint running `odds_api_ingestion.py odds --regions us us2 eu --markets h2h totals` → `oddsapi.mlb_odds_raw`, 6 cr/call) +
+  README (`railway.toml` service-scoped config — repo root has a separate heavy `./Dockerfile`, so Config-as-code path is set
+  per-service; Railway has no Dockerfile-path UI field). **Rebuild cadence redesigned 2026-06-16 (operator cost challenge):** the
+  first cut fired a full 5-mart rebuild on EVERY capture (~48/day) — reintroducing the A2.15/A2.16 intraday full-CTAS-frequency
+  problem. Replaced with **capture-cadence ≠ materialization-cadence**: (1) `odds_current_rebuild_sensor` fires the LIGHT
+  `odds_current_rebuild_job` (`odds_current_dbt_rebuild`: stg_oddsapi_odds → mart_odds_outcomes only) on a **dynamic game-hours
+  window** derived from today's actual slate (`MIN/MAX(game_date)` cached in the cursor → Snowflake queried ONCE/day) — hourly from
+  first-pitch −3h to last first pitch + one near-close tick (10 min pre-last-pitch), **0 fires on dark days**; (2) the full-CTAS
+  post-hoc trio (`mart_closing_line_value` / `mart_prediction_clv` / **`mart_odds_line_movement`**) split to `odds_clv_rebuild_daily`
+  schedule (08:00 UTC, once/day post-game — closing line doesn't exist until first pitch). Net full-CTAS rebuilds **48/day →
+  ~12-14 light game-day + 1 full, 0 dark days**. Raw 30-min snapshots in `mlb_odds_raw` are the meta-model movement series (free,
+  off Dagster bill). Import chain + Definitions validated (15 jobs / 9 sensors / 28 scheds); sensor window simulated across a full
+  slate (opens 3h pre, hourly, single terminal near-close, dark-day=0). **Fast-follow:** incrementalize `stg_oddsapi_odds` (append
+  by ingestion_ts, A2.15 pattern) to make light rebuilds near-free. **Pending (user):** deploy the Railway service (Config-as-code
+  = `services/odds_capture/railway.toml`), validate capture→sensor→rebuild end-to-end, THEN disable the 17 Parlay `odds_snapshot_*`
+  schedules in `intraday_schedules.py` (removes the ~1,044 min/mo Dagster driver before 6/18 billing). Odds-API becomes primary,
+  Parlay = dormant manual `workflow_dispatch` failover (historical Parlay data preserved; GH Action decommissions with the
+  private-repo move; consider downgrading the Parlay plan after ~1 week of Odds-API stability).
+- [ ] **(superseded — original scoping kept for reference)** LIVE RE-WIRING — NOW THE PRIORITY (operator 2026-06-16: "we're missing it right now"). What we built is one-time
+  historical backfill; going forward new games still get ONLY Parlay (the unreliable source). The going-forward Odds-API capture
+  must be re-wired. **Infra already exists — revive-and-schedule, not greenfield:** `scripts/odds_api_ingestion.py` (`odds` mode
+  → `/v4/sports/baseball_mlb/odds` → `oddsapi.mlb_odds_raw` → `stg_oddsapi_odds` → the EXISTING `mart_odds_outcomes` UNION) works;
+  it was just **decommissioned at the Parlay cutover** (no Dagster/GH-Actions ref anymore). Steps: (a) schedule `odds_api_ingestion.py
+  odds --markets h2h totals --regions us us2` (+ a Pinnacle/eu pass) at the intraday cadence — **cost is LIVE not historical =
+  markets×regions, ~6 cr/call × ~17/day ≈ 3k/mo**, trivial; (b) it flows through the existing union automatically (the migration
+  left `stg_oddsapi_odds` in place); (c) add a per-source freshness + quota-header alert so a silent downgrade fires immediately
+  (the thing Parlay lacked); (d) the running 12.3.7 backfill already proves coverage/quality.
+- [ ] **mart_odds_line_movement reconcile for the live era:** the mart's `live` CTE reads `mart_odds_outcomes` bovada — once
+  Odds-API ALSO lands there, apply the same per-game source-preference dedup we added for the historical path (prefer Odds-API),
+  OR route live capture into `odds_snapshots_historical` via a daily `backfill_historical_odds_snapshots.py` forward-fill so the
+  authoritative table is single-source. Decide one.
+- [ ] **Decision:** Odds-API primary, Parlay primary w/ Odds-API failover, or true dual-write. Given the 12.3.3 quota incident +
+  validated Odds-API quality + clean metering, lean **Odds-API primary, Parlay as failover** (don't rip Parlay — it's the free
+  redundancy + the only SSE/WS streaming path for 12.11). Record in [[project_parlay_api_migration]].
+**AC:** a go/no-go on The Odds API with live coverage + cost + reliability evidence (coverage ✅, historical ✅, metering ✅), and
+— if go — a dual-source architecture (Odds-API primary + Parlay failover) that removes single-vendor dependence and alerts on
+provider degradation. Pairs with Story 12.11 (streaming) + A2.18 (offload) as the "never silently lose odds data again" plan.
+
+---
+
 ### 12.4 — Bayesian sequential meta-model (≥ 50 live games)
+
+**✅ PRE-TEST: SIGNAL → GO (2026-06-16).** `betting_ml/scripts/clv_thesis_pretest_12_4.py`, report
+`ablation_results/clv_thesis_pretest_12_4.md`. On **959 live 2026 paired games** (earliest live `morning`
+prediction ⋈ Bovada open→close movement, now dense single-source Odds-API per 12.3.4), the market-blind morning
+edge predicts open→close CLV: **H2H Pearson +0.216 (95% CI [0.11,0.32], p=1e-11), Spearman +0.244, directional
+hit 60.4%**, MONOTONE CLV-by-edge-quintile (Q1 −0.011→Q5 +0.023), top-edge decile +0.040 vs bottom −0.009, and
+positive on BOTH sources (Odds-API r=0.20, Parlay r=0.45 — not a one-source artifact). Totals weaker but real
+(Pearson +0.082 / Spearman +0.139; extremes correct, noisy middle). ⇒ **the morning model anticipates line
+movement → build the meta-model.** Caveat: `h2h_edge` uses the vig-carrying `open_home_win_prob` (mart stores only
+home implied prob; corr is vig-robust, directional hit uses median-centered edge); mean-reversion not yet
+controlled (a sharp-anchor/Pinnacle control is the first 12.4 build-step, now that Pinnacle is backfilled). This
+also supports leaning pre-lineup → unblocks the [[project_decision_layer_stories]] thread and the A0.4.28 gate.
 
 **Overview:** The first working meta-model. Rather than waiting for 500 games to train a frequentist classifier, implement a Bayesian logistic regression with informative priors derived from the Story 12.3 proxy analysis. The posterior updates after every new batch of CLV-labeled games. From game ~50 onward, the model produces useful (if uncertain) P(CLV > 0) estimates with calibrated credible intervals. The credible interval width is the key signal — it narrows as n grows, providing a continuous measure of how much to trust the model's output.
 
@@ -9181,6 +9480,41 @@ Acceptance Criteria:
 - [ ] P&L attribution table shows positive/negative contribution per signal group — confirms sub-model signals are adding value
 - [ ] Bankroll page renders without error; all charts populated after ≥ 10 manual bet entries
 
+### 22.4 — Uncertainty-aware bet selection & σ-scaled sizing  `[Home: Epic 22 / decision layer]`  ⬜ specced 2026-06-16  (gated on Story 9.8)
+**Why this is the under-exploited Bayesian lever.** Across 33.5, [[project_30_2_bayesian_leverage_closed]], and the
+weather/OAA closure, **point accuracy is near a ceiling** given the team-level features — more features (Bayesian or
+not) keep failing the gate. But the part of Bayesianism that actually earns money in a betting product is
+*decision-theoretic*, and it's barely wired: Story 9.7 made `combined_sigma` a real per-game posterior width, yet it
+currently only feeds the point model as a 0.10-weight FEATURE and bounds the P(over) CI — the CI gate
+(`_eval_uncertainty_below_threshold`) is **not wired into bet selection** (9.7 status note). This story uses the
+calibrated posterior to decide *which* bets to take and *how much* — orthogonal to the point-accuracy gates that keep
+failing, so it can add EV without a better point model.
+
+**HARD PREREQUISITE: Story 9.8.** A σ-aware rule on a *miscalibrated* posterior amplifies the miscalibration. Do not
+build this until 9.8 certifies the relevant target/tier posterior is calibrated (or recalibrates it). Also honors
+[[feedback_no_auto_betting]] — this informs SELECTION/SIZING surfaced to the user; it never auto-places a bet.
+
+**Goal.** A backtested decision rule that conditions on predictive uncertainty: (a) SELECTION — abstain when
+`combined_sigma` (or the per-target served PI width) is high relative to the estimated edge (low edge-to-σ ⇒ skip);
+(b) SIZING — σ-scaled fractional Kelly so tight-posterior bets get more stake than wide-posterior ones at equal point
+edge. Measure on the honest backtest surface (the Epic 19 EV/CLV harness + `mart_bankroll_*` once 22.3 exists):
+does uncertainty-gated selection lift realized ROI / CLV / hit-rate-at-stake vs the ungated qualified-bet set?
+
+**Tasks.**
+- [ ] Define `edge_to_sigma` per pick (point edge ÷ calibrated PI width) and sweep an abstain threshold on the
+  backtest; report ROI/CLV and bet-count tradeoff vs the current qualified-bet gate (the conviction/permission layer,
+  Epic 19) — find the σ band where selection actually helps, `log()` what it drops (no silent truncation).
+- [ ] σ-scaled Kelly: fold the calibrated posterior into the 22.2 correlation-adjusted Kelly fraction (down-weight
+  high-σ legs); compare to flat / point-edge Kelly on the backtest.
+- [ ] Wire the existing CI gate (`_eval_uncertainty_below_threshold`) into the selection path as the mechanism;
+  surface the σ tier + the abstain reason in the pick payload (pairs with the Story 30.15 explanation).
+
+**Acceptance criteria.**
+- [ ] 9.8 calibration pass on record for every target/tier this rule consumes.
+- [ ] Backtest shows the uncertainty-gated set beats the ungated qualified set on ROI **or** CLV at a defensible
+  bet-count (paired/bootstrapped, not a point delta) — or an honest negative ("σ-gating doesn't add EV here") logged.
+- [ ] Selection/sizing is advisory only; `automated_bets` stays false ([[feedback_no_auto_betting]]).
+
 ---
 
 # Epic 23 — Model Drift and Signal Decay Monitoring
@@ -9262,6 +9596,85 @@ Tasks:
   - `min_pa_or_bf > 50`: player has enough current-season sample for the EB posterior to be meaningful
 - [ ] Implement `compute_prop_bet_permission()` in `betting_ml/utils/prop_probability.py`
 - [ ] Add player prop picks to a new Streamlit tab on Today's Picks page
+
+---
+
+### 24.3 — Deep-learning zone-matchup signal (hitter hot-zone × pitcher cold-zone overlap)  ⬜ NEW 2026-06-16 · MEDIUM / TWO-PHASE-GATED
+
+**Hypothesis (user, 2026-06-16):** When a hitter's hot zones for a given pitch type spatially overlap a pitcher's vulnerable zones for that *same* pitch type, the hitter "wins" the matchup more often — raising that hitter's expected offensive output (and, in aggregate, a team's run total).
+
+**Primary surface: player props / fantasy + visualization.** The signal lives at the hitter-vs-pitcher PA grain, which is exactly where prop markets price. Pointing it at props (HR, total bases, hits, RBI) keeps the grain intact, whereas aggregating 9 hitters + an unknown bullpen into a team total dilutes it into the variance-deficiency gap that Epic 29/30/31 keep hitting. Team-totals integration is a **cheap secondary probe only**, not the headline. This is inherently a **post-lineup** feature (needs the specific batter and starter) — acceptable for props (always matchup-specific) but it does NOT help the morning pre-lineup serve, so it must not be wired into the pre-lineup totals path.
+
+**Evaluation order (inherits Epic 30 doctrine):** prediction accuracy is PRIMARY (does the matchup signal improve per-prop point accuracy / calibration / CRPS vs the 24.1 baseline?); beating the prop line is SECONDARY. The overlaid-heatmap visualization is a deliverable **regardless of model outcome** — it feeds the A0.4.16 player pages and serves as explainability.
+
+**Two phases — Phase 1 cheaply gates the DL build (same pattern as Story 31.5):**
+
+**Phase 1 — non-DL feasibility probe (do first; kill gate):**
+- Build per-hitter hot maps and per-pitcher vulnerability maps from `stg_batter_pitches` (Statcast pitch-level: `plate_x`, `plate_z`, `pitch_type`, `estimated_woba_using_speedangle`, swing/contact `description`). Bin the zone (standard Statcast grid or a coarse KDE) per pitch type.
+- **EB-smooth** every cell — per-cell-per-pitch-type samples are tiny, especially early season. Shrink toward the hitter's (and pitcher's) own pitch-type marginal, then toward league. This is the project's established sparsity remedy; without it the maps are noise.
+- Compute a scalar overlap score: `Σ_cells hitter_hot(cell) × pitcher_vulnerable(cell) × pitcher_location_freq(cell)`, summed over the pitcher's pitch types weighted by usage. **Game-theory correction (required):** weight by the location the pitcher *actually throws* (`pitcher_location_freq`), not the static map — pitchers avoid hitter hot zones, so a static overlap overstates how often the favorable matchup is exercised.
+- Test: does the overlap score correlate with realized per-PA / per-game offensive output on held-out data, AND does it add incremental accuracy when appended to the Story 24.1 prop feature set? **Kill gate:** no correlation and no incremental lift → do NOT build the CNN; ship the viz only and document the null.
+
+**Phase 2 — DL spatial matchup encoder (gated on Phase 1 signal):**
+- Represent each matchup as a multi-channel image: hitter heatmap + pitcher vulnerability map (+ optional pitcher location map) per pitch type. A small CNN / spatial-attention encoder learns a matchup embedding → predicts the prop outcome (or emits a scalar matchup feature for the 24.1 model). This is the rare genuinely DL-appropriate problem here: a learned spatial convolution of two 2D fields, which a linear feature cannot represent.
+- Evaluate accuracy-first (prop point accuracy / calibration / CRPS) vs the Phase-1 linear overlap and vs the 24.1 baseline. Promote only on an accuracy win via the standard `promotion_gate`.
+
+**Visualization deliverable (independent of model verdict):**
+- Overlaid hitter-hot / pitcher-cold heatmaps per pitch type + the matchup score, rendered on the A0.4.16 player detail pages. Useful for users and as model explainability even if the feature shows no betting edge.
+
+**Dependencies:** Epic 24 deps (Epics 4A ✅, 5A ✅, 16, Story 18.1) + Story 24.1 prop feature mart (the baseline this challenges). Viz integration depends on A0.4.16.
+
+**Tasks:**
+- [ ] Phase 1: build EB-smoothed hitter/pitcher zone maps per pitch type from `stg_batter_pitches`; compute the game-theory-corrected overlap score
+- [ ] Phase 1: correlation + incremental-lift test vs Story 24.1 baseline → kill gate
+- [ ] Phase 2 (if Phase 1 passes): CNN/spatial-encoder matchup model; accuracy-first eval vs linear overlap and 24.1 baseline via `promotion_gate`
+- [ ] Secondary probe: aggregate the overlap to lineup-vs-starter and test whether it adds anything to the totals model (expected weak — document either way)
+- [ ] Viz: overlaid heatmaps + matchup score component for A0.4.16 player pages
+- [ ] Document the verdict (accuracy delta, calibration, betting edge if any) in `non_tech_reports` or an ablation_results file
+
+**Acceptance criteria:**
+- [ ] Phase 1 overlap score built with EB smoothing + the pitcher-location game-theory correction; correlation/lift result reported with an explicit kill/proceed verdict
+- [ ] If Phase 2 runs: CNN matchup model evaluated accuracy-first vs the linear overlap and the 24.1 baseline; promote only on an accuracy win
+- [ ] Heatmap visualization shipped to player pages regardless of model verdict
+- [ ] Feature is NOT wired into the pre-lineup serving path (post-lineup only)
+- [ ] Null results documented, not silently dropped
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 24.3 standalone:
+
+```
+You are picking up Story 24.3 (Deep-learning zone-matchup signal) of the MLB betting & fantasy project.
+
+Before writing any code, read:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story 24.3 (this story),
+     Story 24.1 (player prop feature mart — the baseline you challenge), the Epic 30 EVALUATION
+     ORDER block (accuracy PRIMARY, market SECONDARY — applies here), and Story 31.5 (the
+     two-phase cheap-probe-gates-the-build pattern you mirror)
+  2. dbt/models/staging/stg_batter_pitches.sql — the Statcast pitch-level source (plate_x,
+     plate_z, pitch_type, estimated_woba_using_speedangle, description)
+  3. betting_ml/utils/promotion_gate.py — the accuracy-first promotion gate you must use
+  4. How the project does EB smoothing for sparse cells (Epics 4A/5A/16 posterior infra) — you
+     will reuse this pattern for sparse per-cell-per-pitch-type maps
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; run Python with `uv run python`,
+never bare python/python3; hand any script that runs >1 min back to the user to run and show the
+command; do not git commit or push (the user handles git); test any new Snowflake-querying script
+with real credentials before merge.
+
+Hypothesis: hitter hot-zone × pitcher cold-zone overlap (same pitch type) predicts the hitter
+winning the matchup → higher offensive output. Primary surface is PLAYER PROPS / FANTASY + a
+heatmap visualization, NOT team totals (the team-total grain dilutes the signal — that's only a
+cheap secondary probe).
+
+DO PHASE 1 FIRST AND STOP AT THE KILL GATE. Phase 1 is a non-DL probe: build EB-smoothed hitter
+and pitcher zone maps per pitch type, compute a game-theory-corrected overlap score (weight by the
+location the pitcher ACTUALLY throws, because pitchers avoid hitter hot zones — a static overlap
+overstates reality), and test for correlation with realized output + incremental lift over the
+24.1 prop baseline. If there is no correlation and no lift, DO NOT build the CNN — ship the
+visualization only and document the null. Only build the Phase-2 CNN spatial encoder if Phase 1
+shows signal. Evaluate everything accuracy-first; beating the prop line is the secondary question.
+Confirm the Phase-1 verdict with the user before starting Phase 2.
+```
 
 ---
 
@@ -9894,7 +10307,7 @@ Acceptance criteria:
 
 **Remaining story priority (as of 2026-06-15):**
 - **P1 — Beta launch blockers:** A0.4.18 (SES production access approval → beta user provisioning; literal gate to inviting anyone), A0.4.13 (marketing pages — footer links on the live home page currently point nowhere), A0.4.11 (settings page — small, fully unblocked, user-facing)
-- **P2 — Beta quality:** A0.4.14 (admin page — backend already built; needs Lambda deploy + `DAGSTER_CLOUD_API_TOKEN` + Cognito admin-group guard), A0.4.15 (data quality bug reports — closes the beta feedback loop)
+- **P2 — Beta quality:** A0.4.14 ✅ COMPLETE 2026-06-15, A0.4.26 ✅ COMPLETE 2026-06-16, A0.4.15 (data quality bug reports — closes the beta feedback loop)
 - **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 (player/team detail pages — post-beta scope; A2.12 Railway PG serving store SHIPPED 2026-06-15 so the data-path gate is now cleared)
 
 ---
@@ -10633,7 +11046,7 @@ Done when all 6 new pages render, footer links route correctly, no link goes to 
 
 ---
 
-#### A0.4.14 — Admin page: wire pipeline status + model freshness ⬜ (partial — backlog)  **[P2]**
+#### A0.4.14 — Admin page: wire pipeline status + model freshness ✅ COMPLETE (2026-06-15)  **[P2 → DONE]**
 
 Wire `frontend/app/admin/page.tsx` to real backend data. `GET /pipeline/status` exists and covers the status cards. Pipeline run history, model artifact freshness, and Snowflake credit chart require new backend endpoints — spec'd below.
 
@@ -10666,20 +11079,21 @@ Other fixes shipped alongside (not part of A0.4.14 proper):
 - `frontend/components/nav.tsx` — `<Image>` for `logo-full.svg` gained `style={{ width: "auto" }}` to silence Next.js aspect-ratio warning.
 - `frontend/app/login/page.tsx` — same fix for `logo-wordmark.svg`.
 
-**What still needs work / known open issues:**
+**All issues resolved (2026-06-15):**
 
-- **Auth guard missing:** the admin page is accessible to any authenticated user. Needs Cognito group check (`admin` group) — either in API Gateway JWT authorizer or a middleware check. Until then, any beta user who navigates to `/admin` can see it.
-- **`userEmail` hardcoded:** `<Nav ... userEmail="user@example.com" />` — should read from `useAuth()`.
-- **Pipeline run `notes` are sparse:** backend currently only populates `notes` for failed runs. Success/warning notes require parsing Dagster step tags — not done yet.
-- **`DAGSTER_CLOUD_API_TOKEN` not yet in Lambda:** must be added in the AWS console; `/admin/pipeline-runs` returns 503 until then.
-- **End-to-end testing not done:** admin page has not been tested against the live prod API with the new endpoints deployed.
+- **Auth guard:** `AdminGuard` component wraps the admin page (frontend redirect for non-admin users); backend `get_admin_user` dependency checks Cognito `admin` group on every admin route. ✅
+- **`userEmail`:** reads from `useAuth().email`. ✅
+- **`DAGSTER_CLOUD_API_TOKEN`:** added to Lambda env vars in AWS console. ✅
+- **Backend deployed:** admin endpoints live in prod. ✅
+- **End-to-end tested:** status cards, pipeline run table, and model freshness all confirmed showing real data. ✅
+- **Pipeline run `notes`:** still sparse for non-failed runs (Dagster step-tag parsing deferred to backlog; acceptable for beta).
 
 **Remaining tasks before story is complete:**
-- [ ] Deploy backend with new endpoints (lambda deploy)
-- [ ] Add `DAGSTER_CLOUD_API_TOKEN` to Lambda env vars in AWS console
-- [ ] Add Cognito `admin` group check to admin routes (or API Gateway route-level authorizer)
-- [ ] Read `userEmail` from `useAuth()` in the admin page Nav call
-- [ ] Test against prod API — confirm status cards, run table, and model freshness show real data
+- [x] Deploy backend with new endpoints (lambda deploy)
+- [x] Add `DAGSTER_CLOUD_API_TOKEN` to Lambda env vars in AWS console
+- [x] Add Cognito `admin` group check to admin routes (or API Gateway route-level authorizer)
+- [x] Read `userEmail` from `useAuth()` in the admin page Nav call
+- [x] Test against prod API — confirm status cards, run table, and model freshness show real data
 
 **Blog WYSIWYG editor (decided 2026-06-15, to be implemented as part of this story):**
 - Storage: **DynamoDB** `blog_posts` table (consistent with existing bets/users infra)
@@ -10691,12 +11105,20 @@ Other fixes shipped alongside (not part of A0.4.14 proper):
 - New backend endpoints needed: `GET /blog/posts`, `POST /blog/posts`, `PUT /blog/posts/{id}`, `DELETE /blog/posts/{id}`, `POST /blog/upload-image` (returns presigned S3 URL)
 
 **Acceptance criteria:**
-- [ ] Status cards show real pipeline status from `GET /pipeline/status`; `indicator` field drives the status dot color
-- [ ] Pipeline run table shows real Dagster run history
-- [ ] Model freshness table shows real `days_since_training` and status badges
-- [ ] Invalidate Cache button calls `POST /admin/cache/invalidate` and shows feedback
-- [ ] No `MOCK_DATA` remains
-- [ ] Admin routes reject non-admin users
+- [x] Status cards show real pipeline status from `GET /pipeline/status`; `indicator` field drives the status dot color
+- [x] Pipeline run table shows real Dagster run history
+- [x] Model freshness table shows real `days_since_training` and status badges
+- [x] Invalidate Cache button calls `POST /admin/cache/invalidate` and shows feedback
+- [x] No `MOCK_DATA` remains
+- [x] Admin routes reject non-admin users
+
+**Also completed as part of this story (2026-06-15):**
+- [x] Blog WYSIWYG editor (TipTap) with split-pane preview in `/admin/blog`
+- [x] DynamoDB `credence-prod-dynamo-blog-posts` table; full CRUD endpoints in `app/backend/routers/blog.py`
+- [x] Public `GET /blog/posts` and `GET /blog/posts/{id}` excluded from API Gateway JWT authorizer (unauthenticated access works)
+- [x] On-demand Next.js cache revalidation (`/api/revalidate/blog`) triggered on publish/unpublish
+- [x] Homepage `LatestPost` teaser positioned immediately below the hero, with `cache: "no-store"` for always-fresh data
+- [x] `/picks/today` optional `date` query param — frontend passes browser's local date to avoid ET midnight seam for CST/PT users
 
 **Session prompt:**
 ```
@@ -10826,6 +11248,43 @@ Clickable player names and team names across the app navigate to dedicated profi
 - [ ] Pages return a graceful 404 if the player/team ID is not found
 - [ ] No raw Snowflake queries at request time — data is served from pre-materialized cache
 
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A0.4.16 standalone:
+
+```
+You are picking up Story A0.4.16 (Player and team detail pages) of the MLB betting & fantasy project.
+
+Before writing any code, read:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story A0.4.16 (this story),
+     Story A2.12 (Railway PG serving store — the data path you MUST use), and Epic A0.4 overall
+     acceptance criteria
+  2. app/backend/routers/picks.py — to mirror the existing router/auth/response-model patterns
+  3. frontend/app/dashboard/page.tsx and frontend/app/picks/[game_pk]/page.tsx — to mirror the
+     authenticated page layout, nav bar, and data-fetching conventions
+  4. The A2.12 Railway PG serving store: how rows are written and read (this story reads from it;
+     it must NOT add live Snowflake queries at request time)
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git);
+all new Snowflake-querying code must be tested with real credentials before merge.
+
+Goal: clickable player and team names across the app navigate to dedicated profile pages
+(`/player/[player_id]`, `/team/[team_id]`) served entirely from the Railway PG cache — no live
+Snowflake at request time.
+
+START HERE (do not skip): Task 1 is an audit. Before designing any API schema or building any
+route, inventory exactly what per-player and per-team fields already exist in the Railway PG
+serving store and in the source marts named in this story (mart_batter_rolling_stats,
+mart_team_rolling_stats, feature_pregame_lineup_features, feature_pregame_team_features,
+stg_statsapi_games). Report which page fields are directly available, which need a new
+materialization into PG, and which are not available at all — then design the API around what
+exists, not around the wishlist above. Confirm the audit findings with the user before building
+the backend routes.
+
+This is post-beta scope. Confirm with the user that beta has launched (or that they explicitly
+want this started early) before doing more than the audit.
+```
+
 ---
 
 #### A0.4.17 — Morning early pick: surface today's prediction before lineups confirm  🔶 PARTIAL  **[P3 — blocked on 30.8]**
@@ -10917,6 +11376,11 @@ back to the user to run and show the command; do not git commit or push (the use
 
 The goal is to show a morning "Preliminary" pick on the home page after morning ingestion but before
 lineup confirmation, clearly labeled so naive users understand it is an early estimate.
+
+Prior work already shipped (do not re-implement):
+- `GET /picks/today` has an optional `?date=YYYY-MM-DD` param; the dashboard frontend passes the
+  browser's local date to avoid the ET midnight seam for late-night CST/PT users. This is already
+  in app/backend/routers/picks.py and frontend/app/dashboard/page.tsx.
 ```
 
 ---
@@ -10941,15 +11405,25 @@ Customize the Cognito invite email so beta users receive a branded welcome messa
 - Configured Cognito to send via SES using `noreply@credencesports.com` (via AWS CLI `update-user-pool --email-configuration`)
 - Submitted SES production access request (AWS support case open as of 2026-06-13); awaiting approval
 
-**Remaining tasks (blocked on SES production access approval):**
-- [ ] Confirm SES production access granted
-- [ ] Send test invite to own email and verify it arrives from `noreply@credencesports.com` without hitting spam
+**Remaining tasks — two paths (pick one):**
+
+_Path A — Wait for SES production approval (original plan):_
+- [ ] Confirm SES production access granted by AWS
+- [ ] Send test invite to own email; verify it arrives from `noreply@credencesports.com` without hitting spam
 - [ ] Provision each beta user via Cognito console (Users → Create user → send invitation email)
 - [ ] Confirm each beta user can log in and reach the dashboard
 
+_Path B — Resend contingency (if SES approval doesn't arrive before beta launch; see A0.5 Resend section):_
+- [ ] Complete Resend domain verification and deploy `cognito-email-sender` Lambda per A0.5 spec
+- [ ] Verify Lambda intercepts Cognito invitation messages: create a test user in the Cognito console and confirm the invite arrives via Resend (check Resend dashboard for delivery receipt)
+- [ ] Provision each beta user via Cognito console — same steps as Path A; delivery mechanism is transparent once the Lambda is wired
+- [ ] Confirm each beta user can log in and reach the dashboard
+
+**Note:** Path B simultaneously unblocks A0.4.22 (password reset verification codes) and A0.4.11 (email notification toggle) — the `cognito-email-sender` Lambda intercepts all Cognito-originated emails, not just invitations.
+
 **Acceptance criteria:**
 - [x] Invite email shows Credence Sports branding (not the default AWS template)
-- [ ] Invite email arrives from `noreply@credencesports.com` (not `no-reply@verificationemail.com`)
+- [ ] Invite email arrives from `noreply@credencesports.com` (not `no-reply@verificationemail.com`) — via SES (Path A) or Resend (Path B)
 - [x] Temp-password login flow works on `https://www.credencesports.com`
 - [ ] All beta users provisioned and able to authenticate
 
@@ -11053,19 +11527,26 @@ Beta users need a self-service way to reset their password without admin interve
 - [x] Create `frontend/app/reset-password/page.tsx` — step 2: code + new password + confirm password form that calls `cognitoUser.confirmPassword(code, newPassword)` on submit; redirects to `/login` on success with a success toast
 - [x] Handle error states: expired code, code mismatch, password policy failure (min 8 chars)
 - [x] Auto-verify `email_verified=true` on every successful login via fire-and-forget `POST /auth/verify-email` — fixes admin-created accounts that can't reset without it
-- [ ] Update the Cognito "Verification message" template (Branding → Message templates) to use branded HTML matching the invitation email style
+- [ ] Update the Cognito "Verification message" template (Branding → Message templates) to use branded HTML matching the invitation email style — **only applicable under Path A (SES); skip if adopting Resend (Path B), where the Lambda controls the template**
 
 **Acceptance criteria:**
 - [x] "Forgot password?" link is visible on the login page
 - [x] Full reset flow completes end-to-end: request code → receive email → enter code + new password → log in with new password (validated 2026-06-14 with SES sandbox verified email)
 - [x] Expired/invalid code shows a clear error message
-- [ ] Reset email uses branded HTML template (not the default AWS template)
+- [ ] Reset email uses branded HTML template (not the default AWS template) — via Cognito console (Path A) or `cognito-email-sender` Lambda template (Path B)
 
-**Follow-on after SES production approval:**
+**Follow-on — two paths (mirrors A0.4.18):**
+
+_Path A — After SES production approval:_
 - Deploy backend Lambda (`./infrastructure/lambda/deploy.sh`) — the `/auth/verify-email` endpoint is merged but not yet in prod
 - Confirm IAM policy is live: `aws iam get-role-policy --role-name credence-prod-lambda-execution-role --policy-name CognitoEmailVerify`
 - Push frontend to main → Vercel deploy (forgot-password, reset-password, login pages)
 - Re-test end-to-end with a fresh admin-created account (no SES sandbox workaround) to confirm the auto-verify path works in prod
+
+_Path B — After Resend `cognito-email-sender` Lambda is deployed (per A0.5):_
+- The Lambda intercepts both invitation emails (A0.4.18) and verification code emails (this story) — no separate wiring needed for A0.4.22 specifically
+- Re-test the full forgot-password → reset-password flow with a non-sandbox email address to confirm delivery via Resend
+- Update the branded HTML email template inside the Lambda to match the invitation email style (replaces the Cognito console "Verification message" template task above)
 
 ---
 
@@ -11207,7 +11688,7 @@ Basic legal pages are required before collecting any user data via PostHog/Sentr
 
 ---
 
-#### A0.4.26 — Weekly changelog page ⬜  **[P2]**
+#### A0.4.26 — Weekly changelog page ✅ COMPLETE 2026-06-16  **[P2]**
 
 Surface a user-facing `/changelog` page that shows incremental product improvements week by week. The goal is to demonstrate to users that the product is actively improving, and to give the admin a source of truth to reference in Monday blog posts.
 
@@ -11222,8 +11703,8 @@ Surface a user-facing `/changelog` page that shows incremental product improveme
 
 **Tasks:**
 
-- [ ] Create `frontend/data/changelog.json` with the first entry covering the current week's shipped features (A0.4.11, A0.4.13 footer/FAQ/Contact, umpire feed fix, etc.)
-- [ ] Create `frontend/app/changelog/page.tsx` — Server Component; imports the JSON; renders week-by-week entries with tag badges; metadata title "Changelog — Credence Sports"
+- [x] Create `frontend/data/changelog.json` with the first entry covering the current week's shipped features — **DONE 2026-06-15**. Note: live format uses `{ version, date, entries: [{tag, title, description}] }` (not the `{week, title, items}` shape in the reference below); build the page to match the live format.
+- [ ] Create `frontend/app/changelog/page.tsx` — Server Component; imports the JSON; renders entries with tag badges; metadata title "Changelog — Credence Sports"
 - [ ] Tag badge colors: `new` → emerald (`bg-[#10b981]/15 text-[#10b981]`), `improvement` → blue (`bg-blue-500/10 text-blue-400`), `fix` → amber (`bg-amber-500/10 text-amber-400`), `model` → purple (`bg-purple-500/10 text-purple-400`), `data` → gray (`bg-[#262626] text-gray-400`)
 - [ ] Add "Changelog" link to `frontend/components/site-footer.tsx` (alongside FAQ, Blog, Privacy, Terms, Contact)
 - [ ] Add "What's New" dot indicator to the authenticated sub-nav in `frontend/components/nav.tsx` — show an emerald dot badge on the "Changelog" link when the latest entry's `week` date is within the last 7 days; link href `/changelog`
@@ -11315,6 +11796,51 @@ Assign authenticated users to named Cognito user groups (e.g. `beta_tester`, `pa
 - [ ] Settings page tier badge reads from `groups`, not a hardcoded string
 - [ ] Adding a user to the `paid` group in Cognito is reflected in their Settings page on next login
 
+#### A0.4.28 — Pre-lineup pick messaging update + changeover blog post  ⬜ NEW (2026-06-16)  **[GATED — see trigger]**
+
+**⚠️ GATE / TRIGGER (do NOT start until this fires):** this story ships only if we *decide* to lean on the pre-lineup
+(morning, market-blind) model as the primary product surface. That decision is **predicated on the market-interaction
+test** (Epic 12.4 CLV meta-model — does the market's lead-up movement add the signal the model can't capture?). The
+Epic 33 findings (33.5/33.7) established that pre-lineup ≈ post-lineup (the lineup adds nothing), which *motivates*
+leaning pre-lineup, but the go/no-go is the CLV thesis. **Hold this story until 12.4 returns a verdict.**
+
+**Why.** Today the app shows caveat/warning copy on morning pre-lineup picks framing them as preliminary/"lineups not
+yet posted." If we adopt the pre-lineup model as primary (because it's as accurate as post-lineup AND available before
+the market reacts to lineups — the product edge), that messaging is now *misleading* — it tells users to wait for
+something that doesn't improve the pick. This story updates the copy and explains the change publicly.
+
+**Work (app session — frontend/ + app/backend/):**
+- [ ] Revise the pre-lineup pick warning/caveat copy across the app (pick cards, pick-details banner, any "preliminary"
+  badges) from "wait for lineups" framing → an *honest, positive* framing: the morning pick is the model's full read,
+  available early; the post-lineup re-score is a refinement, not a correction. Do NOT claim a betting edge / win-rate
+  ([[feedback_no_auto_betting]], FAQ no-win-rate rule). Keep the served-tier label (pre_lineup vs post_lineup) visible.
+- [ ] **AC — changeover blog post.** Publish a blog/changelog post explaining WHY we made the change: the data showed
+  the lineup itself adds ~nothing to the model (Epic 33), so a market-blind morning pick is as accurate as waiting AND
+  lets users act before the market moves. Honest framing only — model reasoning + transparency, no profit/win-rate
+  claims; route via the A0.4.26 changelog or a dedicated blog surface.
+
+**Acceptance criteria:**
+- [ ] Trigger satisfied (12.4 verdict says lean pre-lineup) and recorded before any copy change.
+- [ ] No app surface tells users to "wait for lineups" to improve a pick; served-tier remains visible.
+- [ ] Changeover blog/changelog post published, explaining the rationale with no win-rate/edge claims.
+
+#### A0.4.29 — Evaluate The Odds API website odds widget  ⬜ NEW (2026-06-16)  **[P3 — low fit, investigate-then-likely-defer]**
+
+**Why.** Now that we have a website, the operator flagged The Odds API's embeddable odds widget
+(the-odds-api.com/guide/website-odds-integration.html) as worth investigating — a drop-in HTML tag showing bookmaker odds.
+
+**Honest fit assessment (from the docs, 2026-06-16):** **LOW fit for a branded product.** The widget is: (1) **single
+bookmaker at a time**, (2) **primary markets only**, (3) **fixed UI — structure/styles cannot be customized** (so it won't
+match Credence Sports branding), and (4) built around **affiliate-link monetization**. It's designed for affiliate/content
+sites, not a first-party picks product. Since we already pull the full Odds API data ourselves (12.3.7), we can render odds
+in our OWN branded components with far more control — the widget mainly buys us an affiliate-revenue path, not a UX win.
+**Work (app session):**
+- [ ] Confirm widget terms: does it consume API credits, require affiliate signup, and what are the usage/branding limits?
+- [ ] Decide: (a) skip (build first-party odds display from our Odds-API data — likely), or (b) adopt ONLY if an affiliate
+  revenue stream is a near-term goal and the fixed UI is acceptable on a secondary/marketing page (not the core product).
+**AC:** a documented keep/skip decision; default expectation is SKIP in favor of first-party rendering unless affiliate
+monetization is prioritized. Frontend/product call — operator's domain.
+
 ---
 
 ### A0.5 — Brand Identity & Communications Setup
@@ -11326,16 +11852,16 @@ Assign authenticated users to named Cognito user groups (e.g. `beta_tester`, `pa
 #### Logo Generation
 
 Tasks:
-- [ ] Generate primary logo using an AI image tool (Midjourney, DALL-E, or Adobe Firefly) — see prompt guidance below
-- [ ] Produce the following logo variants and export as SVG where possible, PNG fallback:
+- [x] Generate primary logo using an AI image tool (Midjourney, DALL-E, or Adobe Firefly) — see prompt guidance below
+- [x] Produce the following logo variants and export as SVG where possible, PNG fallback:
   - `logo-full.svg` — wordmark + icon, horizontal layout, dark background
   - `logo-icon.svg` — icon only, for favicons and small contexts
   - `logo-wordmark.svg` — text only, no icon, matches the nav bar treatment v0 generated
   - `logo-full-light.svg` — inverted version for any light background contexts
-- [ ] Place all logo files in `frontend/public/brand/`
-- [ ] Replace the v0-generated text wordmark in the nav bar and login card with `<Image>` component using `logo-wordmark.svg` — keep the emerald/white color treatment
-- [ ] Update `frontend/public/favicon.ico` with the icon variant — use a 32×32 PNG converted via favicon.io
-- [ ] Update `frontend/src/app/layout.tsx` metadata: set `title`, `description`, and `og:image` using the full logo
+- [x] Place all logo files in `frontend/public/brand/`
+- [x] Replace the v0-generated text wordmark in the nav bar and login card with `<Image>` component using `logo-wordmark.svg` — keep the emerald/white color treatment
+- [x] Update `frontend/public/favicon.ico` with the icon variant — use a 32×32 PNG converted via favicon.io
+- [x] Update `frontend/src/app/layout.tsx` metadata: set `title`, `description`, and `og:image` using the full logo
 
 #### Email Setup
 
@@ -11344,21 +11870,50 @@ Tasks:
 - [x] Cognito wired to send via SES using `noreply@credencesports.com`
 - [x] SES production access requested (support case open; awaiting approval)
 
-**Remaining tasks:**
-- [ ] Create a Google Workspace account for credencesports.com — $6/user/month Business Starter tier is sufficient for beta
-- [ ] Add the required DNS records (MX, SPF, DKIM, DMARC) to the Route 53 hosted zone — Google Workspace setup wizard generates these automatically; add them as records in Route 53
-- [ ] Create the following mailboxes:
-  - `hello@credencesports.com` — primary contact, linked from login page mailto and footer
+**Completed tasks (2026-06-16):**
+- [x] Created Zoho Workplace account for credencesports.com (chose Zoho over Google Workspace)
+- [x] Added required DNS records (MX, SPF, DKIM, DMARC) to Route 53 hosted zone
+- [x] Created the following mailboxes:
+  - `support@credencesports.com` — primary contact (replaces originally planned `hello@`)
   - `charlie@credencesports.com` — personal Credence Sports address
-  - `noreply@credencesports.com` — outbound notifications/system emails (SES sending identity already configured; no inbox needed)
-- [ ] Update the `mailto:hello@credencesports.com` link on the login page to confirm the mailbox is live and receiving before beta launch
-- [ ] Add email signature to `charlie@credencesports.com`:
-  ```
-  Charlie Clark
-  Credence Sports | Penumbra Partners
-  charlie@credencesports.com
-  credencesports.com
-  ```
+
+**Remaining / blocked:**
+- [ ] `noreply@credencesports.com` outbound via SES — SES production access request still pending (sandbox only); no inbox needed, just SES approval
+- [ ] **SES sandbox blocker:** AWS has not yet approved the SES production access request; outbound notification emails (Cognito auth, A1.7 pick alerts) cannot reach non-verified recipients until approved. See Resend contingency plan below.
+
+#### SES Contingency — Resend
+
+If AWS does not approve SES production access before beta launch, migrate transactional email to **Resend** (resend.com). Resend is a developer-focused email API with a free tier (3,000 emails/month, 100/day) that is more than sufficient for beta. It does not require a sandbox approval process — the account is live immediately after domain verification.
+
+**Downstream impact — read before starting A0.4.11 or A0.6:**
+- **A0.4.11** (notification preferences): The email notification toggle in Settings is currently a "Coming soon" placeholder explicitly because SES is sandboxed. Switching to Resend unblocks this — the toggle can be wired as originally specced. If Resend is adopted, A0.4.11 must note the sending mechanism as Resend, not SES, in its implementation.
+- **A0.6** (push notification system): The planned `push-notification-sender` Lambda calls `boto3.client('ses').send_email()` for email alerts. If Resend is adopted, that call is replaced with the Resend Python SDK (`resend` package) — everything else in A0.6 (SNS topic, DynamoDB subscriptions table, Web Push via `pywebpush`, VAPID keys) is unaffected. The switch is a one-function change in the Lambda.
+
+**Scope of work to adopt Resend:**
+
+1. **Domain verification** — Add a DNS TXT record to the Route 53 hosted zone to verify `credencesports.com` with Resend. Takes ~5 minutes; propagation is fast.
+
+2. **Cognito auth emails** — Cognito currently sends verification and password-reset emails via SES. To route these through Resend, enable the **Custom Email Sender** Lambda trigger on the Cognito User Pool:
+   - Write a small Lambda (`cognito-email-sender`) that receives Cognito's trigger payload, decrypts the OTP/link using the KMS key Cognito provides, and calls the Resend API to deliver the email using the `noreply@credencesports.com` sender.
+   - Store `RESEND_API_KEY` in SSM Parameter Store (`/credence/prod/resend_api_key`) and grant the Lambda `ssm:GetParameter` access.
+   - Use Cognito's built-in email templates (verification, password reset) as the body — no new template design needed for beta.
+
+3. **A0.6 Lambda email path** — Replace the `boto3` SES call in `push-notification-sender` with:
+   ```python
+   import resend
+   resend.api_key = os.environ["RESEND_API_KEY"]
+   resend.Emails.send({
+       "from": "Credence Sports <noreply@credencesports.com>",
+       "to": [user_email],
+       "subject": "Today's picks are ready",
+       "html": email_body_html,
+   })
+   ```
+   Add `resend` to the Lambda's requirements and pass `RESEND_API_KEY` as an environment variable (sourced from SSM).
+
+4. **`aws_resources.md` update** — Record the Resend domain verification TXT record, the `cognito-email-sender` Lambda ARN, and the SSM parameter path.
+
+**Decision gate:** If SES production access is not approved within 1 week of beta launch target, adopt Resend. Do not hold A0.4.11 or A0.6 waiting on AWS.
 
 #### Logo Design Direction
 
@@ -11385,12 +11940,12 @@ Alternative icon directions worth exploring:
 Acceptance criteria:
 - [x] Logo files exist in `frontend/public/brand/` in all four variants
 - [x] Favicon updated — Credence Sports icon appears in browser tab
-- [ ] Nav bar and login card use SVG logo asset, not v0-generated text wordmark
-- [ ] `hello@credencesports.com` is live and receiving email — verified by sending a test from an external address
-- [ ] DNS records for Google Workspace (MX, SPF, DKIM, DMARC) are active in Route 53 — verified via MXToolbox
-- [ ] SES domain verification complete for credencesports.com in us-east-1 — status shows Verified in SES console
-- [ ] SES production access requested (exits sandbox) — approved by AWS
-- [ ] `aws_resources.md` updated with SES identity ARN and Google Workspace MX records
+- [x] Nav bar and login card use SVG logo asset, not v0-generated text wordmark
+- [x] `support@credencesports.com` and `charlie@credencesports.com` live and receiving email (Zoho)
+- [x] DNS records for Zoho (MX, SPF, DKIM, DMARC) active in Route 53
+- [x] SES domain verification complete for credencesports.com in us-east-1 — status shows Verified in SES console
+- [ ] SES production access approved by AWS (exits sandbox) — **BLOCKED; investigating Resend/SendGrid/Postmark as contingency**
+- [ ] `aws_resources.md` updated with SES identity ARN and Zoho MX records
 
 ---
 
@@ -13055,6 +13610,36 @@ do not git commit/push; Dagster in-process ops import packaged code only ([[feed
 
 ---
 
+### Story A2.18 — Offload I/O-bound odds capture off Dagster+ run-minutes  `[Home: Epic A2 / infrastructure]`  ⬜ NEW (2026-06-16)
+**Operator insight (2026-06-16):** "We get charged for Dagster+ compute time; if we offload the compute spent *while API calls
+are being made*, we could cut it significantly — as long as it cancels out cost-wise, ideally better." Correct, and it converges
+with two existing threads.
+
+**The cost mechanic.** We're on Dagster+ **Hybrid (per-run-minute)** billing ([[project_dagster_cost_audit_jun2026]]). The
+`odds_snapshot_job` is the **#1 recurring run-minute driver: ~1,044 min / 329 runs ≈ 3.2 min/run, ~42% of recurring runtime** —
+and most of each run is **I/O wait** (the op `odds_snapshot_ingest` just shells `parlay_api_ingestion.py events/odds/line-movement`
+and blocks on the network). We pay Dagster+ run-minutes (and our agent host) to *wait on HTTP*. That is the waste.
+
+**Two ways to offload (not mutually exclusive):**
+1. **Move capture to an always-on consumer (CONVERGES with Story 12.11).** A single long-lived SSE/WS consumer (or even a tiny
+   always-on poller) running on cheap compute (Railway/Fargate ~$5–15/mo) replaces all **329 Dagster runs/mo → 0**, removing the
+   ~1,044 run-min/mo entirely AND capturing denser data. This is the *cost justification* for 12.11's always-on service — the
+   thing that was "the main new operating cost the spike must justify" is **paid for by the Dagster run-minutes it eliminates.**
+2. **Reduce cadence in place (A2.16-D2, already specced):** `odds_snapshot */30→*/60` halves the run-minutes as a stopgap until 12.11 ships.
+**Break-even (the "must cancel out" check):** Dagster+ Hybrid run-minute rate × ~1,044 min/mo (+ agent compute for those minutes)
+vs. the always-on host (~$5–15/mo). The always-on host is **flat and far below** the per-minute billing of 329 waiting runs, so it
+should be net-cheaper *and* higher-coverage — but **quantify both sides at the 2026-06-22 re-audit before committing.**
+**Tasks:**
+- [ ] Pull `odds_snapshot_job` true run-minutes/mo + the Dagster+ Hybrid per-minute rate; compute the monthly $ it represents.
+- [ ] Price the always-on consumer host (Railway/Fargate) for a single persistent MLB connection (ties to the 12.11 spike).
+- [ ] Confirm net savings (host cost < run-minutes saved) AND that moving capture off Dagster doesn't break downstream
+  (`mart_odds_outcomes` dbt rebuild still triggers — keep the *dbt rebuild* in Dagster, only the *fetch* moves out).
+- [ ] If 12.11 isn't ready, ship A2.16-D2 cadence cut now as the interim run-minute reduction.
+**AC:** a quantified break-even showing the offload is cost-neutral-or-better, and a decision: (a) fold odds capture into the
+12.11 always-on consumer, or (b) interim cadence cut. The fetch leaves Dagster; the downstream dbt rebuild stays. Cross-linked to [[project_dagster_cost_audit_jun2026]] + Story 12.11 + A2.16-D2.
+
+---
+
 # Epic 27 — Within-Season Scoring-Environment State Signal
 
 **Status:** 🔄 IN PROGRESS (27.1 ✅ 2026-06-10; 27.3/27.5 ✅ DEFER/FAIL; **27.6 ⬜ NEW 2026-06-12 — the pivot:
@@ -14402,6 +14987,51 @@ Note: combined_sigma affects only the P(over) CI bounds, not `totals_p_over`/`to
 gate (`_eval_uncertainty_below_threshold`) is not yet wired, so no model re-evaluation needed now.
 `reference_submodel_uncertainty_placeholders` memory retired/updated, AC3 passes.
 
+### Story 9.8 — Served predictive-distribution calibration audit  `[Home: Epic 9 / uncertainty layer]`  ✅ DONE 2026-06-16
+**VERDICT: the served posteriors are CALIBRATED on honest-2026 — green-lights 22.4 + the totals product + 12.4 conviction
+inputs.** Harness `betting_ml/scripts/served_calibration_audit_9_8.py`; report `ablation_results/served_calibration_9_8.md`;
+per-target JSON in `betting_ml/evaluation/calibration_9_8/`. Headline (2026, both tiers): **total_runs** cov80 0.79–0.81
+(gap ≤|0.01|), PIT-KS ~0.048, bias −0.05/−0.07 → calibrated ✓; **run_diff** cov80 0.776, PIT-KS 0.02–0.03, bias ~0 →
+calibrated ✓; **home_win** base classifier ECE 0.018–0.031 (completed folds), mild underconfidence (slope ~1.1), Platt a
+wash. EVERY `⚠ MISCAL` flag is on a COMPLETED 2024/2025 fold (totals historical +0.20 over-bias — 27.7-corrected on 2026;
+run_diff 2024 PI too tight), NOT current serving. KEY NUANCES: (1) the "+0.40 totals over-bias" is the Epic-17 PyMC NegBin
+model, NOT this NGBoost champion (level-unbiased on 2026); (2) totals is *calibrated-but-wide* per 29.1 (honest σ, just
+less sharp than market → 22.4 will correctly abstain often on totals); (3) the served home_win h2h prob is
+`calibrated_win_prob = live_calibrator(0.5·ngb + 0.5·platt_clf)`, and the live calibrator is a DELIBERATE IDENTITY (A2.9,
+`calibrator_refit_meta.json`) — recalibrators lower ECE only by collapsing spread, so DO NOT add home_win recalibration.
+**No model change; gates 22.4 (cleared).**
+
+**Why now (the cheap, high-leverage prerequisite).** Story 9.7 made the `*_uncertainty` columns *real* per-game 80% PI
+widths, and `compute_across_model_sigma` now folds them into `combined_sigma` — but **nobody has checked whether the
+predictive distributions we serve are actually CALIBRATED**. A real-but-miscalibrated posterior is worse than a stub:
+it looks trustworthy. This is the gate that licenses everything uncertainty-aware downstream — Story 22.4 (σ-aware
+selection/sizing), the over/under product (a miscalibrated spread → wrong tail probabilities *even at a perfect mean*,
+and totals already carries a known +0.40 level bias), the CLV meta-model (Epic 12.4 consumes conviction/edge signals —
+if those rest on miscalibrated σ it trains on noise), and the Story 30.15 uncertainty the app now surfaces to users.
+Cheap (eval-only, no retrain, no new data) and it de-risks multiple Tier-1 stories.
+
+**Goal.** Per target (home_win, run_diff, total_runs) and per served tier (champion / pre_lineup), measure whether the
+served predictive distribution is honest on the **honest-2026** OOS surface (and the completed-season folds), using the
+tools already in `betting_ml/utils/promotion_gate.py` (`calibration_report`, `predictive_pit`, `predictive_interval`):
+coverage of the central 80%/90% PI vs nominal, PIT KS-distance + histogram shape (U = overconfident, dome =
+underconfident, slope = directional bias), mean predictive NLL/CRPS, and `bias = mean_pred − mean_actual`. For home_win
+(binary) use a reliability curve + ECE (already in the gate harnesses).
+
+**Tasks.**
+- [ ] Score each champion + pre_lineup model walk-forward (reuse `pre_lineup_baseline_30_8` / `pre_lineup_proj_gate_33_5`
+  fit machinery) → per-game `PredictiveOutput`; run `calibration_report` per (target, tier, season).
+- [ ] Report coverage gap, PIT-KS, NLL/CRPS, bias; flag any tier/target whose 80% PI coverage is off nominal by > ~5pts
+  or whose PIT is visibly U/dome/sloped. Totals is the prime suspect (the +0.40 bias).
+- [ ] Write `quant_sports_intel_models/baseball/ablation_results/served_calibration_9_8.md` + a JSON sidecar; one
+  `--target` per invocation (hand-off). If a target is miscalibrated, RECOMMEND the fix (isotonic/conformal already
+  exists for totals P(over) in Story 10.9; a σ-scale recalibration for the regression PIs) — but 9.8 only MEASURES.
+
+**Acceptance criteria.**
+- [ ] A calibration verdict per (target, tier): coverage vs nominal, PIT-KS, bias, NLL/CRPS, on honest-2026 + folds.
+- [ ] Each surfaced σ/uncertainty consumer (combined_sigma, 30.15 payload, any conviction gate) is annotated
+  "calibrated ✓" or "miscalibrated → recalibrate before use as a decision input."
+- [ ] No model change; this is the evidence base that gates Story 22.4 and the totals-product honesty.
+
 ### Story 10.9 — Isotonic + conformal post-calibration on Layer-3 P(over)/P(home)  `[Home: Epic 10, REOPENED]`
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 10.9 standalone:
@@ -14808,6 +15438,65 @@ markets — the betting surface the efficient main line does not cover.
 - [ ] Coverage/liquidity report of alt / F5 / team-totals markets on the 2026 surface.
 - [ ] Backtest: model vs devig-market Brier + realized ROI/CLV on settled 2026 alt lines, vs the pre-committed kill criterion.
 - [ ] Verdict: is there a calibrated-distribution edge on thin totals markets? If pass → shadow-only deployment behind the registered kill criterion; if fail → documented as the close of the alt-line avenue. Never auto-bet.
+
+---
+
+### Story 29.4 — First-five-innings (F5) totals: coverage inventory + pre-lineup viability re-assessment  `[Home: Epic 29]`  ⬜ NEW 2026-06-16
+
+**Status:** ⬜ NEW 2026-06-16. Cheap precursor that the shelved 29.3 never executed. **Distinct from 29.3:**
+29.3 (full-game alt/F5/team probe) was downgraded by the 29.1 gate (full-game central estimate trails the
+market ~0.53 RMSE). This story tests the specific hypothesis that **F5 ESCAPES that gate** because it is
+structurally different.
+
+**Why F5, and why now (the pre-lineup synergy):** F5 (first-five-innings) totals are **starter-dominated** —
+the bullpen (the consistent totals confounder) is largely irrelevant, and the starter is the **one input
+reliably known PRE-LINEUP** (probables post early). So F5 is (a) the totals sub-market most compatible with
+the pre-lineup posture (Epic 33 / 30.8), and (b) the one where the 29.1 variance-deficiency may NOT bind —
+F5 variance is driven by a tractable starter+park+ump set rather than the league-wide 2026 regime that drove
+the full-game failure. **Accuracy-first** (Epic 30 evaluation order): the gate is F5 prediction accuracy to
+the true F5 total; market-beating is secondary.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 29.4 standalone:
+
+```
+You are picking up Story 29.4 of the MLB betting & fantasy project.
+
+Before writing any code, read these three documents end-to-end to ground yourself in the current
+architecture and data model:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — locate the Story 29.4 section (and skim
+     29.1/29.3 + Epic 32 for context); its Goal, Tasks, and Acceptance criteria are your contract.
+  2. quant_sports_intel_models/baseball/refined_architecture_proposal.md
+  3. quant_sports_intel_models/baseball/baseball_data_mart_inventory.md
+
+CONTEXT:
+  - 29.3 (full-game alt/F5/team) was DOWNGRADED because the full-game central estimate trails the market.
+    F5 is the hypothesis that the STARTER-DOMINATED, bullpen-irrelevant first-5 market escapes that gate and
+    fits the pre-lineup posture (starter known early). This is a viability check, NOT a build.
+  - ACCURACY-FIRST: judge F5 prediction accuracy to the true F5 total (RMSE/MAE/MedAE) FIRST; beating the F5
+    market line is secondary. Honest 2026 OOS surface only.
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; hand any script that runs >1 min
+back to the user to run and show the command; do not git commit or push (the user handles git).
+```
+
+**Goal:** Decide whether F5 totals is a viable near-term track — (a) is there enough priced F5 market volume,
+and (b) does an F5 central estimate reach market parity where the full-game one couldn't?
+
+**Tasks:**
+- [ ] Inventory F5 / first-5-innings totals market lines (Parlay/Bovada — `mart_odds_outcomes` / line-movement):
+  coverage %, snapshot counts, settled-line volume on 2026. Report whether priced F5 volume is enough to backtest.
+- [ ] Build the F5 OOS target: first-5-innings runs per game (from play-by-play / `stg_batter_pitches` inning ≤ 5).
+- [ ] Re-run the 29.1 point-accuracy benchmark ON F5 — predict the F5 total from the STARTER-dominated signals
+  (starter suppression + run-env + park + umpire; NO bullpen), compare RMSE/MAE/MedAE vs the F5 market line vs
+  naive on honest 2026. Does F5 close the central-estimate gap the full-game model couldn't?
+- [ ] Verdict: sufficient coverage AND F5 accuracy reaches market parity → route to Epic 32 (per-side
+  distribution prices F5 for free) or a scoped F5 model; else document F5 as closed (coverage or accuracy).
+
+**Acceptance criteria:**
+- [ ] F5 market-coverage report (volume, settled lines, 2026).
+- [ ] F5 point-accuracy benchmark (model vs market vs naive) on honest 2026, accuracy-first.
+- [ ] Explicit go/no-go: F5 as the pre-lineup-friendly totals track, or closed with reason.
 
 ---
 
@@ -15919,23 +16608,219 @@ back to the user to run and show the command; do not git commit or push (the use
   run (the feature store wasn't rebuilt just before scoring). Moot for actionable edges right now anyway
   (best_alpha=0 already zeroes them). The gate is working as designed (fail-safe observability).
 
-### 33.1 — Player playing-time probability model  ⬜
+### 33.1 — Player playing-time probability model  🟢 Tasks 1-3a DONE 2026-06-16 (P(start) table live; 3b live-serving ships with 33.6)
 **Goal:** Per roster player, P(starts today | healthy, vs opponent-SP handedness), point-in-time, from recent start-rate history + IL/transactions + platoon usage. Output a per-(game_pk, side, player) start-probability table, walk-forward for all history. Gates 33.3.
+
+**Data sources (scoped 2026-06-15 — FEASIBLE):**
+- **Target `did_start`:** `stg_statsapi_lineups` (long: game_pk × home_away × batting_order × player_id; a row = a STARTER) keyed on leakage-safe `official_date`. Coverage 2015+. (`stg_statsapi_lineups_wide` = slot-wide twin; SCD-2 `feature_pregame_lineup_state` adds 2026+ intraday.)
+- **Team-game spine (incl. TODAY's scheduled):** `mart_game_spine` (game_pk, game_date, game_year, home_team, away_team canonical, is_scheduled). Unpivot home/away → one row per (game_pk, team, side).
+- **Opponent SP handedness:** TRAIN on CONFIRMED starter `mart_starting_pitcher_game_log` (`pitcher_hand`, 2015+, 100%); SERVE on `stg_statsapi_probable_pitchers` + handedness, fallback to prior-year-vs-hand when rotation unannounced (~30% NULL).
+- **IL / health (point-in-time):** `feature_pregame_injury_status` SCD-2 (`player_id, is_injured, valid_from/valid_to`), coverage **2021-03-01+** (pre-2021 = treat healthy, no IL signal).
+- **Batter handedness + platoon priors:** `stand` (Statcast) → `batter_hand`; prior-season splits `mart_batter_vs_handedness_splits` (leakage-safe, game_year−1).
+
+**Plan (3 tasks, each independently shippable):**
+- [x] **Task 1a — leakage-safe start FACT (dbt).** `mart_player_game_starts` (NOT int_*; lives in mart/ next to the
+  pitcher analog `mart_starting_pitcher_game_log`): `mart_game_spine` unpivot ⋈ `stg_statsapi_lineups` → one row per
+  (game_pk, team, side, player_id) confirmed starter + opp_team + batting_order + position_code + is_pitcher_slot, keyed
+  on leakage-safe `official_date`. Actual-starts-only (candidate 0-rows built in 1b). **BUILT + verified 2026-06-16:**
+  465,408 rows / 25,856 games / 2,432 players / 2015-04-05→2026-06-15 / **9.00 starters per team-game** / **0
+  future-dated rows** (no scheduled leakage) / 14,260 pre-2022-NL pitcher-slot rows flagged. schema.yml tests
+  (not_null keys, accepted_values side); `dbt parse`/`compile` clean.
+- [x] **Task 1b — candidate panel (Python `build_playing_time_dataset.py`).** Per-team pivot + rolling on
+  `M.shift(1)` (strictly prior) → for each team-game, candidates = players who started ≥1 of the team's last 50 prior
+  games; attaches `did_start∈{0,1}` label, `start_rate_{10,25,50}` + `starts_{K}`, `team_games_in_window_50`,
+  `days_since_last_start`, point-in-time `is_injured` (merge_asof on injury SCD, 2021+). Grain (game_pk, side,
+  player_id). **Smoke-tested (synthetic): leakage-safe** (a call-up is NOT a candidate before its first start; regular
+  start_rate≈1.0). **HAND-OFF (Snowflake load + panel build, minutes):**
+  `uv run python betting_ml/scripts/build_playing_time_dataset.py` → writes `betting_ml/data/playing_time_panel_33_1.parquet`.
+  **v1 scope:** OVERALL start-rates only; the **vs-LHP/RHP platoon split is a documented fast-follow** — needs opposing-
+  starter handedness, which `mart_starting_pitcher_game_log` does NOT carry (derive from pitch `p_throws`).
+- [x] **Task 2 — P(start) model ADOPTED (model wins, 2026-06-16).** Walk-forward 2022-26: learned XGB beats the raw
+  rate decisively every year — **precision@k 0.802** (vs rate50 0.710, rate25 0.750), AUC 0.907 (vs 0.810), ECE 0.014
+  (vs 0.052), Brier 0.122 (vs 0.178). Δprecision@k +0.092 ≫ 0.002 gate → adopt. Edge = combining short/long windows +
+  `is_injured` + rest. Final model `betting_ml/models/playing_time/playing_time_model_33_1.pkl` (+ metrics.json).
+  **Headroom:** precision@k ceiling ~0.99 (candidate coverage); the ~0.20 gap is platoon/matchup lineup decisions ⇒
+  the deferred **vs-LHP/RHP split is the clear next lever** to push 0.80 higher (do after 33.3 shows the lift, or now).
+- [x] **Task 3a — leakage-free P(start) output table DONE + VERIFIED 2026-06-16.** `mart_player_start_probability`
+  written (1,124,634 rows; 909,653 walk-forward + 214,981 rate50-fallback for 2015-16). **Verified in Snowflake:**
+  calibration near-perfect (predicted≈actual every decile: 0.55→0.56, 0.93→0.93), and **Σ P(start) per team-game = 8.79
+  (median 8.92), matching actual captured starters 8.87** — the expected lineup has the right total mass for 33.3's
+  `Σ P·stat / Σ P` weighted average. corr(P, did_start)=0.701. `official_date` stored TIMESTAMP_NTZ (write_pandas-native;
+  33.3 casts ::date). **UNBLOCKS 33.3.**
+- [ ] **Task 3b — live serving (ships with 33.6).** Today's open games: extend `build_playing_time_dataset.py` to add
+  scheduled team-games (from `mart_game_spine`) as candidate-generating "open" rows, score with the final all-data model
+  (leakage-free — today is after all training), upsert today's P(start). Pairs with the probable-SP-handedness path.
+
+**Acceptance criteria:**
+- [ ] `int_team_game_starters` leakage-safe (every rolling/candidate join strictly `official_date <` the game; AST/SQL
+  assert no `<=`); covers 2015+ incl. today's scheduled games.
+- [ ] Start-probability table per (game_pk, side, player_id), walk-forward (no future leak), all seasons; IL-out players
+  get ~0; calibration + top-9 precision documented vs the raw-rate baseline (model must beat or match it to justify).
+- [ ] Point-in-time serving path handles unannounced rotation (probable NULL → prior-year-vs-hand fallback), never leaks.
+
+**Notes.** Pre-2021 has no IL signal (treat healthy). Mid-season trades: roster membership = recent appearances, so a
+traded player naturally drops from the old team's candidate set and enters the new team's once they appear. The raw
+rolling start-rate is a strong, well-calibrated P(start) for regulars; the model's job is the platoon/rest/IL edges.
 
 ### 33.2 — Rotation / probable-pitcher projection  ⬜ (opportunistic)
 **Goal:** Project the next starter from rotation cadence (5-man, days-rest, recent starts) for the ~7-14% of +1/+2-day games where the probable isn't yet announced. Lower priority — the same-day probable is already ~0% null; this only fills the look-ahead tail. Independent of the lineup stories.
 
-### 33.3 — Expected-lineup feature family (the core build)  ⬜
+### 33.3 — Expected-lineup feature family (the core build)  ✅ DONE 2026-06-16 (build pending)
 **Goal:** A dbt feature family of EXPECTED offense aggregates = Σ P(start)·player_stat over the roster — expected wOBA/xwOBA/K%/ISO, platoon splits (vs LHP/RHP), archetype-matchup vs the projected opposing starter, lineup-construction proxies. Point-in-time/walk-forward for ALL seasons. These are the Class-B replacements: a pre-lineup column that approximates its confirmed-lineup counterpart. Depends on 33.1 (+ 33.2 for the opp-SP).
 
-### 33.4 — Team box-score rolling aggregates (robust offense floor)  ⬜
+**Design (mirrors `feature_pregame_lineup_features` but swaps confirmed-9-slot `avg()` for P-weighted expectation):**
+- [x] **Part a — the expected-lineup MODEL (`dbt/models/feature/feature_pregame_expected_lineup.sql`, BUILT, run pending).**
+  Grain (game_pk, home_away). `expected_stat = Σ P(start)·stat / Σ P(start)` over candidates (`mart_player_start_probability`
+  source, 33.1), batter stats resolved by the SAME leakage-safe as-of carry-forward as the confirmed-lineup model (latest
+  rolling-stats row strictly < official_date). **IL subsumed** (P(start) already downweights injured players → no separate
+  injury-adjust). v1 columns: `exp_{woba,xwoba,k_pct,bb_pct,hard_hit_pct,barrel_pct,whiff_rate,chase_rate}_30d` + `_std`,
+  prior-season platoon `exp_*_vs_lhp/rhp`, `exp_lhb_count`/`exp_rhb_count`, `expected_lineup_mass` (Σ P, a confidence
+  signal), `n_candidates`. Registered `mart_player_start_probability` in sources.yml (betting). parse/compile/list clean.
+  **HAND-OFF:** `dbtf build --select feature_pregame_expected_lineup`. **v1 scope:** rolling + platoon (the bulk, no
+  opp-starter needed); the matchup families (vs-pitch-archetype / vs-cluster / bat-tracking) are a follow-on (need the
+  opposing probable starter; prior memories flag vs-cluster as low-edge + 24.7% coverage-gapped, Story 7.6).
+  **+ schema.yml tests added** (grain uniqueness, hard not_null on structural keys, `accepted_range` guards on
+  `expected_lineup_mass` 0–15 / `n_candidates` 1–60 / wOBA cols 0–2 [physically-valid ceiling, catches the date-corruption
+  blowup while tolerating the 4/51k small-sample early-season tail], warn-thresholded not_null on early-season-nullable
+  aggregates). Tests green (16 pass / 2 warn = expected 2015-platoon nulls). The official_date corruption bug was fixed by
+  storing it as VARCHAR(10) ISO in `mart_player_start_probability` (write_pandas mis-scales datetime64[ns] → TIMESTAMP_NTZ).
+- [x] **Validation gate (PASSED 2026-06-16).** Across 51,681 historical games: `corr(exp_woba_30d, confirmed avg_woba_30d)`
+  = **0.778** (xwoba 0.781, vs_lhp 0.784, vs_rhp 0.805), near-**unbiased** (expected 0.326 vs confirmed 0.331, bias −0.0047).
+  The P(start)-weighted expectation is a faithful stand-in for the confirmed-lineup average → 33.3 recovers the dropped
+  Class-B offense signal pre-lineup.
+- [x] **Part b — wired into the master assembly.** Added `home_expected_lineup`/`away_expected_lineup` CTEs +
+  `h_exp`/`a_exp` left joins to `feature_pregame_game_features_raw`; exposes the full expected family home_/away_ prefixed
+  (`home_exp_woba_30d`, `home_expected_lineup_mass`, `home_exp_woba_vs_lhp`, … 30 cols/side). The downstream public surface
+  `feature_pregame_game_features` is a `raw.*` passthrough wrapper → columns flow through automatically (no column-list edit).
+  parse clean. **HAND-OFF (build pending):** `dbtf build --select feature_pregame_game_features_raw+`.
+  (Hold the deploy — batch with the 33.5 retrained model per user.)
+
+### 33.4 — Team box-score rolling aggregates (robust offense floor)  ✅ ALREADY SATISFIED 2026-06-15
 **Goal:** Roster/team-level rolling offense from box-score data (team wOBA, runs/game, K%, last-N windows) — no lineup needed, simplest, partly already present (run_env / team-sequential). Cheaper than 33.3; ship as the first offense-recovery layer, with 33.3 as the per-matchup fidelity upgrade. Can run parallel to 33.1.
 
-### 33.5 — Retrain pre-lineup models on projection features + gate  ⬜
+**FINDING (2026-06-15) — already built; the spec UNDERSTATED what existed.** `mart_team_rolling_offense`
+(`dbt/models/mart/mart_team_rolling_offense.sql`, grain team×game_date, box-score-derived, NO lineup needed)
+already computes team wOBA/xwOBA/runs-per-game/K%/BB%/hard-hit/barrel/slugging at 7d/14d/30d/std windows, and
+`feature_pregame_team_features.sql` already EXPOSES the full `off_*` rolling family + `vs_lhp`/`vs_rhp` platoon
+splits + `team_sequential_woba` + RISP/runners-on situational wOBA. **All Class-A → already in the 33.0
+pre-lineup contracts** (verified against `feature_columns_pre_lineup_{run_diff,total_runs}_fitted.json`: 47 / 30
+team-offense Class-A cols respectively). So the morning model ALREADY has the robust box-score offense floor 33.4
+set out to build. **The 33.0 gap (run_diff +0.1062, totals +0.0261) exists DESPITE this** ⇒ the residual is the
+LINEUP-SPECIFIC signal (the dropped `*_avg_woba_30d` lineup-AVERAGED batter aggregates + the vs-cluster /
+vs-archetype / vs-starter-h2h matchup families), recoverable only by **33.3 (projected expected lineup), gated by
+33.1** — NOT by more team-level box-score features. **Decision: 33.4 CLOSED as already-satisfied; do NOT build a
+redundant team-offense family.** Only unwired bits = a few collinear secondary windows (`off_barrel_pct_7d/14d`,
+`off_slugging_7d/14d/std`, the `_14d` of k/bb/hard_hit) — a trivial dbt add, near-certain no-op (model already has
+7d+30d of each family); skip unless a later ablation shows a need. **Real offense-recovery lever = 33.1 → 33.3.**
+
+### 33.5 — Retrain pre-lineup models on projection features + gate  ❌ HOLD (all 3) 2026-06-16 — projection features add no signal
+**VERDICT (2026-06-16): all three targets HOLD — the 33.3 `exp_*` projection features do NOT beat the 33.0 floor.**
+home_win pooled Δ +0.0003 Brier (no-op, 2% gap recovery); total_runs pooled Δ +0.0029 MAE (slightly WORSE, −40%);
+run_diff pooled Δ −0.0075 MAE (right direction, 2026 corroborates −0.0120, 11% recovery) but does NOT clear the 0.02
+noise floor or reach significance (CI [−0.0198,+0.0051]). The `exp_*` family is a faithful *reconstruction* of the
+confirmed lineup (corr ~0.78) but not *additive signal* over the Class-A team-offense features — a P(start)-weighted
+roster average is a noisier proxy of something already represented at team level (3rd confirmation of team-level
+dominance: [[project_30_2_bayesian_leverage_closed]] + weather/OAA). **All three keep the 33.0 floor
+(`pre_lineup_v1`); registry unchanged.** Only faint lead: run_diff may strengthen once full-2026 data tightens the
+estimate — revisit opportunistically (~Oct), not now. The `*_proj` artifacts stay on the shelf. **Gate worked: caught a
+non-improvement before shipping a regression.** ⇒ 33.6 serves the 33.0 floor (no proj); 33.7 decides if the thread fully closes.
 **Goal:** Retrain the pre-lineup challengers (from 33.0) with the 33.3/33.4 projected features; measure lift vs the 33.0 floor AND vs the post-lineup champion on the honest-2026 surface; promote per the Case-3 gate (`promotion_gate.py`). Eval must be point-in-time (projected features, not actuals). Depends on 33.3/33.4.
 
-### 33.6 — Serving + product surface  ⬜
-**Goal:** Wire the projected features into the morning serve so the pre-lineup model uses them; re-verify live skill (`honest_live_skill.py`) lifts toward the post-lineup ceiling. Optionally expose projected lineups/matchups in the UI (the product differentiator — hand the UI half to the app session). Depends on 33.5.
+**Build (2026-06-16):**
+- [x] **Step 1 — expanded contracts.** `build_pre_lineup_proj_contracts_33_5.py` (instant, ran): appends the 56-col Story-33.3
+  `exp_*` family (home_/away_) to each 33.0 Class-A contract → `feature_columns_pre_lineup_<target>_proj.json`:
+  **home_win 156→212, run_diff 126→182, total_runs 89→145**. The 33.3 exp_* cols are Class-A by construction but the audit
+  cannot pick them up (net-new, not live-contract members; would mis-classify as Class-B until the live P(start) table ships
+  with 33.6), so they're appended explicitly. **33.0 base contracts left UNTOUCHED** = the deployed floor + gate baseline.
+- [x] **Step 2 — trainer generalized.** `train_pre_lineup_30_8.py` gained `--variant {base,proj}` (base = unchanged 33.0).
+  `proj` trains the SAME champion recipe on the expanded contract, writes `*_proj` artifacts + `_fitted_proj.json` (and
+  `*_proj` S3), so nothing 33.0 is overwritten. **HAND-OFF (one --target each, ~minutes):**
+  `uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target {home_win,run_diff,total_runs} --variant proj`.
+- [x] **Step 3 — the gate.** `pre_lineup_proj_gate_33_5.py` (new): controlled 3-arm ablation (post champion / pre 33.0 floor /
+  proj), walk-forward per-game scores (brier / abs_error), runs `promotion_gate.evaluate_promotion` with **champion=pre floor,
+  challenger=proj** (PROMOTE iff proj clears the noise floor + paired-bootstrap-sig + no completed-season regression; 2026 =
+  corroboration). Reports honest-2026 lineup-gap RECOVERY (% of the floor→post gap proj closes). **HAND-OFF (one --target each):**
+  `uv run python betting_ml/scripts/pre_lineup_proj_gate_33_5.py --target {home_win,run_diff,total_runs}`.
+- [ ] **Promotion (only on a PROMOTE verdict).** Repoint `model_registry.yaml` `pre_lineup` → the `*_proj` artifacts +
+  `pre_lineup_feature_columns_path` → `_fitted_proj.json`, bump `pre_lineup_model_version` v1→v2; dev-verify a morning
+  predict_today; batch-ship with the deploy. A HOLD keeps the 33.0 floor (`pre_lineup_v1`) deployed.
+
+### 33.6 — Serving + product surface  🟢 SERVING LIVE via 33.0 (2026-06-16) — proj moot (33.5 HOLD)
+**Goal (original):** Wire the projected features into the morning serve so the pre-lineup model uses them; re-verify live skill (`honest_live_skill.py`) lifts toward the post-lineup ceiling. Optionally expose projected lineups/matchups in the UI. Depends on 33.5.
+
+**REDUCED SCOPE (2026-06-16): 33.5 promoted nothing → there are NO projected features to wire.** The morning serving of
+the **33.0 pre-lineup floor** (`pre_lineup_v1`) is already LIVE: the `predict_today` serving split (`_use_pre_lineup =
+not lineup_confirmed and not is_backfill`) fires on the morning Dagster op (`predict_today_morning` → `--prediction-type
+morning`, no `--lineup-confirmed`); the registry `pre_lineup` entries point to the FLOOR artifacts
+(`xgb_classifier_pre_lineup_2026.pkl` / `ngboost_pre_lineup_2026.pkl`) + floor fitted contracts (156/126/89, story=33.0,
+zero `exp_*` leakage); deployed in the 33.0 push. So Epic 33's serving deliverable is SATISFIED by 33.0.
+- [x] Verified registry → floor (NOT `*_proj`); fitted contracts intact 156/126/89; serving split present + correct.
+- [x] **Pre-flight PASSED (2026-06-16, dev).** `predict_today.py --prediction-type morning --no-log-snowflake` →
+  `[33.0 SERVE-SPLIT] tier=PRE-LINEUP pre_lineup(89/126/156)`, `[FEATURE-ALIGN] 0 absent(structural)` all 3 targets, no
+  CONTRACT-GUARD error, 30.15 attribution 15/15, 15 rows written to `betting_ml_dev` as `model_version=pre_lineup_v1`.
+  The 33.3 `exp_*` store columns are cleanly dropped by the contract reindex (the verification target — CLEARED).
+  NOTE: the run also fired SERVING-GUARD + 30.13-freshness + best_alpha=0 abstentions, but these are NOT 33.6 defects —
+  they're OFF-CYCLE artifacts (ran 08:13 UTC before today's feature-store + EB-bullpen rebuild → coverage 0.69<0.70 →
+  intraday fallback → degraded core), plus the system-wide A2.5 `best_alpha=0` edge-guard (model==market right now,
+  suppresses actionable edges on ALL serves until re-tuning lifts alpha). `_serving_degraded` (predict_today.py:537)
+  deliberately exempts normal DENSE morning pre-lineup serves; the real morning Dagster job builds the store + EB
+  BEFORE `predict_today_morning` (30.13 gate = fail-safe backstop).
+- [ ] **Live-skill tracking (ongoing, not a deploy gate):** `honest_live_skill.py` accrues morning pre_lineup_v1 vs
+  realized outcomes over live days → confirm live skill is non-zero (the Epic 33 raison d'être: fix [[project_epic30_3_status]]
+  morning zero-skill). This is a multi-day accrual, not a pre-deploy check.
+- [ ] UI exposure of pre-lineup vs post-lineup tier = app-session deliverable (hand off).
+
+### 33.7 — Marginal value of the ACTUAL lineup over the projection (confirmed-vs-projected swap)  ✅ DONE 2026-06-16 — PROJECTION ≈ ACTUAL (thread CLOSED)
+**VERDICT: all 3 targets HOLD — the real lineup does NOT beat the projection beyond noise ⇒ Epic 33's projection thread is
+CLOSED.** Harness `betting_ml/scripts/lineup_actual_vs_projected_33_7.py` (sources `exp_*` from the standalone
+`feature_pregame_expected_lineup` table + merges by game_pk — robust to `game_features` rebuild-clobber; both arms = 33.0
+floor + 52-col lineup-offense block, differing ONLY confirmed `avg_*` vs projected `exp_*`). Pooled Δ (confirmed−projected,
+completed folds): **home_win +0.0002** (perfect stand-in), **total_runs −0.0044** (CI crosses 0), **run_diff −0.0162**
+(paired-bootstrap significant but does NOT clear the 0.02 noise floor AND 2026 REGRESSES +0.0219 — a one-season 2025 effect
+that reverses). Chained with 33.5 (projected ≈ floor): **floor ≈ projected ≈ confirmed** — the lineup-offense block (real
+OR projected) adds ~zero over the team-level floor ⇒ the Bayesian "projected=prior → actual=posterior" idea is MOOT.
+Follow-up: optionally REVERT 33.3 Part-b (drop `exp_*` from `feature_pregame_game_features_raw`) to keep the store clean —
+nothing consumes them and a scheduled rebuild on the deployed pre-33.3 project already clobbers them; the standalone
+`feature_pregame_expected_lineup` table + validation stay as the record. **PIVOT (operator 2026-06-16): since "model the
+game better" is exhausted, the remaining edge is in the MARKET-INTERACTION layer → Epic 12.4 CLV meta-model + 12.10′
+steam/sharp-money (market movement = the info our market-blind morning model can't capture).**
+
+<details><summary>Original 33.7 spec (resolved above)</summary>
+
+**The question (and why it matters now).** 33.5 showed the projected `exp_*` aggregates don't add signal **over the
+Class-A team-offense features** (home_win no-op; total_runs slightly worse; run_diff pending). 33.7 asks the dual,
+sharper question: holding the model and EVERYTHING else fixed, how much does knowing the **real** lineup beat the
+**projection**? This is the diagnostic that decides whether Epic 33's projection thread keeps going or closes — and
+it gates the "Bayesian lineup melding" idea (projected=prior → actual=posterior). A large confirmed-over-projected
+gap ⇒ lineups genuinely matter and a better projection (or uncertainty propagation) is a real lever; a gap inside
+the noise floor ⇒ the projection is **as good as the real lineup for the model**, the morning pre-lineup product is
+near-optimal on offense, and the projection thread (and the Bayesian elaboration) is **moot**.
+
+**Clean isolation (the whole point — do NOT confound with the other Class-B families).** Two arms, IDENTICAL tuned
+HP, IDENTICAL feature set EXCEPT the lineup-averaged batter-offense block, which has a 1:1 confirmed↔projected map by
+construction (`avg_woba_30d`↔`exp_woba_30d`, `avg_woba_vs_lhp`↔`exp_woba_vs_lhp`, … all 28/side):
+  - **confirmed arm** = Class-A (33.0 pre-lineup contract) **+ the confirmed `avg_*` lineup block** (what a post-lineup
+    serve actually sees).
+  - **projected arm** = Class-A **+ the `exp_*` projected block** (= the 33.5 proj contract).
+  - The ONLY difference between arms is confirmed-vs-projected lineup offense. EXCLUDE the other Class-B matchup
+    families (archetype / vs-cluster / sequential / bat-tracking) from BOTH arms so they can't confound — this isolates
+    the *lineup-offense* delta specifically, not "all of post-lineup."
+  Train each walk-forward (controlled HP, same as `pre_lineup_proj_gate_33_5.py`), score per-game on the completed
+  folds + honest-2026.
+
+**Verdict (MEASUREMENT, not a promote).** Feed per-game scores to `promotion_gate.evaluate_promotion` with
+**champion = projected arm, challenger = confirmed arm** → the pooled Δ = the *value of the actual lineup over the
+projection*. Clears the noise floor + paired-bootstrap-significant ⇒ the real lineup carries information the
+projection misses (≈ how much the morning product gives up by not waiting; and the green light for Part B). Inside the
+floor ⇒ **CLOSE the projection thread**: confirm the 33.0 floor is the offense-optimal morning model and STOP
+(consistent with [[project_30_2_bayesian_leverage_closed]] + the weather/OAA closure — team-level features dominate;
+player-lineup resolution doesn't move these point models).
+
+**Scope guard.** New script (e.g. `lineup_actual_vs_projected_33_7.py`) reusing the `pre_lineup_baseline_30_8` /
+`pre_lineup_proj_gate_33_5` machinery; one `--target` per invocation (hand-off). Point-accuracy metrics only
+(brier / mae); do NOT build the Bayesian melding here — 33.7 is the gate that decides whether it's worth specifying at all.
+
+</details>
 
 **Risks:** (1) projection error propagates into the model — but a noisy projection >> a constant impute, so net positive vs today; (2) point-in-time discipline is unforgiving (the make-or-break); (3) Epic-sized (multi-week) — sequence so each story is independently shippable + measurable. **Honest framing:** this is the right way to make a strong morning model, but it is NOT a quick win — the floor (33.0) ships fast; the high-fidelity projection (33.1→33.3→33.5) is the multi-week investment.
 
@@ -16661,15 +17546,16 @@ NOT manufacture a new edge. Parent: [[project_layer3_signal_leakage]] + Story 30
 
 ---
 
-### 30.15 — Per-pick feature attribution (explainable picks)  `[Home: Epic 30 / serving + product]`  🟢 SERVE-SIDE IMPLEMENTED 2026-06-15 (exact SHAP, all 3 targets) — pending dev-run verify + app render
+### 30.15 — Per-pick feature attribution (explainable picks)  `[Home: Epic 30 / serving + product]`  ✅ COMPLETE 2026-06-16
 
-**Implementation status (2026-06-15).** Serve-side MVP built + unit-tested. The NGBoost
-"feasibility spike" RESOLVED TO EXACT SHAP — no approximation needed: NGBoost models the loc
-parameter as an additive DecisionTreeRegressor ensemble, and SHAP is additive over additive
-models, so summing per-stage TreeSHAP (scaled by `−lr·scaling_k`, scattered to each stage's
-column-subsample) gives EXACT loc-SHAP. Verified Σcontrib = loc − intercept to machine precision,
-and the full n=1000 ensemble explains a 15-game slate in **0.10s** (negligible at serve time). So
-home_win AND run_diff AND total_runs all ship exact local SHAP — not just home_win.
+**Implementation status (2026-06-16).** Fully shipped — serve side + consumer side + serving store mirror.
+Serve-side (2026-06-15): The NGBoost "feasibility spike" RESOLVED TO EXACT SHAP — no approximation needed:
+NGBoost models the loc parameter as an additive DecisionTreeRegressor ensemble, and SHAP is additive over
+additive models, so summing per-stage TreeSHAP (scaled by `−lr·scaling_k`, scattered to each stage's
+column-subsample) gives EXACT loc-SHAP. Verified Σcontrib = loc − intercept to machine precision, and
+the full n=1000 ensemble explains a 15-game slate in **0.10s** (negligible at serve time). So home_win
+AND run_diff AND total_runs all ship exact local SHAP — not just home_win.
+Consumer side (2026-06-16): Cortex narrative, UI render, cache guards, serving store mirror all complete.
 - **`betting_ml/utils/pick_explanations.py`** (NEW): `home_win_shap` (TreeExplainer on the
   `PlattCalibratedXGBClassifier.xgb_classifier`; margin space, monotone through Platt so sign +
   ranking hold), `ngboost_loc_shap` (exact additive TreeSHAP + additivity self-check → fail-safe
@@ -16681,11 +17567,22 @@ home_win AND run_diff AND total_runs all ship exact local SHAP — not just home
   threads `pick_explanations` into `_write_predictions_to_snowflake`, persists JSON text to a NEW
   unbounded `pick_explanation VARCHAR` column on `daily_model_predictions` (DDL + INSERT + idempotent
   `ADD COLUMN IF NOT EXISTS`). `served_tier` = post_lineup/pre_lineup from `lineup_confirmed`.
+- **`scripts/generate_pick_narratives.py`** (NEW): batch Cortex COMPLETE over `pick_explanation`
+  rows lacking `pick_narrative`; writes back to Snowflake. One-time per (game_pk, score_date).
+- **`app/backend/routers/picks.py`** (MODIFIED): `_EXPLANATION_QUERY` added; `pick_explanation` +
+  `pick_narrative` returned in `GameDetailResponse`. Cache read guard: only serve PG/S3 cache when
+  `pick_explanation is not None` — prevents stale permanent entries from locking out backfill.
+  Cache write guard: permanent only when `_is_final AND _has_expl`.
+- **`scripts/write_serving_store.py`** (MODIFIED): `_EXPLANATION_BATCH` mirrors both columns into
+  Railway PG game-detail blobs. Same permanent-cache guard (`_has_expl`) applied.
+- **`frontend/components/pick-explanation.tsx`** (NEW): `PickExplanationSection` (full driver bar chart
+  grouped by family), `MiniDriverList` (compact top-3 for home card), `ServedTierBadge`.
+- **`frontend/app/picks/[game_pk]/page.tsx`** (MODIFIED): "Why this pick" narrative + "Model reasoning"
+  collapsible driver chart below the pick banner.
+- **`frontend/app/page.tsx`** (MODIFIED): featured pick card shows narrative + `MiniDriverList`; static
+  `ai_summary` is suppressed when `model_narrative` is present.
 - **Honesty guard:** every payload carries `basis="model_reasoning"` + a disclaimer string ("explains
   the model's reasoning, not a betting edge / expected profit"); no win-rate framing.
-- **⏳ PENDING:** (1) dev-schema verify run (hand-off below); (2) mirror the column into the A2.12
-  Railway PG serving store; (3) app-side render (separate session). The served-tier AC is PARTIAL —
-  serve TIMING is tracked now; the actual pre-lineup MODEL swap composes once Epic 33.x wires it.
 
 **▶ Dev-run verify (hand-off — Snowflake write, run WITHOUT `TARGET_ENV=prod` so it lands in the dev schema):**
 ```
@@ -16732,7 +17629,7 @@ can show "why this pick."
   family rescue; reuses `influence_report.py`'s `_infer_feature_group`. Pitching/bullpen labels phrased as
   "…wOBA allowed" (not "quality") so a raw-feature SHAP direction never reads backwards.
 - [x] **Storage:** unbounded `pick_explanation VARCHAR` (JSON text) on `daily_model_predictions` (DDL + INSERT +
-  idempotent ADD COLUMN). **Still TODO:** mirror into the A2.12 Railway PG serving store (app-prompt below).
+  idempotent ADD COLUMN). Mirrored into Railway PG serving store via `write_serving_store.py` `_EXPLANATION_BATCH` (2026-06-16).
 - [x] **Honesty guard:** every payload carries `basis="model_reasoning"` + disclaimer; no win-rate/profit framing
   ([[feedback_no_auto_betting]] + FAQ rule).
 
@@ -16742,11 +17639,13 @@ can show "why this pick."
 - [x] Human-label dictionary covers every feature that can appear in a top-N list (generated fallback guarantees it).
 - [~] Attribution reflects the served tier — serve TIMING tracked now (`served_tier` ∈ pre_lineup/post_lineup/
   backfill); the actual pre-lineup MODEL swap composes once Epic 33.x wires the morning model.
-- [ ] **Available in the A2.12 serving store for the frontend; no edge/win-rate framing.** ← APP SESSION (below).
+- [x] **Available in the A2.12 serving store for the frontend; no edge/win-rate framing.** App-side render
+  complete 2026-06-16; cache guards in `picks.py` + `write_serving_store.py` ensure permanent cache never
+  locks out explanation data after backfill.
 
-**Sequencing/notes:** serve-side DONE 2026-06-15; the remaining half is APP-SESSION work (LLM narrative + UI).
-Placed in Epic 30 (serving/transparency) because it spans ALL picks. Composes with Epic 33 (the morning
-explanation will reflect the 33.x pre-lineup model once wired).
+**Sequencing/notes:** Serve-side DONE 2026-06-15. Consumer side (Cortex narrative + UI render + cache fix +
+serving store mirror) COMPLETE 2026-06-16. Placed in Epic 30 (serving/transparency) because it spans ALL
+picks. Composes with Epic 33 (the morning explanation will reflect the 33.x pre-lineup model once wired).
 
 ---
 
@@ -17192,6 +18091,27 @@ WebSocket/SSE** feed. Two distinct prizes, deliberately separated by risk:
 - **Infra reality:** a persistent socket needs an **always-on consumer** — GH Actions cron + Lambda are
   ephemeral and CANNOT hold the connection; this requires a small always-on service (ECS/Fargate/VM or a
   long-lived Dagster daemon), which is the main new operating cost the spike must justify.
+
+**⭐ ADDENDUM (2026-06-16) — ELEVATED by the 12.3.3/12.3.4 findings; new streaming options + corrected key facts:**
+- **WHY NOW (the elevation):** 12.3.4 proved the polled history is **unrecoverable** for movement (daily-grade, ~6-wk lagged to
+  2026-05-09, and **no Bovada** in the archive), and 12.3.3 showed polling **gaps during incidents** (the May-27 quota lapse cost
+  ~3 weeks of density with no way to backfill). ⇒ streaming is not just "cheaper/fresher" — it is the **ONLY** path to reliable
+  dense Bovada movement, and every polled day that gaps is gone forever. This is now the highest-leverage capture work.
+- **Billing model CONFIRMED cost-effective (OpenAPI `x-credit-cost`):** SSE/WS odds streams are **connection-based, not
+  per-message** (`/v1/sse/odds/{sk}` has empty `x-credit-cost`; `/v1/sports/{sk}/live/sse` = 5 cr at *connect*). One persistent
+  connection ≈ flat ~handful of credits, then continuous data — vs polling's per-call burn. On 1M credits the cost is **infra
+  (one always-on consumer), not credits.**
+- **NEW capture option — `/v1/odds-drop/{sport_key}` (Business+ SSE, move-only):** filters the broadcast to **line-MOVES only**
+  above a customer-set threshold (American cents); pushes `{event_id, bookmaker, side, prev, new, delta, direction, timestamp}`
+  the instant a side crosses. Multi-sport: `/v1/odds-drop/all`. **This is a purpose-built steam/CLV feed** — lighter to store than
+  the full `odds` stream and exactly the movement signal 12.4 needs. **Most cost-effective option = `odds-drop` for the thesis**
+  (only the moves), with full `/v1/sse/odds/baseball_mlb` (or `wss://…/v1/ws/odds/baseball_mlb`) if we want every book's full state.
+- **Companion diagnostics (cheap REST, ties to 12.3.6):** `/live/source-health` (1 cr) = detect a feed going dark in real time —
+  the monitor that would have caught the May-27 thinning immediately; `/live/disagreement` (5), `/live/book_latency` (5), `consensus` (3) = meta-features.
+- **Key-fact CORRECTION:** the 2026-06-11 "0 usage / no `x-requests-*` headers" was NOT just a metering artifact — 12.3.3 found
+  header logging genuinely broke after 2026-06-04 AND a real quota crunch (100k→500) ran May-27→early-June. A **live billed call
+  2026-06-16** with the `.env` key (`598f3d…b04c`) returns `x-requests-remaining 958,817 / used 41,183 / quota 1,000,000` ⇒ that
+  key IS Business now. Task-1 still must confirm the **prod-secret** key equals this one before the WS connect.
 
 **Tasks (Phase 1 — spike, then conditional build):**
 - [ ] **Confirm the prod key is Business-tier.** Cost gate already cleared (account IS Business, confirmed
@@ -17699,6 +18619,44 @@ cheap base-learner lever before conceding the gap is structural.
 
 ---
 
+### Story 31.5 — Rolling within-season Stuff+ / Location+ as a starter command-quality variance signal  `[Home: Epic 31]`  ⬜ NEW 2026-06-16 · LOW / GATED
+
+**Status:** ⬜ NEW 2026-06-16. **LOW priority. GATED** behind Story 27.6's regime read (only pursue if 27.6
+finds the 2026 gap is signal-shaped, not a pure level shift full-season data will fix) AND framed **AGAINST
+Epic 31's verified prior** ("the orthogonal data classes are already ingested + were pruned as noise"). This
+is a calculated one-shot bet, not a program.
+
+**Context:** Epic 29.1 found the totals model is level-unbiased but per-game variance-**deficient** — it knows
+the average but can't separate a 6-run game from an 11-run game. The one untested, **pre-lineup-compatible**
+candidate for a game-specific variance carrier is recent starter **command/stuff** quality (the starter is
+known pre-lineup). **CAVEAT (be honest about the narrow residue):** season-level Stuff+ is ALREADY in
+`feature_pregame_starter_features`, and rolling whiff%/CSW%/velocity/arsenal-drift windows are too — so the
+marginal NEW signal is only **within-season ROLLING Stuff+/Location+ (recent command trend)**, distinct from
+the season-level Stuff+ + rolling outcome metrics already present. That is a thin sliver against a skeptical
+prior; treat a null result as confirmation the variance gap is information-structural (→ wait-for-October +
+Epic 32), not a failure.
+
+**Goal:** Test whether a rolling (last-N-start) Stuff+/Location+ command-quality feature adds game-specific
+variance signal the existing season-level Stuff+ + rolling outcome metrics don't already carry.
+
+**Tasks:**
+- [ ] Derivability check FIRST: is rolling within-season Stuff+/Location+ available at the start grain?
+  (`ingest_fangraphs_stuff_plus.py` is season-level; a Statcast-per-pitch proxy may be derivable.) If not
+  cheaply derivable, STOP and document — do not build a bespoke pitch-model for this.
+- [ ] If derivable: build a rolling Stuff+/Location+/command-trend feature (last 3–5 starts); add to a
+  challenger contract on top of the 30.x-cleaned champion.
+- [ ] Single ablation vs the champion on the honest 2026 surface, judged **accuracy-first** (Epic 30
+  evaluation order + `promotion_gate`): must beat the champion on accuracy-to-truth (effect size +
+  no-regression), market-edge secondary.
+- [ ] Verdict: promote if it clears; else document as confirming the variance gap is information-structural.
+
+**Acceptance criteria:**
+- [ ] Derivability finding (rolling Stuff+/Location+ available at start grain, or not).
+- [ ] If built: accuracy-first ablation vs champion; promote/defer.
+- [ ] If not pursued: documented reason (gated by 27.6 / not cheaply derivable / Epic 31 prior).
+
+---
+
 # Epic 32 — Generative Per-Side Totals (Decomposed Scoring Model)
 
 **Status:** 🔬 RESEARCH / DEFERRED — placeholder, opened 2026-06-15. **Not scheduled; documents an architecture we may eventually investigate.** Do NOT start without an explicit go + clearing the gates below.
@@ -17721,4 +18679,128 @@ cheap base-learner lever before conceding the gap is structural.
 **Sketch (for whoever picks this up):** per-side count model (start simple — NegBin GLM / gradient-boosted count, or a small hierarchical Bayesian per side reusing the Epic-16/17 machinery) → conditional on the as-of Track-B inputs for that side → convolve home⊕away (numerical or MC) → total distribution → price every line. Validate per-side calibration BEFORE convolving (a miscalibrated side poisons the total). Benchmark vs market line + the monolithic v5 on point-accuracy AND distribution calibration.
 
 **Sequencing:** sits *behind* the 31.0 → 31.1 → 30.2 chain. If 30.2 closes the variance gap on the monolithic model, Epic 32 may never be needed — that's the cheaper win to try first. Kept here so the option isn't lost.
+
+---
+
+# Epic 34 — Parlay Recommendation System  ⬜ SPECCED 2026-06-16
+
+**Origin:** Beta-user feature request (2026-06-16) — users want parlay recommendations, not just single-game picks.
+
+**Read this first — the honest economics of parlays (binds the whole epic).** A parlay multiplies the legs' odds *and* compounds the book's vig: a 3-leg parlay of −110 legs pays ~+595 but the fair price (if each leg were a true coin-flip-with-vig) is worse, so the house edge on a 3-leg parlay is roughly **1 − (1−v)³ ≈ 3× a single bet's hold**. That means a parlay built from legs that are *individually* break-even-or-worse is **strictly more −EV than betting them straight**. We already have **four independent H2H no-edge confirmations** and totals is **product-only / no main-line edge** (`[[project_epic11_status]]`, Story 29.1, `[[project_arch_review_backlog]]`). So a naive "combine today's picks into a parlay" recommender would actively lose users money and we must not ship it. There are exactly **two** defensible sources of parlay value, and the epic is built around them:
+
+1. **Cross-game stacking of individually +EV legs.** If — and only if — we have legs that each beat the market (independent legs → EVs multiply, so a parlay of two genuine +EV legs is +EV). Today the *only* candidates are the **28.2/28.6 conviction-gate H2H** signal (forward-test pending, small sample) and **future prop edges** (Epic 24 — prop markets are softer than game markets, the most likely place real edge exists). Until at least one such source is live + forward-validated, cross-game parlay recommendations have no honest basis.
+
+2. **Same-game correlation mispricing (SGP).** Books price same-game-parlay legs with a correlation discount; if **our joint model's** true correlation differs from the **book's implied** correlation, that gap is edge — independent of whether either single leg beats the market. Example: home win and "over" are positively correlated through a home blowout; if the book under-credits that correlation, the SGP is underpriced. This is the structurally most interesting path **but** it needs two things we don't have yet: a **joint outcome distribution** (Epic 32 gives the joint over (home_runs, away_runs) → both winner and total fall out of it; prop×prop needs a joint prop model) **and the book's actual SGP prices** (a data gap — see 34.2).
+
+**Therefore the epic ships value in honest order:** a *decision-support calculator* first (tells users the truth about any parlay they're considering — true vs implied probability, +EV or not — which is useful even with zero model edge), then the data + correlation infrastructure, then an actual *recommender* gated on a live edge source.
+
+---
+
+## Dependency analysis — what must exist before a credible parlay *recommender*
+
+| Capability | Provided by | Status | Why it's required |
+|---|---|---|---|
+| Per-leg model probabilities (h2h, totals) | Epic 11 / Layer-3 totals, `predict_today` | ✅ exists (but no straight-bet edge) | Legs need a calibrated P(win). Totals is product-only — usable for the *calculator*, not as an edge leg. |
+| Per-leg **edge** source (≥1 market that beats the line) | 28.6 conviction H2H (forward-test) and/or Epic 24 props | 🔶 28.6 shadow / 🔒 24 not built | Without ≥1 +EV leg type, cross-game parlay recs have no basis. **Hard gate for the recommender (34.3).** |
+| Serving honesty (live skill ≈ offline) | Epic 30 (30.3/30.6) | 🔶 in progress | A zero-skill live model (`[[project_prod_model_audit_jun2026]]`) makes every leg probability untrustworthy. Recommender must wait on Epic 30. |
+| Prop legs (beyond h2h/totals) | Epic 24.1 / 24.2 | 🔒 not started | Meaningful parlays need a leg inventory; props are also the softest market = best edge candidate. |
+| **Same-game** joint distribution (for SGP correlation) | Epic 32 (joint home/away runs) + a joint prop model | 🔬 deferred | Honest SGP correlation between h2h and totals legs of the same game. Pairwise historical correlation (22.1) is the cheaper approximation. |
+| Bet-pair **correlation** estimates (cross-game/same-day) | Epic 22.1 | ⬜ specced | Even cross-game legs can correlate (same division/weather); needed for honest combined variance + staking. |
+| Book **SGP / parlay pricing** data | Parlay API — **NOT confirmed available** | ❓ data gap (34.2) | You cannot measure SGP mispricing without the book's SGP price. `/odds` gives straight ML/totals/props only; no SGP endpoint surfaced in the Epic-0 mapping. Cross-game parlay odds *can* be computed (product of decimal odds); **SGP odds cannot** — they must be ingested. |
+| Parlay **staking** (parlay Kelly) | Epic 22.2 (extend) | ⬜ specced | Parlays are higher-variance, lower-probability; needs its own Kelly treatment, not the single-bet fraction. |
+| Permission gate for parlays | Epic 19 / 24.2 (extend) | ✅/🔒 | Decide which recommended parlays qualify to surface. |
+| App surface | A0.4.x frontend + `/picks` API | ✅ pattern exists | Where users see/build parlays. |
+
+**Critical-path summary:** the **calculator (34.1)** depends only on things that exist today (per-leg probabilities + a correlation approximation). The **recommender (34.3)** is gated on **Epic 30 (serving honesty) + at least one live edge source (28.6 forward-validated OR Epic 24 props)**. **SGP edge** additionally needs **34.2 (book SGP pricing ingestion)** and ideally **Epic 32 / a joint prop model**.
+
+---
+
+## Stories
+
+### 34.1 — Parlay decision-support calculator (the honest MVP) ⬜
+
+**Goal:** A "build-your-own-parlay" tool. The user selects legs (any combination of today's h2h / totals / prop markets); we return the **true combined probability** (from our models + correlation adjustment), the **book's implied probability** (from the parlay odds), the **EV**, and a plain-language verdict ("This parlay is −EV: the book pays $X but fair value is $Y"). This ships value with **zero model edge required** — it tells beta users the truth about parlays and quietly surfaces the rare +EV correlated combos.
+
+**Tasks:**
+- [ ] `compute_parlay(legs: list[Leg]) -> ParlayQuote` in `betting_ml/utils/parlay.py`. For independent (cross-game) legs: combined P = Π pᵢ; for **same-game** legs apply a correlation adjustment — start with the Epic 22.1 pairwise historical correlation (or a documented constant prior, e.g. h2h⊕totals ρ≈+0.2 from blowout co-occurrence) until Epic 32's joint distribution is available; clearly stamp `correlation_source ∈ {joint_model, historical_pairwise, prior_constant}`.
+- [ ] Combined book odds: product of decimal odds for cross-game; for SGP, use the ingested book SGP price (34.2) if available, else mark `sgp_price_unavailable` and refuse to score (do not silently treat an SGP as independent — that's the exact mispricing we'd be hiding from the user).
+- [ ] EV = combined_true_P × (decimal_odds − 1) − (1 − combined_true_P); return `is_positive_ev`, `true_prob`, `implied_prob`, `edge`, and a `verdict` string.
+- [ ] Honesty guardrail: if any leg's market has no demonstrated edge (totals, non-conviction h2h), the verdict text says the leg is "fair-value / no edge" so a +EV readout can only come from genuine correlation mispricing, never from over-trusting a no-edge straight leg.
+
+**Acceptance:** given a set of legs, returns true prob / implied prob / EV / verdict; same-game legs use a correlation adjustment (not naive independence) with the source stamped; SGP legs without an ingested book price are refused, not faked.
+
+### 34.2 — Book SGP / parlay price ingestion (gated; data-feasibility first) ⬜🔒
+
+**Goal:** Determine whether our book(s) expose same-game-parlay prices via the Parlay API (or any source) and, if so, ingest them. **Without this, SGP mispricing cannot be measured** — it's the hard prerequisite for any SGP edge.
+
+**Tasks:**
+- [ ] **Feasibility spike first:** probe the Parlay API for any SGP/parlay-pricing endpoint (the Epic-0 mapping found `/odds`, `/ev`, `/consensus`, `/props`, `/arbitrage`, `/line-movement` — none confirmed to carry SGP prices). Document go/no-go.
+- [ ] If available: ingestion + a `mart_sgp_prices` (or extend odds marts) keyed to `(game_pk, leg_set, book)`; if not available: document the dead-end and **close the SGP path** — cross-game-only recommender remains viable.
+
+**Acceptance:** explicit data-availability verdict; if available, SGP prices land in a queryable mart; if not, SGP scope is formally closed with the reason.
+
+### 34.3 — Correlation-aware +EV parlay recommender (gated on a live edge source) ⬜🔒
+
+**Goal:** Search the space of qualifying legs for **+EV** parlays and recommend them. **Hard gate:** does NOT start until (a) Epic 30 serving honesty is confirmed AND (b) ≥1 leg market is live-edge-validated (28.6 conviction H2H forward test passed, OR Epic 24 props showing edge). Absent an edge source this can only produce −EV recommendations and must not ship.
+
+**Tasks:**
+- [ ] Enumerate candidate legs from validated-edge markets only; bound the combinatorial search (≤N legs, prune −EV partials early).
+- [ ] Score each candidate parlay via 34.1; rank by EV with a correlation-adjusted variance penalty (reuse 22.1/22.2).
+- [ ] Parlay permission gate (extends Epic 19/24.2): min per-leg edge, max legs, min combined P, correlation cap.
+- [ ] Daily recommended-parlay output (write to a predictions table; surface via the alert/picks path). **MANUAL placement only** (`[[feedback_no_auto_betting]]` — US, all bets manual).
+
+**Acceptance:** recommends only parlays whose legs come from edge-validated markets; every recommendation is +EV after vig AND after correlation adjustment; no recommendation when no qualifying +EV parlay exists (no forcing a daily pick).
+
+### 34.4 — Parlay staking (parlay Kelly) ⬜🔒
+
+**Goal:** Size recommended parlays. Parlays are low-probability / high-variance; the single-bet Kelly fraction over-bets them. Extend Epic 22.2 `portfolio.py` with a parlay-Kelly treatment (full-Kelly on the combined odds/prob, then the same fractional-Kelly multiplier the single-bet path uses), and account for correlation with any straight bets recommended the same day.
+
+**Acceptance:** parlay stake derived from combined odds + true combined prob via fractional Kelly; correlated same-day straight bets reduce the parlay stake (and vice versa); never recommends a stake on a −EV parlay.
+
+### 34.5 — Frontend parlay surface ⬜🔒
+
+**Goal:** UI for both the calculator (34.1 — build-your-own, always available) and the recommender (34.3 — gated). Calculator shows true vs implied probability + the −EV/+EV verdict for any user-built parlay; recommender tab shows the day's qualifying +EV parlays (or an honest "no qualifying parlay today"). Reuse the existing authenticated page + `/picks` patterns.
+
+**Acceptance:** users can build a parlay and see the honest verdict; recommended-parlays tab renders gated output or an explicit empty state; never displays a parlay without its EV verdict.
+
+---
+
+**Epic 34 sequencing / phasing:**
+1. **Now (no new edge required):** 34.1 calculator + the 34.2 feasibility spike + 34.5 calculator UI. Ships honest beta value immediately ("tell me if my parlay is any good").
+2. **After Epic 30 + a live edge source:** 34.3 recommender + 34.4 staking + 34.5 recommender tab.
+3. **SGP edge (optional, deepest):** requires 34.2 data available + Epic 32 (joint totals/h2h) or a joint prop model for honest same-game correlation.
+
+**Kill criteria:** if 34.2 finds no SGP pricing AND no straight-leg market ever clears a live edge gate, the epic terminates at the **calculator** (34.1/34.5) — a genuinely useful honest tool — and the recommender (34.3/34.4) is closed as "no edge to recommend." That is an acceptable, honest outcome, not a failure.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Epic 34 (start with Story 34.1):
+
+```
+You are picking up Epic 34 (Parlay Recommendation System) of the MLB betting & fantasy project,
+starting with Story 34.1 (the decision-support calculator MVP).
+
+Before writing any code, read:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Epic 34 (this epic) IN FULL,
+     especially "the honest economics of parlays" and the dependency-analysis table
+  2. Epic 22 (22.1 bet correlation, 22.2 correlation-adjusted Kelly), Epic 24 (player props),
+     Epic 32 (generative per-side totals — the joint distribution SGP would need), and the Epic 30
+     EVALUATION ORDER block
+  3. betting_ml/utils/ — the existing Kelly/permission/probability utilities you will extend
+  4. scripts/predict_today.py — where per-leg h2h/totals probabilities are produced
+
+Conventions (non-negotiable): use `dbtf`, never `dbt`; query Snowflake only via the Snowflake MCP
+with fully-qualified db.schema.table names and no USE statements; run Python with `uv run python`;
+hand any script that runs >1 min back to the user to run; do not git commit or push; NO auto-betting
+ever (US — all bets manual, automated_bets never flips true).
+
+CRITICAL FRAMING: parlays compound vig, and our straight bets have NO demonstrated market edge
+(4 H2H no-edge confirmations; totals product-only). A naive "combine today's picks" recommender
+would lose users money — DO NOT build that. Build the honest tool first: Story 34.1 is a CALCULATOR
+that tells users the TRUE vs IMPLIED probability of any parlay they build, and whether it's +EV.
+The only real edge sources are (a) cross-game stacking of individually-+EV legs (none live yet
+except possibly the 28.6 conviction H2H) and (b) same-game correlation mispricing (needs book SGP
+prices — Story 34.2 feasibility spike — and a joint model). The actual recommender (34.3) is GATED
+on Epic 30 serving honesty + at least one live edge source; do not start it until those hold.
+Same-game legs must NEVER be scored as independent — use a correlation adjustment and stamp its
+source. Confirm scope (34.1 + 34.2 spike only, for now) with the user before going further.
+```
 
