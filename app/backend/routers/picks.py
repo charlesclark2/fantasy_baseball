@@ -36,6 +36,9 @@ from app.backend.models.picks import (
     LineMovement,
     LineupPlayer,
     Pick,
+    PickDriver,
+    PickExplanationPayload,
+    PickExplanationTarget,
     PublicBetting,
     StarterStats,
     TeamPerfStats,
@@ -235,6 +238,62 @@ LIMIT 1
 
 _ET = ZoneInfo("America/New_York")
 
+# Story 30.15 — per-game explanation (pick_explanation JSON + pick_narrative VARCHAR).
+# Separate lightweight query so the complex UNION ALL game queries don't need extra columns.
+_EXPLANATION_QUERY = f"""
+SELECT pick_explanation, pick_narrative, prediction_type
+FROM {_ML_SCHEMA}.daily_model_predictions
+WHERE game_pk = %(game_pk)s
+  AND pick_explanation IS NOT NULL
+ORDER BY
+    CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+    inserted_at DESC
+LIMIT 1
+"""
+
+
+def _parse_explanation(raw: str | dict | None) -> PickExplanationPayload | None:
+    """Parse pick_explanation VARCHAR → PickExplanationPayload; returns None on any failure."""
+    if not raw:
+        return None
+    try:
+        import json
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        targets: dict[str, PickExplanationTarget] = {}
+        for k, v in (data.get("targets") or {}).items():
+            drivers = [PickDriver(**d) for d in (v.get("drivers") or [])]
+            targets[k] = PickExplanationTarget(
+                method=v.get("method", ""),
+                units=v.get("units", ""),
+                base_value=v.get("base_value"),
+                prediction=v.get("prediction"),
+                toward=v.get("toward", ""),
+                drivers=drivers,
+                note=v.get("note"),
+            )
+        return PickExplanationPayload(
+            served_tier=data.get("served_tier"),
+            basis=data.get("basis", "model_reasoning"),
+            disclaimer=data.get("disclaimer", ""),
+            targets=targets,
+        )
+    except Exception:
+        logger.warning("Could not parse pick_explanation JSON")
+        return None
+
+
+def _top_drivers_for_market(
+    expl: PickExplanationPayload | None, market_type: str, n: int = 3
+) -> list[PickDriver] | None:
+    """Return top-n drivers for the relevant target given the market."""
+    if not expl:
+        return None
+    target_key = "home_win" if market_type == "h2h" else "total_runs"
+    target = expl.targets.get(target_key)
+    if not target or not target.drivers:
+        return None
+    return target.drivers[:n]
+
 
 def _format_game_time_et(game_start_utc: datetime | None) -> str | None:
     if game_start_utc is None:
@@ -267,6 +326,8 @@ def _build_featured_result(
     r: dict,
     yesterday_obj: "FeaturedYesterday | None",
     is_stale: bool,
+    expl: PickExplanationPayload | None = None,
+    narrative: str | None = None,
 ) -> FeaturedPickResponse:
     edge_raw = r.get("EDGE")
     model_prob = r.get("MODEL_PROB")
@@ -279,6 +340,8 @@ def _build_featured_result(
         pick_date: str | None = game_date_raw.isoformat()
     else:
         pick_date = str(game_date_raw) if game_date_raw else None
+    top_drivers = _top_drivers_for_market(expl, market_type, n=3)
+    served_tier = expl.served_tier if expl else None
     return FeaturedPickResponse(
         game_pk=r.get("GAME_PK"),
         matchup=f"{away} @ {home}",
@@ -298,6 +361,9 @@ def _build_featured_result(
         home_team=home or None,
         away_team=away or None,
         pick_side=r.get("PICK_SIDE"),
+        model_narrative=narrative,
+        top_drivers=top_drivers,
+        served_tier=served_tier,
     )
 
 
@@ -305,7 +371,7 @@ def _build_featured_result(
 def get_featured_pick() -> FeaturedPickResponse:
     today = datetime.now(_ET).date().isoformat()
     cached = get_cache(f"picks/featured_{today}.json")
-    if cached is not None and cached.get("game_pk") is not None:
+    if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)
 
     try:
@@ -329,8 +395,23 @@ def get_featured_pick() -> FeaturedPickResponse:
             )
 
     if rows:
-        result = _build_featured_result(rows[0], yesterday, is_stale=False)
-        set_cache(f"picks/featured_{today}.json", result.model_dump(mode="json"))
+        game_pk_for_expl = rows[0].get("GAME_PK")
+        expl_payload: PickExplanationPayload | None = None
+        narrative_str: str | None = None
+        if game_pk_for_expl:
+            try:
+                expl_rows = execute_query(_EXPLANATION_QUERY, params={"game_pk": game_pk_for_expl})
+                if expl_rows:
+                    expl_payload = _parse_explanation(expl_rows[0].get("PICK_EXPLANATION"))
+                    narrative_str = expl_rows[0].get("PICK_NARRATIVE")
+            except Exception:
+                logger.warning("Could not load explanation for featured pick game_pk=%s", game_pk_for_expl)
+        result = _build_featured_result(rows[0], yesterday, is_stale=False,
+                                        expl=expl_payload, narrative=narrative_str)
+        # Only cache once explanation data is present; otherwise re-query on next request
+        # so the narrative populates as soon as generate_pick_narratives.py runs.
+        if narrative_str is not None:
+            set_cache(f"picks/featured_{today}.json", result.model_dump(mode="json"))
         return result
 
     # No picks today — fall back to yesterday's champion pick (don't cache: re-check on next request)
@@ -343,7 +424,19 @@ def get_featured_pick() -> FeaturedPickResponse:
     if not stale_rows:
         return FeaturedPickResponse(game_pk=None)
 
-    return _build_featured_result(stale_rows[0], None, is_stale=True)
+    stale_game_pk = stale_rows[0].get("GAME_PK")
+    stale_expl: PickExplanationPayload | None = None
+    stale_narrative: str | None = None
+    if stale_game_pk:
+        try:
+            stale_expl_rows = execute_query(_EXPLANATION_QUERY, params={"game_pk": stale_game_pk})
+            if stale_expl_rows:
+                stale_expl = _parse_explanation(stale_expl_rows[0].get("PICK_EXPLANATION"))
+                stale_narrative = stale_expl_rows[0].get("PICK_NARRATIVE")
+        except Exception:
+            logger.warning("Could not load explanation for stale pick game_pk=%s", stale_game_pk)
+    return _build_featured_result(stale_rows[0], None, is_stale=True,
+                                  expl=stale_expl, narrative=stale_narrative)
 
 
 _TODAY_QUERY = f"""
@@ -1332,14 +1425,14 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     _game_cache_key = f"picks/game/{game_pk}.json"
 
     _pg_cached = pg.get_cache(_game_pg_key, _today_str)
-    if _pg_cached is not None:
+    if _pg_cached is not None and _pg_cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_pg_cached)
         except Exception:
             logger.warning("PG stale/invalid for game_pk=%s, re-fetching", game_pk)
 
     _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
-    if _cached is not None:
+    if _cached is not None and _cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_cached)
         except Exception:
@@ -1377,6 +1470,17 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
         )
         for r in pick_rows
     ]
+
+    # Story 30.15 — pick explanation + narrative
+    pick_explanation: PickExplanationPayload | None = None
+    pick_narrative: str | None = None
+    try:
+        expl_rows = execute_query(_EXPLANATION_QUERY, params=params)
+        if expl_rows:
+            pick_explanation = _parse_explanation(expl_rows[0].get("PICK_EXPLANATION"))
+            pick_narrative = expl_rows[0].get("PICK_NARRATIVE")
+    except Exception:
+        logger.warning("Could not load pick explanation for game_pk=%s", game_pk)
 
     # Game status + full team names + pre-game records
     game_score: GameScore | None = None
@@ -1745,13 +1849,17 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
         line_movement=line_movement,
         umpire=umpire,
         game_context=game_context,
+        pick_explanation=pick_explanation,
+        pick_narrative=pick_narrative,
     )
 
-    # Write to cache: Final games are immutable → permanent; others → date-scoped
+    # Write to cache: Final games are immutable → permanent only when explanation is also
+    # present (skip permanent cache when explanation is null so we re-fetch after backfill).
     _is_final = game_score is not None and game_score.status == "Final"
+    _has_expl = pick_explanation is not None
     _payload = result.model_dump(mode="json")
-    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
-    set_cache(_game_cache_key, _payload, permanent=_is_final)
+    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=(_is_final and _has_expl))
+    set_cache(_game_cache_key, _payload, permanent=(_is_final and _has_expl))
 
     return result
 

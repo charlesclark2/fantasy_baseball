@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { ProbabilityBar } from "@/components/probability-bar"
 import { Nav } from "@/components/nav"
 import { LandingFaqSection } from "@/components/landing-faq"
+import { MiniDriverList, ServedTierBadge, type PickDriver } from "@/components/pick-explanation"
 import {
   BookOpen,
   CheckCircle2,
@@ -46,6 +47,10 @@ type FeaturedPick = {
   home_team?: string | null
   away_team?: string | null
   pick_side?: string | null  // 'home'|'away' for h2h; 'over'|'under' for totals
+  // Story 30.15 — model explanation
+  model_narrative?: string | null
+  top_drivers?: PickDriver[] | null
+  served_tier?: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -241,10 +246,30 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                   </div>
                 )}
 
-                {/* AI summary */}
-                <p className="mt-6 text-sm leading-relaxed text-gray-400">
-                  {pick.ai_summary}
-                </p>
+                {/* AI summary — hidden when model narrative is available */}
+                {!pick.model_narrative && (
+                  <p className="mt-6 text-sm leading-relaxed text-gray-400">
+                    {pick.ai_summary}
+                  </p>
+                )}
+
+                {/* Story 30.15 — model narrative + top drivers */}
+                {(pick.model_narrative || (pick.top_drivers && pick.top_drivers.length > 0)) && (
+                  <div className="mt-4 rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+                        Model reasoning
+                      </span>
+                      <ServedTierBadge tier={pick.served_tier} />
+                    </div>
+                    {pick.model_narrative && (
+                      <p className="text-xs leading-relaxed text-gray-400">{pick.model_narrative}</p>
+                    )}
+                    {pick.top_drivers && pick.top_drivers.length > 0 && (
+                      <MiniDriverList drivers={pick.top_drivers} />
+                    )}
+                  </div>
+                )}
 
                 {pick.yesterday && (
                   <>
