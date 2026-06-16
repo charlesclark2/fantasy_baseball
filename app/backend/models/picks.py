@@ -5,6 +5,37 @@ from datetime import date, datetime
 from pydantic import BaseModel
 
 
+# ---------------------------------------------------------------------------
+# Pick explanation models (Story 30.15)
+# ---------------------------------------------------------------------------
+
+class PickDriver(BaseModel):
+    feature: str
+    label: str
+    family: str
+    family_key: str
+    contribution: float
+    direction: str  # "increases" | "decreases"
+    toward: str
+
+
+class PickExplanationTarget(BaseModel):
+    method: str
+    units: str = ""
+    base_value: float | None = None
+    prediction: float | None = None
+    toward: str = ""
+    drivers: list[PickDriver] = []
+    note: str | None = None  # deferred/error path
+
+
+class PickExplanationPayload(BaseModel):
+    served_tier: str | None = None
+    basis: str = "model_reasoning"
+    disclaimer: str = ""
+    targets: dict[str, PickExplanationTarget] = {}
+
+
 class DataQuality(BaseModel):
     signal_completeness_score: float | None = None
     last_updated_at: datetime | None = None
@@ -62,6 +93,10 @@ class FeaturedPickResponse(BaseModel):
     home_team: str | None = None
     away_team: str | None = None
     pick_side: str | None = None  # 'home'|'away' for h2h; 'over'|'under' for totals
+    # Story 30.15 — model explanation
+    model_narrative: str | None = None
+    top_drivers: list[PickDriver] | None = None
+    served_tier: str | None = None
 
 
 class HistoricalPick(Pick):
@@ -281,3 +316,6 @@ class GameDetailResponse(BaseModel):
     line_movement: LineMovement | None = None
     umpire: UmpireInfo | None = None
     game_context: GameContext | None = None
+    # Story 30.15 — model explanation
+    pick_explanation: PickExplanationPayload | None = None
+    pick_narrative: str | None = None

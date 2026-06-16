@@ -769,6 +769,17 @@ WHERE game_pk IN ({game_pk_list})
 QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY game_pk DESC) = 1
 """
 
+_EXPLANATION_BATCH = """
+SELECT game_pk, pick_explanation, pick_narrative, prediction_type
+FROM baseball_data.betting_ml.daily_model_predictions
+WHERE game_pk IN ({game_pk_list})
+  AND pick_explanation IS NOT NULL
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY game_pk
+    ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END, inserted_at DESC
+) = 1
+"""
+
 _GAME_PICKS_BATCH = """
 WITH ranked AS (
     SELECT
@@ -929,7 +940,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     """
     log.info("Assembling game detail for %d games", len(game_pks))
 
-    # Run all 12 batch queries
+    # Run all 13 batch queries
     status_rows     = _sf_query_batch(sf, _GAME_STATUS_BATCH, game_pks)
     starter_rows    = _sf_query_batch(sf, _STARTERS_BATCH, game_pks)
     bovada_rows     = _sf_query_batch(sf, _BOVADA_BATCH, game_pks)
@@ -943,6 +954,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     h2h_rows        = _sf_query_batch(sf, _H2H_BATCH, game_pks)
     umpire_rows     = _sf_query_batch(sf, _UMPIRE_BATCH, game_pks)
     pick_rows       = _sf_query_batch(sf, _GAME_PICKS_BATCH, game_pks)
+    expl_rows       = _sf_query_batch(sf, _EXPLANATION_BATCH, game_pks)
 
     # Index by game_pk
     status_by_pk   = {r["GAME_PK"]: r for r in status_rows}
@@ -952,6 +964,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
     lm_by_pk       = {r["GAME_PK"]: r for r in lm_rows}
     h2h_by_pk      = {r["GAME_PK"]: r for r in h2h_rows}
     umpire_by_pk   = {r["GAME_PK"]: r for r in umpire_rows}
+    expl_by_pk     = {r["GAME_PK"]: r for r in expl_rows}
 
     starters_by_pk  = defaultdict(list)
     for r in starter_rows:
@@ -1227,6 +1240,19 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
                 "games_sample": _int(ur.get("UMP_GAMES_SAMPLE")),
             }
 
+        # ── pick explanation + narrative (Story 30.15) ──
+        pick_explanation = None
+        pick_narrative = None
+        er = expl_by_pk.get(gp)
+        if er:
+            raw_expl = er.get("PICK_EXPLANATION")
+            if raw_expl:
+                try:
+                    pick_explanation = json.loads(raw_expl) if isinstance(raw_expl, str) else raw_expl
+                except Exception:
+                    pass
+            pick_narrative = er.get("PICK_NARRATIVE")
+
         payload = {
             "picks": picks_out, "total": len(picks_out),
             "home_team_name": home_team_name, "away_team_name": away_team_name,
@@ -1234,6 +1260,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
             "team_features": team_features, "lineups": lineups, "weather": weather,
             "public_betting": public_betting, "line_movement": line_movement,
             "umpire": umpire, "game_context": game_context,
+            "pick_explanation": pick_explanation, "pick_narrative": pick_narrative,
         }
         result[gp] = (payload, is_final)
 

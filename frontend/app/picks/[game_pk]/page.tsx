@@ -16,6 +16,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  PickExplanationSection,
+  ServedTierBadge,
+  type PickExplanationPayload,
+} from "@/components/pick-explanation"
 
 // ---------------------------------------------------------------------------
 // Types matching GameDetailResponse
@@ -154,6 +159,9 @@ type GameDetailData = {
     away_form: { l5_wins: number | null; l5_losses: number | null; l5_games: number | null; l10_wins: number | null; l10_losses: number | null; l10_games: number | null } | null
     h2h: { home_wins: number | null; away_wins: number | null; games_played: number | null; avg_total_runs: number | null } | null
   } | null
+  // Story 30.15 — model explanation
+  pick_explanation: PickExplanationPayload | null
+  pick_narrative: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +711,44 @@ export default function PickDetailPage() {
                   ))}
                 </div>
               </div>
+
+              {/* ============================================================
+                  1b. Why this pick — narrative + model reasoning (Story 30.15)
+              ============================================================ */}
+              {(data?.pick_narrative || data?.pick_explanation) && (() => {
+                const expl = data.pick_explanation
+                const narrative = data.pick_narrative
+                const tier = expl?.served_tier
+                // Determine primary market for driver view
+                const primaryMarket = firstPick?.market_type ?? "h2h"
+                return (
+                  <>
+                    {narrative && (
+                      <div className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden">
+                        <div className="px-6 py-4 border-b border-[#1e1e1e] flex items-center justify-between gap-3">
+                          <span className="flex items-center gap-2.5">
+                            <span className="w-1 h-5 rounded-full bg-[#10b981] shrink-0" />
+                            <span className="text-base font-bold text-white">Why this pick</span>
+                          </span>
+                          <ServedTierBadge tier={tier} />
+                        </div>
+                        <div className="px-6 py-4">
+                          <p className="text-sm leading-relaxed text-gray-400">{narrative}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {expl && (
+                      <CollapsibleSection title="Model reasoning" defaultOpen={false}>
+                        <PickExplanationSection
+                          explanation={expl}
+                          marketType={primaryMarket}
+                        />
+                      </CollapsibleSection>
+                    )}
+                  </>
+                )
+              })()}
 
               {/* ============================================================
                   2. Bovada Lines
