@@ -1,10 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { ChevronDown, ChevronUp, Lock, RefreshCw } from "lucide-react"
+import { ChevronDown, ChevronUp, CheckCircle, Lock, RefreshCw } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { useState } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { AdminGuard } from "@/components/auth-guard"
@@ -86,6 +86,7 @@ interface DataQualityReport {
   description: string
   created_at: string
   game_pk?: number
+  resolved_at?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +157,7 @@ export default function AdminPage() {
   const qc = useQueryClient()
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [showFixedBreakdown, setShowFixedBreakdown] = useState(false)
+  const [showResolved, setShowResolved] = useState(false)
   const [configDraft, setConfigDraft] = useState<FinancesConfig | null>(null)
   const [configSaving, setConfigSaving] = useState(false)
 
@@ -206,6 +208,12 @@ export default function AdminPage() {
     queryFn: () => apiFetch("/admin/data-quality-reports", {}, accessToken),
     staleTime: 60_000,
     enabled: !!accessToken && isAdmin,
+  })
+
+  const resolveMutation = useMutation({
+    mutationFn: (reportId: string) =>
+      apiFetch(`/admin/data-quality-reports/${reportId}/resolve`, { method: "PATCH" }, accessToken),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-data-quality-reports"] }),
   })
 
   // Sync config into draft once loaded (only if draft not yet set)
@@ -673,7 +681,16 @@ export default function AdminPage() {
 
         {/* Data Quality Reports */}
         <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
-          <h2 className="mb-5 text-base font-semibold text-white">Data Quality Reports</h2>
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">Data Quality Reports</h2>
+            <button
+              onClick={() => setShowResolved((v) => !v)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {showResolved ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {showResolved ? "Hide resolved" : "Show resolved"}
+            </button>
+          </div>
           {reportsLoading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
@@ -682,38 +699,60 @@ export default function AdminPage() {
             </div>
           ) : !dataQualityReports || dataQualityReports.length === 0 ? (
             <p className="text-sm text-gray-500">No reports submitted yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[#262626] text-left text-[11px] font-semibold uppercase tracking-widest text-gray-500">
-                    <th className="pb-3 pr-4">Submitted</th>
-                    <th className="pb-3 pr-4">User</th>
-                    <th className="pb-3 pr-4">Page</th>
-                    <th className="pb-3">Description</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1e1e1e]">
-                  {dataQualityReports.map((r) => (
-                    <tr key={r.report_id} className="text-gray-300">
-                      <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
-                        {new Date(r.created_at).toLocaleString("en-US", {
-                          month: "short", day: "numeric", hour: "numeric",
-                          minute: "2-digit", timeZoneName: "short",
-                        })}
-                      </td>
-                      <td className="py-3 pr-4 text-xs whitespace-nowrap">{r.user_email}</td>
-                      <td className="py-3 pr-4 text-xs text-gray-500 max-w-[200px] truncate">
-                        {r.page_url.replace(/^https?:\/\/[^/]+/, "")}
-                        {r.game_pk ? <span className="ml-1 text-gray-600">(#{r.game_pk})</span> : null}
-                      </td>
-                      <td className="py-3 text-xs text-gray-400 max-w-[300px]">{r.description}</td>
+          ) : (() => {
+            const visible = dataQualityReports.filter((r) => showResolved || !r.resolved_at)
+            if (visible.length === 0) {
+              return <p className="text-sm text-gray-500">All reports resolved. <button onClick={() => setShowResolved(true)} className="underline hover:text-gray-300">Show resolved</button></p>
+            }
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#262626] text-left text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                      <th className="pb-3 pr-4">Submitted</th>
+                      <th className="pb-3 pr-4">User</th>
+                      <th className="pb-3 pr-4">Page</th>
+                      <th className="pb-3 pr-4">Description</th>
+                      <th className="pb-3" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="divide-y divide-[#1e1e1e]">
+                    {visible.map((r) => (
+                      <tr key={r.report_id} className={r.resolved_at ? "opacity-40" : "text-gray-300"}>
+                        <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
+                          {new Date(r.created_at).toLocaleString("en-US", {
+                            month: "short", day: "numeric", hour: "numeric",
+                            minute: "2-digit", timeZoneName: "short",
+                          })}
+                        </td>
+                        <td className="py-3 pr-4 text-xs whitespace-nowrap">{r.user_email}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-500 max-w-[200px] truncate">
+                          {r.page_url.replace(/^https?:\/\/[^/]+/, "")}
+                          {r.game_pk ? <span className="ml-1 text-gray-600">(#{r.game_pk})</span> : null}
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 max-w-[300px]">{r.description}</td>
+                        <td className="py-3 whitespace-nowrap">
+                          {r.resolved_at ? (
+                            <span className="flex items-center gap-1 text-xs text-[#10b981]">
+                              <CheckCircle className="h-3.5 w-3.5" /> Resolved
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => resolveMutation.mutate(r.report_id)}
+                              disabled={resolveMutation.isPending}
+                              className="flex items-center gap-1 rounded border border-[#2a2a2a] px-2 py-1 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] transition-colors disabled:opacity-50"
+                            >
+                              <CheckCircle className="h-3 w-3" /> Resolve
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
         </section>
 
       </main>

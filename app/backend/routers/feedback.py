@@ -51,6 +51,25 @@ def list_data_quality_reports(limit: int = 50) -> list[dict]:
         raise HTTPException(status_code=503, detail="Could not fetch reports")
 
 
+@router.patch("/admin/data-quality-reports/{report_id}/resolve", status_code=200)
+def resolve_data_quality_report(report_id: str) -> dict:
+    try:
+        _reports_table().update_item(
+            Key={"report_id": report_id},
+            UpdateExpression="SET resolved_at = :ts",
+            ExpressionAttributeValues={":ts": datetime.now(timezone.utc).isoformat()},
+            ConditionExpression="attribute_exists(report_id)",
+        )
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code == "ConditionalCheckFailedException":
+            raise HTTPException(status_code=404, detail="Report not found")
+        logger.exception("DynamoDB update_item failed for report %s (code=%s)", report_id, code)
+        raise HTTPException(status_code=503, detail="Could not resolve report")
+    logger.info("Data quality report %s marked resolved", report_id)
+    return {"report_id": report_id, "resolved": True}
+
+
 @router.post("/feedback/data-quality", status_code=201)
 def create_data_quality_report(body: DataQualityReportRequest) -> dict:
     report_id = str(uuid4())
