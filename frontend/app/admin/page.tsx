@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Lock, RefreshCw } from "lucide-react"
+import { ChevronDown, ChevronUp, Lock, RefreshCw } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -52,6 +52,31 @@ interface SnowflakeCredits {
   compute_credits: number
   cloud_service_credits: number
   total_credits: number
+}
+
+interface MonthlyFinances {
+  month: string
+  month_label: string
+  fixed_cost: number
+  snowflake_cost: number | null
+  aws_cost: number | null
+  railway_cost: number | null
+  dagster_cost: number | null
+  total_cost: number
+  betting_pl: number
+  subscription_revenue: number
+  net: number
+}
+
+interface FinancesData {
+  months: MonthlyFinances[]
+  fixed_breakdown: Record<string, number>
+  notes: string[]
+}
+
+interface FinancesConfig {
+  railway_monthly_estimate: number
+  dagster_monthly_estimate: number
 }
 
 // ---------------------------------------------------------------------------
@@ -106,10 +131,24 @@ function indicatorToStatus(indicator: string): string {
 // Page
 // ---------------------------------------------------------------------------
 
+function fmt(val: number | null, prefix = "$"): string {
+  if (val === null) return "—"
+  return `${prefix}${Math.abs(val).toFixed(2)}`
+}
+
+function PLCell({ value }: { value: number }) {
+  const color = value > 0 ? "#10b981" : value < 0 ? "#ef4444" : "#6b7280"
+  const sign = value > 0 ? "+" : ""
+  return <span style={{ color }}>{sign}${value.toFixed(2)}</span>
+}
+
 export default function AdminPage() {
   const { accessToken, email, isAdmin } = useAuth()
   const qc = useQueryClient()
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
+  const [showFixedBreakdown, setShowFixedBreakdown] = useState(false)
+  const [configDraft, setConfigDraft] = useState<FinancesConfig | null>(null)
+  const [configSaving, setConfigSaving] = useState(false)
 
   const { data: pipelineStatus, isLoading: statusLoading } = useQuery<PipelineStatus>({
     queryKey: ["pipeline-status", accessToken],
@@ -138,6 +177,37 @@ export default function AdminPage() {
     staleTime: 3_600_000,
     enabled: !!accessToken && isAdmin,
   })
+
+  const { data: finances, isLoading: financesLoading } = useQuery<FinancesData>({
+    queryKey: ["admin-finances", accessToken],
+    queryFn: () => apiFetch("/admin/finances", {}, accessToken),
+    staleTime: 3_600_000,
+    enabled: !!accessToken && isAdmin,
+  })
+
+  const { data: financesConfig } = useQuery<FinancesConfig>({
+    queryKey: ["admin-finances-config", accessToken],
+    queryFn: () => apiFetch("/admin/finances-config", {}, accessToken),
+    staleTime: Infinity,
+    enabled: !!accessToken && isAdmin,
+  })
+
+  // Sync config into draft once loaded (only if draft not yet set)
+  if (financesConfig && configDraft === null) {
+    setConfigDraft(financesConfig)
+  }
+
+  async function saveFinancesConfig() {
+    if (!configDraft) return
+    setConfigSaving(true)
+    try {
+      await apiFetch("/admin/finances-config", { method: "PATCH", body: JSON.stringify(configDraft) }, accessToken)
+      qc.invalidateQueries({ queryKey: ["admin-finances", accessToken] })
+      qc.invalidateQueries({ queryKey: ["admin-finances-config", accessToken] })
+    } finally {
+      setConfigSaving(false)
+    }
+  }
 
   async function handleRefresh() {
     setRefreshState("loading")
@@ -421,6 +491,137 @@ export default function AdminPage() {
             )}
           </section>
         </div>
+        {/* Monthly P&L */}
+        <section className="rounded-lg border border-[#262626] bg-[#141414] p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">Monthly P&amp;L</h2>
+            <button
+              onClick={() => setShowFixedBreakdown((v) => !v)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Fixed breakdown
+              {showFixedBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+
+          {/* Editable variable estimates */}
+          <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+              Variable Estimates
+            </p>
+            <div className="flex flex-wrap gap-4 items-end">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-gray-500">Railway ($/mo)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={configDraft?.railway_monthly_estimate ?? ""}
+                  onChange={(e) => setConfigDraft((d) => d ? { ...d, railway_monthly_estimate: parseFloat(e.target.value) || 0 } : d)}
+                  className="w-28 rounded border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-gray-500">Dagster+ ($/mo)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={configDraft?.dagster_monthly_estimate ?? ""}
+                  onChange={(e) => setConfigDraft((d) => d ? { ...d, dagster_monthly_estimate: parseFloat(e.target.value) || 0 } : d)}
+                  className="w-28 rounded border border-[#2a2a2a] bg-[#141414] px-2 py-1 text-sm text-white focus:border-blue-500 focus:outline-none"
+                />
+              </label>
+              <Button
+                size="sm"
+                onClick={saveFinancesConfig}
+                disabled={configSaving || configDraft === null}
+                className="h-[30px] text-xs"
+              >
+                {configSaving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+            <p className="mt-2 text-[10px] text-gray-600">
+              Dagster+ default: $50/mo. Railway: check your dashboard. Both persisted to S3.
+            </p>
+          </div>
+
+          {showFixedBreakdown && finances?.fixed_breakdown && (
+            <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                Fixed Monthly Costs
+              </p>
+              <ul className="space-y-1.5">
+                {Object.entries(finances.fixed_breakdown).map(([name, cost]) => (
+                  <li key={name} className="flex justify-between text-sm">
+                    <span className="text-gray-400">{name}</span>
+                    <span className="text-white">${cost.toFixed(2)}</span>
+                  </li>
+                ))}
+                <li className="flex justify-between border-t border-[#262626] pt-2 text-sm font-medium">
+                  <span className="text-gray-300">Total Fixed</span>
+                  <span className="text-white">
+                    ${Object.values(finances.fixed_breakdown).reduce((a, b) => a + b, 0).toFixed(2)}/mo
+                  </span>
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {financesLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-8 rounded bg-[#1a1a1a] animate-pulse" />
+              ))}
+            </div>
+          ) : !finances?.months.length ? (
+            <p className="text-sm text-gray-500">No data available.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#262626]">
+                      {["Month", "Fixed", "Snowflake", "AWS", "Railway", "Dagster", "Total Cost", "Betting P&L", "Subs", "Net"].map((h) => (
+                        <th key={h} className="pb-3 pr-4 text-left text-xs font-semibold uppercase tracking-widest text-gray-500 last:pr-0 whitespace-nowrap">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1a1a1a]">
+                    {finances.months.map((m) => (
+                      <tr key={m.month} className="hover:bg-[#1a1a1a]">
+                        <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">{m.month_label}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">${m.fixed_cost.toFixed(2)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.snowflake_cost)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.aws_cost)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.railway_cost)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.dagster_cost)}</td>
+                        <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">${m.total_cost.toFixed(2)}</td>
+                        <td className="py-3 pr-4 text-xs whitespace-nowrap">
+                          <PLCell value={m.betting_pl} />
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">${m.subscription_revenue.toFixed(2)}</td>
+                        <td className="py-3 text-xs font-semibold whitespace-nowrap">
+                          <PLCell value={m.net} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {finances.notes.length > 0 && (
+                <ul className="mt-4 space-y-1">
+                  {finances.notes.map((note, i) => (
+                    <li key={i} className="text-[11px] text-gray-600">⚠ {note}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+
       </main>
     </div>
     </AdminGuard>

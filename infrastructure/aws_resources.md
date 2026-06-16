@@ -72,6 +72,10 @@ AWS_REGION=us-east-1
 
 CACHE_BUCKET=credence-prod-s3-api-cache
 DAGSTER_CLOUD_API_TOKEN=<token from .env>
+
+# Admin finances endpoint (GET /admin/finances)
+RAILWAY_MONTHLY_ESTIMATE=<Railway monthly bill in USD, e.g. 10.00>
+DAGSTER_MONTHLY_ESTIMATE=<Dagster+ monthly cost in USD (credits × $0.04), e.g. 5.00>
 ```
 
 ### Snowflake Role Grants Required
@@ -96,9 +100,28 @@ GRANT SELECT ON FUTURE TABLES IN SCHEMA baseball_data.betting TO ROLE CREDENCE_A
 -- Warehouse access
 GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE CREDENCE_API_RO;
 
+-- Snowflake ACCOUNT_USAGE (for /admin/snowflake-credits and /admin/finances Snowflake cost line)
+-- Run as ACCOUNTADMIN:
+-- GRANT IMPORTED PRIVILEGES ON DATABASE SNOWFLAKE TO ROLE CREDENCE_API_RO;
+
 -- Assign to service account
 GRANT ROLE CREDENCE_API_RO TO USER credence_api;
 ```
+
+### IAM additions for /admin/finances
+
+The `GET /admin/finances` endpoint calls AWS Cost Explorer. Add this inline policy to
+the Lambda execution role (`credence-prod-lambda-api`) in the IAM console:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["ce:GetCostAndUsage"],
+  "Resource": "*"
+}
+```
+
+Without this, AWS costs show as `—` and the endpoint logs a warning.
 
 ### Deploying
 
