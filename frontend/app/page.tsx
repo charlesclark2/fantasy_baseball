@@ -42,6 +42,9 @@ type FeaturedPick = {
   is_stale?: boolean
   is_preliminary?: boolean
   pick_date?: string | null
+  home_team?: string | null
+  away_team?: string | null
+  pick_side?: string | null  // 'home'|'away' for h2h; 'over'|'under' for totals
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +168,13 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                   <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
                     {pick.matchup}
                   </h2>
+                  {pick.pick_side && (
+                    <p className="mt-1.5 text-base font-semibold text-[#10b981]">
+                      {pick.market_type === "h2h"
+                        ? `Picking: ${pick.pick_side === "home" ? pick.home_team : pick.away_team} to win`
+                        : `Picking: ${pick.pick_side.charAt(0).toUpperCase() + pick.pick_side.slice(1)}`}
+                    </p>
+                  )}
                   <p className="mt-1 text-sm text-gray-500">{pick.game_time_et}</p>
                 </div>
 

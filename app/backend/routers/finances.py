@@ -35,6 +35,13 @@ _REGION = os.getenv("AWS_REGION", "us-east-1")
 _USER_BETS_TABLE = os.getenv("USER_BETS_TABLE", "credence-prod-dynamo-user-bets")
 _USERS_TABLE = os.getenv("USERS_TABLE", "credence-prod-dynamo-users")
 _OWNER_EMAIL = "ctcb57@gmail.com"
+# Set OWNER_USER_ID to the owner's Cognito sub (find in Cognito console or JWT 'sub' claim).
+# Without it, finances falls back to a DynamoDB Scan which requires dynamodb:Scan on the
+# Lambda role — add that permission or just set this env var.
+_OWNER_USER_ID_OVERRIDE = os.getenv("OWNER_USER_ID")
+
+# Finances start month — project launched May 2026
+_FINANCES_START = datetime.date(2026, 5, 1)
 
 # ── Fixed monthly costs (USD) — update here when prices change ────────────────
 
@@ -188,6 +195,10 @@ def _aws_costs_by_month() -> dict[str, float]:
 
 
 def _owner_user_id() -> str | None:
+    if _OWNER_USER_ID_OVERRIDE:
+        return _OWNER_USER_ID_OVERRIDE
+    # Fallback: scan users table by email (requires dynamodb:Scan on Lambda role).
+    # Prefer setting OWNER_USER_ID env var to avoid this.
     try:
         ddb = boto3.resource("dynamodb", region_name=_REGION)
         table = ddb.Table(_USERS_TABLE)
@@ -196,9 +207,12 @@ def _owner_user_id() -> str | None:
             ProjectionExpression="user_id",
         )
         items = resp.get("Items", [])
-        return str(items[0]["user_id"]) if items else None
-    except Exception:
-        logger.warning("Users table scan for owner ID failed")
+        if items:
+            return str(items[0]["user_id"])
+        logger.warning("Owner user ID not found via scan — is %s in the users table?", _OWNER_EMAIL)
+        return None
+    except Exception as exc:
+        logger.warning("Users table scan for owner ID failed (add dynamodb:Scan or set OWNER_USER_ID): %s", exc)
         return None
 
 
@@ -273,13 +287,10 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
         notes.append("Dagster+ estimate not set — edit estimates above ($0.04/credit)")
 
     today = datetime.date.today()
+    current_month = datetime.date(today.year, today.month, 1)
     months: list[MonthlyFinances] = []
-    for i in range(5, -1, -1):
-        year, month = today.year, today.month - i
-        while month <= 0:
-            month += 12
-            year -= 1
-        month_date = datetime.date(year, month, 1)
+    month_date = _FINANCES_START
+    while month_date <= current_month:
         key = month_date.strftime("%Y-%m")
         label = month_date.strftime("%b %Y")
 
@@ -307,6 +318,12 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
             subscription_revenue=subs,
             net=net,
         ))
+
+        # Advance to next month
+        if month_date.month == 12:
+            month_date = datetime.date(month_date.year + 1, 1, 1)
+        else:
+            month_date = datetime.date(month_date.year, month_date.month + 1, 1)
 
     return FinancesResponse(
         months=months,

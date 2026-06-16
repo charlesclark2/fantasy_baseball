@@ -87,7 +87,8 @@ h2h AS (
         NULL::FLOAT                                                   AS win_prob_ci_high,
         b.game_datetime,
         b.game_date,
-        b.prediction_type
+        b.prediction_type,
+        b.layer4_h2h_decision                                         AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_h2h_decision IN ('home', 'away')
@@ -105,17 +106,20 @@ totals AS (
         NULL::FLOAT                                        AS win_prob_ci_high,
         b.game_datetime,
         b.game_date,
-        b.prediction_type
+        b.prediction_type,
+        b.layer4_totals_decision                                       AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
-       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
+       pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
-       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
+       pick_side
 FROM totals
 ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
 LIMIT 1
@@ -150,7 +154,8 @@ h2h AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
-        clv.actual_outcome
+        clv.actual_outcome,
+        b.layer4_h2h_decision                                         AS pick_side
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
@@ -171,7 +176,8 @@ totals AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
-        clv.actual_outcome
+        clv.actual_outcome,
+        b.layer4_totals_decision                                       AS pick_side
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
@@ -180,12 +186,12 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome
+       actual_outcome, pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome
+       actual_outcome, pick_side
 FROM totals
 ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST
 LIMIT 1
@@ -289,6 +295,9 @@ def _build_featured_result(
         is_stale=is_stale,
         is_preliminary=not is_stale and prediction_type == "morning",
         pick_date=pick_date,
+        home_team=home or None,
+        away_team=away or None,
+        pick_side=r.get("PICK_SIDE"),
     )
 
 
