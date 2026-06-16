@@ -7,16 +7,21 @@ from pipeline.jobs.intraday_jobs import (
     odds_snapshot_job,
 )
 
-# ── Odds Snapshot ─────────────────────────────────────────────────────────────
-# Mirrors the 17 cron entries in odds_snapshot.yml (all times UTC):
+# ── Odds Snapshot (Parlay) — DECOMMISSIONED 2026-06-16 (Story 12.3.7 / A2.18) ──
+# These 17 Parlay `odds_snapshot_job` schedules were the live odds source AND the #1
+# Dagster+ run-minute driver (~1,044 min/mo, ~42%). Retired in favour of The Odds API
+# (Railway cron capture → mlb_odds_raw → odds_current_rebuild_sensor / odds_clv_rebuild_daily),
+# which validated healthier coverage on 2026-06-16 (28 games / 37 books incl Bovada + Pinnacle,
+# vs Parlay 18 / 15). Removing them from `all_intraday_schedules` (below) stops the auto-fires
+# and the Dagster+ cost BEFORE billing starts 6/18.
 #
-# CLV architecture timeline (EDT = UTC-4):
-#   Step 1 — Opening baseline: captured by daily_ingestion_job at 12:00 UTC
-#   Step 2 — Hourly line-movement path (14:00–23:00 UTC = 10:00–19:00 EDT)
-#   Step 3 — Near-close snapshots covering each start-time band
+# The defs are RETAINED (not deleted) so Parlay stays a dormant manual failover: `odds_snapshot_job`
+# is still registered and launchable from the Dagster UI, and re-adding `odds_snapshot_schedules`
+# to the tuple below revives the schedule in one line. Historical Parlay data is preserved; the
+# stg_parlayapi_* → mart_odds_outcomes union rows simply stop updating (dedup prefers odds_api).
 #
-# Dagster does not support multiple cron strings per ScheduleDefinition, so
-# each cron entry is its own ScheduleDefinition pointing at the same job.
+# Mirrors the 17 cron entries in odds_snapshot.yml (all times UTC). Dagster does not support
+# multiple cron strings per ScheduleDefinition, so each is its own ScheduleDefinition.
 
 _ODDS_SNAPSHOT_CRONS = [
     # ── Hourly morning / midday coverage (10:00–17:00 EDT) ─────────────────
@@ -89,13 +94,12 @@ intraday_schedule_capture_overnight = ScheduleDefinition(
     name="intraday_schedule_capture_overnight",
 )
 
-all_intraday_schedules = (
-    odds_snapshot_schedules
-    + [
-        odds_clv_rebuild_schedule,
-        intraday_weather_schedule_daytime,
-        intraday_weather_schedule_overnight,
-        intraday_schedule_capture_daytime,
-        intraday_schedule_capture_overnight,
-    ]
-)
+# NOTE: `odds_snapshot_schedules` (Parlay) is intentionally OMITTED here — decommissioned
+# 2026-06-16 (see header). Re-add it to this tuple to revive the Parlay capture cadence.
+all_intraday_schedules = [
+    odds_clv_rebuild_schedule,
+    intraday_weather_schedule_daytime,
+    intraday_weather_schedule_overnight,
+    intraday_schedule_capture_daytime,
+    intraday_schedule_capture_overnight,
+]
