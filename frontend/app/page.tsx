@@ -246,10 +246,12 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                   </div>
                 )}
 
-                {/* AI summary */}
-                <p className="mt-6 text-sm leading-relaxed text-gray-400">
-                  {pick.ai_summary}
-                </p>
+                {/* AI summary — hidden when model narrative is available */}
+                {!pick.model_narrative && (
+                  <p className="mt-6 text-sm leading-relaxed text-gray-400">
+                    {pick.ai_summary}
+                  </p>
+                )}
 
                 {/* Story 30.15 — model narrative + top drivers */}
                 {(pick.model_narrative || (pick.top_drivers && pick.top_drivers.length > 0)) && (

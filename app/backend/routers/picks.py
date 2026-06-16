@@ -1425,14 +1425,14 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     _game_cache_key = f"picks/game/{game_pk}.json"
 
     _pg_cached = pg.get_cache(_game_pg_key, _today_str)
-    if _pg_cached is not None:
+    if _pg_cached is not None and _pg_cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_pg_cached)
         except Exception:
             logger.warning("PG stale/invalid for game_pk=%s, re-fetching", game_pk)
 
     _cached = get_cache(_game_cache_key, permanent=True) or get_cache(_game_cache_key)
-    if _cached is not None:
+    if _cached is not None and _cached.get("pick_explanation") is not None:
         try:
             return GameDetailResponse(**_cached)
         except Exception:
@@ -1853,11 +1853,13 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
         pick_narrative=pick_narrative,
     )
 
-    # Write to cache: Final games are immutable → permanent; others → date-scoped
+    # Write to cache: Final games are immutable → permanent only when explanation is also
+    # present (skip permanent cache when explanation is null so we re-fetch after backfill).
     _is_final = game_score is not None and game_score.status == "Final"
+    _has_expl = pick_explanation is not None
     _payload = result.model_dump(mode="json")
-    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=_is_final)
-    set_cache(_game_cache_key, _payload, permanent=_is_final)
+    pg.set_cache(_game_pg_key, _today_str, _payload, is_permanent=(_is_final and _has_expl))
+    set_cache(_game_cache_key, _payload, permanent=(_is_final and _has_expl))
 
     return result
 
