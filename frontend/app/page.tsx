@@ -12,6 +12,7 @@ import {
   Database,
   Eye,
   FlaskConical,
+  Pencil,
   ShieldCheck,
   Zap,
 } from "lucide-react"
@@ -400,6 +401,34 @@ function TrustSection() {
   )
 }
 
+function LatestPost({ post }: { post: { post_id: string; title: string; excerpt?: string | null; published_at?: string | null } | null }) {
+  if (!post) return null
+  return (
+    <section className="py-12 md:py-16 border-t border-[#262626]">
+      <div className="mx-auto max-w-4xl px-4">
+        <div className="flex items-center gap-2 mb-5">
+          <Pencil className="h-4 w-4 text-[#10b981]" />
+          <span className="text-xs uppercase tracking-widest text-[#10b981] font-semibold">
+            From the Blog
+          </span>
+        </div>
+        <Link
+          href={`/blog/${post.post_id}`}
+          className="group block rounded-xl border border-[#262626] bg-[#141414] p-6 hover:border-[#10b981]/30 transition-colors"
+        >
+          <h3 className="text-lg font-bold text-white group-hover:text-[#10b981] transition-colors">
+            {post.title}
+          </h3>
+          {post.excerpt && (
+            <p className="mt-2 text-sm leading-relaxed text-gray-400 line-clamp-2">{post.excerpt}</p>
+          )}
+          <p className="mt-3 text-xs text-[#10b981]">Read more →</p>
+        </Link>
+      </div>
+    </section>
+  )
+}
+
 function FooterCta() {
   return (
     <section className="py-20 md:py-28 border-t border-[#262626]">
@@ -443,11 +472,21 @@ function FooterCta() {
 
 export default async function LandingPage() {
   const base = process.env.NEXT_PUBLIC_API_URL ?? ""
-  const featuredRes = base
-    ? await fetch(`${base}/picks/featured`, { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : { game_pk: null }))
-        .catch(() => ({ game_pk: null }))
-    : { game_pk: null }
+
+  const [featuredRes, blogData] = await Promise.all([
+    base
+      ? fetch(`${base}/picks/featured`, { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : { game_pk: null }))
+          .catch(() => ({ game_pk: null }))
+      : Promise.resolve({ game_pk: null }),
+    base
+      ? fetch(`${base}/blog/posts`, { next: { revalidate: 300 } })
+          .then((r) => (r.ok ? r.json() : { posts: [] }))
+          .catch(() => ({ posts: [] }))
+      : Promise.resolve({ posts: [] }),
+  ])
+
+  const latestPost = (blogData.posts ?? [])[0] ?? null
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
@@ -458,6 +497,7 @@ export default async function LandingPage() {
         <WhyCredenceStrip />
         <HowItWorks />
         <TrustSection />
+        <LatestPost post={latestPost} />
         <LandingFaqSection />
         <FooterCta />
       </main>

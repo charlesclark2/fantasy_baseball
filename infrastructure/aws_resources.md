@@ -74,8 +74,11 @@ CACHE_BUCKET=credence-prod-s3-api-cache
 DAGSTER_CLOUD_API_TOKEN=<token from .env>
 
 # Admin finances endpoint (GET /admin/finances)
-RAILWAY_MONTHLY_ESTIMATE=<Railway monthly bill in USD, e.g. 10.00>
-DAGSTER_MONTHLY_ESTIMATE=<Dagster+ monthly cost in USD (credits × $0.04), e.g. 5.00>
+# RAILWAY_MONTHLY_ESTIMATE and DAGSTER_MONTHLY_ESTIMATE are now set via the admin dashboard UI
+# (stored in S3 admin-settings/finances-config.json) — no longer needed as env vars.
+# OWNER_USER_ID: the owner's Cognito sub (find in Cognito console → User Pool → ctcb57@gmail.com → sub attribute)
+# Without this, the finances endpoint falls back to dynamodb:Scan (add that permission or just set this var)
+OWNER_USER_ID=<Cognito sub for ctcb57@gmail.com>
 ```
 
 ### Snowflake Role Grants Required

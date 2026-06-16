@@ -14,6 +14,7 @@ type ActiveLink =
   | "settings"
   | "bet-log"
   | "admin"
+  | "blog"
   | null
 
 interface NavProps {
@@ -55,6 +56,14 @@ export function Nav({
 
         {/* Right actions */}
         <div className="flex items-center gap-3">
+          {/* Blog link — always visible */}
+          <Link
+            href="/blog"
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors hidden sm:block"
+          >
+            Blog
+          </Link>
+
           {authenticated ? (
             <>
               <span className="hidden text-xs text-gray-500 sm:block">
@@ -131,16 +140,28 @@ export function Nav({
             </Link>
           ))}
           {isAdmin && (
-            <Link
-              href="/admin"
-              className={
-                activeLink === "admin"
-                  ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
-                  : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
-              }
-            >
-              Admin
-            </Link>
+            <>
+              <Link
+                href="/admin"
+                className={
+                  activeLink === "admin"
+                    ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+                    : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                }
+              >
+                Admin
+              </Link>
+              <Link
+                href="/admin/blog"
+                className={
+                  activeLink === "blog"
+                    ? "border-b-2 border-[#10b981] pb-2.5 text-sm text-white font-medium transition-colors"
+                    : "border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                }
+              >
+                Blog Editor
+              </Link>
+            </>
           )}
         </div>
       )}
