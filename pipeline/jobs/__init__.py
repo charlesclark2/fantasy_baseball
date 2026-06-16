@@ -3,7 +3,8 @@ from pipeline.jobs.daily_ingestion_job import daily_ingestion_job
 from pipeline.jobs.intraday_jobs import (
     intraday_schedule_job,
     intraday_weather_job,
-    odds_oddsapi_rebuild_job,
+    odds_clv_rebuild_job,
+    odds_current_rebuild_job,
     odds_snapshot_job,
 )
 from pipeline.jobs.sensor_jobs import lineup_monitor_job, pregame_snapshot_job, statcast_catchup_job
@@ -17,7 +18,8 @@ all_jobs = [
     snowflake_check_job,
     daily_ingestion_job,
     odds_snapshot_job,
-    odds_oddsapi_rebuild_job,
+    odds_current_rebuild_job,
+    odds_clv_rebuild_job,
     intraday_weather_job,
     intraday_schedule_job,
     lineup_monitor_job,

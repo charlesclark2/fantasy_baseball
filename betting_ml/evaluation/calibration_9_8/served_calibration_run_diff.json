@@ -1,0 +1,172 @@
+{
+  "target": "run_diff",
+  "kind": "regression",
+  "tiers": {
+    "champion": {
+      "2024": {
+        "n": 2001,
+        "coverage_80": 0.7191,
+        "coverage_gap_80": -0.0809,
+        "coverage_90": 0.8336,
+        "coverage_gap_90": -0.0664,
+        "pit_ks": 0.0465,
+        "pit_hist": [
+          286,
+          183,
+          166,
+          191,
+          162,
+          150,
+          190,
+          191,
+          206,
+          276
+        ],
+        "nll_mean": 2.7618,
+        "crps_mean": 2.1463,
+        "mean_pred": 0.0609,
+        "mean_actual": 0.015,
+        "bias": 0.0459,
+        "miscalibrated": true,
+        "shape": "OVERCONFIDENT (PI too tight \u2014 coverage below nominal)"
+      },
+      "2025": {
+        "n": 2026,
+        "coverage_80": 0.7937,
+        "coverage_gap_80": -0.0063,
+        "coverage_90": 0.8865,
+        "coverage_gap_90": -0.0135,
+        "pit_ks": 0.0132,
+        "pit_hist": [
+          212,
+          211,
+          190,
+          203,
+          204,
+          207,
+          197,
+          188,
+          208,
+          206
+        ],
+        "nll_mean": 2.7417,
+        "crps_mean": 2.2153,
+        "mean_pred": 0.0683,
+        "mean_actual": -0.003,
+        "bias": 0.0713,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      },
+      "2026": {
+        "n": 792,
+        "coverage_80": 0.7765,
+        "coverage_gap_80": -0.0235,
+        "coverage_90": 0.8775,
+        "coverage_gap_90": -0.0225,
+        "pit_ks": 0.0193,
+        "pit_hist": [
+          86,
+          72,
+          75,
+          74,
+          87,
+          77,
+          83,
+          74,
+          73,
+          91
+        ],
+        "nll_mean": 2.7563,
+        "crps_mean": 2.1822,
+        "mean_pred": -0.0791,
+        "mean_actual": -0.0707,
+        "bias": -0.0084,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      }
+    },
+    "pre_lineup": {
+      "2024": {
+        "n": 2001,
+        "coverage_80": 0.7151,
+        "coverage_gap_80": -0.0849,
+        "coverage_90": 0.8361,
+        "coverage_gap_90": -0.0639,
+        "pit_ks": 0.0472,
+        "pit_hist": [
+          291,
+          180,
+          178,
+          190,
+          160,
+          158,
+          182,
+          196,
+          187,
+          279
+        ],
+        "nll_mean": 2.7633,
+        "crps_mean": 2.1655,
+        "mean_pred": 0.1209,
+        "mean_actual": 0.015,
+        "bias": 0.1059,
+        "miscalibrated": true,
+        "shape": "OVERCONFIDENT (PI too tight \u2014 coverage below nominal)"
+      },
+      "2025": {
+        "n": 2026,
+        "coverage_80": 0.7947,
+        "coverage_gap_80": -0.0053,
+        "coverage_90": 0.884,
+        "coverage_gap_90": -0.016,
+        "pit_ks": 0.0124,
+        "pit_hist": [
+          211,
+          189,
+          201,
+          213,
+          199,
+          194,
+          217,
+          202,
+          195,
+          205
+        ],
+        "nll_mean": 2.7546,
+        "crps_mean": 2.2401,
+        "mean_pred": 0.0574,
+        "mean_actual": -0.003,
+        "bias": 0.0604,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      },
+      "2026": {
+        "n": 792,
+        "coverage_80": 0.7765,
+        "coverage_gap_80": -0.0235,
+        "coverage_90": 0.8775,
+        "coverage_gap_90": -0.0225,
+        "pit_ks": 0.0301,
+        "pit_hist": [
+          77,
+          81,
+          69,
+          77,
+          78,
+          80,
+          70,
+          85,
+          75,
+          100
+        ],
+        "nll_mean": 2.8069,
+        "crps_mean": 2.2622,
+        "mean_pred": -0.1851,
+        "mean_actual": -0.0707,
+        "bias": -0.1144,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      }
+    }
+  }
+}

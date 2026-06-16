@@ -1,0 +1,84 @@
+{
+  "target": "run_diff",
+  "metric": "mae",
+  "n_post": 167,
+  "n_pre": 124,
+  "n_proj": 180,
+  "n_exp_added": 56,
+  "per_year": {
+    "2024": {
+      "post": 3.001273959369434,
+      "pre": 3.034484661070168,
+      "proj": 3.0194102180409867,
+      "n": 2002
+    },
+    "2025": {
+      "post": 3.115151478404655,
+      "pre": 3.155311550466985,
+      "proj": 3.1553338308600916,
+      "n": 2025
+    },
+    "2026": {
+      "post": 3.0400056065615866,
+      "pre": 3.1451071333029823,
+      "proj": 3.1330898414731374,
+      "n": 792
+    }
+  },
+  "gate": {
+    "decision": "HOLD",
+    "single_eval_pass": false,
+    "overall_delta": -0.007482969244693403,
+    "boot_ci": [
+      -0.019801319660520136,
+      0.005126088701553315
+    ],
+    "effect_size_pass": false,
+    "significant": false,
+    "consistency_pass": true,
+    "tolerance": 0.02,
+    "reasons": [
+      "Pooled improvement -0.0075 does NOT clear the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0051 \u2265 0 (not significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "Current season 2026 corroborates (-0.0120)."
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2002,
+        "champion": 3.034484661070168,
+        "challenger": 3.0194102180409867,
+        "delta": -0.01507444302918115,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2025,
+        "champion": 3.155311550466985,
+        "challenger": 3.1553338308600916,
+        "delta": 2.2280393106477447e-05,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 792,
+        "champion": 3.1451071333029823,
+        "challenger": 3.1330898414731374,
+        "delta": -0.0120172918298449,
+        "complete": false,
+        "regressed": false
+      }
+    ]
+  },
+  "honest_2026_recovery": {
+    "post": 3.0400056065615866,
+    "pre": 3.1451071333029823,
+    "proj": 3.1330898414731374,
+    "floor_gap_vs_post": 0.10510152674139572,
+    "proj_gap_vs_post": 0.09308423491155082,
+    "recovery_frac": 0.11433984074668746
+  }
+}

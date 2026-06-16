@@ -1,0 +1,172 @@
+{
+  "target": "total_runs",
+  "kind": "regression",
+  "tiers": {
+    "champion": {
+      "2024": {
+        "n": 2001,
+        "coverage_80": 0.7846,
+        "coverage_gap_80": -0.0154,
+        "coverage_90": 0.8996,
+        "coverage_gap_90": -0.0004,
+        "pit_ks": 0.0691,
+        "pit_hist": [
+          224,
+          281,
+          225,
+          204,
+          184,
+          172,
+          182,
+          145,
+          177,
+          207
+        ],
+        "nll_mean": 2.827,
+        "crps_mean": 2.2795,
+        "mean_pred": 8.9171,
+        "mean_actual": 8.7176,
+        "bias": 0.1995,
+        "miscalibrated": true,
+        "shape": "well-covered"
+      },
+      "2025": {
+        "n": 2026,
+        "coverage_80": 0.7705,
+        "coverage_gap_80": -0.0295,
+        "coverage_90": 0.8746,
+        "coverage_gap_90": -0.0254,
+        "pit_ks": 0.0909,
+        "pit_hist": [
+          227,
+          307,
+          251,
+          197,
+          181,
+          168,
+          162,
+          157,
+          138,
+          238
+        ],
+        "nll_mean": 2.8985,
+        "crps_mean": 2.4324,
+        "mean_pred": 9.1036,
+        "mean_actual": 8.8855,
+        "bias": 0.2181,
+        "miscalibrated": true,
+        "shape": "well-covered"
+      },
+      "2026": {
+        "n": 792,
+        "coverage_80": 0.8081,
+        "coverage_gap_80": 0.0081,
+        "coverage_90": 0.899,
+        "coverage_gap_90": -0.001,
+        "pit_ks": 0.0481,
+        "pit_hist": [
+          62,
+          110,
+          91,
+          81,
+          83,
+          80,
+          59,
+          62,
+          74,
+          90
+        ],
+        "nll_mean": 2.8483,
+        "crps_mean": 2.3338,
+        "mean_pred": 8.9096,
+        "mean_actual": 8.9823,
+        "bias": -0.0727,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      }
+    },
+    "pre_lineup": {
+      "2024": {
+        "n": 2001,
+        "coverage_80": 0.7816,
+        "coverage_gap_80": -0.0184,
+        "coverage_90": 0.8976,
+        "coverage_gap_90": -0.0024,
+        "pit_ks": 0.0637,
+        "pit_hist": [
+          215,
+          267,
+          237,
+          197,
+          184,
+          178,
+          172,
+          155,
+          174,
+          222
+        ],
+        "nll_mean": 2.8321,
+        "crps_mean": 2.2763,
+        "mean_pred": 8.8074,
+        "mean_actual": 8.7176,
+        "bias": 0.0898,
+        "miscalibrated": true,
+        "shape": "well-covered"
+      },
+      "2025": {
+        "n": 2026,
+        "coverage_80": 0.7646,
+        "coverage_gap_80": -0.0354,
+        "coverage_90": 0.8727,
+        "coverage_gap_90": -0.0273,
+        "pit_ks": 0.088,
+        "pit_hist": [
+          234,
+          297,
+          242,
+          198,
+          188,
+          166,
+          163,
+          161,
+          134,
+          243
+        ],
+        "nll_mean": 2.8993,
+        "crps_mean": 2.4357,
+        "mean_pred": 9.0923,
+        "mean_actual": 8.8855,
+        "bias": 0.2068,
+        "miscalibrated": true,
+        "shape": "well-covered"
+      },
+      "2026": {
+        "n": 792,
+        "coverage_80": 0.7891,
+        "coverage_gap_80": -0.0109,
+        "coverage_90": 0.8952,
+        "coverage_gap_90": -0.0048,
+        "pit_ks": 0.0485,
+        "pit_hist": [
+          73,
+          102,
+          89,
+          83,
+          85,
+          77,
+          60,
+          64,
+          65,
+          94
+        ],
+        "nll_mean": 2.8598,
+        "crps_mean": 2.354,
+        "mean_pred": 8.9278,
+        "mean_actual": 8.9823,
+        "bias": -0.0545,
+        "miscalibrated": false,
+        "shape": "well-covered"
+      }
+    }
+  }
+}

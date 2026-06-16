@@ -1,0 +1,75 @@
+{
+  "target": "total_runs",
+  "metric": "mae",
+  "n_floor": 87,
+  "n_confirmed_arm": 139,
+  "n_projected_arm": 139,
+  "n_swap_block": 52,
+  "per_year": {
+    "2024": {
+      "confirmed": 3.236305160541555,
+      "projected": 3.2418170809187457,
+      "n": 2003
+    },
+    "2025": {
+      "confirmed": 3.443730726077345,
+      "projected": 3.447087498644366,
+      "n": 2026
+    },
+    "2026": {
+      "confirmed": 3.320683522287916,
+      "projected": 3.312146540612616,
+      "n": 802
+    }
+  },
+  "actual_lineup_matters": false,
+  "headline": "PROJECTION \u2248 ACTUAL \u2014 the real lineup does NOT beat the projection beyond noise \u2192 the projection is as good as the confirmed lineup for the model \u2192 CLOSE the projection thread (33.6 floor is offense-optimal).",
+  "gate": {
+    "decision": "HOLD",
+    "single_eval_pass": false,
+    "overall_delta": -0.004428195020178238,
+    "boot_ci": [
+      -0.011862948813465406,
+      0.0026750785475577713
+    ],
+    "effect_size_pass": false,
+    "significant": false,
+    "consistency_pass": true,
+    "tolerance": 0.02,
+    "reasons": [
+      "Pooled improvement -0.0044 does NOT clear the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0027 \u2265 0 (not significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "Current season 2026 corroborates (+0.0085)."
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2003,
+        "champion": 3.2418170809187457,
+        "challenger": 3.236305160541555,
+        "delta": -0.005511920377190727,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2026,
+        "champion": 3.447087498644366,
+        "challenger": 3.443730726077345,
+        "delta": -0.00335677256702116,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 802,
+        "champion": 3.312146540612616,
+        "challenger": 3.320683522287916,
+        "delta": 0.008536981675300037,
+        "complete": false,
+        "regressed": false
+      }
+    ]
+  }
+}

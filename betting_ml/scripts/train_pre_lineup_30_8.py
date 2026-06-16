@@ -27,10 +27,19 @@ output and predict_today's reindex(columns=contract) is exact.
 
 Runtime: load_features + NGBoost fit = minutes → HAND OFF, ONE --target per invocation.
 
+STORY 33.5 (--variant proj): SAME recipe, EXPANDED contract = the 33.0 Class-A set PLUS the
+Story-33.3 expected-lineup `exp_*` projection features (the pre-lineup replacement for the dropped
+confirmed-lineup batter aggregates). Writes `*_proj` artifacts/contracts so the 33.0 base set stays
+intact as the deployed floor + gate baseline. The proj artifact is a CHALLENGER — gate on honest-2026
+(beat the 33.0 floor; measure lineup-gap recovery vs the post-lineup champion) BEFORE any registry repoint.
+
 Usage:
+    # Story 33.0 floor (default):
     uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target home_win
-    uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target run_diff
-    uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target total_runs
+    # Story 33.5 projection challenger:
+    uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target home_win --variant proj
+    uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target run_diff --variant proj
+    uv run python betting_ml/scripts/train_pre_lineup_30_8.py --target total_runs --variant proj
     (add --no-upload to skip the S3 push; artifact is always written locally)
 """
 from __future__ import annotations
@@ -86,6 +95,24 @@ _TARGETS = {
         "n_estimators": 500, "max_depth": 3,
     },
 }
+
+
+def _apply_variant(cfg: dict, variant: str) -> dict:
+    """Story 33.5: the `proj` variant trains the SAME recipe on the EXPANDED contract
+    (33.0 Class-A + the Story-33.3 expected-lineup `exp_*` projection features). It writes
+    `*_proj` artifacts/contracts so the 33.0 base set stays intact as the gate floor.
+    `base` (default) = unchanged 33.0 behavior."""
+    if variant == "base":
+        return cfg
+    out = dict(cfg)
+    for k in ("contract", "artifact", "out_contract", "s3"):
+        if k == "s3":
+            head, _, tail = cfg[k].rpartition(".")
+            out[k] = f"{head}_proj.{tail}"
+        else:
+            p = Path(cfg[k])
+            out[k] = str(p.with_name(p.stem + "_proj" + p.suffix))
+    return out
 
 
 def _contract_cols(path: str) -> list[str]:
@@ -159,13 +186,17 @@ def _smoke(model, X: pd.DataFrame, kind: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", required=True, choices=["home_win", "run_diff", "total_runs"])
+    ap.add_argument("--variant", choices=["base", "proj"], default="base",
+                    help="base = 33.0 Class-A contract; proj = 33.5 (+ Story-33.3 exp_* projection features)")
     ap.add_argument("--no-upload", action="store_true", help="skip S3 upload (local artifact only)")
     args = ap.parse_args()
-    cfg = _TARGETS[args.target]
+    cfg = _apply_variant(_TARGETS[args.target], args.variant)
 
-    print(f"=== STORY 33.0 — PRE-LINEUP ARTIFACT: {args.target} ({cfg['kind']}) ===\n")
+    story = "33.0" if args.variant == "base" else "33.5"
+    label = "Class-A" if args.variant == "base" else "Class-A + 33.3 exp_* projection"
+    print(f"=== STORY {story} — PRE-LINEUP ARTIFACT ({args.variant}): {args.target} ({cfg['kind']}) ===\n")
     contract = _contract_cols(cfg["contract"])
-    print(f"  Pre-lineup contract: {len(contract)} Class-A features ({cfg['contract']})")
+    print(f"  Pre-lineup contract: {len(contract)} {label} features ({cfg['contract']})")
 
     print("\nLoading features from Snowflake...")
     df = load_features(min_games_played=15)
@@ -192,7 +223,9 @@ def main() -> None:
     artifact_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, artifact_path)
     out_contract_path.write_text(json.dumps(
-        {"target": cfg["target_col"], "model_name": f"pre_lineup_{args.target}", "story": "33.0",
+        {"target": cfg["target_col"],
+         "model_name": f"pre_lineup_{args.target}" + ("_proj" if args.variant == "proj" else ""),
+         "story": story,
          "n_features": len(fitted_cols), "derived_from": cfg["contract"],
          "feature_cols": fitted_cols}, indent=2))
     print(f"\nArtifact: {artifact_path}")
@@ -207,7 +240,8 @@ def main() -> None:
             print(f"  WARNING: S3 upload skipped ({exc}). Local artifact is valid; "
                   f"point the registry at the local path or re-upload later.")
 
-    print(f"""
+    if args.variant == "base":
+        print(f"""
 === NEXT STEPS (Story 33.0 serving split) ===
 Add a `pre_lineup` variant to model_registry.yaml under '{cfg['target_col']}':
    pre_lineup: {cfg['artifact']}        # (or {cfg['s3']})
@@ -215,6 +249,17 @@ Add a `pre_lineup` variant to model_registry.yaml under '{cfg['target_col']}':
 Then the predict_today serving split loads load_model('{cfg['target_col']}', 'pre_lineup')
 + this contract in the morning (lineups unconfirmed) and the champion post-lineup.
 Do this for all 3 targets, then verify with a dev predict_today run.
+""")
+    else:
+        print(f"""
+=== NEXT STEPS (Story 33.5 — GATE before any promotion) ===
+This `proj` artifact is a CHALLENGER to the deployed 33.0 pre-lineup floor. Do NOT repoint
+the registry yet. Run the honest-2026 gate (pre_lineup_baseline_30_8.py / promotion_gate.py):
+   proj challenger  vs  33.0 pre-lineup floor   (must beat — the projection features must add lift)
+   proj challenger  vs  post-lineup champion    (context — how much of the lineup gap is recovered)
+Only on a PROMOTE verdict: repoint model_registry `pre_lineup` → {cfg['artifact']}
+   + pre_lineup_feature_columns_path → {cfg['out_contract']}, bump pre_lineup_model_version v1→v2.
+Artifact + fitted contract written ({len(fitted_cols)} cols); batch-ship with the deploy.
 """)
 
 

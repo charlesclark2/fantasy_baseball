@@ -5,7 +5,8 @@ from pipeline.ops.intraday_ops import (
     intraday_lineup_rebuild,
     intraday_schedule_capture,
     intraday_weather_capture,
-    odds_oddsapi_dbt_rebuild,
+    odds_clv_dbt_rebuild,
+    odds_current_dbt_rebuild,
     odds_snapshot_dbt_rebuild,
     odds_snapshot_ingest,
 )
@@ -25,12 +26,22 @@ def odds_snapshot_job():
 
 
 # Story 12.3.7 / A2.18 — dbt rebuild for the ODDS API live path. The capture itself runs
-# on a Railway cron container (off the Dagster+ bill); `odds_rebuild_sensor` fires this job
-# only when new rows land in oddsapi.mlb_odds_raw, so Dagster pays for the (quick) warehouse
-# rebuild, never the I/O-bound HTTP poll.
+# every 30 min on a Railway cron container (off the Dagster+ bill); Dagster only pays for
+# the warehouse rebuild, decoupled from capture cadence. Split into two by freshness need:
+#
+#   odds_current_rebuild_job  — LIGHT (stg + mart_odds_outcomes). Fired by
+#     odds_current_rebuild_sensor on a dynamic game-hours window (hourly from first-pitch
+#     -3h to last first pitch + a near-close tick). ~12-14 game-day rebuilds, 0 on dark days.
+#   odds_clv_rebuild_job      — FULL post-hoc CLV/line-movement marts. Run ONCE/day post-game
+#     by odds_clv_rebuild_schedule (the closing line doesn't exist until first pitch).
 @job(executor_def=in_process_executor, tags={"concurrency_group": "odds_oddsapi_rebuild"})
-def odds_oddsapi_rebuild_job():
-    odds_oddsapi_dbt_rebuild()
+def odds_current_rebuild_job():
+    odds_current_dbt_rebuild()
+
+
+@job(executor_def=in_process_executor, tags={"concurrency_group": "odds_oddsapi_rebuild"})
+def odds_clv_rebuild_job():
+    odds_clv_dbt_rebuild()
 
 
 @job(executor_def=in_process_executor)

@@ -1,0 +1,75 @@
+{
+  "target": "home_win",
+  "metric": "brier",
+  "n_floor": 154,
+  "n_confirmed_arm": 206,
+  "n_projected_arm": 206,
+  "n_swap_block": 52,
+  "per_year": {
+    "2024": {
+      "confirmed": 0.19263191970317892,
+      "projected": 0.19244122694081356,
+      "n": 2003
+    },
+    "2025": {
+      "confirmed": 0.1985603834324157,
+      "projected": 0.19836914130854266,
+      "n": 2026
+    },
+    "2026": {
+      "confirmed": 0.20131406362301363,
+      "projected": 0.20116266054309628,
+      "n": 802
+    }
+  },
+  "actual_lineup_matters": false,
+  "headline": "PROJECTION \u2248 ACTUAL \u2014 the real lineup does NOT beat the projection beyond noise \u2192 the projection is as good as the confirmed lineup for the model \u2192 CLOSE the projection thread (33.6 floor is offense-optimal).",
+  "gate": {
+    "decision": "HOLD",
+    "single_eval_pass": false,
+    "overall_delta": 0.00019096901116517234,
+    "boot_ci": [
+      -0.0008377407156995669,
+      0.0012048661091747116
+    ],
+    "effect_size_pass": false,
+    "significant": false,
+    "consistency_pass": true,
+    "tolerance": 0.002,
+    "reasons": [
+      "Pooled improvement +0.0002 does NOT clear the 0.002 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0012 \u2265 0 (not significant).",
+      "No completed season regresses beyond tolerance (cross-season consistent).",
+      "Current season 2026 corroborates (+0.0002)."
+    ],
+    "per_season": [
+      {
+        "season": 2024,
+        "n": 2003,
+        "champion": 0.19244122694081356,
+        "challenger": 0.19263191970317892,
+        "delta": 0.0001906927623653576,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2025,
+        "n": 2026,
+        "champion": 0.19836914130854266,
+        "challenger": 0.1985603834324157,
+        "delta": 0.00019124212387303108,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2026,
+        "n": 802,
+        "champion": 0.20116266054309628,
+        "challenger": 0.20131406362301363,
+        "delta": 0.00015140307991734492,
+        "complete": false,
+        "regressed": false
+      }
+    ]
+  }
+}

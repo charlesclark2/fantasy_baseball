@@ -6,19 +6,33 @@ off the Dagster+ run-minute bill). Each cron fire runs once and exits.
 
 ## Architecture
 
+Capture cadence is **decoupled** from mart-rebuild cadence: Railway captures densely (cheap,
+off the Dagster bill); Dagster rebuilds the marts only when a consumer needs them. The raw
+30-min snapshots in `mlb_odds_raw` are the market-movement time series for the Epic-12 meta-model
+and cost no warehouse — only the full-CTAS marts cost compute, so they rebuild on demand.
+
 ```
-Railway cron (*/30)                          Dagster (daemon)
-  └─ entrypoint.sh                             odds_rebuild_sensor (every 5 min)
-       └─ odds_api_ingestion.py odds            └─ cursor on MAX(ingestion_ts) of mlb_odds_raw
-            --regions us us2 eu                      └─ new capture? → odds_oddsapi_rebuild_job
-            --markets h2h totals                          └─ dbtf run: stg_oddsapi_odds → mart_odds_outcomes
-       writes → oddsapi.mlb_odds_raw                          → mart_closing_line_value, mart_prediction_clv,
-                                                                mart_odds_line_movement
+Railway cron (*/30)              Dagster (daemon)
+  └─ entrypoint.sh                 odds_current_rebuild_sensor (~every 10 min)
+       └─ odds_api_ingestion.py     └─ caches today's slate (MIN/MAX game_date) in cursor — queries
+            odds --regions us          Snowflake ONCE/day; all other ticks are free
+            us2 eu --markets         └─ dynamic game-hours window: hourly from first-pitch −3h to
+            h2h totals                  last first pitch, + one near-close tick (10 min pre-last-pitch);
+       writes →                        0 fires on dark days
+       oddsapi.mlb_odds_raw          └─ fire → odds_current_rebuild_job
+                                          └─ dbtf run: stg_oddsapi_odds → mart_odds_outcomes  (LIGHT)
+
+                                 odds_clv_rebuild_daily schedule (08:00 UTC, once/day post-game)
+                                   └─ odds_clv_rebuild_job
+                                       └─ dbtf run: stg + outcomes + mart_closing_line_value,
+                                          mart_prediction_clv, mart_odds_line_movement  (FULL, post-hoc)
 ```
 
-- **Cost:** live endpoint = `markets(2) × regions(3)` = **6 credits/call**. At `*/30` ≈ 48/day ≈ ~8.6k/mo (trivial). Tighten the cron to game hours if desired.
+- **Capture cost:** live endpoint = `markets(2) × regions(3)` = **6 credits/call**. At `*/30` ≈ 48/day ≈ ~8.6k/mo (trivial).
+- **Rebuild cost:** full-CTAS marts go from ~48/day (the rejected per-capture design) to **~12-14 light rebuilds on a game day + 1 full post-game** — and **0 on dark days** (the sensor window is derived from the actual slate). This is what keeps us off the A2.15/A2.16 intraday-frequency problem.
 - **Books captured:** all `us` + `us2` + `eu` → Bovada (target), Pinnacle (sharp), DraftKings, FanDuel, BetMGM, etc.
 - **Lineage:** flows through the EXISTING `mart_odds_outcomes` UNION (`stg_oddsapi_odds`), untouched since the migration.
+- **Fast-follow:** `stg_oddsapi_odds` is still a full-CTAS `table`; incrementalizing it (append by `ingestion_ts`, the A2.15 pattern) makes each light rebuild near-free and opens headroom to go more frequent for the meta-model without cost.
 
 ## Railway setup
 
@@ -38,8 +52,8 @@ Railway cron (*/30)                          Dagster (daemon)
 select max(ingestion_ts), count(*) from baseball_data.oddsapi.mlb_odds_raw
 where ingestion_ts > dateadd('hour', -2, current_timestamp());
 ```
-- Confirm `odds_rebuild_sensor` is ON in Dagster and fired `odds_oddsapi_rebuild_job` after a capture.
-- Confirm `mart_odds_outcomes` / `mart_odds_line_movement` show fresh `data_source` rows for today.
+- Confirm `odds_current_rebuild_sensor` is ON in Dagster and fired `odds_current_rebuild_job` during today's game-hours window (you'll see hourly runs from ~3h before first pitch). On a dark day it correctly fires nothing.
+- Confirm `mart_odds_outcomes` shows fresh `data_source` rows for today. `mart_closing_line_value` / `mart_prediction_clv` / `mart_odds_line_movement` refresh once/day via the `odds_clv_rebuild_daily` schedule (08:00 UTC) — check them the morning after.
 
 ## Cutover (do AFTER validation — this is the A2.18 saving)
 
