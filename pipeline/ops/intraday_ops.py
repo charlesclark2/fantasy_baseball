@@ -9,12 +9,27 @@ SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
 
+# Story A2.16 port (2026-06-15) — these helpers ran `subprocess.run` with NO timeout
+# (the A2.16 fix only reached sensor_ops.py). Incident 2026-06-15: the intraday
+# odds_snapshot_ingest op (`parlay_api_ingestion.py odds`) WEDGED on a hung Parlay API
+# request (~19:55 EDT) and the op never returned, blocking the snapshot. A hard
+# subprocess ceiling converts an infinite hang into a bounded failure the sensor can
+# retry cleanly. Odds polls get a TIGHTER 600s ceiling (a poll is seconds of work, so a
+# hang should fail within the snapshot cadence, not sit for 30 min); dbt rebuilds keep
+# the 1800s default.
+_SUBPROCESS_TIMEOUT = 1800   # seconds (30 min) default
+_POLL_TIMEOUT = 600          # seconds (10 min) — fast-fail ceiling for API polls
 
-def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None) -> None:
+
+def _run_script(context: OpExecutionContext, script: str, args: list[str] | None = None,
+                timeout: int = _SUBPROCESS_TIMEOUT) -> None:
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
     cmd = [sys.executable, path] + (args or [])
-    context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    context.log.info(f"Running: {' '.join(cmd)} (timeout {timeout}s)")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise Exception(f"{os.path.basename(script)} exceeded {timeout}s hard timeout and was killed")
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:
@@ -23,10 +38,13 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
         raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
 
 
-def _run_dbt(context: OpExecutionContext, args: list[str]) -> None:
+def _run_dbt(context: OpExecutionContext, args: list[str], timeout: int = _SUBPROCESS_TIMEOUT) -> None:
     cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
-    context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    context.log.info(f"Running: {' '.join(cmd)} (timeout {timeout}s)")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise Exception(f"dbtf {args[0]} exceeded {timeout}s hard timeout and was killed")
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:
@@ -89,9 +107,9 @@ def odds_snapshot_ingest(context: OpExecutionContext, has_games: bool) -> None:
     if not has_games:
         context.log.info("No games today — skipping odds snapshot ingestion.")
         return
-    _run_script(context, "parlay_api_ingestion.py", ["events"])
-    _run_script(context, "parlay_api_ingestion.py", ["odds"])
-    _run_script(context, "parlay_api_ingestion.py", ["line-movement"])
+    _run_script(context, "parlay_api_ingestion.py", ["events"], timeout=_POLL_TIMEOUT)
+    _run_script(context, "parlay_api_ingestion.py", ["odds"], timeout=_POLL_TIMEOUT)
+    _run_script(context, "parlay_api_ingestion.py", ["line-movement"], timeout=_POLL_TIMEOUT)
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
