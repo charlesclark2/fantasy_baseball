@@ -369,7 +369,7 @@ function BlogAdminInner() {
     const posts = postsQuery.data?.posts ?? []
     return (
       <div className="min-h-screen bg-[#0a0a0a]">
-        <Nav authenticated activeLink="admin" />
+        <Nav authenticated activeLink="blog" />
         <main className="mx-auto max-w-4xl px-6 py-10">
           <div className="flex items-center justify-between mb-8">
             <div>
@@ -441,7 +441,7 @@ function BlogAdminInner() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col">
-      <Nav authenticated activeLink="admin" />
+      <Nav authenticated activeLink="blog" />
 
       {/* Editor toolbar bar */}
       <div className="sticky top-[73px] z-20 border-b border-[#262626] bg-[#0a0a0a]/95 backdrop-blur-sm">

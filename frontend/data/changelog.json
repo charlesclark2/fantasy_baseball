@@ -5,6 +5,21 @@
     "entries": [
       {
         "tag": "new",
+        "title": "Blog",
+        "description": "Blog posts written in the admin editor are now publicly visible at /blog and /blog/[id]. The homepage now surfaces the latest published post as a teaser immediately below the hero."
+      },
+      {
+        "tag": "improvement",
+        "title": "Picks show correct date for late-night users",
+        "description": "Dashboard picks now reflect your local date rather than Eastern Time — users in CST, MT, and PT time zones will see the correct day's picks after 11 PM without waiting for midnight ET."
+      },
+      {
+        "tag": "improvement",
+        "title": "Admin pipeline monitoring live",
+        "description": "Admin page now shows real-time Dagster run history and model freshness from production. Mock data has been removed."
+      },
+      {
+        "tag": "new",
         "title": "Settings page",
         "description": "Account settings now available from the gear icon in the top-right nav. Shows your verified email address, subscription tier, and sign-out controls."
       },

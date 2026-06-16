@@ -287,6 +287,50 @@ the `~/.aws` power-user profile). Same actions/resources as policy #1.
 
 ---
 
+## DynamoDB — Data Quality Reports (A0.4.15)
+
+User-submitted data issue reports from the picks detail page. Writes via `POST /feedback/data-quality`.
+Email notification to `support@credencesports.com` via SES is deferred (see A0.5 below).
+
+| Resource | Value |
+|---|---|
+| Table name | `credence-prod-dynamo-data-quality-reports` |
+| Partition key | `report_id` (String, UUID) |
+| Billing mode | Pay-per-request (on-demand) |
+| Region | `us-east-1` |
+
+```bash
+# Provision (run once with create-table IAM creds)
+aws dynamodb create-table \
+  --table-name credence-prod-dynamo-data-quality-reports \
+  --attribute-definitions AttributeName=report_id,AttributeType=S \
+  --key-schema AttributeName=report_id,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region us-east-1
+```
+
+### Lambda IAM — inline policy addition
+
+Add `dynamodb:PutItem` on this table to the Lambda execution role (`credence-prod-lambda-api`):
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["dynamodb:PutItem"],
+  "Resource": "arn:aws:dynamodb:us-east-1:ACCOUNT_ID:table/credence-prod-dynamo-data-quality-reports"
+}
+```
+
+### Lambda environment variable
+
+| Variable | Value |
+|---|---|
+| `DATA_QUALITY_TABLE` | `credence-prod-dynamo-data-quality-reports` |
+
+Set via Lambda console → credence-prod-lambda-api → Configuration → Environment variables.
+
+---
+
 ## Railway PostgreSQL Serving Store (A2.12)
 
 Primary OLTP read path for all FastAPI endpoints. Dagster reverse-ETLs prediction
