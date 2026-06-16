@@ -1,0 +1,19 @@
+# Railway config for the odds-capture cron service ONLY (Story 12.3.7 / A2.18).
+#
+# This file is SERVICE-SCOPED on purpose. The repo root has a separate ./Dockerfile
+# (the heavy Dagster/ML service); a repo-root railway.toml would force THAT service to
+# build this lean capture image too. So in the Railway service for odds-capture, set:
+#   Settings → Config-as-code (Railway Config File) → services/odds_capture/railway.toml
+#
+# Root Directory stays at the repo root: dockerfilePath and the Dockerfile's
+# `COPY scripts/...` lines are repo-root-relative, so the build context must be the root.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/odds_capture/Dockerfile"
+
+[deploy]
+# Railway re-invokes the container on this schedule; each fire runs entrypoint.sh once
+# and exits. NEVER restart on exit (the cron is the only thing that should re-run it).
+cronSchedule = "*/30 * * * *"
+restartPolicyType = "NEVER"
