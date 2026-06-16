@@ -40,6 +40,7 @@ from betting_ml.utils.data_loader import load_features, load_todays_features, ge
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
+from betting_ml.utils.pick_explanations import build_pick_explanations  # Story 30.15
 from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
@@ -197,7 +198,14 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- Story 30.7 — explicit provenance flag. TRUE only for rows backfilled after a
     -- promotion; live (real-time, pre-game) rows are FALSE. Replaces the overloaded
     -- use of prediction_type='backfill'; prediction_type now means live-timing only.
-    is_backfill                  BOOLEAN  DEFAULT FALSE
+    is_backfill                  BOOLEAN  DEFAULT FALSE,
+
+    -- Story 30.15 — per-pick feature attribution ("why this pick"). JSON text of
+    -- the served model's top-N signed local SHAP drivers per target (home_win /
+    -- total_runs / run_diff), with human labels + the served tier. Explains MODEL
+    -- REASONING, not a betting edge (honesty guard; framed for the product, no
+    -- win-rate claims). Unbounded VARCHAR so top-N payloads never truncate.
+    pick_explanation             VARCHAR
 )
 """
 
@@ -225,6 +233,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     imputed_feature_count, imputed_discriminative_count,
     discriminative_coverage, is_degraded, imputed_features,
     qualified_bet,
+    pick_explanation,
     is_backfill
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
@@ -249,6 +258,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(imputed_feature_count)s, %(imputed_discriminative_count)s,
     %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s,
     %(qualified_bet)s,
+    %(pick_explanation)s,
     %(is_backfill)s
 )
 """
@@ -677,6 +687,7 @@ def _write_predictions_to_snowflake(
     best_alpha: float,
     picks: list[str],
     imputation_summary: list[dict] | None = None,
+    pick_explanations: list[dict] | None = None,
 ) -> None:
     def _f(arr, i) -> float | None:
         v = arr[i]
@@ -887,6 +898,12 @@ def _write_predictions_to_snowflake(
                 (l4_h2h_decision is not None and l4_h2h_decision != "abstain")
                 or (l4_tot_decision is not None and l4_tot_decision != "abstain")
             ),
+            # Story 30.15 — per-pick feature attribution payload (JSON text; the
+            # frontend/API parse it for "why this pick"). None-safe when absent.
+            "pick_explanation": (
+                json.dumps(pick_explanations[i])
+                if (pick_explanations and i < len(pick_explanations)) else None
+            ),
             "is_backfill": is_backfill,
         }))
 
@@ -953,6 +970,7 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS is_degraded BOOLEAN")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_features VARCHAR(4000)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")  # Story 30.15
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
@@ -1438,17 +1456,54 @@ def main(target_date: str, args) -> None:
     global MODEL_VERSION
     MODEL_VERSION = _registry["home_win"]["model_version"]
 
-    def _registry_feat_cols(target: str) -> list[str]:
-        path = PROJECT_ROOT / _registry[target]["feature_columns_path"]
-        with open(path) as _f:
+    def _load_cols(path: str) -> list[str]:
+        with open(PROJECT_ROOT / path) as _f:
             raw = json.load(_f)
         return raw["feature_cols"] if isinstance(raw, dict) else raw
 
+    # Story 33.0 — pre/post-lineup SERVING SPLIT. The morning slate (lineups not yet
+    # confirmed, a live run) serves the PRE-LINEUP model trained on Class-A features —
+    # it matches the sparse morning matrix, so there's no train/serve skew (the whole
+    # point of Epic 33). The post-lineup re-score (--lineup-confirmed) and historical
+    # backfills (--is-backfill, dense post-hoc features) serve the full champion.
+    # FAIL-SAFE: any target lacking a `pre_lineup` registry variant falls back to the
+    # champion, so this is inert until all three pre-lineup artifacts are wired and
+    # never breaks scoring. The CONTRACT-GUARD below still asserts contract==model.
+    _use_pre_lineup = (not args.lineup_confirmed) and (not args.is_backfill)
+
+    def _resolve_serve_variant(target: str) -> tuple[str, str]:
+        """(model_variant, feature_columns_path) for this serve tier."""
+        entry = _registry[target]
+        if (_use_pre_lineup and entry.get("pre_lineup")
+                and entry.get("pre_lineup_feature_columns_path")):
+            return "pre_lineup", entry["pre_lineup_feature_columns_path"]
+        return "prod", entry["feature_columns_path"]
+
+    _serve_variant = {t: _resolve_serve_variant(t)
+                      for t in ("total_runs", "run_differential", "home_win")}
+
+    # Story 33.0 — the pre-lineup serve is a DISTINCT model lineage (its own version,
+    # starting at v1), NOT the champion's version (v5). Stamping morning pre-lineup rows
+    # `pre_lineup_v1` keeps them cleanly separable from the post-lineup champion in
+    # daily_model_predictions + the Model Performance page — important because betting
+    # pre-lineup (ahead of the market's reaction to lineups) is its own product surface.
+    # Keyed off home_win's resolved variant (the existing MODEL_VERSION anchor); all 3
+    # pre-lineup variants are wired so the tier is uniform.
+    if _serve_variant["home_win"][0] == "pre_lineup":
+        _pre_ver = _registry["home_win"].get("pre_lineup_model_version", "v1")
+        MODEL_VERSION = f"pre_lineup_{_pre_ver}"
+
     ngb_tot_dist  = _registry["total_runs"]["dist"]
     ngb_diff_dist = _registry["run_differential"]["dist"]
-    tot_feat_cols  = _registry_feat_cols("total_runs")
-    diff_feat_cols = _registry_feat_cols("run_differential")
-    hw_feat_cols   = _registry_feat_cols("home_win")
+    tot_feat_cols  = _load_cols(_serve_variant["total_runs"][1])
+    diff_feat_cols = _load_cols(_serve_variant["run_differential"][1])
+    hw_feat_cols   = _load_cols(_serve_variant["home_win"][1])
+    _tier_label = ("PRE-LINEUP (morning)" if _use_pre_lineup
+                   else "BACKFILL" if args.is_backfill else "POST-LINEUP")
+    print(f"  [33.0 SERVE-SPLIT] tier={_tier_label}  "
+          f"total_runs={_serve_variant['total_runs'][0]}({len(tot_feat_cols)}) "
+          f"run_diff={_serve_variant['run_differential'][0]}({len(diff_feat_cols)}) "
+          f"home_win={_serve_variant['home_win'][0]}({len(hw_feat_cols)})")
     print(f"  total_runs dist={ngb_tot_dist}, features={len(tot_feat_cols)}")
     print(f"  run_differential dist={ngb_diff_dist}, features={len(diff_feat_cols)}")
     print(f"  home_win features={len(hw_feat_cols)}")
@@ -1495,9 +1550,9 @@ def main(target_date: str, args) -> None:
     )
 
     print("Loading production models from registry...")
-    ngb_total = _load_model_cached("total_runs", "prod")
-    ngb_diff  = _load_model_cached("run_differential", "prod")
-    clf_hw    = _load_model_cached("home_win", "prod")
+    ngb_total = _load_model_cached("total_runs", _serve_variant["total_runs"][0])
+    ngb_diff  = _load_model_cached("run_differential", _serve_variant["run_differential"][0])
+    clf_hw    = _load_model_cached("home_win", _serve_variant["home_win"][0])
     print(f"  total_runs: {type(ngb_total).__name__}")
     print(f"  run_differential: {type(ngb_diff).__name__}")
     print(f"  home_win: {type(clf_hw).__name__}")
@@ -1524,8 +1579,8 @@ def main(target_date: str, args) -> None:
         _n_model = _model_n_features(_model)
         if _n_model is not None and _n_model != len(_cols):
             raise RuntimeError(
-                f"[CONTRACT-GUARD] {_tgt}: registry contract "
-                f"({_registry[_tgt]['feature_columns_path']}) lists {len(_cols)} "
+                f"[CONTRACT-GUARD] {_tgt} ({_serve_variant[_tgt][0]} variant): contract "
+                f"({_serve_variant[_tgt][1]}) lists {len(_cols)} "
                 f"features but the trained {type(_model).__name__} expects {_n_model}. "
                 f"These must match — the model scores by column position, so a "
                 f"mismatch yields a silent IndexError. Likely cause: the contract was "
@@ -1614,6 +1669,33 @@ def main(target_date: str, args) -> None:
 
     X_clf = X_today_imp.reindex(columns=hw_feat_cols, fill_value=0.0).values.astype(np.float32)
     p_home_win_clf = clf_hw.predict_proba(X_clf)[:, 1]
+
+    # Story 30.15 — per-pick feature attribution (explainable picks). Exact SHAP
+    # per game × target on the ACTUAL served model (home_win XGBoost TreeSHAP;
+    # NGBoost loc additive-TreeSHAP). Stored alongside the pick so the frontend can
+    # render "why this pick." served_tier reflects this serve's timing (the morning
+    # pre-lineup pass vs the post_lineup re-score); composes with Epic 33 once the
+    # pre-lineup model is wired. NEVER blocks scoring — fails to a 'deferred' payload.
+    try:
+        # served_tier: a backfill scores completed games on DENSE post-hoc features
+        # (neither a live morning nor a live post-lineup serve) → label it 'backfill';
+        # live runs track timing via lineup_confirmed (pre vs post lineup).
+        _served_tier = ("backfill" if args.is_backfill
+                        else "post_lineup" if args.lineup_confirmed else "pre_lineup")
+        pick_explanations = build_pick_explanations(
+            served_tier=_served_tier,
+            top_n=5,
+            clf_hw=clf_hw, X_clf=X_clf, hw_feat_cols=hw_feat_cols,
+            ngb_total=ngb_total, X_tot=X_tot, tot_feat_cols=tot_feat_cols,
+            ngb_diff=ngb_diff, X_diff=X_diff, diff_feat_cols=diff_feat_cols,
+        )
+        _n_expl = sum(1 for p in pick_explanations
+                      if any(t.get("drivers") for t in p.get("targets", {}).values()))
+        print(f"[30.15] Per-pick attribution computed for {_n_expl}/{len(pick_explanations)} game(s) "
+              f"(home_win exact SHAP; NGBoost loc additive-SHAP).")
+    except Exception as _expl_exc:
+        print(f"[30.15] Warning: per-pick attribution unavailable ({_expl_exc}); picks still scored.")
+        pick_explanations = []
 
     has_odds_col = df_today["has_odds"].fillna(False).astype(bool)
     h2h_mkt  = (
@@ -1775,6 +1857,7 @@ def main(target_date: str, args) -> None:
         best_alpha=best_alpha,
         picks=picks_list,
         imputation_summary=imputation_summary,
+        pick_explanations=pick_explanations,
     )
 
 

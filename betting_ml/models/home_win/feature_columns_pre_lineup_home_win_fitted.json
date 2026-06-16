@@ -1,9 +1,9 @@
 {
   "target": "home_win",
   "model_name": "pre_lineup_home_win",
-  "story": "30.8",
+  "story": "33.0",
   "n_features": 156,
-  "derived_from": "home_win live contract minus 55 Class-B lineup cols",
+  "derived_from": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win.json",
   "feature_cols": [
     "home_bp_eb_xwoba",
     "away_bp_eb_xwoba",

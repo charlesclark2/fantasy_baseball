@@ -1,9 +1,9 @@
 {
   "target": "total_runs",
   "model_name": "pre_lineup_total_runs",
-  "story": "30.8",
+  "story": "33.0",
   "n_features": 89,
-  "derived_from": "total_runs live contract minus 24 Class-B lineup cols",
+  "derived_from": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json",
   "feature_cols": [
     "home_bp_eb_xwoba_seasonnorm",
     "away_bp_eb_xwoba_seasonnorm",
