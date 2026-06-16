@@ -243,7 +243,7 @@ export default function AdminPage() {
         {
           label: "Last Dagster Run",
           value: pipelineStatus.last_updated_at
-            ? new Date(pipelineStatus.last_updated_at).toLocaleString("en-US", {
+            ? new Date(pipelineStatus.last_updated_at.endsWith("Z") ? pipelineStatus.last_updated_at : pipelineStatus.last_updated_at + "Z").toLocaleString("en-US", {
                 month: "short",
                 day: "numeric",
                 hour: "numeric",
