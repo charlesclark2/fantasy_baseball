@@ -40,9 +40,12 @@ import boto3
 import psycopg2
 import psycopg2.extras
 import snowflake.connector
+from dotenv import load_dotenv
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -1392,11 +1395,305 @@ def main() -> int:
             log.exception("Failed to write game detail blobs")
             errors += 1
 
+    # ── team profiles ────────────────────────────────────────────────────────────
+    if pg:
+        try:
+            errors += write_team_profiles(sf, pg, today)
+        except Exception:
+            log.exception("Failed to write team profiles")
+            errors += 1
+
     sf.close()
     if pg:
         pg.close()
 
     return 0 if errors == 0 else 1
+
+
+# ── Team profile SQL ──────────────────────────────────────────────────────────
+
+_TEAM_SUMMARY_SQL = """
+WITH current_record AS (
+    SELECT *
+    FROM baseball_data.betting.mart_team_season_record
+    WHERE game_year = YEAR(CURRENT_DATE) AND is_current = TRUE
+),
+latest_offense AS (
+    SELECT *
+    FROM baseball_data.betting.mart_team_rolling_offense
+    WHERE game_year = YEAR(CURRENT_DATE)
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY team ORDER BY game_date DESC) = 1
+),
+latest_pitching AS (
+    SELECT *
+    FROM baseball_data.betting.mart_team_rolling_pitching
+    WHERE game_year = YEAR(CURRENT_DATE)
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY team ORDER BY game_date DESC) = 1
+)
+SELECT
+    t.team_id,
+    t.canonical_abbrev                      AS team_abbrev,
+    t.canonical_name                        AS team_name,
+    r.wins, r.losses, r.games_played, r.win_pct,
+    r.runs_scored_ytd, r.runs_allowed_ytd,
+    r.pythagorean_win_exp,
+    r.games_back, r.is_division_leader,
+    r.streak_direction, r.streak_length,
+    r.league, r.division,
+    off.xwoba_std                           AS off_xwoba_std,
+    off.runs_per_game_std                   AS off_runs_per_game_std,
+    off.woba_std                            AS off_woba_std,
+    off.k_pct_std                           AS off_k_pct_std,
+    off.bb_pct_std                          AS off_bb_pct_std,
+    off.xwoba_30d                           AS off_xwoba_30d,
+    off.runs_per_game_30d                   AS off_runs_per_game_30d,
+    pit.runs_allowed_per_game_std           AS pit_ra_per_game_std,
+    pit.xwoba_against_std                   AS pit_xwoba_against_std,
+    pit.starter_xwoba_against_std           AS pit_starter_xwoba_against_std,
+    pit.starter_k_pct_std                   AS pit_starter_k_pct_std,
+    pit.bullpen_xwoba_against_std           AS pit_bullpen_xwoba_against_std,
+    pit.xwoba_against_30d                   AS pit_xwoba_against_30d
+FROM baseball_data.betting.dim_team_name_lookup t
+JOIN current_record r ON r.team_id = t.team_id
+LEFT JOIN latest_offense off ON off.team = t.canonical_abbrev
+LEFT JOIN latest_pitching pit ON pit.team = t.canonical_abbrev
+"""
+
+_TEAM_PLATOON_SQL = """
+SELECT
+    t.team_id,
+    vs.opp_starter_hand                     AS pitcher_hand,
+    vs.xwoba_std,
+    vs.woba_std,
+    vs.k_pct_std,
+    vs.bb_pct_std,
+    vs.runs_per_game_std
+FROM baseball_data.betting.mart_team_vs_pitcher_hand vs
+JOIN baseball_data.betting.dim_team_name_lookup t ON t.canonical_abbrev = vs.team
+WHERE vs.game_year = YEAR(CURRENT_DATE)
+QUALIFY ROW_NUMBER() OVER (PARTITION BY vs.team, vs.opp_starter_hand ORDER BY vs.game_date DESC) = 1
+"""
+
+_TEAM_ELO_SQL = """
+SELECT
+    t.team_id,
+    e.game_date,
+    e.elo_after_game                        AS elo
+FROM baseball_data.betting.team_elo_history e
+JOIN baseball_data.betting.dim_team_name_lookup t ON t.canonical_abbrev = e.team_abbrev
+WHERE e.game_date >= DATEADD(day, -60, CURRENT_DATE)
+QUALIFY ROW_NUMBER() OVER (PARTITION BY t.team_id ORDER BY e.game_date DESC) <= 30
+ORDER BY t.team_id, e.game_date
+"""
+
+_TEAM_FORM_SQL = """
+WITH team_games AS (
+    SELECT
+        t.team_id,
+        g.game_pk,
+        g.game_date,
+        CASE WHEN g.home_team_id = t.team_id THEN g.away_team ELSE g.home_team END AS opponent,
+        CASE WHEN g.home_team_id = t.team_id THEN 'home' ELSE 'away' END           AS home_away,
+        CASE WHEN g.home_team_id = t.team_id THEN g.home_final_score
+             ELSE g.away_final_score END                                             AS runs_scored,
+        CASE WHEN g.home_team_id = t.team_id THEN g.away_final_score
+             ELSE g.home_final_score END                                             AS runs_allowed,
+        (g.home_team_won IS NOT NULL AND (
+            (g.home_team_id = t.team_id AND g.home_team_won) OR
+            (g.away_team_id = t.team_id AND NOT g.home_team_won)
+        ))                                                                           AS won,
+        ROW_NUMBER() OVER (PARTITION BY t.team_id ORDER BY g.game_date DESC, g.game_pk DESC) AS rn
+    FROM baseball_data.betting.mart_game_results g
+    JOIN baseball_data.betting.dim_team_name_lookup t
+        ON t.team_id = g.home_team_id OR t.team_id = g.away_team_id
+    WHERE g.game_year = YEAR(CURRENT_DATE)
+      AND g.home_team_won IS NOT NULL
+)
+SELECT team_id, game_pk, game_date, opponent, home_away, runs_scored, runs_allowed, won
+FROM team_games
+WHERE rn <= 10
+ORDER BY team_id, rn
+"""
+
+_TEAM_H2H_ACCURACY_SQL = """
+SELECT
+    t.team_id,
+    COUNT(*)                                                                            AS games_predicted,
+    SUM(CASE WHEN (clv.model_prob > 0.5 AND clv.actual_outcome = 1)
+                  OR (clv.model_prob <= 0.5 AND clv.actual_outcome = 0) THEN 1 ELSE 0
+         END)                                                                           AS games_correct,
+    ROUND(
+        SUM(CASE WHEN (clv.model_prob > 0.5 AND clv.actual_outcome = 1)
+                      OR (clv.model_prob <= 0.5 AND clv.actual_outcome = 0) THEN 1.0 ELSE 0
+             END) / NULLIF(COUNT(*), 0),
+        4
+    )                                                                                   AS accuracy
+FROM baseball_data.betting.mart_clv_labeled_games clv
+JOIN baseball_data.betting.mart_game_results g ON g.game_pk = clv.game_pk
+JOIN baseball_data.betting.dim_team_name_lookup t
+    ON t.team_id = g.home_team_id OR t.team_id = g.away_team_id
+WHERE YEAR(clv.game_date) = YEAR(CURRENT_DATE)
+  AND clv.market_type = 'h2h'
+  AND clv.actual_outcome IS NOT NULL
+GROUP BY t.team_id
+"""
+
+_TEAM_SCHEDULE_SQL = """
+WITH probable AS (
+    SELECT game_pk, side, probable_pitcher_name
+    FROM baseball_data.betting.stg_statsapi_probable_pitchers
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk, side ORDER BY ingestion_ts DESC) = 1
+)
+SELECT
+    t.team_id,
+    g.game_pk,
+    g.game_date,
+    opp.canonical_abbrev                                                               AS opponent,
+    CASE WHEN g.home_team_id = t.team_id THEN 'home' ELSE 'away' END                 AS home_away,
+    g.venue_name,
+    CASE WHEN g.home_team_id = t.team_id THEN ph.probable_pitcher_name
+         ELSE pa.probable_pitcher_name END                                             AS our_probable_pitcher
+FROM baseball_data.betting.stg_statsapi_games g
+JOIN baseball_data.betting.dim_team_name_lookup t
+    ON t.team_id = g.home_team_id OR t.team_id = g.away_team_id
+JOIN baseball_data.betting.dim_team_name_lookup opp
+    ON opp.team_id = CASE WHEN g.home_team_id = t.team_id THEN g.away_team_id ELSE g.home_team_id END
+LEFT JOIN probable ph ON ph.game_pk = g.game_pk AND ph.side = 'home'
+LEFT JOIN probable pa ON pa.game_pk = g.game_pk AND pa.side = 'away'
+WHERE g.game_date BETWEEN CURRENT_DATE AND DATEADD(day, 7, CURRENT_DATE)
+  AND g.abstract_game_state NOT IN ('Final', 'Live')
+  AND YEAR(g.game_date) = YEAR(CURRENT_DATE)
+ORDER BY t.team_id, g.game_date
+"""
+
+
+def write_team_profiles(sf, pg_conn, today: str) -> int:
+    """Builds and writes team profile blobs to api_cache. Returns error count."""
+    errors = 0
+    try:
+        summary_rows  = _sf_query(sf, _TEAM_SUMMARY_SQL)
+        platoon_rows  = _sf_query(sf, _TEAM_PLATOON_SQL)
+        elo_rows      = _sf_query(sf, _TEAM_ELO_SQL)
+        form_rows     = _sf_query(sf, _TEAM_FORM_SQL)
+        schedule_rows = _sf_query(sf, _TEAM_SCHEDULE_SQL)
+        h2h_rows      = _sf_query(sf, _TEAM_H2H_ACCURACY_SQL)
+    except Exception:
+        log.exception("Failed to query Snowflake for team profiles")
+        return 1
+
+    # Index secondary tables by team_id
+    platoon_by_team: dict = defaultdict(dict)
+    for r in platoon_rows:
+        hand = str(r.get("PITCHER_HAND") or "").upper()
+        platoon_by_team[r["TEAM_ID"]][hand] = {
+            "xwoba": _flt(r.get("XWOBA_STD")),
+            "woba": _flt(r.get("WOBA_STD")),
+            "k_pct": _flt(r.get("K_PCT_STD")),
+            "bb_pct": _flt(r.get("BB_PCT_STD")),
+            "runs_per_game": _flt(r.get("RUNS_PER_GAME_STD")),
+        }
+
+    elo_by_team: dict = defaultdict(list)
+    for r in elo_rows:
+        elo_by_team[r["TEAM_ID"]].append({
+            "date": str(r["GAME_DATE"]),
+            "elo": _flt(r.get("ELO")),
+        })
+
+    form_by_team: dict = defaultdict(list)
+    for r in form_rows:
+        form_by_team[r["TEAM_ID"]].append({
+            "game_pk": _int(r.get("GAME_PK")),
+            "date": str(r["GAME_DATE"]),
+            "opponent": r.get("OPPONENT"),
+            "home_away": r.get("HOME_AWAY"),
+            "runs_scored": _int(r.get("RUNS_SCORED")),
+            "runs_allowed": _int(r.get("RUNS_ALLOWED")),
+            "won": bool(r.get("WON")),
+        })
+
+    h2h_by_team: dict = {r["TEAM_ID"]: r for r in h2h_rows}
+
+    schedule_by_team: dict = defaultdict(list)
+    for r in schedule_rows:
+        schedule_by_team[r["TEAM_ID"]].append({
+            "game_pk": _int(r.get("GAME_PK")),
+            "date": str(r["GAME_DATE"]),
+            "opponent": r.get("OPPONENT"),
+            "home_away": r.get("HOME_AWAY"),
+            "venue_name": r.get("VENUE_NAME"),
+            "our_probable_pitcher": r.get("OUR_PROBABLE_PITCHER"),
+        })
+
+    for r in summary_rows:
+        tid = r["TEAM_ID"]
+        payload = {
+            "team_id": tid,
+            "team_abbrev": r.get("TEAM_ABBREV"),
+            "team_name": r.get("TEAM_NAME"),
+            "league": r.get("LEAGUE"),
+            "division": r.get("DIVISION"),
+            "record": {
+                "wins": _int(r.get("WINS")),
+                "losses": _int(r.get("LOSSES")),
+                "games_played": _int(r.get("GAMES_PLAYED")),
+                "win_pct": _flt(r.get("WIN_PCT")),
+                "runs_scored_ytd": _int(r.get("RUNS_SCORED_YTD")),
+                "runs_allowed_ytd": _int(r.get("RUNS_ALLOWED_YTD")),
+                "run_differential": (
+                    _int(r.get("RUNS_SCORED_YTD")) - _int(r.get("RUNS_ALLOWED_YTD"))
+                    if r.get("RUNS_SCORED_YTD") is not None and r.get("RUNS_ALLOWED_YTD") is not None
+                    else None
+                ),
+                "pythagorean_win_exp": _flt(r.get("PYTHAGOREAN_WIN_EXP")),
+                "games_back": _flt(r.get("GAMES_BACK")),
+                "is_division_leader": bool(r.get("IS_DIVISION_LEADER")),
+                "streak_direction": r.get("STREAK_DIRECTION"),
+                "streak_length": _int(r.get("STREAK_LENGTH")),
+            },
+            "offense": {
+                "xwoba_std": _flt(r.get("OFF_XWOBA_STD")),
+                "woba_std": _flt(r.get("OFF_WOBA_STD")),
+                "runs_per_game_std": _flt(r.get("OFF_RUNS_PER_GAME_STD")),
+                "k_pct_std": _flt(r.get("OFF_K_PCT_STD")),
+                "bb_pct_std": _flt(r.get("OFF_BB_PCT_STD")),
+                "xwoba_30d": _flt(r.get("OFF_XWOBA_30D")),
+                "runs_per_game_30d": _flt(r.get("OFF_RUNS_PER_GAME_30D")),
+                "vs_lhp": platoon_by_team[tid].get("L"),
+                "vs_rhp": platoon_by_team[tid].get("R"),
+            },
+            "pitching": {
+                "ra9": _flt(r.get("PIT_RA_PER_GAME_STD")),
+                "xwoba_against_std": _flt(r.get("PIT_XWOBA_AGAINST_STD")),
+                "starter_xwoba_against_std": _flt(r.get("PIT_STARTER_XWOBA_AGAINST_STD")),
+                "starter_k_pct_std": _flt(r.get("PIT_STARTER_K_PCT_STD")),
+                "bullpen_xwoba_against_std": _flt(r.get("PIT_BULLPEN_XWOBA_AGAINST_STD")),
+                "xwoba_against_30d": _flt(r.get("PIT_XWOBA_AGAINST_30D")),
+            },
+            "elo": {
+                "current": elo_by_team[tid][-1]["elo"] if elo_by_team[tid] else None,
+                "history": elo_by_team[tid],
+            },
+            "recent_form": form_by_team[tid],
+            "schedule": schedule_by_team[tid],
+            "h2h_model": (
+                {
+                    "games": _int(h2h_by_team[tid].get("GAMES_PREDICTED")),
+                    "correct": _int(h2h_by_team[tid].get("GAMES_CORRECT")),
+                    "accuracy": _flt(h2h_by_team[tid].get("ACCURACY")),
+                }
+                if tid in h2h_by_team
+                else None
+            ),
+        }
+        try:
+            _pg_set_cache(pg_conn, f"team/{tid}", today, payload, is_permanent=True)
+        except Exception:
+            log.exception("Failed to write team profile for team_id=%s", tid)
+            errors += 1
+
+    log.info("Team profiles written: %d teams, %d errors", len(summary_rows), errors)
+    return errors
 
 
 if __name__ == "__main__":

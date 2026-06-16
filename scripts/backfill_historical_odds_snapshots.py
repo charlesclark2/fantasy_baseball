@@ -14,13 +14,13 @@ For each game date × timestamp combination the script calls:
         &bookmakers=<bookmaker>
 
 The historical endpoint returns odds as they existed at the given UTC timestamp.
-Three snapshots per day (12:00 / 17:00 / 23:00 UTC) capture the open, mid-day,
-and pre-game lines. Both h2h and totals markets are requested in a single call
-(1 API credit per timestamp).
+Snapshots through the day capture the open, mid-day, and pre-game lines. Both h2h
+and totals markets are requested in a single call.
 
-Credit budget:
-  912 regular-season game dates (2021–2025) × 3 timestamps = 2,736 API calls.
-  19,305 credits were remaining after the 7.P1 dry-run.
+Credit cost (verified live 2026-06-16): historical = 10 × [#markets] × [#regions].
+We always request 2 markets (h2h,totals), so a call costs 20 credits for one region
+(us), 40 for two (us,us2), etc. The #books does NOT affect cost — `--bookmaker all`
+captures every book in the region for the same credits (see ALL_BOOKS below).
 
 Usage:
     uv run backfill_historical_odds_snapshots.py \\
@@ -99,6 +99,27 @@ GAMES_FQN          = "baseball_data.betting.stg_statsapi_games"
 DEFAULT_BOOKMAKER  = "draftkings"
 DEFAULT_SLEEP      = 1.5
 BATCH_SIZE         = 500     # rows per Snowflake write batch
+
+# --parquet-out mode staging objects. Fetch writes per-date parquet locally (warehouse
+# stays SUSPENDED through the whole API-bound loop), then a single PUT → COPY INTO →
+# MERGE loads everything at the end (warehouse hot only for that final step).
+STAGING_TBL_NAME   = "stg_odds_backfill_parquet"
+STAGING_FQN        = f"{TARGET_DB}.{TARGET_SCHEMA}.{STAGING_TBL_NAME}"
+STAGING_STAGE      = f"@{TARGET_DB}.{TARGET_SCHEMA}.%{STAGING_TBL_NAME}"   # the table's internal stage
+PARQUET_COLS       = [
+    "game_pk", "game_date", "snapshot_ts", "home_team", "away_team",
+    "home_price", "away_price", "over_price", "under_price", "total_line",
+    "bookmaker", "home_win_prob", "away_win_prob", "load_id",
+]
+
+# Sentinel for --bookmaker: capture EVERY book present in the requested region(s).
+# The Odds API historical cost is 10 × markets × regions — it does NOT depend on the
+# number of books, so one call captures ~15 us books for the same credits as one book.
+# The target table's MERGE key already includes `bookmaker`, so multi-book rows coexist.
+ALL_BOOKS          = "all"
+# When in all-books mode, use this book to decide whether a date/snapshot is already
+# covered enough to skip (it's our model target and present on most games).
+COVERAGE_ANCHOR    = "bovada"
 
 # Date-sensitive team name normalization: (oddsapi_name, effective_from_year) → statsapi_name.
 # statsapi renames teams when franchises relocate; OddsAPI may lag behind.
@@ -442,8 +463,11 @@ def fetch_snapshot(
         "regions":    region,
         "markets":    "h2h,totals",
         "oddsFormat": "american",
-        "bookmakers": bookmaker,
     }
+    # all-books mode: omit the bookmakers filter so the response carries every book
+    # in the region (same credit cost). Single-book mode keeps the narrow filter.
+    if bookmaker != ALL_BOOKS:
+        params["bookmakers"] = bookmaker
 
     log.info("GET %s  date=%s  bookmaker=%s", url, snapshot_ts, bookmaker)
 
@@ -682,6 +706,114 @@ def upsert_rows(
     return ins, upd
 
 
+# ── Parquet → COPY INTO → MERGE (deferred-load mode) ──────────────────────────
+# Fetch writes one parquet per date locally (no warehouse), then a single bulk load
+# at the end. Everything is stored as VARCHAR in parquet so the load is unambiguous
+# (avoids the write_pandas DATE/TIMESTAMP serialization corruption) and cast in MERGE.
+
+def write_date_parquet(date_rows: list[dict], parquet_dir: Path,
+                       date_str: str, bookmaker: str, region: str) -> Path:
+    import pandas as pd
+
+    df = pd.DataFrame(date_rows, columns=PARQUET_COLS).astype("string")  # nullable str
+    safe = f"{date_str}_{bookmaker}_{region.replace(',', '-')}"
+    path = parquet_dir / f"snap_{safe}.parquet"
+    df.to_parquet(path, index=False)
+    return path
+
+
+_CREATE_STAGING_SQL = f"""
+    CREATE OR REPLACE TRANSIENT TABLE {STAGING_FQN} (
+        game_pk VARCHAR, game_date VARCHAR, snapshot_ts VARCHAR,
+        home_team VARCHAR, away_team VARCHAR,
+        home_price VARCHAR, away_price VARCHAR, over_price VARCHAR,
+        under_price VARCHAR, total_line VARCHAR, bookmaker VARCHAR,
+        home_win_prob VARCHAR, away_win_prob VARCHAR, load_id VARCHAR
+    )
+"""
+
+_MERGE_FROM_STAGING_SQL = f"""
+    MERGE INTO {TARGET_FQN} AS tgt
+    USING (
+        SELECT
+            TRY_CAST(game_pk       AS INTEGER)       AS game_pk,
+            TRY_CAST(game_date     AS DATE)          AS game_date,
+            TRY_CAST(snapshot_ts   AS TIMESTAMP_TZ)  AS snapshot_ts,
+            home_team,
+            away_team,
+            TRY_CAST(home_price    AS INTEGER)       AS home_price,
+            TRY_CAST(away_price    AS INTEGER)       AS away_price,
+            TRY_CAST(over_price    AS INTEGER)       AS over_price,
+            TRY_CAST(under_price   AS INTEGER)       AS under_price,
+            TRY_CAST(total_line    AS FLOAT)         AS total_line,
+            bookmaker,
+            TRY_CAST(home_win_prob AS FLOAT)         AS home_win_prob,
+            TRY_CAST(away_win_prob AS FLOAT)         AS away_win_prob,
+            load_id
+        FROM {STAGING_FQN}
+    ) AS src
+    ON  tgt.home_team   = src.home_team
+    AND tgt.away_team   = src.away_team
+    AND tgt.game_date   = src.game_date
+    AND tgt.snapshot_ts = src.snapshot_ts
+    AND tgt.bookmaker   = src.bookmaker
+    WHEN MATCHED THEN UPDATE SET
+        game_pk       = src.game_pk,
+        home_price    = src.home_price,
+        away_price    = src.away_price,
+        over_price    = src.over_price,
+        under_price   = src.under_price,
+        total_line    = src.total_line,
+        home_win_prob = src.home_win_prob,
+        away_win_prob = src.away_win_prob,
+        load_id       = src.load_id,
+        loaded_at     = CURRENT_TIMESTAMP()
+    WHEN NOT MATCHED THEN INSERT (
+        game_pk, game_date, snapshot_ts, home_team, away_team,
+        home_price, away_price, over_price, under_price, total_line,
+        bookmaker, home_win_prob, away_win_prob, load_id
+    ) VALUES (
+        src.game_pk, src.game_date, src.snapshot_ts, src.home_team, src.away_team,
+        src.home_price, src.away_price, src.over_price, src.under_price, src.total_line,
+        src.bookmaker, src.home_win_prob, src.away_win_prob, src.load_id
+    )
+"""
+
+
+def bulk_load_parquet(conn: snowflake.connector.SnowflakeConnection,
+                      parquet_dir: Path) -> tuple[int, int]:
+    """PUT every parquet in parquet_dir → the staging table's internal stage, COPY INTO
+    a transient staging table (MATCH_BY_COLUMN_NAME), then MERGE into the target in one
+    shot. The warehouse is used ONLY here (PUT is a client-side upload, no warehouse)."""
+    files = sorted(parquet_dir.glob("*.parquet"))
+    if not files:
+        log.warning("No parquet files in %s — nothing to load.", parquet_dir)
+        return 0, 0
+
+    put_glob = str((parquet_dir / "*.parquet").resolve()).replace("\\", "/")
+    log.info("Bulk-loading %d parquet file(s) from %s ...", len(files), parquet_dir)
+    with conn.cursor() as cur:
+        cur.execute(_CREATE_STAGING_SQL)
+        # PUT runs client-side; parquet is already compressed.
+        cur.execute(
+            f"PUT 'file://{put_glob}' {STAGING_STAGE} AUTO_COMPRESS=FALSE OVERWRITE=TRUE"
+        )
+        cur.execute(
+            f"COPY INTO {STAGING_FQN} FROM {STAGING_STAGE} "
+            "FILE_FORMAT=(TYPE=PARQUET) MATCH_BY_COLUMN_NAME=CASE_INSENSITIVE PURGE=TRUE"
+        )
+        cur.execute(f"SELECT COUNT(*) FROM {STAGING_FQN}")
+        staged = cur.fetchone()[0]
+        log.info("  staged %d row(s) → MERGE into %s", staged, TARGET_FQN)
+        cur.execute(_MERGE_FROM_STAGING_SQL)
+        result = cur.fetchone()
+        ins = result[0] if result else 0
+        upd = result[1] if result else 0
+        cur.execute(f"DROP TABLE IF EXISTS {STAGING_FQN}")
+
+    return ins, upd
+
+
 # ── Main backfill loop ────────────────────────────────────────────────────────
 
 def run_backfill(
@@ -692,7 +824,13 @@ def run_backfill(
     sleep_seconds: float,
     min_snapshots: int = 2,
     region: str = "us",
+    parquet_out: Path | None = None,
 ) -> None:
+    if parquet_out is not None:
+        parquet_out.mkdir(parents=True, exist_ok=True)
+        log.info("Deferred-load mode: per-date parquet → %s, single COPY+MERGE at the end "
+                 "(warehouse stays suspended through the fetch loop).", parquet_out)
+
     log.info("Connecting to Snowflake ...")
     conn = get_snowflake_connection()
 
@@ -713,13 +851,18 @@ def run_backfill(
     log.info("  %d game(s) cached across %d matchup-dates (%d doubleheader date(s))",
              n_games, len(pk_lookup), n_dh)
 
-    log.info("Checking coverage of already-loaded snapshots (min_snapshots=%d) ...", min_snapshots)
+    # In all-books mode, decide skip/coverage against the anchor book (it's present on
+    # most games); a date/snapshot already covered for the anchor means we'd re-pull the
+    # whole region for no new anchor data, so skipping it saves credits.
+    coverage_book = COVERAGE_ANCHOR if bookmaker == ALL_BOOKS else bookmaker
+    log.info("Checking coverage of already-loaded snapshots (min_snapshots=%d, anchor=%s) ...",
+             min_snapshots, coverage_book)
     dates_sufficient = fetch_dates_with_sufficient_coverage(
-        conn, start_date, end_date, bookmaker, min_snapshots=min_snapshots
+        conn, start_date, end_date, coverage_book, min_snapshots=min_snapshots
     )
     log.info("  %d date(s) already have ≥%d snapshots — will skip entirely",
              len(dates_sufficient), min_snapshots)
-    already_loaded = fetch_already_loaded(conn, start_date, end_date, bookmaker)
+    already_loaded = fetch_already_loaded(conn, start_date, end_date, coverage_book)
     log.info("  %d (game_date, snapshot_ts) pair(s) already loaded — will skip individual calls", len(already_loaded))
 
     total_calls        = len(game_dates) * len(timestamps)
@@ -727,6 +870,7 @@ def run_backfill(
     calls_skipped      = 0
     total_inserted     = 0
     total_updated      = 0
+    total_rows_written = 0     # parquet mode: rows staged to disk during fetch
     last_remaining: int | None = None
     load_id            = str(uuid.uuid4())
 
@@ -743,6 +887,12 @@ def run_backfill(
             calls_skipped += len(timestamps)
             call_num      += len(timestamps)
             continue
+
+        # Accumulate every timestamp's rows for this date, then write ONCE per date
+        # (one temp-table build + one MERGE instead of one per timestamp → ~Nx fewer
+        # Snowflake round-trips/warehouse ops). The date is a natural resume checkpoint:
+        # a crash only loses the in-progress date, which re-fetches on the next run.
+        date_rows: list[dict] = []
 
         for ts_str in timestamps:
             call_num   += 1
@@ -761,7 +911,7 @@ def run_backfill(
                 log.info("  No events returned for %s", ts_label)
                 continue
 
-            rows: list[dict] = []
+            ts_start  = len(date_rows)
             unmatched = 0
 
             for event in events:
@@ -783,40 +933,61 @@ def run_backfill(
                     )
                     unmatched += 1
 
-                home_price, away_price      = _extract_h2h(event, bookmaker)
-                over_price, under_price, total_line = _extract_totals(event, bookmaker)
+                # In all-books mode emit one row per book present in the event;
+                # otherwise just the single requested book.
+                if bookmaker == ALL_BOOKS:
+                    book_keys = [b.get("key") for b in event.get("bookmakers", []) if b.get("key")]
+                else:
+                    book_keys = [bookmaker]
 
-                rows.append({
-                    "game_pk":       game_pk,
-                    "game_date":     date_str,
-                    "snapshot_ts":   ts_label,
-                    "home_team":     home_team,
-                    "away_team":     away_team,
-                    "home_price":    home_price,
-                    "away_price":    away_price,
-                    "over_price":    over_price,
-                    "under_price":   under_price,
-                    "total_line":    total_line,
-                    "bookmaker":     bookmaker,
-                    "home_win_prob": american_to_implied_prob(home_price),
-                    "away_win_prob": american_to_implied_prob(away_price),
-                    "load_id":       load_id,
-                })
+                for bk in book_keys:
+                    home_price, away_price      = _extract_h2h(event, bk)
+                    over_price, under_price, total_line = _extract_totals(event, bk)
+                    # skip a book that carried neither market at this snapshot
+                    if home_price is None and away_price is None and total_line is None:
+                        continue
+
+                    date_rows.append({
+                        "game_pk":       game_pk,
+                        "game_date":     date_str,
+                        "snapshot_ts":   ts_label,
+                        "home_team":     home_team,
+                        "away_team":     away_team,
+                        "home_price":    home_price,
+                        "away_price":    away_price,
+                        "over_price":    over_price,
+                        "under_price":   under_price,
+                        "total_line":    total_line,
+                        "bookmaker":     bk,
+                        "home_win_prob": american_to_implied_prob(home_price),
+                        "away_win_prob": american_to_implied_prob(away_price),
+                        "load_id":       load_id,
+                    })
 
             if unmatched:
-                log.warning(
-                    "  %d/%d event(s) had no matching game_pk on %s",
-                    unmatched, len(rows), date_str,
-                )
+                log.warning("  %d event(s) had no matching game_pk on %s", unmatched, date_str)
+            log.info("[%d/%d] %s — %d row(s) buffered  credits_remaining=%s",
+                     call_num, total_calls, ts_label, len(date_rows) - ts_start, remaining)
 
-            if rows:
-                ins, upd = upsert_rows(conn, rows)
+        # Single write per date. Parquet mode defers ALL Snowflake work to the end so the
+        # warehouse stays suspended during fetch; direct mode MERGEs per date.
+        if date_rows:
+            if parquet_out is not None:
+                path = write_date_parquet(date_rows, parquet_out, date_str, bookmaker, region)
+                total_rows_written += len(date_rows)
+                log.info("  %s — wrote %d row(s) → %s", date_str, len(date_rows), path.name)
+            else:
+                ins, upd = upsert_rows(conn, date_rows)
                 total_inserted += ins
                 total_updated  += upd
-                log.info(
-                    "[%d/%d] %s — %d row(s) inserted, %d updated  credits_remaining=%s",
-                    call_num, total_calls, ts_label, ins, upd, remaining,
-                )
+                log.info("  %s — flushed %d row(s) in 1 MERGE: %d inserted, %d updated",
+                         date_str, len(date_rows), ins, upd)
+
+    # Deferred load: one PUT → COPY INTO → MERGE for the whole run.
+    if parquet_out is not None:
+        log.info("Fetch complete (%d row(s) staged to parquet). Loading to Snowflake ...",
+                 total_rows_written)
+        total_inserted, total_updated = bulk_load_parquet(conn, parquet_out)
 
     conn.close()
 
@@ -866,7 +1037,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--bookmaker",
         default=DEFAULT_BOOKMAKER,
         metavar="KEY",
-        help=f"OddsAPI bookmaker key (default: {DEFAULT_BOOKMAKER}).",
+        help=(
+            f"OddsAPI bookmaker key (default: {DEFAULT_BOOKMAKER}). Use '{ALL_BOOKS}' to "
+            "capture EVERY book in the requested region(s) in one call — same credit cost "
+            "(cost is per region, not per book), ~15+ books/call. Skip/coverage is anchored "
+            f"on '{COVERAGE_ANCHOR}' in this mode."
+        ),
     )
     parser.add_argument(
         "--region",
@@ -893,6 +1069,17 @@ def build_parser() -> argparse.ArgumentParser:
             "Skip a date only when it already has >= N distinct snapshot timestamps loaded "
             "(default: 2). Use --min-snapshots 3 when adding a third timestamp to dates "
             "that already have 2."
+        ),
+    )
+    parser.add_argument(
+        "--parquet-out",
+        default=None,
+        metavar="DIR",
+        help=(
+            "DEFERRED-LOAD mode: write one parquet file per game-date to DIR during fetch "
+            "(Snowflake/warehouse stays SUSPENDED through the API loop), then a single "
+            "PUT → COPY INTO → MERGE at the end. Also banks fetched data to disk so a "
+            "Snowflake failure never re-burns API credits. Recommended for large backfills."
         ),
     )
     parser.add_argument(
@@ -933,14 +1120,21 @@ def main() -> None:
         span_days      = (end_date - start_date).days + 1
         approx_dates   = round(span_days * 0.6)  # rough: ~60% of days are game days
         approx_calls   = approx_dates * len(timestamps)
-        # Historical endpoint credit cost varies by region and events returned.
-        # EU region (e.g. Pinnacle): ~20 credits/call. US region: ~1 credit/call.
-        credits_per_call = 20 if args.region != "us" else 1
+        # The Odds API HISTORICAL cost = 10 × [#markets] × [#regions]. We always request
+        # 2 markets (h2h,totals); regions = comma-count of --region. (Verified live
+        # 2026-06-16: regions=us, markets=h2h,totals → x-requests-last: 20.) The number of
+        # bookmakers does NOT change cost, so --bookmaker all is free upside.
+        n_regions        = len([r for r in args.region.split(",") if r.strip()])
+        credits_per_call = 10 * 2 * n_regions
         approx_credits   = approx_calls * credits_per_call
         print(f"\nEstimated game dates in range : ~{approx_dates} (exact count from Snowflake at runtime)")
         print(f"Estimated API calls           : ~{approx_calls}")
-        print(f"Credits per call (approx)     : ~{credits_per_call} (region={args.region})")
+        print(f"Credits per call              : {credits_per_call}  (10 × 2 markets × {n_regions} region(s))")
         print(f"Estimated credits consumed    : ~{approx_credits}")
+        if args.bookmaker == ALL_BOOKS:
+            print(f"Bookmaker mode                : ALL books in region(s)={args.region} (same cost, ~15+ books/call)")
+        if args.parquet_out:
+            print(f"Load mode                     : DEFERRED (parquet → {args.parquet_out} → one COPY+MERGE; warehouse cold during fetch)")
         print("\nDry-run complete.")
         return
 
@@ -952,6 +1146,7 @@ def main() -> None:
         sleep_seconds = args.sleep_seconds,
         min_snapshots = args.min_snapshots,
         region        = args.region,
+        parquet_out   = Path(args.parquet_out) if args.parquet_out else None,
     )
 
 

@@ -178,6 +178,26 @@ def invalidate_game(game_pk: int, date_str: str) -> None:
     invalidate(f"picks/game/{game_pk}", date_str)
 
 
+def list_cache_by_prefix(prefix: str) -> list[dict]:
+    """Returns all is_permanent payloads whose cache_key starts with `prefix`."""
+    conn = _conn()
+    if conn is None:
+        return []
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT payload FROM api_cache WHERE cache_key LIKE %s AND is_permanent = TRUE ORDER BY cache_key",
+                (prefix + "%",),
+            )
+            rows = cur.fetchall()
+        return [dict(r["payload"]) for r in rows]
+    except Exception:
+        logger.warning("PG list_cache_by_prefix failed for prefix=%s", prefix)
+        return []
+    finally:
+        _release(conn)
+
+
 # ── User portfolios ───────────────────────────────────────────────────────────
 
 _DEFAULT_PORTFOLIO = {

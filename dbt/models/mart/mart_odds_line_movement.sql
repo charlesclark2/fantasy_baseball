@@ -5,14 +5,18 @@
 --          intraday odds snapshots. Exposes h2h and totals line movement as
 --          signed deltas (pregame − open).
 --
--- Data sources by era:
---   2021–2025  baseball_data.oddsapi.odds_snapshots_historical  (Card 7.P2 backfill)
---   2026+      mart_odds_outcomes (Parlay API hourly snapshots via odds_snapshot.yml,
---              ~15 captures/game-day) filtered to ingestion_ts < commence_time
+-- Data sources (priority order, deduped per game_pk):
+--   1. baseball_data.oddsapi.odds_snapshots_historical  (Odds API historical backfill,
+--      backfill_historical_odds_snapshots.py) — AUTHORITATIVE wherever present. Covers
+--      2021–2025 (Card 7.P2) AND the 2026 Odds-API backfill (Story 12.3.4 — dense
+--      5-min-grid bovada snapshots that recovered the Parlay quota-crunch gap, 12.3.3).
+--   2. mart_odds_outcomes (Parlay API hourly snapshots via odds_snapshot.yml) — FALLBACK,
+--      used only for game_pks NOT yet in the Odds-API backfill (e.g. today's games).
+--   Per-game dedup (below) prevents mixing the two sources' snapshots for one game.
 --
--- Bookmaker: bovada (hardcoded). The Card 7.P2 historical backfill used bovada;
---   Parlay API also carries bovada, ensuring consistent implied-prob scale across
---   eras. Future enhancement: make bookmaker configurable.
+-- Bookmaker: bovada (hardcoded) on both sources → consistent implied-prob scale. (We
+--   also backfill pinnacle/eu into odds_snapshots_historical for sharp-vs-soft work, but
+--   this bovada-only mart ignores it.) Future enhancement: make bookmaker configurable.
 --
 -- Leakage guard: all snapshots must have snapshot_ts < game commence_time.
 --   For historical rows the guard uses stg_statsapi_games.game_date (TIMESTAMP_TZ).
@@ -170,7 +174,14 @@ live as (
 all_snapshots as (
     select * from historical
     union all
-    select * from live
+    -- The Odds-API historical backfill is authoritative per game_pk where present
+    -- (clean, dense, our target book). Parlay live fills ONLY games not in the backfill
+    -- (e.g. today's not-yet-backfilled games), so we never mix two sources' snapshots
+    -- for a single game (which would corrupt open/close and snapshot_count).
+    select * from live l
+    where not exists (
+        select 1 from historical h where h.game_pk = l.game_pk
+    )
 ),
 
 -- ── Rank snapshots within each game to identify open (earliest) and

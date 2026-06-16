@@ -5,6 +5,7 @@ from pipeline.ops.intraday_ops import (
     intraday_lineup_rebuild,
     intraday_schedule_capture,
     intraday_weather_capture,
+    odds_oddsapi_dbt_rebuild,
     odds_snapshot_dbt_rebuild,
     odds_snapshot_ingest,
 )
@@ -21,6 +22,15 @@ def odds_snapshot_job():
     has_games = check_games_today()
     start = odds_snapshot_ingest(has_games=has_games)
     odds_snapshot_dbt_rebuild(start=start)
+
+
+# Story 12.3.7 / A2.18 — dbt rebuild for the ODDS API live path. The capture itself runs
+# on a Railway cron container (off the Dagster+ bill); `odds_rebuild_sensor` fires this job
+# only when new rows land in oddsapi.mlb_odds_raw, so Dagster pays for the (quick) warehouse
+# rebuild, never the I/O-bound HTTP poll.
+@job(executor_def=in_process_executor, tags={"concurrency_group": "odds_oddsapi_rebuild"})
+def odds_oddsapi_rebuild_job():
+    odds_oddsapi_dbt_rebuild()
 
 
 @job(executor_def=in_process_executor)
