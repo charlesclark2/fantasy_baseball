@@ -397,7 +397,7 @@ export default function AdminPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#262626]">
-                    {["Month", "Compute", "Cloud Svc", "Total"].map((h) => (
+                    {["Month", "Compute cr.", "Cloud Svc cr.", "Total cr.", "Est. Cost"].map((h) => (
                       <th key={h} className="pb-3 text-left text-xs font-semibold uppercase tracking-widest text-gray-500">
                         {h}
                       </th>
@@ -410,7 +410,10 @@ export default function AdminPage() {
                       <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">{row.month_label}</td>
                       <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.compute_credits.toFixed(1)}</td>
                       <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.cloud_service_credits.toFixed(1)}</td>
-                      <td className="py-3 text-xs font-semibold text-white whitespace-nowrap">{row.total_credits.toFixed(1)}</td>
+                      <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{row.total_credits.toFixed(1)}</td>
+                      <td className="py-3 text-xs font-semibold text-[#10b981] whitespace-nowrap">
+                        ${(row.total_credits * 2).toFixed(2)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
