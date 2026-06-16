@@ -44,11 +44,12 @@ def _derive(row: dict | None) -> PipelineStatus:
     if not row:
         return PipelineStatus()  # defaults: red / "Pipeline running…"
 
-    status = (row.get("pipeline_status") or "missing").lower()
-    predictions_ready = status == "complete" and (row.get("n_games_scored") or 0) > 0
-    lineup_confirmed = row.get("lineup_confirmed_complete_ts") is not None
+    # Snowflake DictCursor returns uppercase column names.
+    status = (row.get("PIPELINE_STATUS") or "missing").lower()
+    predictions_ready = status == "complete" and (row.get("N_GAMES_SCORED") or 0) > 0
+    lineup_confirmed = row.get("LINEUP_CONFIRMED_COMPLETE_TS") is not None
     # Most recent of the two completion stamps (lineup re-score is the later one).
-    last_updated_at = row.get("lineup_confirmed_complete_ts") or row.get("predict_today_complete_ts")
+    last_updated_at = row.get("LINEUP_CONFIRMED_COMPLETE_TS") or row.get("PREDICT_TODAY_COMPLETE_TS")
 
     if predictions_ready and lineup_confirmed:
         indicator = "green"
@@ -61,14 +62,14 @@ def _derive(row: dict | None) -> PipelineStatus:
         message = "Pipeline running — check back in a few minutes"
 
     return PipelineStatus(
-        run_date=row.get("run_date"),
+        run_date=row.get("RUN_DATE"),
         predictions_ready=predictions_ready,
         lineup_confirmed=lineup_confirmed,
         last_updated_at=last_updated_at,
-        n_games_scored=int(row.get("n_games_scored") or 0),
-        n_qualified_bets=int(row.get("n_qualified_bets") or 0),
-        signal_completeness_score=row.get("signal_completeness_score"),
-        avg_feature_coverage_score=row.get("avg_feature_coverage_score"),
+        n_games_scored=int(row.get("N_GAMES_SCORED") or 0),
+        n_qualified_bets=int(row.get("N_QUALIFIED_BETS") or 0),
+        signal_completeness_score=row.get("SIGNAL_COMPLETENESS_SCORE"),
+        avg_feature_coverage_score=row.get("AVG_FEATURE_COVERAGE_SCORE"),
         pipeline_status=status,
         indicator=indicator,
         message=message,
