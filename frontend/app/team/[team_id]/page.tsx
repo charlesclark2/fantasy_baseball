@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { format, parseISO } from "date-fns"
@@ -86,11 +87,27 @@ type TeamProfile = {
   }
   recent_form: FormGame[]
   schedule: ScheduleGame[]
+  h2h_model: {
+    games: number
+    correct: number
+    accuracy: number
+  } | null
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const ESPN_ABBREV_OVERRIDES: Record<string, string> = {
+  CWS: "chw",
+  AZ: "ari",
+  ATH: "oak",
+}
+
+function teamLogoSrc(abbrev: string): string {
+  const slug = (ESPN_ABBREV_OVERRIDES[abbrev] ?? abbrev).toLowerCase()
+  return `https://a.espncdn.com/i/teamlogos/mlb/500/${slug}.png`
+}
 
 function pct(val: number | null | undefined, decimals = 1): string {
   if (val == null) return "—"
@@ -127,18 +144,39 @@ function fmtDow(dateStr: string): string {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+function Tip({ text, children }: { text: string; children: React.ReactNode }) {
+  return (
+    <span className="group relative inline-block cursor-help">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden w-max max-w-[220px] -translate-x-1/2 rounded bg-white px-2 py-1.5 text-center text-xs text-black shadow-lg group-hover:block normal-case tracking-normal font-normal">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 function StatCard({
   label,
   value,
   sub,
+  tip,
 }: {
   label: string
   value: string
   sub?: string
+  tip?: string
 }) {
   return (
     <div className="flex flex-col gap-0.5 rounded-lg border border-[#262626] bg-[#111111] px-4 py-3">
-      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-xs text-gray-500">
+        {tip ? (
+          <Tip text={tip}>
+            {label} <span className="text-[10px] text-gray-600">(?)</span>
+          </Tip>
+        ) : (
+          label
+        )}
+      </span>
       <span className="text-xl font-semibold text-white tabular-nums">{value}</span>
       {sub && <span className="text-xs text-gray-500">{sub}</span>}
     </div>
@@ -153,47 +191,41 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
-function PlatoonRow({
-  hand,
-  split,
-}: {
-  hand: string
-  split: PlatoonSplit | null
-}) {
+function PlatoonRow({ hand, split }: { hand: string; split: PlatoonSplit | null }) {
   if (!split) return null
   return (
     <div className="flex items-center gap-6 rounded-lg border border-[#262626] bg-[#111111] px-4 py-3">
       <span className="w-16 text-sm font-medium text-gray-400">vs {hand}</span>
       <div className="flex flex-1 gap-6">
         <div className="flex flex-col">
-          <span className="text-xs text-gray-500">xwOBA</span>
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {num(split.xwoba)}
-          </span>
+          <Tip text="Expected weighted on-base average based on quality of contact">
+            <span className="text-xs text-gray-500">xwOBA</span>
+          </Tip>
+          <span className="text-sm font-semibold text-white tabular-nums">{num(split.xwoba)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-xs text-gray-500">wOBA</span>
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {num(split.woba)}
-          </span>
+          <Tip text="Weighted on-base average — measures overall offensive production">
+            <span className="text-xs text-gray-500">wOBA</span>
+          </Tip>
+          <span className="text-sm font-semibold text-white tabular-nums">{num(split.woba)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-xs text-gray-500">K%</span>
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {pct(split.k_pct)}
-          </span>
+          <Tip text="Strikeout rate — % of plate appearances ending in a strikeout">
+            <span className="text-xs text-gray-500">K%</span>
+          </Tip>
+          <span className="text-sm font-semibold text-white tabular-nums">{pct(split.k_pct)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-xs text-gray-500">BB%</span>
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {pct(split.bb_pct)}
-          </span>
+          <Tip text="Walk rate — % of plate appearances ending in a base on balls">
+            <span className="text-xs text-gray-500">BB%</span>
+          </Tip>
+          <span className="text-sm font-semibold text-white tabular-nums">{pct(split.bb_pct)}</span>
         </div>
         <div className="flex flex-col">
-          <span className="text-xs text-gray-500">R/G</span>
-          <span className="text-sm font-semibold text-white tabular-nums">
-            {num(split.runs_per_game, 2)}
-          </span>
+          <Tip text="Average runs scored per game against this pitcher hand">
+            <span className="text-xs text-gray-500">R/G</span>
+          </Tip>
+          <span className="text-sm font-semibold text-white tabular-nums">{num(split.runs_per_game, 2)}</span>
         </div>
       </div>
     </div>
@@ -201,6 +233,8 @@ function PlatoonRow({
 }
 
 function EloSparkline({ history }: { history: { date: string; elo: number }[] }) {
+  const [hovered, setHovered] = useState<{ i: number; x: number; y: number } | null>(null)
+
   if (!history.length) return <span className="text-xs text-gray-600">No data</span>
 
   const elos = history.map((h) => h.elo)
@@ -210,26 +244,58 @@ function EloSparkline({ history }: { history: { date: string; elo: number }[] })
   const W = 200
   const H = 40
 
-  const points = history.map((h, i) => {
-    const x = (i / (history.length - 1 || 1)) * W
-    const y = H - ((h.elo - min) / range) * H
-    return `${x},${y}`
-  })
+  const pts = history.map((_, i) => ({
+    x: (i / (history.length - 1 || 1)) * W,
+    y: H - ((elos[i] - min) / range) * H,
+  }))
 
   const trend = elos[elos.length - 1] - elos[0]
   const color = trend > 5 ? "#10b981" : trend < -5 ? "#ef4444" : "#6b7280"
 
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    const i = Math.max(0, Math.min(history.length - 1, Math.round(ratio * (history.length - 1))))
+    setHovered({ i, x: pts[i].x, y: pts[i].y })
+  }
+
+  const h = hovered
+
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-      <polyline
-        points={points.join(" ")}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
+    <div className="relative select-none">
+      <svg
+        width={W}
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setHovered(null)}
+        className="cursor-crosshair"
+      >
+        <polyline
+          points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {h && (
+          <>
+            <line x1={h.x} y1={0} x2={h.x} y2={H} stroke="#ffffff20" strokeWidth="1" />
+            <circle cx={h.x} cy={h.y} r={3} fill={color} />
+          </>
+        )}
+      </svg>
+      {h && (
+        <div
+          className="pointer-events-none absolute z-10 rounded bg-white px-2 py-1 text-xs text-black shadow-lg"
+          style={{ left: Math.min(h.x + 6, W - 90), top: Math.max(h.y - 36, 0) }}
+        >
+          <div className="font-semibold">{Math.round(history[h.i].elo)}</div>
+          <div className="text-gray-500">{fmtDate(history[h.i].date)}</div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -247,6 +313,8 @@ function TeamPageInner() {
     enabled: !!accessToken && !!params.team_id,
     staleTime: 5 * 60 * 1000,
   })
+
+  const nextGame = team?.schedule?.[0] ?? null
 
   return (
     <>
@@ -273,11 +341,33 @@ function TeamPageInner() {
           <div className="space-y-8">
             {/* Header */}
             <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-white">{team.team_name}</h1>
-                <p className="mt-1 text-sm text-gray-400">
-                  {team.division} · {team.league}
-                </p>
+              <div className="flex items-center gap-4">
+                <img
+                  src={teamLogoSrc(team.team_abbrev)}
+                  alt={team.team_abbrev}
+                  className="h-16 w-16 object-contain"
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).style.display = "none"
+                  }}
+                />
+                <div>
+                  <h1 className="text-3xl font-bold text-white">{team.team_name}</h1>
+                  <p className="mt-1 text-sm text-gray-400">
+                    {team.division} · {team.league}
+                  </p>
+                  {nextGame && (
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-500">
+                      <span className="text-gray-600">Next:</span>
+                      <span className="font-medium text-gray-300">
+                        {nextGame.home_away === "home" ? "vs" : "@"} {nextGame.opponent}
+                      </span>
+                      <span>{fmtDate(nextGame.date)}</span>
+                      {nextGame.our_probable_pitcher && (
+                        <span className="text-gray-600">· {nextGame.our_probable_pitcher}</span>
+                      )}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold text-white tabular-nums">
@@ -314,49 +404,70 @@ function TeamPageInner() {
                 label="Run Diff"
                 value={rdSign(team.record.run_differential)}
                 sub={`${team.record.runs_scored_ytd} RS · ${team.record.runs_allowed_ytd} RA`}
+                tip="Runs scored minus runs allowed this season"
               />
               <StatCard
                 label="xWin%"
                 value={pct(team.record.pythagorean_win_exp)}
                 sub="Pythagorean"
+                tip="Expected win % based on runs scored and allowed (RS² ÷ (RS² + RA²))"
               />
               <StatCard
                 label="Off xwOBA"
                 value={num(team.offense.xwoba_std)}
                 sub={`30D: ${num(team.offense.xwoba_30d)}`}
+                tip="Expected weighted on-base average — measures offensive quality by expected outcomes based on contact quality"
               />
               <StatCard
                 label="R/G"
                 value={num(team.offense.runs_per_game_std, 2)}
                 sub={`30D: ${num(team.offense.runs_per_game_30d, 2)}`}
+                tip="Runs scored per game this season"
               />
               <StatCard
                 label="RA/9"
                 value={num(team.pitching.ra9, 2)}
                 sub="Runs allowed per game"
+                tip="Runs allowed per game by this team's pitching staff and defense"
               />
               <StatCard
                 label="Pit xwOBA-against"
                 value={num(team.pitching.xwoba_against_std)}
                 sub={`30D: ${num(team.pitching.xwoba_against_30d)}`}
+                tip="xwOBA allowed by the team's combined pitching — lower is better"
               />
               <StatCard
                 label="SP K%"
                 value={pct(team.pitching.starter_k_pct_std)}
                 sub="Starter strikeout rate"
+                tip="Strikeout rate for the team's starting pitchers this season"
               />
               <StatCard
                 label="BP xwOBA"
                 value={num(team.pitching.bullpen_xwoba_against_std)}
                 sub="Bullpen xwOBA-against"
+                tip="xwOBA allowed by the bullpen — lower is better"
               />
+              {team.h2h_model && team.h2h_model.games > 0 && (
+                <StatCard
+                  label="Model H2H Accuracy"
+                  value={pct(team.h2h_model.accuracy)}
+                  sub={`${team.h2h_model.correct}/${team.h2h_model.games} games`}
+                  tip="How often the production model correctly predicted the winner of this team's completed games in the current season"
+                />
+              )}
             </div>
 
             {/* ELO + Platoon splits */}
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
               {/* ELO */}
               <div>
-                <SectionHeader>ELO Rating</SectionHeader>
+                <SectionHeader>
+                  <Tip text="ELO rating: a relative team strength measure updated after each game. ~1500 is league average; higher = stronger.">
+                    ELO Rating{" "}
+                    <span className="text-[10px] text-gray-500 normal-case font-normal">(?)</span>
+                  </Tip>
+                </SectionHeader>
                 <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-4">
                   <div className="mb-3 flex items-end justify-between">
                     <span className="text-2xl font-bold text-white tabular-nums">
@@ -406,7 +517,7 @@ function TeamPageInner() {
             {/* Recent form */}
             {team.recent_form.length > 0 && (
               <div>
-                <SectionHeader>Recent Form (L10)</SectionHeader>
+                <SectionHeader>Recent Form (Last 10 games)</SectionHeader>
                 <div className="flex gap-1.5 flex-wrap">
                   {team.recent_form.map((g) => (
                     <div
@@ -422,7 +533,6 @@ function TeamPageInner() {
                     </div>
                   ))}
                 </div>
-                {/* Detailed form table */}
                 <div className="mt-3 overflow-x-auto rounded-lg border border-[#262626]">
                   <table className="w-full text-xs">
                     <thead>
