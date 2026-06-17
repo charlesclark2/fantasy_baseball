@@ -735,24 +735,46 @@ _CREATE_STAGING_SQL = f"""
 _MERGE_FROM_STAGING_SQL = f"""
     MERGE INTO {TARGET_FQN} AS tgt
     USING (
+        -- Outer SELECT keeps one row per MERGE key. The source MUST be unique on the ON
+        -- key or Snowflake raises 100090 "Duplicate row detected during DML action".
+        -- Two ways the staging set produces duplicates, both handled here:
+        --   1. DOUBLEHEADERS — same (home_team, away_team, game_date) but distinct game_pk;
+        --      game_pk is therefore part of BOTH the dedup partition AND the ON clause so the
+        --      two games map to two target rows instead of colliding.
+        --   2. A snapshot re-fetched under two requested timestamps that resolve to the same
+        --      stored snapshot_ts — collapsed by ROW_NUMBER()=1.
         SELECT
-            TRY_CAST(game_pk       AS INTEGER)       AS game_pk,
-            TRY_CAST(game_date     AS DATE)          AS game_date,
-            TRY_CAST(snapshot_ts   AS TIMESTAMP_TZ)  AS snapshot_ts,
-            home_team,
-            away_team,
-            TRY_CAST(home_price    AS INTEGER)       AS home_price,
-            TRY_CAST(away_price    AS INTEGER)       AS away_price,
-            TRY_CAST(over_price    AS INTEGER)       AS over_price,
-            TRY_CAST(under_price   AS INTEGER)       AS under_price,
-            TRY_CAST(total_line    AS FLOAT)         AS total_line,
-            bookmaker,
-            TRY_CAST(home_win_prob AS FLOAT)         AS home_win_prob,
-            TRY_CAST(away_win_prob AS FLOAT)         AS away_win_prob,
-            load_id
-        FROM {STAGING_FQN}
+            game_pk, game_date, snapshot_ts, home_team, away_team,
+            home_price, away_price, over_price, under_price, total_line,
+            bookmaker, home_win_prob, away_win_prob, load_id
+        FROM (
+            SELECT
+                TRY_CAST(game_pk       AS INTEGER)       AS game_pk,
+                TRY_CAST(game_date     AS DATE)          AS game_date,
+                TRY_CAST(snapshot_ts   AS TIMESTAMP_TZ)  AS snapshot_ts,
+                home_team,
+                away_team,
+                TRY_CAST(home_price    AS INTEGER)       AS home_price,
+                TRY_CAST(away_price    AS INTEGER)       AS away_price,
+                TRY_CAST(over_price    AS INTEGER)       AS over_price,
+                TRY_CAST(under_price   AS INTEGER)       AS under_price,
+                TRY_CAST(total_line    AS FLOAT)         AS total_line,
+                bookmaker,
+                TRY_CAST(home_win_prob AS FLOAT)         AS home_win_prob,
+                TRY_CAST(away_win_prob AS FLOAT)         AS away_win_prob,
+                load_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY TRY_CAST(game_pk AS INTEGER), home_team, away_team,
+                                 TRY_CAST(game_date AS DATE),
+                                 TRY_CAST(snapshot_ts AS TIMESTAMP_TZ), bookmaker
+                    ORDER BY TRY_CAST(snapshot_ts AS TIMESTAMP_TZ)
+                ) AS _rn
+            FROM {STAGING_FQN}
+        )
+        WHERE _rn = 1
     ) AS src
-    ON  tgt.home_team   = src.home_team
+    ON  EQUAL_NULL(tgt.game_pk, src.game_pk)
+    AND tgt.home_team   = src.home_team
     AND tgt.away_team   = src.away_team
     AND tgt.game_date   = src.game_date
     AND tgt.snapshot_ts = src.snapshot_ts
@@ -826,6 +848,7 @@ def run_backfill(
     region: str = "us",
     parquet_out: Path | None = None,
     force: bool = False,
+    load_only: bool = False,
 ) -> None:
     if parquet_out is not None:
         parquet_out.mkdir(parents=True, exist_ok=True)
@@ -836,6 +859,20 @@ def run_backfill(
     conn = get_snowflake_connection()
 
     ensure_table(conn)
+
+    # RECOVERY PATH: load already-staged parquet WITHOUT re-fetching from the API. Use this
+    # when the fetch succeeded but the final MERGE failed (the parquet on disk holds every
+    # row, so no API credits are re-spent). Requires --parquet-out pointing at that dir.
+    if load_only:
+        if parquet_out is None:
+            log.error("--load-only requires --parquet-out pointing at the staged parquet dir.")
+            conn.close()
+            return
+        log.info("--load-only: skipping fetch; loading existing parquet from %s ...", parquet_out)
+        ins, upd = bulk_load_parquet(conn, parquet_out)
+        conn.close()
+        print(f"\nLoad-only complete: {ins} inserted, {upd} updated from {parquet_out}")
+        return
 
     log.info("Fetching regular-season game dates %s → %s ...", start_date, end_date)
     game_dates = fetch_game_dates(conn, start_date, end_date)
@@ -1109,6 +1146,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--load-only",
+        action="store_true",
+        default=False,
+        help=(
+            "RECOVERY: skip the API fetch and load the parquet already in --parquet-out into "
+            "Snowflake (re-runs the PUT → COPY → MERGE). Use when the fetch succeeded but the "
+            "MERGE failed — no API credits are re-spent."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -1180,6 +1227,7 @@ def main() -> None:
         region        = args.region,
         parquet_out   = Path(args.parquet_out) if args.parquet_out else None,
         force         = args.force,
+        load_only     = args.load_only,
     )
 
 
