@@ -404,28 +404,53 @@ def insert_event_row(
         })
 
 
-def insert_odds_row(
-    conn: snowflake.connector.SnowflakeConnection,
-    *,
-    target: SnowflakeTarget,
-    ingestion_ts: datetime,
-    load_id: str,
-    source_endpoint: str,
-    request_url: str,
-    request_params: dict,
-    http_status_code: int,
-    x_requests_used: int | None,
-    x_requests_remaining: int | None,
-    raw_json: Any,
-    event_id: str | None,
-    sport_key: str | None,
-    sport_title: str | None,
-    commence_time: str | None,
-    home_team: str | None,
-    away_team: str | None,
-    bookmakers_count: int | None,
-) -> None:
-    sql = f"""
+# ── Bulk odds write ───────────────────────────────────────────────────────────
+# The odds endpoints return one event object per game; the old path inserted each
+# event with its own `INSERT … SELECT …, PARSE_JSON(raw_json)` statement, so a single
+# live fire (~28 events × regions × markets ≈ 168 events) kept COMPUTE_WH hot for the
+# whole script and re-parsed JSON per row (Story 12.3.8 / A2.15 anti-pattern).
+#
+# Instead, buffer all events for a fire (live) or game-date (historical) into Python,
+# load them into a session-scoped TEMPORARY table whose JSON columns are VARCHAR, then
+# run ONE set-based `INSERT INTO target SELECT …, PARSE_JSON(raw_json), …`. The warehouse
+# is touched once at the end instead of per row. This is the established VARIANT-insert
+# rule (feedback_snowflake_variant_insert): never PARSE_JSON inside an executemany VALUES
+# — stage as VARCHAR, then PARSE_JSON in the set-based write.
+
+_BULK_TMP_TABLE = "tmp_odds_ingest"
+
+_CREATE_BULK_TMP_SQL = f"""
+    CREATE OR REPLACE TEMPORARY TABLE {_BULK_TMP_TABLE} (
+        ingestion_ts         VARCHAR,
+        load_id              VARCHAR,
+        source_system        VARCHAR,
+        process_name         VARCHAR,
+        source_endpoint      VARCHAR,
+        request_url          VARCHAR,
+        request_params       VARCHAR,
+        http_status_code     VARCHAR,
+        x_requests_used      VARCHAR,
+        x_requests_remaining VARCHAR,
+        raw_json             VARCHAR,
+        event_id             VARCHAR,
+        sport_key            VARCHAR,
+        sport_title          VARCHAR,
+        commence_time        VARCHAR,
+        home_team            VARCHAR,
+        away_team            VARCHAR,
+        bookmakers_count     VARCHAR
+    )
+"""
+
+_INSERT_BULK_TMP_SQL = f"""
+    INSERT INTO {_BULK_TMP_TABLE} VALUES (
+        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+    )
+"""
+
+
+def _bulk_odds_insert_select_sql(target: SnowflakeTarget) -> str:
+    return f"""
         INSERT INTO {target.qualified_name} (
             ingestion_ts, load_id,
             source_system, process_name,
@@ -436,46 +461,95 @@ def insert_odds_row(
             bookmakers_count
         )
         SELECT
-            %(ingestion_ts)s::timestamp_ntz,
-            %(load_id)s,
-            %(source_system)s,
-            %(process_name)s,
-            %(source_endpoint)s,
-            %(request_url)s,
-            PARSE_JSON(%(request_params)s),
-            %(http_status_code)s,
-            %(x_requests_used)s,
-            %(x_requests_remaining)s,
-            PARSE_JSON(%(raw_json)s),
-            %(event_id)s,
-            %(sport_key)s,
-            %(sport_title)s,
-            %(commence_time)s::timestamp_ntz,
-            %(home_team)s,
-            %(away_team)s,
-            %(bookmakers_count)s
+            ingestion_ts::timestamp_ntz,
+            load_id,
+            source_system,
+            process_name,
+            source_endpoint,
+            request_url,
+            PARSE_JSON(request_params),
+            http_status_code::integer,
+            x_requests_used::integer,
+            x_requests_remaining::integer,
+            PARSE_JSON(raw_json),
+            event_id,
+            sport_key,
+            sport_title,
+            commence_time::timestamp_ntz,
+            home_team,
+            away_team,
+            bookmakers_count::integer
+        FROM {_BULK_TMP_TABLE}
     """
+
+
+def _opt_str(value: Any) -> str | None:
+    """Render a value as VARCHAR for the staging table; None stays NULL."""
+    return str(value) if value is not None else None
+
+
+def build_odds_row(
+    *,
+    ingestion_ts: datetime,
+    load_id: str,
+    source_endpoint: str,
+    request_url: str,
+    request_params: dict,
+    http_status_code: int,
+    x_requests_used: int | None,
+    x_requests_remaining: int | None,
+    event: dict,
+    bookmakers_count: int | None,
+) -> tuple:
+    """
+    Build one staging-table row tuple (all VARCHAR-or-NULL) for a single odds event.
+    Column order matches _INSERT_BULK_TMP_SQL / _CREATE_BULK_TMP_SQL.
+    """
+    return (
+        ingestion_ts.isoformat(),
+        load_id,
+        SOURCE_SYSTEM,
+        PROCESS_NAME,
+        source_endpoint,
+        request_url,
+        json.dumps(request_params),
+        _opt_str(http_status_code),
+        _opt_str(x_requests_used),
+        _opt_str(x_requests_remaining),
+        json.dumps(event),
+        event.get("id"),
+        event.get("sport_key"),
+        event.get("sport_title"),
+        event.get("commence_time"),
+        event.get("home_team"),
+        event.get("away_team"),
+        _opt_str(bookmakers_count),
+    )
+
+
+def bulk_insert_odds_rows(
+    conn: snowflake.connector.SnowflakeConnection,
+    *,
+    target: SnowflakeTarget,
+    rows: list[tuple],
+) -> int:
+    """
+    Append many odds events to `target` with a single set-based write.
+
+    Loads all `rows` (VARCHAR-staged tuples from build_odds_row) into a TEMPORARY
+    table via one batched executemany, then runs ONE INSERT…SELECT with PARSE_JSON.
+    Collapses N per-event warehouse-active INSERTs into a single temp load + one
+    set-based INSERT. Append-only — no MERGE/dedup (matches the script's load model).
+    Returns the number of rows written.
+    """
+    if not rows:
+        return 0
     with conn.cursor() as cur:
-        cur.execute(sql, {
-            "ingestion_ts":          ingestion_ts.isoformat(),
-            "load_id":               load_id,
-            "source_system":         SOURCE_SYSTEM,
-            "process_name":          PROCESS_NAME,
-            "source_endpoint":       source_endpoint,
-            "request_url":           request_url,
-            "request_params":        json.dumps(request_params),
-            "http_status_code":      http_status_code,
-            "x_requests_used":       x_requests_used,
-            "x_requests_remaining":  x_requests_remaining,
-            "raw_json":              json.dumps(raw_json),
-            "event_id":              event_id,
-            "sport_key":             sport_key,
-            "sport_title":           sport_title,
-            "commence_time":         commence_time,
-            "home_team":             home_team,
-            "away_team":             away_team,
-            "bookmakers_count":      bookmakers_count,
-        })
+        cur.execute(_CREATE_BULK_TMP_SQL)
+        cur.executemany(_INSERT_BULK_TMP_SQL, rows)
+        cur.execute(_bulk_odds_insert_select_sql(target))
+        cur.execute(f"DROP TABLE IF EXISTS {_BULK_TMP_TABLE}")
+    return len(rows)
 
 
 # ── Subcommand runners ─────────────────────────────────────────────────────────
@@ -568,6 +642,11 @@ def run_odds(
     ingestion_ts = datetime.now(tz=timezone.utc)
     total_calls  = len(markets) * len(regions)
     call_num     = 0
+    # Buffer every event across all (market, region) calls, then write ONCE at the end
+    # of the fire (one temp load + one PARSE_JSON INSERT-SELECT) so COMPUTE_WH is touched
+    # once briefly instead of staying hot for the whole fetch loop. Each row carries its
+    # own call's url/params/credits, so a single bulk write preserves per-call metadata.
+    buffer: list[tuple] = []
 
     log.info(
         "Odds ingest → %s  %d market(s) × %d region(s) = %d call(s)  load_id=%s",
@@ -601,47 +680,41 @@ def run_odds(
 
             if dry_run:
                 log.info(
-                    "  [DRY RUN] Would insert %d row(s) to %s",
+                    "  [DRY RUN] Would buffer %d row(s) for %s",
                     len(events), target.qualified_name,
                 )
                 time.sleep(REQUEST_DELAY)
                 continue
 
-            inserted = 0
             for event in events:
                 bookmakers = event.get("bookmakers")
-                try:
-                    insert_odds_row(
-                        conn,
-                        target               = target,
-                        ingestion_ts         = ingestion_ts,
-                        load_id              = load_id,
-                        source_endpoint      = ODDS_ENDPOINT,
-                        request_url          = result.url,
-                        request_params       = params,
-                        http_status_code     = result.status_code,
-                        x_requests_used      = result.requests_used,
-                        x_requests_remaining = result.requests_remaining,
-                        raw_json             = event,
-                        event_id             = event.get("id"),
-                        sport_key            = event.get("sport_key"),
-                        sport_title          = event.get("sport_title"),
-                        commence_time        = event.get("commence_time"),
-                        home_team            = event.get("home_team"),
-                        away_team            = event.get("away_team"),
-                        bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
-                    )
-                    inserted += 1
-                except Exception as exc:
-                    log.error(
-                        "  Snowflake write failed for event %s (market=%s region=%s): %s",
-                        event.get("id"), market, region, exc,
-                    )
+                buffer.append(build_odds_row(
+                    ingestion_ts         = ingestion_ts,
+                    load_id              = load_id,
+                    source_endpoint      = ODDS_ENDPOINT,
+                    request_url          = result.url,
+                    request_params       = params,
+                    http_status_code     = result.status_code,
+                    x_requests_used      = result.requests_used,
+                    x_requests_remaining = result.requests_remaining,
+                    event                = event,
+                    bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
+                ))
 
-            log.info("  %d/%d row(s) inserted", inserted, len(events))
+            log.info("  %d event(s) buffered (%d total)", len(events), len(buffer))
             time.sleep(REQUEST_DELAY)
 
-    log.info("Odds ingest complete — load_id=%s", load_id)
+    if dry_run:
+        log.info("[DRY RUN] Odds ingest complete — no Snowflake writes performed (load_id=%s)", load_id)
+        return
+
+    try:
+        written = bulk_insert_odds_rows(conn, target=target, rows=buffer)
+        log.info("Odds ingest complete — %d row(s) written in 1 bulk insert (load_id=%s)",
+                 written, load_id)
+    except Exception as exc:
+        log.error("Snowflake bulk write failed (%d buffered row(s), load_id=%s): %s",
+                  len(buffer), load_id, exc)
 
 
 # ── Historical events helpers ─────────────────────────────────────────────────
@@ -932,6 +1005,11 @@ def run_historical_odds(
         )
 
         ingestion_ts = datetime.now(tz=timezone.utc)
+        # Buffer every event across this date's markets, then write ONCE per date
+        # (one temp load + one PARSE_JSON INSERT-SELECT). The date is a natural resume
+        # checkpoint: a crash only loses the in-progress date, and the (date, market)
+        # idempotency skip re-fetches it on the next run since nothing was written.
+        date_buffer: list[tuple] = []
 
         for market in markets:
             call_num += 1
@@ -1018,40 +1096,33 @@ def run_historical_odds(
                 time.sleep(REQUEST_DELAY)
                 continue
 
-            date_inserted = 0
             for event_obj in data_array:
                 bookmakers = event_obj.get("bookmakers")
-                try:
-                    insert_odds_row(
-                        conn,
-                        target               = target,
-                        ingestion_ts         = ingestion_ts,
-                        load_id              = load_id,
-                        source_endpoint      = HIST_ODDS_ENDPOINT,
-                        request_url          = result.url,
-                        request_params       = params,
-                        http_status_code     = result.status_code,
-                        x_requests_used      = result.requests_used,
-                        x_requests_remaining = result.requests_remaining,
-                        raw_json             = event_obj,
-                        event_id             = event_obj.get("id"),
-                        sport_key            = event_obj.get("sport_key"),
-                        sport_title          = event_obj.get("sport_title"),
-                        commence_time        = event_obj.get("commence_time"),
-                        home_team            = event_obj.get("home_team"),
-                        away_team            = event_obj.get("away_team"),
-                        bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
-                    )
-                    date_inserted += 1
-                    rows_inserted += 1
-                except Exception as exc:
-                    log.error(
-                        "  Snowflake write failed for event=%s market=%s: %s",
-                        event_obj.get("id"), market, exc,
-                    )
+                date_buffer.append(build_odds_row(
+                    ingestion_ts         = ingestion_ts,
+                    load_id              = load_id,
+                    source_endpoint      = HIST_ODDS_ENDPOINT,
+                    request_url          = result.url,
+                    request_params       = params,
+                    http_status_code     = result.status_code,
+                    x_requests_used      = result.requests_used,
+                    x_requests_remaining = result.requests_remaining,
+                    event                = event_obj,
+                    bookmakers_count     = len(bookmakers) if isinstance(bookmakers, list) else None,
+                ))
 
-            log.info("  %d/%d row(s) inserted", date_inserted, len(data_array))
+            log.info("  %d event(s) buffered for %s", len(data_array), game_date)
             time.sleep(REQUEST_DELAY)
+
+        # Single bulk write per game-date (skipped when dry-run buffered nothing).
+        if date_buffer:
+            try:
+                written = bulk_insert_odds_rows(conn, target=target, rows=date_buffer)
+                rows_inserted += written
+                log.info("  %s — flushed %d row(s) in 1 bulk insert", game_date, written)
+            except Exception as exc:
+                log.error("  Snowflake bulk write failed for %s (%d buffered row(s)): %s",
+                          game_date, len(date_buffer), exc)
 
     log.info(
         "Historical odds ingest complete — %d date(s), %d call(s), %d row(s)  load_id=%s",
