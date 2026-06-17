@@ -8181,3 +8181,46 @@ models:
         description: Line drives / total_batted_balls.
       - name: popup_pct
         description: Infield pop-ups / total_batted_balls.
+
+  # ============================================================================
+  # mart_player_game_starts  (Story 33.1 Task 1a — leakage-safe start fact)
+  # ============================================================================
+  - name: mart_player_game_starts
+    description: >
+      Story 33.1 — the leakage-safe START FACT for the playing-time probability
+      model (33.1) and the expected-lineup feature family (33.3). One row per
+      (game_pk, team, side, player_id) for every CONFIRMED STARTER: mart_game_spine
+      unpivoted to (game_pk, team, side, opp_team) joined to stg_statsapi_lineups
+      (one lineup row = one starter). Actual-starts-only by design — the candidate
+      panel, the did_start in {0,1} label, and rolling start-rates are built
+      downstream in build_playing_time_dataset.py with a strict `prior.official_date
+      < game.official_date` guard. official_date is the canonical leakage-safe game
+      date. Scheduled (today's) games produce NO rows (lineup not posted yet) —
+      serving predicts today's starters from each team's RECENT starts here, never
+      from today's unknown lineup. Coverage 2015+.
+    columns:
+      - name: game_pk
+        description: MLB game identifier.
+        tests: [not_null]
+      - name: official_date
+        description: Canonical leakage-safe game date (from the posted lineup).
+        tests: [not_null]
+      - name: team
+        description: Canonical abbrev of the batting team this row's starter played for.
+        tests: [not_null]
+      - name: side
+        description: home | away — which side of the game this team batted.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+      - name: player_id
+        description: MLB Stats API player id of the starter.
+        tests: [not_null]
+      - name: batting_order
+        description: Lineup slot 1-9 the player started in.
+      - name: position_code
+        description: Primary position code of the player in this game (1 = pitcher).
+      - name: is_pitcher_slot
+        description: TRUE when the starter occupied a pitcher slot (pre-2022 NL no-DH); lets 33.3 exclude/down-weight non-hitters.

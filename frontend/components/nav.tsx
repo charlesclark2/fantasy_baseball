@@ -44,6 +44,7 @@ const MAIN_NAV_ITEMS = [
 
 const RESEARCH_ITEMS = [
   { label: "Teams", href: "/teams", key: "teams" },
+  { label: "Players", href: "/players", key: "players" },
 ] as const
 
 const ADMIN_ITEMS = [

@@ -954,6 +954,17 @@ sources:
           includes the game's own observation (do NOT use as a pre-game feature).
           Grain: team × metric × season × game_pk.
 
+      - name: mart_player_start_probability
+        description: >
+          Story 33.1 — per-(game_pk, side, player_id) P(start) for the candidate roster.
+          Written by betting_ml/scripts/score_playing_time.py (write_pandas, CREATE OR
+          REPLACE). Leakage-safe: historical rows are WALK-FORWARD (year Y scored by a
+          model fit on <Y, p_source=walk_forward_model); 2015-16 fall back to raw
+          start_rate_50 (p_source=rate50_fallback). Consumed by feature_pregame_expected_lineup
+          (33.3) as Σ P(start)·player_stat. official_date is VARCHAR ISO 'YYYY-MM-DD' (cast
+          ::date downstream — VARCHAR avoids write_pandas datetime serialization bugs).
+          Grain: game_pk × side × player_id.
+
   - name: betting_ml
     database: baseball_data
     schema: betting_ml
