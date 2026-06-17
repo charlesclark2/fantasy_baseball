@@ -1752,19 +1752,23 @@ ORDER BY b.batter_id, b.game_date
 """
 
 _PLAYER_BATTER_IDENTITY_SQL = """
-SELECT player_id, full_name, first_name, last_name, position_abbreviation
-FROM (
-    SELECT
-        player_id, full_name, first_name, last_name, position_abbreviation,
-        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY official_date DESC) AS rn
-    FROM baseball_data.betting.stg_statsapi_lineups
-    WHERE player_id IN (
-        SELECT DISTINCT batter_id
-        FROM baseball_data.betting.mart_batter_rolling_stats
-        WHERE game_year = 2026
-    )
-) t
-WHERE rn = 1
+SELECT
+    pp.player_id,
+    pp.full_name,
+    SPLIT_PART(pp.full_name, ' ', 1)                                   AS first_name,
+    SPLIT_PART(pp.full_name, ' ', -1)                                  AS last_name,
+    CASE pp.primary_position_code
+        WHEN '1'  THEN 'P'  WHEN '2'  THEN 'C'  WHEN '3'  THEN '1B'
+        WHEN '4'  THEN '2B' WHEN '5'  THEN '3B' WHEN '6'  THEN 'SS'
+        WHEN '7'  THEN 'LF' WHEN '8'  THEN 'CF' WHEN '9'  THEN 'RF'
+        WHEN '10' THEN 'DH' WHEN 'O'  THEN 'OF' ELSE 'POS'
+    END                                                                AS position_abbreviation
+FROM baseball_data.betting.stg_statsapi_player_profiles pp
+WHERE pp.player_id IN (
+    SELECT DISTINCT batter_id
+    FROM baseball_data.betting.mart_batter_rolling_stats
+    WHERE game_year = 2026
+)
 """
 
 _PLAYER_PITCHER_SQL = """
@@ -1796,19 +1800,23 @@ ORDER BY p.pitcher_id, p.game_date
 """
 
 _PLAYER_PITCHER_IDENTITY_SQL = """
-SELECT player_id, full_name, first_name, last_name, position_abbreviation
-FROM (
-    SELECT
-        player_id, full_name, first_name, last_name, position_abbreviation,
-        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY official_date DESC) AS rn
-    FROM baseball_data.betting.stg_statsapi_lineups
-    WHERE player_id IN (
-        SELECT DISTINCT pitcher_id
-        FROM baseball_data.betting.mart_starting_pitcher_game_log
-        WHERE game_year = 2026
-    )
-) t
-WHERE rn = 1
+SELECT
+    pp.player_id,
+    pp.full_name,
+    SPLIT_PART(pp.full_name, ' ', 1)                                   AS first_name,
+    SPLIT_PART(pp.full_name, ' ', -1)                                  AS last_name,
+    CASE pp.primary_position_code
+        WHEN '1'  THEN 'SP' WHEN '2'  THEN 'C'  WHEN '3'  THEN '1B'
+        WHEN '4'  THEN '2B' WHEN '5'  THEN '3B' WHEN '6'  THEN 'SS'
+        WHEN '7'  THEN 'LF' WHEN '8'  THEN 'CF' WHEN '9'  THEN 'RF'
+        WHEN '10' THEN 'DH' WHEN 'O'  THEN 'OF' ELSE 'P'
+    END                                                                AS position_abbreviation
+FROM baseball_data.betting.stg_statsapi_player_profiles pp
+WHERE pp.player_id IN (
+    SELECT DISTINCT pitcher_id
+    FROM baseball_data.betting.mart_starting_pitcher_game_log
+    WHERE game_year = 2026
+)
 """
 
 
