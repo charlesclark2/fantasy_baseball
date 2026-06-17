@@ -46,8 +46,10 @@ from dotenv import load_dotenv
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+from scipy.stats import norm as _scipy_norm
+
 from betting_ml.utils.h2h_probability import devig_home_prob
-from betting_ml.utils.totals_probability import devig_over_prob, compute_over_under_probs
+from betting_ml.utils.totals_probability import devig_over_prob
 from betting_ml.utils.probability_layer import compute_kelly
 
 load_dotenv()
@@ -910,7 +912,8 @@ ORDER BY b.game_pk, lo.bookmaker_key, lo.market_key, lo.outcome_name
 _MODEL_DIST_BATCH = """
 WITH ranked AS (
     SELECT
-        game_pk, calibrated_win_prob, pred_total_runs, totals_r, home_team, away_team,
+        game_pk, calibrated_win_prob, pred_total_runs, pred_total_runs_scale,
+        home_team, away_team,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
@@ -919,7 +922,8 @@ WITH ranked AS (
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE game_pk IN ({game_pk_list})
 )
-SELECT game_pk, calibrated_win_prob, pred_total_runs, totals_r, home_team, away_team
+SELECT game_pk, calibrated_win_prob, pred_total_runs, pred_total_runs_scale,
+       home_team, away_team
 FROM ranked WHERE _rn = 1
 """
 
@@ -1068,7 +1072,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
         dist = dist_by_pk.get(gp)
         calib_win_prob = _flt(dist.get("CALIBRATED_WIN_PROB")) if dist else None
         pred_mu = _flt(dist.get("PRED_TOTAL_RUNS")) if dist else None
-        totals_r = _flt(dist.get("TOTALS_R")) if dist else None
+        pred_scale = _flt(dist.get("PRED_TOTAL_RUNS_SCALE")) if dist else None
         home_team = dist.get("HOME_TEAM") if dist else None
         away_team = dist.get("AWAY_TEAM") if dist else None
 
@@ -1161,12 +1165,16 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     mkt_pct_over = None
                 p_over = p_under = p_push = ev_over = ev_under = edge_over = kelly_over = None
                 if (
-                    pred_mu is not None and totals_r is not None
+                    pred_mu is not None and pred_scale is not None
                     and line is not None
                     and mkt_pct_over is not None and not (mkt_pct_over != mkt_pct_over)
                 ):
                     try:
-                        p_over, p_under, p_push = compute_over_under_probs(pred_mu, totals_r, line)
+                        # Champion totals model is NGBoost Normal — use Normal CDF.
+                        # P(push) = 0 for a continuous distribution.
+                        p_over = float(_scipy_norm.sf(line, loc=pred_mu, scale=pred_scale))
+                        p_under = 1.0 - p_over
+                        p_push = 0.0
                         edge_over = p_over - mkt_pct_over
                         if over_dec is not None:
                             ev_over = p_over * (over_dec - 1.0) - (1.0 - p_over)
@@ -1211,7 +1219,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
             "home_team": home_team,
             "away_team": away_team,
             "pred_total_runs": round(pred_mu, 2) if pred_mu is not None else None,
-            "totals_r": round(totals_r, 4) if totals_r is not None else None,
+            "pred_total_runs_scale": round(pred_scale, 4) if pred_scale is not None else None,
             "h2h": h2h_rows,
             "totals": totals_rows,
         }

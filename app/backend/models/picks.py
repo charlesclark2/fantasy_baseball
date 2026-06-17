@@ -378,8 +378,8 @@ class BookOddsComparison(BaseModel):
     game_pk: int
     home_team: str | None = None
     away_team: str | None = None
-    # NegBin params used for totals recomputation (transparency)
+    # Champion model distribution params used for P(over) recomputation (transparency)
     pred_total_runs: float | None = None
-    totals_r: float | None = None
+    pred_total_runs_scale: float | None = None
     h2h: list[BookOddsH2H] = []
     totals: list[BookOddsTotals] = []
