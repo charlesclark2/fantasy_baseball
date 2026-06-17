@@ -20,7 +20,13 @@ _SCRIPT = f"{APP_DIR}/betting_ml/scripts/compute_stacking_weights.py"
 _WEIGHTS_JSON = f"{APP_DIR}/betting_ml/models/layer3/stacking_weights.json"
 
 _META_SCRIPT = f"{APP_DIR}/betting_ml/scripts/train_bayesian_meta_model.py"
-_META_SUMMARY = f"{APP_DIR}/betting_ml/models/meta_model/meta_model_latest.json"
+_META_MARKETS = ("h2h", "totals")  # Story 12.4 H2H + Story 12.12 totals
+
+
+def _meta_summary_path(market: str) -> str:
+    """h2h summary at the flat meta_model/ path; totals at meta_model/totals/."""
+    base = f"{APP_DIR}/betting_ml/models/meta_model"
+    return f"{base}/meta_model_latest.json" if market == "h2h" else f"{base}/{market}/meta_model_latest.json"
 
 
 @op(out=Out())
@@ -64,10 +70,11 @@ def compute_stacking_weights_op(context):
 
 @op(out=Out())
 def train_bayesian_meta_model_op(context):
-    """Weekly Bayesian CLV meta-model retrain (Story 12.4 / Epic O.5).
+    """Weekly Bayesian CLV meta-model retrain — both markets (Story 12.4 H2H + 12.12 totals / Epic O.5).
 
-    Reruns the MCMC on the accumulated live-CLV population and uploads the updated
-    trace/scaler/summary to S3. The script owns all gating, so the op stays thin:
+    Reruns the MCMC per market on the accumulated live-CLV population and uploads each
+    updated trace/scaler/summary to S3 (h2h → meta_model/, totals → meta_model/totals/).
+    The script owns all gating, so the op stays thin:
       • count gate (`--min-games 50`): below threshold the script logs
         "Insufficient CLV labels (n/50) — skipping MCMC" and exits 0 (op stays green);
       • convergence gate: R-hat > 1.10 → the script exits non-zero WITHOUT uploading
@@ -84,31 +91,40 @@ def train_bayesian_meta_model_op(context):
             "Skipping (stub mode).")
         return {"status": "stub"}
 
-    # --s3-upload writes meta_model/* to S3 for runtime consumers; the script exits
-    # non-zero (→ raise → alert) on a non-converged trace without uploading.
-    _run_script(context, _META_SCRIPT, ["--s3-upload", "--min-games", "50"])
+    # Retrain BOTH markets (Story 12.4 H2H + Story 12.12 totals) as independent failure
+    # domains: each runs --s3-upload, owns its own count/convergence gate, and writes a
+    # per-market summary. One market's convergence FAILURE (R-hat > 1.10 → non-zero exit)
+    # does not block the other; we attempt both, then raise at the end if any failed so the
+    # Dagster alert still fires.
+    results: dict[str, dict] = {}
+    failures: list[str] = []
+    metadata: dict = {}
+    for market in _META_MARKETS:
+        try:
+            _run_script(context, _META_SCRIPT,
+                        ["--s3-upload", "--min-games", "50", "--market", market])
+            try:
+                with open(_meta_summary_path(market)) as fh:
+                    summary = json.load(fh)
+                metadata[f"{market}__n_games"] = summary.get("n_games")
+                metadata[f"{market}__mean_ci_width"] = summary.get("mean_ci_width")
+                metadata[f"{market}__max_rhat"] = summary.get("max_rhat")
+                metadata[f"{market}__gates"] = MetadataValue.json(summary.get("gates", {}))
+                results[market] = {"status": "ok", "n_games": summary.get("n_games")}
+                context.log.info(
+                    f"[{market}] meta retrained: n_games={summary.get('n_games')}, "
+                    f"mean_ci_width={summary.get('mean_ci_width')}, max_rhat={summary.get('max_rhat')}")
+            except FileNotFoundError:
+                # Count gate skipped MCMC (no summary written) — expected below threshold.
+                results[market] = {"status": "skipped"}
+                context.log.info(f"[{market}] count gate skipped MCMC (below threshold).")
+        except Exception as exc:  # noqa: BLE001 — record + continue; re-raise after both attempted
+            results[market] = {"status": "failed", "error": str(exc)}
+            failures.append(market)
+            context.log.error(f"[{market}] meta retrain failed: {exc}")
 
-    # Surface n_games / mean_ci_width / max_rhat to run metadata so the weekly
-    # convergence history is auditable from run history without opening S3 (O.5 AC).
-    try:
-        with open(_META_SUMMARY) as fh:
-            summary = json.load(fh)
-        context.add_output_metadata({
-            "n_games": summary.get("n_games"),
-            "mean_ci_width": summary.get("mean_ci_width"),
-            "max_rhat": summary.get("max_rhat"),
-            "quartile_spread": summary.get("quartile_spread"),
-            "gates": MetadataValue.json(summary.get("gates", {})),
-            "generated_at": summary.get("generated_at", "unknown"),
-        })
-        context.log.info(
-            f"Meta-model retrained: n_games={summary.get('n_games')}, "
-            f"mean_ci_width={summary.get('mean_ci_width')}, max_rhat={summary.get('max_rhat')}")
-        return {"status": "ok", "n_games": summary.get("n_games")}
-    except FileNotFoundError:
-        # Count gate skipped MCMC (no summary written this run) — expected below 50 games.
-        context.log.info("No summary written — count gate skipped MCMC (below threshold).")
-        return {"status": "skipped"}
-    except Exception as exc:  # noqa: BLE001 — trace uploaded; metadata is best-effort
-        context.log.warning(f"Trace uploaded, but metadata logging failed: {exc}")
-        return {"status": "ok"}
+    if metadata:
+        context.add_output_metadata(metadata)
+    if failures:
+        raise Exception(f"Meta-model retrain failed for market(s): {failures}")
+    return {"status": "ok", "markets": results}

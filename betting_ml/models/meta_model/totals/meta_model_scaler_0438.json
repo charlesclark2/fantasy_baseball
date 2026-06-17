@@ -1,0 +1,22 @@
+{
+  "features": [
+    "edge_mag",
+    "pub_align",
+    "open_extremity"
+  ],
+  "mean": {
+    "edge_mag": 0.9303530735316196,
+    "pub_align": -0.07534246575342465,
+    "open_extremity": 0.7705479452054794
+  },
+  "std": {
+    "edge_mag": 1.1683757772506984,
+    "pub_align": 8.886205216376528,
+    "open_extremity": 0.9396031277382995
+  },
+  "n_games": 438,
+  "base_rate": 0.6027397260273972,
+  "edge_median": 0.5599296760076449,
+  "market": "totals",
+  "open_anchor": 8.0
+}

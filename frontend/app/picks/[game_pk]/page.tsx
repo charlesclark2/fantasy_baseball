@@ -513,7 +513,12 @@ function BookOddsSection({
           {/* Totals comparison */}
           {hasTotals && selTotals && (
             <div>
-              <p className="mb-2 text-xs font-semibold text-gray-500 uppercase tracking-widest">Totals</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Totals</p>
+                {selTotals.model_prob_over == null && (
+                  <span className="text-[10px] text-gray-600 italic">market lines only · model not yet deployed</span>
+                )}
+              </div>
               <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] overflow-hidden">
                 <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2 border-b border-[#1a1a1a]">
                   <span className="text-[10px] text-gray-600 uppercase tracking-wider">Side</span>

@@ -1145,7 +1145,10 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
             tot_market = book_odds.get("totals", [])
             over_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "over"), None)
             under_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "under"), None)
-            if over_row and under_row and pred_mu is not None and totals_r is not None:
+            if over_row and under_row:
+                # Market lines are always written even when model params are unavailable.
+                # Model prob/EV/edge columns go null — frontend renders "—" for those cells
+                # so raw book prices remain visible without a working totals model.
                 totals_odds_as_of = _ts(over_row.get("LATEST_TS"))
                 line = _flt(over_row.get("OUTCOME_POINT"))
                 over_am = _int(over_row.get("OUTCOME_PRICE_AMERICAN"))
@@ -1157,7 +1160,11 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                 except Exception:
                     mkt_pct_over = None
                 p_over = p_under = p_push = ev_over = ev_under = edge_over = kelly_over = None
-                if line is not None and mkt_pct_over is not None and not (mkt_pct_over != mkt_pct_over):
+                if (
+                    pred_mu is not None and totals_r is not None
+                    and line is not None
+                    and mkt_pct_over is not None and not (mkt_pct_over != mkt_pct_over)
+                ):
                     try:
                         p_over, p_under, p_push = compute_over_under_probs(pred_mu, totals_r, line)
                         edge_over = p_over - mkt_pct_over
@@ -1169,7 +1176,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                             kelly_over = compute_kelly(edge_over, mkt_pct_over)
                     except Exception:
                         pass
-                else:
+                elif mkt_pct_over is not None and mkt_pct_over != mkt_pct_over:  # NaN guard
                     mkt_pct_over = None
                 totals_rows.append({
                     "book_key": book_key, "book_name": book_name,

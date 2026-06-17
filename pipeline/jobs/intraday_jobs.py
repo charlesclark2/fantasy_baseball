@@ -9,6 +9,7 @@ from pipeline.ops.intraday_ops import (
     odds_current_dbt_rebuild,
     odds_snapshot_dbt_rebuild,
     odds_snapshot_ingest,
+    write_book_odds_op,
 )
 
 
@@ -22,7 +23,8 @@ from pipeline.ops.intraday_ops import (
 def odds_snapshot_job():
     has_games = check_games_today()
     start = odds_snapshot_ingest(has_games=has_games)
-    odds_snapshot_dbt_rebuild(start=start)
+    dbt_done = odds_snapshot_dbt_rebuild(start=start)
+    write_book_odds_op(start=dbt_done)
 
 
 # Story 12.3.7 / A2.18 — dbt rebuild for the ODDS API live path. The capture itself runs
@@ -36,7 +38,8 @@ def odds_snapshot_job():
 #     by odds_clv_rebuild_schedule (the closing line doesn't exist until first pitch).
 @job(executor_def=in_process_executor, tags={"concurrency_group": "odds_oddsapi_rebuild"})
 def odds_current_rebuild_job():
-    odds_current_dbt_rebuild()
+    dbt_done = odds_current_dbt_rebuild()
+    write_book_odds_op(start=dbt_done)
 
 
 @job(executor_def=in_process_executor, tags={"concurrency_group": "odds_oddsapi_rebuild"})

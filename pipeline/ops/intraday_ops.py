@@ -171,6 +171,23 @@ def odds_clv_dbt_rebuild(context: OpExecutionContext) -> None:
     ])
 
 
+# ── Book-odds serving store refresh ─────────────────────────────────────────
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def write_book_odds_op(context: OpExecutionContext) -> None:
+    """Push fresh per-book odds to the Railway PG serving store after each mart rebuild.
+
+    Runs write_serving_store.py --book-odds standalone — the script resolves today's
+    game_pks directly from daily_model_predictions when --picks is not also passed.
+    Failures are non-fatal (logged, not re-raised) so a PG outage doesn't kill the
+    odds rebuild job.
+    """
+    try:
+        _run_script(context, "write_serving_store.py", ["--book-odds"])
+    except Exception as exc:
+        context.log.warning(f"write_book_odds_op failed (non-fatal): {exc}")
+
+
 # ── Intraday Weather ─────────────────────────────────────────────────────────
 
 @op(out=Out(Nothing))

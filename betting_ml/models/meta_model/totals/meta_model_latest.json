@@ -1,0 +1,17 @@
+{
+  "n_games": 438,
+  "mean_ci_width": 0.1021,
+  "max_rhat": 1.0,
+  "quartile_spread": 0.1273,
+  "in_sample_auc": 0.5459,
+  "gates": {
+    "rhat": true,
+    "ci_width": true,
+    "quartile": true,
+    "all_pass": true
+  },
+  "trace_file": "bayesian_meta_trace_0438.nc",
+  "scaler_file": "meta_model_scaler_0438.json",
+  "generated_at": "2026-06-17T05:46:50.405905+00:00",
+  "market": "totals"
+}

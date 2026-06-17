@@ -1,15 +1,17 @@
-"""meta_model.py — Story 12.4 Bayesian CLV meta-model inference.
+"""meta_model.py — Bayesian CLV meta-model inference (Story 12.4 H2H / Story 12.12 totals).
 
 Serve-side helper that turns a morning game's raw signals into a calibrated P(CLV > 0)
 with an 80% credible interval, using the posterior trace + scaler produced by
-`betting_ml/scripts/train_bayesian_meta_model.py`.
+`betting_ml/scripts/train_bayesian_meta_model.py --market {h2h,totals}`.
 
-Feature set (must match the trainer exactly):
-    edge_mag       = |(model_home_prob − open_home_win_prob) − edge_median|
-    pub_align      = (home_ml_money_pct − home_ml_ticket_pct) × sign(centered edge)
-    open_extremity = |open_home_win_prob − 0.5|
-`edge_median` and the per-feature standardization (mean/std) are training statistics read
-from the scaler sidecar so serve-time transforms match training.
+Both markets share the same 3 features (names) with market-specific derivation; the
+trainer records `market` and `open_anchor` in the scaler so the serve build matches:
+    h2h:    edge = model_home_prob − open_home_win_prob ; open_extremity anchor = 0.5
+    totals: edge = pred_total_runs   − open_total_line  ; open_extremity anchor = median open total
+    edge_mag       = |centered edge|     (centered by scaler["edge_median"])
+    pub_align      = (over/home money% − ticket%) × sign(centered edge)
+    open_extremity = |open_val − scaler["open_anchor"]|
+Artifacts: h2h at the flat meta_model/ path; totals at meta_model/totals/.
 """
 from __future__ import annotations
 
@@ -48,13 +50,22 @@ def _load_from_dir(d: Path):
     return az.from_netcdf(str(trace_path)), load_scaler(scaler_path)
 
 
-def _pull_latest_from_s3(cache_dir: Path) -> bool:
-    """Download the trace+scaler named in `meta_model_latest.json` into `cache_dir`.
+def _market_dir(market: str) -> Path:
+    """h2h → flat meta_model/ (backward-compatible); totals → meta_model/totals/."""
+    return _DEFAULT_MODELS_DIR if market == "h2h" else _DEFAULT_MODELS_DIR / market
+
+
+def _market_prefix(market: str) -> str:
+    return _S3_PREFIX if market == "h2h" else f"{_S3_PREFIX}/{market}"
+
+
+def _pull_latest_from_s3(cache_dir: Path, prefix: str) -> bool:
+    """Download the trace+scaler named in `{prefix}/meta_model_latest.json` into `cache_dir`.
 
     The Story O.5 weekly retrain uploads the newest trace/scaler plus a stable
-    `meta_model_latest.json` pointer to S3. This pulls that pointer's pair so serve
-    picks up the weekly update without a redeploy. Fail-open: any error (no creds,
-    missing object, network) returns False → caller falls back to the local trace.
+    `meta_model_latest.json` pointer to S3 (per market prefix). This pulls that pointer's
+    pair so serve picks up the weekly update without a redeploy. Fail-open: any error (no
+    creds, missing object, network) returns False → caller falls back to the local trace.
     """
     import io
 
@@ -62,23 +73,23 @@ def _pull_latest_from_s3(cache_dir: Path) -> bool:
 
     s3 = boto3.client("s3")
     buf = io.BytesIO()
-    s3.download_fileobj(_S3_BUCKET, f"{_S3_PREFIX}/meta_model_latest.json", buf)
+    s3.download_fileobj(_S3_BUCKET, f"{prefix}/meta_model_latest.json", buf)
     summary = json.loads(buf.getvalue().decode())
     trace_file, scaler_file = summary["trace_file"], summary["scaler_file"]
     cache_dir.mkdir(parents=True, exist_ok=True)
     for name in (trace_file, scaler_file):
         dest = cache_dir / name
         if not dest.exists():  # immutable per-n names → cache once
-            s3.download_file(_S3_BUCKET, f"{_S3_PREFIX}/{name}", str(dest))
+            s3.download_file(_S3_BUCKET, f"{prefix}/{name}", str(dest))
     return (cache_dir / trace_file).exists() and (cache_dir / scaler_file).exists()
 
 
-def load_latest_meta_model(models_dir: str | Path | None = None):
-    """Load the most-recent (trace, scaler) pair for serving.
+def load_latest_meta_model(market: str = "h2h", models_dir: str | Path | None = None):
+    """Load the most-recent (trace, scaler) pair for serving, for the given market.
 
-    Prod serve prefers the newest trace from S3 (the Story O.5 weekly-retrain target)
-    so a Wednesday retrain reaches serve without a redeploy, then falls back to the
-    baked-in local `betting_ml/models/meta_model/` trace on any S3 failure. An explicit
+    `market` ∈ {h2h, totals} (Story 12.12). Prod serve prefers the newest trace from S3
+    (the Story O.5 weekly-retrain target) so a Wednesday retrain reaches serve without a
+    redeploy, then falls back to the baked-in local trace on any S3 failure. An explicit
     `models_dir` (tests / offline) loads from that dir only and skips S3. Set
     `META_MODEL_S3_DISABLE=1` to force local-only. Returns (None, None) when no artifact
     is available or the load fails — callers serve-skip the meta columns rather than
@@ -92,8 +103,8 @@ def load_latest_meta_model(models_dir: str | Path | None = None):
 
     if os.environ.get("META_MODEL_S3_DISABLE") != "1":
         try:
-            cache = Path(tempfile.gettempdir()) / "meta_model_cache"
-            if _pull_latest_from_s3(cache):
+            cache = Path(tempfile.gettempdir()) / "meta_model_cache" / market
+            if _pull_latest_from_s3(cache, _market_prefix(market)):
                 got = _load_from_dir(cache)
                 if got != (None, None):
                     return got
@@ -101,7 +112,7 @@ def load_latest_meta_model(models_dir: str | Path | None = None):
             pass  # fall through to local baked-in trace
 
     try:
-        return _load_from_dir(_DEFAULT_MODELS_DIR)
+        return _load_from_dir(_market_dir(market))
     except Exception:
         return None, None
 
@@ -110,18 +121,25 @@ def build_meta_features(game: dict, scaler: dict) -> dict:
     """
     Derive the three meta-model features from a game's raw morning signals.
 
-    `game` keys: model_home_prob, open_home_win_prob, and optionally
-    handle_ticket_div (AN money% − ticket%; missing → 0, i.e. neutral public money).
+    Market is read from the scaler (`market`, `open_anchor`) so the same builder serves
+    both. `game` keys by market:
+        h2h:    model_home_prob, open_home_win_prob
+        totals: model_total,     open_total_line
+    plus optional handle_ticket_div (over/home money% − ticket%; missing → 0 = neutral).
     """
-    edge_c = (float(game["model_home_prob"]) - float(game["open_home_win_prob"])
-              - float(scaler["edge_median"]))
+    if scaler.get("market", "h2h") == "totals":
+        model_val, open_val = float(game["model_total"]), float(game["open_total_line"])
+    else:
+        model_val, open_val = float(game["model_home_prob"]), float(game["open_home_win_prob"])
+    edge_c = model_val - open_val - float(scaler["edge_median"])
     side = float(np.sign(edge_c))
     div = game.get("handle_ticket_div")
     div = 0.0 if div is None else float(div)
+    open_anchor = float(scaler.get("open_anchor", 0.5))
     return {
         "edge_mag": abs(edge_c),
         "pub_align": div * side,
-        "open_extremity": abs(float(game["open_home_win_prob"]) - 0.5),
+        "open_extremity": abs(open_val - open_anchor),
     }
 
 
@@ -143,12 +161,13 @@ def compute_meta_model_prediction(game_features: dict, trace, scaler: dict) -> d
     """
     Posterior predictive P(CLV > 0) with an 80% credible interval for one game.
 
-    `game_features` may be either raw morning signals (model_home_prob,
-    open_home_win_prob, handle_ticket_div) or already-derived FEATURES; raw signals are
-    detected by the presence of `model_home_prob` and converted via build_meta_features.
-    Returns the column dict written to daily_model_predictions.
+    `game_features` may be either raw morning signals (h2h: model_home_prob/
+    open_home_win_prob; totals: model_total/open_total_line; + handle_ticket_div) or
+    already-derived FEATURES; raw signals are detected by the presence of a model-value
+    key and converted via build_meta_features. Returns the column dict for
+    daily_model_predictions.
     """
-    if "model_home_prob" in game_features:
+    if "model_home_prob" in game_features or "model_total" in game_features:
         feats = build_meta_features(game_features, scaler)
     else:
         feats = {f: float(game_features[f]) for f in FEATURES}
