@@ -27,6 +27,33 @@ def load_scaler(path: str | Path) -> dict:
     return json.loads(Path(path).read_text())
 
 
+_DEFAULT_MODELS_DIR = Path(__file__).resolve().parents[1] / "models" / "meta_model"
+
+
+def load_latest_meta_model(models_dir: str | Path | None = None):
+    """Load the most-recent (trace, scaler) pair from the meta_model dir.
+
+    Picks the highest `bayesian_meta_trace_{n:04d}.nc` (zero-padded n → lexical sort =
+    numeric sort) with a matching `meta_model_scaler_{n}.json`. Returns (None, None) when
+    no trained artifact is present or the load fails — callers must serve-skip meta columns
+    rather than crash (the meta-model is an optional serve enrichment, not core scoring).
+    """
+    d = Path(models_dir) if models_dir else _DEFAULT_MODELS_DIR
+    try:
+        traces = sorted(d.glob("bayesian_meta_trace_*.nc"))
+        if not traces:
+            return None, None
+        trace_path = traces[-1]
+        n = trace_path.stem.rsplit("_", 1)[-1]
+        scaler_path = d / f"meta_model_scaler_{n}.json"
+        if not scaler_path.exists():
+            return None, None
+        import arviz as az
+        return az.from_netcdf(str(trace_path)), load_scaler(scaler_path)
+    except Exception:
+        return None, None
+
+
 def build_meta_features(game: dict, scaler: dict) -> dict:
     """
     Derive the three meta-model features from a game's raw morning signals.
