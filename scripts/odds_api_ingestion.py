@@ -273,52 +273,70 @@ def _parse_int_header(value: str | None) -> int | None:
         return None
 
 
-def _get_ordered_keys(historical: bool) -> list[str]:
+def _get_ordered_keys(historical: bool, prefer_main: bool = False) -> list[tuple[str, str]]:
     """
-    Return API keys to try in priority order.
+    Return (label, api_key) pairs to try in priority order.
 
-    For live endpoints: starter key first (if set), then main key.
-    For historical endpoints: main key only — starter tier does not support
+    For live endpoints the DEFAULT is starter key first (if set), then main key —
+    this conserves the more expensive main-key credits for endpoints where it
+    matters.
+
+    For historical endpoints: main key only — the starter tier does not support
     the /historical/ path.
+
+    prefer_main=True flips the live order to MAIN first, then starter as a quota
+    fallback. Use this for COVERAGE-CRITICAL pulls (the /odds endpoint): The Odds
+    API's starter tier returns a NARROWER bookmaker roster — it omits Fanatics,
+    Caesars (williamhill_us) and rebet (confirmed 2026-06-17) — so a starter-first
+    odds pull silently drops those books. The events endpoint carries no bookmaker
+    data, so it keeps the credit-conserving starter-first default.
     """
-    keys: list[str] = []
-    if not historical:
-        starter = os.environ.get("ODDS_API_STARTER_KEY")
-        if starter:
-            keys.append(starter)
     main_key = os.environ.get("ODDS_API_KEY")
     if not main_key:
         raise EnvironmentError("ODDS_API_KEY is not set in the environment or .env file.")
-    keys.append(main_key)
+    starter = None if historical else os.environ.get("ODDS_API_STARTER_KEY")
+
+    keys: list[tuple[str, str]] = []
+    if prefer_main:
+        keys.append(("main key", main_key))
+        if starter:
+            keys.append(("starter key", starter))
+    else:
+        if starter:
+            keys.append(("starter key", starter))
+        keys.append(("main key", main_key))
     return keys
 
 
-def call_odds_api(endpoint: str, params: dict) -> OddsApiResponse:
+def call_odds_api(endpoint: str, params: dict, prefer_main: bool = False) -> OddsApiResponse:
     """
     Make a GET request to the given Odds API endpoint path (e.g.
     '/sports/baseball_mlb/events') with the provided query parameters.
 
-    For live endpoints, the starter key (ODDS_API_STARTER_KEY) is tried first.
-    If the starter key returns HTTP 401 or 422 (invalid or quota exhausted) the
-    main key (ODDS_API_KEY) is used as a fallback. Historical endpoints always
+    For live endpoints, the starter key (ODDS_API_STARTER_KEY) is tried first by
+    default. If a key returns HTTP 401 or 422 (invalid or quota exhausted) the
+    next key in priority order is used as a fallback. Historical endpoints always
     use the main key directly — the starter tier does not support /historical/.
+
+    prefer_main=True tries the MAIN key first (full bookmaker coverage); pass it
+    for the /odds endpoint, whose starter-tier roster omits Fanatics, Caesars
+    (williamhill_us) and rebet (see _get_ordered_keys).
 
     Raises requests.HTTPError when all available keys are exhausted.
     """
     url        = f"{ODDS_API_BASE_URL}{endpoint}"
     historical = "historical" in endpoint
-    keys       = _get_ordered_keys(historical)
+    keys       = _get_ordered_keys(historical, prefer_main=prefer_main)
 
     log.info("GET %s  params=%s", url, {k: v for k, v in params.items()})
 
-    for i, key in enumerate(keys):
-        key_label = "starter key" if i == 0 and len(keys) > 1 else "main key"
-        response  = requests.get(url, params={"apiKey": key, **params}, timeout=30)
+    for i, (key_label, key) in enumerate(keys):
+        response = requests.get(url, params={"apiKey": key, **params}, timeout=30)
 
         if response.status_code in (401, 422) and i < len(keys) - 1:
             log.warning(
-                "  %s returned HTTP %d — falling back to main key",
-                key_label, response.status_code,
+                "  %s returned HTTP %d — falling back to %s",
+                key_label, response.status_code, keys[i + 1][0],
             )
             continue
 
@@ -665,7 +683,10 @@ def run_odds(
             log.info("[%d/%d] market=%s  region=%s", call_num, total_calls, market, region)
 
             try:
-                result = call_odds_api(ODDS_ENDPOINT, params)
+                # prefer_main: the /odds pull is coverage-critical — the starter
+                # tier drops Fanatics, Caesars (williamhill_us) and rebet, so use
+                # the full-coverage main key first (starter stays as quota fallback).
+                result = call_odds_api(ODDS_ENDPOINT, params, prefer_main=True)
             except requests.HTTPError as exc:
                 log.warning("  HTTP error for market=%s region=%s: %s — skipping", market, region, exc)
                 time.sleep(REQUEST_DELAY)

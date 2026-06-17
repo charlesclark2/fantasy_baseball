@@ -25,6 +25,7 @@
     config(
         materialized = 'incremental',
         incremental_strategy = 'append',
+        on_schema_change = 'append_new_columns',
     )
 }}
 
@@ -129,6 +130,11 @@ select
 
     -- ── Bookmaker ─────────────────────────────────────────────────────────────
     bookmaker_key,
+    -- Canonical book IDENTITY: collapses keys that differ across ingestion sources for
+    -- the same book (williamhill_us ⇒ caesars). Raw bookmaker_key is preserved above;
+    -- consumers needing unified identity (dispersion/consensus/per-book edge/CLV) read
+    -- this column. Single source of truth: macros/canonical_bookmaker_key.sql.
+    {{ canonical_bookmaker_key('bookmaker_key') }}         as bookmaker_key_canonical,
     bookmaker_title,
     bookmaker_last_update,
 
