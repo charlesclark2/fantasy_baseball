@@ -281,7 +281,7 @@ function PickRow({ pick, router }: { pick: Pick; router: ReturnType<typeof useRo
               ciHigh={ciHigh}
               modelProb={mProb}
               marketProb={mkProb}
-              showLabels={true}
+              showLabels={false}
               showHighConviction={false}
             />
           )
