@@ -50,6 +50,8 @@ type Pick = {
   game_conviction_score: number
   win_prob_ci_low: number | null
   win_prob_ci_high: number | null
+  win_prob_ci_width: number | null
+  gate_signals_met: number | null
   lineup_confirmed: boolean
   home_team: string
   away_team: string
@@ -129,6 +131,8 @@ function normalizeEVPick(p: any): Pick {
     game_conviction_score: p.game_conviction_score ?? 0,
     win_prob_ci_low: null,
     win_prob_ci_high: null,
+    win_prob_ci_width: null,
+    gate_signals_met: null,
     lineup_confirmed: p.lineup_confirmed ?? false,
     home_team: normalizeTeam(p.home_team ?? ""),
     away_team: normalizeTeam(p.away_team ?? ""),
@@ -140,9 +144,9 @@ function normalizeEVPick(p: any): Pick {
 }
 
 const CONVICTION_TOOLTIP: Record<string, string> = {
-  HIGH: "Multiple model signals agree — strong confidence in the edge. Higher priority play.",
-  MED: "Most signals align but with some uncertainty. Moderate confidence.",
-  LOW: "Edge detected but signals are mixed. Smaller or less certain advantage.",
+  HIGH: "Model conviction (early) — strong confidence in this edge based on the signal active today. Note: only 1 of 5 gate criteria is live; this score reflects model certainty, not a full multi-signal gate.",
+  MED: "Model conviction (early) — moderate confidence. Most model signals align but with some uncertainty. Note: only 1 of 5 gate criteria is active.",
+  LOW: "Model conviction (early) — lower confidence. Edge detected but model uncertainty is higher. Note: only 1 of 5 gate criteria is active.",
 }
 
 function ConvictionBadge({ level }: { level: string }) {
