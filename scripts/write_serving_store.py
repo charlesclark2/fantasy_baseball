@@ -27,6 +27,7 @@ Exits 0 on full success, 1 if any write fails.
 
 from __future__ import annotations
 
+import argparse
 import base64
 import decimal
 import json
@@ -228,8 +229,10 @@ h2h AS (
         b.layer4_h2h_edge                            AS edge,
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
-        NULL::FLOAT                                  AS win_prob_ci_low,
-        NULL::FLOAT                                  AS win_prob_ci_high,
+        b.win_prob_ci_low,
+        b.win_prob_ci_high,
+        b.win_prob_ci_width,
+        b.gate_signals_met,
         b.home_team, b.away_team,
         b.layer4_h2h_decision                        AS pick_side,
         b.game_start_utc,
@@ -251,6 +254,8 @@ totals AS (
         b.lineup_confirmed,
         NULL::FLOAT                                  AS win_prob_ci_low,
         NULL::FLOAT                                  AS win_prob_ci_high,
+        NULL::FLOAT                                  AS win_prob_ci_width,
+        NULL::INTEGER                                AS gate_signals_met,
         b.home_team, b.away_team,
         b.layer4_totals_decision                     AS pick_side,
         b.game_start_utc,
@@ -803,7 +808,7 @@ h2h AS (
         b.calibrated_win_prob AS model_prob, b.h2h_market_implied_prob AS bovada_devig_prob,
         b.layer4_h2h_edge AS edge,
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
-        b.lineup_confirmed, NULL::FLOAT AS win_prob_ci_low, NULL::FLOAT AS win_prob_ci_high,
+        b.lineup_confirmed, b.win_prob_ci_low, b.win_prob_ci_high, b.win_prob_ci_width, b.gate_signals_met,
         b.home_team, b.away_team, NULLIF(b.layer4_h2h_decision, 'abstain') AS pick_side,
         b.game_start_utc, b.inserted_at AS predicted_at,
         NULL::FLOAT AS model_total_runs, NULL::FLOAT AS market_total_line
@@ -815,6 +820,7 @@ totals AS (
         b.layer4_totals_over_signal AS edge,
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed, NULL::FLOAT AS win_prob_ci_low, NULL::FLOAT AS win_prob_ci_high,
+        NULL::FLOAT AS win_prob_ci_width, NULL::INTEGER AS gate_signals_met,
         b.home_team, b.away_team, NULLIF(b.layer4_totals_decision, 'abstain') AS pick_side,
         b.game_start_utc, b.inserted_at AS predicted_at,
         b.pred_total_runs AS model_total_runs, b.total_line_consensus AS market_total_line
@@ -873,6 +879,7 @@ def _build_picks_payload(rows: list[dict], freshness_rows: list[dict]) -> dict:
             "bovada_devig_prob": r.get("BOVADA_DEVIG_PROB"), "edge": r.get("EDGE"),
             "game_conviction_score": r.get("GAME_CONVICTION_SCORE"),
             "win_prob_ci_low": r.get("WIN_PROB_CI_LOW"), "win_prob_ci_high": r.get("WIN_PROB_CI_HIGH"),
+            "win_prob_ci_width": r.get("WIN_PROB_CI_WIDTH"), "gate_signals_met": r.get("GATE_SIGNALS_MET"),
             "lineup_confirmed": r.get("LINEUP_CONFIRMED"), "home_team": r.get("HOME_TEAM"),
             "away_team": r.get("AWAY_TEAM"), "pick_side": r.get("PICK_SIDE"),
             "game_start_utc": _ts(r.get("GAME_START_UTC")),
@@ -1009,6 +1016,7 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
                 "bovada_devig_prob": r.get("BOVADA_DEVIG_PROB"), "edge": r.get("EDGE"),
                 "game_conviction_score": r.get("GAME_CONVICTION_SCORE"),
                 "win_prob_ci_low": r.get("WIN_PROB_CI_LOW"), "win_prob_ci_high": r.get("WIN_PROB_CI_HIGH"),
+                "win_prob_ci_width": r.get("WIN_PROB_CI_WIDTH"), "gate_signals_met": r.get("GATE_SIGNALS_MET"),
                 "lineup_confirmed": r.get("LINEUP_CONFIRMED"), "home_team": r.get("HOME_TEAM"),
                 "away_team": r.get("AWAY_TEAM"), "pick_side": r.get("PICK_SIDE"),
                 "game_start_utc": _ts(r.get("GAME_START_UTC")),
@@ -1275,7 +1283,43 @@ def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Write Snowflake prediction outputs to the PG serving store and S3 cache.",
+    )
+    parser.add_argument(
+        "--picks", action="store_true",
+        help="Write picks/today, picks/ev, and daily_picks rows.",
+    )
+    parser.add_argument(
+        "--game-detail", action="store_true",
+        help="Write per-game detail blobs (picks/game/<pk>). Requires --picks or pre-existing picks_rows.",
+    )
+    parser.add_argument(
+        "--history", action="store_true",
+        help="Write picks/history.",
+    )
+    parser.add_argument(
+        "--performance", action="store_true",
+        help="Write performance/summary.",
+    )
+    parser.add_argument(
+        "--teams", action="store_true",
+        help="Write team profile blobs.",
+    )
+    parser.add_argument(
+        "--players", action="store_true",
+        help="Write player profile blobs.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
+    # If no section flags given, run everything.
+    run_all = not any([args.picks, args.game_detail, args.history,
+                       args.performance, args.teams, args.players])
+
     today = date.today().isoformat()
     bucket = os.environ.get("CACHE_BUCKET")
 
@@ -1290,121 +1334,126 @@ def main() -> int:
 
     # ── picks/today ─────────────────────────────────────────────────────────
     picks_rows: list[dict] = []
-    try:
-        picks_rows = _sf_query(sf, _PICKS_TODAY_SQL, {"today": today})
-        fresh_rows = _sf_query(sf, _FRESHNESS_SQL, {"today": today})
-        if not picks_rows:
-            log.info("No predictions for %s — skipping picks/today cache write", today)
-        else:
-            payload = _build_picks_payload(picks_rows, fresh_rows)
-            if pg:
-                _pg_set_cache(pg, "picks/today", today, payload)
-                log.info("PG: picks/today written (%d picks)", len(picks_rows))
-            if bucket:
-                _write_s3(bucket, f"api-cache/{today}/picks/today.json", payload)
-    except Exception:
-        log.exception("Failed to write picks/today")
-        errors += 1
-
-    # ── picks/ev ────────────────────────────────────────────────────────────
     ev_rows: list[dict] = []
-    try:
-        ev_rows = _sf_query(sf, _EV_TODAY_SQL, {"today": today})
-        if not ev_rows:
-            log.info("No EV rows for %s — skipping picks/ev cache write", today)
-        else:
-            payload = _build_ev_payload(ev_rows)
+    if run_all or args.picks or args.game_detail:
+        try:
+            picks_rows = _sf_query(sf, _PICKS_TODAY_SQL, {"today": today})
+            fresh_rows = _sf_query(sf, _FRESHNESS_SQL, {"today": today})
+            if not picks_rows:
+                log.info("No predictions for %s — skipping picks/today cache write", today)
+            elif run_all or args.picks:
+                payload = _build_picks_payload(picks_rows, fresh_rows)
+                if pg:
+                    _pg_set_cache(pg, "picks/today", today, payload)
+                    log.info("PG: picks/today written (%d picks)", len(picks_rows))
+                if bucket:
+                    _write_s3(bucket, f"api-cache/{today}/picks/today.json", payload)
+        except Exception:
+            log.exception("Failed to write picks/today")
+            errors += 1
+
+        # ── picks/ev ────────────────────────────────────────────────────────
+        try:
+            ev_rows = _sf_query(sf, _EV_TODAY_SQL, {"today": today})
+            if not ev_rows:
+                log.info("No EV rows for %s — skipping picks/ev cache write", today)
+            elif run_all or args.picks:
+                payload = _build_ev_payload(ev_rows)
+                if pg:
+                    _pg_set_cache(pg, "picks/ev", today, payload)
+                    log.info("PG: picks/ev written (%d rows)", len(ev_rows))
+                if bucket:
+                    _write_s3(bucket, f"api-cache/{today}/picks/ev.json", payload)
+        except Exception:
+            log.exception("Failed to write picks/ev")
+            errors += 1
+
+        # ── individual daily_picks rows (portfolio filtering) ────────────────
+        if pg and (run_all or args.picks) and (picks_rows or ev_rows):
+            try:
+                merged = {(r["GAME_PK"], r["MARKET_TYPE"]): r for r in picks_rows}
+                for r in ev_rows:
+                    key = (r["GAME_PK"], r["MARKET_TYPE"])
+                    if key in merged:
+                        merged[key].update({k: r[k] for k in ("KELLY_FRACTION", "QUALIFIED_BET",
+                            "TOTAL_LINE_CONSENSUS", "PRED_TOTAL_RUNS") if k in r})
+                    else:
+                        merged[key] = r
+                _pg_upsert_picks(pg, list(merged.values()), today)
+                log.info("PG: daily_picks upserted (%d rows)", len(merged))
+            except Exception:
+                log.exception("Failed to upsert daily_picks rows")
+                errors += 1
+
+    # ── picks/history ────────────────────────────────────────────────────────
+    if run_all or args.history:
+        try:
+            history_rows = _sf_query(sf, _HISTORY_SQL)
+            payload = _build_history_payload(history_rows)
             if pg:
-                _pg_set_cache(pg, "picks/ev", today, payload)
-                log.info("PG: picks/ev written (%d rows)", len(ev_rows))
+                _pg_set_cache(pg, "picks/history", today, payload)
+                log.info("PG: picks/history written (%d rows)", len(history_rows))
             if bucket:
-                _write_s3(bucket, f"api-cache/{today}/picks/ev.json", payload)
-    except Exception:
-        log.exception("Failed to write picks/ev")
-        errors += 1
-
-    # ── individual daily_picks rows (portfolio filtering) ───────────────────
-    if pg and (picks_rows or ev_rows):
-        try:
-            # Merge picks+ev rows; picks carry pick_side, ev rows carry kelly/qualified
-            merged = {(r["GAME_PK"], r["MARKET_TYPE"]): r for r in picks_rows}
-            for r in ev_rows:
-                key = (r["GAME_PK"], r["MARKET_TYPE"])
-                if key in merged:
-                    merged[key].update({k: r[k] for k in ("KELLY_FRACTION", "QUALIFIED_BET",
-                        "TOTAL_LINE_CONSENSUS", "PRED_TOTAL_RUNS") if k in r})
-                else:
-                    merged[key] = r
-            _pg_upsert_picks(pg, list(merged.values()), today)
-            log.info("PG: daily_picks upserted (%d rows)", len(merged))
+                _write_s3(bucket, f"api-cache/{today}/picks/history.json", payload)
         except Exception:
-            log.exception("Failed to upsert daily_picks rows")
+            log.exception("Failed to write picks/history")
             errors += 1
 
-    # ── picks/history ───────────────────────────────────────────────────────
-    try:
-        history_rows = _sf_query(sf, _HISTORY_SQL)
-        payload = _build_history_payload(history_rows)
-        if pg:
-            _pg_set_cache(pg, "picks/history", today, payload)
-            log.info("PG: picks/history written (%d rows)", len(history_rows))
-        if bucket:
-            _write_s3(bucket, f"api-cache/{today}/picks/history.json", payload)
-    except Exception:
-        log.exception("Failed to write picks/history")
-        errors += 1
-
-    # ── performance/summary ─────────────────────────────────────────────────
-    try:
+    # ── performance/summary ──────────────────────────────────────────────────
+    if run_all or args.performance:
         try:
-            perf_rows = _sf_query(sf, _BANKROLL_SQL)
-            source = "mart_bankroll_state"
+            try:
+                perf_rows = _sf_query(sf, _BANKROLL_SQL)
+                source = "mart_bankroll_state"
+            except Exception:
+                log.warning("mart_bankroll_state unavailable — falling back")
+                perf_rows = _sf_query(sf, _CLV_SUMMARY_SQL)
+                source = "mart_clv_labeled_games"
+            if not perf_rows:
+                perf_rows = _sf_query(sf, _CLV_SUMMARY_SQL)
+                source = "mart_clv_labeled_games"
+            payload = _build_performance_payload(perf_rows, source)
+            if pg:
+                _pg_set_cache(pg, "performance/summary", today, payload)
+                log.info("PG: performance/summary written (source=%s)", source)
+            if bucket:
+                _write_s3(bucket, f"api-cache/{today}/performance/summary.json", payload)
         except Exception:
-            log.warning("mart_bankroll_state unavailable — falling back")
-            perf_rows = _sf_query(sf, _CLV_SUMMARY_SQL)
-            source = "mart_clv_labeled_games"
-        if not perf_rows:
-            perf_rows = _sf_query(sf, _CLV_SUMMARY_SQL)
-            source = "mart_clv_labeled_games"
-        payload = _build_performance_payload(perf_rows, source)
-        if pg:
-            _pg_set_cache(pg, "performance/summary", today, payload)
-            log.info("PG: performance/summary written (source=%s)", source)
-        if bucket:
-            _write_s3(bucket, f"api-cache/{today}/performance/summary.json", payload)
-    except Exception:
-        log.exception("Failed to write performance/summary")
-        errors += 1
-
-    # ── game detail blobs (one blob per game) ───────────────────────────────
-    game_pks = list({r["GAME_PK"] for r in picks_rows} | {r["GAME_PK"] for r in ev_rows})
-    if game_pks and pg:
-        try:
-            final_pks: set[int] = set()
-            detail_map = _assemble_game_detail_payloads(sf, game_pks, final_pks)
-            for gp, (detail_payload, is_final) in detail_map.items():
-                cache_key = f"picks/game/{gp}"
-                _has_expl = bool(detail_payload.get("pick_explanation"))
-                _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=(is_final and _has_expl))
-                if bucket and is_final:
-                    _write_s3(bucket, f"api-cache/permanent/{cache_key}.json", detail_payload)
-                elif bucket:
-                    _write_s3(bucket, f"api-cache/{today}/{cache_key}.json", detail_payload)
-            log.info("PG: game detail written for %d games", len(detail_map))
-        except Exception:
-            log.exception("Failed to write game detail blobs")
+            log.exception("Failed to write performance/summary")
             errors += 1
 
-    # ── team profiles ────────────────────────────────────────────────────────────
-    if pg:
+    # ── game detail blobs (one blob per game) ────────────────────────────────
+    if run_all or args.game_detail:
+        game_pks = list({r["GAME_PK"] for r in picks_rows} | {r["GAME_PK"] for r in ev_rows})
+        if game_pks and pg:
+            try:
+                final_pks: set[int] = set()
+                detail_map = _assemble_game_detail_payloads(sf, game_pks, final_pks)
+                for gp, (detail_payload, is_final) in detail_map.items():
+                    cache_key = f"picks/game/{gp}"
+                    _has_expl = bool(detail_payload.get("pick_explanation"))
+                    _pg_set_cache(pg, cache_key, today, detail_payload, is_permanent=(is_final and _has_expl))
+                    if bucket and is_final:
+                        _write_s3(bucket, f"api-cache/permanent/{cache_key}.json", detail_payload)
+                    elif bucket:
+                        _write_s3(bucket, f"api-cache/{today}/{cache_key}.json", detail_payload)
+                log.info("PG: game detail written for %d games", len(detail_map))
+            except Exception:
+                log.exception("Failed to write game detail blobs")
+                errors += 1
+        elif not game_pks:
+            log.info("No game_pks resolved — skipping game detail (run --picks first or alongside --game-detail)")
+
+    # ── team profiles ─────────────────────────────────────────────────────────
+    if (run_all or args.teams) and pg:
         try:
             errors += write_team_profiles(sf, pg, today)
         except Exception:
             log.exception("Failed to write team profiles")
             errors += 1
 
-    # ── player profiles ──────────────────────────────────────────────────────────
-    if pg:
+    # ── player profiles ───────────────────────────────────────────────────────
+    if (run_all or args.players) and pg:
         try:
             errors += write_player_profiles(sf, pg, today)
         except Exception:

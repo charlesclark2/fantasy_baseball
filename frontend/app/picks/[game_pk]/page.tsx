@@ -678,59 +678,6 @@ export default function PickDetailPage() {
                         </Tooltip>
                       </div>
 
-                      {/* Win-probability CI band — h2h only */}
-                      {pick.market_type === "h2h" && pick.win_prob_ci_low != null && pick.win_prob_ci_high != null && (() => {
-                        const isAway = pick.pick_side === "away"
-                        const ciLow = isAway ? 1 - pick.win_prob_ci_high! : pick.win_prob_ci_low!
-                        const ciHigh = isAway ? 1 - pick.win_prob_ci_low! : pick.win_prob_ci_high!
-                        const modelP = isAway ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
-                        const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
-                        const halfWidth = pick.win_prob_ci_width != null ? (pick.win_prob_ci_width * 50).toFixed(1) : null
-                        return (
-                          <div className="mt-0.5">
-                            <div className="flex items-center justify-between mb-1">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-[10px] font-medium uppercase tracking-wide text-gray-600 cursor-help inline-flex items-center gap-1">
-                                    Model uncertainty (80% CI)
-                                    <Info className="h-3 w-3" />
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
-                                  Green bar = 80% credible interval for the model&apos;s win-probability estimate. White line = model point estimate. Orange marker = Bovada implied probability. Narrower bar = higher model confidence. Morning rows may show a narrower CI (imputed pre-lineup matrix) — prefer the post-lineup row when available.
-                                </TooltipContent>
-                              </Tooltip>
-                              <span className="text-[10px] font-mono text-gray-600">
-                                {(ciLow * 100).toFixed(1)}% – {(ciHigh * 100).toFixed(1)}%
-                                {halfWidth && <span className="ml-1 text-gray-700">(±{halfWidth}pp)</span>}
-                              </span>
-                            </div>
-                            <div className="relative h-3 bg-[#1e1e1e] rounded-full overflow-hidden">
-                              <div
-                                className="absolute top-0 bottom-0 bg-[#10b981]/30 rounded-sm"
-                                style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
-                              />
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-[#f59e0b]"
-                                style={{ left: `${mktP * 100}%` }}
-                              />
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-white"
-                                style={{ left: `${modelP * 100}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center gap-3 mt-1">
-                              <span className="text-[10px] text-gray-600 inline-flex items-center gap-1">
-                                <span className="inline-block h-1.5 w-3 bg-white rounded-full" /> Model {(modelP * 100).toFixed(1)}%
-                              </span>
-                              <span className="text-[10px] text-gray-600 inline-flex items-center gap-1">
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {(mktP * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                          </div>
-                        )
-                      })()}
-
                       {/* Prob / totals details */}
                       <div className="flex flex-col items-start gap-0.5 sm:items-end">
                         {pick.market_type === "h2h" ? (() => {
@@ -780,6 +727,59 @@ export default function PickDetailPage() {
                           )
                         })()}
                       </div>
+
+                      {/* Win-probability CI band — h2h only */}
+                      {pick.market_type === "h2h" && pick.win_prob_ci_low != null && pick.win_prob_ci_high != null && (() => {
+                        const isAway = pick.pick_side === "away"
+                        const ciLow = isAway ? 1 - pick.win_prob_ci_high! : pick.win_prob_ci_low!
+                        const ciHigh = isAway ? 1 - pick.win_prob_ci_low! : pick.win_prob_ci_high!
+                        const modelP = isAway ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
+                        const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
+                        const halfWidth = pick.win_prob_ci_width != null ? (pick.win_prob_ci_width * 50).toFixed(1) : null
+                        return (
+                          <div className="border-t border-[#1e1e1e] pt-2 mt-1">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs font-medium text-gray-500 cursor-help inline-flex items-center gap-1">
+                                    80% win-probability CI
+                                    <Info className="h-3 w-3" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                                  Green bar = 80% credible interval for the model&apos;s win-probability estimate. White line = model point estimate. Orange marker = Bovada implied probability. Narrower bar = higher model confidence. Morning rows may show a narrower CI (imputed pre-lineup matrix) — prefer the post-lineup row when available.
+                                </TooltipContent>
+                              </Tooltip>
+                              <span className="text-xs font-mono text-gray-500">
+                                {(ciLow * 100).toFixed(1)}%–{(ciHigh * 100).toFixed(1)}%
+                                {halfWidth && <span className="ml-1.5 text-gray-600">±{halfWidth}pp</span>}
+                              </span>
+                            </div>
+                            <div className="relative h-4 bg-[#1e1e1e] rounded-full overflow-hidden">
+                              <div
+                                className="absolute top-0 bottom-0 bg-[#10b981]/30 rounded-sm"
+                                style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
+                              />
+                              <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-[#f59e0b]"
+                                style={{ left: `${mktP * 100}%` }}
+                              />
+                              <div
+                                className="absolute top-0 bottom-0 w-0.5 bg-white"
+                                style={{ left: `${modelP * 100}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-4 mt-1.5">
+                              <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-3 bg-white rounded-full" /> Model {(modelP * 100).toFixed(1)}%
+                              </span>
+                              <span className="text-xs text-gray-500 inline-flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {(mktP * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   ))}
                 </div>
