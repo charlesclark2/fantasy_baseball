@@ -63,7 +63,28 @@ from betting_ml.utils.data_loader import get_snowflake_connection  # noqa: E402
 _MODELS = PROJECT_ROOT / "betting_ml" / "models" / "meta_model"
 _REPORT_DIR = (PROJECT_ROOT / "quant_sports_intel_models" / "baseball" / "ablation_results")
 
-FEATURES = ["edge_mag", "pub_align", "open_extremity"]
+FEATURES = ["edge_mag", "pub_align", "open_extremity"]   # base feature set (Story 12.4/12.12)
+
+# Story 12.13 — candidate Layer-4-derived extras, per market, added under --features plus_layer4.
+# All RECOMPUTED from historically-dense columns (the stored layer4_* columns are <12% populated —
+# recent features — so we derive the signal from consensus_win_prob / open line / pred_total scale).
+#   h2h  direction_flip — model fades the market favorite (model & open on opposite sides of 0.5).
+#        Data-validated 2026-06-17: +0.111 CLV+ within low-edge games, +0.056 within high-edge —
+#        ADDITIVE beyond edge_mag. (The conviction/estimator-disagreement signal was weak +
+#        non-monotonic → excluded.)
+#   totals edge_sigma — |centered totals edge| / pred_total_runs_scale (edge in model-σ units).
+#        Speculative candidate only (totals meta v0 had zero OOS discrimination); kept so the
+#        ablation tests it, expected to fail its held-out gate.
+_EXTRA_FEATURES = {"h2h": ["direction_flip"], "totals": ["edge_sigma"]}
+_PRIOR_MU = {"edge_mag": 0.4, "pub_align": 0.0, "open_extremity": 0.0,
+             "direction_flip": 0.0, "edge_sigma": 0.0}
+_PRIOR_SIGMA = {"edge_mag": 0.5}  # default 0.4 for the rest
+
+
+def _feature_list(market: str, featureset: str) -> list[str]:
+    return FEATURES if featureset == "base" else FEATURES + _EXTRA_FEATURES.get(market, [])
+
+
 DRAWS, TUNE, CHAINS, TARGET_ACCEPT, SEED = 1000, 1000, 4, 0.9, 124
 
 # Story 12.12 — the H2H meta-model (12.4) and the totals meta-model share this trainer via
@@ -104,7 +125,8 @@ where mv.snapshot_count > 1
 
 _SQL_TOTALS = """
 with morn as (
-  select game_pk, game_date, pred_total_runs as model_val
+  select game_pk, game_date, pred_total_runs as model_val,
+         pred_total_runs_scale as model_scale
   from baseball_data.betting_ml.daily_model_predictions
   where prediction_type='morning' and coalesce(is_backfill,false)=false
     and date_part('year', game_date)=2026
@@ -116,8 +138,8 @@ pb as (
 )
 select
   mv.game_pk, morn.game_date, mv.data_source,
-  morn.model_val, mv.open_total_line as open_val, mv.total_line_movement as line_movement,
-  pb.handle_ticket_div
+  morn.model_val, morn.model_scale, mv.open_total_line as open_val,
+  mv.total_line_movement as line_movement, pb.handle_ticket_div
 from baseball_data.betting.mart_odds_line_movement mv
 join morn on morn.game_pk = mv.game_pk
 left join pb on pb.game_pk = mv.game_pk
@@ -153,6 +175,15 @@ def _load(market: str) -> pd.DataFrame:
     df.attrs["open_anchor"] = open_anchor
     df["open_extremity"] = (df["open_val"] - open_anchor).abs()
 
+    # Story 12.13 — recomputed Layer-4 extras (only used under --features plus_layer4).
+    if market == "h2h":
+        # Model fades the market favorite: model & open on opposite sides of 0.5 (pick'em).
+        df["direction_flip"] = ((df["model_val"] > 0.5) != (df["open_val"] > 0.5)).astype(float)
+    else:
+        # Totals edge in model-σ units (|centered edge| / NGBoost scale); guard scale>0.
+        scale = df["model_scale"].where(df["model_scale"] > 0, np.nan)
+        df["edge_sigma"] = (df["edge_mag"] / scale).fillna(0.0)
+
     # Label: did the close move toward our side? Defined on moved games only.
     df["moved"] = df["line_movement"] != 0
     df["clv_positive"] = (np.sign(df["line_movement"]) == df["model_side"]).astype(int)
@@ -163,15 +194,15 @@ def _standardize(X: pd.DataFrame) -> tuple[np.ndarray, dict]:
     mu = X.mean()
     sd = X.std(ddof=0).replace(0, 1.0)
     Z = ((X - mu) / sd).to_numpy(float)
-    scaler = {"features": FEATURES, "mean": mu.to_dict(), "std": sd.to_dict()}
+    scaler = {"features": list(X.columns), "mean": mu.to_dict(), "std": sd.to_dict()}
     return Z, scaler
 
 
-def _posterior_logits(trace, Z: np.ndarray) -> np.ndarray:
+def _posterior_logits(trace, Z: np.ndarray, features: list[str]) -> np.ndarray:
     """Return an (n_samples, n_games) matrix of logit draws."""
     post = trace.posterior
     b0 = post["b0"].values.reshape(-1)                       # (S,)
-    betas = np.stack([post[f"b_{f}"].values.reshape(-1) for f in FEATURES], axis=1)  # (S,F)
+    betas = np.stack([post[f"b_{f}"].values.reshape(-1) for f in features], axis=1)  # (S,F)
     return b0[:, None] + betas @ Z.T                         # (S, n_games)
 
 
@@ -224,8 +255,14 @@ def main() -> None:
     parser.add_argument("--market", choices=["h2h", "totals"], default="h2h",
                         help="Which market to train (Story 12.12). h2h → flat meta_model/ path "
                              "(12.4 default); totals → meta_model/totals/.")
+    parser.add_argument("--features", choices=["base", "plus_layer4"], default="base",
+                        help="Story 12.13 ablation. base = 3-feature 12.4/12.12 model (the served one). "
+                             "plus_layer4 = base + recomputed Layer-4 extras (h2h direction_flip / totals "
+                             "edge_sigma). plus_layer4 writes to an ablation subdir — never clobbers or serves "
+                             "the base trace; promote only on a held-out lift.")
     args = parser.parse_args()
-    market = args.market
+    market, featureset = args.market, args.features
+    features = _feature_list(market, featureset)
 
     import pymc as pm
     import arviz as az
@@ -233,13 +270,16 @@ def main() -> None:
     from sklearn.metrics import roc_auc_score
     from sklearn.preprocessing import StandardScaler
 
-    models_dir = _market_dir(market)
-    out_path = _REPORT_DIR / _REPORT[market]
+    # base → served path (12.4/12.12); plus_layer4 → ablation subdir so it can never be picked up
+    # by load_latest_meta_model's glob or uploaded as the live trace.
+    models_dir = _market_dir(market) if featureset == "base" else _market_dir(market) / f"ablation_{featureset}"
+    out_path = (_REPORT_DIR / _REPORT[market] if featureset == "base"
+                else _REPORT_DIR / f"bayesian_meta_model_12_13_{market}_{featureset}.md")
     models_dir.mkdir(parents=True, exist_ok=True)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     raw = _load(market)
-    df = raw[raw["moved"]].dropna(subset=FEATURES + ["clv_positive"]).copy()
+    df = raw[raw["moved"]].dropna(subset=features + ["clv_positive"]).copy()
     df = df.sort_values("game_date").reset_index(drop=True)
     n = len(df)
     base_rate = float(df["clv_positive"].mean())
@@ -252,33 +292,29 @@ def main() -> None:
     # is daily_model_predictions ⋈ mart_odds_line_movement (the contaminated backfill mart
     # is deliberately bypassed; see Story 12.4 notes).
     if n < args.min_games:
-        print(f"[{market}] Insufficient CLV labels ({n}/{args.min_games}) — skipping MCMC.")
+        print(f"[{market}/{featureset}] Insufficient CLV labels ({n}/{args.min_games}) — skipping MCMC.")
         return
 
-    Z, scaler = _standardize(df[FEATURES])
+    Z, scaler = _standardize(df[features])
     y = df["clv_positive"].to_numpy(int)
 
-    # ── Bayesian logistic regression ──────────────────────────────────────────────
+    # ── Bayesian logistic regression (N features) ─────────────────────────────────
     # Weakly-informative priors: data (~900 games) dominates. Intercept centered on the
-    # known ~0.60 base agreement; β_edge weakly positive (pre-test); others ~0, sign learned.
+    # known base rate; β_edge weakly positive (pre-test); all others ~0, sign learned.
     with pm.Model() as model:
         b0 = pm.Normal("b0", mu=float(np.log(base_rate / (1 - base_rate))), sigma=0.5)
-        b_edge = pm.Normal("b_edge_mag", mu=0.4, sigma=0.5)
-        b_pub = pm.Normal("b_pub_align", mu=0.0, sigma=0.4)
-        b_open = pm.Normal("b_open_extremity", mu=0.0, sigma=0.4)
-        logit_p = (b0
-                   + b_edge * Z[:, 0]
-                   + b_pub * Z[:, 1]
-                   + b_open * Z[:, 2])
+        betas = [pm.Normal(f"b_{f}", mu=_PRIOR_MU.get(f, 0.0), sigma=_PRIOR_SIGMA.get(f, 0.4))
+                 for f in features]
+        logit_p = b0 + sum(betas[i] * Z[:, i] for i in range(len(features)))
         pm.Bernoulli("clv_obs", logit_p=logit_p, observed=y)
         trace = pm.sample(draws=DRAWS, tune=TUNE, chains=CHAINS, target_accept=TARGET_ACCEPT,
                           random_seed=SEED, progressbar=False)
 
-    summary = az.summary(trace, var_names=["b0", "b_edge_mag", "b_pub_align", "b_open_extremity"])
+    summary = az.summary(trace, var_names=["b0"] + [f"b_{f}" for f in features])
     max_rhat = float(summary["r_hat"].max())
 
     # ── Per-game posterior P(CLV>0) + 80% CI ──────────────────────────────────────
-    logits = _posterior_logits(trace, Z)                     # (S, n_games)
+    logits = _posterior_logits(trace, Z, features)           # (S, n_games)
     p_samples = 1.0 / (1.0 + np.exp(-logits))
     meta_p = p_samples.mean(axis=0)
     ci_low = np.percentile(p_samples, 10, axis=0)
@@ -297,9 +333,9 @@ def main() -> None:
 
     # ── Honesty check: temporal-split frequentist AUC (train early, test late) ─────
     cut = int(n * 0.7)
-    sc = StandardScaler().fit(df[FEATURES].iloc[:cut])
-    lr = LogisticRegression(max_iter=1000).fit(sc.transform(df[FEATURES].iloc[:cut]), y[:cut])
-    test_p = lr.predict_proba(sc.transform(df[FEATURES].iloc[cut:]))[:, 1]
+    sc = StandardScaler().fit(df[features].iloc[:cut])
+    lr = LogisticRegression(max_iter=1000).fit(sc.transform(df[features].iloc[:cut]), y[:cut])
+    test_p = lr.predict_proba(sc.transform(df[features].iloc[cut:]))[:, 1]
     temporal_auc = (float(roc_auc_score(y[cut:], test_p))
                     if len(np.unique(y[cut:])) > 1 else float("nan"))
 
@@ -316,6 +352,7 @@ def main() -> None:
     scaler["edge_median"] = df.attrs["edge_median"]
     scaler["market"] = market                                # serve-side market-aware feature build
     scaler["open_anchor"] = df.attrs["open_anchor"]          # h2h 0.5 / totals median open total
+    scaler["featureset"] = featureset                        # Story 12.13 — base vs plus_layer4
     scaler_path = models_dir / f"meta_model_scaler_{n:04d}.json"
     scaler_path.write_text(json.dumps(scaler, indent=2))
 
@@ -328,12 +365,15 @@ def main() -> None:
         "max_rhat": round(max_rhat, 4),
         "quartile_spread": round(quartile_spread, 4),
         "in_sample_auc": round(in_auc, 4),
+        "temporal_auc": round(temporal_auc, 4),       # Story 12.13 — the honest discrimination gate
         "gates": {"rhat": gate1, "ci_width": gate2, "quartile": gate3, "all_pass": all_pass},
         "trace_file": trace_path.name,
         "scaler_file": scaler_path.name,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
     summary["market"] = market
+    summary["featureset"] = featureset
+    summary["features"] = features
     summary_path = models_dir / "meta_model_latest.json"
     summary_path.write_text(json.dumps(summary, indent=2))
 
@@ -357,17 +397,25 @@ def main() -> None:
                  else "|open_total_line − median open total|")
     pub_desc = ("public (money%−ticket%) × model_side — sharp money on our side" if market == "h2h"
                 else "public over (money%−ticket%) × model_side — sharp O/U money on our side")
-    coef = {name: _coef(name) for name in ["b0", "b_edge_mag", "b_pub_align", "b_open_extremity"]}
+    _extra_desc = {
+        "direction_flip": "1 if the model fades the market favorite (model & open on opposite sides "
+                          "of 0.5) — Story 12.13, +0.11/+0.06 CLV+ lift validated beyond edge_mag",
+        "edge_sigma": "|centered totals edge| / pred_total_runs_scale (edge in model-σ units) — Story 12.13 candidate",
+    }
+    coef = {name: _coef(name) for name in ["b0"] + [f"b_{f}" for f in features]}
     L = [
-        f"# Story {story} — Bayesian sequential CLV meta-model — {mkt_label} (v0)", "",
+        f"# Story {story} — Bayesian sequential CLV meta-model — {mkt_label} (featureset={featureset})", "",
         f"**Population:** {n} moved 2026 live-morning games ⋈ Bovada open→close {mkt_label} movement "
         f"(snapshot_count>1; {len(raw)} paired, flat dropped). Label CLV+ = close moved toward "
         f"the morning model's side; base rate **{base_rate:.3f}**.",
         "",
-        "**Honest feature set** (3 features shared with the H2H model; market-specific derivation):",
+        f"**Feature set ({featureset}):** base 3 features (market-specific derivation)"
+        + (f" + Story 12.13 extra(s): {', '.join(_EXTRA_FEATURES.get(market, []))}"
+           if featureset != "base" else "") + ".",
         f"- `edge_mag` = {edge_desc} — primary signal",
         f"- `pub_align` = {pub_desc}",
         f"- `open_extremity` = {open_desc} — mean-reversion control",
+    ] + [f"- `{f}` = {_extra_desc.get(f, '')}" for f in features if f not in FEATURES] + [
         "",
         "## Convergence gates",
         f"| Gate | Value | Threshold | Pass |",
@@ -409,7 +457,7 @@ def main() -> None:
         f"in-sample AUC    = {in_auc:.3f}",
         f"temporal AUC     = {temporal_auc:.3f}",
         f"coefficients     = " + ", ".join(f"{k}={v[0]:+.3f}" for k, v in coef.items()),
-        f"\nVERDICT [{market}]: {'ALL GATES PASS' if all_pass else 'NOT ALL GATES PASS'}",
+        f"\nVERDICT [{market}/{featureset}]: {'ALL GATES PASS' if all_pass else 'NOT ALL GATES PASS'}",
         f"Report  → {out_path}",
         f"Trace   → {trace_path}",
     ]))
@@ -423,7 +471,12 @@ def main() -> None:
     if action == "warn":
         print(f"WARNING: max R-hat {max_rhat:.4f} > 1.05 — uploading but flagged for review.")
 
-    if args.s3_upload:
+    if args.s3_upload and featureset != "base":
+        # Safety: plus_layer4 is an ablation artifact. NEVER upload it as the live trace — that
+        # would clobber the served base model's S3 pointer with a feature set the serve can't build.
+        print(f"[12.13] featureset={featureset}: skipping S3 upload (ablation artifact, not the "
+              f"served model). Promote by re-running --features base once a held-out lift is confirmed.")
+    elif args.s3_upload:
         _upload_to_s3(trace_path, scaler_path, summary_path, n, market)
 
 

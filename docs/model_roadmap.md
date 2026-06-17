@@ -39,12 +39,12 @@ capped until point-in-time serving lands.
 
 | Story | What | Effort | Notes |
 |---|---|---|---|
-| **30.12** | Feature-store completeness audit & backfill-degradation policy | S/M | Specced 2026-06-13 (surfaced by the v5 backfill). Quantifies which features are sparse when → **directly feeds 30.6 + 30.8 + 31.0**. Can run in parallel with Phase 0. Known lead: `pythagorean_win_exp_diff` ~6.5% persistent mid-season null floor (`[[project_pythagorean_null_floor]]`). |
-| **31.0** | Data-expansion scoping spike — ingested-data utilization & orthogonality audit | S (spike) | Specced 2026-06-15. **Cheap, read-only, run now (parallel with Phase 0/30.12).** Recon finding: the orthogonal classes (weather, OAA, framing, bat-tracking, granular park) are ALREADY ingested but were **pruned from the promoted seasonnorm contracts** — totals has 0 weather/OAA/framing, home_win 0 weather/framing/park. The spike decides per class: tapped-out vs skew-pruned (false negative) vs under-wired vs new-needed. **Its action items (31.1/31.2) are gated on serving honesty; the audit itself is not.** |
+| **30.12** | Feature-store completeness audit & backfill-degradation policy | S/M | ✅ **DONE 2026-06-14.** 317 contract feats → after triage **~15–20 genuine structural gaps** (not the 131 the pooled bar over-flagged); the big "2026 bump" is the **serving-skew signature** (whole-row sparsity on recent games) = 30.6's territory, not a dbt fix. Pythagorean floor re-classed **2024-only, not structural** (downgraded). Spillovers: `left_ft`→`left_line_ft` folds into run_diff's next retrain; pitcher-cluster coverage → 7.6. |
+| **31.0** | Data-expansion scoping spike — ingested-data utilization & orthogonality audit | S (spike) | ✅ **DONE 2026-06-15.** Per-class verdicts feed 31.1/31.2/31.3 — all **gated on serving honesty (30.6)**; re-running feature selection on skewed data just re-prunes. |
 | **30.6** | ⭐ Serving-skew fix (live-ceiling lift) | **L** | The keystone — CONFIRMED 2026-06-14: same model scores corr **0.61 offline-dense vs 0.016 served** (not an illusory ceiling). Mechanism = starter-EB + lineup blocks NULL at serve (stale SCD-2 starter chain), NOT value-shift → **fix serve density, not forward-capture**. Fix (A) **shipped + verified** 2026-06-14: starter_id null 80%→0; **today's serve-time starter-EB null 62.5%→0.13 (bleed stopped for today's bet)**. Residual +1/+2-day EB gap = posterior-staleness → folded into A2.11. **NEXT: Lever 2** (post_lineup re-score binding) → forward re-measure live skill (~0→~0.6) → alpha re-tune → 27.8/30.9 v6 bundle. |
 | **30.13** | ⭐ Feature-store freshness guarantee (build-ordering + serve-time freshness gate) | M | **HIGH** — the durable other half of 30.6 fix (A). Guarantees serving-path feature models rebuild from the latest ingestion BEFORE predict_today + a serve-time freshness gate (abstain on staleness), so the keystone lift can't silently regress. Generalizes the SCD-2 staleness → the posterior-staleness class. Sequence right after the 30.6 re-measure. |
 | **30.8** | Pre-lineup and post-lineup prediction contracts | M | Tightly coupled to 30.6 (morning projected-lineup vs confirmed-lineup confidence tiers; don't let the morning pick degrade to imputed output). |
-| **A2.11** | Migrate EB posteriors from Python compute to dbt models | M | Removes the posterior-staleness fragility (`[[project_posterior_staleness_jun2026]]`) that silently corrupts serving when the Python compute scripts stall. **Now also owns the 30.6 residual:** `eb_starter_posteriors` is game_pk-keyed + written only for today's slate → starter-EB NULL for all +1/+2-day games (verified 2026-06-14). dbt as-of model keyed on `(pitcher_id, as-of)` closes it structurally — future game_pk inherits the starter's latest posterior. Bump priority toward Phase 1 (it's the durable half of the keystone, alongside 30.13). |
+| **A2.11** | Migrate EB posteriors from Python compute to dbt models | M | 🟢 **ACTIVATED 2026-06-14 (correctness driver, not cost); 5 dbt models on disk** (`eb_posteriors/` — batter/starter/bullpen/bullpen-team + int_bullpen_ali). **Owns the 30.6 residual:** the Python `eb_starter_posteriors` is game_pk-scoped to today's slate → starter-EB NULL for +1/+2-day games; sourcing the dbt model from `stg_statsapi_probable_pitchers` (full schedule spine) closes it by construction. Validate byte-for-byte vs the Python table on closed 2025, then cut over. The durable half of the keystone — pick up right after the 30.6 levers. |
 
 ---
 
@@ -83,14 +83,17 @@ These accumulate live CLV-labeled games as the season plays; you **trigger** the
 
 | Story | Unlock | What |
 |---|---|---|
-| **19.3** | ≥50 live CLV games | Backtest gate: confirm `qualified_bet` shows better CLV than unqualified before promoting it to the default view. |
-| **12.4** | ≥50 | Bayesian sequential meta-model (CLV). |
-| **12.5** | ≥100 + 12.4 converging | Meta-model integration into Epic 19. |
+| **12.4** | ≥50 | ✅ **CONVERGED + SERVING 2026-06-16** — H2H Bayesian sequential CLV meta-model; all 3 gates pass, temporal AUC 0.595 (real discrimination). Served on the morning row via `predict_today.py`. |
+| **12.12** | ≥50 | ✅ **BUILT + SERVING 2026-06-17** — totals arm of the meta-model (parity with H2H for beta display). Honest result: **no OOS discrimination** (temporal AUC 0.446) → Tier-A display ships framed as near-flat/low-information; Tier-B gating on totals meta is OFF. |
+| **12.13** | — | 🔴 **LEVER 1 CLOSED 2026-06-17** — Layer-4-feature discrimination lift was negative on BOTH markets (H2H 0.595→0.588, totals 0.446→0.448); `edge_mag` already captures the CLV signal. **v0 retained.** Lever 2 (post-lineup meta variant) untested, low-priority, not blocking. |
+| **O.5 / 12.9** | — | ✅ **DONE** — weekly Bayesian meta-model retrain wired into Dagster (`weekly_meta_model_job`, Wed 10:00 UTC), both markets as independent failure domains, S3-upload + convergence gate; serve-side S3 pull in `predict_today.py`. (12.9 collapsed into O.5.) |
+| **19.3** | ≥50 live CLV games | Backtest gate: confirm `qualified_bet` (= Layer-4 non-abstain side **AND** meta P(CLV>0) > per-market τ) shows better CLV than unqualified before promoting it to the default view. **No longer waits on 12.13** — "definition D" collapsed into "definition C (base meta IS the gate)." Forward CLV labels accrue through early/mid-July; follow-up **2026-07-01** (also the 12.5 checkpoint). |
+| **12.5** | ≥100 served-then-CLV-observed games since go-live + 12.4 converging | Meta-model integration into Epic 19 (the gate τ tuning + view promotion). Forward-count definition; follow-up **2026-07-01**. |
 | **12.6** | ≥500 | Frequentist exploratory meta-model. |
-| **12.9** | — | Wire Bayesian meta-model retraining into Dagster. |
 
 ⚠ **Gate these on Story 30.6 as well, not just the count** — a CLV meta-model trained on zero-skill live
-predictions learns nothing. Don't start 12.4 until serving is fixed *and* the live count clears.
+predictions learns nothing. 12.4/12.12 converged on the *pre-test* surface; the live-population retrains
+(O.5 weekly) only become trustworthy once serving is honest *and* the live count clears.
 
 ---
 
@@ -108,10 +111,15 @@ predictions learns nothing. Don't start 12.4 until serving is fixed *and* the li
 
 ## Recommended start order
 
-1. **Phase 0** (27.8 → 30.9 → v6 re-backfill) — cheap, closes the in-flight loop, consistent base-model semantics.
-2. **30.12 + 31.0** (both cheap, read-only, parallelizable with Phase 0) → **Phase 1** (30.6 keystone + 30.8 + A2.11).
-3. **Phase 2** (30.2 → 31.1 / 31.2 → 7.6 → 3A.3 / 5A.6 → Track B revisit).
-4. Trigger the **gated 12.x / 19.3** track as live counts clear *and* 30.6 has landed.
+The two cheap read-only spikes (**30.12 ✅, 31.0 ✅**) are now DONE — they confirmed the diagnosis and
+de-risked the keystone. Nothing cheap is left to hide behind: the critical path is the keystone itself.
 
-**Alternative if maximizing live-skill-per-hour:** jump straight to **30.12 → 30.6** and return to 27.8/30.9
-afterward. Phase 0's payoff is real but deferred until 30.6; 30.6 is the single highest-leverage item here.
+1. ⭐ **30.6 Lever 2** (post-lineup re-score binding) — **the immediate next action.** Fix (a) already stopped
+   today's starter-EB bleed (62.5%→0.13% null); Lever 2 binds picks to the dense post-lineup path, then
+   **forward-re-measure live skill (~0 → ~0.6 expected)** and re-tune `best_alpha` off zero.
+2. **A2.11 cutover** (durable 30.6 residual fix — 5 dbt EB models built; validate byte-for-byte vs Python on
+   closed 2025, then cut over) + **30.13** (serve-time freshness gate, so the lift can't silently regress).
+3. **Phase 0 bundle** (27.8 home_win v6 → 30.9 learned h2h ensemble → v6 re-backfill) — now has a live payoff
+   path once `best_alpha` unlocks. Includes the `left_ft`→`left_line_ft` swap (30.12 spillover) in run_diff's retrain.
+4. **Phase 2** (30.2 → 31.1 / 31.2 → 7.6 → 3A.3 / 5A.6 → Track B revisit) — sub-model quality, now visible in prod.
+5. Trigger the **gated 12.x / 19.3** track as live counts clear *and* 30.6 has landed (follow-up **2026-07-01**).

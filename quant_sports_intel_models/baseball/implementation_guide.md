@@ -7424,9 +7424,18 @@ do NOT add a "high conviction" badge on totals. Non-admin user-facing change →
 
 ---
 
-### 12.13 — Meta-model discrimination lift: consume Layer-4 signals + post-lineup ablation (H2H + totals) ⬜ NEW 2026-06-17  `[makes the permission signal better — builds WITH 12.12]`
+### 12.13 — Meta-model discrimination lift: consume Layer-4 signals + post-lineup ablation (H2H + totals) 🔴 LEVER 1 NEGATIVE — keep v0 (2026-06-17); lever 2 (post-lineup) open  `[makes the permission signal better — builds WITH 12.12]`
 
-**Why.** The CLV meta-model's discrimination is **modest** — Story 12.4's v0 reports in-sample AUC **0.579**, temporal-split AUC **0.596** — and it uses only three features (`edge_mag`, `pub_align`, `open_extremity`). Meanwhile the **Layer-4** layer computes signals that are plausibly CLV-predictive and currently **unused by the meta-model**: the H2H conviction flag (Story 28.6b — the two H2H estimators agreeing within 0.02), the decision rule (`direction_flip` vs `magnitude`), and the raw Layer-4 edge magnitude. This story tries to lift the meta-model's discrimination (and therefore the quality of the 19.3 gate) by feeding it those signals — for **both markets**, building alongside [Story 12.12](#1212--totals-clv-meta-model-h2h-parity) so the totals meta-model gets the richer feature set from the start rather than a later refit.
+**⛔ Lever 1 result (2026-06-17) — NO LIFT, keep the base 3-feature model both markets.** Ablation harness built (`--features {base,plus_layer4}`, recomputed Layer-4 extras, isolated `ablation_plus_layer4/` artifacts, temporal-AUC now a recorded gate). Verdict on the honest held-out gate (temporal AUC, same 911/438-game population):
+| market | base temporal AUC | plus_layer4 | feature added | Δ | keep? |
+|---|---|---|---|---|---|
+| H2H | 0.595 | **0.588** | `direction_flip` (b=+0.081) | **−0.007** | ❌ no — redundant with `edge_mag` (its coef shrank 0.179→0.132; the 2×2 univariate lift was already captured by the continuous edge feature) |
+| totals | 0.446 | **0.448** | `edge_sigma` (b=−0.159) | +0.002 (still <0.5) | ❌ no — totals has no OOS signal regardless |
+Both runs report "ALL GATES PASS" — exactly the trap: convergence/in-sample gates pass even for the no-skill totals model; **temporal AUC is the real judge and it did not lift.** Pre-checks first killed the conviction/estimator-disagreement signal (weak + non-monotonic) before any PyMC. **Conclusion: the meta-model's `edge_mag` already captures the available CLV signal; Layer-4-derived features add nothing. Lever 1 is exhausted.** The served `base` model is unchanged (the ablation never touched it). **Downstream:** Story 19.3 "definition D" collapses to **definition C (the base meta-model IS the gate)** — 19.3 no longer waits on 12.13. Reports: `ablation_results/bayesian_meta_model_12_13_{h2h,totals}_plus_layer4.md`.
+
+**Remaining: lever 2 (post-lineup meta variant) is untested** — a genuinely different hypothesis (denser post-lineup matrix → better win-prob → better edge), but more involved (different line reference + shorter CLV horizon) and a longer shot given lever 1. Treat as a separate, lower-priority investigation; not blocking.
+
+**Why (original framing — retained for context).** The CLV meta-model's discrimination is **modest** — Story 12.4's v0 reports in-sample AUC **0.579**, temporal-split AUC **0.596** — and it uses only three features (`edge_mag`, `pub_align`, `open_extremity`). Meanwhile the **Layer-4** layer computes signals that are plausibly CLV-predictive and currently **unused by the meta-model**: the H2H conviction flag (Story 28.6b — the two H2H estimators agreeing within 0.02), the decision rule (`direction_flip` vs `magnitude`), and the raw Layer-4 edge magnitude. This story tries to lift the meta-model's discrimination (and therefore the quality of the 19.3 gate) by feeding it those signals — for **both markets**, building alongside [Story 12.12](#1212--totals-clv-meta-model-h2h-parity) so the totals meta-model gets the richer feature set from the start rather than a later refit.
 
 **Two levers (each gated on an honest held-out discrimination lift — a failed lift is an acceptable, logged outcome, exactly like 12.4's original feature re-scope):**
 
@@ -12570,7 +12579,7 @@ Confirm the poller respects the cost guard (no calls when no games are live) and
 **AC:** the app shows live scores that update without manual refresh, sourced from Odds-API `/scores`, written only to Railway PG;
 the poller makes **zero calls when no games are live** and ~60–90s cadence during live windows; credit usage is logged.
 
-#### A0.4.32 — Per-book odds comparison: model vs. a user-selected sportsbook (dynamic EV + de-vigged market %)  ⬜ NEW (2026-06-17)  **[P2 — app feature, model-side ready]**
+#### A0.4.32 — Per-book odds comparison: model vs. a user-selected sportsbook (dynamic EV + de-vigged market %)  ✅ SHIPPED 2026-06-17  **[P2]**
 
 **Why.** Beta-user request: now that we ingest many books, let users pick a sportsbook and see our model's probability next to *that
 book's* current line, with a **dynamic EV** and the book's **de-vigged implied probability ("market bet %")** for h2h and totals. Today
@@ -12615,24 +12624,28 @@ sharp, low-vig "fair price" reference** even when another book is selected — i
 after vig. Present this as a **transparency / market-comparison** tool, **not** a profit signal or bet recommendation — model-vs-Pinnacle
 is the most meaningful read. Do not auto-flag "+EV" as "bet this" (ties to the Epic 30 accuracy-vs-market separation and `[[feedback_no_auto_betting]]`).
 
+**SHIPPED 2026-06-17.** Implemented via option (B) PG materialization: `write_serving_store.py --book-odds` precomputes all six-book payloads and writes them to Railway PG; `write_book_odds_op` wired into both `odds_snapshot_job` and `odds_current_rebuild_job` in Dagster so the cache refreshes on every odds mart rebuild. Frontend book selector added to the game detail page at `frontend/app/picks/[game_pk]/page.tsx`; Pinnacle always rendered as the sharp reference row.
+
+**Implementation correction — Normal CDF, not NegBin:** The spec said to use `pred_total_runs` + `totals_r` (NegBin dispersion) via `compute_over_under_probs`. However, `totals_r` is never written to `daily_model_predictions` — the champion totals model is **NGBoost with Normal distribution**, which outputs `pred_total_runs` (μ) and `pred_total_runs_scale` (σ), not NegBin params. `write_serving_store.py` was updated to use `scipy.stats.norm.sf(line, loc=pred_mu, scale=pred_scale)` instead of the NegBin CDF. P(push) = 0 for the continuous Normal approximation. If a future NegBin model is promoted, `pred_total_runs_scale` and the Normal CDF path would need to be revisited.
+
 **Tasks:**
-- [ ] Backend: `GET /picks/{game_pk}/odds-comparison` returning, per market (h2h, totals), an array over the six books of
+- [x] Backend: `GET /picks/{game_pk}/odds-comparison` returning, per market (h2h, totals), an array over the six books of
       `{book, american, decimal, market_bet_pct, model_prob, ev, edge, kelly?}` — **return all six in one payload** so the frontend
-      switches instantly. Totals `model_prob` recomputed at each book's line (NegBin CDF on stored μ + `totals_r`); pushes handled.
-- [ ] Curated book allowlist constant (six keys + display names) + Pinnacle-as-reference flag; gracefully omit a book that has no line
+      switches instantly. Totals `model_prob` recomputed at each book's line (Normal CDF on stored μ + σ); P(push)=0.
+- [x] Curated book allowlist constant (six keys + display names) + Pinnacle-as-reference flag; gracefully omit a book that has no line
       for that game/market (don't error).
-- [ ] Serving path: implement (B) PG materialization if ready, else (A) live Snowflake as MVP — document which and the migration note.
-- [ ] Frontend: book selector (segmented control / dropdown) on the pick/game-detail page; show book price, market bet %, model %, EV
+- [x] Serving path: implemented (B) PG materialization via `write_serving_store.py --book-odds` + `write_book_odds_op` Dagster op.
+- [x] Frontend: book selector (segmented control / dropdown) on the pick/game-detail page; show book price, market bet %, model %, EV
       (color-coded ±), edge; Pinnacle row always visible as the sharp reference.
-- [ ] Reuse `devig_*` + `compute_kelly`; no re-implemented odds math.
+- [x] Reuse `devig_*` + `compute_kelly`; no re-implemented odds math.
 
 **Acceptance criteria:**
-- [ ] For a given game, the endpoint returns per-market comparisons for all six books that offer a line, each with offered price,
+- [x] For a given game, the endpoint returns per-market comparisons for all six books that offer a line, each with offered price,
       de-vigged market bet %, model probability, EV, and edge; Caesars resolves via key `caesars`.
-- [ ] Totals `model_prob`/EV are computed at **each book's own total line** (not the consensus line), using the stored `pred_total_runs` + `totals_r`; integer-line pushes handled.
-- [ ] Frontend book selector switches the displayed comparison instantly (single payload); Pinnacle always shown as the sharp reference.
-- [ ] De-vig and EV use the existing `betting_ml/utils` functions (no duplicated math).
-- [ ] Surface copy frames this as market comparison/transparency, not a bet recommendation; no "+EV ⇒ place bet" auto-framing.
+- [x] Totals `model_prob`/EV are computed at **each book's own total line** (not the consensus line), using `pred_total_runs` + `pred_total_runs_scale` via Normal CDF (spec referenced NegBin/`totals_r` — corrected per implementation note above).
+- [x] Frontend book selector switches the displayed comparison instantly (single payload); Pinnacle always shown as the sharp reference.
+- [x] De-vig and EV use the existing `betting_ml/utils` functions (no duplicated math).
+- [x] Surface copy frames this as market comparison/transparency, not a bet recommendation; no "+EV ⇒ place bet" auto-framing.
 
 **Dependencies:** `mart_odds_outcomes` six-book coverage ✅ (live) · `mart_game_odds_bridge` `game_pk`↔`event_id` (verify six-book
 resolution) · `daily_model_predictions` distribution params ✅ · `devig_*` + `compute_kelly` utils ✅ · serving path (A2.12 PG
@@ -12820,13 +12833,16 @@ run Python with `uv run python`; do not git commit or push (the user handles git
   - Served on the **morning** pass only, and only for games with a Bovada open line; NULL otherwise (the bar should simply not render when NULL — abstain, don't show 0).
 - **Build/test data NOW:** `betting_ml_dev.daily_model_predictions` for `game_date='2026-06-16'` — H2H meta 15/15, totals meta 14/14, all populated.
 
+**⚠️ CRITICAL serving-row note — the meta columns live ONLY on the MORNING row, but the app likely shows the POST_LINEUP pick.** `daily_model_predictions` has up to two live rows per game: `prediction_type='morning'` and `prediction_type='post_lineup'` (the post-lineup re-score is usually the "final" pick the app surfaces). The meta-models are **morning-only by design** (`_serve_meta = (prediction_type=='morning') and not is_backfill` — they model morning-prediction-vs-open-line → open-close CLV), so **`meta_*` / `totals_meta_*` are populated on the morning row and NULL on the post_lineup row.** Therefore the backend MUST **read the meta columns from the game's MORNING row and coalesce them onto whichever pick the app displays** (e.g. `LEFT JOIN` the morning row by `game_pk` + `game_date`, or `MAX(meta_p_clv_positive) OVER (PARTITION BY game_pk, game_date)`). Do NOT read meta off the post_lineup row directly — it will always be NULL and the bar will never render. This is the #1 thing to get right in this story.
+
 **⚠️ Semantics the UI MUST respect (this is the crux — do not over-claim):**
 - **Totals meta v0 has NO discriminating signal.** Measured 2026-06-17: temporal AUC 0.445, served `totals_meta_p_clv_positive` clusters at **avg 0.604, std 0.009** (range 0.581–0.616). The bars will be **visually near-identical game-to-game.** Render for parity but treat as **low-information** — muted/neutral styling, and **do NOT add a "high conviction" badge on totals.** (Tier B gating on totals is off until Story 12.13 earns discrimination.)
 - **H2H meta has only modest discrimination** (temporal AUC 0.596). Frame it as "line-movement confidence," not a strong signal.
 - **CLV ≠ win-rate edge, and ≠ a bet recommendation.** `best_alpha=0` — the point models have no demonstrated market edge; CLV is a *leading indicator of line value*, not "we beat the book." US betting is manual ([[feedback_no_auto_betting]]). No "high P(CLV) ⇒ place this bet" framing.
 
 **Tasks:**
-- [ ] Backend (`app/backend/routers/picks.py` + Pydantic `app/backend/models/picks.py`): surface `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high` on the H2H pick and `totals_meta_p_clv_positive`/`totals_meta_ci_low`/`totals_meta_ci_high` on the totals pick. NULL passes through as "no bar."
+- [ ] Backend (`app/backend/routers/picks.py` + Pydantic `app/backend/models/picks.py`): surface `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high` on the H2H pick and `totals_meta_p_clv_positive`/`totals_meta_ci_low`/`totals_meta_ci_high` on the totals pick. **Pull the meta columns from the game's MORNING row and coalesce onto the displayed (often post_lineup) pick** — see the CRITICAL serving-row note above; reading meta off the post_lineup row yields all-NULL. NULL passes through as "no bar."
+- [ ] Acceptance check the coalesce: on a game with both a morning and a post_lineup row, the meta bar renders on the displayed pick (it must NOT disappear just because the post_lineup row's own meta columns are NULL).
 - [ ] Serving store (`scripts/write_serving_store.py`, per A2.12): add the meta columns to the H2H and totals CTEs of `_PICKS_TODAY_SQL` / `_GAME_PICKS_BATCH` so the Railway PG mirror carries them (mirror the A0.4.33 pattern; keep UNION ALL column alignment).
 - [ ] Frontend: a CLV-confidence bar (P(CLV>0) + CI) on each market's pick detail. Totals bar = low-information treatment (muted, no conviction badge). Tooltip explains "probability the closing line moves toward this side."
 - [ ] Guardrail copy: CLV framed as line-value confidence / transparency, partial-signal noted (totals especially), no bet-rec framing.
@@ -12859,8 +12875,17 @@ Data (live): daily_model_predictions — prod baseball_data.betting_ml, dev base
   H2H:    meta_p_clv_positive, meta_ci_low, meta_ci_high, meta_ci_width, meta_n_games_trained
   Totals: totals_meta_p_clv_positive, totals_meta_ci_low, totals_meta_ci_high, totals_meta_ci_width,
           totals_meta_n_games_trained
-  ONE row per game carries BOTH — read meta_* for the H2H pick, totals_meta_* for the totals pick; never cross
-  them. Morning pass + open-line only; NULL otherwise → render NO bar (clean abstain, do not show 0).
+  ONE row per game carries BOTH markets — read meta_* for the H2H pick, totals_meta_* for the totals pick;
+  never cross them. Morning pass + open-line only; NULL otherwise → render NO bar (clean abstain, do not show 0).
+
+  *** CRITICAL — META IS ON THE MORNING ROW ONLY ***
+  daily_model_predictions has up to two live rows per game: prediction_type='morning' and 'post_lineup'. The
+  meta-models are MORNING-ONLY by design, so meta_* / totals_meta_* are populated on the MORNING row and NULL
+  on the POST_LINEUP row. The app usually surfaces the post_lineup pick → if you read meta off that row it is
+  ALWAYS NULL and the bar never renders. You MUST pull the meta columns from the game's MORNING row and
+  coalesce them onto the displayed pick (LEFT JOIN the morning row by game_pk+game_date, or
+  MAX(meta_p_clv_positive) OVER (PARTITION BY game_pk, game_date)). This is the #1 thing to get right.
+
   BUILD/TEST AGAINST DEV NOW: betting_ml_dev.daily_model_predictions WHERE game_date='2026-06-16' (H2H 15/15,
   totals 14/14, populated). Prod populates after the 12.12 deploy + first prod morning serve — coordinate w/ user.
 

@@ -1,15 +1,6 @@
 [
   {
-    "week": "2026-06-17",
-    "items": [
-      {
-        "tag": "new",
-        "text": "Book Comparison panel added to every game detail page — select from BetMGM, Caesars, FanDuel, DraftKings, Bovada, or Pinnacle and see that book's moneyline and totals prices alongside the model's probability, the book's de-vigged implied market %, and expected value per $1. Pinnacle is always shown as the sharp low-vig reference anchor. This is a market transparency tool; our models have no demonstrated market edge and all bets are manual."
-      }
-    ]
-  },
-  {
-    "week": "2026-06-16",
+    "week": "2026-06-15",
     "items": [
       {
         "tag": "new",
@@ -42,11 +33,15 @@
       {
         "tag": "improvement",
         "text": "The probability bar on the dashboard now shows a hover tooltip with the exact model win%, Bovada win%, and 80% credible interval range for moneyline picks — so the visual is clean at a glance but the numbers are always one hover away."
+      },
+      {
+        "tag": "new",
+        "text": "Book Comparison panel added to every game detail page — select from BetMGM, Caesars, FanDuel, DraftKings, Bovada, or Pinnacle and see that book's moneyline and totals prices alongside the model's probability, the book's de-vigged implied market %, and expected value per $1. Pinnacle is always shown as the sharp low-vig reference anchor. This is a market transparency tool; our models have no demonstrated market edge and all bets are manual."
       }
     ]
   },
   {
-    "week": "2026-06-09",
+    "week": "2026-06-08",
     "items": [
       {
         "tag": "new",
