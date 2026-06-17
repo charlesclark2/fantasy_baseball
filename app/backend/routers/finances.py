@@ -48,7 +48,7 @@ _FINANCES_START = datetime.date(2026, 5, 1)
 _FIXED_LINE_ITEMS: dict[str, float] = {
     "Domain": round(15 / 12, 2),   # $15/year → $1.25/month
     "Zoho": 8.0,
-    "Parlay API": 40.0,
+    "The Odds API": 59.0,
     "Claude Code": 100.0,
     "FanGraphs": 15.0,
 }
