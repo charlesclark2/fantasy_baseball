@@ -8224,3 +8224,45 @@ models:
         description: Primary position code of the player in this game (1 = pitcher).
       - name: is_pitcher_slot
         description: TRUE when the starter occupied a pitcher slot (pre-2022 NL no-DH); lets 33.3 exclude/down-weight non-hitters.
+
+  # ============================================================================
+  # mart_player_profile_identity  (A0.4.16 — player profile serving identity)
+  # ============================================================================
+  - name: mart_player_profile_identity
+    description: >
+      A0.4.16 — one row per (player_id, player_type) for every active 2026
+      player in mart_batter_rolling_stats or mart_starting_pitcher_game_log.
+      Consolidates player identity (stg_statsapi_player_profiles primary,
+      stg_statsapi_lineups fallback) with current IL status from
+      feature_pregame_injury_status (is_current = TRUE). Consumed by
+      write_serving_store.py to populate api_cache player/{id} blobs.
+      Two-way players (e.g. Ohtani) produce one batter row and one pitcher row.
+    columns:
+      - name: player_id
+        description: MLB Stats API player identifier.
+        tests:
+          - not_null
+      - name: player_type
+        description: "batter or pitcher — which mart this player's stats come from."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['batter', 'pitcher']
+      - name: full_name
+        description: Display name; profiles primary, lineups fallback.
+        tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: position_abbreviation
+        description: Fielding position abbreviation (SP, C, 1B, … DH, OF, POS).
+        tests: [not_null]
+      - name: team
+        description: Most-recent team abbreviation from the player's stat mart.
+        tests: [not_null]
+      - name: is_on_il
+        description: TRUE when the player has an open IL stint in feature_pregame_injury_status.
+        tests: [not_null]
+      - name: il_since
+        description: Date the current IL stint began; NULL when is_on_il = FALSE.

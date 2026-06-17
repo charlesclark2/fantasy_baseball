@@ -1751,24 +1751,19 @@ WHERE b.game_year = 2026
 ORDER BY b.batter_id, b.game_date
 """
 
-_PLAYER_BATTER_IDENTITY_SQL = """
+_PLAYER_IDENTITY_SQL = """
 SELECT
-    pp.player_id,
-    pp.full_name,
-    SPLIT_PART(pp.full_name, ' ', 1)                                   AS first_name,
-    SPLIT_PART(pp.full_name, ' ', -1)                                  AS last_name,
-    CASE pp.primary_position_code
-        WHEN '1'  THEN 'P'  WHEN '2'  THEN 'C'  WHEN '3'  THEN '1B'
-        WHEN '4'  THEN '2B' WHEN '5'  THEN '3B' WHEN '6'  THEN 'SS'
-        WHEN '7'  THEN 'LF' WHEN '8'  THEN 'CF' WHEN '9'  THEN 'RF'
-        WHEN '10' THEN 'DH' WHEN 'O'  THEN 'OF' ELSE 'POS'
-    END                                                                AS position_abbreviation
-FROM baseball_data.betting.stg_statsapi_player_profiles pp
-WHERE pp.player_id IN (
-    SELECT DISTINCT batter_id
-    FROM baseball_data.betting.mart_batter_rolling_stats
-    WHERE game_year = 2026
-)
+    player_id,
+    player_type,
+    full_name,
+    first_name,
+    last_name,
+    position_abbreviation,
+    team,
+    bats,
+    is_on_il,
+    il_since::VARCHAR AS il_since
+FROM baseball_data.betting.mart_player_profile_identity
 """
 
 _PLAYER_PITCHER_SQL = """
@@ -1799,25 +1794,6 @@ WHERE p.game_year = 2026
 ORDER BY p.pitcher_id, p.game_date
 """
 
-_PLAYER_PITCHER_IDENTITY_SQL = """
-SELECT
-    pp.player_id,
-    pp.full_name,
-    SPLIT_PART(pp.full_name, ' ', 1)                                   AS first_name,
-    SPLIT_PART(pp.full_name, ' ', -1)                                  AS last_name,
-    CASE pp.primary_position_code
-        WHEN '1'  THEN 'SP' WHEN '2'  THEN 'C'  WHEN '3'  THEN '1B'
-        WHEN '4'  THEN '2B' WHEN '5'  THEN '3B' WHEN '6'  THEN 'SS'
-        WHEN '7'  THEN 'LF' WHEN '8'  THEN 'CF' WHEN '9'  THEN 'RF'
-        WHEN '10' THEN 'DH' WHEN 'O'  THEN 'OF' ELSE 'P'
-    END                                                                AS position_abbreviation
-FROM baseball_data.betting.stg_statsapi_player_profiles pp
-WHERE pp.player_id IN (
-    SELECT DISTINCT pitcher_id
-    FROM baseball_data.betting.mart_starting_pitcher_game_log
-    WHERE game_year = 2026
-)
-"""
 
 
 def write_player_profiles(sf, pg_conn, today: str) -> int:
@@ -1829,17 +1805,20 @@ def write_player_profiles(sf, pg_conn, today: str) -> int:
     """
     errors = 0
     try:
-        batter_rows   = _sf_query(sf, _PLAYER_BATTER_SQL)
-        batter_id_rows = _sf_query(sf, _PLAYER_BATTER_IDENTITY_SQL)
-        pitcher_rows  = _sf_query(sf, _PLAYER_PITCHER_SQL)
-        pitcher_id_rows = _sf_query(sf, _PLAYER_PITCHER_IDENTITY_SQL)
+        batter_rows    = _sf_query(sf, _PLAYER_BATTER_SQL)
+        pitcher_rows   = _sf_query(sf, _PLAYER_PITCHER_SQL)
+        identity_rows  = _sf_query(sf, _PLAYER_IDENTITY_SQL)
     except Exception:
         log.exception("Failed to query Snowflake for player profiles")
         return 1
 
-    # Index identity rows by player_id
-    batter_identity: dict[int, dict] = {r["PLAYER_ID"]: r for r in batter_id_rows}
-    pitcher_identity: dict[int, dict] = {r["PLAYER_ID"]: r for r in pitcher_id_rows}
+    # Index identity rows by (player_id, player_type)
+    batter_identity: dict[int, dict] = {
+        r["PLAYER_ID"]: r for r in identity_rows if r["PLAYER_TYPE"] == "batter"
+    }
+    pitcher_identity: dict[int, dict] = {
+        r["PLAYER_ID"]: r for r in identity_rows if r["PLAYER_TYPE"] == "pitcher"
+    }
 
     # Group batter game rows by batter_id (already ordered by game_date ASC)
     batter_games: dict[int, list] = defaultdict(list)
@@ -1922,6 +1901,8 @@ def write_player_profiles(sf, pg_conn, today: str) -> int:
             "position": position,
             "bats": last.get("BATTER_HAND"),
             "team": team,
+            "is_on_il": bool(identity.get("IS_ON_IL")),
+            "il_since": identity.get("IL_SINCE"),
             "season_2026": season,
             "rolling_30d": rolling_30d,
             "game_log": game_log,
@@ -2020,6 +2001,8 @@ def write_player_profiles(sf, pg_conn, today: str) -> int:
             "last_name": identity.get("LAST_NAME"),
             "position": position,
             "team": team,
+            "is_on_il": bool(identity.get("IS_ON_IL")),
+            "il_since": identity.get("IL_SINCE"),
             "season_2026": season,
             "game_log": game_log,
         }

@@ -1,9 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, ChevronRight, Flag } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -105,6 +106,8 @@ type BatterProfile = {
   position: string | null
   bats: string | null
   team: string | null
+  is_on_il: boolean
+  il_since: string | null
   season_2026: BatterSeason
   rolling_30d: BatterRolling
   game_log: BatterGameLog[]
@@ -118,6 +121,8 @@ type PitcherProfile = {
   last_name: string | null
   position: string | null
   team: string | null
+  is_on_il: boolean
+  il_since: string | null
   season_2026: PitcherSeason
   game_log: PitcherGameLog[]
 }
@@ -140,7 +145,7 @@ function fmt(val: number | null | undefined, decimals = 2): string {
 
 function fmtPct(val: number | null | undefined): string {
   if (val == null) return "—"
-  return `${val.toFixed(1)}%`
+  return `${(val * 100).toFixed(1)}%`
 }
 
 function fmtIp(ip: number | null | undefined, outs: number | null | undefined): string {
@@ -174,10 +179,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
 // Batter view
 // ---------------------------------------------------------------------------
 
+const LOG_PAGE_SIZE = 30
+
 function BatterView({ profile }: { profile: BatterProfile }) {
   const s = profile.season_2026
   const r = profile.rolling_30d
   const log = [...profile.game_log].reverse() // newest first
+  const [logPage, setLogPage] = useState(0)
+  const logStart = logPage * LOG_PAGE_SIZE
+  const logEnd = Math.min(logStart + LOG_PAGE_SIZE, log.length)
+  const visibleLog = log.slice(logStart, logEnd)
 
   return (
     <>
@@ -230,9 +241,16 @@ function BatterView({ profile }: { profile: BatterProfile }) {
 
       {/* Game log */}
       <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-          Game Log ({log.length} games)
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Game Log ({log.length} games)
+          </h2>
+          {log.length > LOG_PAGE_SIZE && (
+            <span className="text-xs text-gray-600">
+              {logStart + 1}–{logEnd} of {log.length}
+            </span>
+          )}
+        </div>
         <div className="overflow-x-auto rounded-lg border border-[#262626]">
           <table className="w-full text-sm">
             <thead>
@@ -248,7 +266,7 @@ function BatterView({ profile }: { profile: BatterProfile }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1a1a1a]">
-              {log.map((g) => (
+              {visibleLog.map((g) => (
                 <tr
                   key={g.game_pk}
                   className="text-white transition-colors hover:bg-[#161616]"
@@ -270,6 +288,26 @@ function BatterView({ profile }: { profile: BatterProfile }) {
             </tbody>
           </table>
         </div>
+        {log.length > LOG_PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setLogPage((p) => Math.max(0, p - 1))}
+              disabled={logPage === 0}
+              className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </button>
+            <button
+              onClick={() => setLogPage((p) => (p + 1) * LOG_PAGE_SIZE < log.length ? p + 1 : p)}
+              disabled={logEnd >= log.length}
+              className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </section>
     </>
   )
@@ -282,6 +320,10 @@ function BatterView({ profile }: { profile: BatterProfile }) {
 function PitcherView({ profile }: { profile: PitcherProfile }) {
   const s = profile.season_2026
   const log = [...profile.game_log].reverse()
+  const [logPage, setLogPage] = useState(0)
+  const logStart = logPage * LOG_PAGE_SIZE
+  const logEnd = Math.min(logStart + LOG_PAGE_SIZE, log.length)
+  const visibleLog = log.slice(logStart, logEnd)
 
   return (
     <>
@@ -319,9 +361,16 @@ function PitcherView({ profile }: { profile: PitcherProfile }) {
 
       {/* Game log */}
       <section>
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-          Game Log ({log.length} starts)
-        </h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Game Log ({log.length} starts)
+          </h2>
+          {log.length > LOG_PAGE_SIZE && (
+            <span className="text-xs text-gray-600">
+              {logStart + 1}–{logEnd} of {log.length}
+            </span>
+          )}
+        </div>
         <div className="overflow-x-auto rounded-lg border border-[#262626]">
           <table className="w-full text-sm">
             <thead>
@@ -340,7 +389,7 @@ function PitcherView({ profile }: { profile: PitcherProfile }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1a1a1a]">
-              {log.map((g) => (
+              {visibleLog.map((g) => (
                 <tr
                   key={g.game_pk}
                   className="text-white transition-colors hover:bg-[#161616]"
@@ -378,6 +427,26 @@ function PitcherView({ profile }: { profile: PitcherProfile }) {
             </tbody>
           </table>
         </div>
+        {log.length > LOG_PAGE_SIZE && (
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <button
+              onClick={() => setLogPage((p) => Math.max(0, p - 1))}
+              disabled={logPage === 0}
+              className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Prev
+            </button>
+            <button
+              onClick={() => setLogPage((p) => (p + 1) * LOG_PAGE_SIZE < log.length ? p + 1 : p)}
+              disabled={logEnd >= log.length}
+              className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </section>
     </>
   )
@@ -432,18 +501,48 @@ function PlayerPageInner() {
         {profile && (
           <>
             {/* Header */}
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold text-white">{displayName}</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                {profile.team ?? "—"}
-                {profile.position ? ` · ${profile.position}` : ""}
-                {profile.player_type === "batter" && (profile as BatterProfile).bats
-                  ? ` · Bats: ${(profile as BatterProfile).bats}`
-                  : ""}
-                <span className="ml-2 rounded bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  {profile.player_type === "batter" ? "Batter" : "Pitcher"}
-                </span>
-              </p>
+            <div className="mb-6 flex items-center gap-5">
+              {/* Headshot */}
+              <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-full border-2 border-[#262626] bg-[#1a1a1a]">
+                <img
+                  src={`https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_180,q_auto:best/v1/people/${profile.player_id}/headshot/67/current`}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h1 className="text-3xl font-bold text-white">{displayName}</h1>
+                    {profile.is_on_il && (
+                      <span
+                        className="flex-shrink-0 rounded bg-red-900/60 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-red-400 border border-red-800/60"
+                        title={profile.il_since ? `On IL since ${profile.il_since}` : "On injured list"}
+                      >
+                        IL
+                      </span>
+                    )}
+                  </div>
+                  <a
+                    href={`mailto:support@credencesports.com?subject=${encodeURIComponent(`Data Quality Issue: Player ${profile.player_id} (${displayName})`)}&body=${encodeURIComponent(`Player ID: ${profile.player_id}\nPlayer Name: ${displayName}\n\nDescribe the issue:\n`)}`}
+                    className="flex-shrink-0 flex items-center gap-1.5 rounded-md border border-[#262626] bg-[#111111] px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:border-[#363636] transition-colors"
+                    title="Report a data quality issue"
+                  >
+                    <Flag className="h-3 w-3" />
+                    Report issue
+                  </a>
+                </div>
+                <p className="mt-1 text-sm text-gray-500">
+                  {profile.team ?? "—"}
+                  {profile.position ? ` · ${profile.position}` : ""}
+                  {profile.player_type === "batter" && (profile as BatterProfile).bats
+                    ? ` · Bats: ${(profile as BatterProfile).bats}`
+                    : ""}
+                  <span className="ml-2 rounded bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                    {profile.player_type === "batter" ? "Batter" : "Pitcher"}
+                  </span>
+                </p>
+              </div>
             </div>
 
             {profile.player_type === "batter" ? (

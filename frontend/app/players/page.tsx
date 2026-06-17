@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { Search } from "lucide-react"
+import { ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -174,6 +174,8 @@ function PitcherRow({ pitcher }: { pitcher: PitcherSummary }) {
 // Page
 // ---------------------------------------------------------------------------
 
+const LIST_PAGE_SIZE = 50
+
 type TabType = "batters" | "pitchers"
 
 function PlayersPageInner() {
@@ -181,6 +183,8 @@ function PlayersPageInner() {
   const [search, setSearch] = useState("")
   const [teamFilter, setTeamFilter] = useState("ALL")
   const [tab, setTab] = useState<TabType>("batters")
+  const [batterPage, setBatterPage] = useState(0)
+  const [pitcherPage, setPitcherPage] = useState(0)
 
   const { data, isLoading, isError } = useQuery<PlayersListResponse>({
     queryKey: ["players-list"],
@@ -197,6 +201,7 @@ function PlayersPageInner() {
   }, [data])
 
   const filteredBatters = useMemo(() => {
+    setBatterPage(0)
     const q = search.toLowerCase()
     return (data?.batters ?? []).filter(
       (b) =>
@@ -206,6 +211,7 @@ function PlayersPageInner() {
   }, [data, search, teamFilter])
 
   const filteredPitchers = useMemo(() => {
+    setPitcherPage(0)
     const q = search.toLowerCase()
     return (data?.pitchers ?? []).filter(
       (p) =>
@@ -301,33 +307,97 @@ function PlayersPageInner() {
           <p className="text-sm text-red-400">Failed to load players. Please try again.</p>
         )}
 
-        {!isLoading && !isError && tab === "batters" && (
-          <>
-            {filteredBatters.length === 0 ? (
-              <p className="text-sm text-gray-500">No batters match your filters.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {filteredBatters.map((b) => (
-                  <BatterRow key={b.player_id} batter={b} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {!isLoading && !isError && tab === "batters" && (() => {
+          const start = batterPage * LIST_PAGE_SIZE
+          const end = Math.min(start + LIST_PAGE_SIZE, filteredBatters.length)
+          const visible = filteredBatters.slice(start, end)
+          return (
+            <>
+              {filteredBatters.length === 0 ? (
+                <p className="text-sm text-gray-500">No batters match your filters.</p>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    {visible.map((b) => (
+                      <BatterRow key={b.player_id} batter={b} />
+                    ))}
+                  </div>
+                  {filteredBatters.length > LIST_PAGE_SIZE && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-xs text-gray-600">
+                        {start + 1}–{end} of {filteredBatters.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setBatterPage((p) => Math.max(0, p - 1))}
+                          disabled={batterPage === 0}
+                          className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                          Prev
+                        </button>
+                        <button
+                          onClick={() => setBatterPage((p) => end < filteredBatters.length ? p + 1 : p)}
+                          disabled={end >= filteredBatters.length}
+                          className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Next
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )
+        })()}
 
-        {!isLoading && !isError && tab === "pitchers" && (
-          <>
-            {filteredPitchers.length === 0 ? (
-              <p className="text-sm text-gray-500">No pitchers match your filters.</p>
-            ) : (
-              <div className="space-y-1.5">
-                {filteredPitchers.map((p) => (
-                  <PitcherRow key={p.player_id} pitcher={p} />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {!isLoading && !isError && tab === "pitchers" && (() => {
+          const start = pitcherPage * LIST_PAGE_SIZE
+          const end = Math.min(start + LIST_PAGE_SIZE, filteredPitchers.length)
+          const visible = filteredPitchers.slice(start, end)
+          return (
+            <>
+              {filteredPitchers.length === 0 ? (
+                <p className="text-sm text-gray-500">No pitchers match your filters.</p>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    {visible.map((p) => (
+                      <PitcherRow key={p.player_id} pitcher={p} />
+                    ))}
+                  </div>
+                  {filteredPitchers.length > LIST_PAGE_SIZE && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-xs text-gray-600">
+                        {start + 1}–{end} of {filteredPitchers.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setPitcherPage((p) => Math.max(0, p - 1))}
+                          disabled={pitcherPage === 0}
+                          className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                          Prev
+                        </button>
+                        <button
+                          onClick={() => setPitcherPage((p) => end < filteredPitchers.length ? p + 1 : p)}
+                          disabled={end >= filteredPitchers.length}
+                          className="flex items-center gap-1 rounded-md border border-[#262626] bg-[#111111] px-3 py-1.5 text-xs text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Next
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )
+        })()}
       </main>
     </>
   )
