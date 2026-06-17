@@ -9,6 +9,10 @@
       {
         "tag": "new",
         "text": "Players currently on the injured list show a red IL badge with the date their stint began."
+      },
+      {
+        "tag": "model",
+        "text": "Pick details now include a posterior confidence tier (low / medium / high) derived from the model's calibrated uncertainty interval relative to the edge — high-confidence picks have a tight posterior relative to their edge size."
       }
     ]
   },

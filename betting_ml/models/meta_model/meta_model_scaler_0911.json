@@ -1,0 +1,20 @@
+{
+  "features": [
+    "edge_mag",
+    "pub_align",
+    "open_extremity"
+  ],
+  "mean": {
+    "edge_mag": 0.06032205059809366,
+    "pub_align": 2.288693743139407,
+    "open_extremity": 0.07787946950350683
+  },
+  "std": {
+    "edge_mag": 0.06093504875382006,
+    "pub_align": 13.54688867214348,
+    "open_extremity": 0.057201951972481596
+  },
+  "n_games": 911,
+  "base_rate": 0.601536772777168,
+  "edge_median": -0.028142835928509136
+}

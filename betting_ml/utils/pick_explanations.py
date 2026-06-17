@@ -271,6 +271,11 @@ def build_pick_explanations(
     clf_hw=None, X_clf=None, hw_feat_cols=None,
     ngb_total=None, X_tot=None, tot_feat_cols=None,
     ngb_diff=None, X_diff=None, diff_feat_cols=None,
+    # Story 22.4 — per-game sigma gate fields (lists parallel to model rows, or None)
+    sigma_tiers: list[str] | None = None,
+    abstain_reasons: list[str] | None = None,
+    totals_ci_widths: list[float | None] | None = None,
+    h2h_ci_widths: list[float | None] | None = None,
 ) -> list[dict]:
     """Per-game explanation payloads (one dict per game row, all targets).
 
@@ -328,10 +333,26 @@ def build_pick_explanations(
                 "toward": _TARGET_OUTCOME.get(tname, {}).get("toward", ""),
                 "drivers": _drivers_for_game(info["cols"], sv_i, tname, top_n),
             }
+        # Story 22.4 — σ confidence tier + abstain reason in payload
+        sigma_payload: dict = {}
+        if sigma_tiers is not None and i < len(sigma_tiers):
+            sigma_payload["sigma_tier"] = sigma_tiers[i]
+        if abstain_reasons is not None and i < len(abstain_reasons):
+            sigma_payload["abstain_reason"] = abstain_reasons[i] or ""
+        if totals_ci_widths is not None and i < len(totals_ci_widths):
+            v = totals_ci_widths[i]
+            if v is not None:
+                sigma_payload["totals_ci_width"] = round(float(v), 4)
+        if h2h_ci_widths is not None and i < len(h2h_ci_widths):
+            v = h2h_ci_widths[i]
+            if v is not None:
+                sigma_payload["h2h_ci_width"] = round(float(v), 4)
+
         payloads.append({
             "served_tier": served_tier,
             "basis": "model_reasoning",
             "disclaimer": MODEL_REASONING_DISCLAIMER,
             "targets": targets,
+            **sigma_payload,
         })
     return payloads

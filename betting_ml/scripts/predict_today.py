@@ -44,6 +44,8 @@ from betting_ml.utils.probability_layer import (
     compute_kelly,
     compute_bet_permission,
 )
+from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
+from betting_ml.utils.sigma_gate import evaluate_sigma_gate             # Story 22.4
 from betting_ml.models.total_runs_trainer import p_over_line
 from betting_ml.utils.ml_env import ml_schema
 
@@ -293,9 +295,18 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     qualified_bet           BOOLEAN,       -- Story 19.2: bet permission gate result
     gate_signals_met        INTEGER,       -- 0-5 gate criteria that fired
     game_conviction_score   FLOAT,         -- 0.0-1.0 weighted gate strength
+    win_prob_alpha          FLOAT,         -- Story 19.7: Beta(α,β) posterior on P(home win)
+    win_prob_beta           FLOAT,         -- Story 19.7
+    win_prob_ci_low         FLOAT,         -- Story 19.7: 80% credible interval lower = Beta.ppf(0.10)
+    win_prob_ci_high        FLOAT,         -- Story 19.7: 80% credible interval upper = Beta.ppf(0.90)
+    win_prob_ci_width       FLOAT,         -- Story 19.7: ci_high − ci_low
     posterior_source        VARCHAR(20),   -- Epic 16.2: game-level least-informed player-quality source {sequential|season_eb|prior_only}
     prior_age_days          INTEGER,       -- Epic 16.2: stalest (max) sequential-posterior age in days; >7 raises game_uncertainty_score
-    is_backfill             BOOLEAN  DEFAULT FALSE  -- Story 30.7: TRUE only for rows backfilled after a promotion; live rows are FALSE
+    is_backfill             BOOLEAN  DEFAULT FALSE,  -- Story 30.7: TRUE only for rows backfilled after a promotion; live rows are FALSE
+    totals_ci_width         FLOAT,                   -- Story 22.4: P(over) 80% CI width (probability units)
+    h2h_ci_width            FLOAT,                   -- Story 22.4: P(home win) 80% CI width (probability units)
+    sigma_tier              VARCHAR(20),              -- Story 22.4: high_confidence|medium|low|abstain
+    abstain_reason          VARCHAR(200)              -- Story 22.4: '' or reason string when sigma_tier=abstain
 )
 """
 
@@ -320,8 +331,10 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     totals_model_prob, totals_posterior_prob, totals_edge, totals_kelly_fraction,
     data_source,
     qualified_bet, gate_signals_met, game_conviction_score,
+    win_prob_alpha, win_prob_beta, win_prob_ci_low, win_prob_ci_high, win_prob_ci_width,
     posterior_source, prior_age_days,
-    is_backfill
+    is_backfill,
+    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -337,8 +350,10 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(totals_model_prob)s, %(totals_posterior_prob)s, %(totals_edge)s, %(totals_kelly_fraction)s,
     %(data_source)s,
     %(qualified_bet)s, %(gate_signals_met)s, %(game_conviction_score)s,
+    %(win_prob_alpha)s, %(win_prob_beta)s, %(win_prob_ci_low)s, %(win_prob_ci_high)s, %(win_prob_ci_width)s,
     %(posterior_source)s, %(prior_age_days)s,
-    FALSE
+    FALSE,
+    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s
 )
 """
 
@@ -444,6 +459,8 @@ def _write_predictions_to_snowflake(
         clf_win  = float(p_home_win_clf[i])
         cons_win = ngb_win * 0.5 + clf_win * 0.5
         cal_win  = _apply_calibrator(cons_win)
+        # Story 19.7 — Beta(α,β) credible interval on P(home win); see win_prob_uncertainty.
+        wp_unc = compute_win_prob_beta(cal_win, [ngb_win, clf_win]) or {}
 
         h2h_mkt_v = _f(h2h_mkt, i)
         if has_odds and h2h_mkt_v is not None:
@@ -479,6 +496,21 @@ def _write_predictions_to_snowflake(
                 game_dt = pd.Timestamp(raw_dt).to_pydatetime().replace(tzinfo=None)
             except Exception:
                 pass
+
+        # Story 22.4 — σ-aware selection: CI widths, edge_to_sigma, tier
+        sigma_row = {
+            "pred_total_runs":        float(pred_total_mean[i]),
+            "pred_total_runs_scale":  float(scale_tot[i]),
+            "total_line_consensus":   total_line_v if has_odds else None,
+            "calibrated_win_prob":    cal_win,
+            "p_home_win_ngboost":     ngb_win,
+            "p_home_win_classifier":  clf_win,
+            "totals_edge":            tot_edge,
+            "h2h_edge":               h2h_edge,
+            "totals_kelly_fraction":  tot_kelly,
+            "h2h_kelly_fraction":     h2h_kelly,
+        }
+        sg = evaluate_sigma_gate(sigma_row)
 
         rows.append(_sanitize({
             "model_version":          model_version,
@@ -518,9 +550,20 @@ def _write_predictions_to_snowflake(
             "qualified_bet":          gate_result["qualified_bet"],
             "gate_signals_met":       gate_result["gate_signals_met"],
             "game_conviction_score":  gate_result["game_conviction_score"],
+            # Story 19.7 — Beta(α,β) win-prob posterior + 80% credible interval
+            "win_prob_alpha":         wp_unc.get("win_prob_alpha"),
+            "win_prob_beta":          wp_unc.get("win_prob_beta"),
+            "win_prob_ci_low":        wp_unc.get("win_prob_ci_low"),
+            "win_prob_ci_high":       wp_unc.get("win_prob_ci_high"),
+            "win_prob_ci_width":      wp_unc.get("win_prob_ci_width"),
             # Epic 16.2 — game-level sequential posterior provenance
             "posterior_source":       (prov.get(int(game_pk_val)) or {}).get("posterior_source") if game_pk_val is not None else None,
             "prior_age_days":         (prov.get(int(game_pk_val)) or {}).get("prior_age_days") if game_pk_val is not None else None,
+            # Story 22.4 — σ-aware selection
+            "totals_ci_width":        sg.get("totals_ci_width"),
+            "h2h_ci_width":           sg.get("h2h_ci_width"),
+            "sigma_tier":             sg.get("sigma_tier"),
+            "abstain_reason":         sg.get("abstain_reason") or "",
         }))
 
     if dry_run:
@@ -537,9 +580,19 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_alpha FLOAT")            # Story 19.7
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_beta FLOAT")             # Story 19.7
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_low FLOAT")           # Story 19.7
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_high FLOAT")          # Story 19.7
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_width FLOAT")         # Story 19.7
             # Epic 16.2 migration — idempotent; safe on every scoring pass
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
+            # Story 22.4 migration — σ-aware selection columns
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_ci_width FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS sigma_tier VARCHAR(20)")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS abstain_reason VARCHAR(200)")
 
             inserted = 0
             skipped = 0
@@ -554,10 +607,17 @@ def _write_predictions_to_snowflake(
                 inserted += 1
 
             conn.commit()
+            # [22.4] log sigma tier distribution for the slate
+            tier_counts: dict[str, int] = {}
+            for r in rows:
+                t = r.get("sigma_tier") or "unknown"
+                tier_counts[t] = tier_counts.get(t, 0) + 1
+            tier_summary = ", ".join(f"{k}={v}" for k, v in sorted(tier_counts.items()))
             print(f"\nWrote {inserted} prediction row(s) to "
                   f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={model_version}, feature_version={feature_version}, "
                   f"skipped_duplicates={skipped}, date={target_date})")
+            print(f"  [22.4] sigma_tier distribution: {tier_summary}")
         finally:
             conn.close()
     except Exception as exc:
