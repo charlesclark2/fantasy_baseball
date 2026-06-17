@@ -11,9 +11,20 @@ Two gates (raise on either):
      endpoint always returns the upcoming slate, in-season). If the newest ingestion is older
      than _STALE_MINUTES (≈3 missed fires) the capture is down — Railway crashed, key expired,
      or the plan lapsed.
-  2. QUOTA — the Odds-API `x-requests-remaining` header (logged on each call into
-     `mart_odds_outcomes`) below _QUOTA_FLOOR is early warning that the $59/mo plan's monthly
-     credits are nearly exhausted (or a renewal gap), BEFORE capture actually fails.
+  2. QUOTA — the Odds-API `x-requests-remaining` header (logged on every call into
+     `mlb_odds_raw`) on the MAIN 100k key below _QUOTA_FLOOR is early warning that the $59/mo
+     plan's monthly credits are nearly exhausted (or a renewal gap), BEFORE capture fails.
+
+     ⚠️ TWO-KEY DESIGN: by design the live path drains the cheap STARTER key (500/mo) FIRST,
+     then falls back to the MAIN key (100k/mo). So the captured `x_requests_remaining` is the
+     starter key's (≤500) for the first ~500 credits of each month, then the main key's. We must
+     NOT alert on the starter drain (≤500 is expected every month) — only on the MAIN key getting
+     low. The discriminator is magnitude: any reading > _STARTER_CAP (500) is unambiguously the
+     main key (starter is capped at 500). We watch the latest main-key reading only; during the
+     pure-starter phase there is no recent main-key row → skip (main key healthy/unused).
+     (A cleaner long-term fix would tag the key identity in the capture row; magnitude suffices
+     while the starter cap is a fixed 500.) Historical loads use the main key but write a
+     different table (odds_snapshots_historical), so they don't pollute this live signal.
 
 Transient Snowflake/connection errors → SkipReason (don't page on our own infra blip; matches
 odds_current_rebuild_sensor / pregame_snapshot_sensor). A genuine stale/low-quota condition
@@ -29,10 +40,12 @@ from dagster import SensorEvaluationContext, SkipReason, sensor
 
 # ── thresholds ────────────────────────────────────────────────────────────────
 _STALE_MINUTES = 90      # ≈3 missed 30-min Railway fires → capture is down
-# $59/mo plan = 100k credits/mo; normal burn ≈8.6k/mo (6cr × ~48 calls/day), so `remaining`
-# should sit ~90-100k all month. A reading < 10k means a non-reset/lapsed renewal or a runaway
+_STARTER_CAP = 500       # starter key's monthly allotment; readings ≤ this are the STARTER key
+                         # (expected drain every month) — alert only on MAIN-key readings (> this)
+# MAIN plan = 100k credits/mo; normal main burn ≈8k/mo, so the main key's `remaining` sits
+# ~90-100k all month. A MAIN-key reading < 10k means a non-reset/lapsed renewal or a runaway
 # burn (10×+ normal) — genuinely alert-worthy, with weeks of lead time before 100k is exhausted.
-# Stays false-alarm-free even at 3× cadence (~26k/mo). Re-tune if the plan size changes.
+# The window where we alert is (_STARTER_CAP, _QUOTA_FLOOR) = (500, 10000). Re-tune if plan sizes change.
 _QUOTA_FLOOR = 10000
 
 # UTC-on-UTC: mlb_odds_raw.ingestion_ts is TIMESTAMP_NTZ written in UTC; SYSDATE() is current
@@ -41,9 +54,11 @@ _FRESHNESS_SQL = (
     "SELECT DATEDIFF('minute', MAX(ingestion_ts), SYSDATE()) AS age_min, "
     "MAX(ingestion_ts) AS latest FROM baseball_data.oddsapi.mlb_odds_raw"
 )
+# Latest MAIN-key reading only (remaining > starter cap). Read from raw (current every capture,
+# no rebuild lag). NULL result = main key not recently used (pure-starter phase) → no quota concern.
 _QUOTA_SQL = (
-    "SELECT x_requests_remaining, ingestion_ts FROM baseball_data.betting.mart_odds_outcomes "
-    "WHERE source_system = 'odds_api' AND x_requests_remaining IS NOT NULL "
+    "SELECT x_requests_remaining FROM baseball_data.oddsapi.mlb_odds_raw "
+    "WHERE x_requests_remaining > %s "
     "ORDER BY ingestion_ts DESC LIMIT 1"
 )
 
@@ -59,7 +74,7 @@ def odds_freshness_alert_sensor(context: SensorEvaluationContext):
             cur = conn.cursor()
             cur.execute(_FRESHNESS_SQL)
             age_min, latest = cur.fetchone()
-            cur.execute(_QUOTA_SQL)
+            cur.execute(_QUOTA_SQL, [_STARTER_CAP])
             quota_row = cur.fetchone()
             cur.close()
         finally:
@@ -79,12 +94,14 @@ def odds_freshness_alert_sensor(context: SensorEvaluationContext):
             f"(> {_STALE_MINUTES}) — Railway cron down / key expired / plan lapsed"
         )
 
-    # 2. quota
+    # 2. quota — MAIN key only (readings > _STARTER_CAP). The starter key's expected ≤500 drain
+    #    is filtered out in SQL, so this never false-pages during the monthly starter phase. NULL
+    #    = main key not recently used (pure-starter phase) → no concern.
     remaining = quota_row[0] if quota_row else None
     if remaining is not None and remaining < _QUOTA_FLOOR:
         problems.append(
-            f"LOW quota: x_requests_remaining={remaining} (< {_QUOTA_FLOOR}) — "
-            f"Odds-API monthly credits nearly exhausted / renewal gap"
+            f"LOW main-key quota: x_requests_remaining={remaining} (< {_QUOTA_FLOOR}) — "
+            f"Odds-API 100k monthly credits nearly exhausted / renewal gap"
         )
 
     if problems:
