@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.backend.models.picks import (
+    BookOddsComparison,
     BovadaH2H,
     BovadaLines,
     BovadaTotals,
@@ -1880,6 +1881,34 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
     set_cache(_game_cache_key, _payload, permanent=_is_final)
 
     return result
+
+
+@router.get("/{game_pk}/odds-comparison", response_model=BookOddsComparison)
+def get_odds_comparison(game_pk: int) -> BookOddsComparison:
+    """A0.4.32 — Per-book odds comparison for a game.
+
+    Returns all six books (Pinnacle, BetMGM, Caesars, FanDuel, DraftKings, Bovada)
+    in one payload for both h2h and totals markets. Model EV / edge / de-vigged market %
+    are pre-computed server-side. Pinnacle is the sharp low-vig reference anchor.
+
+    This is a market transparency tool — our h2h/totals models have no demonstrated
+    market edge, so EVs are informational only. All bets are manual.
+    """
+    _pg_key = f"picks/book-odds/{game_pk}"
+
+    # Book-odds are "latest available" — use get_cache_latest so blobs written for a prior
+    # date (e.g. during backfill or --date testing) are still served correctly.
+    _pg_cached = pg.get_cache_latest(_pg_key)
+    if _pg_cached is not None and (_pg_cached.get("h2h") or _pg_cached.get("totals")):
+        try:
+            return BookOddsComparison(**_pg_cached)
+        except Exception:
+            logger.warning("PG book-odds invalid for game_pk=%s, returning empty", game_pk)
+
+    # If no PG data yet (book-odds write hasn't run), return an empty shell so
+    # the frontend can display gracefully. Do NOT query Snowflake live at request time.
+    logger.info("No book-odds cache for game_pk=%s — returning empty payload", game_pk)
+    return BookOddsComparison(game_pk=game_pk)
 
 
 @router.get("/{game_pk}", response_model=GamePicksResponse)

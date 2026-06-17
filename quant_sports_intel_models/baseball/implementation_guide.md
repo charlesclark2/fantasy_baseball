@@ -7322,7 +7322,19 @@ Acceptance criteria:
 
 ---
 
-### 12.12 — Totals CLV meta-model (H2H parity) ⬜ NEW 2026-06-16  `[beta UI-parity driver — twin of 12.4/12.5/O.5 on the totals market]`
+### 12.12 — Totals CLV meta-model (H2H parity) ✅ BUILT + TRAINED + SERVE-VERIFIED 2026-06-17  `[beta UI-parity driver — twin of 12.4/12.5/O.5 on the totals market]`
+
+**Serve-verified (dev, game_date 2026-06-16):** h2h meta 15/15, totals meta 14/14 (games with an open total line); `avg(totals_meta_p)=0.604`, **`std=0.009` (range 0.581–0.616)** — empirically confirms the near-flat / no-discrimination behaviour. Remaining: app render (low-information framing) + commit.
+
+
+**Status (built 2026-06-17).** Trainer generalized to `--market {h2h,totals}` (`betting_ml/scripts/train_bayesian_meta_model.py`): totals edge = `pred_total_runs − open_total_line`, label = over/under close move, `open_extremity` anchor = median open total, `pub_align` from the over money/ticket split. Artifacts namespaced — h2h stays at the flat `meta_model/` path (backward-compatible with the live 12.4 serve), totals at `meta_model/totals/`. `meta_model.py` is market-aware (`load_latest_meta_model(market)`, `build_meta_features` reads `market`/`open_anchor` from the scaler). Serve wired in `scripts/predict_today.py` (morning-only, open-total-line-gated, fail-open). O.5 weekly op (`pipeline/ops/weekly_ml_ops.py`) now retrains BOTH markets as independent failure domains. Verified: trainer/meta syntax + `--market` flag; Dagster `Definitions` loads; backward-compat (deployed h2h trace with no `market` key still serves); 76 tests pass.
+
+**⚠️ Spec correction (table grain):** `daily_model_predictions` is **one row per game carrying both markets** — NOT separate h2h/totals rows. So totals meta got its **own columns** `totals_meta_p_clv_positive` / `totals_meta_ci_low/high/width` / `totals_meta_n_games_trained` (the existing `meta_*` columns are H2H). DDL + idempotent ALTER + INSERT updated (79 cols = 79 vals). The app-side prompt below is updated accordingly (render from `totals_meta_*`, not a shared column).
+
+**Trained 2026-06-17 (n=438 moved):** all 3 convergence gates PASS (R-hat 1.0, CI width 0.102, quartile +0.127) but **NO out-of-sample discrimination** — temporal AUC **0.445** < in-sample 0.546, `b_edge_mag` −0.039 (≈0, vs H2H's credibly-positive +0.179). Base rate **0.603** (NOT ~0.46 — that figure was from `mart_clv_labeled_games`'s different label; the trainer's directional label ≈ H2H's 0.602). So served `totals_meta_p_clv_positive` clusters ~0.60 with little spread — the model can't discriminate which totals bets get CLV. ⚠️ **'ALL GATES PASS' ≠ 'has edge'**: the gates test convergence + in-sample separation, not OOS skill; temporal AUC is the honest check and it failed. This is the expected "totals has no edge" outcome → **direct motivation for [Story 12.13](#1213--meta-model-discrimination-lift-consume-layer-4-signals--post-lineup-ablation-h2h--totals)** (Layer-4 features + post-lineup may give it discrimination). **Tier A display still ships for parity but must be framed honestly (near-flat, low-information — NOT conviction); Tier B gating on totals meta is OFF until 12.13 earns it.**
+
+**Remaining:** (1) ~~totals training~~ ✅ done; (2) app renders the totals confidence bar from `totals_meta_*`, framed as low-information (app session).
+
 
 **Driver — UI parity, not edge.** Story 12.4's Bayesian CLV meta-model is **H2H-only by construction** (its edge = `model_home_prob − open_home_win_prob`, its label = H2H moneyline open→close movement, its features are win-prob-shaped). The H2H pick view surfaces a meta-model CLV confidence visualization (12.5's `meta_p_clv_positive` probability bar + conviction). **For beta testing, the totals pick view must show the same visualization** — a totals pick that renders no CLV-confidence bar next to an H2H pick that does looks broken/half-built to a beta user. So we need a parallel **totals** CLV meta-model producing the analogous served columns, **regardless of whether the totals point model has betting edge** (it currently does not — see [[project_epic10_totals_verdict]]).
 
@@ -7397,12 +7409,88 @@ merge; do NOT git commit or push; predict_today is the live serve script — coo
 **▶ New-session prompt — app/UI side (hand to an app session):**
 
 ```
-Story 12.12 (Totals CLV meta-model) — APP side. The model/serve side populates meta_p_clv_positive (+ meta_ci_low/
-meta_ci_high/meta_ci_width) on the TOTALS rows of daily_model_predictions, mirroring the existing H2H meta columns.
-Render the SAME meta-model CLV confidence visualization on the totals pick view that the H2H pick view already
-shows (the probability bar + CI). This is informational/display parity for beta — it is NOT a bet-permission
-gate. Show the value honestly: the totals CLV base rate is ~46% (below 50%), so totals bars will often read low —
-that is correct, do not floor/inflate them. This is a non-admin user-facing change, so add a changelog entry for it.
+Story 12.12 (Totals CLV meta-model) — APP side. The model/serve side populates the TOTALS meta columns on
+daily_model_predictions: totals_meta_p_clv_positive (+ totals_meta_ci_low / totals_meta_ci_high /
+totals_meta_ci_width). NOTE: daily_model_predictions is ONE row per game carrying both markets, so the H2H meta
+lives in meta_* and the totals meta in totals_meta_* (separate columns — do NOT read meta_* for totals). Render
+the SAME meta-model CLV confidence visualization on the totals pick view that the H2H pick view shows from meta_*
+(probability bar + CI), but sourced from totals_meta_*. This is informational/display parity for beta — it is NOT
+a bet-permission gate. Show the value honestly: the totals meta-model (v0, trained 2026-06-17) has NO out-of-sample
+discrimination (temporal AUC 0.445), so totals_meta_p_clv_positive clusters ~0.60 with little spread across games —
+the bars will look near-identical. That is the honest signal; do NOT present near-flat ~0.60 bars as "conviction" /
+"high confidence". Render the bar for parity but frame it as low-information (e.g. a muted/neutral treatment), and
+do NOT add a "high conviction" badge on totals. Non-admin user-facing change → add a changelog entry.
+```
+
+---
+
+### 12.13 — Meta-model discrimination lift: consume Layer-4 signals + post-lineup ablation (H2H + totals) ⬜ NEW 2026-06-17  `[makes the permission signal better — builds WITH 12.12]`
+
+**Why.** The CLV meta-model's discrimination is **modest** — Story 12.4's v0 reports in-sample AUC **0.579**, temporal-split AUC **0.596** — and it uses only three features (`edge_mag`, `pub_align`, `open_extremity`). Meanwhile the **Layer-4** layer computes signals that are plausibly CLV-predictive and currently **unused by the meta-model**: the H2H conviction flag (Story 28.6b — the two H2H estimators agreeing within 0.02), the decision rule (`direction_flip` vs `magnitude`), and the raw Layer-4 edge magnitude. This story tries to lift the meta-model's discrimination (and therefore the quality of the 19.3 gate) by feeding it those signals — for **both markets**, building alongside [Story 12.12](#1212--totals-clv-meta-model-h2h-parity) so the totals meta-model gets the richer feature set from the start rather than a later refit.
+
+**Two levers (each gated on an honest held-out discrimination lift — a failed lift is an acceptable, logged outcome, exactly like 12.4's original feature re-scope):**
+
+1. **Consume Layer-4 signals as meta-model features.** Add to the `--market {h2h,totals}` trainer (from 12.12): `layer4_edge_mag` (|raw model−market gap|), `layer4_rule` (one-hot direction_flip/magnitude/abstain), and for H2H `layer4_conviction_flag` + `layer4_conviction_disagree` (28.6b). Re-fit; compare temporal-split AUC and the top-vs-bottom-quartile CLV+ spread against the current 3-feature model. Keep only the additions that lift held-out discrimination.
+2. **Post-lineup meta-model ablation.** The meta-model serves **morning-only** on a sparse, ~30%-imputed matrix (the serving-skew issue: live corr 0.001 vs. offline 0.42, [[project_epic30_3_status]]). Train + score a `post_lineup` variant on the **dense** matrix (ties to [[project_epic33_pre_lineup_serving]]'s pre/post split) and compare discrimination to the morning model. If the post-lineup meta discriminates materially better, serve it on the post_lineup pass where lineups are confirmed (morning keeps the pre-lineup meta). Quantify the morning→post lift so we know the ceiling cost of pre-lineup serving.
+
+**Totals-specific sub-lever:** H2H has a conviction signal (28.6b); totals has none. Build a totals analogue (e.g. NGBoost-pred-total vs. market-line agreement, or NegBin P(over) dispersion) as a **candidate** feature in lever 1 — include it only if it lifts held-out totals discrimination.
+
+**Tasks:**
+
+- [ ] Extend the 12.12 `--market` trainer to optionally include the Layer-4 feature block; add a `--features {base,plus_layer4}` toggle so the ablation is reproducible.
+- [ ] Run the lever-1 ablation per market: report temporal AUC + quartile CLV+ spread, base vs. plus_layer4; keep the winning feature set (data-forced).
+- [ ] Build + evaluate a `post_lineup` meta variant (lever 2) per market; report morning-vs-post discrimination; wire post_lineup serving only if it wins.
+- [ ] Build + test the totals conviction candidate feature; include only on a held-out lift.
+- [ ] Update `betting_ml/utils/meta_model.py` (and the 12.12 serve path) to load/serve whichever feature set + serve-time variant won, per market — no change to the served column names (still `meta_p_clv_positive` etc.), so 19.3 and the app consume it transparently.
+- [ ] Write the findings report under `quant_sports_intel_models/baseball/ablation_results/` (honest verdict, even if "no lift → keep v0").
+
+**Acceptance criteria:**
+
+- [ ] Per-market ablation report exists: base (3-feat morning) vs. plus_layer4 vs. post_lineup, on temporal-holdout AUC + quartile CLV+ spread.
+- [ ] The served meta-model uses the empirically-best feature set + serve-time variant per market; column names unchanged.
+- [ ] If no lever lifts held-out discrimination, that is documented and v0 is retained — no feature is added on in-sample gains alone.
+- [ ] Feeds Story 19.3 definition **D** (the improved meta-model is the one 19.3 backtests as its best operating point).
+
+**Dependencies:** Story 12.12 (the `--market` trainer + totals meta exist), Story 28.6b (H2H conviction flag), Epic 33 (pre/post-lineup serving split for lever 2). Builds with 12.12; feeds 19.3.
+
+**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.13 standalone:
+
+```
+You are picking up Story 12.13 (meta-model discrimination lift — consume Layer-4 signals + post-lineup
+ablation, H2H + totals) of the MLB betting & fantasy project. Goal: make the CLV meta-model discriminate
+better so the Story 19.3 bet-permission gate is sharper. This builds WITH Story 12.12 (totals meta-model).
+
+WHY: the 12.4 meta-model has modest discrimination (temporal AUC 0.596) on just 3 features (edge_mag,
+pub_align, open_extremity). Layer-4 computes CLV-relevant signals the meta-model ignores: the 28.6b conviction
+flag, the decision rule (direction_flip/magnitude), the raw Layer-4 edge magnitude. And the meta serves
+morning-only on a sparse ~30%-imputed matrix — a post-lineup dense variant may discriminate better.
+
+TWO LEVERS, each gated on an HONEST held-out lift (a failed lift is an acceptable logged outcome — do NOT add
+a feature on in-sample gains alone):
+  1. Add Layer-4 features (layer4_edge_mag, layer4_rule one-hot, h2h layer4_conviction_flag/disagree) to the
+     12.12 --market trainer behind a --features {base,plus_layer4} toggle; compare temporal AUC + quartile
+     CLV+ spread per market; keep the winners.
+  2. Train/score a post_lineup meta variant on the DENSE matrix (Epic 33 pre/post split); compare to morning;
+     serve post_lineup only if it wins. Quantify the morning→post lift.
+  Totals sub-lever: build a totals conviction analogue (NGBoost-vs-line agreement / NegBin P(over) dispersion)
+  as a candidate feature; include only on a held-out totals lift.
+
+Read first:
+  1. implementation_guide.md — Story 12.13 (this story), 12.12 (the --market trainer you extend), 12.4
+     (the v0 meta-model + its honest-feature history), 19.3 (the gate this feeds), 28.6b (conviction flag),
+     Epic 33 (pre/post-lineup serving)
+  2. betting_ml/scripts/train_bayesian_meta_model.py — the trainer (now --market aware from 12.12)
+  3. betting_ml/utils/meta_model.py — serve path; keep served column names unchanged
+  4. scripts/predict_today.py — where layer4_* + conviction columns are computed (feature sources)
+
+Deliver: per-market ablation report under quant_sports_intel_models/baseball/ablation_results/ (base vs
+plus_layer4 vs post_lineup on temporal-holdout AUC + quartile CLV+ spread); serve the empirically-best
+feature set + serve-time variant per market WITHOUT renaming served columns (meta_p_clv_positive etc.), so
+19.3 and the app consume it transparently. If nothing lifts held-out discrimination, document it and keep v0.
+
+Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
+uv run python; hand any script >1 min to the user; test Snowflake-querying scripts with real creds before
+merge; do not git commit or push.
 ```
 
 ---
@@ -7456,48 +7544,82 @@ Acceptance Criteria:
 
 ---
 
-### 19.3 — Backtest gate against historical predictions
+### 19.3 — Reconcile + data-drive the bet-permission gate (deprecate 3-of-5; define `qualified_bet` via Layer-4 ∧ meta-model, tuned on CLV) ⬜ REWRITTEN 2026-06-17  `[gate-definition decision — supersedes the original "backtest the 3-of-5 gate"]`
 
-**Deployment gate:** Do not promote `qualified_bet` to the default EV Tracker view until this backtest confirms qualified bets show meaningfully better CLV than unqualified bets.
+**Why this was rewritten.** The original 19.3 backtested the Story 19.2 `compute_bet_permission()` 3-of-5 gate. That gate is **non-functional and superseded**: only 1 of its 5 criteria (`offensive_signal_qualifies`) is implemented — the other four (`run_env_supports`, `uncertainty_below_threshold`, `market_disagreement_visible`, `prior_fresh`) are stubs that `return 0.0` — so with `min_criteria_met=3`, `qualified_bet` is **structurally always False** and the backtest would be degenerate (0 qualified vs. everything). Meanwhile the de-facto prod selector is **Layer-4 non-abstain** (`scripts/write_api_cache.py`, `/picks/ev`), and the **meta-model** (12.4 H2H / 12.12 totals) now estimates bet quality (P(CLV>0)) directly and calibrated — exactly what 12.5 says replaces raw edge as "the top-line quality indicator." So this story **reconciles** the competing definitions instead of backtesting a broken one.
 
-Tasks:
-- [ ] Requires ≥ 50 live CLV-labeled games in `mart_prediction_clv`; do not begin until threshold is met (track via Story 12.1 monitoring)
-- [ ] Retroactively apply `compute_bet_permission()` logic to all historical `daily_model_predictions` rows where signal data exists — produces a historical `qualified_bet` flag for comparison
-- [ ] Compute: mean CLV, `pct_positive_CLV`, and hit rate for qualified vs. non-qualified bets across all available historical games
-- [ ] Promotion gate: qualified bets must show ≥ 0.3% higher mean CLV than non-qualified in the holdout period
-- [ ] Document findings in `clv_monitoring_log.md` (Story 12.1)
+**The reconciled model — two orthogonal axes:**
+- **Layer-4 = side selection** (alpha-independent, geometric): totals fires when `|model_mu − line| > 1.0` run; H2H on favorite-disagreement (`direction_flip`) or `|model_p − market_p| > 0.12` (`magnitude`). Answers *"does the model have an opinion vs. the open?"*
+- **Meta-model = quality permission**: `meta_p_clv_positive` answers *"will sharp money confirm that opinion?"*
+- **Target definition:** `qualified_bet = (Layer-4 non-abstain side) AND (meta-model P(CLV>0) clears a per-market, data-tuned threshold)`. Tune H2H and totals **independently** (base rates differ sharply: 52.5% vs 46.2% CLV-positive).
 
-Acceptance Criteria:
-- [ ] Backtest report exists comparing qualified vs. non-qualified bet CLV distributions
-- [ ] If gate criterion passes: proceed to Story 19.4 (EV Tracker update)
-- [ ] If gate criterion fails: revise threshold configuration and re-run; do not deploy a gate that shows no CLV lift
+**Honest framing (drives the metric):** H2H `best_alpha = 0` today — the point model has **no demonstrated market edge** (A2.5). So "qualified" is a **CLV-harvesting** selection (bet where we disagree with the open AND the line is likely to move our way), NOT a win-rate edge. CLV is the *leading* indicator of long-run value at point-model/market parity — the Penumbra premise of Epic 19. Frame conviction to beta users as line-value confidence, never "we beat the book."
+
+**Eval oracle:** `mart_clv_labeled_games` (grain `game_pk × market_type`; carries both `clv`/`clv_positive` AND `actual_outcome`; 345 h2h / 288 totals live labels as of 2026-06-11, growing ~13–15/day). `placed_bets` (~122 sparse manual rows) is too thin to tune ROI on — **CLV is the primary metric**, `actual_outcome` a guardrail.
+
+**Tasks:**
+
+- [ ] **Build the eval surface:** `daily_model_predictions` (live, `is_backfill=false`, morning) ⋈ `mart_clv_labeled_games` on `(game_pk, market_type)` → per-bet rows carrying `{layer4_*_decision, layer4_*_edge, layer4_h2h_conviction_flag, meta_p_clv_positive, meta_ci_low, model_edge}` + `{clv, clv_positive, actual_outcome}`. (>1-min Snowflake → write the script, hand to the user to run.)
+- [ ] **Sweep candidate definitions, per market**, recording mean CLV, `pct_positive_CLV`, `actual_outcome` hit-rate, and qualified volume at each threshold:
+  - **A. Layer-4 only** (today's de-facto baseline) — `decision != 'abstain'`.
+  - **B. Meta-model only** — `meta_ci_low > τ` (sweep τ).
+  - **C. Conjunction** — Layer-4 side AND `meta_p_clv_positive > τ`.
+  - **D. Re-trained meta** — the Story 12.13 meta-model that ingests Layer-4 features (use if 12.13 has shipped; else note as the follow-up operating point).
+- [ ] **In-sample caveat:** the 12.4 meta-model was trained on ~911 of the historical labeled games, so a naïve retroactive backtest is partly in-sample. Report **both** a temporal-holdout slice (label `game_date` after the trace's newest training game) AND the full retroactive set, and lead with the holdout number.
+- [ ] **Pick the operating point** per market: maximize mean CLV subject to guardrails — `pct_positive_CLV > 0.50`, non-negative `actual_outcome` lift, and **minimum qualified volume** (≥ ~20–30% of slate, so beta has picks to show). Document the chosen τ_h2h, τ_totals + rationale in `clv_monitoring_log.md`.
+- [ ] **Rewire `qualified_bet`** in `betting_ml/utils/probability_layer.py` / `scripts/predict_today.py` to the chosen definition; **deprecate** the 3-of-5 path (keep the per-criterion strengths as diagnostics only, or remove). Repurpose `game_conviction_score` to carry `meta_p_clv_positive` (the honest, calibrated conviction the app surfaces) — document the change.
+- [ ] **Deployment gate (preserved):** only promote `qualified_bet` to the default app view if the qualified cohort shows a positive, significant CLV lift on the holdout; else keep iterating thresholds. Do NOT ship a gate with no CLV lift.
+
+**Acceptance criteria:**
+
+- [ ] Per-market frontier report exists (volume vs. mean-CLV / pct-positive / hit-rate) comparing definitions A–D on BOTH a temporal holdout and the full set.
+- [ ] `qualified_bet` is rewired to the chosen Layer-4 ∧ meta-model definition; the 3-of-5 path no longer drives it; `game_conviction_score` reflects `meta_p_clv_positive`.
+- [ ] Chosen τ_h2h / τ_totals documented with the CLV lift + qualified volume each yields.
+- [ ] App-surfacing of the new definition (default view, conviction display) is flagged as a separate app-session task with its own changelog entry.
+
+**Dependencies / sequencing:** H2H arm ready now (12.4 serving since 2026-06-16). **Totals arm depends on Story 12.12** (totals `meta_p_clv_positive` must exist). Definition **D depends on Story 12.13**. Recommended order: 12.12 → 12.13 → 19.3 (but 19.3 can establish the A/B/C baseline before 12.13's D lands). See [[project_qualified_bet_dual_definition]] (the dual-definition history) and [[project_decision_layer_stories]] (decision lever, since point accuracy is ceilinged).
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 19.3 standalone:
 
 ```
-You are picking up Story 19.3 (backtest the Epic 19 permission gate against historical predictions) of the
-MLB betting & fantasy project. This is a DEPLOYMENT GATE, not a code feature: it decides whether qualified_bet
-becomes the default EV-Tracker view.
+You are picking up Story 19.3 (reconcile + data-drive the bet-permission gate) of the MLB betting & fantasy
+project. This is a DEFINITION + DEPLOYMENT-GATE decision, not a feature: decide what "qualified_bet" means and
+wire it, then gate promoting it to the default app view on a CLV-lift backtest.
 
-GATE: requires ≥50 live CLV-labeled games in mart_prediction_clv — verify via the Snowflake MCP before starting.
+CONTEXT YOU MUST INTERNALIZE FIRST:
+  - The Story 19.2 3-of-5 compute_bet_permission() gate is NON-FUNCTIONAL: only offensive_signal_qualifies is
+    implemented; run_env_supports/uncertainty_below_threshold/market_disagreement_visible/prior_fresh are
+    `return 0.0` stubs; min_criteria_met=3 ⇒ qualified_bet is ALWAYS False. Do NOT backtest it. DEPRECATE it.
+  - The de-facto prod selector is Layer-4 non-abstain (write_api_cache.py, /picks/ev).
+  - The meta-model (12.4 H2H, 12.12 totals) estimates P(CLV>0) directly + calibrated — the quality signal.
+  - TARGET DEFINITION: qualified_bet = (Layer-4 non-abstain side) AND (meta P(CLV>0) > per-market tuned τ).
+    Layer-4 = side selection; meta-model = quality permission. Tune H2H and totals SEPARATELY (base rates
+    52.5% vs 46.2%).
+  - HONEST FRAMING: H2H best_alpha=0 ⇒ no point-model edge; "qualified" is CLV-harvesting, NOT a win-rate edge.
+
+GATE: ≥100 live CLV-labeled games per market in mart_clv_labeled_games — verify via the Snowflake MCP first.
 
 Read first:
-  1. implementation_guide.md — Story 19.3 (this story), 19.1 (gate criteria), 19.2 (compute_bet_permission,
-     DONE), Story 12.1 (CLV monitoring + clv_monitoring_log.md)
-  2. betting_ml/utils/probability_layer.py — compute_bet_permission() (apply its logic retroactively)
-  3. The daily_model_predictions table (Snowflake) — historical scored rows you backtest over
+  1. implementation_guide.md — Story 19.3 (this story, IN FULL), 19.1/19.2 (the gate being deprecated),
+     12.4 (H2H meta), 12.12 (totals meta), 12.13 (meta consumes Layer-4 → definition D), 12.5 (gate intent)
+  2. betting_ml/utils/probability_layer.py — compute_bet_permission(), compute_posterior/edge, tune_alpha
+  3. betting_ml/scripts/evaluation/bayesian_model_eval.py — compute_bet_decision() (the Layer-4 rules)
+  4. dbt/models/mart/mart_clv_labeled_games.sql — the eval oracle (clv, clv_positive, actual_outcome)
+  5. scripts/predict_today.py + scripts/write_api_cache.py — where qualified_bet is written + selected on
 
-Goal: retroactively apply compute_bet_permission() to all historical daily_model_predictions rows where the
-signal data exists, then compare qualified vs non-qualified bets on mean CLV, pct_positive_CLV, and hit rate.
-PROMOTION GATE: qualified bets must show ≥0.3% higher mean CLV than non-qualified. Pass → proceed to 19.4
-(EV Tracker default-view change). Fail → revise thresholds and re-run; do NOT deploy a gate with no CLV lift.
-Document findings in clv_monitoring_log.md.
-
-NOTE: prerequisite reading — Story 19.6 found game_conviction_score / gate_signals_met are NULL on current
-live rows (dropped from the write path). Confirm the backtest has usable gate inputs, or coordinate with 19.6.
+Build: (a) the per-bet eval surface (daily_model_predictions live ⋈ mart_clv_labeled_games on game_pk +
+market_type); (b) sweep definitions A=Layer-4-only, B=meta-only, C=conjunction, D=12.13-meta, per market,
+recording mean CLV / pct_positive_CLV / actual_outcome hit-rate / qualified volume; (c) report BOTH a temporal
+holdout (game_date after the meta trace's newest training game — avoid in-sample inflation) AND the full set;
+(d) pick τ_h2h/τ_totals maximizing mean CLV subject to pct_positive>0.5 + non-negative outcome lift + qualified
+volume ≥ ~20-30% of slate; (e) rewire qualified_bet to the chosen definition, deprecate the 3-of-5 path,
+repurpose game_conviction_score = meta_p_clv_positive; (f) document τ + CLV lift in clv_monitoring_log.md.
+Deployment gate: only promote to the default app view if the qualified cohort shows positive significant CLV
+lift on the holdout. App-side surfacing is a SEPARATE app-session task (needs its own changelog entry).
 
 Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
-run Python with `uv run python`; hand any script >1 min to the user; do not git commit or push.
+uv run python; hand any script >1 min to the user to run; test Snowflake-querying scripts with real creds
+before merge; do not git commit or push.
 ```
 
 ---
@@ -10799,7 +10921,7 @@ Acceptance criteria:
 **Remaining story priority (as of 2026-06-15):**
 - **P1 — Beta launch blockers:** A0.4.18 (SES production access approval → beta user provisioning; literal gate to inviting anyone), A0.4.13 (marketing pages — footer links on the live home page currently point nowhere), A0.4.11 (settings page — small, fully unblocked, user-facing)
 - **P2 — Beta quality:** A0.4.14 ✅ COMPLETE 2026-06-15, A0.4.26 ✅ COMPLETE 2026-06-16, A0.4.15 (data quality bug reports — closes the beta feedback loop)
-- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 🔶 PARTIAL (player pages SHIPPED 2026-06-16 with IL badge + age/height/weight; team pages + nav linking still pending)
+- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 ✅ SHIPPED 2026-06-16 (player + team directories and detail pages live; nav deep-links from lineup cards / game headers still pending)
 
 ---
 
@@ -11702,11 +11824,11 @@ Done when: clicking the link, filling in text, and submitting creates a DynamoDB
 
 ---
 
-#### A0.4.16 — Player and team detail pages 🔶 PARTIAL (player page shipped 2026-06-16; team page pending)  **[P3]**
+#### A0.4.16 — Player and team detail pages ✅ SHIPPED 2026-06-16  **[P3]**
 
-Clickable player names and team names across the app navigate to dedicated profile pages. Player profile page is SHIPPED. Team pages are remaining scope.
+Players directory, player detail, teams directory, and team detail pages all live. Nav deep-links from lineup cards / game detail headers to player/team pages are remaining scope (no backlog story yet).
 
-**Shipped (player side, 2026-06-16):**
+**Shipped (2026-06-16):**
 - `frontend/app/players/[player_id]/page.tsx` — authenticated player profile page (note: route uses `players/` plural)
 - `mart_player_profile_identity` dbt mart — single source of truth for player identity + physical attributes + IL status; grain: one row per `(player_id, player_type)`; sources: `mart_batter_rolling_stats`, `mart_starting_pitcher_game_log`, `stg_statsapi_player_profiles`, `stg_statsapi_lineups`, `feature_pregame_injury_status`
 - `write_serving_store.py` writes `player/{player_id}` blobs to Railway PG from `mart_player_profile_identity`
@@ -11735,8 +11857,10 @@ Clickable player names and team names across the app navigate to dedicated profi
 - [x] Audit what data is available per-player from existing feature marts — `mart_player_profile_identity` built as canonical source
 - [x] Build `GET /player/{player_id}` backend route — served via Railway PG `api_cache` (player blobs written by `write_serving_store.py`)
 - [x] Create `frontend/app/players/[player_id]/page.tsx` — live; shows batter/pitcher stats + profile header
-- [ ] Build `GET /team/{team_id}` backend route — must use pre-materialized data served from Railway PG, not live Snowflake
-- [ ] Create `frontend/app/team/[team_id]/page.tsx`
+- [x] Build `GET /team/{team_id}` backend route — pre-materialized, served from Railway PG
+- [x] Create `frontend/app/team/[team_id]/page.tsx` — ELO trend, platoon splits, recent form, schedule, key stats
+- [x] Create `frontend/app/teams/page.tsx` — teams directory by division (W-L, win %, streak)
+- [x] Create `frontend/app/players/page.tsx` — players directory with search/filter + batter/pitcher tabs
 - [ ] Make player names in the game detail lineup card link to `/players/{player_id}`
 - [ ] Make team names/logos in the game detail header link to `/team/{team_id}`
 
@@ -12523,12 +12647,33 @@ Bovada, Pinnacle} and see our model's probability vs THAT book's current line, w
 book's de-vigged implied probability ("market bet %"), for both h2h and totals. Always show Pinnacle as the
 sharp low-vig reference.
 
+APPLICATION ARCHITECTURE (read this before touching any file):
+  - Backend: AWS API Gateway + Lambda (`credence-prod-lambda-api`, us-east-1). Deployed via
+    `infrastructure/lambda/deploy.sh`. FastAPI runs inside the Lambda handler.
+  - Frontend: Next.js deployed on Vercel (auto-deploys on every push to main). No server-side Lambda calls
+    from the frontend — all API calls go through the API Gateway URL.
+  - Serving layer (two-tier):
+      1. Railway PostgreSQL (primary) — OLTP serving store. FastAPI reads PG first at request time.
+         Dagster reverse-ETLs pre-computed picks/game-detail/etc. into PG via write_serving_store.py after
+         each pipeline run. PG tables: daily_picks, game_detail (JSONB), performance_summary, user_portfolios.
+      2. S3 (`credence-prod-s3-api-cache`) — secondary fallback; being phased out post-A2.12 stability.
+      FastAPI read order: PG → S3 → Snowflake (Snowflake only as last-resort fallback; NOT at request time in prod).
+  - Snowflake = OLAP only (model training, backtesting, pipeline feature computation). Never add a live
+    Snowflake query to a FastAPI request path — all reads at request time must come from PG.
+  - DynamoDB: bet log (`credence-prod-dynamo-user-bets`) + users registry (`credence-prod-dynamo-users`) only.
+  - Key env var: `DATABASE_URL` — Railway PG connection string (in Lambda env vars + Dagster secrets).
+    Backend uses asyncpg pool (FastAPI); scripts use psycopg[binary] (psycopg3).
+
 Read first:
   1. quant_sports_intel_models/baseball/implementation_guide.md — Story A0.4.32 (this story) IN FULL, plus
      A2.12 (Railway PG serving store) and A0.4.31 (the Odds-API→PG live-data pattern you mirror)
   2. app/backend/routers/picks.py — existing model-output + single-book-edge surfacing you generalize
-  3. betting_ml/utils/h2h_probability.py (devig_home_prob), totals_probability.py (devig_over_prob),
+  3. scripts/write_serving_store.py — the reverse-ETL pattern for writing pre-computed data into PG; your
+     new per-book odds snapshot must follow the same write path
+  4. betting_ml/utils/h2h_probability.py (devig_home_prob), totals_probability.py (devig_over_prob),
      probability_layer.py (compute_kelly) — REUSE these; do not re-implement odds math
+  5. frontend/app/picks/[game_pk]/page.tsx — the pick detail page you are adding the book selector to;
+     mirror the existing data-fetching and component conventions
 
 Data (already live — confirmed 2026-06-17):
   - Odds: baseball_data.betting.mart_odds_outcomes — grain (ingestion_ts, event_id, bookmaker_key,
@@ -12546,22 +12691,25 @@ Compute per (book, market): market_bet_pct = de-vigged implied prob (devig_* fns
 - (1-p_model) at the book's offered price; edge = p_model - market_bet_pct; optional kelly = compute_kelly.
 
 Serving: PREFER materializing a per-game x six-book latest-odds snapshot into Railway PG (A2.12 / A0.4.31
-pattern) and read PG. If that's not ready, MVP = query Snowflake mart_odds_outcomes live (picks.py already
-does), and leave a TODO to migrate to PG. Return all six books in ONE payload so the frontend switches
-instantly.
+pattern) and read PG at request time. If that's not ready, MVP = pre-compute in write_serving_store.py and
+store as a JSONB blob in PG (same pattern as game_detail). Do NOT add a live Snowflake query to the request
+path. Confirm the serving-path approach with the user before building the data layer.
+Return all six books in ONE payload so the frontend book selector switches instantly without a second fetch.
 
 HONEST FRAMING (required): our h2h/totals models have NO demonstrated market edge, so most EVs will be ~0 or
 negative after vig. This is a market-comparison / transparency tool, NOT a bet recommendation — frame it that
 way, show Pinnacle as the sharp anchor, and do NOT auto-label "+EV" as "place this bet" (US = all bets manual).
 
+CHANGELOG (required): this is a non-admin user-facing change — add a changelog entry to
+frontend/data/changelog.json as the final step.
+
 Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
-run Python with `uv run python`; do not git commit or push (the user handles git). Confirm the serving-path
-choice (PG vs live Snowflake) with the user before building the data layer.
+run Python with `uv run python`; do not git commit or push (the user handles git).
 ```
 
 ---
 
-#### A0.4.33 — Surface the 19.7 decision-layer fields (conviction, gate signals, win-prob CI) in the app  ⬜ NEW (2026-06-17)  **[P2 — app wiring, model-side DONE]**
+#### A0.4.33 — Surface the 19.7 decision-layer fields (conviction, gate signals, win-prob CI) in the app  ✅ SHIPPED 2026-06-16  **[P2]**
 
 **Why.** Story 19.7 (model-side, dev-verified 2026-06-16) now writes real `game_conviction_score`, `gate_signals_met`, and the Beta(α,β)
 80% credible interval `win_prob_ci_low` / `win_prob_ci_high` / `win_prob_ci_width` on `daily_model_predictions` for every live pick.
@@ -12590,22 +12738,23 @@ win_prob_ci_low/high` in its pick queries and derives `game_conviction_score` fr
   ([[feedback_no_auto_betting]]). No "high conviction ⇒ place bet" framing.
 
 **Tasks:**
-- [ ] Backend: in `picks.py`, replace `NULL::FLOAT AS win_prob_ci_low/high` with `b.win_prob_ci_low` / `b.win_prob_ci_high` (+ add
+- [x] Backend: in `picks.py`, replace `NULL::FLOAT AS win_prob_ci_low/high` with `b.win_prob_ci_low` / `b.win_prob_ci_high` (+ add
       `b.win_prob_ci_width`), and replace the `IFF(layer4_h2h_conviction_flag,0.8,0.4)` conviction placeholder with the real
       `b.game_conviction_score` (carry `b.gate_signals_met` too). Apply across every pick query that currently uses the placeholders.
-- [ ] Serving store: if the app reads the Railway PG serving store ([[project_serving_store_architecture]] / A2.12) rather than
-      Snowflake directly, add the five new columns to the PG mirror so they flow through; otherwise note the endpoint reads Snowflake.
-- [ ] Frontend: surface per pick — a **conviction** indicator (labeled "early/partial") and a **win-probability band** (the 80% CI around
-      the model win %, e.g. a small range bar). Keep raw model % visible.
-- [ ] Guardrail copy: conviction/CI are model-confidence transparency, not bet signals; no auto-"+EV ⇒ bet" framing.
-- [ ] **Changelog:** this is a non-admin user-facing change → add a changelog entry ([[feedback_story_prompt_and_changelog]]).
+- [x] Serving store: `write_serving_store.py` `_PICKS_TODAY_SQL` + `_GAME_PICKS_BATCH` h2h CTEs now read real `b.win_prob_ci_*` +
+      `b.gate_signals_met`; totals CTEs carry `NULL` placeholders for UNION ALL alignment. Both payload builders include the new columns.
+- [x] Frontend: conviction indicator (LOW/HIGH badge + gate_signals_met tooltip on pick detail), win-probability CI band on h2h picks
+      (pick detail: redesigned section below prob/details with separator; dashboard: ProbabilityBar with hover tooltip showing CI range).
+      Dashboard bar uses `showCiLabels={false}` to keep inline text readable while tooltip surfaces CI on hover.
+- [x] Guardrail copy: conviction/CI framed as model-confidence transparency; "early/partial" noted (gate criteria 2–5 off); no "+EV ⇒ bet".
+- [x] **Changelog:** entry added to `frontend/data/changelog.json` 2026-06-16 week.
 
 **Acceptance criteria:**
-- [ ] `/picks/today` + `/picks/history` return real `game_conviction_score`, `gate_signals_met`, and `win_prob_ci_low/high/width`
+- [x] `/picks/today` + `/picks/history` return real `game_conviction_score`, `gate_signals_met`, and `win_prob_ci_low/high/width`
       (non-null for live rows once a 19.7-deployed serve has run); `win_prob_ci_low < model_win_prob < win_prob_ci_high`.
-- [ ] No remaining `NULL::FLOAT AS win_prob_ci_*` or `IFF(...conviction...)` placeholder in `picks.py`.
-- [ ] Frontend renders a conviction indicator + win-prob CI band; copy frames them as confidence/transparency (partial-gate noted), not a bet signal.
-- [ ] A changelog entry is added for the user-facing change.
+- [x] No remaining `NULL::FLOAT AS win_prob_ci_*` or `IFF(...conviction...)` placeholder in `picks.py`.
+- [x] Frontend renders a conviction indicator + win-prob CI band; copy frames them as confidence/transparency (partial-gate noted), not a bet signal.
+- [x] A changelog entry is added for the user-facing change.
 
 **Dependencies:** Story 19.7 model-side ✅ (dev-verified; **prod serve must run after the 19.7 deploy** so prod columns populate — until
 then build against `betting_ml_dev` 2026-06-14) · `app/backend/models/picks.py` fields ✅ (add `win_prob_ci_width`) · serving path
@@ -12652,6 +12801,87 @@ SEMANTICS (must respect — do NOT over-claim):
 
 CHANGELOG (required): this is a non-admin user-facing change — add a changelog entry as the final step of this
 work (the app's weekly changelog page, per A0.4.26).
+
+Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
+run Python with `uv run python`; do not git commit or push (the user handles git).
+```
+
+---
+
+#### A0.4.34 — Surface the CLV meta-model confidence bar (H2H + totals) in the app  ⬜ NEW (2026-06-17)  **[P2 — app feature, model-side ready; pairs with Stories 12.4 / 12.12]**
+
+**Why.** The Bayesian CLV meta-models now write a calibrated P(CLV>0) + 80% credible interval to `daily_model_predictions` for **both markets**: H2H in `meta_*` (Story 12.4) and totals in `totals_meta_*` (Story 12.12). Nothing in the app reads them yet. This story renders a per-pick **CLV-confidence bar** on each market's pick view — the "will sharp money move toward this side?" read that complements the win-probability band from A0.4.33. **This is a display/parity feature, NOT a bet-permission gate** (that's the deferred Tier B / Story 19.3 work).
+
+**What's ready (model side — no model work in this story):**
+- `daily_model_predictions` (prod `baseball_data.betting_ml`, dev `baseball_data.betting_ml_dev`) carries:
+  - **H2H:** `meta_p_clv_positive`, `meta_ci_low`, `meta_ci_high`, `meta_ci_width`, `meta_n_games_trained`
+  - **Totals:** `totals_meta_p_clv_positive`, `totals_meta_ci_low`, `totals_meta_ci_high`, `totals_meta_ci_width`, `totals_meta_n_games_trained`
+  - One row per game carries BOTH — read `meta_*` for the H2H pick, `totals_meta_*` for the totals pick (do NOT cross them).
+  - Served on the **morning** pass only, and only for games with a Bovada open line; NULL otherwise (the bar should simply not render when NULL — abstain, don't show 0).
+- **Build/test data NOW:** `betting_ml_dev.daily_model_predictions` for `game_date='2026-06-16'` — H2H meta 15/15, totals meta 14/14, all populated.
+
+**⚠️ Semantics the UI MUST respect (this is the crux — do not over-claim):**
+- **Totals meta v0 has NO discriminating signal.** Measured 2026-06-17: temporal AUC 0.445, served `totals_meta_p_clv_positive` clusters at **avg 0.604, std 0.009** (range 0.581–0.616). The bars will be **visually near-identical game-to-game.** Render for parity but treat as **low-information** — muted/neutral styling, and **do NOT add a "high conviction" badge on totals.** (Tier B gating on totals is off until Story 12.13 earns discrimination.)
+- **H2H meta has only modest discrimination** (temporal AUC 0.596). Frame it as "line-movement confidence," not a strong signal.
+- **CLV ≠ win-rate edge, and ≠ a bet recommendation.** `best_alpha=0` — the point models have no demonstrated market edge; CLV is a *leading indicator of line value*, not "we beat the book." US betting is manual ([[feedback_no_auto_betting]]). No "high P(CLV) ⇒ place this bet" framing.
+
+**Tasks:**
+- [ ] Backend (`app/backend/routers/picks.py` + Pydantic `app/backend/models/picks.py`): surface `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high` on the H2H pick and `totals_meta_p_clv_positive`/`totals_meta_ci_low`/`totals_meta_ci_high` on the totals pick. NULL passes through as "no bar."
+- [ ] Serving store (`scripts/write_serving_store.py`, per A2.12): add the meta columns to the H2H and totals CTEs of `_PICKS_TODAY_SQL` / `_GAME_PICKS_BATCH` so the Railway PG mirror carries them (mirror the A0.4.33 pattern; keep UNION ALL column alignment).
+- [ ] Frontend: a CLV-confidence bar (P(CLV>0) + CI) on each market's pick detail. Totals bar = low-information treatment (muted, no conviction badge). Tooltip explains "probability the closing line moves toward this side."
+- [ ] Guardrail copy: CLV framed as line-value confidence / transparency, partial-signal noted (totals especially), no bet-rec framing.
+- [ ] **Changelog:** add an entry to `frontend/data/changelog.json` (non-admin user-facing change).
+
+**Acceptance criteria:**
+- [ ] H2H and totals pick views render the CLV-confidence bar from their respective `meta_*` / `totals_meta_*` columns; NULL → no bar (clean abstain).
+- [ ] Totals bar is visibly low-information (no "high conviction" badge); copy does not over-claim.
+- [ ] No bet-recommendation framing on either bar; `best_alpha=0` honesty preserved.
+- [ ] Changelog entry added.
+
+**Dependencies:** Story 12.4 (H2H meta ✅ serving) + Story 12.12 (totals meta ✅ serve-verified 2026-06-17). Pairs with A0.4.33 (win-prob band — same pick views). Prod columns populate after the 12.12 deploy + first prod morning serve — until then build against `betting_ml_dev` `game_date='2026-06-16'`. See [[project_epic12_4_status]].
+
+**▶ App-session prompt** — copy into a fresh application-repo session:
+```
+You are building Story A0.4.34 (surface the CLV meta-model confidence bar, H2H + totals) in the Credence app repo.
+
+Goal: the model writes a calibrated P(CLV>0) + 80% credible interval per pick to daily_model_predictions — H2H
+in meta_* (Story 12.4), totals in totals_meta_* (Story 12.12). Render a per-pick CLV-confidence bar on each
+market's pick view. This is DISPLAY/PARITY, NOT a bet-permission gate.
+
+APPLICATION ARCHITECTURE (read before touching any file):
+  - Backend: AWS API Gateway + Lambda (credence-prod-lambda-api, us-east-1), FastAPI in the Lambda handler.
+  - Frontend: Next.js on Vercel (auto-deploys on push to main).
+  - Serving layer (two-tier): Railway PostgreSQL (primary OLTP serving store; FastAPI reads PG first) +
+    S3 (credence-prod-s3-api-cache, fallback). Dagster reverse-ETLs picks into PG via write_serving_store.py.
+    Read order PG → S3 → Snowflake. NEVER add a live Snowflake query to a request path. Snowflake = OLAP only.
+
+Data (live): daily_model_predictions — prod baseball_data.betting_ml, dev baseball_data.betting_ml_dev.
+  H2H:    meta_p_clv_positive, meta_ci_low, meta_ci_high, meta_ci_width, meta_n_games_trained
+  Totals: totals_meta_p_clv_positive, totals_meta_ci_low, totals_meta_ci_high, totals_meta_ci_width,
+          totals_meta_n_games_trained
+  ONE row per game carries BOTH — read meta_* for the H2H pick, totals_meta_* for the totals pick; never cross
+  them. Morning pass + open-line only; NULL otherwise → render NO bar (clean abstain, do not show 0).
+  BUILD/TEST AGAINST DEV NOW: betting_ml_dev.daily_model_predictions WHERE game_date='2026-06-16' (H2H 15/15,
+  totals 14/14, populated). Prod populates after the 12.12 deploy + first prod morning serve — coordinate w/ user.
+
+Read first:
+  1. implementation_guide.md — Story A0.4.34 (this story) IN FULL, plus 12.4 + 12.12 (what the columns mean)
+     and A2.12 (Railway PG serving store)
+  2. app/backend/routers/picks.py — the pick queries to add the meta columns to (mirror A0.4.33's pattern)
+  3. app/backend/models/picks.py — add the Pydantic fields
+  4. scripts/write_serving_store.py — add the meta columns to the H2H + totals CTEs (UNION ALL alignment)
+  5. the pick detail page (where A0.4.33 put the win-prob band) — add the CLV bar beside it
+
+SEMANTICS (must respect — do NOT over-claim):
+  - TOTALS meta v0 has NO discriminating signal: temporal AUC 0.445; served value clusters avg 0.604 / std 0.009
+    (range 0.58-0.62). Bars will look near-identical across games. Render for parity but LOW-INFORMATION —
+    muted/neutral styling, NO "high conviction" badge on totals.
+  - H2H meta has only modest discrimination (temporal AUC 0.596) — "line-movement confidence", not strong.
+  - CLV is a LEADING INDICATOR OF LINE VALUE, not a win-rate edge and NOT a bet recommendation. best_alpha=0 —
+    the model has no demonstrated market edge. US betting is manual. No "high P(CLV) ⇒ place bet" framing.
+
+CHANGELOG (required): non-admin user-facing change — add a changelog entry to frontend/data/changelog.json as
+the final step (the app's weekly changelog page, per A0.4.26).
 
 Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
 run Python with `uv run python`; do not git commit or push (the user handles git).

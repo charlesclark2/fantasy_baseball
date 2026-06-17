@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     win_prob_ci_high          FLOAT,
     win_prob_ci_width         FLOAT,
 
-    -- Story 12.4 — Bayesian CLV meta-model: P(closing line moves toward the model's side)
+    -- Story 12.4 — Bayesian CLV meta-model (H2H): P(closing line moves toward the model's side)
     -- + 80% credible interval. Served on the MORNING pass only (the trained regime); NULL on
     -- post_lineup/backfill and on games with no Bovada open line. n_games_trained = the trace size.
     meta_p_clv_positive       FLOAT,
@@ -193,6 +193,16 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     meta_ci_high              FLOAT,
     meta_ci_width             FLOAT,
     meta_n_games_trained      INTEGER,
+
+    -- Story 12.12 — Bayesian CLV meta-model (TOTALS): P(close total moves toward our O/U side).
+    -- Separate columns (one row per game carries both markets); same morning-only / open-line /
+    -- NULL-abstain regime as the H2H meta. v0 (2026-06-17) has NO OOS discrimination (temporal
+    -- AUC 0.445) so this clusters ~0.60 near-flat — display-only, NOT a gate (see Story 12.13).
+    totals_meta_p_clv_positive   FLOAT,
+    totals_meta_ci_low           FLOAT,
+    totals_meta_ci_high          FLOAT,
+    totals_meta_ci_width         FLOAT,
+    totals_meta_n_games_trained  INTEGER,
 
     -- Story 28.3 — actual Bovada American moneyline odds at scoring time (not de-vigged).
     -- Populated for every game with Bovada h2h odds; used by the magnitude kill-criterion
@@ -269,6 +279,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     gate_signals_met, game_conviction_score,
     win_prob_alpha, win_prob_beta, win_prob_ci_low, win_prob_ci_high, win_prob_ci_width,
     meta_p_clv_positive, meta_ci_low, meta_ci_high, meta_ci_width, meta_n_games_trained,
+    totals_meta_p_clv_positive, totals_meta_ci_low, totals_meta_ci_high,
+    totals_meta_ci_width, totals_meta_n_games_trained,
     data_source, feature_coverage_score,
     layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
     imputed_feature_count, imputed_discriminative_count,
@@ -298,6 +310,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(gate_signals_met)s, %(game_conviction_score)s,
     %(win_prob_alpha)s, %(win_prob_beta)s, %(win_prob_ci_low)s, %(win_prob_ci_high)s, %(win_prob_ci_width)s,
     %(meta_p_clv_positive)s, %(meta_ci_low)s, %(meta_ci_high)s, %(meta_ci_width)s, %(meta_n_games_trained)s,
+    %(totals_meta_p_clv_positive)s, %(totals_meta_ci_low)s, %(totals_meta_ci_high)s,
+    %(totals_meta_ci_width)s, %(totals_meta_n_games_trained)s,
     %(data_source)s, %(feature_coverage_score)s,
     %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s,
     %(imputed_feature_count)s, %(imputed_discriminative_count)s,
@@ -442,10 +456,13 @@ WITH games AS (
     WHERE official_date = %(d)s
 ),
 pb AS (
-    SELECT game_pk, home_ml_money_pct - home_ml_ticket_pct AS handle_ticket_div
+    SELECT game_pk,
+           home_ml_money_pct - home_ml_ticket_pct AS handle_ticket_div,
+           over_money_pct - over_ticket_pct       AS over_handle_ticket_div
     FROM baseball_data.betting_features.feature_pregame_public_betting_features
 )
-SELECT g.game_pk, mv.open_home_win_prob, pb.handle_ticket_div
+SELECT g.game_pk, mv.open_home_win_prob, mv.open_total_line,
+       pb.handle_ticket_div, pb.over_handle_ticket_div
 FROM games g
 JOIN baseball_data.betting.mart_odds_line_movement mv
     ON mv.game_pk = g.game_pk AND mv.bookmaker = 'bovada'
@@ -454,31 +471,34 @@ LEFT JOIN pb ON pb.game_pk = g.game_pk
 
 
 def _load_meta_serve_inputs(target_date: str) -> dict[int, dict]:
-    """{game_pk: {"open_home_win_prob": float|None, "handle_ticket_div": float|None}}.
+    """{game_pk: {open_home_win_prob, handle_ticket_div, open_total_line, over_handle_ticket_div}}.
 
-    Story 12.4 — the extra inputs the Bayesian CLV meta-model needs at serve time beyond the
-    model's own win prob: the Bovada OPEN de-vig home prob (drives edge_mag / open_extremity)
-    and the AN money%−ticket% divergence (pub_align). Graceful — empty dict on any failure;
-    a game with no open line gets a NULL meta prediction (the meta-model abstains on it)."""
+    Stories 12.4 (H2H) + 12.12 (totals) — the extra inputs the Bayesian CLV meta-models need at
+    serve time beyond the model's own predictions: the Bovada OPEN de-vig home prob / OPEN total
+    line (drive edge_mag / open_extremity) and the public money%−ticket% divergences (pub_align;
+    home split for h2h, over split for totals). Graceful — empty dict on any failure; a game with
+    no open line for a market gets a NULL meta prediction for that market (the meta-model abstains)."""
     try:
         conn = get_snowflake_connection()
         try:
             cur = conn.cursor()
             cur.execute(_META_SERVE_QUERY, {"d": target_date})
             out: dict[int, dict] = {}
-            for gpk, open_hwp, htd in cur.fetchall():
+            for gpk, open_hwp, open_tot, htd, over_htd in cur.fetchall():
                 if gpk is None:
                     continue
                 out[int(gpk)] = {
                     "open_home_win_prob": float(open_hwp) if open_hwp is not None else None,
                     "handle_ticket_div": float(htd) if htd is not None else None,
+                    "open_total_line": float(open_tot) if open_tot is not None else None,
+                    "over_handle_ticket_div": float(over_htd) if over_htd is not None else None,
                 }
-            print(f"  [12.4] Loaded meta-model serve inputs for {len(out)} game(s).")
+            print(f"  [12.4/12.12] Loaded meta-model serve inputs for {len(out)} game(s).")
             return out
         finally:
             conn.close()
     except Exception as exc:  # noqa: BLE001
-        print(f"  [12.4] Meta-model serve inputs unavailable ({exc}); meta columns will be NULL.")
+        print(f"  [12.4/12.12] Meta-model serve inputs unavailable ({exc}); meta columns will be NULL.")
         return {}
 
 
@@ -811,9 +831,15 @@ def _write_predictions_to_snowflake(
     # the meta columns NULL. Loaded once per serve; both fall back gracefully (NULL) if absent.
     _serve_meta = (prediction_type == "morning") and not is_backfill
     meta_inputs = _load_meta_serve_inputs(target_date) if _serve_meta else {}
-    _meta_trace, _meta_scaler = load_latest_meta_model() if _serve_meta else (None, None)
+    _meta_trace, _meta_scaler = load_latest_meta_model("h2h") if _serve_meta else (None, None)
+    # Story 12.12 — the totals CLV meta-model is a separate per-market artifact; serve its
+    # P(CLV>0) into the totals_meta_* columns. Same morning-only / open-line-gated / fail-open
+    # regime as h2h. Absent totals artifact → totals_meta_* stay NULL (no crash).
+    _meta_trace_tot, _meta_scaler_tot = load_latest_meta_model("totals") if _serve_meta else (None, None)
     if _serve_meta and _meta_trace is None:
-        print("  [12.4] No trained meta-model artifact found; meta columns will be NULL.")
+        print("  [12.4] No trained H2H meta-model artifact found; meta_* columns will be NULL.")
+    if _serve_meta and _meta_trace_tot is None:
+        print("  [12.12] No trained totals meta-model artifact found; totals_meta_* columns will be NULL.")
     _n_serving_guard = 0    # Story 30.3 — games abstained for value-degraded serving
     _n_lineup_deferred = 0  # Story 30.3 — pre-lineup games whose edge defers to the post_lineup re-score
     # Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate (one check, not per game).
@@ -954,6 +980,26 @@ def _write_predictions_to_snowflake(
                     print(f"  [12.4] meta-model serve failed for game {gpk_val} "
                           f"({_meta_exc}); meta columns NULL.")
 
+        # Story 12.12 — totals CLV meta-model: P(close total moves toward our O/U side) + 80% CI.
+        # Same morning-only, open-line-gated, fail-open regime as h2h; edge = pred_total_runs −
+        # open_total_line. Written to the separate totals_meta_* columns (one row per game).
+        meta_tot = {}
+        if _meta_trace_tot is not None and gpk_val is not None:
+            _mi = meta_inputs.get(int(gpk_val))
+            if _mi and _mi.get("open_total_line") is not None:
+                try:
+                    meta_tot = compute_meta_model_prediction(
+                        {
+                            "model_total": float(loc_tot[i]),
+                            "open_total_line": _mi["open_total_line"],
+                            "handle_ticket_div": _mi.get("over_handle_ticket_div"),
+                        },
+                        _meta_trace_tot, _meta_scaler_tot,
+                    ) or {}
+                except Exception as _meta_exc:  # noqa: BLE001
+                    print(f"  [12.12] totals meta-model serve failed for game {gpk_val} "
+                          f"({_meta_exc}); totals_meta_* columns NULL.")
+
         # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
         ood_row = {
             "bullpen_mu_home": (game_bullpen or {}).get("bullpen_mu_home"),
@@ -1038,13 +1084,20 @@ def _write_predictions_to_snowflake(
             "win_prob_ci_low":           wp_unc.get("win_prob_ci_low"),
             "win_prob_ci_high":          wp_unc.get("win_prob_ci_high"),
             "win_prob_ci_width":         wp_unc.get("win_prob_ci_width"),
-            # Story 12.4 — Bayesian CLV meta-model: P(close moves toward our side) + 80% CI.
+            # Story 12.4 — Bayesian CLV meta-model (H2H): P(close moves toward our side) + 80% CI.
             # NULL on post_lineup/backfill and on games with no Bovada open line (abstain).
             "meta_p_clv_positive":       meta.get("meta_p_clv_positive"),
             "meta_ci_low":               meta.get("meta_ci_low"),
             "meta_ci_high":              meta.get("meta_ci_high"),
             "meta_ci_width":             meta.get("meta_ci_width"),
             "meta_n_games_trained":      meta.get("meta_n_games_trained"),
+            # Story 12.12 — Bayesian CLV meta-model (TOTALS): P(close total moves to our O/U side).
+            # Separate columns (one row per game carries both markets); same NULL/abstain regime.
+            "totals_meta_p_clv_positive": meta_tot.get("meta_p_clv_positive"),
+            "totals_meta_ci_low":         meta_tot.get("meta_ci_low"),
+            "totals_meta_ci_high":        meta_tot.get("meta_ci_high"),
+            "totals_meta_ci_width":       meta_tot.get("meta_ci_width"),
+            "totals_meta_n_games_trained": meta_tot.get("meta_n_games_trained"),
             # A1.10 — feature-source observability
             "data_source":               _s(df_today, "data_source", i),
             "feature_coverage_score":    _feature_coverage_score(df_today, i),
@@ -1157,6 +1210,11 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_high FLOAT")             # Story 12.4
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_width FLOAT")            # Story 12.4
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_n_games_trained INTEGER")   # Story 12.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_p_clv_positive FLOAT")     # Story 12.12
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_low FLOAT")             # Story 12.12
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_high FLOAT")            # Story 12.12
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_width FLOAT")           # Story 12.12
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_n_games_trained INTEGER")  # Story 12.12
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")  # Story 30.15
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_ci_width FLOAT")   # Story 22.4
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")      # Story 22.4
