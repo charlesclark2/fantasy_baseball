@@ -825,6 +825,7 @@ def run_backfill(
     min_snapshots: int = 2,
     region: str = "us",
     parquet_out: Path | None = None,
+    force: bool = False,
 ) -> None:
     if parquet_out is not None:
         parquet_out.mkdir(parents=True, exist_ok=True)
@@ -854,16 +855,29 @@ def run_backfill(
     # In all-books mode, decide skip/coverage against the anchor book (it's present on
     # most games); a date/snapshot already covered for the anchor means we'd re-pull the
     # whole region for no new anchor data, so skipping it saves credits.
-    coverage_book = COVERAGE_ANCHOR if bookmaker == ALL_BOOKS else bookmaker
-    log.info("Checking coverage of already-loaded snapshots (min_snapshots=%d, anchor=%s) ...",
-             min_snapshots, coverage_book)
-    dates_sufficient = fetch_dates_with_sufficient_coverage(
-        conn, start_date, end_date, coverage_book, min_snapshots=min_snapshots
-    )
-    log.info("  %d date(s) already have ≥%d snapshots — will skip entirely",
-             len(dates_sufficient), min_snapshots)
-    already_loaded = fetch_already_loaded(conn, start_date, end_date, coverage_book)
-    log.info("  %d (game_date, snapshot_ts) pair(s) already loaded — will skip individual calls", len(already_loaded))
+    #
+    # --force bypasses BOTH skips: the anchor-book coverage check is wrong for a
+    # RE-DENSIFICATION pass (adding new regions/books/timestamps on top of an existing
+    # sparse backfill) — bovada already being dense made every date skip and starved the
+    # new us2 + full-eu/Pinnacle pulls. With --force every (date × timestamp) call fires;
+    # the MERGE is idempotent on the natural key, so re-pulled rows update in place and the
+    # genuinely-new books/timestamps insert.
+    if force:
+        log.info("--force: bypassing coverage/already-loaded skips — every (date × timestamp) "
+                 "call will fire (re-pulls are idempotent MERGEs).")
+        dates_sufficient: set = set()
+        already_loaded: set = set()
+    else:
+        coverage_book = COVERAGE_ANCHOR if bookmaker == ALL_BOOKS else bookmaker
+        log.info("Checking coverage of already-loaded snapshots (min_snapshots=%d, anchor=%s) ...",
+                 min_snapshots, coverage_book)
+        dates_sufficient = fetch_dates_with_sufficient_coverage(
+            conn, start_date, end_date, coverage_book, min_snapshots=min_snapshots
+        )
+        log.info("  %d date(s) already have ≥%d snapshots — will skip entirely",
+                 len(dates_sufficient), min_snapshots)
+        already_loaded = fetch_already_loaded(conn, start_date, end_date, coverage_book)
+        log.info("  %d (game_date, snapshot_ts) pair(s) already loaded — will skip individual calls", len(already_loaded))
 
     total_calls        = len(game_dates) * len(timestamps)
     call_num           = 0
@@ -1083,6 +1097,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help=(
+            "Bypass the anchor-book coverage/already-loaded skips and fire EVERY "
+            "(date × timestamp) call. Use this for a RE-DENSIFICATION pass (adding new "
+            "regions/books/timestamps on top of an existing backfill) — otherwise an "
+            "already-dense anchor book (e.g. bovada) makes every date skip. Re-pulls are "
+            "idempotent MERGEs, so existing rows update and new books/timestamps insert."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         default=False,
@@ -1133,6 +1159,12 @@ def main() -> None:
         print(f"Estimated credits consumed    : ~{approx_credits}")
         if args.bookmaker == ALL_BOOKS:
             print(f"Bookmaker mode                : ALL books in region(s)={args.region} (same cost, ~15+ books/call)")
+        if args.force:
+            print("Skip mode                     : --force (no coverage/already-loaded skips — "
+                  "every call fires; the credit estimate above is the full spend)")
+        else:
+            print("Skip mode                     : default (skips dates/timestamps the anchor "
+                  "book already covers; actual spend will be LOWER — use --force to re-densify)")
         if args.parquet_out:
             print(f"Load mode                     : DEFERRED (parquet → {args.parquet_out} → one COPY+MERGE; warehouse cold during fetch)")
         print("\nDry-run complete.")
@@ -1147,6 +1179,7 @@ def main() -> None:
         min_snapshots = args.min_snapshots,
         region        = args.region,
         parquet_out   = Path(args.parquet_out) if args.parquet_out else None,
+        force         = args.force,
     )
 
 

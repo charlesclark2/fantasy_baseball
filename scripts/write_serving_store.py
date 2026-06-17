@@ -266,7 +266,7 @@ totals AS (
         'totals'                                     AS market_type,
         b.totals_model_prob                          AS model_prob,
         b.over_prob_consensus                        AS bovada_devig_prob,
-        b.layer4_totals_over_signal                  AS edge,
+        ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,  -- prob-points edge (NOT layer4_totals_over_signal, which is runs: mu - line)
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
         NULL::FLOAT                                  AS win_prob_ci_low,
@@ -331,7 +331,7 @@ totals AS (
         'totals'                                     AS market_type,
         b.totals_model_prob                          AS model_prob,
         b.over_prob_consensus                        AS bovada_devig_prob,
-        b.layer4_totals_over_signal                  AS edge,
+        ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,  -- prob-points edge (NOT layer4_totals_over_signal, which is runs: mu - line)
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed,
         b.layer4_totals_decision <> 'abstain'        AS qualified_bet,
@@ -386,7 +386,7 @@ totals AS (
         'totals'                                    AS market_type,
         b.totals_model_prob                         AS model_prob,
         b.over_prob_consensus                       AS bovada_devig_prob,
-        b.totals_edge                               AS edge,
+        ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,  -- prob-points edge (totals_edge is unpopulated upstream)
         b.game_conviction_score,
         b.lineup_confirmed,
         NULL::FLOAT                                 AS win_prob_ci_low,
@@ -396,7 +396,7 @@ totals AS (
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
-    WHERE b.totals_edge IS NOT NULL
+    WHERE b.totals_model_prob IS NOT NULL AND b.over_prob_consensus IS NOT NULL
 )
 SELECT * FROM h2h UNION ALL SELECT * FROM totals
 ORDER BY game_date DESC, game_pk, market_type
@@ -834,7 +834,7 @@ h2h AS (
 totals AS (
     SELECT b.game_pk, b.game_date, 'totals' AS market_type,
         b.totals_model_prob AS model_prob, b.over_prob_consensus AS bovada_devig_prob,
-        b.layer4_totals_over_signal AS edge,
+        ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,  -- prob-points edge (NOT layer4_totals_over_signal, which is runs: mu - line)
         IFF(b.layer4_h2h_conviction_flag, 0.8, 0.4) AS game_conviction_score,
         b.lineup_confirmed, NULL::FLOAT AS win_prob_ci_low, NULL::FLOAT AS win_prob_ci_high,
         NULL::FLOAT AS win_prob_ci_width, NULL::INTEGER AS gate_signals_met,

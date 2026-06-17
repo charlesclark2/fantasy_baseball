@@ -570,7 +570,7 @@ totals AS (
         'totals'                                    AS market_type,
         b.totals_model_prob                         AS model_prob,
         b.over_prob_consensus                       AS bovada_devig_prob,
-        b.totals_edge                               AS edge,
+        ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,  -- prob-points edge (totals_edge is unpopulated upstream)
         b.game_conviction_score,
         b.gate_signals_met,
         b.lineup_confirmed,
@@ -586,7 +586,7 @@ totals AS (
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
-    WHERE b.totals_edge IS NOT NULL
+    WHERE b.totals_model_prob IS NOT NULL AND b.over_prob_consensus IS NOT NULL
 )
 SELECT * FROM h2h
 UNION ALL
