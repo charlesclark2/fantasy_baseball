@@ -13,6 +13,10 @@
       {
         "tag": "model",
         "text": "Pick details now include a posterior confidence tier (low / medium / high) derived from the model's calibrated uncertainty interval relative to the edge — high-confidence picks have a tight posterior relative to their edge size."
+      },
+      {
+        "tag": "model",
+        "text": "Pick detail pages now show a model conviction score and an 80% win-probability credible interval for h2h picks — a visual bar displaying how wide the model's uncertainty is, with the Bovada implied probability marked for comparison. Conviction and CI are confidence signals; they reflect model certainty, not a recommendation to bet."
       }
     ]
   },
