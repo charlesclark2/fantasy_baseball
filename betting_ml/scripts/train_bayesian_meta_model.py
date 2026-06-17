@@ -46,8 +46,10 @@ Run (hand-off — Snowflake + NUTS, ~1 min):
 """
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -135,7 +137,47 @@ def _posterior_logits(trace, Z: np.ndarray) -> np.ndarray:
     return b0[:, None] + betas @ Z.T                         # (S, n_games)
 
 
+_S3_BASE = "s3://baseball-betting-ml-artifacts/meta_model"
+
+
+def _convergence_action(max_rhat: float) -> str:
+    """Epic O.5 convergence gate on the weekly retrain.
+
+    Returns 'fail' (R-hat > 1.10 → block the S3 upload so serving keeps the last-good
+    trace, and exit non-zero so the Dagster alert fires), 'warn' (R-hat > 1.05 →
+    upload but flag for review), or 'ok'.
+    """
+    if max_rhat > 1.10:
+        return "fail"
+    if max_rhat > 1.05:
+        return "warn"
+    return "ok"
+
+
+def _upload_to_s3(trace_path: Path, scaler_path: Path, summary_path: Path, n: int) -> None:
+    """Upload the freshly-written trace + scaler + latest-summary to S3 (Epic O.5).
+
+    The per-n trace/scaler are immutable history; `meta_model_latest.json` is the
+    stable pointer the weekly job (and any serve-side S3 pull) reads for the newest n.
+    """
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(trace_path, f"{_S3_BASE}/{trace_path.name}")
+    upload_artifact(scaler_path, f"{_S3_BASE}/{scaler_path.name}")
+    upload_artifact(summary_path, f"{_S3_BASE}/meta_model_latest.json")
+    print(f"Uploaded trace+scaler+summary (n={n}) → {_S3_BASE}/")
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Train the Bayesian CLV meta-model (Story 12.4); weekly retrain via Epic O.5.")
+    parser.add_argument("--s3-upload", action="store_true",
+                        help="After writing locally, upload trace+scaler+summary to "
+                             f"{_S3_BASE}/. Used by the weekly Dagster job (Epic O.5).")
+    parser.add_argument("--min-games", type=int, default=50,
+                        help="Epic O.5 count gate: if the moved-game training population is "
+                             "below this, skip MCMC and exit 0 (never fail below threshold).")
+    args = parser.parse_args()
+
     import pymc as pm
     import arviz as az
     from sklearn.linear_model import LogisticRegression
@@ -152,6 +194,15 @@ def main() -> None:
     base_rate = float(df["clv_positive"].mean())
     print(f"Loaded {len(raw)} paired games; {n} moved (label base CLV+ rate {base_rate:.3f}); "
           f"{len(raw) - len(raw[raw['moved']])} flat dropped.")
+
+    # Epic O.5 count gate — never fail below threshold (the weekly Dagster op stays green
+    # until enough live CLV labels accrue). Gated on the trainer's ACTUAL training
+    # population (moved live-morning games), NOT mart_clv_labeled_games — the 12.4 surface
+    # is daily_model_predictions ⋈ mart_odds_line_movement (the contaminated backfill mart
+    # is deliberately bypassed; see Story 12.4 notes).
+    if n < args.min_games:
+        print(f"Insufficient CLV labels ({n}/{args.min_games}) — skipping MCMC.")
+        return
 
     Z, scaler = _standardize(df[FEATURES])
     y = df["clv_positive"].to_numpy(int)
@@ -212,7 +263,25 @@ def main() -> None:
     scaler["n_games"] = n
     scaler["base_rate"] = base_rate
     scaler["edge_median"] = df.attrs["edge_median"]
-    (_MODELS / f"meta_model_scaler_{n:04d}.json").write_text(json.dumps(scaler, indent=2))
+    scaler_path = _MODELS / f"meta_model_scaler_{n:04d}.json"
+    scaler_path.write_text(json.dumps(scaler, indent=2))
+
+    # ── Latest-summary sidecar (Epic O.5) ───────────────────────────────────────────
+    # Stable-key JSON the weekly Dagster op reads for run metadata (n_games / mean_ci_width
+    # / max_rhat) without opening the .nc, and the pointer to the newest n.
+    summary = {
+        "n_games": n,
+        "mean_ci_width": round(mean_ci_width, 4),
+        "max_rhat": round(max_rhat, 4),
+        "quartile_spread": round(quartile_spread, 4),
+        "in_sample_auc": round(in_auc, 4),
+        "gates": {"rhat": gate1, "ci_width": gate2, "quartile": gate3, "all_pass": all_pass},
+        "trace_file": trace_path.name,
+        "scaler_file": scaler_path.name,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    summary_path = _MODELS / "meta_model_latest.json"
+    summary_path.write_text(json.dumps(summary, indent=2))
 
     # ── Report ─────────────────────────────────────────────────────────────────────
     # Coefficient mean + 94% central credible interval straight from posterior samples
@@ -276,6 +345,18 @@ def main() -> None:
         f"Report  → {_OUT}",
         f"Trace   → {trace_path}",
     ]))
+
+    # ── Epic O.5: convergence gate + optional S3 upload ─────────────────────────────
+    action = _convergence_action(max_rhat)
+    if action == "fail":
+        print(f"FAILURE: max R-hat {max_rhat:.4f} > 1.10 — trace NOT uploaded; serving keeps "
+              f"the last-good trace. Exiting non-zero so the Dagster alert fires.")
+        sys.exit(1)
+    if action == "warn":
+        print(f"WARNING: max R-hat {max_rhat:.4f} > 1.05 — uploading but flagged for review.")
+
+    if args.s3_upload:
+        _upload_to_s3(trace_path, scaler_path, summary_path, n)
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ export interface ProbabilityBarProps {
   modelProb: number
   marketProb: number
   showLabels?: boolean
+  showCiLabels?: boolean
   showHighConviction?: boolean
   showTooltip?: boolean
   className?: string
@@ -24,10 +25,13 @@ export function ProbabilityBar({
   modelProb,
   marketProb,
   showLabels = true,
+  showCiLabels,
   showHighConviction = true,
   showTooltip = true,
   className,
 }: ProbabilityBarProps) {
+  // showCiLabels defaults to showLabels unless explicitly set
+  const _showCiLabels = showCiLabels ?? showLabels
   const hasCi = ciLow != null && ciHigh != null
 
   const isHighConviction = hasCi && ciLow > marketProb
@@ -102,7 +106,7 @@ export function ProbabilityBar({
       {/* Below-bar percentage labels */}
       {showLabels && (
         <div className="relative h-5 mt-1 text-[10px]">
-          {hasCi && (
+          {hasCi && _showCiLabels && (
             <>
               <span
                 className="absolute -translate-x-1/2 text-[#10b981]/80"
