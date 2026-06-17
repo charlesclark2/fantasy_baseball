@@ -96,6 +96,30 @@ def get_cache(cache_key: str, date_str: str) -> dict | None:
         _release(conn)
 
 
+def get_cache_latest(cache_key: str) -> dict | None:
+    """Return the most recently written payload for a key, ignoring cache_date.
+
+    Used for data that is 'latest available' rather than strictly date-scoped
+    (e.g. book-odds blobs where the most recent write is always the right one).
+    """
+    conn = _conn()
+    if conn is None:
+        return None
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT payload FROM api_cache WHERE cache_key = %s ORDER BY updated_at DESC LIMIT 1",
+                (cache_key,),
+            )
+            row = cur.fetchone()
+            return dict(row["payload"]) if row else None
+    except Exception:
+        logger.warning("PG get_cache_latest failed for key=%s", cache_key)
+        return None
+    finally:
+        _release(conn)
+
+
 def set_cache(cache_key: str, date_str: str, payload: dict, is_permanent: bool = False) -> None:
     """Upserts a payload into api_cache. is_permanent rows are never downgraded."""
     conn = _conn()

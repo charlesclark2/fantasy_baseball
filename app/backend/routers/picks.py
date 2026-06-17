@@ -1894,18 +1894,18 @@ def get_odds_comparison(game_pk: int) -> BookOddsComparison:
     This is a market transparency tool — our h2h/totals models have no demonstrated
     market edge, so EVs are informational only. All bets are manual.
     """
-    _today_str = datetime.now(_ET).date().isoformat()
     _pg_key = f"picks/book-odds/{game_pk}"
 
-    # PG primary read — Dagster pre-computes and writes this blob on the odds cadence
-    _pg_cached = pg.get_cache(_pg_key, _today_str)
+    # Book-odds are "latest available" — use get_cache_latest so blobs written for a prior
+    # date (e.g. during backfill or --date testing) are still served correctly.
+    _pg_cached = pg.get_cache_latest(_pg_key)
     if _pg_cached is not None and (_pg_cached.get("h2h") or _pg_cached.get("totals")):
         try:
             return BookOddsComparison(**_pg_cached)
         except Exception:
             logger.warning("PG book-odds invalid for game_pk=%s, returning empty", game_pk)
 
-    # If no PG data yet (book-odds write hasn't run today), return an empty shell so
+    # If no PG data yet (book-odds write hasn't run), return an empty shell so
     # the frontend can display gracefully. Do NOT query Snowflake live at request time.
     logger.info("No book-odds cache for game_pk=%s — returning empty payload", game_pk)
     return BookOddsComparison(game_pk=game_pk)

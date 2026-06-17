@@ -36,6 +36,7 @@ type BookOddsH2H = {
   ev_home: number | null
   edge_home: number | null
   kelly_home: number | null
+  odds_as_of: string | null
 }
 
 type BookOddsTotals = {
@@ -55,6 +56,7 @@ type BookOddsTotals = {
   ev_under: number | null
   edge_over: number | null
   kelly_over: number | null
+  odds_as_of: string | null
 }
 
 type BookOddsComparison = {
@@ -308,6 +310,16 @@ function edgeColor(edge: number | null | undefined): string {
   return "text-gray-400"
 }
 
+function fmtOddsTime(isoTs: string | null | undefined): string | null {
+  if (!isoTs) return null
+  try {
+    const d = new Date(isoTs.endsWith("Z") ? isoTs : isoTs + "Z")
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+  } catch {
+    return null
+  }
+}
+
 function BookOddsSection({
   bookOdds,
   homeFullName,
@@ -329,6 +341,9 @@ function BookOddsSection({
   const selTotals = bookOdds.totals.find((b) => b.book_key === selectedBook)
   const pinnacleH2H = bookOdds.h2h.find((b) => b.book_key === "pinnacle")
   const pinnacleTotals = bookOdds.totals.find((b) => b.book_key === "pinnacle")
+  // Most recent snapshot time across h2h and totals for the selected book
+  const oddsTimestamp = selH2H?.odds_as_of ?? selTotals?.odds_as_of ?? null
+  const oddsTimeLabel = fmtOddsTime(oddsTimestamp)
 
   const availableBooks = BOOK_ORDER.filter((k) => {
     const h = bookOdds.h2h.find((b) => b.book_key === k)
@@ -360,12 +375,23 @@ function BookOddsSection({
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="px-6 pb-5 space-y-4">
-          {/* Disclaimer */}
-          <p className="text-xs text-gray-600 leading-relaxed">
-            Select a sportsbook to see our model&apos;s probability vs that book&apos;s current line.{" "}
-            <span className="text-[#a78bfa]">Pinnacle</span> is the sharp low-vig anchor shown separately for reference.
-            EV is informational — these models have no verified market edge.
-          </p>
+          {/* Disclaimer + vig explainer */}
+          <div className="rounded-lg bg-[#111] border border-[#1e1e1e] px-4 py-3 space-y-2">
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Select a book to compare its line against our model. <span className="text-[#a78bfa] font-medium">Pinnacle</span> is shown as the sharp reference — it has the lowest vig (built-in fee) in the industry, so its implied probabilities are the most efficient.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1 pt-1">
+              <p className="text-[11px] text-gray-600 leading-snug">
+                <span className="text-gray-400 font-medium">Vig</span> — the bookmaker&apos;s built-in margin. If you add both sides&apos; implied probabilities they sum to more than 100% — that excess is the vig (typically 4–8% at US books, ~2% at Pinnacle).
+              </p>
+              <p className="text-[11px] text-gray-600 leading-snug">
+                <span className="text-gray-400 font-medium">Mkt %</span> — the book&apos;s implied probability with the vig removed, so both sides sum to 100%. This is the market&apos;s &quot;true&quot; estimate of each team&apos;s win probability.
+              </p>
+              <p className="text-[11px] text-gray-600 leading-snug">
+                <span className="text-gray-400 font-medium">EV</span> — expected profit per $1 wagered if our model is right. Positive EV is rare and does not guarantee a win. Our models have no demonstrated market edge — treat this as informational only.
+              </p>
+            </div>
+          </div>
 
           {/* Book selector */}
           <div className="flex flex-wrap gap-2">
@@ -389,6 +415,13 @@ function BookOddsSection({
             ))}
           </div>
 
+          {/* Odds freshness timestamp */}
+          {oddsTimeLabel && (
+            <p className="text-[11px] text-gray-600">
+              Lines as of <span className="text-gray-500">{oddsTimeLabel}</span> — updated hourly
+            </p>
+          )}
+
           {/* H2H comparison */}
           {hasH2H && selH2H && (
             <div>
@@ -399,7 +432,7 @@ function BookOddsSection({
                   <span className="text-[10px] text-gray-600 uppercase tracking-wider">Side</span>
                   <span className="text-[10px] text-gray-600 text-right">Price</span>
                   <span className="text-[10px] text-gray-600 text-right">
-                    <MetricTip label="Mkt %" tip="De-vigged (no-vig) implied probability from this book's moneyline prices." />
+                    <MetricTip label="Mkt %" tip="The book's implied win probability after removing their built-in margin (vig). Both sides sum to 100%." />
                   </span>
                   <span className="text-[10px] text-gray-600 text-right">Model %</span>
                   <span className="text-[10px] text-gray-600 text-right">
@@ -486,7 +519,7 @@ function BookOddsSection({
                   <span className="text-[10px] text-gray-600 uppercase tracking-wider">Side</span>
                   <span className="text-[10px] text-gray-600 text-right">Price</span>
                   <span className="text-[10px] text-gray-600 text-right">
-                    <MetricTip label="Mkt %" tip="De-vigged implied probability from this book's totals prices." />
+                    <MetricTip label="Mkt %" tip="The book's implied over/under probability after removing their built-in margin (vig). Both sides sum to 100%." />
                   </span>
                   <span className="text-[10px] text-gray-600 text-right">
                     <MetricTip label="Model %" tip="Our model P(over/under) computed at THIS book's total line via NegBin CDF — not the consensus line." />

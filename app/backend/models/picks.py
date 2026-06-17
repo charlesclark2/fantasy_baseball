@@ -345,6 +345,8 @@ class BookOddsH2H(BaseModel):
     # p_model - market_bet_pct (home)
     edge_home: float | None = None
     kelly_home: float | None = None
+    # ISO timestamp of the snapshot these prices came from
+    odds_as_of: str | None = None
 
 
 class BookOddsTotals(BaseModel):
@@ -367,6 +369,8 @@ class BookOddsTotals(BaseModel):
     ev_under: float | None = None
     edge_over: float | None = None
     kelly_over: float | None = None
+    # ISO timestamp of the snapshot these prices came from
+    odds_as_of: str | None = None
 
 
 class BookOddsComparison(BaseModel):

@@ -846,14 +846,17 @@ ORDER BY game_pk, market_type
 """
 
 
-# A0.4.32 — Latest multi-book odds snapshot per game (all 6 curated books)
+# A0.4.32 — Latest multi-book odds snapshot per game (all 6 curated books).
+# We pick the latest ingestion_ts where BOTH outcomes are present in the same
+# snapshot (snapshot-aligned), avoiding mixed-snapshot lines where a partial
+# feed update causes e.g. home +315 / away +139 (both positive — impossible).
 _BOOK_ODDS_BATCH = """
 WITH bridge AS (
     SELECT game_pk, event_id
     FROM baseball_data.betting.mart_game_odds_bridge
     WHERE game_pk IN ({game_pk_list})
 ),
-latest_odds AS (
+all_odds AS (
     SELECT
         o.event_id,
         o.bookmaker_key,
@@ -862,19 +865,42 @@ latest_odds AS (
         o.outcome_price_american,
         o.outcome_price_decimal,
         o.outcome_point,
-        o.is_home_outcome
+        o.is_home_outcome,
+        o.ingestion_ts
     FROM baseball_data.betting.mart_odds_outcomes o
     INNER JOIN bridge b ON b.event_id = o.event_id
     WHERE o.bookmaker_key IN ('betmgm', 'caesars', 'fanduel', 'draftkings', 'bovada', 'pinnacle')
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY o.event_id, o.bookmaker_key, o.market_key, o.outcome_name
-        ORDER BY o.ingestion_ts DESC
-    ) = 1
+),
+-- Latest ingestion_ts for which the full set of outcomes is present
+-- (h2h needs 2 sides, totals needs over+under). Prevents mixing a partial
+-- feed update (e.g. only home price updated) with a stale away price.
+complete_snapshots AS (
+    SELECT event_id, bookmaker_key, market_key, ingestion_ts
+    FROM all_odds
+    GROUP BY event_id, bookmaker_key, market_key, ingestion_ts
+    HAVING COUNT(DISTINCT outcome_name) >= 2
+),
+latest_complete AS (
+    SELECT event_id, bookmaker_key, market_key,
+           MAX(ingestion_ts) AS latest_ts
+    FROM complete_snapshots
+    GROUP BY event_id, bookmaker_key, market_key
+),
+latest_odds AS (
+    SELECT o.event_id, o.bookmaker_key, o.market_key, o.outcome_name,
+           o.outcome_price_american, o.outcome_price_decimal, o.outcome_point,
+           o.is_home_outcome, lc.latest_ts
+    FROM all_odds o
+    INNER JOIN latest_complete lc
+        ON  lc.event_id      = o.event_id
+        AND lc.bookmaker_key = o.bookmaker_key
+        AND lc.market_key    = o.market_key
+        AND lc.latest_ts     = o.ingestion_ts
 )
 SELECT b.game_pk,
        lo.bookmaker_key, lo.market_key, lo.outcome_name,
        lo.outcome_price_american, lo.outcome_price_decimal, lo.outcome_point,
-       lo.is_home_outcome
+       lo.is_home_outcome, lo.latest_ts
 FROM latest_odds lo
 JOIN bridge b ON b.event_id = lo.event_id
 ORDER BY b.game_pk, lo.bookmaker_key, lo.market_key, lo.outcome_name
@@ -1061,6 +1087,17 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
             if home_h2h and away_h2h and calib_win_prob is not None:
                 home_am = _int(home_h2h.get("OUTCOME_PRICE_AMERICAN"))
                 away_am = _int(away_h2h.get("OUTCOME_PRICE_AMERICAN"))
+                # Sanity: both sides positive = impossible moneyline (feed glitch).
+                # Treat as missing rather than showing nonsense EV.
+                if home_am is not None and away_am is not None and home_am > 0 and away_am > 0:
+                    log.warning(
+                        "Skipping %s h2h for game_pk=%s — both sides positive (%s/%s)",
+                        book_key, gp, home_am, away_am,
+                    )
+                    h2h_rows.append({"book_key": book_key, "book_name": book_name,
+                                     "is_sharp_reference": is_sharp})
+                    continue
+                h2h_odds_as_of = _ts(home_h2h.get("LATEST_TS"))
                 home_dec = _flt(home_h2h.get("OUTCOME_PRICE_DECIMAL"))
                 away_dec = _flt(away_h2h.get("OUTCOME_PRICE_DECIMAL"))
                 try:
@@ -1090,6 +1127,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "ev_home": round(ev_home, 4) if ev_home is not None else None,
                     "edge_home": round(edge_home, 4) if edge_home is not None else None,
                     "kelly_home": round(kelly_home, 4) if kelly_home is not None else None,
+                    "odds_as_of": h2h_odds_as_of,
                 })
             else:
                 # Book has no line for this game — include placeholder so frontend knows
@@ -1100,6 +1138,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "home_decimal": None, "away_decimal": None,
                     "market_bet_pct_home": None, "model_prob_home": None,
                     "ev_home": None, "edge_home": None, "kelly_home": None,
+                    "odds_as_of": None,
                 })
 
             # ── Totals ────────────────────────────────────────────────────────
@@ -1107,6 +1146,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
             over_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "over"), None)
             under_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "under"), None)
             if over_row and under_row and pred_mu is not None and totals_r is not None:
+                totals_odds_as_of = _ts(over_row.get("LATEST_TS"))
                 line = _flt(over_row.get("OUTCOME_POINT"))
                 over_am = _int(over_row.get("OUTCOME_PRICE_AMERICAN"))
                 under_am = _int(under_row.get("OUTCOME_PRICE_AMERICAN"))
@@ -1145,6 +1185,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "ev_under": round(ev_under, 4) if ev_under is not None else None,
                     "edge_over": round(edge_over, 4) if edge_over is not None else None,
                     "kelly_over": round(kelly_over, 4) if kelly_over is not None else None,
+                    "odds_as_of": totals_odds_as_of,
                 })
             else:
                 totals_rows.append({
@@ -1155,6 +1196,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "market_bet_pct_over": None, "model_prob_over": None,
                     "model_prob_under": None, "p_push": None,
                     "ev_over": None, "ev_under": None, "edge_over": None, "kelly_over": None,
+                    "odds_as_of": None,
                 })
 
         result[gp] = {
@@ -1680,6 +1722,20 @@ def main() -> int:
     # ── per-book odds comparison (A0.4.32) ──────────────────────────────────────
     if (run_all or getattr(args, "book_odds", False)) and pg:
         book_pks = list({r["GAME_PK"] for r in picks_rows} | {r["GAME_PK"] for r in ev_rows})
+        if not book_pks:
+            # Standalone --book-odds run (no --picks): resolve game_pks directly from predictions.
+            _standalone_pks_sql = """
+                SELECT DISTINCT game_pk
+                FROM baseball_data.betting_ml.daily_model_predictions
+                WHERE game_date = %(today)s
+                  AND prediction_type IN ('post_lineup', 'morning')
+            """
+            try:
+                pk_rows = _sf_query(sf, _standalone_pks_sql, {"today": today})
+                book_pks = [r["GAME_PK"] for r in pk_rows]
+                log.info("book-odds standalone: resolved %d game_pks for %s", len(book_pks), today)
+            except Exception:
+                log.warning("Failed to resolve standalone game_pks for book-odds")
         if book_pks:
             try:
                 book_odds_map = _compute_book_odds_payloads(sf, book_pks)
@@ -1691,7 +1747,7 @@ def main() -> int:
                 log.exception("Failed to write book-odds")
                 errors += 1
         else:
-            log.info("No game_pks resolved — skipping book-odds (run --picks first or alongside --book-odds)")
+            log.info("No game_pks resolved for %s — skipping book-odds", today)
 
     # ── team profiles ─────────────────────────────────────────────────────────
     if (run_all or args.teams) and pg:
