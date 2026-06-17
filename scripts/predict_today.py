@@ -42,6 +42,7 @@ from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.pick_explanations import build_pick_explanations  # Story 30.15
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
+from betting_ml.utils.sigma_gate import evaluate_sigma_gate              # Story 22.4
 from betting_ml.utils.probability_layer import (
     compute_posterior,
     compute_edge,
@@ -221,7 +222,15 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     -- total_runs / run_diff), with human labels + the served tier. Explains MODEL
     -- REASONING, not a betting edge (honesty guard; framed for the product, no
     -- win-rate claims). Unbounded VARCHAR so top-N payloads never truncate.
-    pick_explanation             VARCHAR
+    pick_explanation             VARCHAR,
+
+    -- Story 22.4 — uncertainty-aware selection. CI widths in probability space;
+    -- sigma_tier classifies each game's predictive confidence; abstain_reason
+    -- records WHY a game was assigned the 'abstain' tier (empty string otherwise).
+    totals_ci_width  FLOAT,
+    h2h_ci_width     FLOAT,
+    sigma_tier       VARCHAR(20),
+    abstain_reason   VARCHAR(200)
 )
 """
 
@@ -252,7 +261,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     discriminative_coverage, is_degraded, imputed_features,
     qualified_bet,
     pick_explanation,
-    is_backfill
+    is_backfill,
+    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason
 ) VALUES (
     %(model_version)s, %(inserted_at)s, %(score_date)s, %(prediction_type)s, %(lineup_confirmed)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -279,7 +289,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(discriminative_coverage)s, %(is_degraded)s, %(imputed_features)s,
     %(qualified_bet)s,
     %(pick_explanation)s,
-    %(is_backfill)s
+    %(is_backfill)s,
+    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s
 )
 """
 
@@ -860,6 +871,20 @@ def _write_predictions_to_snowflake(
         }
         gate_result = compute_bet_permission(str(gpk_val), ood_row)
 
+        # Story 22.4 — σ-aware selection: CI widths + sigma tier
+        _sg = evaluate_sigma_gate({
+            "pred_total_runs":       float(loc_tot[i]),
+            "pred_total_runs_scale": float(scale_tot[i]),
+            "total_line_consensus":  total_line_vals[i] if has_odds else None,
+            "calibrated_win_prob":   cal_win,
+            "p_home_win_ngboost":    ngb_win,
+            "p_home_win_classifier": clf_win,
+            "totals_edge":           tot_edge,
+            "h2h_edge":              h2h_edge,
+            "totals_kelly_fraction": tot_kelly,
+            "h2h_kelly_fraction":    h2h_kelly,
+        })
+
         rows.append(_sanitize({
             "model_version":          MODEL_VERSION,
             "inserted_at":            inserted_at,
@@ -944,6 +969,11 @@ def _write_predictions_to_snowflake(
                 if (pick_explanations and i < len(pick_explanations)) else None
             ),
             "is_backfill": is_backfill,
+            # Story 22.4 — σ-aware selection
+            "totals_ci_width": _sg.get("totals_ci_width"),
+            "h2h_ci_width":    _sg.get("h2h_ci_width"),
+            "sigma_tier":      _sg.get("sigma_tier"),
+            "abstain_reason":  _sg.get("abstain_reason") or "",
         }))
 
     if _n_serving_guard:
@@ -1017,6 +1047,10 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_high FLOAT")          # Story 19.7
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_width FLOAT")         # Story 19.7
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")  # Story 30.15
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_ci_width FLOAT")   # Story 22.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")      # Story 22.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS sigma_tier VARCHAR(20)")  # Story 22.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS abstain_reason VARCHAR(200)")  # Story 22.4
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.
