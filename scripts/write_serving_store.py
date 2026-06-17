@@ -46,7 +46,22 @@ from dotenv import load_dotenv
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+from betting_ml.utils.h2h_probability import devig_home_prob
+from betting_ml.utils.totals_probability import devig_over_prob, compute_over_under_probs
+from betting_ml.utils.probability_layer import compute_kelly
+
 load_dotenv()
+
+# A0.4.32 — curated book set (verified live 2026-06-17)
+_BOOK_DISPLAY: dict[str, str] = {
+    "pinnacle": "Pinnacle",
+    "betmgm": "BetMGM",
+    "caesars": "Caesars",
+    "fanduel": "FanDuel",
+    "draftkings": "DraftKings",
+    "bovada": "Bovada",
+}
+_BOOK_ORDER = list(_BOOK_DISPLAY.keys())  # Pinnacle first (sharp reference)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
@@ -831,6 +846,58 @@ ORDER BY game_pk, market_type
 """
 
 
+# A0.4.32 — Latest multi-book odds snapshot per game (all 6 curated books)
+_BOOK_ODDS_BATCH = """
+WITH bridge AS (
+    SELECT game_pk, event_id
+    FROM baseball_data.betting.mart_game_odds_bridge
+    WHERE game_pk IN ({game_pk_list})
+),
+latest_odds AS (
+    SELECT
+        o.event_id,
+        o.bookmaker_key,
+        o.market_key,
+        o.outcome_name,
+        o.outcome_price_american,
+        o.outcome_price_decimal,
+        o.outcome_point,
+        o.is_home_outcome
+    FROM baseball_data.betting.mart_odds_outcomes o
+    INNER JOIN bridge b ON b.event_id = o.event_id
+    WHERE o.bookmaker_key IN ('betmgm', 'caesars', 'fanduel', 'draftkings', 'bovada', 'pinnacle')
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY o.event_id, o.bookmaker_key, o.market_key, o.outcome_name
+        ORDER BY o.ingestion_ts DESC
+    ) = 1
+)
+SELECT b.game_pk,
+       lo.bookmaker_key, lo.market_key, lo.outcome_name,
+       lo.outcome_price_american, lo.outcome_price_decimal, lo.outcome_point,
+       lo.is_home_outcome
+FROM latest_odds lo
+JOIN bridge b ON b.event_id = lo.event_id
+ORDER BY b.game_pk, lo.bookmaker_key, lo.market_key, lo.outcome_name
+"""
+
+# A0.4.32 — Model distribution params for per-book P(over) recomputation
+_MODEL_DIST_BATCH = """
+WITH ranked AS (
+    SELECT
+        game_pk, calibrated_win_prob, pred_total_runs, totals_r, home_team, away_team,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                     inserted_at DESC
+        ) AS _rn
+    FROM baseball_data.betting_ml.daily_model_predictions
+    WHERE game_pk IN ({game_pk_list})
+)
+SELECT game_pk, calibrated_win_prob, pred_total_runs, totals_r, home_team, away_team
+FROM ranked WHERE _rn = 1
+"""
+
+
 # ── Payload builders ──────────────────────────────────────────────────────────
 
 def _ts(val) -> str | None:
@@ -944,6 +1011,163 @@ def _build_performance_payload(rows: list[dict], source: str) -> dict:
         "net_pnl_kelly": r.get("NET_PNL_KELLY"), "sharpe_ratio": r.get("SHARPE_RATIO"),
         "source": source,
     }
+
+
+def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
+    """Fetch per-book odds + model distribution params; compute EV/edge/kelly Python-side.
+
+    Returns {game_pk: book_odds_payload} where the payload matches BookOddsComparison schema.
+    Gracefully skips books with incomplete lines rather than erroring.
+    """
+    if not game_pks:
+        return {}
+
+    odds_rows = _sf_query_batch(sf, _BOOK_ODDS_BATCH, game_pks)
+    dist_rows = _sf_query_batch(sf, _MODEL_DIST_BATCH, game_pks)
+
+    # Index model params by game_pk
+    dist_by_pk: dict[int, dict] = {r["GAME_PK"]: r for r in dist_rows}
+
+    # Group odds by game_pk → bookmaker_key → market_key → list[row]
+    odds_by_pk: dict[int, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for row in odds_rows:
+        gp = row["GAME_PK"]
+        bk = str(row["BOOKMAKER_KEY"]).lower()
+        mk = str(row["MARKET_KEY"]).lower()
+        odds_by_pk[gp][bk][mk].append(row)
+
+    result: dict[int, dict] = {}
+
+    for gp in game_pks:
+        dist = dist_by_pk.get(gp)
+        calib_win_prob = _flt(dist.get("CALIBRATED_WIN_PROB")) if dist else None
+        pred_mu = _flt(dist.get("PRED_TOTAL_RUNS")) if dist else None
+        totals_r = _flt(dist.get("TOTALS_R")) if dist else None
+        home_team = dist.get("HOME_TEAM") if dist else None
+        away_team = dist.get("AWAY_TEAM") if dist else None
+
+        h2h_rows: list[dict] = []
+        totals_rows: list[dict] = []
+
+        for book_key in _BOOK_ORDER:
+            book_name = _BOOK_DISPLAY[book_key]
+            is_sharp = book_key == "pinnacle"
+            book_odds = odds_by_pk[gp].get(book_key, {})
+
+            # ── H2H ──────────────────────────────────────────────────────────
+            h2h_market = book_odds.get("h2h", [])
+            home_h2h = next((r for r in h2h_market if r.get("IS_HOME_OUTCOME")), None)
+            away_h2h = next((r for r in h2h_market if not r.get("IS_HOME_OUTCOME")), None)
+            if home_h2h and away_h2h and calib_win_prob is not None:
+                home_am = _int(home_h2h.get("OUTCOME_PRICE_AMERICAN"))
+                away_am = _int(away_h2h.get("OUTCOME_PRICE_AMERICAN"))
+                home_dec = _flt(home_h2h.get("OUTCOME_PRICE_DECIMAL"))
+                away_dec = _flt(away_h2h.get("OUTCOME_PRICE_DECIMAL"))
+                try:
+                    mkt_pct_home = float(devig_home_prob(home_am, away_am))
+                except Exception:
+                    mkt_pct_home = None
+                ev_home = None
+                edge_home = None
+                kelly_home = None
+                if mkt_pct_home is not None and not (mkt_pct_home != mkt_pct_home):  # not NaN
+                    edge_home = calib_win_prob - mkt_pct_home
+                    if home_dec is not None:
+                        ev_home = calib_win_prob * (home_dec - 1.0) - (1.0 - calib_win_prob)
+                    try:
+                        kelly_home = compute_kelly(edge_home, mkt_pct_home) if mkt_pct_home > 0 else None
+                    except Exception:
+                        kelly_home = None
+                else:
+                    mkt_pct_home = None
+                h2h_rows.append({
+                    "book_key": book_key, "book_name": book_name,
+                    "is_sharp_reference": is_sharp,
+                    "home_american": home_am, "away_american": away_am,
+                    "home_decimal": home_dec, "away_decimal": away_dec,
+                    "market_bet_pct_home": round(mkt_pct_home, 4) if mkt_pct_home is not None else None,
+                    "model_prob_home": round(calib_win_prob, 4),
+                    "ev_home": round(ev_home, 4) if ev_home is not None else None,
+                    "edge_home": round(edge_home, 4) if edge_home is not None else None,
+                    "kelly_home": round(kelly_home, 4) if kelly_home is not None else None,
+                })
+            else:
+                # Book has no line for this game — include placeholder so frontend knows
+                h2h_rows.append({
+                    "book_key": book_key, "book_name": book_name,
+                    "is_sharp_reference": is_sharp,
+                    "home_american": None, "away_american": None,
+                    "home_decimal": None, "away_decimal": None,
+                    "market_bet_pct_home": None, "model_prob_home": None,
+                    "ev_home": None, "edge_home": None, "kelly_home": None,
+                })
+
+            # ── Totals ────────────────────────────────────────────────────────
+            tot_market = book_odds.get("totals", [])
+            over_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "over"), None)
+            under_row = next((r for r in tot_market if str(r.get("OUTCOME_NAME", "")).lower() == "under"), None)
+            if over_row and under_row and pred_mu is not None and totals_r is not None:
+                line = _flt(over_row.get("OUTCOME_POINT"))
+                over_am = _int(over_row.get("OUTCOME_PRICE_AMERICAN"))
+                under_am = _int(under_row.get("OUTCOME_PRICE_AMERICAN"))
+                over_dec = _flt(over_row.get("OUTCOME_PRICE_DECIMAL"))
+                under_dec = _flt(under_row.get("OUTCOME_PRICE_DECIMAL"))
+                try:
+                    mkt_pct_over = float(devig_over_prob(over_am, under_am))
+                except Exception:
+                    mkt_pct_over = None
+                p_over = p_under = p_push = ev_over = ev_under = edge_over = kelly_over = None
+                if line is not None and mkt_pct_over is not None and not (mkt_pct_over != mkt_pct_over):
+                    try:
+                        p_over, p_under, p_push = compute_over_under_probs(pred_mu, totals_r, line)
+                        edge_over = p_over - mkt_pct_over
+                        if over_dec is not None:
+                            ev_over = p_over * (over_dec - 1.0) - (1.0 - p_over)
+                        if under_dec is not None:
+                            ev_under = p_under * (under_dec - 1.0) - (1.0 - p_under)
+                        if mkt_pct_over > 0:
+                            kelly_over = compute_kelly(edge_over, mkt_pct_over)
+                    except Exception:
+                        pass
+                else:
+                    mkt_pct_over = None
+                totals_rows.append({
+                    "book_key": book_key, "book_name": book_name,
+                    "is_sharp_reference": is_sharp,
+                    "line": line,
+                    "over_american": over_am, "under_american": under_am,
+                    "over_decimal": over_dec, "under_decimal": under_dec,
+                    "market_bet_pct_over": round(mkt_pct_over, 4) if mkt_pct_over is not None else None,
+                    "model_prob_over": round(p_over, 4) if p_over is not None else None,
+                    "model_prob_under": round(p_under, 4) if p_under is not None else None,
+                    "p_push": round(p_push, 4) if p_push is not None else None,
+                    "ev_over": round(ev_over, 4) if ev_over is not None else None,
+                    "ev_under": round(ev_under, 4) if ev_under is not None else None,
+                    "edge_over": round(edge_over, 4) if edge_over is not None else None,
+                    "kelly_over": round(kelly_over, 4) if kelly_over is not None else None,
+                })
+            else:
+                totals_rows.append({
+                    "book_key": book_key, "book_name": book_name,
+                    "is_sharp_reference": is_sharp,
+                    "line": None, "over_american": None, "under_american": None,
+                    "over_decimal": None, "under_decimal": None,
+                    "market_bet_pct_over": None, "model_prob_over": None,
+                    "model_prob_under": None, "p_push": None,
+                    "ev_over": None, "ev_under": None, "edge_over": None, "kelly_over": None,
+                })
+
+        result[gp] = {
+            "game_pk": gp,
+            "home_team": home_team,
+            "away_team": away_team,
+            "pred_total_runs": round(pred_mu, 2) if pred_mu is not None else None,
+            "totals_r": round(totals_r, 4) if totals_r is not None else None,
+            "h2h": h2h_rows,
+            "totals": totals_rows,
+        }
+
+    return result
 
 
 def _assemble_game_detail_payloads(sf, game_pks: list[int], final_game_pks: set[int]) -> dict[int, tuple[dict, bool]]:
@@ -1311,6 +1535,14 @@ def _parse_args() -> argparse.Namespace:
         "--players", action="store_true",
         help="Write player profile blobs.",
     )
+    parser.add_argument(
+        "--book-odds", action="store_true",
+        help="Write per-book odds comparison blobs (A0.4.32). Runs alongside --picks.",
+    )
+    parser.add_argument(
+        "--date", default=None,
+        help="Override today's date (YYYY-MM-DD). Useful for backfilling or testing with yesterday's predictions.",
+    )
     return parser.parse_args()
 
 
@@ -1318,9 +1550,10 @@ def main() -> int:
     args = _parse_args()
     # If no section flags given, run everything.
     run_all = not any([args.picks, args.game_detail, args.history,
-                       args.performance, args.teams, args.players])
+                       args.performance, args.teams, args.players,
+                       getattr(args, "book_odds", False)])
 
-    today = date.today().isoformat()
+    today = args.date if args.date else date.today().isoformat()
     bucket = os.environ.get("CACHE_BUCKET")
 
     try:
@@ -1443,6 +1676,22 @@ def main() -> int:
                 errors += 1
         elif not game_pks:
             log.info("No game_pks resolved — skipping game detail (run --picks first or alongside --game-detail)")
+
+    # ── per-book odds comparison (A0.4.32) ──────────────────────────────────────
+    if (run_all or getattr(args, "book_odds", False)) and pg:
+        book_pks = list({r["GAME_PK"] for r in picks_rows} | {r["GAME_PK"] for r in ev_rows})
+        if book_pks:
+            try:
+                book_odds_map = _compute_book_odds_payloads(sf, book_pks)
+                for gp, payload in book_odds_map.items():
+                    cache_key = f"picks/book-odds/{gp}"
+                    _pg_set_cache(pg, cache_key, today, payload, is_permanent=False)
+                log.info("PG: book-odds written for %d games", len(book_odds_map))
+            except Exception:
+                log.exception("Failed to write book-odds")
+                errors += 1
+        else:
+            log.info("No game_pks resolved — skipping book-odds (run --picks first or alongside --book-odds)")
 
     # ── team profiles ─────────────────────────────────────────────────────────
     if (run_all or args.teams) and pg:

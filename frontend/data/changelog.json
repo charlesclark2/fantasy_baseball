@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-06-17",
+    "items": [
+      {
+        "tag": "new",
+        "text": "Book Comparison panel added to every game detail page — select from BetMGM, Caesars, FanDuel, DraftKings, Bovada, or Pinnacle and see that book's moneyline and totals prices alongside the model's probability, the book's de-vigged implied market %, and expected value per $1. Pinnacle is always shown as the sharp low-vig reference anchor. This is a market transparency tool; our models have no demonstrated market edge and all bets are manual."
+      }
+    ]
+  },
+  {
     "week": "2026-06-16",
     "items": [
       {

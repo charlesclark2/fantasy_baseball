@@ -321,3 +321,61 @@ class GameDetailResponse(BaseModel):
     # Story 30.15 — model explanation
     pick_explanation: PickExplanationPayload | None = None
     pick_narrative: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# A0.4.32 — Per-book odds comparison
+# ---------------------------------------------------------------------------
+
+class BookOddsH2H(BaseModel):
+    """Per-book h2h comparison row."""
+    book_key: str
+    book_name: str
+    is_sharp_reference: bool = False   # True for Pinnacle
+    home_american: int | None = None
+    away_american: int | None = None
+    home_decimal: float | None = None
+    away_decimal: float | None = None
+    # De-vigged (no-vig) implied probability — home side
+    market_bet_pct_home: float | None = None
+    # Model calibrated_win_prob (home)
+    model_prob_home: float | None = None
+    # EV per $1 on home side: p_model*(dec-1)-(1-p_model)
+    ev_home: float | None = None
+    # p_model - market_bet_pct (home)
+    edge_home: float | None = None
+    kelly_home: float | None = None
+
+
+class BookOddsTotals(BaseModel):
+    """Per-book totals comparison row."""
+    book_key: str
+    book_name: str
+    is_sharp_reference: bool = False
+    line: float | None = None
+    over_american: int | None = None
+    under_american: int | None = None
+    over_decimal: float | None = None
+    under_decimal: float | None = None
+    # De-vigged implied P(over)
+    market_bet_pct_over: float | None = None
+    # Model P(over) re-computed at THIS book's line via NegBin CDF
+    model_prob_over: float | None = None
+    model_prob_under: float | None = None
+    p_push: float | None = None
+    ev_over: float | None = None
+    ev_under: float | None = None
+    edge_over: float | None = None
+    kelly_over: float | None = None
+
+
+class BookOddsComparison(BaseModel):
+    """Full per-book comparison for one game (h2h + totals, all six books)."""
+    game_pk: int
+    home_team: str | None = None
+    away_team: str | None = None
+    # NegBin params used for totals recomputation (transparency)
+    pred_total_runs: float | None = None
+    totals_r: float | None = None
+    h2h: list[BookOddsH2H] = []
+    totals: list[BookOddsTotals] = []

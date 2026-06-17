@@ -19,6 +19,54 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import dynamic from "next/dynamic"
 import type { PickExplanationPayload } from "@/components/pick-explanation"
 
+// ---------------------------------------------------------------------------
+// A0.4.32 — Book odds comparison types
+// ---------------------------------------------------------------------------
+
+type BookOddsH2H = {
+  book_key: string
+  book_name: string
+  is_sharp_reference: boolean
+  home_american: number | null
+  away_american: number | null
+  home_decimal: number | null
+  away_decimal: number | null
+  market_bet_pct_home: number | null
+  model_prob_home: number | null
+  ev_home: number | null
+  edge_home: number | null
+  kelly_home: number | null
+}
+
+type BookOddsTotals = {
+  book_key: string
+  book_name: string
+  is_sharp_reference: boolean
+  line: number | null
+  over_american: number | null
+  under_american: number | null
+  over_decimal: number | null
+  under_decimal: number | null
+  market_bet_pct_over: number | null
+  model_prob_over: number | null
+  model_prob_under: number | null
+  p_push: number | null
+  ev_over: number | null
+  ev_under: number | null
+  edge_over: number | null
+  kelly_over: number | null
+}
+
+type BookOddsComparison = {
+  game_pk: number
+  home_team: string | null
+  away_team: string | null
+  pred_total_runs: number | null
+  totals_r: number | null
+  h2h: BookOddsH2H[]
+  totals: BookOddsTotals[]
+}
+
 const PickExplanationSection = dynamic(
   () => import("@/components/pick-explanation").then((m) => ({ default: m.PickExplanationSection })),
   { ssr: false, loading: () => null },
@@ -227,6 +275,314 @@ function fmtGameTime(utc: string | null): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// A0.4.32 — BookOddsSection helpers + component
+// ---------------------------------------------------------------------------
+
+const BOOK_ORDER = ["pinnacle", "betmgm", "caesars", "fanduel", "draftkings", "bovada"]
+const BOOK_LABELS: Record<string, string> = {
+  pinnacle: "Pinnacle",
+  betmgm: "BetMGM",
+  caesars: "Caesars",
+  fanduel: "FanDuel",
+  draftkings: "DraftKings",
+  bovada: "Bovada",
+}
+
+function fmtEV(ev: number | null | undefined): string {
+  if (ev == null) return "—"
+  const pct = (ev * 100).toFixed(1)
+  return ev >= 0 ? `+${pct}%` : `${pct}%`
+}
+
+function evColor(ev: number | null | undefined): string {
+  if (ev == null) return "text-gray-500"
+  if (ev > 0.01) return "text-[#10b981]"
+  if (ev < -0.01) return "text-[#f87171]"
+  return "text-gray-400"
+}
+
+function edgeColor(edge: number | null | undefined): string {
+  if (edge == null) return "text-gray-500"
+  if (edge > 0.01) return "text-[#10b981]"
+  if (edge < -0.01) return "text-[#f87171]"
+  return "text-gray-400"
+}
+
+function BookOddsSection({
+  bookOdds,
+  homeFullName,
+  awayFullName,
+  selectedBook,
+  setSelectedBook,
+}: {
+  bookOdds: BookOddsComparison
+  homeFullName: string
+  awayFullName: string
+  selectedBook: string
+  setSelectedBook: (b: string) => void
+}) {
+  const hasH2H = bookOdds.h2h.some((b) => b.home_american != null)
+  const hasTotals = bookOdds.totals.some((b) => b.line != null)
+  if (!hasH2H && !hasTotals) return null
+
+  const selH2H = bookOdds.h2h.find((b) => b.book_key === selectedBook)
+  const selTotals = bookOdds.totals.find((b) => b.book_key === selectedBook)
+  const pinnacleH2H = bookOdds.h2h.find((b) => b.book_key === "pinnacle")
+  const pinnacleTotals = bookOdds.totals.find((b) => b.book_key === "pinnacle")
+
+  const availableBooks = BOOK_ORDER.filter((k) => {
+    const h = bookOdds.h2h.find((b) => b.book_key === k)
+    const t = bookOdds.totals.find((b) => b.book_key === k)
+    return (h?.home_american != null) || (t?.line != null)
+  })
+
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden"
+    >
+      <CollapsibleTrigger asChild>
+        <button className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#1a1a1a] transition-colors text-left">
+          <span className="flex items-center gap-2.5">
+            <span className="w-1 h-5 rounded-full bg-[#10b981] shrink-0" />
+            <span className="text-base font-bold text-white">Book Comparison</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 text-gray-600 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                Market transparency tool. Our h2h and totals models have no demonstrated market edge — most EVs here will be ≈0 or negative after vig. Pinnacle is the sharpest, lowest-vig reference. All bets are manual and at your own discretion.
+              </TooltipContent>
+            </Tooltip>
+          </span>
+          <ChevronDown className="h-4 w-4 text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180 shrink-0" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-6 pb-5 space-y-4">
+          {/* Disclaimer */}
+          <p className="text-xs text-gray-600 leading-relaxed">
+            Select a sportsbook to see our model&apos;s probability vs that book&apos;s current line.{" "}
+            <span className="text-[#a78bfa]">Pinnacle</span> is the sharp low-vig anchor shown separately for reference.
+            EV is informational — these models have no verified market edge.
+          </p>
+
+          {/* Book selector */}
+          <div className="flex flex-wrap gap-2">
+            {availableBooks.map((key) => (
+              <button
+                key={key}
+                onClick={() => setSelectedBook(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                  selectedBook === key
+                    ? key === "pinnacle"
+                      ? "bg-[#a78bfa]/20 text-[#a78bfa] border-[#a78bfa]/40"
+                      : "bg-[#10b981]/15 text-[#10b981] border-[#10b981]/30"
+                    : "bg-transparent text-gray-500 border-[#262626] hover:border-[#333] hover:text-gray-300"
+                }`}
+              >
+                {BOOK_LABELS[key] ?? key}
+                {key === "pinnacle" && (
+                  <span className="ml-1 text-[9px] font-bold uppercase tracking-widest opacity-70">sharp</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* H2H comparison */}
+          {hasH2H && selH2H && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-gray-500 uppercase tracking-widest">Moneyline</p>
+              <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] overflow-hidden">
+                {/* Column headers */}
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2 border-b border-[#1a1a1a]">
+                  <span className="text-[10px] text-gray-600 uppercase tracking-wider">Side</span>
+                  <span className="text-[10px] text-gray-600 text-right">Price</span>
+                  <span className="text-[10px] text-gray-600 text-right">
+                    <MetricTip label="Mkt %" tip="De-vigged (no-vig) implied probability from this book's moneyline prices." />
+                  </span>
+                  <span className="text-[10px] text-gray-600 text-right">Model %</span>
+                  <span className="text-[10px] text-gray-600 text-right">
+                    <MetricTip label="EV" tip="Expected value per $1 wagered: model P × (decimal odds − 1) − (1 − model P). Negative after vig is the norm." />
+                  </span>
+                </div>
+
+                {/* Home row */}
+                {selH2H.home_american != null ? (
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2.5 border-b border-[#1a1a1a]">
+                    <span className="text-xs text-gray-300 truncate">{homeFullName} (home)</span>
+                    <span className={`text-xs font-mono font-semibold text-right ${(selH2H.home_american ?? 0) < 0 ? "text-[#f59e0b]" : "text-[#10b981]"}`}>
+                      {fmtAmerican(selH2H.home_american)}
+                    </span>
+                    <span className="text-xs font-mono text-gray-400 text-right">{fmtPct(selH2H.market_bet_pct_home)}</span>
+                    <span className="text-xs font-mono text-gray-300 text-right">{fmtPct(selH2H.model_prob_home)}</span>
+                    <span className={`text-xs font-mono font-semibold text-right ${evColor(selH2H.ev_home)}`}>
+                      {fmtEV(selH2H.ev_home)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="px-4 py-2.5 border-b border-[#1a1a1a]">
+                    <span className="text-xs text-gray-600">No line available from {BOOK_LABELS[selectedBook] ?? selectedBook}</span>
+                  </div>
+                )}
+
+                {/* Away row */}
+                {selH2H.away_american != null && selH2H.model_prob_home != null && (
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2.5">
+                    <span className="text-xs text-gray-300 truncate">{awayFullName} (away)</span>
+                    <span className={`text-xs font-mono font-semibold text-right ${(selH2H.away_american ?? 0) < 0 ? "text-[#f59e0b]" : "text-[#10b981]"}`}>
+                      {fmtAmerican(selH2H.away_american)}
+                    </span>
+                    <span className="text-xs font-mono text-gray-400 text-right">
+                      {selH2H.market_bet_pct_home != null ? fmtPct(1 - selH2H.market_bet_pct_home) : "—"}
+                    </span>
+                    <span className="text-xs font-mono text-gray-300 text-right">
+                      {fmtPct(1 - selH2H.model_prob_home)}
+                    </span>
+                    {(() => {
+                      const awayDec = selH2H.away_decimal
+                      const awayModelP = selH2H.model_prob_home != null ? 1 - selH2H.model_prob_home : null
+                      const awayEV = awayDec != null && awayModelP != null
+                        ? awayModelP * (awayDec - 1) - (1 - awayModelP) : null
+                      return (
+                        <span className={`text-xs font-mono font-semibold text-right ${evColor(awayEV)}`}>
+                          {fmtEV(awayEV)}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Pinnacle reference (always shown when selected book ≠ Pinnacle) */}
+              {selectedBook !== "pinnacle" && pinnacleH2H?.home_american != null && (
+                <div className="mt-2 rounded-lg border border-[#a78bfa]/20 bg-[#a78bfa]/5 px-4 py-3">
+                  <p className="text-[10px] text-[#a78bfa] font-semibold uppercase tracking-widest mb-2">Pinnacle (sharp reference)</p>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1">
+                    <span className="text-xs text-gray-400">
+                      {homeFullName}: <span className="font-mono">{fmtAmerican(pinnacleH2H.home_american)}</span>
+                      {pinnacleH2H.market_bet_pct_home != null && (
+                        <span className="text-gray-600 ml-1">({fmtPct(pinnacleH2H.market_bet_pct_home)} no-vig)</span>
+                      )}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {awayFullName}: <span className="font-mono">{fmtAmerican(pinnacleH2H.away_american)}</span>
+                      {pinnacleH2H.market_bet_pct_home != null && (
+                        <span className="text-gray-600 ml-1">({fmtPct(1 - pinnacleH2H.market_bet_pct_home)} no-vig)</span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Totals comparison */}
+          {hasTotals && selTotals && (
+            <div>
+              <p className="mb-2 text-xs font-semibold text-gray-500 uppercase tracking-widest">Totals</p>
+              <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] overflow-hidden">
+                <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2 border-b border-[#1a1a1a]">
+                  <span className="text-[10px] text-gray-600 uppercase tracking-wider">Side</span>
+                  <span className="text-[10px] text-gray-600 text-right">Price</span>
+                  <span className="text-[10px] text-gray-600 text-right">
+                    <MetricTip label="Mkt %" tip="De-vigged implied probability from this book's totals prices." />
+                  </span>
+                  <span className="text-[10px] text-gray-600 text-right">
+                    <MetricTip label="Model %" tip="Our model P(over/under) computed at THIS book's total line via NegBin CDF — not the consensus line." />
+                  </span>
+                  <span className="text-[10px] text-gray-600 text-right">
+                    <MetricTip label="EV" tip="Expected value per $1: model P × (decimal − 1) − (1 − model P). Negative after vig is normal." />
+                  </span>
+                </div>
+
+                {selTotals.line != null ? (
+                  <>
+                    {/* Over row */}
+                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2.5 border-b border-[#1a1a1a]">
+                      <span className="text-xs text-gray-300">Over {selTotals.line?.toFixed(1)}</span>
+                      <span className={`text-xs font-mono font-semibold text-right ${(selTotals.over_american ?? 0) < 0 ? "text-[#f59e0b]" : "text-[#10b981]"}`}>
+                        {fmtAmerican(selTotals.over_american)}
+                      </span>
+                      <span className="text-xs font-mono text-gray-400 text-right">{fmtPct(selTotals.market_bet_pct_over)}</span>
+                      <span className="text-xs font-mono text-gray-300 text-right">{fmtPct(selTotals.model_prob_over)}</span>
+                      <span className={`text-xs font-mono font-semibold text-right ${evColor(selTotals.ev_over)}`}>
+                        {fmtEV(selTotals.ev_over)}
+                      </span>
+                    </div>
+                    {/* Under row */}
+                    <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-x-4 px-4 py-2.5">
+                      <span className="text-xs text-gray-300">
+                        Under {selTotals.line?.toFixed(1)}
+                        {selTotals.p_push != null && selTotals.p_push > 0.001 && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="ml-1 text-gray-600 cursor-help text-[10px]">
+                                (push {fmtPct(selTotals.p_push)})
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[230px] text-xs leading-relaxed">
+                              Integer total line — model assigns {fmtPct(selTotals.p_push)} probability of an exact push (total = {selTotals.line}).
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </span>
+                      <span className={`text-xs font-mono font-semibold text-right ${(selTotals.under_american ?? 0) < 0 ? "text-[#f59e0b]" : "text-[#10b981]"}`}>
+                        {fmtAmerican(selTotals.under_american)}
+                      </span>
+                      <span className="text-xs font-mono text-gray-400 text-right">
+                        {selTotals.market_bet_pct_over != null ? fmtPct(1 - selTotals.market_bet_pct_over) : "—"}
+                      </span>
+                      <span className="text-xs font-mono text-gray-300 text-right">{fmtPct(selTotals.model_prob_under)}</span>
+                      <span className={`text-xs font-mono font-semibold text-right ${evColor(selTotals.ev_under)}`}>
+                        {fmtEV(selTotals.ev_under)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="px-4 py-2.5">
+                    <span className="text-xs text-gray-600">No totals line available from {BOOK_LABELS[selectedBook] ?? selectedBook}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Model total runs annotation */}
+              {bookOdds.pred_total_runs != null && (
+                <p className="mt-1.5 text-[10px] text-gray-600">
+                  Model projected total: {bookOdds.pred_total_runs.toFixed(1)} runs — P(over) is recomputed at each book&apos;s own line.
+                </p>
+              )}
+
+              {/* Pinnacle reference for totals */}
+              {selectedBook !== "pinnacle" && pinnacleTotals?.line != null && (
+                <div className="mt-2 rounded-lg border border-[#a78bfa]/20 bg-[#a78bfa]/5 px-4 py-3">
+                  <p className="text-[10px] text-[#a78bfa] font-semibold uppercase tracking-widest mb-2">Pinnacle (sharp reference)</p>
+                  <div className="flex flex-wrap gap-x-6 gap-y-1">
+                    <span className="text-xs text-gray-400">
+                      Line: <span className="font-mono">{pinnacleTotals.line.toFixed(1)}</span>
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      Over: <span className="font-mono">{fmtAmerican(pinnacleTotals.over_american)}</span>
+                      {pinnacleTotals.market_bet_pct_over != null && (
+                        <span className="text-gray-600 ml-1">({fmtPct(pinnacleTotals.market_bet_pct_over)} no-vig)</span>
+                      )}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      Under: <span className="font-mono">{fmtAmerican(pinnacleTotals.under_american)}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
 // CollapsibleSection
 // ---------------------------------------------------------------------------
 
@@ -421,6 +777,16 @@ export default function PickDetailPage() {
     staleTime: 5 * 60 * 1000,
     enabled: !!accessToken && !!gamePk,
   })
+
+  // A0.4.32 — per-book odds comparison (separate query; all 6 books in one payload)
+  const { data: bookOdds } = useQuery<BookOddsComparison>({
+    queryKey: ["book-odds", gamePk, accessToken],
+    queryFn: () => apiFetch(`/picks/${gamePk}/odds-comparison`, {}, accessToken),
+    staleTime: 15 * 60 * 1000,
+    enabled: !!accessToken && !!gamePk,
+  })
+
+  const [selectedBook, setSelectedBook] = useState<string>("pinnacle")
 
   const picks = data?.picks ?? []
   const firstPick = picks[0]
@@ -878,6 +1244,19 @@ export default function PickDetailPage() {
                     </div>
                   </div>
                 </CollapsibleSection>
+              )}
+
+              {/* ============================================================
+                  2b. A0.4.32 — Book Odds Comparison
+              ============================================================ */}
+              {bookOdds && (bookOdds.h2h.length > 0 || bookOdds.totals.length > 0) && (
+                <BookOddsSection
+                  bookOdds={bookOdds}
+                  homeFullName={homeFullName}
+                  awayFullName={awayFullName}
+                  selectedBook={selectedBook}
+                  setSelectedBook={setSelectedBook}
+                />
               )}
 
               {/* ============================================================
