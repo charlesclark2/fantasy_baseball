@@ -6626,7 +6626,14 @@ capture). This audit measures whether we HAVE the data to test that before commi
 - Follow-on (going forward): if the intraday TRAJECTORY (not just net open→close) is ever wanted, we must CAPTURE denser
   snapshots live (ties to Story 12.11 Parlay streaming) — historical is 2-point only and unrecoverable.
 
-### 12.3.2 — Backfill point-in-time morning predictions for the CLV pre-test  ⬜ NEW (2026-06-16)  `[enables the 12.4 thesis test]`
+### 12.3.2 — Backfill point-in-time morning predictions for the CLV pre-test  ✅ SUBSTANTIALLY SATISFIED 2026-06-17 (optional residual)  `[subsumed by the 12.4 pre-test]`
+**✅ SUBSTANTIALLY SATISFIED — primary deliverable achieved without the backfill.** The 12.4 pre-test ran on **959 live 2026
+paired games** (existing live `morning` predictions ⋈ `mart_odds_line_movement`) → H2H +0.22 corr, the go/no-go input this story
+was meant to produce. As the scope-correction below explains, the *movement* thesis can ONLY be tested on the ~500-959 live games
+(historical games are single-snapshot), so the historical prediction backfill never gated the result and isn't on the 12.4 critical
+path. **Optional residual (low priority, not blocking 12.4):** the weaker historical CLV-vs-close check on the degraded 2021-2025 set
+— powered but low-signal-quality; do only if a specific question needs it. Original scope below.
+
 **⚠️ SCOPE CORRECTION (post-12.3.1 deeper pass):** the MOVEMENT thesis (morning edge → open→close CLV) can ONLY be tested
 on the **~500 intraday-tracked May-Jun 2026 games** — historical games are single-snapshot (no movement to pair), so
 backfilling 2021-2025 predictions does NOT enable the *movement* test. For those ~500 games we likely already have genuine
@@ -6735,7 +6742,7 @@ the Odds-API pivot; an inherent Parlay coverage/thinning problem argues FOR re-e
 
 ---
 
-### 12.3.4 — Historical odds recovery  ✅ PROBED 2026-06-16 → NOT VIABLE via PARLAY, ✅ VIABLE via ODDS-API  `[recovery routes to Story 12.3.7]`
+### 12.3.4 — Historical odds recovery  ✅ COMPLETE 2026-06-17 (executed via Odds-API backfill under 12.3.7)  `[Parlay-path not viable; Odds-API path done]`
 > **⚡ UPDATE (2026-06-16): recovery IS possible — via THE ODDS API, not Parlay.** The Odds API historical endpoint returns
 > 5-min-grid Bovada h2h+totals snapshots back to 2020 (live-probed inside the lost window; see **Story 12.3.7** "HISTORICAL PROBE
 > — GAME-CHANGER"). The PARLAY-path analysis below stands (Parlay historical is daily-grade/lagged/no-Bovada), but the conclusion
@@ -6754,24 +6761,34 @@ the Odds-API pivot; an inherent Parlay coverage/thinning problem argues FOR re-e
 are a cheap way to get *closing* lines for a CLV-vs-close check on the non-Bovada `_an` books back to 2024 — the WEAK check only,
 not movement, not Bovada. The script's existing `historical-odds`/`historical-matches` loop (20 cr/day each) is NOT worth running
 for this thesis.
-**⇒ ROUTING:** intraday movement for the crunch window is permanently unrecoverable; **the only path to reliable dense movement
-is forward-capture via streaming — see Story 12.11 (now elevated).** This probe is the empirical justification for prioritizing 12.11.
+**⇒ ROUTING (updated 2026-06-17):** the *Parlay* crunch window is unrecoverable, but **recovery was EXECUTED via The Odds API
+historical endpoint** (Story 12.3.7) — backfilled the lost May 27–June window + 2026 season-to-date + 2024/2025 US as dense
+(5-min-grid) Bovada h2h+totals into `mart_odds_outcomes`, which is what powered the 12.4 pre-test (959 paired games, +0.22 corr).
+Going forward, dense movement comes from the **30-min Odds-API live capture** (Story 12.3.7), NOT streaming — Story 12.11 (Parlay
+SSE/WS) is CLOSED (vendor cancelled; 30-min polling is sufficient for the open→close thesis). This story is effectively COMPLETE
+via the 12.3.7 backfill. ~~prioritize 12.11~~
 
-### 12.3.5 — Maximize bookmaker + region coverage on the live capture  ⬜ NEW (2026-06-16)  `[breadth now that quota is 1M]`
-**Why.** Capture breadth was bounded by config, not the API: the intraday op runs `parlay_api_ingestion.py odds` with
-`DEFAULT_REGIONS=["us","us2"]`, `DEFAULT_MARKETS=["h2h","totals"]`, and **no explicit `bookmakers` filter**. We currently land
-**28 books** (bovada, pinnacle, draftkings, fanduel, novig, prophetx, kalshi, bet365, betmgm, caesars, fanatics, betrivers,
-parx, hardrock, polymarket, …). The docs (parlay-api.com/docs#bookmaker-keys) list region groups **us / us2 / uk / eu / au** and
-books we may be missing (e.g. `tipico` [eu], `pointsbet`, `stake`, `sugarhouse`, plus DFS/prop platforms `prizepicks`,
-`underdog`, `sleeper`, `pick6`, `parlayplay`). On the Business plan (1M credits, ~4% used) there's no quota reason to stay narrow.
-- [ ] Audit captured-vs-documented bookmaker keys; list exactly which documented books we DON'T get and which region unlocks each.
-- [ ] Add `uk,eu,au` to the odds `--regions` (and confirm whether a `bookmakers` param can request all books in one call) — measure the credit delta; with 1M headroom, favor breadth.
-- [ ] Keep **Bovada** the modeling target ([[project_target_bookmaker]]); the extra books power cross-book dispersion / sharp-vs-soft meta features (see `idea_notes.md` → `feature_pregame_market_microstructure_features`).
-**AC:** the live capture requests the maximal sensible book/region set, captured-book count rises toward the documented list,
-and the credit cost is quantified against the 1M budget. Feeds 12.4 (book dispersion is a meta-model signal).
+### 12.3.5 — Maximize bookmaker + region coverage on the live capture  ✅ SUBSTANTIALLY DONE 2026-06-17 (via Odds-API migration)  `[breadth — residual uk/au is budget-gated]`
+**✅ SUBSTANTIALLY SATISFIED by the 12.3.7 migration.** The Odds-API live capture runs `--regions us us2 eu --markets h2h totals`
+and lands **37 books** (incl. Bovada [target], Pinnacle [sharp], DraftKings, FanDuel, BetMGM, …) — *more* than the old Parlay path
+(28). us/us2/eu already covers the books that matter for the model + cross-book dispersion meta-features. The original Parlay framing
+(`parlay_api_ingestion.py`, "1M credits, ~4% used") is obsolete: we're on Odds-API now, and on the **100k plan credits are NOT free** —
+each added region multiplies per-call cost (markets×regions), and this cycle is tight (see 12.3.7). So the residual is small and
+**budget-gated, not a priority**:
+- [ ] (Optional, post-6/23 renewal) Evaluate adding `uk,au` regions — quantify the credit delta vs the 100k budget before enabling;
+  only worth it if a specific missing book feeds a 12.4 meta-feature. Default: stay at us/us2/eu.
+- [x] Bovada remains the modeling target ([[project_target_bookmaker]]); 37-book breadth already powers cross-book dispersion / sharp-vs-soft.
+**AC (met):** live capture requests a broad sensible book/region set (us/us2/eu = 37 books incl Bovada + Pinnacle); further widening
+is an optional, budget-gated follow-up rather than open work.
 
-### 12.3.6 — Investigate additional Parlay endpoints for the meta-model  ⬜ SCOPED 2026-06-16 (costs known)  `[exploratory — feeds 12.4]`
-**Why.** The CLV/market-interaction thesis (12.4) wants signals beyond our own book lines — "incoming information we're not
+### 12.3.6 — Investigate additional Parlay endpoints for the meta-model  ❌ CANCELLED 2026-06-17  `[Parlay retired]`
+**❌ CANCELLED 2026-06-17 — vendor gone.** Parlay API was cancelled (Story 12.3.7; The Odds API is now the sole odds vendor), so
+these Parlay-specific endpoints (consensus / disagreement / book_latency / ev / arbitrage / source-health) are no longer
+accessible. If the 12.4 meta-model later wants cross-book dispersion / sharp-vs-soft / fair-line-gap signals, derive them from
+**the multi-book Odds-API capture we already land** (37 books across us/us2/eu in `mart_odds_outcomes` — see 12.3.5) rather than a
+second vendor's pre-computed endpoints. Original Parlay-endpoint scoping retained below for reference only.
+
+**Why (historical).** The CLV/market-interaction thesis (12.4) wants signals beyond our own book lines — "incoming information we're not
 capturing." The OpenAPI spec (`parlay-api.com/openapi.json`, 191 paths, `x-credit-cost` per op) gives exact costs:
 
 | Endpoint | Cost | Signal for the meta-model |
@@ -6792,7 +6809,20 @@ capturing." The OpenAPI spec (`parlay-api.com/openapi.json`, 191 paths, `x-credi
 **AC:** one-page scoping with a prioritized shortlist for 12.4's meta-feature set (`idea_notes.md` → `feature_pregame_market_microstructure_features`
 already names ml_book_dispersion / sharp_soft_delta / open→close — map each to an endpoint above). No ingestion built until 12.4 shows signal.
 
-### 12.3.7 — Evaluate reverting to The Odds API (dual-source + failover)  ⬜ NEW (2026-06-16)  `[provider-trust + reliability for the live product]`
+### 12.3.7 — Revert to The Odds API as the live odds source  ✅ COMPLETE 2026-06-17  `[Odds-API sole source; Parlay retired]`
+**✅ COMPLETE 2026-06-17 — migration done, validated end-to-end, Parlay fully retired (NOT dual-source — went sole-source).**
+What shipped: (1) **Railway cron capture container** (`services/odds_capture/` — Dockerfile + entrypoint + service-scoped
+`railway.toml`) runs `odds_api_ingestion.py odds --regions us us2 eu --markets h2h totals` every 30 min → `oddsapi.mlb_odds_raw`,
+off the Dagster+ bill (= A2.18). (2) **Decoupled rebuild** — `odds_current_rebuild_sensor` (dynamic game-hours window) drives the
+LIGHT mart rebuild; `odds_clv_rebuild_daily` (08:00 UTC) the post-hoc CLV/line-movement marts. (3) **Parlay decommissioned** — the 17
+`odds_snapshot_*` schedules removed from registration (defs retained as dormant ref); **Parlay subscription CANCELLED** (Story 12.11
+streaming closed → no SSE/WS need; $99/mo for two vendors rejected). (4) **Single-vendor safety net** — `odds_freshness_alert_sensor`
+(staleness >90min + main-key quota <10k → Dagster+ alert; the alarm Parlay silently lacked). **Validated live 2026-06-17:** capture
+fresh, 28 games / 37 books incl Bovada + Pinnacle (healthier than Parlay's 18/15), starter→main key drain confirmed, Parlay stopped.
+Two-key cost design (drain free 500 starter, then 100k main) is intentional. ⚠️ Operational note: main key this cycle is near-exhausted
+(~5,716 left, renews 6/23) from the backfills — **no historical backfills before 6/23**. Deferred small-ROI: tighten Railway cron to
+game-hours; incrementalize `stg_oddsapi_odds`. Full history in [[reference_line_movement_coverage]]. Original eval rationale below.
+
 **Why — the gate moved.** Earlier guidance (12.3.1) was "don't pivot Parlay→Odds-API until the thesis shows signal." That gate
 is **superseded by product stage:** we now have a live product with **beta users**, so odds **reliability is paramount and cost is
 secondary** (operator 2026-06-16: "I don't care about cost on The Odds API right now"). The 12.3.3 incident (a silent ~2-week
@@ -6879,6 +6909,35 @@ historical lacked (which was daily-grade, ~6-wk lagged, no Bovada — [[referenc
 **AC:** a go/no-go on The Odds API with live coverage + cost + reliability evidence (coverage ✅, historical ✅, metering ✅), and
 — if go — a dual-source architecture (Odds-API primary + Parlay failover) that removes single-vendor dependence and alerts on
 provider degradation. Pairs with Story 12.11 (streaming) + A2.18 (offload) as the "never silently lose odds data again" plan.
+
+---
+
+### 12.3.8 — Batch the live odds-ingestion writes (stop the per-event INSERT warehouse churn)  ⬜ NEW (2026-06-17)  `[Snowflake spend defect — pairs with A2.18]`
+
+**Why — a warehouse-cost defect found in the live capture (operator, 2026-06-17, via Snowflake query history).** The live `odds`
+path in `scripts/odds_api_ingestion.py` writes **one row at a time**: the loop at ~L611 calls `insert_odds_row(...)` per event, and
+each call runs a separate `INSERT INTO oddsapi.mlb_odds_raw … SELECT …, PARSE_JSON(raw_json), PARSE_JSON(request_params)` statement
+(`insert_odds_row`, ~L407-459; same shape in `insert_event_row`). One `*/30` fire = ~28 events × 6 (regions × markets) ≈ **~168
+individual warehouse-active INSERTs**, which keeps **COMPUTE_WH hot for the whole script** (and re-parses JSON per row). This is
+exactly the A2.15 "warehouse busy on tiny serial statements" anti-pattern, now on the 24/7 live path → recurring credit burn that
+undercuts the A2.18 Dagster-offload win (the fetch left Dagster, but the *write* is now the hot spot).
+
+**Fix — reuse the deferred bulk-load pattern the backfill script already uses.** Replace the per-event `INSERT … PARSE_JSON` loop
+with a single bulk load per fire (or per call): accumulate all event rows in Python → stage to a TRANSIENT **VARCHAR-columned**
+table (raw_json / request_params as VARCHAR — `write_pandas` or PUT+COPY, one bulk op) → ONE `INSERT INTO mlb_odds_raw SELECT …,
+PARSE_JSON(raw_json), PARSE_JSON(request_params) FROM stage`. Collapses ~168 warehouse-active statements → **1 bulk load + 1
+INSERT-SELECT**, so the warehouse is touched once briefly at the end and the fetch loop runs warehouse-cold. This mirrors
+`scripts/backfill_historical_odds_snapshots.py` (parquet→COPY INTO→MERGE) and the established VARIANT-insert rule
+([[feedback_snowflake_variant_insert]]: never PARSE_JSON in VALUES with executemany — VARCHAR stage then PARSE_JSON in the set-based
+write). Apply to both `insert_odds_row` (live `odds`) and `insert_event_row` (events) call sites.
+
+- [ ] Refactor the live `odds` write to batch (single staged bulk-load + one PARSE_JSON INSERT-SELECT per fire).
+- [ ] Same for the `events` path; keep idempotency (the `fetch_already_loaded_odds_combos` skip + `--force` delete) intact.
+- [ ] Test with real creds before merge ([[feedback_test_before_deploy]]); confirm row counts match the old path and only 1-2
+  warehouse statements run per fire (verify in query history).
+- [ ] Redeploy the Railway `odds_capture` container (it COPYs the script in).
+**AC:** a `*/30` live fire issues a single bulk-load + a single set-based INSERT-SELECT (verified in Snowflake query history),
+row counts/idempotency unchanged, and COMPUTE_WH active-time per fire drops from ~the whole script to a brief end-of-run write.
 
 ---
 
@@ -10308,7 +10367,7 @@ Acceptance criteria:
 **Remaining story priority (as of 2026-06-15):**
 - **P1 — Beta launch blockers:** A0.4.18 (SES production access approval → beta user provisioning; literal gate to inviting anyone), A0.4.13 (marketing pages — footer links on the live home page currently point nowhere), A0.4.11 (settings page — small, fully unblocked, user-facing)
 - **P2 — Beta quality:** A0.4.14 ✅ COMPLETE 2026-06-15, A0.4.26 ✅ COMPLETE 2026-06-16, A0.4.15 (data quality bug reports — closes the beta feedback loop)
-- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 (player/team detail pages — post-beta scope; A2.12 Railway PG serving store SHIPPED 2026-06-15 so the data-path gate is now cleared)
+- **P3 — Blocked / post-beta:** A0.4.17 (morning pick display — UX half done; pipeline half blocked on Story 30.8 model retraining), A0.4.16 🔶 PARTIAL (player pages SHIPPED 2026-06-16 with IL badge + age/height/weight; team pages + nav linking still pending)
 
 ---
 
@@ -11211,17 +11270,24 @@ Done when: clicking the link, filling in text, and submitting creates a DynamoDB
 
 ---
 
-#### A0.4.16 — Player and team detail pages ⬜  *(post-beta)*  **[P3]**
+#### A0.4.16 — Player and team detail pages 🔶 PARTIAL (player page shipped 2026-06-16; team page pending)  **[P3]**
 
-Clickable player names and team names across the app navigate to dedicated profile pages. Scoped as a post-beta enhancement. The A2.12 Railway PG serving store gate is now CLEARED (shipped 2026-06-15) — player/team pages can use the PG cache rather than live Snowflake queries. Do not start until after beta launch.
+Clickable player names and team names across the app navigate to dedicated profile pages. Player profile page is SHIPPED. Team pages are remaining scope.
+
+**Shipped (player side, 2026-06-16):**
+- `frontend/app/players/[player_id]/page.tsx` — authenticated player profile page (note: route uses `players/` plural)
+- `mart_player_profile_identity` dbt mart — single source of truth for player identity + physical attributes + IL status; grain: one row per `(player_id, player_type)`; sources: `mart_batter_rolling_stats`, `mart_starting_pitcher_game_log`, `stg_statsapi_player_profiles`, `stg_statsapi_lineups`, `feature_pregame_injury_status`
+- `write_serving_store.py` writes `player/{player_id}` blobs to Railway PG from `mart_player_profile_identity`
+- Profile header: position, team, batting hand (batters), age, height (`ft'in"`), weight (lbs), IL badge with date-since
 
 **Dependencies:** A0.4.7 complete; A2.12 COMPLETE (2026-06-15) — Railway PG serving store live.
 
-**Player profile page** (`/player/[player_id]`):
-- Season stats: PA, OPS, xwOBA, K%, BB%, wRC+
-- L10 performance trend (sparkline)
-- vs LHP / vs RHP splits
-- Recent games: date, opponent, PA, H, HR, BB, K, xwOBA
+**Player profile page** (`/players/[player_id]`):
+- Season stats: PA, OPS, xwOBA, K%, BB%, wRC+ ✅
+- Profile header with age, height, weight, IL status ✅
+- Recent games: date, opponent, PA, H, HR, BB, K, xwOBA ✅
+- L10 performance trend (sparkline) — pending
+- vs LHP / vs RHP splits — pending
 
 **Team profile page** (`/team/[team_id]`):
 - Season record, run differential, team ERA, team xwOBA
@@ -11230,23 +11296,24 @@ Clickable player names and team names across the app navigate to dedicated profi
 - Upcoming schedule (next 7 games with opponent + starter)
 - Rotation (projected starters for next 5 games)
 
-**Backend gaps:**
-- `GET /player/{player_id}` — season stats, splits, last 10 game log (sources: `mart_batter_rolling_stats`, `feature_pregame_lineup_features`)
+**Remaining backend gaps:**
 - `GET /team/{team_id}` — record, ERA, xwOBA, ELO history, schedule (sources: `mart_team_rolling_stats`, `feature_pregame_team_features`, `stg_statsapi_games`)
 
 **Tasks:**
-- [ ] Audit what data is available per-player and per-team from existing feature marts before designing API schemas
-- [ ] Build `GET /player/{player_id}` and `GET /team/{team_id}` backend routes — must use pre-materialized data served from Railway PG (A2.12 SHIPPED), not live Snowflake queries at request time
-- [ ] Create `frontend/app/player/[player_id]/page.tsx` and `frontend/app/team/[team_id]/page.tsx`
-- [ ] Make player names in the game detail lineup card link to `/player/{player_id}`
+- [x] Audit what data is available per-player from existing feature marts — `mart_player_profile_identity` built as canonical source
+- [x] Build `GET /player/{player_id}` backend route — served via Railway PG `api_cache` (player blobs written by `write_serving_store.py`)
+- [x] Create `frontend/app/players/[player_id]/page.tsx` — live; shows batter/pitcher stats + profile header
+- [ ] Build `GET /team/{team_id}` backend route — must use pre-materialized data served from Railway PG, not live Snowflake
+- [ ] Create `frontend/app/team/[team_id]/page.tsx`
+- [ ] Make player names in the game detail lineup card link to `/players/{player_id}`
 - [ ] Make team names/logos in the game detail header link to `/team/{team_id}`
 
 **Acceptance criteria:**
-- [ ] Clicking a player name from the lineup card navigates to `/player/{player_id}` with real season stats
+- [ ] Clicking a player name from the lineup card navigates to `/players/{player_id}` with real season stats
 - [ ] Clicking a team name/logo navigates to `/team/{team_id}` with record, ELO, and schedule
-- [ ] Both pages use the same nav/layout as other authenticated pages
-- [ ] Pages return a graceful 404 if the player/team ID is not found
-- [ ] No raw Snowflake queries at request time — data is served from pre-materialized cache
+- [x] Player pages use the same nav/layout as other authenticated pages
+- [x] Pages return a graceful 404 if the player/team ID is not found
+- [x] No raw Snowflake queries at request time — data is served from pre-materialized cache
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story A0.4.16 standalone:
 
@@ -11840,6 +11907,77 @@ in our OWN branded components with far more control — the widget mainly buys u
   revenue stream is a near-term goal and the fixed UI is acceptable on a secondary/marketing page (not the core product).
 **AC:** a documented keep/skip decision; default expectation is SKIP in favor of first-party rendering unless affiliate
 monetization is prioritized. Frontend/product call — operator's domain.
+
+#### A0.4.30 — Update odds-data fixed cost to $59/mo (Odds API) on the Finances page  ⬜ NEW (2026-06-17)  **[P2 — quick data fix]**
+
+**Why.** The odds-data vendor changed (Story 12.3.7): we migrated off Parlay API to **The Odds API** and **cancelled the Parlay
+subscription** entirely. The Finances section's fixed-cost assumptions still reflect the old Parlay line item, so the modeled
+monthly burn is wrong. The new reality is a single odds-data fixed cost of **$59/mo** (The Odds API, 100k credits/mo plan);
+the Parlay cost is **$0** (cancelled).
+
+**▶ App-session prompt** — copy into a fresh app/frontend session:
+```
+On the Finances section, update the FIXED COSTS:
+  - The odds-data line item is now "The Odds API — $59/month" (100k credits/mo plan).
+  - Remove / zero out the Parlay API line item — that subscription has been cancelled.
+  - If odds cost was previously modeled as a single "odds data / Parlay" line, just change it to $59/month.
+Then re-total the monthly fixed costs and confirm any derived figures (runway, break-even, per-user cost)
+recompute from the corrected total. No other cost lines change in this story.
+```
+
+**Work (app session):**
+- [ ] Locate the Finances fixed-cost data (config/constant/DB row that drives the Finances section).
+- [ ] Set odds-data fixed cost = **$59/mo (The Odds API)**; remove the Parlay line (cancelled → $0).
+- [ ] Re-total fixed costs and verify downstream figures (runway / break-even / per-user) recompute.
+
+**AC:** the Finances section shows a single odds-data fixed cost of **$59/mo (The Odds API)** with **no Parlay line item**, and
+all derived totals recompute from the corrected fixed-cost base.
+
+#### A0.4.31 — Live scores on the app via the Odds API scores endpoint → Railway PG  ⬜ NEW (2026-06-17)  **[P2 — app live data]**
+
+**Why.** The app should show live game scores that update as they change. We already have an Odds-API integration + key, and its
+`GET /v4/sports/baseball_mlb/scores` returns live + upcoming + recently-completed scores (server-side refresh ~every 30s).
+Docs: https://the-odds-api.com/liveapi/guides/v4/#get-scores
+
+**Architecture decision (operator + assistant, 2026-06-17): write DIRECTLY to Railway PostgreSQL, NOT Snowflake.** This is app-only
+display data until live ingestion exists, so it belongs in the **OLTP serving store** (PG), per the A2.12 split (PG = OLTP serving,
+Snowflake = OLAP only; [[project_serving_store_architecture]]). Snowflake would be wrong here — a warehouse spin per 30–60s update is
+wasteful for ephemeral, constantly-overwritten data. Authoritative final scores for settlement/CLV come from a SEPARATE path (MLB
+StatsAPI → Snowflake, already ingested); do not conflate this live-display feed with the game-outcome record.
+
+**Where the poller runs.** On **Railway, not Dagster** — same principle as the odds capture (keep the I/O-bound poll off the Dagster+
+run-minute bill, A2.18). It can live in the app's existing Railway backend (a background task / lightweight cron) since the consumer
+is the app.
+
+**⚠️ Credit-budget gating (decide before shipping).** The scores endpoint costs ~1 credit/call. Blanket 60s polling across game hours
+≈ 25k/mo — a large bite of the 100k plan (which is also tight until the 6/23 renewal). REQUIRED: **gate polling to in-progress games
+only, at ~60–90s** (no live games → zero calls), bounding cost to a few k/mo. Use the day's schedule (`stg_statsapi_games.game_date`)
+to know when any game is live. **Free fallback if credits pinch:** MLB StatsAPI exposes live scores at no credit cost (we already
+ingest it) — same display, zero Odds-API spend; spec Odds-API now but keep StatsAPI as the documented escape hatch.
+
+**▶ App-session prompt** — copy into a fresh app/frontend session:
+```
+Add a live-scores feature to the app, sourced from The Odds API scores endpoint, served from Railway PostgreSQL (NOT Snowflake).
+  1. PG table `live_scores` (or similar): one row per game — game/event id, home/away team, home/away score, status
+     (scheduled/in_progress/completed), last_update, commence_time. UPSERT by game id.
+  2. Backend poller on Railway (background task or cron in the existing API service): call
+     GET /v4/sports/baseball_mlb/scores (regions not needed; 1 credit/call), upsert rows into live_scores.
+     COST GUARD: only poll when there is at least one in-progress game today (derive from the schedule); poll every ~60–90s
+     during live windows; do NOT poll 24/7. Log credit usage.
+  3. App reads live_scores from PG and renders a live scoreboard that refreshes as scores change (client polls the API route
+     every ~30–60s, or SSE/websocket if already available).
+  4. Do NOT write scores to Snowflake. Final-score settlement is a separate existing path (StatsAPI→Snowflake).
+Confirm the poller respects the cost guard (no calls when no games are live) and that the scoreboard updates without a manual refresh.
+```
+
+**Work (app session):**
+- [ ] PG `live_scores` table (upsert by game id) + migration.
+- [ ] Railway backend poller: `GET /v4/.../scores`, upsert to PG, **gated to in-progress games at ~60–90s**, credit logging.
+- [ ] App scoreboard UI reading from PG, refreshing as scores change.
+- [ ] Confirm no Snowflake write; document the StatsAPI free-fallback option.
+
+**AC:** the app shows live scores that update without manual refresh, sourced from Odds-API `/scores`, written only to Railway PG;
+the poller makes **zero calls when no games are live** and ~60–90s cadence during live windows; credit usage is logged.
 
 ---
 
@@ -13610,7 +13748,16 @@ do not git commit/push; Dagster in-process ops import packaged code only ([[feed
 
 ---
 
-### Story A2.18 — Offload I/O-bound odds capture off Dagster+ run-minutes  `[Home: Epic A2 / infrastructure]`  ⬜ NEW (2026-06-16)
+### Story A2.18 — Offload I/O-bound odds capture off Dagster+ run-minutes  `[Home: Epic A2 / infrastructure]`  ✅ COMPLETE 2026-06-17
+**✅ COMPLETE 2026-06-17 — capture offloaded to Railway, the ~1,044 min/mo driver eliminated.** Resolved as **option (a)** but via
+**The Odds API Railway cron** (not the 12.11 Parlay streaming consumer — that's closed): the I/O-bound HTTP poll now runs on a
+flat-cost Railway cron container (`services/odds_capture/`), and the 17 Parlay `odds_snapshot_*` Dagster schedules were
+decommissioned (Story 12.3.7) — removing the **#1 recurring run-minute driver (~1,044 min/mo, ~42%)** before the 6/18 Hybrid
+billing start. Only the *dbt rebuild* stays in Dagster (now event-driven via `odds_current_rebuild_sensor` + a once/day CLV
+schedule, far fewer run-minutes than the old per-snapshot job). Break-even is decisively favorable: flat Railway host (~$5/mo)
+≪ per-minute billing of 329 waiting runs/mo. No separate cadence-cut (A2.16-D2) needed — the schedules are gone entirely. Detail
+in Story 12.3.7 / [[reference_line_movement_coverage]] / [[project_dagster_cost_audit_jun2026]]. Original framing below.
+
 **Operator insight (2026-06-16):** "We get charged for Dagster+ compute time; if we offload the compute spent *while API calls
 are being made*, we could cut it significantly — as long as it cancels out cost-wise, ideally better." Correct, and it converges
 with two existing threads.
@@ -17950,7 +18097,44 @@ meta-model AUC lift. Killed by the US geo-block — superseded by 12.10′ below
 
 ---
 
-### Story 12.10′ — Pinnacle sharp-money / steam features for the CLV meta-model  `[Home: Epic 12]` ⬜ NEW (replaces 12.10)
+### Story 12.10′ — Pinnacle sharp-money / steam features for the CLV meta-model  `[Home: Epic 12]` ❌ FAILED GATE / DROP — 2026-06-17 (5th no-H2H-edge confirmation)
+
+**❌ VERDICT 2026-06-17 — DROP (failed the ≥+0.01 AUC gate; sharp-money adds no bettable lift over the morning edge).** Harness
+`betting_ml/scripts/pinnacle_sharp_money_ablation_12_10.py`, report `ablation_results/pinnacle_sharp_money_12_10.md`. Ran BOTH framings
+(operator "validate completely") on the 968-game 2026 pre-test population (n=834 with Pinnacle+steam, moved; label = Bovada open→close
+move direction; clv_up rate 0.574):
+- **BASE (morning edge) CV AUC = 0.620** (confirms the +0.22 pre-test in AUC terms).
+- **BASE + OPEN (actionable, non-leaky: pinnacle_open_devig, bovada_open−pinnacle_open gap, AN handle-ticket) = 0.630, lift +0.0095** —
+  BELOW the +0.01 gate AND within noise (CV std ±0.039) ⇒ **statistically indistinguishable from zero**.
+- **BASE + CLOSE (card-literal, leaky: close_devig, steam, bovada_close−pinnacle_close gap) = 0.976, lift +0.355** — **leakage, not signal:**
+  `pin_steam` uni-AUC 0.953 (sharp open→close ≈ Bovada open→close; books co-move). The +0.346 OPEN→CLOSE gap = ~97% of the apparent lift
+  is mechanical close co-movement, NOT bettable. ⭐ Running framing C is what prevented shipping a 0.976-AUC mirage.
+- Only flicker: `bovada_open_vs_pin_open` (the soft-vs-sharp OPEN gap; uni-AUC 0.605, coef −0.747, correct sign) — but its marginal value
+  over the edge IS the +0.0095 measured. Not enough.
+⇒ **5th consecutive no-H2H-edge confirmation** (Epic 11, 16B.7, 28.4, 28.5, 12.10′). Per the AC the sharp-money group is **dropped, not
+shipped**; the close-based Pinnacle features built into `feature_pregame_meta_model_features.sql` must NOT be used as at-open predictors
+(they leak — proven above) → pending operator call on revert-vs-document. Could be re-checked late-season with more live games, but the prior
+is now strongly against. Original READY banner + spec retained below for context.
+
+---
+
+**(superseded by verdict above — retained for context)**
+
+**🟢 READY / DATA-STATE BANNER (2026-06-17).** Operator activated this as the feature-feed to build BEFORE 12.4 (roadmap option (a)).
+Two material updates since the card was written:
+- **✅ LIVE Pinnacle is RESOLVED — it flows.** The card below still says "the live odds source is now the Parlay API → verify if live
+  Pinnacle flows / else backtest-only." That's obsolete: Parlay is retired; the live source is **The Odds API**, and we capture
+  **Pinnacle in the `eu` region** (validated 2026-06-17: ~15 games/snapshot in `mart_odds_outcomes`, source_system='odds_api',
+  bookmaker='pinnacle'). So the sharp-money features ARE available at serve time — **no train/serve skew, no AN-only fallback needed**
+  for the live operational signal. This supersedes the "Confirm LIVE Pinnacle coverage" task and the corresponding AC.
+- **⚠️ KNOWN DATA GAP (operator-acknowledged): dense 2024/2025 EU (Pinnacle) history is NOT backfilled until AFTER 6/23.** The dense
+  Odds-API historical EU backfill (Phase 4) is deferred on purpose — the 100k main key is near-exhausted this billing cycle and **no
+  historical backfills run before the 6/23 renewal** ([[reference_line_movement_coverage]]). **This does NOT block 12.10′:** the 12.4
+  meta-model trains on the **2026 live games** (where dense Pinnacle movement exists via the eu capture), and the existing sparse
+  open+close 2021-2025 Pinnacle (`odds_snapshots_historical`, ~6,620 rows, the 2026-05-29 backfill) already supports open→close steam
+  for the weaker historical check. Proceed on 2026-live + existing-sparse-historical now; treat the dense 2024/2025 EU backfill as a
+  POST-6/23 enhancement that widens the historical sample, not a prerequisite. Same caveat as 12.3.2: dense *movement* only exists for
+  2026-live regardless.
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.10′ standalone:
 
@@ -18005,11 +18189,11 @@ real, populated sharp-money features.
 - [ ] **Wire into the meta-model mart.** Replace the placeholder `bovada_vs_pinnacle_h2h*` / `pinnacle_coverage_flag*`
   columns in `feature_pregame_meta_model_features.sql` with the populated features above (Group 4 — bookmaker
   disagreement / sharp-money). Update `dbt/models/feature/schema.yml`. `dbtf build` the mart (hand off if >1 min).
-- [ ] **Confirm LIVE (2026) Pinnacle coverage.** The historical Pinnacle feed is `oddsapi` (≤2025); the live odds
-  source is now the Parlay API ([[project_parlay_api_migration]]). Verify whether live Pinnacle flows for 2026
-  production. If NOT, scope these as **backtest/training-only** features and fall back to the AN handle% divergence
-  for the live operational signal — document the gap explicitly so the meta-model isn't trained on a feature it
-  can't see at serve time.
+- [x] **LIVE (2026) Pinnacle coverage — CONFIRMED 2026-06-17.** Live Pinnacle flows via The Odds API `eu` region into
+  `mart_odds_outcomes` (source_system='odds_api', bookmaker='pinnacle', ~15 games/snapshot). The features ARE available at serve time
+  — no train/serve skew, no backtest-only scoping, no AN-only fallback for the live signal. (Historical ≤2025 Pinnacle remains in
+  `oddsapi.odds_snapshots_historical`; dense 2024/2025 EU backfill deferred to post-6/23 — see READY banner.) Build the 2026 live
+  Pinnacle features off the `eu` capture; reconcile with the historical CTE so the same feature definitions span both eras.
 - [ ] **Backtest the lift.** Re-run the Epic 12.1 CLV meta-model (proxy CLV labels from `mart_clv_labeled_games` /
   `build_proxy_clv_dataset.py`) with vs without the Pinnacle + AN-handle sharp features; report AUC lift. **Hand off
   (>1 min).**
@@ -18017,15 +18201,17 @@ real, populated sharp-money features.
 **Acceptance criteria:**
 - [ ] Pinnacle steam + de-vig + soft-vs-sharp-gap features non-null on the Pinnacle-covered games, with per-season
   coverage documented (note: historical Pinnacle backfill is partial — ~6,620 rows 2021–2025, NOT every game).
-- [ ] **Live-coverage status documented** (production-live Pinnacle available Y/N); if N, the live fallback (AN
-  handle% divergence) is specified and the train/serve-skew risk is called out.
+- [x] **Live-coverage status documented** — production-live Pinnacle available **YES** (Odds-API `eu` region, confirmed 2026-06-17);
+  no train/serve skew. Document per-era Pinnacle source: 2026 live = Odds-API eu (`mart_odds_outcomes`); ≤2025 = `odds_snapshots_historical`
+  (sparse open+close; dense 2024/2025 EU backfill is a post-6/23 enhancement, not required to ship the 2026-live features).
 - [ ] **No leakage:** every feature derived strictly from snapshots before first pitch; verified on a spot sample.
 - [ ] CLV meta-model **AUC lift from the sharp-money features quantified; gate ≥ +0.01 AUC to retain** (same bar as
   the cancelled Betfair story). Features that don't clear are dropped, not shipped.
 
-**Sequencing/gating:** Tier 2 (ARCH) — after the Tier-1 totals work (27.3/27.5). Unblocked (no external-access
-dependency; Pinnacle historical already ingested). Pairs with Epic 12.4 (Bayesian CLV meta-model) once the
-≥50-live-game gate is met.
+**Sequencing/gating:** 🟢 ACTIVATED 2026-06-17 as the **feature-feed immediately BEFORE Epic 12.4** (operator chose option (a):
+build the Pinnacle sharp-money features, then fold them into the 12.4 CLV meta-model's feature set). Unblocked — live Pinnacle
+confirmed flowing (Odds-API eu) and historical sparse Pinnacle in hand; the dense 2024/2025 EU backfill is a post-6/23 enhancement,
+not a gate. The ≥+0.01 AUC retention bar still applies to each feature.
 
 ---
 

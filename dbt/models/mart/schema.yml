@@ -8264,5 +8264,13 @@ models:
       - name: is_on_il
         description: TRUE when the player has an open IL stint in feature_pregame_injury_status.
         tests: [not_null]
+      - name: birth_date
+        description: Player date of birth from stg_statsapi_player_profiles; NULL for lineup-only players.
+      - name: age
+        description: Current age in whole years (floor of days/365.25); NULL if birth_date is unknown.
+      - name: height_inches
+        description: Total height in inches from stg_statsapi_player_profiles; NULL for lineup-only players.
+      - name: weight_lbs
+        description: Weight in pounds from stg_statsapi_player_profiles; NULL for lineup-only players.
       - name: il_since
         description: Date the current IL stint began; NULL when is_on_il = FALSE.
