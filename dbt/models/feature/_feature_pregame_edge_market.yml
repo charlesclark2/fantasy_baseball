@@ -1,0 +1,84 @@
+version: 2
+
+# ============================================================================
+# Edge Program — Story E3.0: shared market-data feature frame (NET-NEW).
+# Documented in its OWN yml file (not the shared feature/schema.yml) so this
+# Edge-Program addition never touches the existing product's model configs.
+# Materializes into baseball_data.betting_features.
+#
+# NAME NOTE: relation is feature_pregame_edge_market (NOT feature_pregame_market_features,
+# which is a pre-existing SCD-2 source consumed by feature_pregame_odds_features).
+# ============================================================================
+
+models:
+
+  - name: feature_pregame_edge_market
+    description: >
+      Shared Layer-4 market-data frame for the closing-line model (Epic E3) and the
+      cross-book sharp-anchor (Epic E4). One row per (game_pk, market_type) with the
+      de-vigged Pinnacle fair value (sharp anchor, open + close), the per-soft-book
+      de-vigged implied price (bovada/caesars/fanduel), the per-book divergence
+      (h2h: edge prob; totals: line gap in runs), the open→close sharp move (the
+      E3.1 Head-1 target), cross-book dispersion, point-in-time pre-game movers
+      (starter scratches, weather shifts), and the freshest sharp-quote timestamp +
+      lead-to-first-pitch. Live window only (2026-05-01+, Parlay + Odds-API eu);
+      historical Pinnacle union is a deferred fast-follow. Advisory/transparency
+      only — no column asserts a +EV bet (honest-framing rule).
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, market_type]
+
+    columns:
+      - name: game_pk
+        description: Game identifier (primary join key).
+        tests: [not_null]
+      - name: market_type
+        description: "'h2h' | 'totals'"
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['h2h', 'totals']
+      - name: commence_time
+        description: Authoritative first-pitch timestamp (stg_statsapi_games) — the leakage clock.
+      - name: pinnacle_fair_prob
+        description: >
+          De-vigged sharp anchor for the reference side at the freshest pre-game quote —
+          P(home win) for h2h, P(over @ pinnacle's line) for totals. NULL when no
+          pre-game Pinnacle quote resolved for the game.
+      - name: pinnacle_open_prob
+        description: De-vigged sharp anchor at the earliest pre-game quote (open).
+      - name: pinnacle_line
+        description: Pinnacle total line at close (totals rows; NULL for h2h).
+      - name: pinnacle_open_line
+        description: Pinnacle total line at open (totals rows; NULL for h2h).
+      - name: pinnacle_quote_ts
+        description: Ingestion timestamp of the freshest pre-game Pinnacle quote (the "as of" anchor).
+      - name: pinnacle_lead_min
+        description: Minutes from the freshest pre-game Pinnacle quote to first pitch (point-in-time lead).
+      - name: pinnacle_available
+        description: TRUE when a de-vigged pre-game Pinnacle anchor resolved for this game/market.
+      - name: pinnacle_h2h_move_prob
+        description: Δ(open→close) of the de-vigged sharp P(home) — the E3.1 Head-1 h2h target (h2h rows).
+      - name: pinnacle_totals_move_runs
+        description: Δ(open→close) of the Pinnacle total line in runs — the E3.1 Head-1 totals target (totals rows).
+      - name: edge_bovada_prob
+        description: "h2h divergence pinnacle_fair − bovada_implied (prob units; E4.1 signal). Positive ⇒ sharp prices home above Bovada."
+      - name: edge_caesars_prob
+        description: h2h divergence vs Caesars (prob units; E4.1 signal).
+      - name: edge_fanduel_prob
+        description: h2h divergence vs FanDuel (prob units; E4.1 signal).
+      - name: bovada_line_gap_runs
+        description: "totals divergence pinnacle_line − bovada_line (runs; clean line-shopping signal). Positive ⇒ sharp line above Bovada's."
+      - name: caesars_line_gap_runs
+        description: totals line gap vs Caesars (runs).
+      - name: fanduel_line_gap_runs
+        description: totals line gap vs FanDuel (runs).
+      - name: starter_changed_flag
+        description: TRUE when >1 distinct projected starter was seen on either side before first pitch (a scratch the market repriced).
+      - name: weather_changed_flag
+        description: TRUE when >1 distinct forecast snapshot was seen before first pitch (forecast shifted).
+      - name: computed_at
+        description: Batch build timestamp (UTC).

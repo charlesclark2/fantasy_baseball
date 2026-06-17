@@ -1,0 +1,135 @@
+{
+  "h2h": {
+    "market": "h2h",
+    "target": "h2h_line_movement",
+    "n_games": 8769,
+    "feature_cols": [
+      "open_home_win_prob",
+      "ml_implied_prob_std",
+      "ml_implied_prob_range",
+      "sharp_soft_ml_spread",
+      "n_books_available",
+      "consensus_win_prob",
+      "pinnacle_open_prob",
+      "anchor_gap_h2h",
+      "sharp_gap_h2h"
+    ],
+    "pooled": {
+      "mae_model": 0.022405203704669564,
+      "mae_nomove": 0.020922972788602365,
+      "mae_drift": 0.02084217655701841,
+      "dir_acc": 0.5899562312831145,
+      "dir_ci_lo": 0.5777355448053444,
+      "dir_ci_hi": 0.6024072794287031,
+      "n_moved": 4341
+    },
+    "passes_e31_gate": false,
+    "per_season": [
+      {
+        "season": 2024,
+        "n_eval": 1743,
+        "n_train": 3906,
+        "mae_model": 0.017976435371458772,
+        "mae_nomove": 0.01843752867290011,
+        "mae_drift": 0.01831408159132805,
+        "beats_nomove": true,
+        "beats_drift": true,
+        "dir_acc": 0.5970961887477314,
+        "dir_ci_lo": 0.5783424077434967,
+        "dir_ci_hi": 0.617059891107078
+      },
+      {
+        "season": 2025,
+        "n_eval": 1817,
+        "n_train": 5630,
+        "mae_model": 0.01719817515763055,
+        "mae_nomove": 0.017840676047536256,
+        "mae_drift": 0.01779658019205662,
+        "beats_nomove": true,
+        "beats_drift": true,
+        "dir_acc": 0.6045560747663551,
+        "dir_ci_lo": 0.5852803738317757,
+        "dir_ci_hi": 0.6232476635514018
+      },
+      {
+        "season": 2026,
+        "n_eval": 1030,
+        "n_train": 7436,
+        "mae_model": 0.03908531445686014,
+        "mae_nomove": 0.030566334217909302,
+        "mae_drift": 0.03044155588473831,
+        "beats_nomove": false,
+        "beats_drift": false,
+        "dir_acc": 0.5522540983606558,
+        "dir_ci_lo": 0.5266393442622951,
+        "dir_ci_hi": 0.5788934426229508
+      }
+    ]
+  },
+  "totals": {
+    "market": "totals",
+    "target": "total_line_movement",
+    "n_games": 7682,
+    "feature_cols": [
+      "open_total_line",
+      "totals_line_std",
+      "totals_line_range",
+      "n_books_available",
+      "pred_total_runs",
+      "pinnacle_open_line",
+      "anchor_gap_tot",
+      "sharp_gap_tot"
+    ],
+    "pooled": {
+      "mae_model": 0.32511428985831464,
+      "mae_nomove": 0.2898599066044029,
+      "mae_drift": 0.3037420890234485,
+      "dir_acc": 0.5670009115770283,
+      "dir_ci_lo": 0.5505925250683683,
+      "dir_ci_hi": 0.5847766636280766,
+      "n_moved": 2194
+    },
+    "passes_e31_gate": false,
+    "per_season": [
+      {
+        "season": 2024,
+        "n_eval": 1718,
+        "n_train": 2917,
+        "mae_model": 0.313184845254564,
+        "mae_nomove": 0.28667054714784634,
+        "mae_drift": 0.3011143978356573,
+        "beats_nomove": false,
+        "beats_drift": false,
+        "dir_acc": 0.6015712682379349,
+        "dir_ci_lo": 0.574635241301908,
+        "dir_ci_hi": 0.6296296296296297
+      },
+      {
+        "season": 2025,
+        "n_eval": 1813,
+        "n_train": 4617,
+        "mae_model": 0.29158951559193624,
+        "mae_nomove": 0.2520683949255378,
+        "mae_drift": 0.2773151478247552,
+        "beats_nomove": false,
+        "beats_drift": false,
+        "dir_acc": 0.5317647058823529,
+        "dir_ci_lo": 0.5023529411764706,
+        "dir_ci_hi": 0.5588235294117647
+      },
+      {
+        "season": 2026,
+        "n_eval": 966,
+        "n_train": 6414,
+        "mae_model": 0.4092501092932913,
+        "mae_nomove": 0.36645962732919257,
+        "mae_drift": 0.38711320539115723,
+        "beats_nomove": false,
+        "beats_drift": false,
+        "dir_acc": 0.565121412803532,
+        "dir_ci_lo": 0.5253863134657837,
+        "dir_ci_hi": 0.6026490066225165
+      }
+    ]
+  }
+}
