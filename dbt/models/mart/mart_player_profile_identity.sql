@@ -12,6 +12,10 @@
 --   position_abbreviation              — profiles primary, lineups fallback
 --   team                               — most-recent batting_team / pitching_team
 --   bats                               — batter_hand (batters only)
+--   birth_date                         — from stg_statsapi_player_profiles (NULL for lineup-only)
+--   age                                — floor(days since birth / 365.25); NULL if birth_date unknown
+--   height_inches                      — total height in inches (NULL for lineup-only players)
+--   weight_lbs                         — weight in pounds (NULL for lineup-only players)
 --   is_on_il                           — TRUE if feature_pregame_injury_status
 --                                        has is_current = TRUE for this player
 --   il_since                           — date the current IL stint started (NULL if healthy)
@@ -72,6 +76,9 @@ profiles as (
     select
         player_id,
         full_name,
+        birth_date,
+        height_inches,
+        weight_lbs,
         case primary_position_code
             when '1'  then 'SP' when '2'  then 'C'  when '3'  then '1B'
             when '4'  then '2B' when '5'  then '3B' when '6'  then 'SS'
@@ -128,6 +135,10 @@ select
     )                                                         as position_abbreviation,
     u.team,
     u.bats,
+    p.birth_date,
+    floor(datediff('day', p.birth_date, current_date) / 365.25)::int as age,
+    p.height_inches,
+    p.weight_lbs,
     coalesce(il.is_on_il, false)                              as is_on_il,
     il.il_since
 from universe u
