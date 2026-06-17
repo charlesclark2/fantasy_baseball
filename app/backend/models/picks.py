@@ -50,8 +50,10 @@ class Pick(BaseModel):
     bovada_devig_prob: float | None = None
     edge: float | None = None
     game_conviction_score: float | None = None
+    gate_signals_met: int | None = None
     win_prob_ci_low: float | None = None
     win_prob_ci_high: float | None = None
+    win_prob_ci_width: float | None = None
     lineup_confirmed: bool | None = None
     home_team: str | None = None
     away_team: str | None = None

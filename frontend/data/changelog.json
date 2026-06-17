@@ -3,6 +3,18 @@
     "week": "2026-06-16",
     "items": [
       {
+        "tag": "new",
+        "text": "Teams directory launched at /teams — all 30 MLB teams organized by division with current win-loss record, win percentage, and win/loss streak. Click any team to open the detail page."
+      },
+      {
+        "tag": "new",
+        "text": "Team detail pages now live at /team/[team] — each page shows the team's ELO trend over time, platoon splits (xwOBA/wOBA vs LHP and RHP), recent form (last 10 games), upcoming schedule with probable starters, and a key-stats grid covering run differential, Pythagorean win expectation, offensive and pitching xwOBA, and bullpen quality."
+      },
+      {
+        "tag": "new",
+        "text": "Players directory launched at /players — searchable and filterable lists of all active batters and pitchers, with tabs to switch between the two. Batter columns include AVG, HR, wOBA, and xwOBA; pitcher columns include ERA, IP, K, and xwOBA-against. Click any row to open the player profile."
+      },
+      {
         "tag": "improvement",
         "text": "Player profile pages now display age, height, and weight in the profile header alongside position and team."
       },
@@ -17,6 +29,10 @@
       {
         "tag": "model",
         "text": "Pick detail pages now show a model conviction score and an 80% win-probability credible interval for h2h picks — a visual bar displaying how wide the model's uncertainty is, with the Bovada implied probability marked for comparison. Conviction and CI are confidence signals; they reflect model certainty, not a recommendation to bet."
+      },
+      {
+        "tag": "improvement",
+        "text": "The probability bar on the dashboard now shows a hover tooltip with the exact model win%, Bovada win%, and 80% credible interval range for moneyline picks — so the visual is clean at a glance but the numbers are always one hover away."
       }
     ]
   },

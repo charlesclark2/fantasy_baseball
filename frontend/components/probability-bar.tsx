@@ -1,4 +1,10 @@
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
 export interface ProbabilityBarProps {
@@ -7,7 +13,9 @@ export interface ProbabilityBarProps {
   modelProb: number
   marketProb: number
   showLabels?: boolean
+  showCiLabels?: boolean
   showHighConviction?: boolean
+  showTooltip?: boolean
   className?: string
 }
 
@@ -17,9 +25,13 @@ export function ProbabilityBar({
   modelProb,
   marketProb,
   showLabels = true,
+  showCiLabels,
   showHighConviction = true,
+  showTooltip = true,
   className,
 }: ProbabilityBarProps) {
+  // showCiLabels defaults to showLabels unless explicitly set
+  const _showCiLabels = showCiLabels ?? showLabels
   const hasCi = ciLow != null && ciHigh != null
 
   const isHighConviction = hasCi && ciLow > marketProb
@@ -36,7 +48,7 @@ export function ProbabilityBar({
   const toPos = (prob: number) => `${((prob - rangeMin) / range) * 100}%`
   const fmt = (val: number) => `${(val * 100).toFixed(1)}%`
 
-  return (
+  const bar = (
     <div className={cn("w-full select-none", className)}>
       {/* HIGH CONVICTION badge */}
       {showHighConviction && isHighConviction && (
@@ -94,7 +106,7 @@ export function ProbabilityBar({
       {/* Below-bar percentage labels */}
       {showLabels && (
         <div className="relative h-5 mt-1 text-[10px]">
-          {hasCi && (
+          {hasCi && _showCiLabels && (
             <>
               <span
                 className="absolute -translate-x-1/2 text-[#10b981]/80"
@@ -133,6 +145,45 @@ export function ProbabilityBar({
         </div>
       )}
     </div>
+  )
+
+  if (!showTooltip) return bar
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-help">{bar}</div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="min-w-[180px] space-y-1.5 p-3 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-3 shrink-0 rounded-full bg-white" />
+            <span className="text-gray-400">Model</span>
+            <span className="ml-auto font-mono text-white">{fmt(modelProb)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400" />
+            <span className="text-gray-400">Bovada</span>
+            <span className="ml-auto font-mono text-gray-300">{fmt(marketProb)}</span>
+          </div>
+          {hasCi ? (
+            <div className="border-t border-white/10 pt-1.5 mt-0.5">
+              <div className="flex items-center gap-2">
+                <span className="inline-block h-1.5 w-3 shrink-0 rounded-sm bg-[#10b981]/60" />
+                <span className="text-gray-400">80% CI</span>
+                <span className="ml-auto font-mono text-[#10b981]">
+                  {fmt(ciLow)} – {fmt(ciHigh)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="border-t border-white/10 pt-1.5 mt-0.5">
+              <p className="text-gray-600 text-[10px]">CI available for moneyline picks only</p>
+            </div>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

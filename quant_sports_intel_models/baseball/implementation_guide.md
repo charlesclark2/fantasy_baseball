@@ -617,7 +617,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **0 — DONE** | Epic O.6 / Story 8.6 (matchup signal op) | Epic 8.3 ✅ | ✅ 2026-06-02: `generate_matchup_signals_op` wired; 6th fan-in input + freshness reporting added |
 | **DONE** | Epic O.3 (weekly stacking-weights schedule) | Epic 9.3 ✅ | ✅ Activated by 9.6 (2026-06-02): `weekly_ml_job` + Monday-10:00-UTC schedule; deploy-time UI/alert checks pending |
 | **1 — NEXT** | Epic O.4 (end-of-day posterior schedule) | Epic 16.1 + 16.3 | Activate with 16.4 |
-| **1 — NEXT** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 + ≥50 CLV | Activate with 12.9 |
+| **DONE (code)** | Epic O.5 (Bayesian meta-model weekly retrain) | Epic 12.4 ✅ + ≥50 CLV ✅ | ✅ CODE-COMPLETE 2026-06-16: `train_bayesian_meta_model_op` + `weekly_meta_model_job` + Wed `0 10 * * 3` schedule; trainer `--s3-upload`/`--min-games`/convergence gate. Story 12.9 = same op (folded in). Deploy-time: activate schedule + failure alert. Serve-side S3 pull → Story 12.5 |
 | **0 — DONE** | Epic 5A.4 ablation | 5.2 champion ✅ | ✅ 2026-05-31: Δ=0.0000 MAE (EB=Raw); EB kept — top-2 by importance |
 | **0 — DONE** | Epic 6.4–6.5 (signals + ablation) | 6.3 champion ✅ | ✅ Epic 6 complete (6.1–6.5) |
 | **0 — DONE** | Epic 8.0 (Bayesian interaction matrix) | 7.1–7.2 ✅, 2.9 ✅, 7A ✅ | ✅ 2026-06-02: grand_mean=0.3164, σ_interaction=0.0033, k_ratio=17099; matchup_cell_priors.json written; all ACs pass |
@@ -650,7 +650,7 @@ What to work on NOW vs. NEXT vs. LATER. Stories within each phase can run in par
 | **DONE / CLOSED** | Epic 11 (H2H retrain) | Epic 9 + Epic 1 ✅ | 🔴 CLOSED 2026-06-04: no edge vs. 2026 Bovada market (2026 market Brier 0.1967 beats model 0.2220); 11.4–11.6 skipped; H2H deferred to Epic 26.5 live attribution gate |
 | **DONE / CLOSED** | Epic 17 (PyMC hierarchical) | Epics 3–6 ✅ + 16 ✅ + 16B FAIL ✅ | 🔴 CLOSED 2026-06-05: Jensen+rolling final NUTS v3 PPM=9.2819 — 7th independent confirmation; NegBin log-link structural Jensen floor (β_bullpen=0.172, floor=8.87) > threshold 8.81; beta_rolling≈0 (within-season regime signal not learnable). Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. |
 | **2 — LAYER 3** | Epic 18 (fantasy extensibility) | Epic 16 | After Epic 16 |
-| **2 — LAYER 3** | Epic 12.5 (Bayesian → Epic 19 integration) | ≥100 live games + 12.4 converging | ~Mid-June |
+| **2 — LAYER 3** | Epic 12.5 (Bayesian → Epic 19 integration) | ≥100 **forward** live games (served+CLV-observed since 2026-06-16, NOT training-pop) + 12.4 converging across 2 weekly retrains | ~Early July 2026 |
 | **2 — LAYER 3** | Epic 19.4–19.5 (EV Tracker + conviction score) | Epic 19.3 | After 19.3 |
 | **3 — PRODUCTION** | Epic 12.6 (frequentist exploratory meta-model) | ≥500 live games | ~Mid-July |
 | **3 — PRODUCTION** | Epic 22.1–22.2 (portfolio Kelly + correlations) | Epic 12.8 | After 12.8 |
@@ -687,7 +687,7 @@ Track live CLV-labeled game count daily via `mart_clv_label_count`. ⚠️ As of
 |---|---|---|
 | ✅ ≥ 10 games | Epic 12.2 (descriptive monitoring) | Already met |
 | ⏳ ≥ 50 games | Epic 12.3 (proxy CLV analysis), Epic 12.4 (Bayesian meta-model), Epic 19.3 (gate backtest) | ~Early June 2026 |
-| ⏳ ≥ 100 games | Epic 12.5 (Bayesian → Epic 19 integration) AND 12.4 convergence criteria met | ~Mid-June 2026 |
+| ⏳ ≥ 100 forward games | Epic 12.5 (Bayesian → Epic 19 integration) AND 12.4 convergence criteria met | ~Early July 2026 |
 | ⏳ ≥ 200 games | Epic 12.4 posterior CIs narrow enough for operational use | ~Early July 2026 |
 | ⏳ ≥ 500 games | Epic 12.6 (frequentist exploratory meta-model) | ~Mid-July 2026 |
 | ⏳ ≥ 1,000 games + ≥ 2 seasons | Epic 12.7 (production meta-model) | ~Sep 2026 / 2027 |
@@ -737,7 +737,7 @@ Hard gates that cannot be violated under any circumstances. Any violation introd
 
 21. At least one sub-model signal (Epics 3D or 4D — both already complete ✅) must be in production before Epic 19.2 is used operationally. Gate criteria require live signal data.
 22. ≥ 50 live CLV-labeled games must exist before Epic 19.3 (backtest), Epic 12.3 (proxy analysis), and Epic 12.4 (Bayesian meta-model) can begin.
-23. ≥ 100 live CLV-labeled games AND Epic 12.4 convergence criteria (R-hat < 1.01, mean CI width < 0.25, quartile separation ≥ 0.05) must both be met before Epic 12.5 wires the Bayesian model into Epic 19.
+23. ≥ 100 **forward** live CLV-labeled games (distinct games live-served by the meta-model AND CLV-observed since go-live 2026-06-16 — NOT the `meta_n_games_trained` training-pop count, already 911) AND Epic 12.4 convergence criteria (R-hat < 1.01, mean CI width < 0.25, quartile separation ≥ 0.05) holding across 2 consecutive weekly retrains must both be met before Epic 12.5 wires the Bayesian model into Epic 19.
 24. ≥ 500 live CLV-labeled games before Epic 12.6 (frequentist exploratory meta-model).
 25. ≥ 1,000 live CLV-labeled games AND ≥ 2 seasons of data before Epic 12.7 (production meta-model).
 26. **TOTALS PAUSED (Epic 10.6, 2026-06-02; confirmed under a Bayesian framework 2026-06-03):** `total_runs.bet_paused: true` in `model_registry.yaml`. The Epic 19 permission gate must surface NO totals bets. **Rigorous basis** (`ablation_results/totals_bayesian_evaluation.md`, 560 shared 2026 OOS games): on 2026 BOTH v4 and the Layer 3 challenger **FAIL Layer 1 (NLL ≥ prior-predictive 2.8893 — add no info over the training marginal)** and **Layer 3 (blended Brier ≈ 0.279 ≥ prior-naive 0.248 and ≥ market 0.228)**; they pass only Layer 2 calibration (calib_80 ≈ 0.776). The challenger WINS the head-to-head (better/sharper model) but FAILS the operational gate — a good model rendered uninformative by the 2026 regime, not a broken one. **Un-pause criterion (current season):** a totals model must beat **both** the prior-predictive NLL **and** prior-naive Brier (and ideally the market) under the three-layer framework — not the old coin-flip. Revisit with full-season data; don't abandon. Evidence: `totals_bayesian_evaluation.md` + `totals_2026_failure_analysis.md`. **Epic 10 CLOSED 2026-06-04 (Story 10.8):** the recency/sequential run_env diagnostic FAILED its pre-committed kill criterion (4th independent confirmation) — the static run_env signal is not the over-predicting component and the regime move is below the noise floor of any adaptive window. The next totals investment is routed through the **Epic 16B** sequential-sub-model gate; if 16B's combined-μ diagnostic fails (> 8.85), **Epic 17 (PyMC hierarchical)** is the architecture path. **Epic 17 CLOSED 2026-06-05 (Story 17.1):** PyMC NegBin hierarchical NUTS exhausted three variants (v1 PPM=8.8607, v2 abandoned, v3 Jensen+rolling PPM=9.2819) — all failed kill criterion ≤8.81; structural Jensen floor at β_bullpen=0.172 is 8.87 (above threshold); beta_rolling posterior≈0 (within-season regime shift not learnable from current signals); 7th independent confirmation. Re-open: (a) full 2026 season data for honest delta_2026, or (b) sub-model signals capturing within-season scoring regime shifts. Un-pause still requires clearing the three-layer + Epic 26 Layer-4 gate on clean 2026. **Epics 27.3 + 10.10 CLOSED 2026-06-11 — re-open criterion (b) is now EXHAUSTED from two angles. 27.3 (8th confirmation):** the purpose-built within-season Kalman state signal `env_league_state` entered the NUTS non-informatively (β=0.0128 [−0.000,+0.026]); May-2026 PPM=9.3042 > 8.81. **10.10 (9th confirmation, first non-log-link family):** a quantile model removed the structural Jensen floor (May-2026 mean 8.53 ≤ 8.81 — the FIRST positive isolation of §10's mechanism, proving the +0.170 floor was a genuine exp-link artifact) but still beat neither market nor naive (Brier 0.305 vs 0.229/0.250; calib_80 0.686). **For MAIN-LINE betting, only re-open criterion (a) (full-2026 `delta_2026`, ~Oct 2026) remains. The pre-October path is the REFRAMED track Epic 29** (totals point-accuracy RMSE/MAE-to-actual + alt/F5/team-totals edge on a calibrated distribution) — a parallel product/thin-market track that does NOT un-pause main-line totals.
@@ -2147,25 +2147,27 @@ dbt_daily_build (existing)
 
 ---
 
-### O.5 — Wire Bayesian meta-model weekly retraining (Epic 12.4 gate)
+### O.5 — Wire Bayesian meta-model weekly retraining (Epic 12.4 gate)  🟢 CODE-COMPLETE 2026-06-16 (deploy-time alert + activation pending)
 
-**Overview:** The Bayesian sequential meta-model from Epic 12 Story 12.4 reruns MCMC on the accumulated CLV dataset weekly and stores the updated trace to S3. This is a slow op (30–60 minutes for MCMC) and must run on a separate weekly schedule from the stacking weights job — different day to spread the Snowflake compute load.
+**Overview:** The Bayesian sequential meta-model from Epic 12 Story 12.4 reruns MCMC on the accumulated CLV dataset weekly and stores the updated trace to S3. This is a slow op (~1 min for this v0's NUTS; 30–60 min budgeted as the population grows) and runs on a **separate weekly schedule** from the stacking-weights job — Wednesday vs. Monday — to spread the Snowflake compute load and isolate failure domains. **Story 12.9 is the Epic-12 activation twin of this story — same op; built here once.**
 
-**Gate:** Requires Epic 12 Story 12.4 (`train_bayesian_meta_model.py`) to be complete AND ≥ 50 live CLV-labeled games in `mart_clv_labeled_games`.
+**Gate:** Requires Epic 12 Story 12.4 (`train_bayesian_meta_model.py`) complete — ✅ shipped/converged 2026-06-16 — AND ≥ 50 live CLV-labeled games (met: the 12.4 trainer population is 911 moved live-morning games).
+
+**Status:** Built — `train_bayesian_meta_model_op` (`pipeline/ops/weekly_ml_ops.py`), `weekly_meta_model_job` (`pipeline/jobs/weekly_ml_job.py`), `weekly_meta_model_schedule` (`pipeline/schedules/weekly_ml_schedules.py`, `0 10 * * 3` UTC). `Definitions` loads clean (16 jobs; meta job + schedule present). The trainer gained `--s3-upload` + `--min-games` + a `meta_model_latest.json` summary sidecar + an in-script convergence gate. **Deploy-time (user):** activate the Wednesday schedule in Dagster Cloud, confirm a manual `weekly_meta_model_job` run uploads a fresh trace to S3, and route the failure alert to the `daily_ingestion_job` channel.
 
 **Tasks:**
 
-- [ ] Add `train_bayesian_meta_model_op` to `pipeline/jobs/weekly_ml_job.py`: runs `betting_ml/scripts/train_bayesian_meta_model.py`; reads CLV labels from `mart_clv_labeled_games`; saves trace to `s3://baseball-betting-ml-artifacts/meta_model/bayesian_meta_trace_{n_games}.nc`; logs `n_games`, `mean_ci_width`, R-hat max to Dagster run metadata
-- [ ] Add a CLV count gate: before running MCMC, query `mart_clv_label_count.live_total_count`; if count < 50, log "Insufficient CLV labels ({count}/50) — skipping MCMC" and exit successfully; this prevents the op from failing before the gate is met
-- [ ] Schedule on Wednesdays at 10:00 UTC (offset from Monday stacking weights to spread load): `cron_schedule="0 10 * * 3"`
-- [ ] Add a convergence check op that runs after MCMC: reads the trace and computes `az.rhat(trace).max()`; if R-hat > 1.05, logs a WARNING; if R-hat > 1.10, logs a FAILURE and does not update `stacking_weights.json`
-- [ ] Add Dagster alert on `train_bayesian_meta_model_op` failure
+- [x] Add `train_bayesian_meta_model_op` to the weekly ML job: runs `betting_ml/scripts/train_bayesian_meta_model.py --s3-upload`; saves trace + scaler + `meta_model_latest.json` to `s3://baseball-betting-ml-artifacts/meta_model/`; logs `n_games`, `mean_ci_width`, R-hat max, gates to Dagster run metadata (read from the summary sidecar). **⚠️ Spec deviation:** the op does NOT read `mart_clv_labeled_games` — the 12.4 trainer trains on the **pre-test surface** (`daily_model_predictions` ⋈ `mart_odds_line_movement`); the backfill mart is contaminated for 2026 and deliberately bypassed (see Story 12.4 notes).
+- [x] CLV count gate — implemented as the trainer's `--min-games 50` on its **actual training population** (moved live-morning games), not a separate `mart_clv_label_count` query (single source of truth with the data loader). Below threshold the trainer logs "Insufficient CLV labels ({n}/50) — skipping MCMC" and exits 0; the op stays green.
+- [x] Schedule on Wednesdays at 10:00 UTC (offset from Monday stacking weights): `cron_schedule="0 10 * * 3"` — separate `weekly_meta_model_job` (independent failure domain).
+- [x] Convergence gate — implemented **in-script** (single op, not a second op: R-hat is already computed by the trainer). R-hat > 1.05 logs a WARNING and still uploads; R-hat > 1.10 logs a FAILURE, **does NOT upload** (serving keeps the last-good trace), and exits non-zero → `_run_script` raises → Dagster alert fires. (The original "blocks `stacking_weights.json` update" wording was a spec conflation — the meta trace is unrelated to the O.3 stacking-weights artifact; what's blocked is the meta trace's own S3 upload.)
+- [ ] **(deploy-time, user)** Dagster alert on `weekly_meta_model_job` failure → same email channel as `daily_ingestion_job`.
 
 **Acceptance criteria:**
 
-- [ ] Op skips gracefully when CLV count < 50 — confirmed by checking Dagster run logs when count is below threshold
-- [ ] On a successful run with ≥ 50 games: S3 trace file exists with current date in filename; R-hat < 1.05 for all parameters; `meta_n_games_trained` is updated in `daily_model_predictions` for the next `predict_today` run
-- [ ] R-hat gate fires correctly on a synthetic test (inject a non-converged trace and confirm the failure is logged)
+- [x] Op skips gracefully when the training population < 50 — `--min-games` gate exits 0 with the logged message (verifiable in Dagster run logs).
+- [ ] **(deploy-time)** On a successful run with ≥ 50 games: S3 trace exists; R-hat < 1.05. ✅ The serve-side S3 pull is now BUILT (`load_latest_meta_model()` prefers newest-from-S3, local fallback — done under Story 12.5, 2026-06-16, deployed), so once the Wednesday job uploads a trace, the next `predict_today` run advances `meta_n_games_trained` automatically. Remaining is just activating the schedule.
+- [x] R-hat gate logic is deterministic and unit-checkable — `_convergence_action(max_rhat)` returns `fail`/`warn`/`ok` at the 1.10/1.05 thresholds (verified).
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story O.5 standalone:
 
@@ -6544,7 +6546,7 @@ Epic 12 (CLV Meta-Model) is unblocked once 11.7 CLV gate is cleared and 500+ liv
 | 12.2 — Descriptive CLV monitoring | ≥ 10 live games | Already met |
 | 12.3 — Historical proxy CLV analysis | ≥ 50 live games | Early June 2026 |
 | 12.4 — Bayesian sequential meta-model | ≥ 50 live games | Early June 2026 |
-| 12.5 — Bayesian model → Epic 19 integration | ≥ 100 live games + 12.4 converging | Mid-June 2026 |
+| 12.5 — Bayesian model → Epic 19 integration | ≥ 100 forward live games (served+observed since 2026-06-16) + 12.4 converging across 2 weekly retrains | ~Early July 2026 |
 | 12.6 — Frequentist exploratory meta-model | ≥ 500 live games | Mid-July 2026 |
 | 12.7 — Production meta-model | ≥ 1,000 live games + ≥ 2 seasons | Early September 2026 |
 | 12.8 — Risk and portfolio layer | 12.7 complete | Post-season 2026 |
@@ -7155,8 +7157,9 @@ The Bayesian model is ready for Epic 19 integration when all three convergence c
 
 Tasks:
 - [x] Implement `train_bayesian_meta_model.py` with the PyMC model (re-scoped to the honest 3-feature set — see v0 block; wishlist
-  features null at morning). Trace stored locally `betting_ml/models/meta_model/bayesian_meta_trace_0911.nc`. *(Weekly Dagster
-  asset + S3 upload deferred — needs the in-process import path [[feedback_dagster_import_only_packaged_code]] and weekly accumulation.)*
+  features null at morning). Trace stored locally `betting_ml/models/meta_model/bayesian_meta_trace_0911.nc`. **Weekly Dagster asset +
+  S3 upload now BUILT under Story O.5 (2026-06-16)** — `weekly_meta_model_job` (Wed `0 10 * * 3` UTC) runs the trainer `--s3-upload`;
+  op runs a subprocess so the [[feedback_dagster_import_only_packaged_code]] constraint is satisfied.
 - [x] Add `compute_meta_model_prediction()` to `betting_ml/utils/meta_model.py` (loads trace+scaler, returns
   `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high`/`meta_ci_width`/`meta_n_games_trained`; sanity-checked: big edge→0.74, tiny→0.64,
   symmetric in side).
@@ -7164,7 +7167,7 @@ Tasks:
   (DDL + idempotent ALTER + INSERT; 74-col=74-val verified); dev-verified 15/15 (see SERVE-SHIPPED block). NOTE: this is the SERVE
   (records the meta prediction for the live CLV track record) — it does NOT yet feed the Epic-19 bet-permission gate; that wiring is 12.5
   and stays gated on ≥100 live games + a 2-week convergence hold.
-- [ ] **(deferred — 12.5)** CI-width convergence tracker to MLflow (needs weekly cadence).
+- [ ] **(deferred — 12.5)** CI-width convergence tracker to MLflow — weekly cadence now provided by Story O.5; remaining work is the MLflow log wiring + the 2-week convergence-hold check.
 - [ ] **(deferred — 12.5)** Coefficient posterior plot on `4_Model_Performance.py` (the trace has everything needed; app-side render).
 - [x] Prior update protocol: priors re-anchored from the pre-test + 12.10′ findings (intercept on the 0.602 base rate; β_edge weakly
   positive; Pinnacle prior dropped). *(MLflow pre/post logging deferred with the rest of the MLflow tasks.)*
@@ -7175,7 +7178,10 @@ Acceptance criteria:
 - [ ] **(deferred — 12.5)** `meta_p_clv_positive`, `meta_ci_low`, `meta_ci_high` stored in `daily_model_predictions` — serve helper
   ready; wiring is the 12.5 predict_today step.
 - [ ] **(deferred — 12.5)** Convergence tracker plots in MLflow; CI-width trend downward (needs weekly runs).
-- [ ] **(deferred — 12.5)** S3 trace files per weekly update — local trace exists; S3 upload + cadence is the Dagster-asset task.
+- [x] **S3 trace files per weekly update — DONE under Story O.5 (2026-06-16):** `weekly_meta_model_job` uploads trace + scaler +
+  `meta_model_latest.json` to `s3://baseball-betting-ml-artifacts/meta_model/` each Wednesday (deploy-time activation pending). ⚠️ The
+  reciprocal **serve-side S3 pull** (so `predict_today` loads the newest weekly trace instead of the local baked-in one) is a **12.5**
+  task — see 12.5 tasks below.
 
 **Net 12.4 status:** the *model* is built, converged, and validated offline (all 3 gates pass; generalizes). What remains is all
 **integration/cadence** (predict_today columns, Epic-19 gate, MLflow, Streamlit, S3, weekly Dagster) — which is exactly Story 12.5's
@@ -7184,19 +7190,22 @@ modeling deliverable; its remaining checkboxes fold into 12.5.
 
 ---
 
-### 12.5 — Bayesian meta-model integration into Epic 19 (≥ 100 live games AND Story 12.4 converging)
+### 12.5 — Bayesian meta-model integration into Epic 19 (≥ 100 forward live games AND Story 12.4 converging)
 
-**Overview:** Once Story 12.4's Bayesian model passes its convergence gates, wire `meta_p_clv_positive` into the Epic 19 permission gate as a sixth gate criterion. A game where the Bayesian meta-model's 80% CI lower bound exceeds 0.55 — meaning even the pessimistic end of the posterior says P(CLV > 0) > 55% — is a high-conviction meta-signal. This replaces raw model edge as the top-line quality indicator.
+**Overview:** Once Story 12.4's Bayesian model passes its convergence gates, wire `meta_p_clv_positive` into the Epic 19 permission gate as a sixth gate criterion. A game where the Bayesian meta-model's 80% CI lower bound exceeds 0.55 — meaning even the pessimistic end of the posterior says P(CLV > 0) > 55% — is a high-conviction meta-signal. This replaces raw model edge as the top-line quality indicator. **Scope: this story (and 12.4) is the H2H market only; the totals twin is [Story 12.12](#1212--totals-clv-meta-model-h2h-parity) (UI-parity-driven).**
+
+**⚠️ Gate definition — "≥ 100 live games" means FORWARD games, not training-pop size.** Do NOT gate on `meta_n_games_trained` (that column carries the *training* population, already 911, so it's trivially ≥ 100 and would make the gate a no-op). The gate is the **forward out-of-sample track**: distinct games that received a *live serve-time* meta prediction (the serve went live **2026-06-16**) AND have since had their CLV outcome observed. Concretely, count distinct `game_pk` in `daily_model_predictions` where `meta_p_clv_positive IS NOT NULL` AND `coalesce(is_backfill,false)=false` AND `game_date >= '2026-06-16'`, joined to an observed CLV label (closing line present, i.e. the same `mart_odds_line_movement` `snapshot_count > 1` surface the trainer labels on). 12.5 unlocks only when that forward count ≥ 100 **and** the three 12.4 convergence gates hold across **2 consecutive weekly retrains** (Story O.5, Wednesdays) — the binding constraint, since it spans two Wednesday runs. At the live serve rate (~13–15 labeled games/day) the 100-game threshold is reached in ~7–8 days; the 2-retrain hold is what pushes the realistic unlock to early July (see follow-up date in the 12.4 status memory).
 
 Tasks:
-- [ ] Add a sixth criterion to `compute_bet_permission()` in `betting_ml/utils/probability_layer.py`: `meta_model_positive = meta_ci_low > 0.55`; the criterion fires only when `meta_n_games_trained ≥ 100`
+- [x] **Serve-side S3 trace pull (depends on Story O.5) — DONE 2026-06-16:** `meta_model.py::load_latest_meta_model()` now prefers the newest trace+scaler from `s3://baseball-betting-ml-artifacts/meta_model/` (via `meta_model_latest.json`, cached to tmp), falling back to the local baked-in trace on any S3 failure (fail-open — meta is optional serve enrichment). So the **O.5 weekly retrain reaches prod serve without a redeploy**, and `meta_n_games_trained` advances each Wednesday. `META_MODEL_S3_DISABLE=1` forces local-only (tests/offline); an explicit `models_dir` skips S3. Verified: both paths load n_games=911; 45 affected tests green.
+- [ ] Add a sixth criterion to `compute_bet_permission()` in `betting_ml/utils/probability_layer.py`: `meta_model_positive = meta_ci_low > 0.55`; the criterion fires only when the **forward live-game count ≥ 100** (see Gate definition above — distinct live-served, CLV-observed games since 2026-06-16), NOT `meta_n_games_trained` (training-pop size, already 911)
 - [ ] Update `game_conviction_score` weighting: the meta-model criterion carries 1.5× the weight of each other criterion (it is the most direct estimate of what the other criteria collectively approximate); document the weighting rationale
-- [ ] Add `meta_model_available` boolean to `daily_model_predictions`: true when `meta_n_games_trained ≥ 100`; downstream consumers check this flag before relying on `meta_p_clv_positive`
+- [ ] Add `meta_model_available` boolean to `daily_model_predictions`: true when the **forward live-game count ≥ 100** (per the Gate definition, computed from served-then-observed games — NOT `meta_n_games_trained`); downstream consumers check this flag before relying on `meta_p_clv_positive`
 - [ ] Update EV Tracker page: show `meta_p_clv_positive` and its CI as a horizontal probability bar; games where `meta_ci_low > 0.55` display a "High Conviction" badge; replace raw edge as the primary sort key with `game_conviction_score`
 - [ ] Backtest: retroactively apply the meta-model criterion to all historical `daily_model_predictions` rows; compute mean CLV for `meta_model_positive = true` vs. false; gate Story 12.5 deployment on backtest showing at least directionally positive CLV for `meta_model_positive = true` games
 
 Acceptance criteria:
-- [ ] `meta_model_positive` criterion fires only when `meta_n_games_trained ≥ 100`
+- [ ] `meta_model_positive` criterion fires only when the forward live-game count ≥ 100 (live-served + CLV-observed since 2026-06-16) — verified NOT to fire while the forward count is < 100 even though `meta_n_games_trained` is already 911
 - [ ] `game_conviction_score` correctly applies 1.5× weight to meta-model criterion
 - [ ] EV Tracker probability bar renders correctly; "High Conviction" badge appears on ≥ 5% and ≤ 40% of games
 - [ ] Backtest documents mean CLV for `meta_model_positive = true` vs. false; deployment approved when result is directionally positive
@@ -7307,51 +7316,93 @@ Acceptance criteria:
 
 ---
 
-### 12.9 — Wire Bayesian meta-model retraining into Dagster
+### 12.9 — Wire Bayesian meta-model retraining into Dagster  →  **= Story O.5 (built there)**
 
-**Overview:** Story 12.4's `train_bayesian_meta_model.py` reruns MCMC weekly on the accumulated CLV dataset. Because MCMC is slow (30–60 min) and the input only grows weekly, it runs on its own weekly schedule offset from the stacking-weights job to spread Snowflake compute. This story activates the schedule and gates defined in **Epic O** — see [Epic O — Sub-Model Signal Orchestration](#epic-o--sub-model-signal-orchestration), Story O.5.
+**This story is the Epic-12 twin of Epic O Story O.5 — identical scope, one op. It was built under O.5 on 2026-06-16; do not implement separately.** See [Epic O — Story O.5](#o5--wire-bayesian-meta-model-weekly-retraining-epic-124-gate) for the as-built status, deviations, and remaining deploy-time/serve items. Code-complete: `train_bayesian_meta_model_op` + `weekly_meta_model_job` + `weekly_meta_model_schedule` (Wed `0 10 * * 3` UTC). Remaining is deploy-time activation/alert (O.5) and the serve-side S3 pull (Story 12.5).
 
-**Gate:** Story 12.4 complete (`train_bayesian_meta_model.py` exists) AND ≥ 50 live CLV-labeled games in `mart_clv_labeled_games`.
+---
+
+### 12.12 — Totals CLV meta-model (H2H parity) ⬜ NEW 2026-06-16  `[beta UI-parity driver — twin of 12.4/12.5/O.5 on the totals market]`
+
+**Driver — UI parity, not edge.** Story 12.4's Bayesian CLV meta-model is **H2H-only by construction** (its edge = `model_home_prob − open_home_win_prob`, its label = H2H moneyline open→close movement, its features are win-prob-shaped). The H2H pick view surfaces a meta-model CLV confidence visualization (12.5's `meta_p_clv_positive` probability bar + conviction). **For beta testing, the totals pick view must show the same visualization** — a totals pick that renders no CLV-confidence bar next to an H2H pick that does looks broken/half-built to a beta user. So we need a parallel **totals** CLV meta-model producing the analogous served columns, **regardless of whether the totals point model has betting edge** (it currently does not — see [[project_epic10_totals_verdict]]).
+
+**⚠️ Display vs. gating — keep these two tiers separate (this is the crux):**
+- **Tier A — DISPLAY (near-term, UNGATED, the beta-parity deliverable):** serve `meta_p_clv_positive` (+ CI) on the **totals** rows of `daily_model_predictions` and render the same probability-bar viz as H2H. This is informational and ships for beta without waiting on forward validation. **Honesty constraint:** the totals CLV base rate is **46.2% positive** (below 50%; vs h2h 52.5% — Snowflake-verified 2026-06-11, 288 live totals games). So the totals meta-model may well report *low* P(CLV>0) for most totals picks — that is the correct, honest signal and must be shown as-is. Do NOT dress a sub-50% signal as "conviction"; the viz shows calibrated confidence, which for totals will often be unflattering.
+- **Tier B — GATING (later, GATED exactly like 12.5):** wiring totals `meta_p_clv_positive` into any bet-permission decision stays gated on the totals meta-model's **own** forward-validation — ≥100 forward live totals games (served+CLV-observed since its go-live) AND its 3 convergence gates holding across 2 consecutive weekly retrains. Until then totals meta is display-only.
+
+**Gate (to start building):** Story 12.4 complete ✅ + totals CLV labels ≥ 50 ✅ (288 live, verified 2026-06-11). No further gate for Tier A.
+
+**Design — generalize, don't fork.** Add a `--market {h2h,totals}` flag to `train_bayesian_meta_model.py` rather than copy-pasting a second trainer. The NUTS-logistic skeleton, convergence gates, `--s3-upload`, `--min-games`, and the summary sidecar are all market-agnostic. The totals variant swaps three things:
+- **Edge:** `model_total − open_total_line` (centered by its training median), replacing the H2H win-prob edge. `model_total` = the served `pred_total_runs`.
+- **Label:** `clv_positive` = did the close total move toward the model's over/under side = `sign(total_line_movement) == sign(centered total edge)`, defined on moved games only (same as H2H).
+- **`open_extremity`:** `|open_total_line − league_baseline_total|` (mean-reversion control; baseline = the trainer's median open total), replacing `|open_home_win_prob − 0.5|`. `pub_align` = AN over/under money%−ticket% × model_side if available for totals, else drop it (data-forced, like 12.4's honest re-scope).
 
 **Tasks:**
 
-- [ ] Activate Epic O Story O.5: add `train_bayesian_meta_model_op` to `pipeline/jobs/weekly_ml_job.py`, scheduled Wednesdays 10:00 UTC (`cron_schedule="0 10 * * 3"`), offset from the Monday stacking-weights job
-- [ ] Confirm the CLV count gate queries `mart_clv_label_count.live_total_count` and skips MCMC with a logged message when count < 50 — the op must exit successfully, never fail, below threshold
-- [ ] Confirm the post-MCMC convergence check op computes `az.rhat(trace).max()`; R-hat > 1.05 logs a WARNING, R-hat > 1.10 logs a FAILURE and blocks any downstream `stacking_weights.json` update
-- [ ] Confirm trace is written to `s3://baseball-betting-ml-artifacts/meta_model/bayesian_meta_trace_{n_games}.nc` and `n_games`, `mean_ci_width`, R-hat max are logged to Dagster run metadata
-- [ ] Confirm a Dagster failure alert is configured on `train_bayesian_meta_model_op`
+- [ ] **Confirm the totals line-movement surface** in `mart_odds_line_movement` (or its source): the H2H path used `open_home_win_prob` / `h2h_line_movement`; verify the analogous `open_total_line` / `total_line_movement` columns exist and are Bovada-scoped (`snapshot_count > 1`). If absent, extend the mart/loader — this is the data prerequisite. *(Snowflake MCP, fully-qualified, no USE.)*
+- [ ] **`--market {h2h,totals}` in `train_bayesian_meta_model.py`:** parameterize the `_load()` SQL, the edge/label/feature derivation, and the artifact names (namespace S3 + local: `meta_model/h2h/…` and `meta_model/totals/…`; default `h2h` preserves the existing flat path OR migrate both to namespaced — pick one and migrate `load_latest_meta_model` to match). Reuse the convergence gates verbatim.
+- [ ] **`meta_model.py::load_latest_meta_model(market="h2h")`:** add a `market` arg so serve can load the right trace; keep the S3-prefer/local-fallback behavior per market.
+- [ ] **Serve (Tier A) in `scripts/predict_today.py`:** populate `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high`/`meta_ci_width`/`meta_n_games_trained` on the **totals** output rows from the totals meta-model (same column names — the rows are already market-discriminated; predict_today emits 15 h2h + 15 totals rows). Morning-only, open-total-line-gated, fully guarded, fail-open (mirror the 12.4 H2H serve exactly).
+- [ ] **Weekly retrain (extend Story O.5):** have `train_bayesian_meta_model_op` run the trainer for **both** markets (`--market h2h` then `--market totals`), each with its own count/convergence gate and S3 upload, surfacing both to run metadata. Same Wednesday job — no second schedule.
+- [ ] **UI parity (app-session deliverable):** the totals pick view renders the same meta CLV probability bar as H2H (Tier A, informational). Per [[feedback_story_prompt_and_changelog]] this is a non-admin user-facing change → **changelog entry required**, and it's delivered in an app session (hand it the prompt below).
+- [ ] **(Tier B, deferred — gated)** Totals analogue of 12.5's 6th-criterion gating, on the totals meta-model's own forward-validation gate. Do NOT build until that gate is met; track its own follow-up once totals serve goes live.
 
 **Acceptance criteria:**
 
-- [ ] Op skips gracefully when CLV count < 50 — confirmed in Dagster run logs below threshold
-- [ ] On a real run with ≥ 50 games: S3 trace file exists with the current date in its filename and R-hat < 1.05 for all parameters
-- [ ] R-hat gate fires correctly on a synthetic non-converged trace (failure logged, no stacking-weights update)
+- [ ] Totals meta-model converges on the 288-game population (R-hat < 1.01; mean CI width < 0.25) OR the report honestly records which gates fail — a failed gate is an acceptable, logged outcome for a no-edge market (it blocks Tier B, not Tier A).
+- [ ] Totals rows of `daily_model_predictions` carry populated `meta_p_clv_positive` (+ CI) on the morning pass for games with an open total line; dev-verified row count matches the H2H meta coverage for the same slate.
+- [ ] The served totals `meta_p_clv_positive` reflects the honest 46.2% base rate (i.e. it is NOT systematically inflated above 0.5) — sanity-check `AVG(meta_p_clv_positive)` on totals rows is in a plausible sub-0.55 band, not pinned high.
+- [ ] Weekly O.5 op produces both an h2h and a totals trace in S3 each Wednesday; both logged to run metadata.
+- [ ] Tier B (gating) remains inert until the totals forward-validation gate is met — verified it does not influence bet permission while display-only.
 
-**▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.9 standalone:
+**▶ New-session prompt — model/serve side (copy into a fresh Claude Code session):**
 
 ```
-You are picking up Story 12.9 (wire Bayesian meta-model retraining into Dagster) of the MLB betting &
-fantasy project. This is orchestration plumbing — it activates the schedule/gates specified in Epic O Story O.5.
+You are picking up Story 12.12 (Totals CLV meta-model, H2H parity) of the MLB betting & fantasy project — the
+totals twin of Stories 12.4 (model+serve), 12.5 (integration), and O.5 (weekly retrain), which exist for H2H.
 
-GATE: Story 12.4 complete (train_bayesian_meta_model.py exists) AND ≥50 live CLV-labeled games in
-mart_clv_labeled_games. Verify via the Snowflake MCP before activating.
+WHY: the H2H pick view shows a meta-model CLV confidence bar (meta_p_clv_positive); for beta the totals pick
+view must show the SAME viz. Build the totals CLV meta-model that produces the analogous served columns.
+This is UI-PARITY-driven, NOT edge-driven — the totals point model has no demonstrated edge, and the totals
+CLV base rate is 46.2% (below 50%). That is fine: show the honest signal; do NOT inflate it.
+
+TWO TIERS — keep them separate:
+  • Tier A (DISPLAY, near-term, UNGATED): serve meta_p_clv_positive (+CI) on the TOTALS rows of
+    daily_model_predictions; render the same probability bar as H2H. Ships for beta without forward validation.
+  • Tier B (GATING, later, GATED): wiring totals meta into bet permission stays gated on its OWN forward
+    validation (≥100 forward live totals games + 3 convergence gates holding 2 consecutive weekly retrains),
+    exactly like Story 12.5 for H2H. Do NOT build Tier B now.
+
+GATE to start: Story 12.4 complete (it is) + ≥50 totals CLV labels (288 live, verified). No further gate for Tier A.
 
 Read first:
-  1. implementation_guide.md — Story 12.9 (this story), Epic O Story O.5 (the schedule/gate spec), Story 12.4
-  2. pipeline/jobs/weekly_ml_job.py — where train_bayesian_meta_model_op is added (Wed 10:00 UTC, offset from
-     the Monday stacking-weights job)
-  3. pipeline/ — existing op/sensor patterns; remember in-process Dagster code may ONLY import from pipeline/
-     or the betting_ml wheel, never loose scripts/ (prod ModuleNotFoundError otherwise)
+  1. implementation_guide.md — Story 12.12 (this story), 12.4 (H2H model+serve), 12.5 (integration/gate),
+     Epic O Story O.5 (weekly retrain)
+  2. betting_ml/scripts/train_bayesian_meta_model.py — generalize with --market {h2h,totals}, don't fork
+  3. betting_ml/utils/meta_model.py — add a market arg to load_latest_meta_model (S3-prefer, local fallback)
+  4. scripts/predict_today.py — the H2H 12.4 serve block (morning-only, open-line-gated, guarded) to mirror
+  5. pipeline/ops/weekly_ml_ops.py + jobs/weekly_ml_job.py — extend the O.5 op to run BOTH markets
 
-Goal: add train_bayesian_meta_model_op on a weekly Wednesday schedule; the op must (a) skip gracefully
-(exit success, logged message — never fail) when the CLV count gate (mart_clv_label_count.live_total_count)
-is < 50; (b) run a post-MCMC R-hat convergence check (>1.05 WARNING, >1.10 FAILURE that blocks any
-stacking_weights.json update); (c) write the trace to s3://baseball-betting-ml-artifacts/meta_model/ and log
-n_games / mean_ci_width / R-hat to Dagster run metadata; (d) have a Dagster failure alert configured.
+Build: (a) confirm/extend the totals line-movement surface in mart_odds_line_movement (open_total_line /
+total_line_movement, Bovada, snapshot_count>1); (b) --market flag swapping edge=model_total−open_total_line,
+label=close moved toward our O/U side, open_extremity=|open_total−median|, pub_align from O/U public split or
+dropped; (c) serve totals meta columns on the totals rows; (d) extend the O.5 weekly op to retrain both markets
+to namespaced S3 keys; (e) honest convergence report (a failed gate is an acceptable logged outcome).
 
 Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
-run Python with `uv run python`; hand any script >1 min to the user; do not git commit or push.
-Verify against Dagster+ run history (GraphQL helper scripts/ops/dagster_runs.py) after activation.
+uv run python; hand any script >1 min to the user; test Snowflake-querying scripts with real creds before
+merge; do NOT git commit or push; predict_today is the live serve script — coordinate deploys.
+```
+
+**▶ New-session prompt — app/UI side (hand to an app session):**
+
+```
+Story 12.12 (Totals CLV meta-model) — APP side. The model/serve side populates meta_p_clv_positive (+ meta_ci_low/
+meta_ci_high/meta_ci_width) on the TOTALS rows of daily_model_predictions, mirroring the existing H2H meta columns.
+Render the SAME meta-model CLV confidence visualization on the totals pick view that the H2H pick view already
+shows (the probability bar + CI). This is informational/display parity for beta — it is NOT a bet-permission
+gate. Show the value honestly: the totals CLV base rate is ~46% (below 50%), so totals bars will often read low —
+that is correct, do not floor/inflate them. This is a non-admin user-facing change, so add a changelog entry for it.
 ```
 
 ---
