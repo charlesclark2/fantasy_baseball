@@ -370,9 +370,17 @@ def resolve_game_pk(
     away_team: str,
     date_str: str,
     commence_time_str: str,
-) -> int | None:
+) -> tuple[int, str] | None:
     """
-    Return the best-matching game_pk for a given OddsAPI event.
+    Return (game_pk, official_date_iso) for the best-matching StatsAPI game, or
+    None if no game matches.
+
+    The matched ``try_date`` IS the game's StatsAPI official_date — the lookup is
+    keyed on official_date — so the caller stamps the row's game_date from it
+    rather than from the loop date. This is what keeps a single game_pk from being
+    written under two adjacent game_dates: a late-night ET game whose UTC date is
+    the next day resolves via the date−1 fallback to its true official_date, and
+    that official_date (not the loop's UTC date) is what gets stored.
 
     Resolution order:
       1. Exact date match
@@ -402,7 +410,7 @@ def resolve_game_pk(
             continue
 
         if len(candidates) == 1:
-            return candidates[0][0]
+            return candidates[0][0], try_date
 
         # Doubleheader: try to match by commence_time proximity.
         if oddsapi_ct is not None:
@@ -416,7 +424,7 @@ def resolve_game_pk(
                     timed,
                     key=lambda pair: abs((pair[1] - oddsapi_ct).total_seconds()),
                 )[0]
-                return best_pk
+                return best_pk, try_date
 
         # Fallback: game 1 (first in list, ordered by game_number).
         log.warning(
@@ -424,7 +432,7 @@ def resolve_game_pk(
             "defaulting to game 1 (game_pk=%s)",
             home_team, away_team, try_date, candidates[0][0],
         )
-        return candidates[0][0]
+        return candidates[0][0], try_date
 
     return None
 
@@ -974,15 +982,24 @@ def run_backfill(
                 home_team = normalize_team_name(event.get("home_team", ""), date_str)
                 away_team = normalize_team_name(event.get("away_team", ""), date_str)
 
-                game_pk = resolve_game_pk(
+                resolved = resolve_game_pk(
                     pk_lookup, home_team, away_team, date_str, ct
                 )
-                if game_pk is None:
+                if resolved is None:
+                    # Unmatched: keep NULL game_pk and fall back to the loop date for
+                    # game_date (no StatsAPI official_date is available to stamp from).
+                    game_pk = None
+                    resolved_game_date = date_str
                     log.warning(
                         "  No game_pk found for %s vs %s on %s — storing with NULL game_pk",
                         home_team, away_team, date_str,
                     )
                     unmatched += 1
+                else:
+                    # Stamp game_date from the resolved StatsAPI official_date, NOT the
+                    # loop date_str — this is what prevents the same game_pk from being
+                    # written under two adjacent game_dates (UTC-midnight straddle).
+                    game_pk, resolved_game_date = resolved
 
                 # In all-books mode emit one row per book present in the event;
                 # otherwise just the single requested book.
@@ -1000,7 +1017,7 @@ def run_backfill(
 
                     date_rows.append({
                         "game_pk":       game_pk,
-                        "game_date":     date_str,
+                        "game_date":     resolved_game_date,
                         "snapshot_ts":   ts_label,
                         "home_team":     home_team,
                         "away_team":     away_team,
