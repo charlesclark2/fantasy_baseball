@@ -965,11 +965,18 @@ def _write_predictions_to_snowflake(
             # Story 30.15 — per-pick feature attribution payload (JSON text; the
             # frontend/API parse it for "why this pick"). None-safe when absent.
             "pick_explanation": (
-                json.dumps(pick_explanations[i])
+                json.dumps({
+                    **(pick_explanations[i] if (pick_explanations and i < len(pick_explanations)) else {}),
+                    # Story 22.4 — σ-tier fields merged into the explanation payload
+                    "sigma_tier":      _sg.get("sigma_tier"),
+                    "abstain_reason":  _sg.get("abstain_reason") or "",
+                    "totals_ci_width": _sg.get("totals_ci_width"),
+                    "h2h_ci_width":    _sg.get("h2h_ci_width"),
+                })
                 if (pick_explanations and i < len(pick_explanations)) else None
             ),
             "is_backfill": is_backfill,
-            # Story 22.4 — σ-aware selection
+            # Story 22.4 — σ-aware selection (dedicated columns)
             "totals_ci_width": _sg.get("totals_ci_width"),
             "h2h_ci_width":    _sg.get("h2h_ci_width"),
             "sigma_tier":      _sg.get("sigma_tier"),
@@ -1076,9 +1083,16 @@ def _write_predictions_to_snowflake(
                       f"model_version={MODEL_VERSION} ({cur.rowcount} row(s))")
             cur.executemany(_INSERT_PREDICTION, rows)
             conn.commit()
+            # [22.4] sigma tier distribution summary
+            tier_counts: dict[str, int] = {}
+            for _r in rows:
+                _t = _r.get("sigma_tier") or "unknown"
+                tier_counts[_t] = tier_counts.get(_t, 0) + 1
+            _tier_summary = ", ".join(f"{k}={v}" for k, v in sorted(tier_counts.items()))
             print(f"\nWrote {len(rows)} prediction row(s) to "
                   f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={MODEL_VERSION}, inserted_at={inserted_at.isoformat()})")
+            print(f"  [22.4] sigma_tier distribution: {_tier_summary}")
         finally:
             conn.close()
     except Exception as exc:

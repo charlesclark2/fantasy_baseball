@@ -7529,9 +7529,13 @@ EV-tracker CI bars). The audit confirmed **two different defects**, NOT a mornin
   dispersion (NGBoost run-diff vs XGBoost classifier, already on every row) ⊕ irreducible base σ=0.03 so the CI never collapses.
   Unit-tested: agree→width 0.077, mild→0.150, disagree→0.404; **CI always brackets the point estimate** (AC met). Persisted
   `win_prob_alpha/beta` + `win_prob_ci_low/high/width` (DDL + ALTER + INSERT) on **both** predict_today writers for consistency.
-- [ ] **(operator)** Run a real `predict_today` (morning + post_lineup) and confirm non-null coverage ≈100% on new rows + that the
-  null-rate-by-`prediction_type` query flips 0→~full. (Deferred like 12.3.8's redeploy — predict_today is the heavy live script;
-  offline I verified the util + static INSERT alignment, no full model run.)
+- [x] **Dev-verified end-to-end (2026-06-16):** bare `scripts/predict_today.py --date 2026-06-14 --no-log-snowflake` (writes
+  `betting_ml_dev`, isolated from prod) ran the full model + 19.7 loop clean. On the 14 dev rows: `game_conviction_score`/
+  `gate_signals_met`/`win_prob_alpha`/`win_prob_ci_width` all **14/14 non-null** (0→100%), CI brackets the point estimate **14/14**,
+  `ci_width` min 0.077 / avg 0.118 / max 0.216, `gate_signals_met ∈ {0,1}` (confirms the partial-gate semantics). ⚠️ local-test with
+  `scripts/predict_today.py` (respects `TARGET_ENV` → dev).
+- [ ] **(operator)** Deploy to prod + run the live morning + post_lineup serve so prod rows populate; re-run the
+  null-rate-by-`prediction_type` query on `baseball_data.betting_ml` and confirm 0→~full.
 - [ ] **(operator / app)** App-query wiring: `app/backend/routers/picks.py` currently selects `NULL::FLOAT AS win_prob_ci_low/high`
   and derives `game_conviction_score` via an `IFF(layer4_h2h_conviction_flag,0.8,0.4)` placeholder — switch these to the real
   `b.win_prob_ci_low/high/width` and `b.game_conviction_score` columns once a serve has populated them; mirror into the Railway PG
@@ -9859,7 +9863,7 @@ Acceptance Criteria:
 - [ ] P&L attribution table shows positive/negative contribution per signal group — confirms sub-model signals are adding value
 - [ ] Bankroll page renders without error; all charts populated after ≥ 10 manual bet entries
 
-### 22.4 — Uncertainty-aware bet selection & σ-scaled sizing  `[Home: Epic 22 / decision layer]`  ⬜ specced 2026-06-16  (gated on Story 9.8)
+### 22.4 — Uncertainty-aware bet selection & σ-scaled sizing  `[Home: Epic 22 / decision layer]`  🔴 CLOSED 2026-06-16 — HONEST NEGATIVE (σ-gating rejected; gate stays disabled)
 **Why this is the under-exploited Bayesian lever.** Across 33.5, [[project_30_2_bayesian_leverage_closed]], and the
 weather/OAA closure, **point accuracy is near a ceiling** given the team-level features — more features (Bayesian or
 not) keep failing the gate. But the part of Bayesianism that actually earns money in a betting product is
@@ -9880,19 +9884,25 @@ edge. Measure on the honest backtest surface (the Epic 19 EV/CLV harness + `mart
 does uncertainty-gated selection lift realized ROI / CLV / hit-rate-at-stake vs the ungated qualified-bet set?
 
 **Tasks.**
-- [ ] Define `edge_to_sigma` per pick (point edge ÷ calibrated PI width) and sweep an abstain threshold on the
+- [x] Define `edge_to_sigma` per pick (point edge ÷ calibrated PI width) and sweep an abstain threshold on the
   backtest; report ROI/CLV and bet-count tradeoff vs the current qualified-bet gate (the conviction/permission layer,
   Epic 19) — find the σ band where selection actually helps, `log()` what it drops (no silent truncation).
-- [ ] σ-scaled Kelly: fold the calibrated posterior into the 22.2 correlation-adjusted Kelly fraction (down-weight
-  high-σ legs); compare to flat / point-edge Kelly on the backtest.
-- [ ] Wire the existing CI gate (`_eval_uncertainty_below_threshold`) into the selection path as the mechanism;
+  *(backtest harness: `betting_ml/scripts/sigma_gate_backtest_22_4.py` — run `uv run python betting_ml/scripts/sigma_gate_backtest_22_4.py`)*
+- [x] σ-scaled Kelly: fold the calibrated posterior into the 22.2 correlation-adjusted Kelly fraction (down-weight
+  high-σ legs); compare to flat / point-edge Kelly on the backtest. *(`compute_sigma_scaled_kelly` in `betting_ml/utils/sigma_gate.py`)*
+- [x] Wire the existing CI gate (`_eval_uncertainty_below_threshold`) into the selection path as the mechanism;
   surface the σ tier + the abstain reason in the pick payload (pairs with the Story 30.15 explanation).
+  *(`probability_layer.py` + `scripts/predict_today.py` updated; gate `enabled: false` pending backtest threshold)*
 
 **Acceptance criteria.**
-- [ ] 9.8 calibration pass on record for every target/tier this rule consumes.
-- [ ] Backtest shows the uncertainty-gated set beats the ungated qualified set on ROI **or** CLV at a defensible
+- [x] 9.8 calibration pass on record for every target/tier this rule consumes. *(confirmed 2026-06-16; `ablation_results/served_calibration_9_8.md`)*
+- [x] Backtest shows the uncertainty-gated set beats the ungated qualified set on ROI **or** CLV at a defensible
   bet-count (paired/bootstrapped, not a point delta) — or an honest negative ("σ-gating doesn't add EV here") logged.
-- [ ] Selection/sizing is advisory only; `automated_bets` stays false ([[feedback_no_auto_betting]]).
+  **HONEST NEGATIVE 2026-06-16**: σ-gating REJECTED for both targets. Every threshold hurts vs ungated baseline
+  (p=0.07 totals, p=0.05 H2H). σ-Kelly also uniformly worse than flat. Root cause: CI width ∝ prediction
+  magnitude, not reliability — the gate drops the model's highest-edge bets. Gate stays `enabled: false`.
+  See `ablation_results/sigma_gate_22_4.md`.
+- [x] Selection/sizing is advisory only; `automated_bets` stays false ([[feedback_no_auto_betting]]).
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 22.4 standalone:
 
@@ -12479,6 +12489,104 @@ way, show Pinnacle as the sharp anchor, and do NOT auto-label "+EV" as "place th
 Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
 run Python with `uv run python`; do not git commit or push (the user handles git). Confirm the serving-path
 choice (PG vs live Snowflake) with the user before building the data layer.
+```
+
+---
+
+#### A0.4.33 — Surface the 19.7 decision-layer fields (conviction, gate signals, win-prob CI) in the app  ⬜ NEW (2026-06-17)  **[P2 — app wiring, model-side DONE]**
+
+**Why.** Story 19.7 (model-side, dev-verified 2026-06-16) now writes real `game_conviction_score`, `gate_signals_met`, and the Beta(α,β)
+80% credible interval `win_prob_ci_low` / `win_prob_ci_high` / `win_prob_ci_width` on `daily_model_predictions` for every live pick.
+The app does **not** yet read them: [`app/backend/routers/picks.py`](app/backend/routers/picks.py) hardcodes `NULL::FLOAT AS
+win_prob_ci_low/high` in its pick queries and derives `game_conviction_score` from a **placeholder** `IFF(layer4_h2h_conviction_flag,
+0.8, 0.4)`. This story swaps the placeholders for the real columns and surfaces them so the frontend has a true model-confidence read
+(conviction + a win-probability band) per pick.
+
+**What's ready (model side, no model work in this story):**
+- `daily_model_predictions` (prod `baseball_data.betting_ml`, dev `baseball_data.betting_ml_dev`) now carries: `game_conviction_score`
+  (0–1), `gate_signals_met` (int 0–5), `win_prob_alpha`, `win_prob_beta`, `win_prob_ci_low`, `win_prob_ci_high`, `win_prob_ci_width`.
+  The 80% CI brackets `calibrated_win_prob`. The Pydantic model [`app/backend/models/picks.py`](app/backend/models/picks.py) already
+  declares `game_conviction_score` / `win_prob_ci_low` / `win_prob_ci_high` (add `win_prob_ci_width` + optionally `gate_signals_met`).
+- **Build/test data available NOW:** `baseball_data.betting_ml_dev.daily_model_predictions` for `game_date = '2026-06-14'` has 14 rows
+  with all of the above populated — the app session can build/verify against dev before prod is serving these.
+
+**⚠️ Semantics the UI must respect (don't over-claim):**
+- `game_conviction_score` / `gate_signals_met` are **PARTIAL today** — Epic-19 gate criteria 2–5 are disabled, so only criterion 1
+  (offensive-vs-line) fires; `gate_signals_met ∈ {0,1}` currently. Surface it as "model conviction (early — more signals coming)", not a
+  full multi-signal gate. Do not imply 5/5 coverage.
+- The **win-prob CI is model uncertainty, not a guarantee**, and the **morning** value can be narrower than warranted (the ~30%-imputed
+  pre-lineup matrix makes the two estimators agree spuriously; the post_lineup CI is more trustworthy). Frame it as "how confident the
+  model is in this win probability," and prefer the post_lineup row's CI when both exist.
+- **Honest framing (required):** `best_alpha=0` currently (model has no demonstrated edge over the market → actionable edges/Kelly are
+  ~0 by design). Conviction + CI are **transparency / confidence** signals, **not** bet recommendations; US betting is manual
+  ([[feedback_no_auto_betting]]). No "high conviction ⇒ place bet" framing.
+
+**Tasks:**
+- [ ] Backend: in `picks.py`, replace `NULL::FLOAT AS win_prob_ci_low/high` with `b.win_prob_ci_low` / `b.win_prob_ci_high` (+ add
+      `b.win_prob_ci_width`), and replace the `IFF(layer4_h2h_conviction_flag,0.8,0.4)` conviction placeholder with the real
+      `b.game_conviction_score` (carry `b.gate_signals_met` too). Apply across every pick query that currently uses the placeholders.
+- [ ] Serving store: if the app reads the Railway PG serving store ([[project_serving_store_architecture]] / A2.12) rather than
+      Snowflake directly, add the five new columns to the PG mirror so they flow through; otherwise note the endpoint reads Snowflake.
+- [ ] Frontend: surface per pick — a **conviction** indicator (labeled "early/partial") and a **win-probability band** (the 80% CI around
+      the model win %, e.g. a small range bar). Keep raw model % visible.
+- [ ] Guardrail copy: conviction/CI are model-confidence transparency, not bet signals; no auto-"+EV ⇒ bet" framing.
+- [ ] **Changelog:** this is a non-admin user-facing change → add a changelog entry ([[feedback_story_prompt_and_changelog]]).
+
+**Acceptance criteria:**
+- [ ] `/picks/today` + `/picks/history` return real `game_conviction_score`, `gate_signals_met`, and `win_prob_ci_low/high/width`
+      (non-null for live rows once a 19.7-deployed serve has run); `win_prob_ci_low < model_win_prob < win_prob_ci_high`.
+- [ ] No remaining `NULL::FLOAT AS win_prob_ci_*` or `IFF(...conviction...)` placeholder in `picks.py`.
+- [ ] Frontend renders a conviction indicator + win-prob CI band; copy frames them as confidence/transparency (partial-gate noted), not a bet signal.
+- [ ] A changelog entry is added for the user-facing change.
+
+**Dependencies:** Story 19.7 model-side ✅ (dev-verified; **prod serve must run after the 19.7 deploy** so prod columns populate — until
+then build against `betting_ml_dev` 2026-06-14) · `app/backend/models/picks.py` fields ✅ (add `win_prob_ci_width`) · serving path
+(Snowflake now; Railway PG per A2.12). Relates to 19.5 (conviction display), A0.4.12 (`/picks`), [[project_epic12_4_status]].
+
+**▶ App-session prompt** — copy into a fresh application-repo session:
+```
+You are building Story A0.4.33 (surface the 19.7 decision-layer fields) in the Credence app repo.
+
+Goal: the model now writes real per-pick confidence signals to daily_model_predictions — game_conviction_score,
+gate_signals_met, and an 80% win-probability credible interval (win_prob_ci_low / win_prob_ci_high /
+win_prob_ci_width). The app currently IGNORES them: app/backend/routers/picks.py hardcodes
+`NULL::FLOAT AS win_prob_ci_low/high` and derives game_conviction_score from a placeholder
+`IFF(layer4_h2h_conviction_flag,0.8,0.4)`. Wire the real columns through to the API + frontend.
+
+Read first:
+  1. quant_sports_intel_models/baseball/implementation_guide.md — Story A0.4.33 (this story) IN FULL, plus
+     Story 19.7 (what the columns mean + how they're computed) and A2.12 (Railway PG serving store)
+  2. app/backend/routers/picks.py — the NULL::FLOAT / IFF placeholders to replace (every pick query)
+  3. app/backend/models/picks.py — Pydantic fields (game_conviction_score, win_prob_ci_low/high already exist;
+     add win_prob_ci_width, optionally gate_signals_met)
+
+Data (live): daily_model_predictions — prod baseball_data.betting_ml, dev baseball_data.betting_ml_dev.
+Columns: game_conviction_score (0-1), gate_signals_met (int 0-5), win_prob_alpha, win_prob_beta,
+win_prob_ci_low, win_prob_ci_high, win_prob_ci_width. The 80% CI brackets calibrated_win_prob.
+BUILD/TEST AGAINST DEV NOW: betting_ml_dev.daily_model_predictions WHERE game_date='2026-06-14' (14 rows, all
+populated). Prod columns populate after the 19.7 deploy + first prod serve — coordinate timing with the user.
+
+Backend: in picks.py replace NULL::FLOAT AS win_prob_ci_low/high with b.win_prob_ci_low/high (+ add
+win_prob_ci_width) and the IFF conviction placeholder with b.game_conviction_score (carry b.gate_signals_met).
+If the app reads the Railway PG serving store, add the 5 columns to the PG mirror; else the endpoint reads
+Snowflake (note which).
+
+Frontend: per pick, show a conviction indicator and a win-probability band (the 80% CI around the model win %).
+
+SEMANTICS (must respect — do NOT over-claim):
+  - conviction/gate are PARTIAL today: Epic-19 criteria 2-5 are off, so gate_signals_met is 0 or 1. Label it
+    "model conviction (early)", not a full 5-signal gate.
+  - the win-prob CI is model uncertainty, not a guarantee; the MORNING CI can be too narrow (imputed pre-lineup
+    matrix) — prefer the post_lineup row's CI when both exist. Frame as "how confident the model is."
+  - best_alpha=0 right now: the model has no demonstrated market edge, actionable edges are ~0 by design.
+    These are CONFIDENCE / TRANSPARENCY signals, NOT bet recommendations. US betting is manual — never frame
+    "high conviction" as "place this bet."
+
+CHANGELOG (required): this is a non-admin user-facing change — add a changelog entry as the final step of this
+work (the app's weekly changelog page, per A0.4.26).
+
+Conventions: dbtf not dbt; Snowflake only via the Snowflake MCP, fully-qualified db.schema.table, no USE;
+run Python with `uv run python`; do not git commit or push (the user handles git).
 ```
 
 ---
@@ -15756,7 +15864,7 @@ underconfident, slope = directional bias), mean predictive NLL/CRPS, and `bias =
 - [ ] A calibration verdict per (target, tier): coverage vs nominal, PIT-KS, bias, NLL/CRPS, on honest-2026 + folds.
 - [ ] Each surfaced σ/uncertainty consumer (combined_sigma, 30.15 payload, any conviction gate) is annotated
   "calibrated ✓" or "miscalibrated → recalibrate before use as a decision input."
-- [ ] No model change; this is the evidence base that gates Story 22.4 and the totals-product honesty.
+- [x] No model change; this is the evidence base that gates Story 22.4 and the totals-product honesty. *(22.4 ran 2026-06-16 — honest negative; 9.8 prerequisite fully consumed)*
 
 ### Story 10.9 — Isotonic + conformal post-calibration on Layer-3 P(over)/P(home)  `[Home: Epic 10, REOPENED]`
 

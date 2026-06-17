@@ -253,13 +253,47 @@ def _eval_run_env_supports(row: dict) -> float:
     return 0.0
 
 
-def _eval_uncertainty_below_threshold(row: dict) -> float:
-    """Criterion 3: game_uncertainty_score below threshold (Epic 9.F1).
+def _eval_uncertainty_below_threshold(row: dict, threshold: float = 0.25) -> float:
+    """Criterion 3: edge_to_sigma above threshold (Story 22.4).
 
-    Not yet wired — returns 0.0 until game_uncertainty_score is in prediction_row.
+    Returns a continuous strength in [0, 1]:
+        0.0 if edge_to_sigma < threshold  (wide posterior → abstain)
+        scales linearly from 0.01 → 1.0 over [threshold, 2*threshold]
+
+    Requires prediction_row to contain 'totals_ci_width'/'h2h_ci_width' plus the
+    corresponding edge key (populated by predict_today.py via sigma_gate.evaluate_sigma_gate).
+    Falls back to 0.0 if CI widths are absent — the gate does not fire on missing data.
+
+    threshold: minimum edge_to_sigma to qualify. Set via the registry's
+        uncertainty_below_threshold.threshold field; use the value from
+        sigma_gate_backtest_22_4.py results. Default 0.25 is preliminary.
     """
-    # Future: score = 1.0 - clip(game_uncertainty_score / threshold, 0, 1)
-    return 0.0
+    try:
+        from betting_ml.utils.sigma_gate import compute_edge_to_sigma
+    except ImportError:
+        return 0.0
+
+    if threshold is None or threshold <= 0:
+        threshold = 0.25
+
+    # Use the higher edge_to_sigma across totals and H2H (best available signal)
+    candidates: list[float] = []
+    for ci_key, edge_key in (("totals_ci_width", "totals_edge"),
+                              ("h2h_ci_width",    "h2h_edge")):
+        ci   = row.get(ci_key)
+        edge = row.get(edge_key)
+        if ci is not None and edge is not None and float(ci) > 0:
+            candidates.append(compute_edge_to_sigma(float(edge), float(ci)))
+
+    if not candidates:
+        return 0.0
+
+    ets = max(candidates)
+
+    if ets < threshold:
+        return 0.0
+    # Scale linearly 0.01 at threshold → 1.0 at 2*threshold
+    return min(1.0, 0.01 + (ets - threshold) / max(threshold, 1e-6) * 0.99)
 
 
 def _eval_market_disagreement(row: dict) -> float:
@@ -446,10 +480,14 @@ def compute_bet_permission(
         _eval_run_env_supports(prediction_row)
         if _cfg("run_env_supports", "enabled", False) else 0.0
     )
-    strengths["uncertainty_below_threshold"] = (
-        _eval_uncertainty_below_threshold(prediction_row)
-        if _cfg("uncertainty_below_threshold", "enabled", False) else 0.0
-    )
+    if _cfg("uncertainty_below_threshold", "enabled", False):
+        unc_threshold = _cfg("uncertainty_below_threshold", "threshold", 0.25)
+        unc_threshold = float(unc_threshold) if unc_threshold is not None else 0.25
+        strengths["uncertainty_below_threshold"] = _eval_uncertainty_below_threshold(
+            prediction_row, threshold=unc_threshold
+        )
+    else:
+        strengths["uncertainty_below_threshold"] = 0.0
     strengths["market_disagreement_visible"] = (
         _eval_market_disagreement(prediction_row)
         if _cfg("market_disagreement_visible", "enabled", False) else 0.0
