@@ -106,6 +106,10 @@ type BatterProfile = {
   position: string | null
   bats: string | null
   team: string | null
+  birth_date: string | null
+  age: number | null
+  height_inches: number | null
+  weight_lbs: number | null
   is_on_il: boolean
   il_since: string | null
   season_2026: BatterSeason
@@ -121,6 +125,10 @@ type PitcherProfile = {
   last_name: string | null
   position: string | null
   team: string | null
+  birth_date: string | null
+  age: number | null
+  height_inches: number | null
+  weight_lbs: number | null
   is_on_il: boolean
   il_since: string | null
   season_2026: PitcherSeason
@@ -146,6 +154,13 @@ function fmt(val: number | null | undefined, decimals = 2): string {
 function fmtPct(val: number | null | undefined): string {
   if (val == null) return "—"
   return `${(val * 100).toFixed(1)}%`
+}
+
+function fmtHeight(inches: number | null | undefined): string {
+  if (inches == null) return "—"
+  const ft = Math.floor(inches / 12)
+  const inch = inches % 12
+  return `${ft}'${inch}"`
 }
 
 function fmtIp(ip: number | null | undefined, outs: number | null | undefined): string {
@@ -538,6 +553,9 @@ function PlayerPageInner() {
                   {profile.player_type === "batter" && (profile as BatterProfile).bats
                     ? ` · Bats: ${(profile as BatterProfile).bats}`
                     : ""}
+                  {profile.age != null ? ` · Age ${profile.age}` : ""}
+                  {profile.height_inches != null ? ` · ${fmtHeight(profile.height_inches)}` : ""}
+                  {profile.weight_lbs != null ? `, ${profile.weight_lbs} lbs` : ""}
                   <span className="ml-2 rounded bg-[#1a1a1a] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                     {profile.player_type === "batter" ? "Batter" : "Pitcher"}
                   </span>
