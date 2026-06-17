@@ -301,7 +301,7 @@ final as (
         max(data_source)                                                as data_source,
         max(close_snapshot_ts)                                          as close_snapshot_ts
     from per_book
-    group by game_pk, game_date
+    group by game_pk
 )
 
 select * from final
