@@ -42,6 +42,10 @@ from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
 from betting_ml.utils.pick_explanations import build_pick_explanations  # Story 30.15
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
+from betting_ml.utils.meta_model import (  # Story 12.4 — Bayesian CLV meta-model serve
+    compute_meta_model_prediction,
+    load_latest_meta_model,
+)
 from betting_ml.utils.sigma_gate import evaluate_sigma_gate              # Story 22.4
 from betting_ml.utils.probability_layer import (
     compute_posterior,
@@ -181,6 +185,15 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     win_prob_ci_high          FLOAT,
     win_prob_ci_width         FLOAT,
 
+    -- Story 12.4 — Bayesian CLV meta-model: P(closing line moves toward the model's side)
+    -- + 80% credible interval. Served on the MORNING pass only (the trained regime); NULL on
+    -- post_lineup/backfill and on games with no Bovada open line. n_games_trained = the trace size.
+    meta_p_clv_positive       FLOAT,
+    meta_ci_low               FLOAT,
+    meta_ci_high              FLOAT,
+    meta_ci_width             FLOAT,
+    meta_n_games_trained      INTEGER,
+
     -- Story 28.3 — actual Bovada American moneyline odds at scoring time (not de-vigged).
     -- Populated for every game with Bovada h2h odds; used by the magnitude kill-criterion
     -- monitor to compute real-book ROI (decimal = 1 + 100/|odds| if negative, or odds/100+1 if positive).
@@ -255,6 +268,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     bullpen_z_score_home, bullpen_z_score_away, bullpen_signal_ood,
     gate_signals_met, game_conviction_score,
     win_prob_alpha, win_prob_beta, win_prob_ci_low, win_prob_ci_high, win_prob_ci_width,
+    meta_p_clv_positive, meta_ci_low, meta_ci_high, meta_ci_width, meta_n_games_trained,
     data_source, feature_coverage_score,
     layer4_h2h_bovada_ml_home, layer4_h2h_bovada_ml_away,
     imputed_feature_count, imputed_discriminative_count,
@@ -283,6 +297,7 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(bullpen_z_score_home)s, %(bullpen_z_score_away)s, %(bullpen_signal_ood)s,
     %(gate_signals_met)s, %(game_conviction_score)s,
     %(win_prob_alpha)s, %(win_prob_beta)s, %(win_prob_ci_low)s, %(win_prob_ci_high)s, %(win_prob_ci_width)s,
+    %(meta_p_clv_positive)s, %(meta_ci_low)s, %(meta_ci_high)s, %(meta_ci_width)s, %(meta_n_games_trained)s,
     %(data_source)s, %(feature_coverage_score)s,
     %(layer4_h2h_bovada_ml_home)s, %(layer4_h2h_bovada_ml_away)s,
     %(imputed_feature_count)s, %(imputed_discriminative_count)s,
@@ -417,6 +432,53 @@ def _load_bovada_ml_odds(target_date: str) -> dict[int, dict]:
             conn.close()
     except Exception as exc:  # noqa: BLE001
         print(f"  [28.3] Bovada ML odds unavailable ({exc}); columns will be NULL.")
+        return {}
+
+
+_META_SERVE_QUERY = """
+WITH games AS (
+    SELECT game_pk
+    FROM baseball_data.betting.stg_statsapi_games
+    WHERE official_date = %(d)s
+),
+pb AS (
+    SELECT game_pk, home_ml_money_pct - home_ml_ticket_pct AS handle_ticket_div
+    FROM baseball_data.betting_features.feature_pregame_public_betting_features
+)
+SELECT g.game_pk, mv.open_home_win_prob, pb.handle_ticket_div
+FROM games g
+JOIN baseball_data.betting.mart_odds_line_movement mv
+    ON mv.game_pk = g.game_pk AND mv.bookmaker = 'bovada'
+LEFT JOIN pb ON pb.game_pk = g.game_pk
+"""
+
+
+def _load_meta_serve_inputs(target_date: str) -> dict[int, dict]:
+    """{game_pk: {"open_home_win_prob": float|None, "handle_ticket_div": float|None}}.
+
+    Story 12.4 — the extra inputs the Bayesian CLV meta-model needs at serve time beyond the
+    model's own win prob: the Bovada OPEN de-vig home prob (drives edge_mag / open_extremity)
+    and the AN money%−ticket% divergence (pub_align). Graceful — empty dict on any failure;
+    a game with no open line gets a NULL meta prediction (the meta-model abstains on it)."""
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_META_SERVE_QUERY, {"d": target_date})
+            out: dict[int, dict] = {}
+            for gpk, open_hwp, htd in cur.fetchall():
+                if gpk is None:
+                    continue
+                out[int(gpk)] = {
+                    "open_home_win_prob": float(open_hwp) if open_hwp is not None else None,
+                    "handle_ticket_div": float(htd) if htd is not None else None,
+                }
+            print(f"  [12.4] Loaded meta-model serve inputs for {len(out)} game(s).")
+            return out
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [12.4] Meta-model serve inputs unavailable ({exc}); meta columns will be NULL.")
         return {}
 
 
@@ -743,6 +805,15 @@ def _write_predictions_to_snowflake(
     prov = _load_posterior_provenance(target_date)  # Epic 16.2 — game-level posterior provenance
     bullpen_ood_signals = _load_bullpen_ood_signals(target_date)  # Epic 19 — bullpen OOD gate
     bovada_ml = _load_bovada_ml_odds(target_date)  # Story 28.3 — actual Bovada ML for kill-criterion monitor
+    # Story 12.4 — Bayesian CLV meta-model serve. Only the MORNING (pre-lineup, market-blind)
+    # pick matches the regime the meta-model was trained on (morning edge vs the OPEN line →
+    # open→close CLV), so we serve meta_p only on the morning pass; post_lineup/backfill leave
+    # the meta columns NULL. Loaded once per serve; both fall back gracefully (NULL) if absent.
+    _serve_meta = (prediction_type == "morning") and not is_backfill
+    meta_inputs = _load_meta_serve_inputs(target_date) if _serve_meta else {}
+    _meta_trace, _meta_scaler = load_latest_meta_model() if _serve_meta else (None, None)
+    if _serve_meta and _meta_trace is None:
+        print("  [12.4] No trained meta-model artifact found; meta columns will be NULL.")
     _n_serving_guard = 0    # Story 30.3 — games abstained for value-degraded serving
     _n_lineup_deferred = 0  # Story 30.3 — pre-lineup games whose edge defers to the post_lineup re-score
     # Story 30.13 Task 4 — SLATE-LEVEL serve-time freshness gate (one check, not per game).
@@ -862,6 +933,27 @@ def _write_predictions_to_snowflake(
         game_bovada = bovada_ml.get(int(gpk_val)) if gpk_val is not None else None
         imp_summ = _imp_i  # Story 30.3 — computed above for the serving-health gate
 
+        # Story 12.4 — meta-model P(CLV>0) + 80% credible interval. Served only on the
+        # morning pass, and only when the game has a Bovada OPEN line (edge_mag needs it);
+        # otherwise the meta-model abstains and the columns are NULL. Fully guarded so a
+        # meta failure never blocks the core prediction write.
+        meta = {}
+        if _meta_trace is not None and gpk_val is not None:
+            _mi = meta_inputs.get(int(gpk_val))
+            if _mi and _mi.get("open_home_win_prob") is not None:
+                try:
+                    meta = compute_meta_model_prediction(
+                        {
+                            "model_home_prob": cal_win,
+                            "open_home_win_prob": _mi["open_home_win_prob"],
+                            "handle_ticket_div": _mi.get("handle_ticket_div"),
+                        },
+                        _meta_trace, _meta_scaler,
+                    ) or {}
+                except Exception as _meta_exc:  # noqa: BLE001
+                    print(f"  [12.4] meta-model serve failed for game {gpk_val} "
+                          f"({_meta_exc}); meta columns NULL.")
+
         # Epic 19 bullpen OOD gate — compute permission and extract OOD fields
         ood_row = {
             "bullpen_mu_home": (game_bullpen or {}).get("bullpen_mu_home"),
@@ -946,6 +1038,13 @@ def _write_predictions_to_snowflake(
             "win_prob_ci_low":           wp_unc.get("win_prob_ci_low"),
             "win_prob_ci_high":          wp_unc.get("win_prob_ci_high"),
             "win_prob_ci_width":         wp_unc.get("win_prob_ci_width"),
+            # Story 12.4 — Bayesian CLV meta-model: P(close moves toward our side) + 80% CI.
+            # NULL on post_lineup/backfill and on games with no Bovada open line (abstain).
+            "meta_p_clv_positive":       meta.get("meta_p_clv_positive"),
+            "meta_ci_low":               meta.get("meta_ci_low"),
+            "meta_ci_high":              meta.get("meta_ci_high"),
+            "meta_ci_width":             meta.get("meta_ci_width"),
+            "meta_n_games_trained":      meta.get("meta_n_games_trained"),
             # A1.10 — feature-source observability
             "data_source":               _s(df_today, "data_source", i),
             "feature_coverage_score":    _feature_coverage_score(df_today, i),
@@ -1053,6 +1152,11 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_low FLOAT")           # Story 19.7
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_high FLOAT")          # Story 19.7
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_width FLOAT")         # Story 19.7
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_p_clv_positive FLOAT")      # Story 12.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_low FLOAT")              # Story 12.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_high FLOAT")             # Story 12.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_width FLOAT")            # Story 12.4
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_n_games_trained INTEGER")   # Story 12.4
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")  # Story 30.15
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_ci_width FLOAT")   # Story 22.4
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")      # Story 22.4

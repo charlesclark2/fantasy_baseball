@@ -7017,7 +7017,20 @@ row counts/idempotency unchanged, and COMPUTE_WH active-time per fire drops from
 
 ---
 
-### 12.4 — Bayesian sequential meta-model (≥ 50 live games)  🟢 v0 CONVERGED — all 3 gates pass (2026-06-16); integration deferred to 12.5
+### 12.4 — Bayesian sequential meta-model (≥ 50 live games)  🟢 v0 CONVERGED + SERVING (morning meta_p live, dev-verified 2026-06-16); 12.5 gate-wiring still deferred
+
+**✅ SERVE SHIPPED (2026-06-16).** `scripts/predict_today.py` now writes `meta_p_clv_positive` / `meta_ci_low` / `meta_ci_high` /
+`meta_ci_width` / `meta_n_games_trained` to `daily_model_predictions` on the **morning** pass. `betting_ml/utils/meta_model.py::
+load_latest_meta_model()` picks the newest trace+scaler; `_load_meta_serve_inputs(target_date)` pulls the Bovada OPEN de-vig prob
+(mart_odds_line_movement) + AN money%−ticket% (pub_align) per game; `compute_meta_model_prediction` derives features + returns the
+posterior. **Gated to `prediction_type='morning'` and to games with a Bovada open line** (the trained regime; abstains→NULL otherwise),
+fully guarded (a meta failure never blocks core scoring). Open-line availability validated (24/7 30-min capture + morning mart build →
+~all games have an open). Dev-verified: a `--date 2026-06-16 --prediction-type morning` run wrote `meta_p` for 15/15 games, CI brackets
+the point estimate 15/15, `meta_p` 0.518–0.744 (avg 0.641 ≈ base 0.602), `avg_ci_width` 0.085, `n_trained=911`. ⏳ This **starts the live
+forward CLV track record** — the input 12.5's gate (≥100 live games + gates holding a 2nd consecutive weekly update) needs. Still TODO:
+weekly retrain cadence (so the trace updates + convergence history accrues) and the 12.5 Epic-19 gate wiring.
+
+### 12.4 (continued) — v0 convergence record  🟢 all 3 gates pass (2026-06-16)
 
 **✅ v0 BUILT & CONVERGED (2026-06-16).** `betting_ml/scripts/train_bayesian_meta_model.py` + serve helper
 `betting_ml/utils/meta_model.py::compute_meta_model_prediction`; report `ablation_results/bayesian_meta_model_12_4.md`;
@@ -7146,7 +7159,11 @@ Tasks:
   asset + S3 upload deferred — needs the in-process import path [[feedback_dagster_import_only_packaged_code]] and weekly accumulation.)*
 - [x] Add `compute_meta_model_prediction()` to `betting_ml/utils/meta_model.py` (loads trace+scaler, returns
   `meta_p_clv_positive`/`meta_ci_low`/`meta_ci_high`/`meta_ci_width`/`meta_n_games_trained`; sanity-checked: big edge→0.74, tiny→0.64,
-  symmetric in side). *(predict_today wiring + `daily_model_predictions` columns = 12.5 integration; do NOT wire until ≥100 games + 2-week gate hold.)*
+  symmetric in side).
+- [x] **predict_today serve wired (2026-06-16):** morning-only, open-line-gated, guarded; `daily_model_predictions` columns added
+  (DDL + idempotent ALTER + INSERT; 74-col=74-val verified); dev-verified 15/15 (see SERVE-SHIPPED block). NOTE: this is the SERVE
+  (records the meta prediction for the live CLV track record) — it does NOT yet feed the Epic-19 bet-permission gate; that wiring is 12.5
+  and stays gated on ≥100 live games + a 2-week convergence hold.
 - [ ] **(deferred — 12.5)** CI-width convergence tracker to MLflow (needs weekly cadence).
 - [ ] **(deferred — 12.5)** Coefficient posterior plot on `4_Model_Performance.py` (the trace has everything needed; app-side render).
 - [x] Prior update protocol: priors re-anchored from the pre-test + 12.10′ findings (intercept on the 0.602 base rate; β_edge weakly
