@@ -278,10 +278,16 @@ per_book as (
 ),
 
 -- ── Average across bookmakers ─────────────────────────────────────────────────
+-- Grain is one row per game_pk (see header). game_date is resolved as MIN across
+-- the per-book values: the dense historical-odds backfill grid straddles midnight
+-- UTC (00:00/01:00 timestamps), so a night game can be written into
+-- odds_snapshots_historical under both its true ET calendar date and the next UTC
+-- day. The straddle duplicate is always game_date + 1, so MIN(game_date) recovers
+-- the correct ET date and collapses the duplicate back to a single row per game_pk.
 final as (
     select
         game_pk,
-        game_date,
+        min(game_date)                                                 as game_date,
         avg(open_vf_home)                                               as open_vf_home,
         avg(close_vf_home)                                              as close_vf_home,
         avg(clv_home_ml)                                                as clv_home_ml,
