@@ -1,5 +1,18 @@
 [
   {
+    "week": "2026-06-16",
+    "items": [
+      {
+        "tag": "improvement",
+        "text": "Player profile pages now display age, height, and weight in the profile header alongside position and team."
+      },
+      {
+        "tag": "new",
+        "text": "Players currently on the injured list show a red IL badge with the date their stint began."
+      }
+    ]
+  },
+  {
     "week": "2026-06-09",
     "items": [
       {

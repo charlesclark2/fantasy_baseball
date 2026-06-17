@@ -49,6 +49,21 @@ away_lineup as (
     where side = 'away'
 ),
 
+-- Story 33.3 — pre-lineup expected (P(start)-weighted) batter aggregates.
+-- The morning/pre-lineup stand-in for the confirmed-lineup avg_* family above:
+-- validated corr ~0.78–0.80 vs the confirmed averages, near-unbiased. Used by the
+-- pre-lineup (Class-A) models so morning serving has an offense signal without a
+-- confirmed lineup; the post-lineup champion keeps using the avg_* (confirmed) family.
+home_expected_lineup as (
+    select * from {{ ref('feature_pregame_expected_lineup') }}
+    where home_away = 'home'
+),
+
+away_expected_lineup as (
+    select * from {{ ref('feature_pregame_expected_lineup') }}
+    where home_away = 'away'
+),
+
 -- Deduplicate to one starter per side in case of rare data duplicates
 home_starter as (
     select * from (
@@ -371,6 +386,36 @@ final as (
         h_ln.avg_eb_woba_uncertainty            as home_avg_eb_woba_uncertainty,
         h_ln.eb_coverage_pct                    as home_eb_coverage_pct,
 
+        -- ── Home expected (pre-lineup, P(start)-weighted) batter aggregates (Story 33.3) ──
+        h_exp.expected_lineup_mass              as home_expected_lineup_mass,
+        h_exp.n_candidates                      as home_expected_n_candidates,
+        h_exp.exp_lhb_count                     as home_exp_lhb_count,
+        h_exp.exp_rhb_count                     as home_exp_rhb_count,
+        h_exp.exp_woba_30d                      as home_exp_woba_30d,
+        h_exp.exp_xwoba_30d                     as home_exp_xwoba_30d,
+        h_exp.exp_k_pct_30d                     as home_exp_k_pct_30d,
+        h_exp.exp_bb_pct_30d                    as home_exp_bb_pct_30d,
+        h_exp.exp_hard_hit_pct_30d              as home_exp_hard_hit_pct_30d,
+        h_exp.exp_barrel_pct_30d                as home_exp_barrel_pct_30d,
+        h_exp.exp_whiff_rate_30d                as home_exp_whiff_rate_30d,
+        h_exp.exp_chase_rate_30d                as home_exp_chase_rate_30d,
+        h_exp.exp_woba_std                      as home_exp_woba_std,
+        h_exp.exp_xwoba_std                     as home_exp_xwoba_std,
+        h_exp.exp_k_pct_std                     as home_exp_k_pct_std,
+        h_exp.exp_bb_pct_std                    as home_exp_bb_pct_std,
+        h_exp.exp_hard_hit_pct_std              as home_exp_hard_hit_pct_std,
+        h_exp.exp_barrel_pct_std                as home_exp_barrel_pct_std,
+        h_exp.exp_woba_vs_lhp                   as home_exp_woba_vs_lhp,
+        h_exp.exp_xwoba_vs_lhp                  as home_exp_xwoba_vs_lhp,
+        h_exp.exp_k_pct_vs_lhp                  as home_exp_k_pct_vs_lhp,
+        h_exp.exp_bb_pct_vs_lhp                 as home_exp_bb_pct_vs_lhp,
+        h_exp.exp_hard_hit_pct_vs_lhp           as home_exp_hard_hit_pct_vs_lhp,
+        h_exp.exp_woba_vs_rhp                   as home_exp_woba_vs_rhp,
+        h_exp.exp_xwoba_vs_rhp                  as home_exp_xwoba_vs_rhp,
+        h_exp.exp_k_pct_vs_rhp                  as home_exp_k_pct_vs_rhp,
+        h_exp.exp_bb_pct_vs_rhp                 as home_exp_bb_pct_vs_rhp,
+        h_exp.exp_hard_hit_pct_vs_rhp           as home_exp_hard_hit_pct_vs_rhp,
+
         -- ── Away lineup ───────────────────────────────────────────────────────
         a_ln.has_full_lineup                    as away_has_full_lineup,
         a_ln.lhb_count                          as away_lhb_count,
@@ -429,6 +474,36 @@ final as (
         a_ln.avg_eb_iso                         as away_avg_eb_iso,
         a_ln.avg_eb_woba_uncertainty            as away_avg_eb_woba_uncertainty,
         a_ln.eb_coverage_pct                    as away_eb_coverage_pct,
+
+        -- ── Away expected (pre-lineup, P(start)-weighted) batter aggregates (Story 33.3) ──
+        a_exp.expected_lineup_mass              as away_expected_lineup_mass,
+        a_exp.n_candidates                      as away_expected_n_candidates,
+        a_exp.exp_lhb_count                     as away_exp_lhb_count,
+        a_exp.exp_rhb_count                     as away_exp_rhb_count,
+        a_exp.exp_woba_30d                      as away_exp_woba_30d,
+        a_exp.exp_xwoba_30d                     as away_exp_xwoba_30d,
+        a_exp.exp_k_pct_30d                     as away_exp_k_pct_30d,
+        a_exp.exp_bb_pct_30d                    as away_exp_bb_pct_30d,
+        a_exp.exp_hard_hit_pct_30d              as away_exp_hard_hit_pct_30d,
+        a_exp.exp_barrel_pct_30d                as away_exp_barrel_pct_30d,
+        a_exp.exp_whiff_rate_30d                as away_exp_whiff_rate_30d,
+        a_exp.exp_chase_rate_30d                as away_exp_chase_rate_30d,
+        a_exp.exp_woba_std                      as away_exp_woba_std,
+        a_exp.exp_xwoba_std                     as away_exp_xwoba_std,
+        a_exp.exp_k_pct_std                     as away_exp_k_pct_std,
+        a_exp.exp_bb_pct_std                    as away_exp_bb_pct_std,
+        a_exp.exp_hard_hit_pct_std              as away_exp_hard_hit_pct_std,
+        a_exp.exp_barrel_pct_std                as away_exp_barrel_pct_std,
+        a_exp.exp_woba_vs_lhp                   as away_exp_woba_vs_lhp,
+        a_exp.exp_xwoba_vs_lhp                  as away_exp_xwoba_vs_lhp,
+        a_exp.exp_k_pct_vs_lhp                  as away_exp_k_pct_vs_lhp,
+        a_exp.exp_bb_pct_vs_lhp                 as away_exp_bb_pct_vs_lhp,
+        a_exp.exp_hard_hit_pct_vs_lhp           as away_exp_hard_hit_pct_vs_lhp,
+        a_exp.exp_woba_vs_rhp                   as away_exp_woba_vs_rhp,
+        a_exp.exp_xwoba_vs_rhp                  as away_exp_xwoba_vs_rhp,
+        a_exp.exp_k_pct_vs_rhp                  as away_exp_k_pct_vs_rhp,
+        a_exp.exp_bb_pct_vs_rhp                 as away_exp_bb_pct_vs_rhp,
+        a_exp.exp_hard_hit_pct_vs_rhp           as away_exp_hard_hit_pct_vs_rhp,
 
         -- ── Home starting pitcher ─────────────────────────────────────────────
         h_st.pitcher_id                         as home_starter_pitcher_id,
@@ -1218,6 +1293,8 @@ final as (
     from games g
     left join home_lineup h_ln  on  h_ln.game_pk = g.game_pk
     left join away_lineup a_ln  on  a_ln.game_pk = g.game_pk
+    left join home_expected_lineup h_exp on  h_exp.game_pk = g.game_pk
+    left join away_expected_lineup a_exp on  a_exp.game_pk = g.game_pk
     left join home_starter h_st on  h_st.game_pk = g.game_pk
     left join away_starter a_st on  a_st.game_pk = g.game_pk
     left join home_team h_tm    on  h_tm.game_pk = g.game_pk

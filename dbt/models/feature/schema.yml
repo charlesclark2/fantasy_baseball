@@ -547,6 +547,140 @@ models:
         tests:
           - not_null
 
+  - name: feature_pregame_expected_lineup
+    description: >
+      Story 33.3 — PRE-LINEUP-available replacement for the dropped Class-B
+      lineup-AVERAGED batter aggregates (the confirmed-lineup avg_woba_30d / *_vs_lhp
+      family that morning serving cannot see). One row per game_pk × home_away.
+      Instead of averaging over the 9 CONFIRMED starters, each stat is the
+      PROBABILITY-WEIGHTED expectation over the candidate roster:
+      expected_stat = Σ P(start)·stat / Σ P(start), where P(start) comes from
+      mart_player_start_probability (Story 33.1, walk-forward leakage-free) and the
+      per-batter stats are resolved strictly-prior (same as-of carry-forward as
+      feature_pregame_lineup_features). Missing-stat candidates drop out of both
+      numerator and denominator (no dilution toward 0), so the exp_* aggregates carry
+      the same early-season / 2015-platoon null pattern as the confirmed-lineup family.
+      Injuries are subsumed (P(start) downweights injured players). v1 scope: rolling-30d
+      + std + prior-season platoon; matchup families (vs-cluster/archetype) are a
+      documented follow-on needing the opposing probable starter.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, home_away]
+
+    columns:
+      - name: game_pk
+        tests:
+          - not_null
+
+      - name: home_away
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['home', 'away']
+
+      - name: expected_lineup_mass
+        description: >
+          Σ P(start) over the game's candidate roster — the expected number of
+          lineup slots filled. Should sit near 9 (≈ a full lineup). Always present
+          (every game has candidates). The accepted_range guard would catch a corrupt
+          P(start) write (e.g. the 33.1 official_date serialization bug).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 15
+
+      - name: n_candidates
+        description: >
+          Count of candidate batters (P(start) > 0) contributing to this game's
+          expectation. Roughly 9–40 per team-game (the active+recent roster).
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 60
+
+      - name: exp_lhb_count
+        description: P-weighted expected count of left-handed batters in the lineup.
+        tests:
+          - not_null
+
+      - name: exp_rhb_count
+        description: P-weighted expected count of right-handed batters in the lineup.
+        tests:
+          - not_null
+
+      - name: exp_woba_30d
+        description: >
+          P(start)-weighted expected 30-day rolling wOBA over the candidate roster —
+          the pre-lineup stand-in for the confirmed-lineup avg_woba_30d. Null early in
+          each season when no candidate has a prior game-date row in rolling stats.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2   # physically-valid wOBA ceiling (every PA a HR);
+                               # tolerates the small-sample candidate tail (4/51k
+                               # early-season rows reach ~1.6) while still catching
+                               # corruption like the 33.1 official_date blowup.
+              config:
+                where: "exp_woba_30d is not null"
+
+      - name: exp_xwoba_30d
+        description: P-weighted expected 30-day rolling xwOBA. Same early-season null pattern as exp_woba_30d.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: exp_woba_std
+        description: P-weighted expected season-to-date rolling wOBA. Null early in each season.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+
+      - name: exp_woba_vs_lhp
+        description: >
+          P-weighted expected prior-season wOBA vs LHP over the candidate roster.
+          Null for 2015 games (no 2014 platoon data) and when no candidate has a
+          prior-season vs-LHP split.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2   # physically-valid wOBA ceiling (see exp_woba_30d)
+              config:
+                where: "exp_woba_vs_lhp is not null"
+
+      - name: exp_woba_vs_rhp
+        description: P-weighted expected prior-season wOBA vs RHP. Same null pattern as exp_woba_vs_lhp.
+        tests:
+          - not_null:
+              config:
+                warn_if: ">= 100"
+                error_if: ">= 10000"
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 2   # physically-valid wOBA ceiling (see exp_woba_30d)
+              config:
+                where: "exp_woba_vs_rhp is not null"
+
   - name: feature_pregame_starter_status
     description: >
       SCD-2 table tracking projected starter changes for each team per game.

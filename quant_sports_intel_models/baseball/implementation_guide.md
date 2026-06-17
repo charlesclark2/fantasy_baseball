@@ -18029,7 +18029,21 @@ dependency; Pinnacle historical already ingested). Pairs with Epic 12.4 (Bayesia
 
 ---
 
-### Story 12.11 — Parlay API WebSocket/SSE real-time odds streaming  `[Home: Epic 12]` ⬜ NEW (2026-06-11)
+### Story 12.11 — Parlay API WebSocket/SSE real-time odds streaming  `[Home: Epic 12]` ❌ CLOSED — NOT PURSUED (2026-06-16)
+
+**❌ CLOSED 2026-06-16 — vendor cancelled, premise no longer holds.** Streaming required Parlay's
+Business tier ($40/mo) for SSE/WS; with The Odds API as the chosen sole live source ($59/mo, 100k
+credits/mo) and **Parlay being cancelled** (proven-unreliable, the 12.3.3 silent quota loss + thin
+support), keeping Parlay alive *only* for streaming = $99/mo total — rejected by operator. Two reasons
+it's a low-cost close: (1) **30-min Railway polling is sufficient** for the open→close movement series
+the CLV/meta-model needs — the 12.4 pre-test got +0.22 corr off exactly this granularity; sub-minute
+streaming is over-engineering for pre-game MLB (lines don't move meaningfully second-to-second). (2) If
+denser near-close capture is ever wanted, **tighten the Railway cron** (e.g. `*/10` in the final hour) —
+cheap, no streaming vendor. The Odds API does not offer SSE/WS, so streaming is off the table entirely
+unless a new vendor is introduced. Single-vendor risk is covered by `odds_freshness_alert_sensor`
+(staleness + quota alarm — the alert Parlay silently lacked). In-play streaming (old Phase 2) is moot
+without a streaming provider; revisit only if a streaming vendor is re-introduced post-profitability.
+~~Original spec retained below for reference.~~
 
 **▶ New-session prompt** — copy the fenced block below into a fresh Claude Code session to run Story 12.11 standalone:
 

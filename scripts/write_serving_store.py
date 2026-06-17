@@ -1403,6 +1403,14 @@ def main() -> int:
             log.exception("Failed to write team profiles")
             errors += 1
 
+    # ── player profiles ──────────────────────────────────────────────────────────
+    if pg:
+        try:
+            errors += write_player_profiles(sf, pg, today)
+        except Exception:
+            log.exception("Failed to write player profiles")
+            errors += 1
+
     sf.close()
     if pg:
         pg.close()
@@ -1693,6 +1701,358 @@ def write_team_profiles(sf, pg_conn, today: str) -> int:
             errors += 1
 
     log.info("Team profiles written: %d teams, %d errors", len(summary_rows), errors)
+    return errors
+
+
+# ── Player profile SQL ────────────────────────────────────────────────────────
+
+_PLAYER_BATTER_SQL = """
+SELECT
+    b.game_pk,
+    b.game_date::VARCHAR           AS game_date,
+    b.game_year,
+    b.batter_id,
+    b.batter_hand,
+    b.batting_team,
+    b.opposing_team,
+    b.pa_count,
+    b.hits,
+    b.home_runs,
+    b.strikeouts,
+    b.walks,
+    b.pitches_seen,
+    b.avg_std,
+    b.obp_std,
+    b.slg_std,
+    b.ops_std,
+    b.iso_std,
+    b.woba_std,
+    b.xwoba_std,
+    b.xba_std,
+    b.xslg_std,
+    b.k_pct_std,
+    b.bb_pct_std,
+    b.hard_hit_pct_std,
+    b.barrel_pct_std,
+    b.whiff_rate_std,
+    b.games_std,
+    b.pa_count_std,
+    b.games_30d,
+    b.pa_count_30d,
+    b.woba_30d,
+    b.xwoba_30d,
+    b.k_pct_30d,
+    b.bb_pct_30d,
+    b.hard_hit_pct_30d,
+    b.barrel_pct_30d,
+    b.whiff_rate_30d
+FROM baseball_data.betting.mart_batter_rolling_stats b
+WHERE b.game_year = 2026
+ORDER BY b.batter_id, b.game_date
+"""
+
+_PLAYER_IDENTITY_SQL = """
+SELECT
+    player_id,
+    player_type,
+    full_name,
+    first_name,
+    last_name,
+    position_abbreviation,
+    team,
+    bats,
+    birth_date::VARCHAR AS birth_date,
+    age,
+    height_inches,
+    weight_lbs,
+    is_on_il,
+    il_since::VARCHAR AS il_since
+FROM baseball_data.betting.mart_player_profile_identity
+"""
+
+_PLAYER_PITCHER_SQL = """
+SELECT
+    p.game_pk,
+    p.game_date::VARCHAR           AS game_date,
+    p.game_year,
+    p.pitcher_id,
+    p.pitching_team,
+    p.batting_team                 AS opposing_team,
+    p.is_home_team,
+    p.total_pitches,
+    p.batters_faced,
+    p.outs_recorded,
+    p.innings_pitched,
+    p.strikeouts,
+    p.walks,
+    p.hit_by_pitch,
+    p.home_runs_allowed,
+    p.hits_allowed,
+    p.runs_allowed,
+    p.xwoba_against,
+    p.avg_fastball_velo,
+    p.cumulative_season_ip,
+    p.cumulative_season_pitches
+FROM baseball_data.betting.mart_starting_pitcher_game_log p
+WHERE p.game_year = 2026
+ORDER BY p.pitcher_id, p.game_date
+"""
+
+
+
+def write_player_profiles(sf, pg_conn, today: str) -> int:
+    """Builds and writes player profile blobs (batters + pitchers) to api_cache.
+
+    Writes:
+      - player/{player_id}  (is_permanent=True) — full profile with season stats + game log
+      - players/list        (is_permanent=True) — all-player summary for listing/search
+    """
+    errors = 0
+    try:
+        batter_rows    = _sf_query(sf, _PLAYER_BATTER_SQL)
+        pitcher_rows   = _sf_query(sf, _PLAYER_PITCHER_SQL)
+        identity_rows  = _sf_query(sf, _PLAYER_IDENTITY_SQL)
+    except Exception:
+        log.exception("Failed to query Snowflake for player profiles")
+        return 1
+
+    # Index identity rows by (player_id, player_type)
+    batter_identity: dict[int, dict] = {
+        r["PLAYER_ID"]: r for r in identity_rows if r["PLAYER_TYPE"] == "batter"
+    }
+    pitcher_identity: dict[int, dict] = {
+        r["PLAYER_ID"]: r for r in identity_rows if r["PLAYER_TYPE"] == "pitcher"
+    }
+
+    # Group batter game rows by batter_id (already ordered by game_date ASC)
+    batter_games: dict[int, list] = defaultdict(list)
+    for r in batter_rows:
+        batter_games[r["BATTER_ID"]].append(r)
+
+    # Group pitcher game rows by pitcher_id
+    pitcher_games: dict[int, list] = defaultdict(list)
+    for r in pitcher_rows:
+        pitcher_games[r["PITCHER_ID"]].append(r)
+
+    batter_summaries = []
+    pitcher_summaries = []
+
+    # ── Batter profiles ──────────────────────────────────────────────────────
+    for batter_id, rows in batter_games.items():
+        last = rows[-1]  # most recent game — STD cols hold season-to-date totals
+        identity = batter_identity.get(batter_id, {})
+
+        season = {
+            "games": _int(last.get("GAMES_STD")),
+            "pa": _int(last.get("PA_COUNT_STD")),
+            "hits": sum(_int(r.get("HITS")) or 0 for r in rows),
+            "hr": sum(_int(r.get("HOME_RUNS")) or 0 for r in rows),
+            "bb": sum(_int(r.get("WALKS")) or 0 for r in rows),
+            "k": sum(_int(r.get("STRIKEOUTS")) or 0 for r in rows),
+            "avg": _flt(last.get("AVG_STD")),
+            "obp": _flt(last.get("OBP_STD")),
+            "slg": _flt(last.get("SLG_STD")),
+            "ops": _flt(last.get("OPS_STD")),
+            "iso": _flt(last.get("ISO_STD")),
+            "woba": _flt(last.get("WOBA_STD")),
+            "xwoba": _flt(last.get("XWOBA_STD")),
+            "xba": _flt(last.get("XBA_STD")),
+            "xslg": _flt(last.get("XSLG_STD")),
+            "k_pct": _flt(last.get("K_PCT_STD")),
+            "bb_pct": _flt(last.get("BB_PCT_STD")),
+            "hard_hit_pct": _flt(last.get("HARD_HIT_PCT_STD")),
+            "barrel_pct": _flt(last.get("BARREL_PCT_STD")),
+            "whiff_rate": _flt(last.get("WHIFF_RATE_STD")),
+        }
+
+        rolling_30d = {
+            "games": _int(last.get("GAMES_30D")),
+            "pa": _int(last.get("PA_COUNT_30D")),
+            "woba": _flt(last.get("WOBA_30D")),
+            "xwoba": _flt(last.get("XWOBA_30D")),
+            "k_pct": _flt(last.get("K_PCT_30D")),
+            "bb_pct": _flt(last.get("BB_PCT_30D")),
+            "hard_hit_pct": _flt(last.get("HARD_HIT_PCT_30D")),
+            "barrel_pct": _flt(last.get("BARREL_PCT_30D")),
+            "whiff_rate": _flt(last.get("WHIFF_RATE_30D")),
+        }
+
+        game_log = [
+            {
+                "game_pk": _int(r.get("GAME_PK")),
+                "date": str(r.get("GAME_DATE")),
+                "opp": r.get("OPPOSING_TEAM"),
+                "pa": _int(r.get("PA_COUNT")),
+                "hits": _int(r.get("HITS")),
+                "hr": _int(r.get("HOME_RUNS")),
+                "bb": _int(r.get("WALKS")),
+                "k": _int(r.get("STRIKEOUTS")),
+                "pitches": _int(r.get("PITCHES_SEEN")),
+            }
+            for r in rows
+        ]
+
+        full_name = identity.get("FULL_NAME")
+        team = last.get("BATTING_TEAM")
+        position = identity.get("POSITION_ABBREVIATION")
+
+        payload = {
+            "player_id": batter_id,
+            "player_type": "batter",
+            "full_name": full_name,
+            "first_name": identity.get("FIRST_NAME"),
+            "last_name": identity.get("LAST_NAME"),
+            "position": position,
+            "bats": last.get("BATTER_HAND"),
+            "team": team,
+            "birth_date": identity.get("BIRTH_DATE"),
+            "age": _int(identity.get("AGE")),
+            "height_inches": _int(identity.get("HEIGHT_INCHES")),
+            "weight_lbs": _int(identity.get("WEIGHT_LBS")),
+            "is_on_il": bool(identity.get("IS_ON_IL")),
+            "il_since": identity.get("IL_SINCE"),
+            "season_2026": season,
+            "rolling_30d": rolling_30d,
+            "game_log": game_log,
+        }
+
+        try:
+            _pg_set_cache(pg_conn, f"player/{batter_id}", today, payload, is_permanent=True)
+        except Exception:
+            log.exception("Failed to write batter profile for player_id=%s", batter_id)
+            errors += 1
+            continue
+
+        batter_summaries.append({
+            "player_id": batter_id,
+            "full_name": full_name,
+            "position": position,
+            "bats": last.get("BATTER_HAND"),
+            "team": team,
+            "season_2026": {
+                "pa": season["pa"],
+                "avg": season["avg"],
+                "obp": season["obp"],
+                "slg": season["slg"],
+                "hr": season["hr"],
+                "woba": season["woba"],
+                "xwoba": season["xwoba"],
+            },
+        })
+
+    # ── Pitcher profiles ─────────────────────────────────────────────────────
+    for pitcher_id, rows in pitcher_games.items():
+        last = rows[-1]
+        identity = pitcher_identity.get(pitcher_id, {})
+
+        ip = _flt(last.get("CUMULATIVE_SEASON_IP")) or 0
+        k_total = sum(_int(r.get("STRIKEOUTS")) or 0 for r in rows)
+        bb_total = sum(_int(r.get("WALKS")) or 0 for r in rows)
+        ra_total = sum(_int(r.get("RUNS_ALLOWED")) or 0 for r in rows)
+
+        xw_num = sum(
+            (_flt(r.get("XWOBA_AGAINST")) or 0) * (_int(r.get("BATTERS_FACED")) or 0)
+            for r in rows if r.get("XWOBA_AGAINST") is not None
+        )
+        xw_den = sum(
+            _int(r.get("BATTERS_FACED")) or 0
+            for r in rows if r.get("XWOBA_AGAINST") is not None
+        )
+
+        season = {
+            "starts": len(rows),
+            "ip": round(ip, 1) if ip else None,
+            "total_pitches": sum(_int(r.get("TOTAL_PITCHES")) or 0 for r in rows),
+            "k": k_total,
+            "bb": bb_total,
+            "hbp": sum(_int(r.get("HIT_BY_PITCH")) or 0 for r in rows),
+            "hr": sum(_int(r.get("HOME_RUNS_ALLOWED")) or 0 for r in rows),
+            "hits": sum(_int(r.get("HITS_ALLOWED")) or 0 for r in rows),
+            "runs": ra_total,
+            "batters_faced": sum(_int(r.get("BATTERS_FACED")) or 0 for r in rows),
+            "era": round(ra_total / ip * 9, 2) if ip > 0 else None,
+            "k9": round(k_total / ip * 9, 2) if ip > 0 else None,
+            "bb9": round(bb_total / ip * 9, 2) if ip > 0 else None,
+            "xwoba_against": round(xw_num / xw_den, 4) if xw_den > 0 else None,
+            "avg_velo": _flt(last.get("AVG_FASTBALL_VELO")),
+        }
+
+        game_log = [
+            {
+                "game_pk": _int(r.get("GAME_PK")),
+                "date": str(r.get("GAME_DATE")),
+                "opp": r.get("OPPOSING_TEAM"),
+                "home_away": "home" if r.get("IS_HOME_TEAM") else "away",
+                "ip": _flt(r.get("INNINGS_PITCHED")),
+                "outs": _int(r.get("OUTS_RECORDED")),
+                "k": _int(r.get("STRIKEOUTS")),
+                "bb": _int(r.get("WALKS")),
+                "hr": _int(r.get("HOME_RUNS_ALLOWED")),
+                "hits": _int(r.get("HITS_ALLOWED")),
+                "runs": _int(r.get("RUNS_ALLOWED")),
+                "pitches": _int(r.get("TOTAL_PITCHES")),
+                "xwoba_against": _flt(r.get("XWOBA_AGAINST")),
+                "velo": _flt(r.get("AVG_FASTBALL_VELO")),
+            }
+            for r in rows
+        ]
+
+        full_name = identity.get("FULL_NAME")
+        team = last.get("PITCHING_TEAM")
+        position = identity.get("POSITION_ABBREVIATION") or "P"
+
+        payload = {
+            "player_id": pitcher_id,
+            "player_type": "pitcher",
+            "full_name": full_name,
+            "first_name": identity.get("FIRST_NAME"),
+            "last_name": identity.get("LAST_NAME"),
+            "position": position,
+            "team": team,
+            "birth_date": identity.get("BIRTH_DATE"),
+            "age": _int(identity.get("AGE")),
+            "height_inches": _int(identity.get("HEIGHT_INCHES")),
+            "weight_lbs": _int(identity.get("WEIGHT_LBS")),
+            "is_on_il": bool(identity.get("IS_ON_IL")),
+            "il_since": identity.get("IL_SINCE"),
+            "season_2026": season,
+            "game_log": game_log,
+        }
+
+        try:
+            _pg_set_cache(pg_conn, f"player/{pitcher_id}", today, payload, is_permanent=True)
+        except Exception:
+            log.exception("Failed to write pitcher profile for player_id=%s", pitcher_id)
+            errors += 1
+            continue
+
+        pitcher_summaries.append({
+            "player_id": pitcher_id,
+            "full_name": full_name,
+            "position": position,
+            "team": team,
+            "season_2026": {
+                "starts": season["starts"],
+                "ip": season["ip"],
+                "era": season["era"],
+                "k": season["k"],
+                "bb": season["bb"],
+                "xwoba_against": season["xwoba_against"],
+            },
+        })
+
+    # ── Combined list blob ───────────────────────────────────────────────────
+    list_payload = {"batters": batter_summaries, "pitchers": pitcher_summaries}
+    try:
+        _pg_set_cache(pg_conn, "players/list", today, list_payload, is_permanent=True)
+    except Exception:
+        log.exception("Failed to write players/list blob")
+        errors += 1
+
+    log.info(
+        "Player profiles written: %d batters, %d pitchers, %d errors",
+        len(batter_games), len(pitcher_games), errors,
+    )
     return errors
 
 
