@@ -366,7 +366,8 @@ Gate/AC: push arrives <5min after the run, email <10min; no-permission users fal
 **changelog: yes — push/email bet alerts are a user-facing capability.**
 ```
 ```
-▶ Story prompt — E9.10 (A0.4.11) Settings: profile + prefs (UNBLOCKED PARTS ONLY)   [App + backend]   ⭐ P1 (beta-launch blocker)
+▶ Story prompt — E9.10 (A0.4.11) Settings: profile + prefs (UNBLOCKED PARTS ONLY)   [App + backend]   ✅ SHIPPED 2026-06-18
+DONE: new GET/PUT /users/profile (app/backend/routers/users.py + services/dynamo.py; lambda deployed) on credence-prod-dynamo-users; editable initial_deposit persists (TanStack Query + "Saved ✓"); MOCK_DATA removed; real email/gear-nav/sign-out-everywhere; notif toggle = "Coming soon". Unblocks E9.17. (Original brief below.)
 APP TARGET: UI→frontend/app/settings; backend→app/backend/routers (users/alerts, minimal); serving→DynamoDB credence-prod-dynamo-users; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
 SCOPE (strict): finish the UNBLOCKED parts ONLY. The email/push notification TOGGLE is OUT of this card — leave a "Coming soon" placeholder. (SES went to production 2026-06-18, so the toggle's only remaining blocker is E9.9's SNS/Lambda/DynamoDB backend, not SES.)
 Read: master Story A0.4.11 in full + §0.2 + A0.4.3 (API client/TanStack) + E9.17 (which consumes the deposit field).

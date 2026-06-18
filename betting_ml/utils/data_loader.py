@@ -23,7 +23,7 @@ FROM baseball_data.betting_features.feature_pregame_game_features f
 JOIN baseball_data.betting.mart_game_results r USING (game_pk)
 WHERE f.has_full_data = TRUE
   AND LEAST(f.home_games_played, f.away_games_played) >= {min_games_played}
-  AND f.game_year >= 2021
+  AND f.game_year >= {min_year}
 """
 
 _TODAY_QUERY = """
@@ -708,9 +708,18 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
     return df
 
 
-def load_features(min_games_played: int = 15) -> pd.DataFrame:
+def load_features(min_games_played: int = 15, min_year: int = 2021) -> pd.DataFrame:
     """Training/offline feature surface — `feature_pregame_game_features` joined to
     final scores, filtered to `has_full_data` + min games.
+
+    `min_year` (default 2021) is the earliest season loaded. The mart is populated back to
+    2015, so Story E1.6 can opt into `min_year=2016` to roughly double the sample — but ONLY
+    in combination with the regime-similarity weighting (`run_env_regime`), because the older
+    seasons span different run-environment regimes (2019 ≈ peak juiced ball). Pre-2021 rows
+    carry NULL for the Epic-16 sequential posteriors (backfilled 2021+) and FanGraphs Stuff+
+    (2020+); those impute to constants, so a model that relies on them should drop them (the
+    E1.3 slim contracts already largely do). Default stays 2021 so production loading is
+    unchanged unless a caller deliberately extends.
 
     ⚠ NOT POINT-IN-TIME (Story 30.3). This reads each game's row AS IT EXISTS NOW —
     i.e. POST-game-backfilled and dense (lineups, starters, EB posteriors, umpire
@@ -725,7 +734,7 @@ def load_features(min_games_played: int = 15) -> pd.DataFrame:
     """
     conn = _connect()
     try:
-        query = _QUERY.format(min_games_played=int(min_games_played))
+        query = _QUERY.format(min_games_played=int(min_games_played), min_year=int(min_year))
         cur = conn.cursor()
         cur.execute(query)
         columns = [desc[0].lower() for desc in cur.description]

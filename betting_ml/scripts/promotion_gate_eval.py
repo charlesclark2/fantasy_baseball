@@ -46,6 +46,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from betting_ml.scripts.ablation_identifier_features import _TARGETS as _CHAMP_HP, _impute
 from betting_ml.scripts.train_elasticnet_prod import _MARKET_COLS_TO_EXCLUDE
+from betting_ml.utils.cv import PurgedWalkForwardSplit
 from betting_ml.utils.cv_splits import all_season_splits
 from betting_ml.utils.data_loader import load_features
 from betting_ml.utils.feature_hygiene import is_identifier_name
@@ -53,6 +54,8 @@ from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.promotion_gate import (
     PredictiveOutput, calibration_report, evaluate_promotion,
 )
+from betting_ml.utils.run_env_regime import compute_regime_weights, season_regime_profile
+from betting_ml.utils.sample_uniqueness import compute_sample_uniqueness
 
 # The 9 market cols Story 30.4 ADDED — subtract them to reconstruct the pre-30.4
 # champion's market exclude set (so the champion arm still carries the 9 leaks).
@@ -157,21 +160,36 @@ class ModelSpec(Protocol):
     def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput: ...
 
 
+# A `Predictor` is anything with `.output(X) -> PredictiveOutput`. Splitting fit from predict
+# lets MDA (E1.3) FIT ONCE per fold and re-predict on many permuted eval matrices cheaply —
+# refitting per permutation would be both prohibitively slow and a soundness error (MDA holds
+# the model fixed). `sample_weight` (E1.2) flows into the underlying fit when supplied.
+
 @dataclass
 class XGBPlattSpec:
     """XGBoost + Platt calibration on the eval split (the home_win production recipe)."""
     params: dict
     name: str = "xgb_platt"
 
-    def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput:
+    def fit(self, Xtr, ytr, Xcal, ycal, sample_weight=None):
         from sklearn.linear_model import LogisticRegression
         from xgboost import XGBClassifier
         clf = XGBClassifier(**self.params)
-        clf.fit(Xtr, ytr.astype(int))
-        raw = clf.predict_proba(Xev)[:, 1]
+        clf.fit(Xtr, ytr.astype(int), sample_weight=sample_weight)
+        # Platt calibrator fit on the (unpermuted) calibration split, then held FIXED so a
+        # permuted eval matrix is mapped through the same calibrator.
+        raw_cal = clf.predict_proba(Xcal)[:, 1]
         cal = LogisticRegression(C=1.0, solver="lbfgs", max_iter=1000)
-        cal.fit(raw.reshape(-1, 1), yev.astype(int))
-        return PredictiveOutput.binary(cal.predict_proba(raw.reshape(-1, 1))[:, 1])
+        cal.fit(raw_cal.reshape(-1, 1), ycal.astype(int))
+
+        def _output(X) -> PredictiveOutput:
+            raw = clf.predict_proba(X)[:, 1]
+            return PredictiveOutput.binary(cal.predict_proba(raw.reshape(-1, 1))[:, 1])
+
+        return _Predictor(_output)
+
+    def fit_predict(self, Xtr, ytr, Xev, yev, sample_weight=None) -> PredictiveOutput:
+        return self.fit(Xtr, ytr, Xev, yev, sample_weight=sample_weight).output(Xev)
 
 
 @dataclass
@@ -183,21 +201,38 @@ class NGBoostSpec:
     name: str = "ngboost"
     seed: int = 42
 
-    def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput:
+    def fit(self, Xtr, ytr, Xcal=None, ycal=None, sample_weight=None):
         from ngboost import NGBRegressor
         from ngboost.distns import LogNormal, Normal
         D = {"Normal": Normal, "LogNormal": LogNormal}[self.dist]
         m = NGBRegressor(n_estimators=self.n_estimators, Dist=D, verbose=False,
                          random_state=self.seed)
-        m.fit(Xtr.values, ytr)
-        pred = np.asarray(m.predict(Xev.values), float)
-        try:
-            p = m.pred_dist(Xev.values).params
-            if self.dist == "Normal":
-                return PredictiveOutput.normal(p["loc"], p["scale"])
-            return PredictiveOutput.lognormal(np.log(np.asarray(p["scale"], float)), p["s"])
-        except Exception:
-            return PredictiveOutput.point(pred)
+        m.fit(Xtr.values, ytr, sample_weight=sample_weight)
+        dist = self.dist
+
+        def _output(X) -> PredictiveOutput:
+            Xv = X.values if hasattr(X, "values") else np.asarray(X)
+            pred = np.asarray(m.predict(Xv), float)
+            try:
+                p = m.pred_dist(Xv).params
+                if dist == "Normal":
+                    return PredictiveOutput.normal(p["loc"], p["scale"])
+                return PredictiveOutput.lognormal(np.log(np.asarray(p["scale"], float)), p["s"])
+            except Exception:
+                return PredictiveOutput.point(pred)
+
+        return _Predictor(_output)
+
+    def fit_predict(self, Xtr, ytr, Xev, yev, sample_weight=None) -> PredictiveOutput:
+        return self.fit(Xtr, ytr, Xev, yev, sample_weight=sample_weight).output(Xev)
+
+
+@dataclass
+class _Predictor:
+    """A fitted model frozen at predict time: `.output(X) -> PredictiveOutput`."""
+    _fn: object
+    def output(self, X) -> PredictiveOutput:
+        return self._fn(X)
 
 
 @dataclass
@@ -206,9 +241,12 @@ class SklearnPointSpec:
     factory: object
     name: str = "sklearn_point"
 
-    def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput:
+    def fit_predict(self, Xtr, ytr, Xev, yev, sample_weight=None) -> PredictiveOutput:
         est = self.factory()
-        est.fit(Xtr, ytr)
+        try:
+            est.fit(Xtr, ytr, sample_weight=sample_weight)
+        except TypeError:
+            est.fit(Xtr, ytr)
         return PredictiveOutput.point(np.asarray(est.predict(Xev), float))
 
 
@@ -220,26 +258,78 @@ class SamplesSpec:
     sampler: object
     name: str = "samples"
 
-    def fit_predict(self, Xtr, ytr, Xev, yev) -> PredictiveOutput:
+    def fit_predict(self, Xtr, ytr, Xev, yev, sample_weight=None) -> PredictiveOutput:
         return PredictiveOutput.from_samples(self.sampler(Xtr, ytr, Xev))
+
+
+def _default_splitter(df):
+    return all_season_splits(df, min_train_seasons=3)
+
+
+def make_gate_splitter(purged: bool, *, feature_cols=None, embargo_days: int = 3):
+    """Return `(splitter_callable, splitter_obj_or_None)` for the gate driver.
+
+    `purged=False` → the legacy season-forward split (value-preserving default).
+    `purged=True` → `PurgedWalkForwardSplit` (E1.1), feature-aware purge band sized by the
+    union of the models' feature columns, plus an embargo. The returned object exposes
+    `.last_stats` after iteration for the recalibration report.
+    """
+    if not purged:
+        return _default_splitter, None
+    sp = PurgedWalkForwardSplit(embargo_days=embargo_days)
+    cols = list(feature_cols) if feature_cols is not None else None
+    return (lambda df: sp.split(df, feature_cols=cols)), sp
+
+
+def _fold_sample_weight(df, train_idx, eval_year, *, uniqueness_weight, regime_weight,
+                        regime_profile=None):
+    """Combine the per-fold sample weights (E1.2 uniqueness × E1.6 regime). Returns None when
+    neither is requested. Both are computed on the SAME training rows and apply to BOTH the
+    champion and challenger arm, so the comparison stays fair."""
+    parts = []
+    if uniqueness_weight:
+        parts.append(compute_sample_uniqueness(df.loc[train_idx, "game_date"]))
+    if regime_weight:
+        parts.append(compute_regime_weights(
+            df.loc[train_idx, "game_date"], target_season=int(eval_year),
+            profile=regime_profile, df=(None if regime_profile is not None else df)))
+    if not parts:
+        return None
+    w = parts[0]
+    for p in parts[1:]:
+        w = w * p
+    return w
 
 
 def walk_forward_gate(df, target_col, *, champion: ModelSpec, challenger: ModelSpec,
                       champion_cols, challenger_cols, metric,
-                      completed_seasons=None, current_season=None, **gate_kwargs):
+                      completed_seasons=None, current_season=None,
+                      splitter=None, uniqueness_weight: bool = False,
+                      regime_weight: bool = False, **gate_kwargs):
     """Generic, model-agnostic champion-vs-challenger gate. Retrains BOTH specs per
-    season-forward fold, scores each per game via PredictiveOutput.score_to_truth(metric),
-    and runs evaluate_promotion. Works for ANY pair of ModelSpec adapters."""
+    fold, scores each per game via PredictiveOutput.score_to_truth(metric), and runs
+    evaluate_promotion. Works for ANY pair of ModelSpec adapters.
+
+    `splitter` (callable df → iterator of (train_idx, eval_idx)) defaults to the legacy
+    season-forward split; pass a `PurgedWalkForwardSplit.split` callable (E1.1) for the
+    purged, embargoed CV. `uniqueness_weight=True` fits both arms with AFML sample-
+    uniqueness weights (E1.2); `regime_weight=True` ALSO weights by run-environment regime
+    similarity to each fold's eval season (E1.6) — both apply equally to champion and
+    challenger so the comparison stays fair."""
+    splitter = splitter or _default_splitter
+    regime_profile = season_regime_profile(df) if regime_weight else None
     seasons, champ_scores, chal_scores = [], [], []
     warned_kind = False
-    for train_idx, eval_idx in all_season_splits(df, min_train_seasons=3):
+    for train_idx, eval_idx in splitter(df):
         yr = int(df.loc[eval_idx, "game_year"].mode()[0])
         ytr_c = df.loc[train_idx, target_col].values
         yev = df.loc[eval_idx, target_col].values
+        sw = _fold_sample_weight(df, train_idx, yr, uniqueness_weight=uniqueness_weight,
+                                 regime_weight=regime_weight, regime_profile=regime_profile)
         Xtr_c, Xev_c = _impute(df.loc[train_idx, champion_cols], df.loc[eval_idx, champion_cols])
         Xtr_h, Xev_h = _impute(df.loc[train_idx, challenger_cols], df.loc[eval_idx, challenger_cols])
-        co = champion.fit_predict(Xtr_c, ytr_c, Xev_c, yev)
-        ho = challenger.fit_predict(Xtr_h, ytr_c, Xev_h, yev)
+        co = champion.fit_predict(Xtr_c, ytr_c, Xev_c, yev, sample_weight=sw)
+        ho = challenger.fit_predict(Xtr_h, ytr_c, Xev_h, yev, sample_weight=sw)
         # Soundness guard: a distributional metric (crps/nll) across MISMATCHED output
         # kinds credits distribution quality, not just point accuracy — CRPS of a point
         # prediction = |error| ≥ the CRPS of a calibrated distribution at the same mean,
@@ -323,13 +413,15 @@ def _pct_over(out: PredictiveOutput, y, line) -> dict:
 
 
 def walk_forward_calibration(df, target_col, *, champion: ModelSpec, challenger: ModelSpec,
-                             champion_cols, challenger_cols, line_col: str | None = None):
+                             champion_cols, challenger_cols, line_col: str | None = None,
+                             splitter=None, uniqueness_weight: bool = False):
     """Same walk-forward folds as the gate, but collect DISTRIBUTION-calibration
     diagnostics (coverage_80 / PIT-KS / NLL / CRPS / directional bias) for champion vs
     challenger — the evidence a distributional challenger needs before it can be a
     projection source. Returns {'per_season': [...], 'pooled': {...}}."""
+    splitter = splitter or _default_splitter
     champ_outs, chal_outs, ys, lines, per_season = [], [], [], [], []
-    for train_idx, eval_idx in all_season_splits(df, min_train_seasons=3):
+    for train_idx, eval_idx in splitter(df):
         yr = int(df.loc[eval_idx, "game_year"].mode()[0])
         ytr = df.loc[train_idx, target_col].values
         yev = df.loc[eval_idx, target_col].values
@@ -359,7 +451,8 @@ def walk_forward_calibration(df, target_col, *, champion: ModelSpec, challenger:
 
 
 def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False,
-                     challenger_contract_override: str | None = None) -> dict:
+                     challenger_contract_override: str | None = None,
+                     purged_cv: bool = False, embargo_days: int = 3) -> dict:
     """Distribution-calibration comparison (champion vs challenger) for a regression target.
     The verdict the totals projection promotion needs: is the challenger's PREDICTED SPREAD
     honest, not just its point MAE? With season_normalize=True (Story 27.7), the challenger is
@@ -385,10 +478,14 @@ def _run_calibration(name: str, df: pd.DataFrame, season_normalize: bool = False
 
     print(f"\n=== {name} CALIBRATION (champion {champion.name} vs challenger {challenger.name}) ===")
     print(f"  champion:   {len(champ_cols):3d} feats   challenger: {len(chal_cols):3d} feats")
+    splitter, _ = make_gate_splitter(purged_cv, feature_cols=set(champ_cols) | set(chal_cols),
+                                     embargo_days=embargo_days)
+    if purged_cv:
+        print(f"  [E1.1] PURGED walk-forward CV (embargo={embargo_days}d, feature-aware purge band)")
     res = walk_forward_calibration(
         df, cfg["target_col"], champion=champion, challenger=challenger,
         champion_cols=champ_cols, challenger_cols=chal_cols,
-        line_col=_TOTALS_LINE_COL if name == "total_runs" else None)
+        line_col=_TOTALS_LINE_COL if name == "total_runs" else None, splitter=splitter)
 
     pc, ph = res["pooled"]["champion"], res["pooled"]["challenger"]
     print(f"\n  POOLED (all eval games, n={pc['n']}):")
@@ -489,7 +586,9 @@ def _build_specs(name: str, cfg: dict, seed: int = 42) -> tuple[ModelSpec, Model
 def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = None,
                 season_normalize: bool = False, seed: int = 42,
                 challenger_contract_override: str | None = None,
-                champion_contract_override: str | None = None) -> dict:
+                champion_contract_override: str | None = None,
+                purged_cv: bool = False, embargo_days: int = 3,
+                uniqueness_weight: bool = False, regime_weight: bool = False) -> dict:
     cfg = _TARGETS[name]
     chal_contract = cfg["challenger_contract"]
     if season_normalize:
@@ -529,12 +628,26 @@ def _run_target(name: str, df: pd.DataFrame, correctness_override: str | None = 
     print(f"  challenger: {len(chal_cols):3d} feats, {challenger.name}")
     if correctness_override:
         print(f"  correctness override requested: {correctness_override}")
+    splitter, sp_obj = make_gate_splitter(purged_cv, feature_cols=set(champ_cols) | set(chal_cols),
+                                          embargo_days=embargo_days)
+    if purged_cv:
+        print(f"  [E1.1] PURGED walk-forward CV (embargo={embargo_days}d, feature-aware purge band)")
+    if uniqueness_weight:
+        print("  [E1.2] sample-uniqueness weights applied to BOTH arms")
+    if regime_weight:
+        print("  [E1.6] run-environment regime-similarity weights applied to BOTH arms "
+              "(per-fold, toward each eval season)")
 
     verdict = walk_forward_gate(
         df, cfg["target_col"], champion=champion, challenger=challenger,
         champion_cols=champ_cols, challenger_cols=chal_cols, metric=cfg["metric"],
-        correctness_override=correctness_override, seed=seed)
+        correctness_override=correctness_override, seed=seed,
+        splitter=splitter, uniqueness_weight=uniqueness_weight, regime_weight=regime_weight)
     print(verdict)
+    if sp_obj is not None and sp_obj.last_stats:
+        tot_drop = sum(s.n_dropped for s in sp_obj.last_stats)
+        print(f"  [E1.1] purge dropped {tot_drop} training rows across {len(sp_obj.last_stats)} folds "
+              f"(per-fold: {', '.join(f'{s.eval_year}:{s.n_dropped}' for s in sp_obj.last_stats)})")
     return {
         "target": name, "metric": cfg["metric"],
         "champion_recipe": champion.name, "challenger_recipe": challenger.name,
@@ -577,6 +690,28 @@ def main() -> None:
                          "feature group (e.g. champion = seasonnorm-no-weather vs --challenger-contract "
                          "seasonnorm+weather attributes the whole Δ to weather). Accuracy gate only "
                          "(not --eval-calibration). Requires a single --target.")
+    ap.add_argument("--purged-cv", action="store_true",
+                    help="Epic E1.1: use the PURGED + embargoed walk-forward CV "
+                         "(PurgedWalkForwardSplit) instead of the legacy season-forward split. Drops "
+                         "the prior-season boundary band that leaks into carried-forward rolling "
+                         "features. Recommended for all new models; the metric delta vs the default "
+                         "split is the leakage estimate (Story E1.5).")
+    ap.add_argument("--embargo-days", type=int, default=3,
+                    help="Epic E1.1: days after the test fold to embargo from training under "
+                         "--purged-cv (default 3).")
+    ap.add_argument("--uniqueness-weight", action="store_true",
+                    help="Epic E1.2: fit BOTH arms with AFML sample-uniqueness weights "
+                         "(sample_weight=avg_uniqueness). Same weights for champion and challenger so "
+                         "the comparison stays fair. Accuracy gate only.")
+    ap.add_argument("--regime-weight", action="store_true",
+                    help="Story E1.6: ALSO weight BOTH arms by run-environment regime similarity to "
+                         "each fold's eval season (down-weights off-regime seasons like 2019; on-regime "
+                         "older seasons keep ~full weight). Multiplies with --uniqueness-weight. Pair "
+                         "with --min-year 2016 to test the history extension. Accuracy gate only.")
+    ap.add_argument("--min-year", type=int, default=2021,
+                    help="Story E1.6: earliest season to LOAD (default 2021). Use 2016 to extend "
+                         "training history (~2× sample) — only sound WITH --regime-weight, and best "
+                         "paired with an E1.3 slim contract whose features reach back to 2016.")
     args = ap.parse_args()
     if (args.challenger_contract or args.champion_contract) and args.target == "all":
         raise SystemExit("--challenger-contract/--champion-contract require a single --target (not 'all').")
@@ -586,14 +721,18 @@ def main() -> None:
     _OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print("Loading features from Snowflake...")
-    df = load_features().reset_index(drop=True)
+    df = load_features(min_year=args.min_year).reset_index(drop=True)
     print(f"Loaded {len(df)} rows, seasons: {sorted(df['game_year'].dropna().unique().tolist())}")
+    if args.min_year < 2021 and not args.regime_weight:
+        print("  ⚠ --min-year < 2021 WITHOUT --regime-weight: older seasons span different run-"
+              "environment regimes (2019 ≈ peak juiced ball). Add --regime-weight for a sound extension.")
 
     targets = ["home_win", "run_diff", "total_runs"] if args.target == "all" else [args.target]
 
     if args.eval_calibration:
         results = {t: _run_calibration(t, df, season_normalize=args.season_normalize,
-                                       challenger_contract_override=args.challenger_contract)
+                                       challenger_contract_override=args.challenger_contract,
+                                       purged_cv=args.purged_cv, embargo_days=args.embargo_days)
                    for t in targets}
         out = _OUT_DIR / (f"calibration_{args.target}.json")
         out.write_text(json.dumps(results, indent=2, default=float))
@@ -606,7 +745,10 @@ def main() -> None:
     results = {t: _run_target(t, df, args.correctness_override,
                               season_normalize=args.season_normalize, seed=args.seed,
                               challenger_contract_override=args.challenger_contract,
-                              champion_contract_override=args.champion_contract) for t in targets}
+                              champion_contract_override=args.champion_contract,
+                              purged_cv=args.purged_cv, embargo_days=args.embargo_days,
+                              uniqueness_weight=args.uniqueness_weight,
+                              regime_weight=args.regime_weight) for t in targets}
 
     out = _OUT_DIR / ("promotion_gate_all.json" if args.target == "all"
                       else f"promotion_gate_{args.target}.json")

@@ -5,51 +5,51 @@
     "champion_recipe": "ngboost-Normal(champion)",
     "challenger_recipe": "ngboost-Normal(challenger)",
     "n_features": {
-      "champion": 167,
-      "challenger": 167
+      "champion": 374,
+      "challenger": 19
     },
     "decision": "HOLD",
     "override_applied": false,
     "correctness_override": null,
-    "overall_delta": -0.01847490446512006,
+    "overall_delta": -0.021469933140765243,
     "boot_ci": [
-      -0.03552565870961087,
-      -0.0013542827425224706
+      -0.046461648810742655,
+      0.0024900050014996394
     ],
     "per_season": [
       {
         "season": 2024,
-        "n": 2003,
-        "champion": 3.012192690445174,
-        "challenger": 3.0243666124175324,
-        "delta": 0.012173921972358226,
+        "n": 2002,
+        "champion": 3.013182845602305,
+        "challenger": 2.9855050714859126,
+        "delta": -0.027677774116392495,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2025,
-        "n": 2027,
-        "champion": 3.1132881546537274,
-        "challenger": 3.064527310694641,
-        "delta": -0.04876084395908631,
+        "n": 2026,
+        "champion": 3.1196010416435898,
+        "challenger": 3.104265411381998,
+        "delta": -0.015335630261591682,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2026,
-        "n": 765,
-        "champion": 3.0771232966155977,
-        "challenger": 3.098020657943004,
-        "delta": 0.020897361327406383,
+        "n": 816,
+        "champion": 3.1355046090524374,
+        "challenger": 3.128731561652758,
+        "delta": -0.006773047399679655,
         "complete": false,
         "regressed": false
       }
     ],
     "reasons": [
-      "Pooled improvement -0.0185 does NOT clear the 0.02 noise floor.",
-      "Paired bootstrap 95% CI upper bound -0.0014 < 0 (significant).",
+      "Pooled improvement -0.0215 clears the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0025 \u2265 0 (not significant).",
       "No completed season regresses beyond tolerance (cross-season consistent).",
-      "\u26a0 Current season 2026 REGRESSES (+0.0209) \u2014 does not block (corroboration only), but watch for a regime shift before promoting."
+      "Current season 2026 corroborates (-0.0068)."
     ]
   }
 }

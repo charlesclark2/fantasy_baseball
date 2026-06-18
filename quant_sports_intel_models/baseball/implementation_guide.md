@@ -11480,7 +11480,8 @@ These are cosmetic polish items and do not block any functionality.
 
 ---
 
-#### A0.4.11 — Settings: wire user profile + notification preferences ⚠️ PARTIAL (2026-06-15)  **[P1 → BACKLOG]**
+#### A0.4.11 — Settings: wire user profile + notification preferences ✅ SHIPPED 2026-06-18 (unblocked scope)  **[P1]**
+> **Shipped 2026-06-18 (E9.10):** new `GET /users/profile` + `PUT /users/profile` (`app/backend/routers/users.py`, `services/dynamo.py::get_user_profile`/`update_user_profile`, registered in `main.py`; lambda deployed) backed by `credence-prod-dynamo-users` (`initial_deposit` as a sparse attr — no schema migration). `frontend/app/settings/page.tsx`: loads/saves `initial_deposit` via TanStack Query with a "Saved ✓" flash (Enter to save); all MOCK_DATA removed; real Cognito email, gear-nav, sign-out-everywhere confirmed; notifications = "Coming soon". **Unblocks E9.17** (bankroll-growth %). **Still deferred (not SES — E9.9 backend + DynamoDB IAM):** the email/push notification toggle + `alert_timing`/`hours_before_game` persistence (kept as local state). Changelog added; the changelog page now renders the full Mon–Sun week range.
 
 Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist. `alert_timing` and `hours_before_game` have no backend model yet — keep as local state.
 

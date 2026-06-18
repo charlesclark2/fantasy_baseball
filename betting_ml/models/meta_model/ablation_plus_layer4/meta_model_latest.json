@@ -1,0 +1,25 @@
+{
+  "n_games": 911,
+  "mean_ci_width": 0.0857,
+  "max_rhat": 1.0,
+  "quartile_spread": 0.1711,
+  "in_sample_auc": 0.5777,
+  "temporal_auc": 0.5877,
+  "gates": {
+    "rhat": true,
+    "ci_width": true,
+    "quartile": true,
+    "all_pass": true
+  },
+  "trace_file": "bayesian_meta_trace_0911.nc",
+  "scaler_file": "meta_model_scaler_0911.json",
+  "generated_at": "2026-06-17T06:28:27.432329+00:00",
+  "market": "h2h",
+  "featureset": "plus_layer4",
+  "features": [
+    "edge_mag",
+    "pub_align",
+    "open_extremity",
+    "direction_flip"
+  ]
+}

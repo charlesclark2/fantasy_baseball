@@ -5,52 +5,51 @@
     "champion_recipe": "xgb_platt(champion)",
     "challenger_recipe": "xgb_platt(challenger)",
     "n_features": {
-      "champion": 209,
-      "challenger": 209
+      "champion": 374,
+      "challenger": 31
     },
-    "decision": "PROMOTE",
+    "decision": "HOLD",
     "override_applied": false,
     "correctness_override": null,
-    "overall_delta": -0.0053100728258004305,
+    "overall_delta": -0.0001601636613948711,
     "boot_ci": [
-      -0.007635845548367309,
-      -0.0030450846662602132
+      -0.002954518260083666,
+      0.0028549133286544914
     ],
     "per_season": [
       {
         "season": 2024,
-        "n": 2003,
-        "champion": 0.19462122092562847,
-        "challenger": 0.19316016368899463,
-        "delta": -0.0014610572366338392,
+        "n": 2002,
+        "champion": 0.19440392829936934,
+        "challenger": 0.19353999699276273,
+        "delta": -0.0008639313066066134,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2025,
-        "n": 2027,
-        "champion": 0.20073129011456176,
-        "challenger": 0.19161777465180985,
-        "delta": -0.009113515462751909,
+        "n": 2026,
+        "champion": 0.19965592857963732,
+        "challenger": 0.2001911957305396,
+        "delta": 0.0005352671509022688,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2026,
-        "n": 765,
-        "champion": 0.19621416954777274,
-        "challenger": 0.20376141904061265,
-        "delta": 0.007547249492839914,
+        "n": 816,
+        "champion": 0.20159641561744968,
+        "challenger": 0.20419928221210482,
+        "delta": 0.00260286659465514,
         "complete": false,
         "regressed": false
       }
     ],
     "reasons": [
-      "Pooled improvement -0.0053 clears the 0.002 noise floor.",
-      "Paired bootstrap 95% CI upper bound -0.0030 < 0 (significant).",
+      "Pooled improvement -0.0002 does NOT clear the 0.002 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0029 \u2265 0 (not significant).",
       "No completed season regresses beyond tolerance (cross-season consistent).",
-      "\u26a0 Current season 2026 REGRESSES (+0.0075) \u2014 does not block (corroboration only), but watch for a regime shift before promoting.",
-      "Single-eval criteria PASS \u2192 PROMOTE candidate. Confirm hysteresis (\u22652 consecutive passes) before deploy."
+      "\u26a0 Current season 2026 REGRESSES (+0.0026) \u2014 does not block (corroboration only), but watch for a regime shift before promoting."
     ]
   }
 }

@@ -1,0 +1,25 @@
+{
+  "feature_cols": [
+    "home_bp_eb_xwoba",
+    "away_bp_eb_xwoba",
+    "away_wins",
+    "away_losses",
+    "home_bp_eb_uncertainty",
+    "away_bp_eb_coverage_pct",
+    "home_bp_eb_coverage_pct",
+    "park_run_factor_3yr",
+    "away_bp_eb_uncertainty",
+    "home_starter_stuff_plus",
+    "home_team_sequential_win_prob",
+    "home_off_xwoba_30d",
+    "home_team_sequential_woba",
+    "away_starter_xwoba_vs_lhb"
+  ],
+  "_provenance": {
+    "source": "E1.3 clustered_feature_importance.py (clustered MDA under purged CV)",
+    "report": "quant_sports_intel_models/baseball/ablation_results/clustered_feature_importance_total_runs.md",
+    "rule": "kept only clusters whose paired-bootstrap 95% CI is entirely > 0 (signal-bearing); dropped the 90 noise clusters (99 features) from the 111-feature tuned challenger contract",
+    "n_kept": 14,
+    "n_parent": 111
+  }
+}

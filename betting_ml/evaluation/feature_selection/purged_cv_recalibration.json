@@ -1,0 +1,296 @@
+{
+  "home_win": {
+    "target": "home_win",
+    "metric": "brier",
+    "noise_floor": 0.002,
+    "n_champion_features": 374,
+    "champion_recipe": "xgb_platt(champion)",
+    "standard_pooled": 0.19826286110821298,
+    "purged_pooled": 0.1977451339391608,
+    "purged_weighted_pooled": 0.21187981005787251,
+    "leakage_estimate": -0.0005177271690521845,
+    "weight_delta": 0.01413467611871172,
+    "leakage_flagged": false,
+    "per_season": {
+      "standard": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 0.19368057269686295,
+          "n_train": 5975
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 0.2019899654404236,
+          "n_train": 7977
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 0.20028144080663168,
+          "n_train": 10004
+        }
+      ],
+      "purged": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 0.19381283102292216,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 0.1998206232436927,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 0.20231552498407784,
+          "n_train": 9632
+        }
+      ],
+      "purged_weighted": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 0.21335617640788196,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 0.2111401540322546,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 0.21006384663045177,
+          "n_train": 9632
+        }
+      ]
+    },
+    "purge_drops": [
+      {
+        "eval_year": 2024,
+        "n_dropped": 373,
+        "frac_dropped": 0.0624,
+        "purge_days": 30,
+        "n_train_raw": 5975
+      },
+      {
+        "eval_year": 2025,
+        "n_dropped": 355,
+        "frac_dropped": 0.0445,
+        "purge_days": 30,
+        "n_train_raw": 7977
+      },
+      {
+        "eval_year": 2026,
+        "n_dropped": 372,
+        "frac_dropped": 0.0372,
+        "purge_days": 30,
+        "n_train_raw": 10004
+      }
+    ]
+  },
+  "run_diff": {
+    "target": "run_diff",
+    "metric": "mae",
+    "noise_floor": 0.02,
+    "n_champion_features": 374,
+    "champion_recipe": "ngboost-Normal(champion)",
+    "standard_pooled": 3.068197516391881,
+    "purged_pooled": 3.0757514253413296,
+    "purged_weighted_pooled": 3.091633681758873,
+    "leakage_estimate": 0.00755390894944874,
+    "weight_delta": 0.015882256417543594,
+    "leakage_flagged": false,
+    "per_season": {
+      "standard": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.0120158913905817,
+          "n_train": 5975
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.1044616857656413,
+          "n_train": 7977
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.1167862220427422,
+          "n_train": 10004
+        }
+      ],
+      "purged": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.014991140636329,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.116155668389072,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.125305900804716,
+          "n_train": 9632
+        }
+      ],
+      "purged_weighted": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.049115301268173,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.1210963789854897,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.1233056399434482,
+          "n_train": 9632
+        }
+      ]
+    },
+    "purge_drops": [
+      {
+        "eval_year": 2024,
+        "n_dropped": 373,
+        "frac_dropped": 0.0624,
+        "purge_days": 30,
+        "n_train_raw": 5975
+      },
+      {
+        "eval_year": 2025,
+        "n_dropped": 355,
+        "frac_dropped": 0.0445,
+        "purge_days": 30,
+        "n_train_raw": 7977
+      },
+      {
+        "eval_year": 2026,
+        "n_dropped": 372,
+        "frac_dropped": 0.0372,
+        "purge_days": 30,
+        "n_train_raw": 10004
+      }
+    ]
+  },
+  "total_runs": {
+    "target": "total_runs",
+    "metric": "mae",
+    "noise_floor": 0.02,
+    "n_champion_features": 367,
+    "champion_recipe": "ngboost-Normal(champion)",
+    "standard_pooled": 3.352197494279889,
+    "purged_pooled": 3.370096258975166,
+    "purged_weighted_pooled": 3.368831000022433,
+    "leakage_estimate": 0.01789876469527707,
+    "weight_delta": -0.001265258952733106,
+    "leakage_flagged": false,
+    "per_season": {
+      "standard": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.204025234457408,
+          "n_train": 5975
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.5310587892295353,
+          "n_train": 7977
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.2700142265762406,
+          "n_train": 10004
+        }
+      ],
+      "purged": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.236385154145442,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.5373380632004996,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.281181663843443,
+          "n_train": 9632
+        }
+      ],
+      "purged_weighted": [
+        {
+          "season": 2024,
+          "n": 2002,
+          "score": 3.2489863086403163,
+          "n_train": 5602
+        },
+        {
+          "season": 2025,
+          "n": 2027,
+          "score": 3.525567589499004,
+          "n_train": 7622
+        },
+        {
+          "season": 2026,
+          "n": 802,
+          "score": 3.2718534504937398,
+          "n_train": 9632
+        }
+      ]
+    },
+    "purge_drops": [
+      {
+        "eval_year": 2024,
+        "n_dropped": 373,
+        "frac_dropped": 0.0624,
+        "purge_days": 30,
+        "n_train_raw": 5975
+      },
+      {
+        "eval_year": 2025,
+        "n_dropped": 355,
+        "frac_dropped": 0.0445,
+        "purge_days": 30,
+        "n_train_raw": 7977
+      },
+      {
+        "eval_year": 2026,
+        "n_dropped": 372,
+        "frac_dropped": 0.0372,
+        "purge_days": 30,
+        "n_train_raw": 10004
+      }
+    ]
+  }
+}

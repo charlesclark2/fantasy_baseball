@@ -1,0 +1,42 @@
+{
+  "feature_cols": [
+    "home_bp_eb_xwoba",
+    "away_bp_eb_xwoba",
+    "home_bp_eb_uncertainty",
+    "away_bp_eb_uncertainty",
+    "away_team_sequential_bullpen_xwoba",
+    "home_bp_eb_coverage_pct",
+    "home_team_sequential_bullpen_xwoba",
+    "home_away_bp_xwoba_against_30d_pct_diff",
+    "away_bp_eb_coverage_pct",
+    "home_vs_lhp_xwoba_std",
+    "home_vs_lhp_woba_std",
+    "away_starter_k_pct_vs_lhb",
+    "home_avg_hard_hit_pct_std",
+    "away_lineup_vs_home_starter_k_pct_adj",
+    "home_starter_k_pct_30d",
+    "away_starter_eb_xwoba_against",
+    "away_starter_eb_xwoba_against_sequential",
+    "home_starter_eb_xwoba_against",
+    "home_starter_eb_xwoba_against_sequential",
+    "away_avg_eb_woba",
+    "away_avg_eb_bb_pct",
+    "away_avg_eb_iso",
+    "home_starter_eb_k_pct",
+    "home_avg_eb_iso",
+    "home_starter_eb_xwoba_uncertainty",
+    "away_starter_eb_xwoba_uncertainty",
+    "home_avg_eb_woba_sequential",
+    "away_n_high_whiff",
+    "away_starter_hard_hit_pct_7d",
+    "away_avg_hard_hit_pct_vs_rhp",
+    "away_off_hard_hit_pct_std"
+  ],
+  "_provenance": {
+    "source": "E1.3 clustered_feature_importance.py (clustered MDA, purged CV)",
+    "rule": "kept signal clusters (paired-bootstrap 95% CI entirely > 0); dropped noise clusters",
+    "metric": "brier",
+    "n_kept": 31,
+    "n_parent": 209
+  }
+}

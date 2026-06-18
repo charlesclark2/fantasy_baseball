@@ -1,0 +1,26 @@
+{
+  "features": [
+    "edge_mag",
+    "pub_align",
+    "open_extremity",
+    "direction_flip"
+  ],
+  "mean": {
+    "edge_mag": 0.060322050598093646,
+    "pub_align": 2.288693743139407,
+    "open_extremity": 0.07787946950350683,
+    "direction_flip": 0.28210757409440174
+  },
+  "std": {
+    "edge_mag": 0.06093504875382006,
+    "pub_align": 13.546888672143481,
+    "open_extremity": 0.057201951972481596,
+    "direction_flip": 0.4500254334290157
+  },
+  "n_games": 911,
+  "base_rate": 0.601536772777168,
+  "edge_median": -0.028142835928509136,
+  "market": "h2h",
+  "open_anchor": 0.5,
+  "featureset": "plus_layer4"
+}

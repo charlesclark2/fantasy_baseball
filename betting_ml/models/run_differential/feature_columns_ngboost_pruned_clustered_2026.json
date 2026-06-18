@@ -1,0 +1,30 @@
+{
+  "feature_cols": [
+    "home_bp_eb_xwoba",
+    "away_bp_eb_xwoba",
+    "home_bp_eb_coverage_pct",
+    "home_bp_eb_uncertainty",
+    "away_bp_eb_uncertainty",
+    "away_bp_eb_coverage_pct",
+    "away_team_sequential_bullpen_xwoba",
+    "home_team_sequential_bullpen_xwoba",
+    "home_avg_hard_hit_pct_vs_lhp",
+    "home_starter_appearances_30d",
+    "away_starter_xwoba_against_std",
+    "away_avg_bb_pct_std",
+    "away_avg_bb_pct_30d",
+    "series_game_number",
+    "away_injured_player_count",
+    "away_starter_avg_fastball_velo",
+    "home_away_starter_k_pct_std_pct_diff",
+    "away_elo",
+    "away_team_sequential_win_prob"
+  ],
+  "_provenance": {
+    "source": "E1.3 clustered_feature_importance.py (clustered MDA, purged CV)",
+    "rule": "kept signal clusters (paired-bootstrap 95% CI entirely > 0); dropped noise clusters",
+    "metric": "mae",
+    "n_kept": 19,
+    "n_parent": 167
+  }
+}

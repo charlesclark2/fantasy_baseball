@@ -5,51 +5,96 @@
     "champion_recipe": "ngboost-Normal(champion)",
     "challenger_recipe": "ngboost-Normal(challenger)",
     "n_features": {
-      "champion": 111,
-      "challenger": 115
+      "champion": 367,
+      "challenger": 11
     },
     "decision": "HOLD",
     "override_applied": false,
     "correctness_override": null,
-    "overall_delta": -0.006809097378396099,
+    "overall_delta": 0.01138511762185903,
     "boot_ci": [
-      -0.014620941678198841,
-      0.0014397573589950662
+      0.0019820873480301563,
+      0.02123218423363291
     ],
     "per_season": [
       {
+        "season": 2019,
+        "n": 1997,
+        "champion": 3.483458628876668,
+        "challenger": 3.506915116277075,
+        "delta": 0.023456487400407067,
+        "complete": true,
+        "regressed": true
+      },
+      {
+        "season": 2020,
+        "n": 543,
+        "champion": 3.4447082832955314,
+        "challenger": 3.4870539351853838,
+        "delta": 0.0423456518898524,
+        "complete": true,
+        "regressed": true
+      },
+      {
+        "season": 2021,
+        "n": 1954,
+        "champion": 3.319019862654725,
+        "challenger": 3.3389795436741547,
+        "delta": 0.019959681019429798,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2022,
+        "n": 2011,
+        "champion": 3.2037804859320596,
+        "challenger": 3.222787846782897,
+        "delta": 0.01900736085083743,
+        "complete": true,
+        "regressed": false
+      },
+      {
+        "season": 2023,
+        "n": 2013,
+        "champion": 3.3695684212059893,
+        "challenger": 3.3554559606866157,
+        "delta": -0.014112460519373649,
+        "complete": true,
+        "regressed": false
+      },
+      {
         "season": 2024,
-        "n": 2000,
-        "champion": 3.244561565000298,
-        "challenger": 3.2275511317637027,
-        "delta": -0.017010433236595457,
+        "n": 2002,
+        "champion": 3.233450020322704,
+        "challenger": 3.2217135550783014,
+        "delta": -0.011736465244402527,
         "complete": true,
         "regressed": false
       },
       {
         "season": 2025,
-        "n": 2026,
-        "champion": 3.440196799708963,
-        "challenger": 3.443458122723656,
-        "delta": 0.0032613230146929517,
+        "n": 2025,
+        "champion": 3.529886966180029,
+        "challenger": 3.553427594976678,
+        "delta": 0.023540628796648644,
         "complete": true,
-        "regressed": false
+        "regressed": true
       },
       {
         "season": 2026,
-        "n": 792,
-        "champion": 3.290403228907409,
-        "challenger": 3.261770146499699,
-        "delta": -0.02863308240771012,
+        "n": 816,
+        "champion": 3.2826482548136036,
+        "challenger": 3.3360738072604956,
+        "delta": 0.053425552446892066,
         "complete": false,
         "regressed": false
       }
     ],
     "reasons": [
-      "Pooled improvement -0.0068 does NOT clear the 0.02 noise floor.",
-      "Paired bootstrap 95% CI upper bound +0.0014 \u2265 0 (not significant).",
-      "No completed season regresses beyond tolerance (cross-season consistent).",
-      "Current season 2026 corroborates (-0.0286)."
+      "Pooled improvement +0.0114 does NOT clear the 0.02 noise floor.",
+      "Paired bootstrap 95% CI upper bound +0.0212 \u2265 0 (not significant).",
+      "Regresses beyond tolerance on completed season(s) [2019, 2020, 2025] \u2192 overfitting risk; HOLD.",
+      "\u26a0 Current season 2026 REGRESSES (+0.0534) \u2014 does not block (corroboration only), but watch for a regime shift before promoting."
     ]
   }
 }
