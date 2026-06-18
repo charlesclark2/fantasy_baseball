@@ -301,9 +301,19 @@ models:
 
   - name: eb_bullpen_team_posteriors
     description: >
-      Outs-weighted team bullpen aggregate from eb_bullpen_posteriors. Story
-      A2.11 port of _aggregate_to_team. Grain: (game_pk, team). Rename to
-      eb_bullpen_team_posteriors at cutover.
+      LEAKAGE-SAFE team bullpen EB aggregate. Grain: (game_pk, team).
+      Story E1.7 (2026-06-18) DE-LEAKED this model: the prior A2.11 construction
+      was an OUTS-WEIGHTED average over the arms that ACTUALLY PITCHED in the eval
+      game (both the `outs_in_game` weight and the appeared-in-game roster peek the
+      game-G outcome — proven a within-game leak by E2.1b). It is now an
+      EQUAL-weight mean over the team's leakage-safe trailing-30d PRE-GAME relief
+      pool (relievers who appeared for the team in [game_date-30, game_date), each
+      at its most-recent prior EB), spined on mart_game_spine so it POPULATES for
+      today's scheduled games at serve time. Equal ≈ expected-leverage weighting to
+      0.001 NLL (E2.1b). ⚠️ Offline NLL/Brier/importance drop after the de-leak —
+      that is correct (a peek was removed); gate on live/forward + serving-parity,
+      not offline. Parity vs Python aggregate_team_v3(weight_mode='equal'):
+      betting_ml/scripts/eb_priors/parity_check_bullpen_deleak.py.
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
@@ -324,6 +334,9 @@ models:
               arguments:
                 min_value: 1
       - name: team_eb_bullpen_xwoba
+        description: >
+          Equal-weight mean of the pre-game pool relievers' as-of-safe EB xwOBA
+          against. De-leaked (E1.7): no longer outs-in-game weighted.
         tests:
           - dbt_utils.accepted_range:
               arguments:
@@ -331,3 +344,10 @@ models:
                 max_value: 0.50
               config:
                 severity: warn
+      - name: team_eb_bullpen_uncertainty
+        description: Equal-weight mean of the pool relievers' EB xwOBA uncertainty (posterior sd).
+      - name: n_prior_only
+        description: >
+          Count of pool relievers whose most-recent EB is prior_only (thin
+          season-to-date data → posterior == prior mean). Feeds the downstream
+          coverage_pct = n_relievers / (n_relievers + n_prior_only).
