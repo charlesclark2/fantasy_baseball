@@ -11498,12 +11498,12 @@ Wire `frontend/app/settings/page.tsx` to real data. Two backend endpoints exist.
 
 **What was deferred back to backlog (2026-06-15):**
 - Notification toggles (email + push) replaced with a "Coming soon" placeholder
-- Root causes: (1) SES still in sandbox — no emails will actually send until A0.4.18 SES production access is approved; (2) Lambda role missing `dynamodb:GetItem` on `credence-prod-dynamo-push-subscriptions` → `AccessDeniedException` on every settings page load → Sentry noise; (3) no browser push subscription flow exists yet (A0.6 scope)
+- Root causes: (1) ~~SES still in sandbox~~ ✅ **RESOLVED 2026-06-18 — SES is in production**; (2) Lambda role missing `dynamodb:GetItem` on `credence-prod-dynamo-push-subscriptions` → `AccessDeniedException` on every settings page load → Sentry noise (**still open**); (3) no browser push subscription flow exists yet (A0.6 scope — **still open**)
 - `GET /alerts/preferences` and `PUT /alerts/preferences` calls removed from the frontend until the infrastructure is ready
-- Notification wiring to be revisited as part of A0.6 (push) and after SES production approval (email)
+- Notification wiring to be revisited as part of A0.6 (push) — **SES (email) is no longer a blocker as of 2026-06-18; the remaining blockers are the DynamoDB IAM fix + the A0.6 push backend.**
 
-**Acceptance criteria (remaining — blocked):**
-- [ ] Toggle email/push switches and click Save — preferences persist across page reloads (blocked on SES production + DynamoDB IAM fix)
+**Acceptance criteria (remaining — blocked on A0.6, no longer on SES):**
+- [ ] Toggle email/push switches and click Save — preferences persist across page reloads (blocked on the DynamoDB IAM fix + A0.6 push backend; **SES unblocked 2026-06-18**)
 - [ ] `alert_timing` and `hours_before_game` controls wired when backend model is extended
 
 **Session prompt:**
@@ -12025,7 +12025,8 @@ Prior work already shipped (do not re-implement):
 - [ ] `next build` passes with zero errors
 - [ ] `https://app.credencesports.com` is live
 
-#### A0.4.18 — Cognito welcome email + beta user onboarding 🔶 PARTIAL (2026-06-13)  **[P1]**
+#### A0.4.18 — Cognito welcome email + beta user onboarding 🟢 UNBLOCKED (SES prod granted 2026-06-18)  **[P1]**
+> **2026-06-18:** SES is out of the sandbox → follow **Path A** (brand the Cognito invite template + provision beta users). **Path B (Resend) is retired.** This is the literal gate to inviting beta users.
 
 Customize the Cognito invite email so beta users receive a branded welcome message, then provision initial beta accounts.
 
@@ -12145,7 +12146,8 @@ Alert immediately when the site or API goes down so issues are caught before bet
 
 ---
 
-#### A0.4.22 — Password reset flow ✅ (VALIDATED 2026-06-14, pending SES production)
+#### A0.4.22 — Password reset flow 🟢 READY (validated 2026-06-14; SES prod granted 2026-06-18)
+> **2026-06-18:** SES is in production → finish via **Path A only** (branded "Verification message" template + redeploy `infrastructure/lambda/deploy.sh` + retest with a real non-sandbox email). **Path B (Resend) is retired.**
 
 Beta users need a self-service way to reset their password without admin intervention.
 
@@ -13005,10 +13007,12 @@ Tasks:
   - `charlie@credencesports.com` — personal Credence Sports address
 
 **Remaining / blocked:**
-- [ ] `noreply@credencesports.com` outbound via SES — SES production access request still pending (sandbox only); no inbox needed, just SES approval
-- [ ] **SES sandbox blocker:** AWS has not yet approved the SES production access request; outbound notification emails (Cognito auth, A1.7 pick alerts) cannot reach non-verified recipients until approved. See Resend contingency plan below.
+- [x] `noreply@credencesports.com` outbound via SES — ✅ **SES PRODUCTION GRANTED 2026-06-18** (out of sandbox; 50,000 msg/day, 14 msg/s, us-east-1).
+- [x] **SES sandbox blocker — RESOLVED 2026-06-18:** account is out of the sandbox; outbound notification emails (Cognito auth, A1.7 pick alerts) can now reach any recipient. **Still required before bulk sends:** bounce/complaint handling (SES best-practices) + use the SES mailbox simulator for tests.
 
-#### SES Contingency — Resend
+#### SES Contingency — Resend  ⛔ NO LONGER NEEDED (SES granted 2026-06-18)
+
+> **Retired 2026-06-18:** SES production access was granted, so the Resend contingency is moot — use **SES Path A directly** everywhere (Cognito invite/verification emails, A0.6 alert emails). Do not build the `cognito-email-sender` / Resend path. Kept below only as historical record.
 
 If AWS does not approve SES production access before beta launch, migrate transactional email to **Resend** (resend.com). Resend is a developer-focused email API with a free tier (3,000 emails/month, 100/day) that is more than sufficient for beta. It does not require a sandbox approval process — the account is live immediately after domain verification.
 
@@ -18788,7 +18792,15 @@ NOT manufacture a new edge. Parent: [[project_layer3_signal_leakage]] + Story 30
 
 ---
 
-### 30.15 — Per-pick feature attribution (explainable picks)  `[Home: Epic 30 / serving + product]`  ✅ COMPLETE 2026-06-16
+### 30.15 — Per-pick feature attribution (explainable picks)  `[Home: Epic 30 / serving + product]`  ✅ COMPLETE 2026-06-16 · **enhanced 2026-06-18**
+
+**Follow-on (2026-06-18) — dual-market reasoning toggle + narrative-accuracy fixes (app session).** Shipped:
+- **Dual-market H2H / Totals reasoning toggle** on the "Model reasoning" section in both places — the featured pick card (`frontend/components/pick-explanation-home.tsx`, rewritten to take `top_drivers_h2h` + `top_drivers_totals` separately and show a pill toggle when both exist) and the game-detail page (`frontend/app/picks/[game_pk]/page.tsx`, `reasoningMarket` state synced to the pick's market). Backend `FeaturedPickResponse` (`app/backend/models/picks.py`) now exposes `top_drivers_h2h` + `top_drivers_totals` as separate optional fields; `scripts/write_serving_store.py` extracts drivers for **both** markets; `frontend/app/page.tsx` `FeaturedPick` type updated.
+- **Narrative-accuracy bug fix #1 (win prob):** the write-up was computing win probability from the **raw XGBoost sub-model log-odds (~68%)** instead of the ensemble **`calibrated_win_prob` (~74%)** → UI and narrative now agree (confirmed on game_pk=823772, CLE@MIL 6/18).
+- **Narrative-accuracy bug fix #2 (hallucinated market numbers):** `scripts/generate_pick_narratives.py` had no real edge/market columns in its SELECT, so the LLM invented "0.0% edge" lines. Fixed by injecting a real **"Market comparison" block** (`layer4_h2h_edge`, `h2h_market_implied_prob`, `calibrated_win_prob`, `totals_model_prob`) into the prompt + a **system-prompt guardrail** forbidding any market-vs-model claim unless that block is present. Switched the edge source from `h2h_edge` (broken — see known issue) to `layer4_h2h_edge`.
+- **Cost optimization:** `generate_pick_narratives.py` now **groups by `game_pk`** (prefers the `post_lineup` row as representative) and writes one narrative per game in a single UPDATE — **~65% fewer Cortex calls** (~39 → ~13 for a 13-game slate). Pairs with the E9.13 cost-guard.
+- **Operator run after deploy:** `UPDATE … daily_model_predictions SET pick_narrative = NULL WHERE game_date = '<date>'` (Snowflake) → `uv run python scripts/generate_pick_narratives.py --date <date> --schema prod` → `uv run python scripts/write_serving_store.py --picks --game-detail`. Changelog entry added.
+- ⚠️ **KNOWN ISSUE (pre-existing, NOT from this session):** `h2h_edge` = 0.0 because the posterior collapses to the market (a known posterior bug) — `layer4_h2h_edge` is used instead as the edge source. Tracked here; no new story opened. *(Flag if/when it surfaces in another consumer.)*
 
 **Implementation status (2026-06-16).** Fully shipped — serve side + consumer side + serving store mirror.
 Serve-side (2026-06-15): The NGBoost "feasibility spike" RESOLVED TO EXACT SHAP — no approximation needed:

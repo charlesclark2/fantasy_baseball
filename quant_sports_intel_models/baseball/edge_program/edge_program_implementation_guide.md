@@ -27,19 +27,19 @@ This guide is **self-contained for the Edge Program**. A Claude Code session sho
 ### 0.2 Application architecture (the "Credence" app — for any app-repo story)
 
 > ## 🚨 APP TARGET — READ FIRST (every `[App]` story) 🚨
-> **The live app is the Next.js frontend in `frontend/`. Edit ONLY `frontend/` for any user-facing UI work.**
-> **`app/` is the DEPRECATED legacy Streamlit app — DO NOT EDIT IT. It is not deployed and not the product.**
-> The repo is a known footgun: there is a top-level **`app/`** (legacy Streamlit: `app/streamlit_app.py`, `app/home.py`, `app/pages/`) **and** the Next.js app at **`frontend/`** — which has its *own* `frontend/app/` router directory. "The app" **always** means `frontend/`.
-> - ✅ Edit: `frontend/app/**`, `frontend/components/**`, `frontend/lib/**`, `frontend/hooks/**`, `frontend/data/**`.
-> - ⛔ Never touch: top-level `app/**` (Streamlit), unless a story *explicitly* says "legacy Streamlit."
-> - **First action in any app session:** confirm you are in `frontend/` — `cat frontend/package.json` should show a Next.js project (`"next"` in deps, `"dev": "next dev"`). If you find yourself opening `streamlit_app.py` / `st.set_page_config` / `app/pages/*.py`, **STOP — wrong app.**
-> - **A change is not done** until it renders in the Next.js app AND (if user-facing) adds a `frontend/data/changelog.json` entry. Streamlit gets no changelog entry because it is not shipped.
+> Three things share confusingly similar paths. **Two are live; one is dead.**
+> - ✅ **UI / anything user-facing → `frontend/` ONLY** (Next.js on Vercel). UI lives in `frontend/app/**`, `frontend/components/**`, `frontend/lib/**`, `frontend/hooks/**`, `frontend/data/**`.
+> - ✅ **API / backend → `app/backend/`** — the **live FastAPI** service (deployed to Lambda via `infrastructure/lambda/deploy.sh`; entrypoint `app.backend.main`). Edit this for backend work.
+> - ⛔ **DEPRECATED legacy Streamlit UI → `app/streamlit_app.py`, `app/home.py`, `app/pages/`, `app/utils/`** — not deployed, not the product. **DO NOT EDIT** unless a story *explicitly* says "legacy Streamlit."
+> - **Footgun (bit a session 2026-06-18):** `app/` is **half-alive** — `app/backend/` is the live API, but the dead Streamlit UI files sit right next to it at the top of `app/`. And Next.js has its *own* `frontend/app/` router dir. **"The app's UI" is always `frontend/`, never `app/home.py` / `app/pages/`.**
+> - **First action in any app session:** `cat frontend/package.json` → confirm Next.js (`"next"` in deps, `"dev": "next dev"`). If doing **UI** work and you open `streamlit_app.py` / `st.set_page_config` / `app/home.py` / `app/pages/*.py`, **STOP — wrong place → `frontend/`.**
+> - **A change is not done** until it works in the right live target (`frontend/` for UI, `app/backend/` for API) **AND, if the end user would notice it, a `frontend/data/changelog.json` entry is added** as the final step. The Streamlit app never gets a changelog entry (it isn't shipped).
 
-- **Backend:** AWS API Gateway + Lambda (`credence-prod-lambda-api`, us-east-1), FastAPI in the Lambda handler. Deploy via `infrastructure/lambda/deploy.sh`.
-- **Frontend:** **Next.js on Vercel, lives in `frontend/`** (auto-deploys on push to main). This is the only shipped UI. *(The top-level `app/` Streamlit project is legacy/deprecated — see the banner above.)*
+- **Backend:** AWS API Gateway + Lambda (`credence-prod-lambda-api`, us-east-1), **FastAPI source in `app/backend/`** (entrypoint `app.backend.main`). Deploy via `infrastructure/lambda/deploy.sh`. *(Note: `app/backend/` is live; the rest of `app/` is legacy Streamlit — see banner.)*
+- **Frontend:** **Next.js on Vercel, lives in `frontend/`** (auto-deploys on push to main). This is the only shipped UI. *(The top-level `app/` Streamlit UI is legacy/deprecated — see the banner above.)*
 - **Serving (two-tier):** **Railway PostgreSQL** = primary OLTP serving store (FastAPI reads PG first); **S3** (`credence-prod-s3-api-cache`) = fallback. Dagster reverse-ETLs precomputed picks/detail into PG via `scripts/write_serving_store.py` after each pipeline run. Read order: **PG → S3 → Snowflake** (Snowflake last-resort only, never at request time in prod). PG tables: `daily_picks`, `game_detail` (JSONB), `performance_summary`, `user_portfolios`.
 - **DynamoDB:** bet log (`credence-prod-dynamo-user-bets`) + users (`credence-prod-dynamo-users`) only.
-- **Changelog:** any non-admin user-facing change adds an entry to `frontend/data/changelog.json` as its final step (the weekly changelog page, A0.4.26).
+- **Changelog:** any non-admin user-facing change adds an entry to `frontend/data/changelog.json` as its final step (the weekly changelog page, A0.4.26). **Weeks group Monday→Monday:** the `week` value is the **Monday of the week the change ships** (not the literal ship date). Append your item to the existing block for the current Monday if one exists; only create a new block when the current Monday has none. (E.g. anything shipped Tue–Sun goes under that week's Monday label.)
 
 ### 0.3 App/UI work is a separate session — its prompt is emitted by the upstream session
 **Rule:** any application/UI work runs in a **separate Claude Code session** (the Credence app repo), distinct from the model/backend session that produces the data it renders. Each app surface is its own story (tagged 🧩 *separate app session* — e.g. E2.7, E5.5, E8.7, E9.x) with its own `▶ App-session prompt`.
@@ -53,7 +53,9 @@ This guide is **self-contained for the Edge Program**. A Claude Code session sho
 
 This keeps app prompts accurate (no drift from the real contract) and cleanly separates the two repos/sessions.
 
-**One fresh session per app story (workflow, 2026-06-18):** app stories are run **one at a time, each in its own clean session** — paste the persisted **application-session bootstrap prompt (`app_session_bootstrap.md`)** first (it carries the §0.2 app-target guard + §0.1 conventions + the changelog DoD), then **exactly one** `▶ Story prompt`; build, report, end the session. Do **not** let a single long-lived app session chain multiple stories — context drifts and stories bleed together (and it's how a session ended up editing the deprecated Streamlit `app/`). Pull the next card into a new session.
+**One fresh session per app story (workflow, 2026-06-18):** app stories are run **one at a time, each in its own clean session** — paste the persisted **application-session bootstrap prompt (`app_session_bootstrap.md`)** first (it carries the §0.2 app-target guard + §0.1 conventions + the changelog DoD + the operator-handoff closeout), then **exactly one** `▶ Story prompt`; build, report, end the session. Do **not** let a single long-lived app session chain multiple stories — context drifts and stories bleed together (and it's how a session ended up editing the deprecated Streamlit `app/`). Pull the next card into a new session.
+
+**Operator-handoff closeout (required, 2026-06-18):** the session never deploys, commits/pushes, or runs >1-min jobs itself — instead it **ends with a single `⏭️ Operator handoff` checklist** of everything the operator must run, copy-pasteable and in order: 🔧 Lambda rebuild+deploy (`./infrastructure/lambda/deploy.sh`) if `app/backend/` changed; 🗄️ scoped `dbtf run --select …`; ▶️ `uv run python …` scripts (with env/date args, >1-min flagged); 🌱 one-off infra/migrations; 📦 the exact **`git add <paths>`** for the files to deploy (operator commits/pushes); 📝 changelog line (or "N/A"); ✅ what to verify after deploy. Full template lives in `app_session_bootstrap.md`.
 
 **Exception — pure app-repo stories:** items that live entirely in the app repo and compute from an *already-served* contract (e.g. the E9.x beta-backlog stories like E9.1, which derive the breakeven price from the `p` already in the A0.4.32 payload) have **no model/backend upstream to emit their prompt** — they're authored and built directly in an app session. The handoff above applies only when a model/backend session produces a *new* served contract the app will render.
 
@@ -73,7 +75,7 @@ Gate/AC: <the story's AC + which live gate it must clear — E1 PBO/DSR etc.>.
 Conventions (per §0.1): dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min
 scripts to the operator; do not git commit/push [+ market-blind if a non-market model; + honest-framing if user-facing].
 ```
-> **App-story prompts MUST also carry the app-target guard (per §0.2):** *"APP = the Next.js app in `frontend/` ONLY. Do NOT edit the legacy Streamlit `app/`. First action: `cat frontend/package.json` to confirm Next.js; if you open `streamlit_app.py` / `app/pages/*.py`, STOP — wrong app. Add a `frontend/data/changelog.json` entry for user-facing changes."* Put this line in every `[App]` `▶ Story prompt`.
+> **App-story prompts MUST also carry the app-target guard (per §0.2):** *"APP TARGET: UI → `frontend/` (Next.js) ONLY; backend → `app/backend/` (live FastAPI). Do NOT edit the legacy Streamlit UI (`app/streamlit_app.py`, `app/home.py`, `app/pages/`, `app/utils/`). First action: `cat frontend/package.json` to confirm Next.js; if doing UI work and you open `app/home.py`/`app/pages/*.py`, STOP — wrong place. If the end user would notice the change, add a `frontend/data/changelog.json` entry as the final step."* Put this in every `[App]` `▶ Story prompt`.
 
 ---
 
@@ -134,7 +136,7 @@ Plain-language copy for talking to prospective customers who don't know this kin
 ---
 
 ## 3. Epic E1 — CV-Hygiene & Overfitting Audit  ✅ **COMPLETE 2026-06-18** — gate set  **[Track R · gates E2–E5 go-live]**
-> **Audit verdict (E1.1–E1.6 built + validated):** **(1)** no leakage in any champion; **(2)** all three are **massively over-parameterized** — ~370 feats → **14 / 31 / 19** with no loss (run_diff *better* slim) → **re-promote on the slim contracts** (cheap overfitting-surface cut); **(3)** **bullpen EB quality dominates every target** (`home/away_bp_eb_xwoba` #1/#2 on home_win, run_diff, total_runs) → **the clearest signal-investment direction**; **(4)** **history extension (E1.6) is a wash** (accuracy + calibration + bias) → don't extend history. **Net: the edge is in E2 per-side totals + bullpen modeling — not more features or more history.** PBO/DSR + purged-CV are on record → E2–E5 go-live is unblocked (each still clears its own gate).
+> **Audit verdict (E1.1–E1.6 built + validated) — ⚠️ two findings revised 2026-06-18 by E2.1b:** **(1)** ~~no leakage in any champion~~ → **REVISED: a *within-game* leak was present and purged CV missed it** — `bp_eb_xwoba` weights reliever EB by `outs_in_game` (a feature peeking at its own row; purged CV only guards temporal/cross-fold leakage). See E2.1b + the de-leak card **E1.7**; **(2)** all three are **massively over-parameterized** — ~370 feats → **14 / 31 / 19** with no loss → **re-promote on the slim contracts**, *but* **re-derive the prune after the de-leak** (the leaky feature contaminated the importance ranking the slim sets were chosen from); **(3)** ~~bullpen EB dominates every target → the clearest signal-investment direction~~ → **❌ RETRACTED: that #1/#2 rank was the leak.** De-leaked, `bp_eb_xwoba` importance collapses to noise (0% retained); the only real pre-game bullpen signal is **data-depth (`coverage_pct`/`uncertainty`), and it's modest**; **(4)** **history extension (E1.6) is a wash** → don't extend history. **Revised net: the play is the E2 per-side-totals *architecture* (honest distribution/derivatives), not a bullpen signal; and E1's most valuable surfaced action is the de-leak (E1.7) + a full leakage sweep (E1.8).** PBO/DSR + purged-CV on record → E2–E5 go-live unblocked (each still clears its own gate).
 
 **Goal:** Produce honest CV and a trustworthy *number* on every claimed edge, so no E2–E5 strategy ships on multiple-testing noise. **This epic blocks the go-live (not the build) of E2–E5.**
 
@@ -286,13 +288,83 @@ Conventions: dbtf not dbt; Snowflake via MCP, fully-qualified, no USE; uv run py
 to the user; do not git commit/push.
 ```
 
+### E1.7 — De-leak the production bullpen EB feature  ⬜  **[⭐ Tier-0 correctness · touches the live champions · spun out of E2.1b]**
+
+**Why:** E2.1b proved `home/away_bp_eb_xwoba` — the #1/#2 feature on every champion — is a **within-game leak**: `eb_bullpen_team_posteriors.sql:33` weights each reliever's EB by `outs_in_game` (outs recorded *in the game being predicted*), over the roster of arms that *actually pitched that game*. It cannot be computed before first pitch, so its backfilled values encode the eval-game outcome. This column is in the **live home_win / run_diff / total_runs training matrices** → it's a **named mechanism for the offline→live skill collapse** (`[[project_prod_model_audit_jun2026]]`, offline corr 0.42 → live 0.001) previously filed broadly as "serving skew."
+
+**PM decision (2026-06-18): build this as a STANDALONE Tier-0 correctness card** (recommended by the E2.1b handoff) — it touches the live champions and is bigger than a display fix — **and cross-link it to the Epic 30.3 serving-skew thread** (same root cause, now with a mechanism). It is a *correctness* item, not an *edge* item.
+
+**Tasks:**
+- [ ] **Fix the construction:** in `eb_bullpen_team_posteriors.sql`, replace the `outs_in_game` weight + appeared-in-game roster with a **leakage-safe** aggregate — the simplest being equal-weight over a pre-game pool, or the v3 expected-leverage weighting (equivalent on NLL; reuse `aggregate_team_v3(..., weight_mode='equal'|'expected')` + `compute_bullpen_v3.py` from E2.1b). The per-reliever EBs are already as-of-safe; only the **weighting + roster** leak.
+- [ ] **Re-train + re-evaluate the base champions** (home_win / run_diff / total_runs) on the de-leaked feature matrix.
+- [ ] **Re-derive the slim 14/31/19 contracts** on the de-leaked matrix (the prune's importance ranking was contaminated — `coverage_pct`/`uncertainty` rise, the xwOBA value drops out) → feeds E6.7.
+- [ ] **Complete the MDA collapse documentation** on all three targets (run the E2.1b `--bullpen-version v3` MDA for `home_win` + `run_diff`; `total_runs` already done).
+**AC + ⚠️ validation gotcha (critical):** the de-leaked feature **will look WORSE on offline NLL/Brier/importance — that is expected and correct** (you removed a peek); it must **NOT** be read as a regression. Honest validation = **live/forward performance + the serving-parity harness** (does serve-time skill rise toward the now-honest offline number?), **never** offline metrics, which reward the leak. Done = the leaky construction is gone from the production feature, champions re-evaluated on the de-leaked matrix, the offline drop is documented as expected, and forward/serving-parity is the gate.
+
+```
+▶ New-session prompt — Story E1.7 (de-leak the production bullpen feature)
+
+You are building Story E1.7 of the MLB Edge Program — a Tier-0 CORRECTNESS fix. E2.1b proved the #1/#2
+champion feature `bp_eb_xwoba` is a WITHIN-GAME LEAK (eb_bullpen_team_posteriors.sql weights reliever EB by
+outs_in_game — outs recorded in the game being predicted). It feeds the LIVE champions → a named cause of the
+offline→live collapse (0.42→0.001). This is correctness, not edge.
+
+Read first: edge_program_implementation_guide.md §3 E1.7 + E2.1b + E2_1b_HANDOFF.md (the proof + the leakage-safe
+machinery) + eb_bullpen_team_posteriors.sql + betting_ml/scripts/eb_priors/compute_bullpen_v3.py (aggregate_team_v3,
+weight_mode equal/expected) + [[project_epic30_3_status]] (serving skew) + [[project_prod_model_audit_jun2026]].
+
+Do: (1) replace the outs_in_game weight + appeared-in-game roster in eb_bullpen_team_posteriors.sql with a
+leakage-safe aggregate (equal-weight or v3 expected-leverage — equivalent; reuse the E2.1b code); (2) re-train +
+re-evaluate the home_win/run_diff/total_runs champions on the de-leaked matrix; (3) re-derive the slim 14/31/19
+contracts on the de-leaked matrix (feeds E6.7); (4) run the --bullpen-version v3 MDA for home_win + run_diff to
+finish documenting the collapse on all three targets.
+
+⚠️ CRITICAL: offline NLL/Brier/importance WILL DROP — that is CORRECT (you removed a peek), NOT a regression.
+Validate ONLY on live/forward + the serving-parity harness, never offline metrics. Conventions: dbtf not dbt;
+Snowflake via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operator; do not git commit/push.
+```
+
+### E1.8 — Full feature-surface leakage sweep  ⬜  **[⭐ high priority · the bullpen leak is almost certainly not the only one · gates trust in every offline number]**
+
+**Why (raised by the PM 2026-06-18):** the bullpen leak passed purged CV *and* was the single most important feature — if the program's #1 signal was a same-row peek, **other features may leak the same way**, and that could explain the broad **H2H + Totals offline→live collapse**, not just one feature. Purged CV is blind to this class (it guards temporal/cross-fold leakage, not a feature reading its own row). Until the surface is swept, **no offline number — including the E1 audit's own rankings and the slim-contract choice — is fully trustworthy.** This is the generalization of E1.7.
+
+**Method (the E2.1b template, applied to the whole surface ~370 cols in `feature_pregame_game_features` + sub-model signals):**
+- [ ] **Construction/source audit (primary):** trace each feature family's dbt/source lineage; flag any column that reads **game-G outcome or usage** (the `outs_in_game` pattern), post-game box/final stats, or anything **not knowable before first pitch**. Verdict per feature: as-of-safe / leaky / needs-PIT-proof. Prioritize the **top-N importance features per target + the slim 14/31/19 contracts** first (highest blast radius).
+- [ ] **Serving-parity / offline↔live divergence test:** flag features that are **important offline but null/imputed/degraded at serve time** (reuse the serving-parity harness + the prod-audit data) — a high offline-importance feature that's absent live is the leak signature.
+- [ ] **Leak-signature A/B + MDA collapse** where a leakage-safe reconstruction exists (as E2.1b did for bullpen): does importance survive a clean reconstruction?
+- [ ] **Output:** `ablation_results/feature_leakage_audit.md` — per-feature verdict + a prioritized remediation list; each confirmed leak gets a de-leak fix (like E1.7) before any model that uses it is trusted/promoted.
+**AC:** every top-importance feature + the slim-contract features carry a documented leakage verdict; confirmed leaks listed with a remediation owner; the audit explicitly reports **how much of the offline→live gap the found leaks explain.** ⚠️ Same gotcha as E1.7: removing leaks **lowers offline metrics by design** — validate honesty on forward/serving-parity, not offline.
+
+```
+▶ New-session prompt — Story E1.8 (full feature-surface leakage sweep)
+
+You are building Story E1.8 of the MLB Edge Program — a systematic leakage audit of the ENTIRE feature surface.
+Context: E2.1b found the #1/#2 champion feature (bp_eb_xwoba) is a within-game leak that purged CV missed
+(it weights by outs_in_game — the eval game's own usage). The #1 feature leaking means others may too — this
+sweep checks whether leakage explains the broad offline→live collapse (corr 0.42→0.001) across H2H + Totals.
+
+Read first: edge_program_implementation_guide.md §3 E1.7 + E1.8 + E2_1b_HANDOFF.md (the 3-proof template) +
+E1.3 clustered_feature_importance.py (the importance ranking to prioritize by) + the slim 14/31/19 contracts +
+the serving-parity harness + [[project_prod_model_audit_jun2026]] + [[project_epic30_3_status]].
+
+Do: (1) construction/source audit of every feature family — flag any column reading game-G outcome/usage or
+otherwise not knowable before first pitch (the outs_in_game pattern); prioritize top-N-importance + slim-contract
+features. (2) serving-parity test: flag features important offline but null/imputed/degraded live. (3) leak-signature
+A/B + MDA collapse where a clean reconstruction exists. Write ablation_results/feature_leakage_audit.md with a
+per-feature verdict + prioritized remediation list, and quantify how much of the offline→live gap the leaks explain.
+
+⚠️ De-leaking lowers offline metrics BY DESIGN — that's correctness, not regression; judge on forward/serving-parity.
+Conventions: dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min scripts to the
+operator; do not git commit/push.
+```
+
 ---
 
-## 4. Epic E2 — Per-Side Generative Totals  ⬜  **[Track B-totals · the program's primary edge bet post-E1]**
+## 4. Epic E2 — Per-Side Generative Totals  ⬜  **[Track B-totals · the program's main edge bet — as an honest distribution/derivative *architecture*, not a single-feature signal (the bullpen signal was a leak; see E2.1b)]**
 
 **Goal:** model home and away runs as correlated count distributions, convolve to an honest full predictive distribution, and price the **derivative markets books set lazily** (F5, team totals, alt-lines). Fixes the Story-29.1 variance deficiency and produces the user-facing distribution.
 
-> **⭐ E1 signal-investment finding (2026-06-18):** the audit ranked **bullpen EB quality (`home/away_bp_eb_xwoba`) #1/#2 on *every* target.** So in E2: make the opposing **bullpen state/EB a first-class input** to the per-side model (E2.1), and treat **deepening the bullpen model** (better bullpen EB / state — a `bullpen_v3`-style investment) as **the primary modeling investment within E2** — the one place the audit says more *modeling* (not more features) pays. Also re-promote the base champions on E1.3's slim **14/31/19** contracts (cheap overfitting-surface cut; run_diff is *better* slim).
+> **❌ RETRACTED (2026-06-18, E2.1b): the "bullpen EB dominates" finding was a leak.** E1.3 ranked `home/away_bp_eb_xwoba` #1/#2 on every target, and this note originally told E2 to "deepen the bullpen model" as the primary investment. **E2.1b proved that rank was a within-game leak** (the feature weights each reliever's EB by `outs_in_game` — the outs recorded in the game being predicted); de-leaked, its importance collapses to noise (0% retained). **So: there is NO "deepen the bullpen" investment in E2.** What remains true: (1) E2.1 should consume a **leakage-safe** bullpen aggregate (equal-weight ≈ v3), purely because the leaky one isn't computable live — not for lift; (2) the real action is the **production de-leak (E1.7)**; (3) the slim-14/31/19 re-promote must be **re-derived after the de-leak** (its ranking was contaminated). Full detail: `E2_1b_HANDOFF.md`.
 
 **Build on what exists:** `offense_v2` (LightGBM+NegBin) already writes per-side `pred_runs_mu/dispersion/uncertainty` to `betting_features.offense_v2_signals`. E2 adds: calibration as a *bettable* distribution, the home/away dependence structure, convolution, and derivative pricing.
 
@@ -307,7 +379,8 @@ to the user; do not git commit/push.
 - [ ] Land in a `game_pk`-keyed mart so E2.6 can join model distribution → derivative line → realized outcome. **Eval/CLV use ONLY — never joined into the E2 model feature matrix** (market-blind constraint, above).
 **AC:** game×market historical derivative-totals lines (F5 / team-total / alt-total), close (+ open where available), 2023-05-03 → present; coverage report; credit spend logged (same order as the E5.1 prop backfill — comfortably inside 5M/mo).
 
-### E2.1 — Per-side count-distribution model  ⬜  **[market-blind]**
+### E2.1 — Per-side count-distribution model  ✅ **GATE PASS 2026-06-18**  **[market-blind]**
+> **Result:** NegBin beats Poisson on per-side-runs NLL (5/5 purged-CV folds, +0.093 mean), overdispersion recovered (var/mean≈1.6, `r` 8–33 across folds), market-leakage guard clean (0 market cols / 282 feats). Artifact `totals_perside_v1.pkl` + CV record `e2_1_perside_negbin_cv.json` written; **correctly NOT promoted to S3** (gated at E2.6). This marginal is what E2.1b/E2.2/E2.3/E2.5/E2.6 build on. (Two downstream notes folded into E2.2.)
 **Tasks:**
 - [ ] Per game/side **NegBin** runs distribution (`sub_model_output_standard` mandates NegBin for per-side counts; var/mean=2.26 justifies the overdispersion). Emit `mu`, `dispersion`, `uncertainty` per side.
 - [ ] Inputs (**baseball/context only — no market features**): that side's offense (`feature_pregame_lineup_features`; `feature_pregame_expected_lineup` pre-lineup), opposing starter (`feature_pregame_starter_features`, `eb_starter_posteriors`), opposing bullpen (`eb_bullpen_team_posteriors`), park/env (`feature_pregame_park_features`, `run_env_v4`, `feature_league_contact_baseline`), weather, umpire.
@@ -315,9 +388,20 @@ to the user; do not git commit/push.
 - [ ] **CONTRACT-GUARD:** assert zero market/odds columns in the training matrix.
 **AC:** per-side NegBin beats a Poisson baseline on held-out per-side-runs NLL under E1.1 purged CV; overdispersion recovered; market-leakage guard passes.
 
-### E2.1b — Bullpen model deepening (`bullpen_v3`)  ⬜  **[market-blind · ⭐ E1's #1 signal-investment direction · feeds E2.1 — build first/in parallel]**
+**🔄 CODE-COMPLETE (2026-06-18) — pending operator gate run.** Built `betting_ml/scripts/totals_generative/train_perside_negbin.py`: unpivots the wide per-game mart `feature_pregame_game_features` into one row per (game_pk, side) — `off_*` = batting side, `opp_*` = the opposing starter/bullpen/staff/catcher, plus shared park/env/weather/umpire — and fits a count-natural LightGBM Poisson-loss mean + MLE NegBin `r`, scored under **E1.1 `PurgedWalkForwardSplit`** against an explicit Poisson baseline (gate = NegBin NLL < Poisson NLL & var/mean>1). The market-blind CONTRACT-GUARD is the reusable `betting_ml/utils/market_blind.py` (`assert_market_blind`, binds E2/E5/E6/E7/E8); tests `betting_ml/tests/test_market_blind.py` + `test_perside_assembly.py` (70 passing). Documented deltas vs `offense_v2`: (1) full opposing-pitching + park/weather/ump inputs (offense_v2 saw only the batting side), (2) purged CV, (3) Poisson-loss mean + explicit Poisson baseline. **Operator:** `uv run python betting_ml/scripts/totals_generative/train_perside_negbin.py` (>1-min Snowflake + multi-fold LightGBM). Writes artifact `models/sub_models/totals_perside_v1/` + CV record `ablation_results/e2_1_perside_negbin_cv.json`; NOT promoted to S3 (gated at E2.6). Feeds E2.2 (copula) as the NegBin marginal; signal registration is E2.5.
 
-**Why:** the E1 audit (2026-06-18) ranked **bullpen EB quality (`home/away_bp_eb_xwoba`) #1/#2 on *every* target** — the single clearest "more modeling pays here" finding the program has. Today the per-side model consumes `eb_bullpen_team_posteriors` as a **static team-level EB shrink**; it ignores *who is actually available tonight* and *what state the pen is in*. This story makes the bullpen input richer and game-specific. It is the **primary modeling investment inside E2** and the one feature direction E6's "more features ≠ edge" conclusion explicitly exempts.
+### E2.1b — Bullpen model deepening (`bullpen_v3`)  ✅ **COMPLETE 2026-06-18 — GATE FAIL by design (the failure is the finding)**  **[market-blind]**
+
+> **⚠️ READ THE VERDICT BLOCK BELOW FIRST.** The original premise of this story (everything in **Why** + the design-fork notes below) — *"bullpen EB is the #1/#2 signal, deepen it as E2's primary investment"* — was **disproved by this story's own execution: that #1/#2 rank was a within-game leak.** The text below is kept as the as-written brief for provenance; the **✅ COMPLETE** block is the real outcome. Net: there is no "deepen the bullpen" investment; the action is the **de-leak (E1.7)**.
+
+**Why (as originally written — now superseded, see verdict):** the E1 audit (2026-06-18) ranked **bullpen EB quality (`home/away_bp_eb_xwoba`) #1/#2 on *every* target** — the single clearest "more modeling pays here" finding the program has. Today the per-side model consumes `eb_bullpen_team_posteriors` as a **static team-level EB shrink**; it ignores *who is actually available tonight* and *what state the pen is in*. This story makes the bullpen input richer and game-specific. It is the **primary modeling investment inside E2** and the one feature direction E6's "more features ≠ edge" conclusion explicitly exempts.
+
+> **⭐⭐ LEAKAGE FINDING (build session, 2026-06-18) — the core of `bullpen_v3`.** The static team EB aggregates per-reliever posteriors **weighted by `outs_in_game`** — the outs each reliever *actually recorded that night*. The EB **values** are as-of-safe, but the **weights use tonight's realized usage, which is unknown pre-game** → the program's #1 feature is built on a **subtly leaky weighting.** Replacing those weights with **expected leverage × availability** (per-reliever aLI from `int_bullpen_ali_by_season` × `mart_reliever_top3_availability`) is simultaneously the "composition-weighted EB" ask **and a genuine leakage fix.** This is the heart of the story.
+> - **Honest re-measure required:** because E1's dominant feature was partly leaky, **re-run the E1.3 clustered-MDA after the fix** and report honestly whether bullpen EB's importance *drops* once the leak is removed. If it does, that's a real, welcome update to the E1 conclusion — we want to know. (It does **not** invalidate E2.1's NegBin-beats-Poisson gate — that's distribution shape — but any go-live use of the bullpen input should be on the fixed version.)
+
+> **Design decisions (2026-06-18) — recommended resolution of the build-session forks:**
+> - **Build on the existing marts, don't duplicate:** `mart_bullpen_workload` / `mart_reliever_top3_availability` / `mart_bullpen_leverage` / `mart_bullpen_handedness_splits` / `feature_pregame_bullpen_state_features` (fatigue/availability/leverage/L-R) + `int_bullpen_ali_by_season` (the expected-leverage weight) already exist — `bullpen_v3` assembles from these, it does not re-derive them. Staged build (compute → EB-hierarchy refit → CV gate vs static EB → clustered-MDA re-check → register + leakage-safe backfill) is endorsed.
+> - **Platoon-split fork → ship (a) as the gated baseline; let (b) earn its place.** (a) composition-weight the existing **team** L/R xwOBA (`mart_bullpen_handedness_splits`) by the available-pen composition — leakage-safe, reuses what exists, ships a real available-pen L/R input now. (b) full per-reliever × LHB/RHB EB is more principled **but** splits each reliever's already-thin sample in half → heavy shrinkage likely **collapses (b) back toward (a)** anyway, at materially higher build/compute/leakage surface. That's exactly the over-parameterization E1 just flagged. **So: build (a) first as the baseline; build (b) only if it *beats (a)* on held-out per-side-runs NLL under E1.1 purged CV.** "Best product" = the version *validated* to be better, not the most elaborate — and this way we likely get the principled answer for free, or a measured reason to pay for (b). Whichever wins must be as-of-safe + market-blind.
 
 **Tasks:**
 - [ ] **Pen-state features (the highest-leverage add):** opposing-bullpen **availability/fatigue** as-of first pitch — back-to-back usage, pitches/appearances over a trailing window, days rest per reliever, projected-unavailable arms — rolled to a team-game **available-pen** aggregate. Source from `mart_pitch_play_event` / appearance logs; strictly as-of (no same-game leakage).
@@ -328,6 +412,30 @@ to the user; do not git commit/push.
 - [ ] **CONTRACT-GUARD:** zero market/odds columns (market-blind).
 
 **AC:** `bullpen_v3` available-pen + composition-weighted EB + platoon split populated and leakage-safe; **measured improvement vs the static team EB on per-side-runs NLL under E1.1 purged CV** (the bar is *beat the current bullpen input*, not the no-skill floor); feeds E2.1 as a drop-in richer input; importance re-checked via E1.3 clustered MDA (does the deepened bullpen signal stay #1, and does pen-state add over static EB?). **Honest framing:** a measured-lift investment in the proven-dominant signal — not a presumed edge.
+
+**✅ COMPLETE (2026-06-18) — GATE FAIL by design; the failure IS the finding.** The story asked "does deepening the bullpen model beat the current input on per-side NLL?" Measured answer: **NO — because the "current input" was never pre-game skill, it was a within-game leak.** Verified three ways: (1) **NLL leak-signature** — leakage-safe equal-weight (2.4582) and v3 (2.4571) land within 0.001 of each other and both lose to leaky-static (2.4303) by an identical ~0.027 ⇒ the gap is the peek, not v3 being worse; (2) the **dbt model** `eb_bullpen_team_posteriors.sql:33` weights per-reliever EB by `outs_in_game` over the roster of arms that *actually pitched the eval game* (a within-game peek purged CV can't catch); (3) the **MDA re-check** (`--bullpen-version v3`, total_runs) collapses `home/away_bp_eb_xwoba` from rank #1/#2 (imp +0.078/+0.065) to **noise** (rank 40/39, imp +0.0002/+0.0003, CI crosses 0) — **0% importance retained**. Only `bp_eb_uncertainty` (~28%) + `bp_eb_coverage_pct` (rises to #1–2 de-leaked) carry real pre-game bullpen signal — data-depth, not the xwOBA value. **Implications:** E1.3's "bullpen EB dominates every target" headline is leak-inflated; and since this feature feeds the live home_win/run_diff/total_runs training matrices, it is a named mechanism for the offline→live skill collapse ([[project_prod_model_audit_jun2026]], corr 0.42→0.001). v3's leverage/availability weighting is **neutral** vs plain equal-weight (0.001) → the simplest leakage-safe aggregate is the right replacement; **do NOT build Experiment B** (no measured headroom — multiple-testing trap). **Spin-off card recommended: de-leak the production feature** (swap `outs_in_game` → leakage-safe weight in the dbt model) + re-evaluate the base champions. Full write-up: `E2_1b_HANDOFF.md`.
+
+**Build (the leakage-safe machinery — reusable for the de-leak fix).** The static `eb_bullpen_team_posteriors` aggregates per-reliever EB **weighted by `outs_in_game` = the outs each reliever actually recorded that night** — as-of-safe EB values but a *leaky weighting* (tonight's usage is unknown pre-game). `bullpen_v3` replaces those weights with an **expected** composition weight `w_i = expected_leverage_i (trailing-30d aLI, as-of) × availability_i(rest, fatigue)` — projected-unavailable (back-to-back / heavy-use) arms down-weighted, not dropped. The leak fix **is** the composition weighting (locked design decision). Platoon channel (a) = the leakage-safe team L/R split (`mart_bullpen_handedness_splits`) carried onto the v3 row; per-reliever×handedness EB (b) is a **gated** follow-up that must beat (a) — not pre-committed.
+- **`betting_ml/scripts/eb_priors/compute_bullpen_v3.py`** — heavy Snowflake query ONCE → per-reliever cache (parquet, `models/sub_models/bullpen_v3/`); pure-Python `aggregate_team_v3(cache, k)` forms the team posterior at any shrinkage `k` (no re-query); writes `baseball_data.betting.eb_bullpen_team_posteriors_v3` (game_pk × team) via MERGE; CONTRACT-GUARD (`assert_market_blind`) on the output columns.
+- **`betting_ml/scripts/totals_generative/eval_bullpen_v3_cv.py`** — the E2.1b gate: an A/B that holds the E2.1 per-side surface fixed and swaps only the bullpen channel — **BASELINE** (static, leaky weight) vs **V3-LEAKFIX** (expected-weight, same column slot → isolates the fix) vs **V3-PENSTATE** (+ platoon + availability channels → does pen-state add). Reports per-side NegBin NLL per fold under `PurgedWalkForwardSplit` + a shrinkage-`k` sweep. Gate PASS ⇔ V3-LEAKFIX mean NLL < static at the chosen `k`.
+- **`clustered_feature_importance.py --bullpen-version v3 --shrinkage-k <k>`** — the REQUIRED honest MDA re-check: swaps the v3 column in, writes `*_bullpen_v3` outputs, so we report whether `bp_eb_xwoba` importance DROPS once the leaky weighting is gone (≠ a presumed-stays-#1).
+- Registered `bullpen_v3` in `sub_model_registry.yaml` (status `pending` → `challenger` on gate pass); tests `betting_ml/tests/test_bullpen_v3.py` (14 passing: EB-`k` math/parity, availability down-weight, leverage-weighting, platoon carry, market-blind guard).
+
+**Operator runbook (>1-min Snowflake jobs; one `--backfill-season` per invocation, parallelizable):**
+```bash
+# 1. heavy: per-reliever cache per honest-OOS season (run in parallel)
+uv run python betting_ml/scripts/eb_priors/compute_bullpen_v3.py --backfill-season 2021
+uv run python betting_ml/scripts/eb_priors/compute_bullpen_v3.py --backfill-season 2022   # …2023 2024 2025 2026
+# 2. gate + shrinkage-k sweep (static vs v3 on per-side NegBin NLL, purged CV)
+uv run python betting_ml/scripts/totals_generative/eval_bullpen_v3_cv.py --min-year 2021 --k-sweep 0.5 1.0 2.0 4.0
+# 3. if PASS: materialise the team table at the chosen k (per season)
+uv run python betting_ml/scripts/eb_priors/compute_bullpen_v3.py --backfill-season 2021 --shrinkage-k <k> --write   # …each season
+# 4. REQUIRED honesty check — does bp_eb_xwoba importance drop once the leak is gone?
+uv run python betting_ml/scripts/clustered_feature_importance.py --target home_win   --bullpen-version v3 --shrinkage-k <k>
+uv run python betting_ml/scripts/clustered_feature_importance.py --target run_diff   --bullpen-version v3 --shrinkage-k <k>
+uv run python betting_ml/scripts/clustered_feature_importance.py --target total_runs --bullpen-version v3 --shrinkage-k <k>
+```
+**Post-gate wiring:** once the table is live, E2.1's `load_wide` consumes `bp_eb_xwoba` from `eb_bullpen_team_posteriors_v3` (drop-in); a dbt model surfacing the v3 columns into `feature_pregame_game_features` is the daily-serve path (E2.5 backfill registers the signal).
 
 ```
 ▶ New-session prompt — Story E2.1b (bullpen model deepening / bullpen_v3)
@@ -357,11 +465,16 @@ daily Dagster op only scores the upcoming slate's available-pen state. Conventio
 via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operator; do not git commit/push.
 ```
 
-### E2.2 — Dependence structure (copula)  ⬜  **[market-blind]**
+### E2.2 — Dependence structure (copula)  ⬜  **[market-blind · the load-bearing story for E2.3's gate]**
+
+> **From E2.1 (gate-pass 2026-06-18) — two findings that shape this story:**
+> 1. **Per-side calibration ≠ convolution calibration.** The E2.1 marginal already trends `calib_80` ≈ 0.77→0.81 (2025 fold 0.808), which is encouraging for E2.3's `calib_80 ≥ 0.80` gate — **but a ~calibrated per-side marginal does NOT guarantee the convolved total is calibrated.** Getting the home/away dependence right here is what makes (or breaks) that gate — treat E2.2 as load-bearing, not a formality.
+> 2. **Dispersion `r` is non-stationary.** E2.1's fold `r` drifts ~33→8 over time (partly thinner early-train sets). So **don't assume a single global dispersion** any more than a single global ρ.
+
 **Tasks:**
-- [ ] Gaussian copula over the two NegBin marginals; fit ρ on historical (home_runs, away_runs) pairs from `mart_game_results`.
-- [ ] Test conditioning ρ on park/weather/run-environment buckets vs a single global ρ; pick the simplest that fits.
-**AC:** joint samples reproduce the empirical home/away run correlation **and** the realized total-runs variance; independent convolution (ρ=0) is shown insufficient on the tails (the variance/tail miss is the entire reason E2 exists).
+- [ ] Gaussian copula over the two NegBin marginals (the E2.1 `totals_perside_v1` artifact); fit ρ on historical (home_runs, away_runs) pairs from `mart_game_results`.
+- [ ] Test conditioning **both ρ AND the dispersion `r`** on park/weather/run-environment buckets vs single global values; pick the simplest that fits (E2.1 flagged `r` drift; the same conditioning question applies to ρ).
+**AC:** joint samples reproduce the empirical home/away run correlation **and** the realized total-runs variance; independent convolution (ρ=0) is shown insufficient on the tails (the variance/tail miss is the entire reason E2 exists); the ρ/`r` conditioning decision is recorded with its evidence.
 
 ### E2.3 — Convolution → predictive distributions  ⬜  **[market-blind]**
 **Tasks:**
@@ -772,6 +885,8 @@ to the user; do not git commit/push; Dagster ops import packaged code only.
 
 ### E6.7 — Pre-promotion prune validation (gate on the slim re-promote)  ⬜  **[Track R · BLOCKS the slim-contract re-promote · cheap, high-trust]**
 
+> **⚠️ SEQUENCING (2026-06-18): run this AFTER E1.7 de-leak + E1.8 leakage sweep.** The slim **14/31/19** sets were chosen from an importance ranking topped by the leaky `bp_eb_xwoba` (#1/#2). That ranking is contaminated — once de-leaked, the bullpen xwOBA value drops out and `coverage_pct`/`uncertainty` rise — so **the prune must be re-derived on the de-leaked (and leak-swept) matrix before this validation means anything.** Don't validate/promote a prune built on leaked importances.
+
 **Why:** E1.3 produced the slim **14/31/19** contracts on **aggregate** clustered importance, and the plan is to re-promote champions on them. Before we ship a model with ~95% of its features removed, we must confirm the prune is *safe*, not just *smaller-on-average*. The user's two concerns are exactly right and become the gate: **(1) aggregate importance can hide *conditional* importance** — a feature near-useless on average but decisive in a specific game-state slice (extreme weather, bullpen-fatigue games, blowout-prone matchups) — so validate with **per-game (local) importance, not just the rough aggregate**; **(2) before trusting the prune, decide explicitly whether a dimensionality step (PCA) is warranted** rather than assuming.
 
 **Recommended position on PCA (assess, but expect to reject — document the call):** PCA is most likely **the wrong tool here** and the story should prove it rather than apply it blindly. Reasons: (a) the champions are **gradient-boosted trees**, which are invariant to monotone single-feature transforms and already handle collinearity at split time — PCA's decorrelation buys little; (b) PCA produces **dense linear combinations** that **destroy the interpretability the product depends on** ("bullpen EB is your #1 driver" → "PC3 loads on 40 things"), breaking the SHAP `pick_explanation` surface; (c) rotating signal across many components can **dilute** a concentrated signal (bullpen EB) and *hurt* trees. The **redundancy** problem PCA is often reached for is **better handled by the clustered importance** already in E1.3 (which attributes importance across substitute features instead of splitting it). So: run PCA as a **diagnostic** (how many components capture the variance; is there a dominant collinear block) and report the explained-variance/condition number, but the **default recommendation is to keep raw, interpretable features pruned via clustered importance** — adopt PCA only if a measured accuracy win justifies losing interpretability.
@@ -887,6 +1002,7 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 | E9.15 | 2026-06-18 | beta user | **Fix "Model Skill — All Picks" double-counting** — show ONE post-lineup production prediction per game (live + backfill), not morning+post_lineup duplicates. | **P1** | E9.15 (app/serving; metric correctness) | ✅ DONE 2026-06-18 |
 | E9.16 | 2026-06-18 | beta user | **Paginate the Bet Log** (~25 picks/page). | P2 | E9.16 (app) | ⬜ triage |
 | E9.17 | 2026-06-18 | beta user | **Bankroll-growth %** on Performance — net P&L ÷ editable initial deposit, alongside Net P&L + % ROI; user sets/edits their deposit. | P2 | E9.17 (app; settings + metric) | ⬜ triage |
+| E9.18 | 2026-06-18 | internal | **Changelog accordion** — the changelog page is getting long (we're shipping a lot); collapse it into a per-week accordion so users can scan/expand rather than scroll a wall. | P3 | E9.18 (app; pure frontend) | ⬜ triage |
 
 ### E9.1 — "+EV price range" (breakeven line) per pick  ⬜  **[app; extends A0.4.32 + A0.4.33]**
 
@@ -978,6 +1094,15 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 - [ ] **Honest framing:** these are the user's own tracked results (factual), not a model win-rate/edge claim; no extrapolation.
 **AC:** with a deposit set, Performance shows Net P&L, % ROI, and a distinct **% growth on deposit**; the deposit is user-editable in Settings; growth hidden until a deposit is entered; changelog. **Deps:** DynamoDB users store; pairs with E9.10 (settings).
 
+### E9.18 — Changelog accordion (collapsible per-week)  ⬜  **[app · pure frontend]**
+**What it is:** we're shipping a lot, so the changelog page (`frontend/app/changelog`, reading `frontend/data/changelog.json`, A0.4.26) is becoming a long scroll. Turn it into a **per-week accordion** — one collapsible section per week (Monday→Monday grouping, see §0.2), so users can scan week headers and expand the ones they care about.
+**Tasks:**
+- [ ] Frontend only: render each `week` block as an accordion item (header = week label + a count/summary; body = the items). No data-shape change to `changelog.json` (still the same `[{week, items:[{tag,text}]}]`).
+- [ ] **Default-expand the most recent week** (current Monday), collapse the rest; keyboard-accessible + ARIA (it's a disclosure pattern — see the accessibility-review skill).
+- [ ] Preserve the tag styling (new/improvement/fix) within each expanded section.
+- [ ] Optional: persist expand/collapse state for the session only (no browser-storage requirement).
+**AC:** changelog renders as a per-week accordion, most-recent week open by default, others collapsed; keyboard/ARIA accessible; tag styling preserved; no change to the JSON contract; changelog entry (this is itself a user-facing change). **Deps:** A0.4.26 (existing changelog page); pairs with the §0.2 Monday-grouping convention.
+
 ### Migrated app/infra backlog (from master `implementation_guide.md` Epic A0)
 These existing app/infra stories now live here — **E9 is their tracking home.** Full specs remain in the master guide under the cited A0 IDs; they run as app/infra sessions (mostly pure app-repo with no model upstream → authored directly per §0.3). Status as of migration (2026-06-17):
 
@@ -985,15 +1110,16 @@ These existing app/infra stories now live here — **E9 is their tracking home.*
 |----|--------|-------|-----|--------|-----------------|
 | E9.2 | A0.4.34 | CLV meta-model confidence bar (H2H + totals) per pick | P2 | ⬜ NEW | app; meta cols on the **morning** row (12.4 / 12.12) — coalesce onto displayed pick; also the §5A app-surface E3 strengthens |
 | E9.3 | A0.4.31 | Live scores via the Odds API scores endpoint → Railway PG | P2 | ⬜ NEW | app + poller; poll only while games in-progress (cost guard); MLB StatsAPI fallback |
-| E9.4 | A0.4.18 | Cognito welcome email + beta-user onboarding | P1 | 🔶 PARTIAL | backend; blocked on SES production (or Resend Lambda) |
-| E9.5 | A0.4.22 | Password reset flow | P1 | ✅ VALIDATED (SES-prod pending) | app + backend; branded email pending SES prod / Resend |
+| E9.4 | A0.4.18 | Cognito welcome email + beta-user onboarding | P1 | 🟢 UNBLOCKED (SES prod live 2026-06-18) | backend; **SES now in production → Path A direct (Resend Path B no longer needed)**; brand the invite template + provision beta users |
+| E9.5 | A0.4.22 | Password reset flow | P1 | 🟢 READY (SES prod live 2026-06-18) | app + backend; sandbox-validated → finish: branded "Verification message" template + redeploy `infrastructure/lambda/deploy.sh` + retest with a real non-sandbox email |
 | E9.6 | A0.4.17 | Morning early pick (pre-lineup "preliminary" surface) | P3 | 🔶 PARTIAL | app done; pipeline blocked on master Story 30.8 (morning-mode model). Pairs with the Edge pre-lineup theme |
 | E9.7 | A0.6B | Google OAuth / social sign-in | P1 | ⬜ | app; Cognito federated identity; **unblocks E9.8** |
 | E9.8 | A0.7 | Stripe subscription billing (Starter/Pro; Cognito groups) | P1 | ⬜ | app + backend; needs E9.7 + Cognito groups (E9.4) — the **paid-tier revenue gate** |
-| E9.9 | A0.6 | Push notifications (AWS SNS + Lambda + Web Push / SES) | P1 | ⬜ | backend; Dagster publishes post-`predict_today`; needs SES identity (E9.4) |
-| E9.10 | A0.4.11 | Settings: user profile + notification preferences | **P1 (window: unblocked parts only)** | ⚠️ PARTIAL | app; **window scope = profile + sign-out + non-email prefs + editable `initial_deposit`** (no new deps). The **email/push notif toggle is deferred to E9.9 + SES** — not in the current card |
+| E9.9 | A0.6 | Push notifications (AWS SNS + Lambda + Web Push / SES) | P1 | ⬜ (SES email path now live) | backend; Dagster publishes post-`predict_today`; **SES email path unblocked 2026-06-18** — remaining work is the SNS/Lambda/DynamoDB/Web-Push build (no longer SES-blocked) |
+| E9.10 | A0.4.11 | Settings: user profile + notification preferences | **P1 (window: unblocked parts only)** | ⚠️ PARTIAL | app; **window scope = profile + sign-out + non-email prefs + editable `initial_deposit`** (no new deps). The **email/push notif toggle is deferred to E9.9** (SES is no longer the blocker — E9.9's backend build is) — not in the current card |
 
-> **Sequencing notes:** **E9.7 → E9.8** (OAuth → Stripe) is the **paid-tier revenue path** — sequence them together once beta stabilizes. E9.4 (SES identity / Cognito groups) unblocks E9.5/E9.8/E9.9. E9.6 pairs with the pre-lineup serving theme (and the master Story 30.8 dependency). E9.2 is also the CLV-bar app surface that Epic E3 strengthens.
+> **🟢 SES PRODUCTION GRANTED (2026-06-18):** account out of the SES sandbox, **50,000 msg/day, 14 msg/s, us-east-1**. This **unblocks E9.4 (invites), E9.5 (reset emails), and E9.9's email path**, and **retires the Resend "Path B" contingency** (use SES Path A directly). Set up bounce/complaint handling per AWS best-practices before high-volume sending; the mailbox simulator is the safe test target.
+> **Sequencing notes:** **E9.7 → E9.8** (OAuth → Stripe) is the **paid-tier revenue path** — sequence them together once beta stabilizes. **E9.4 + E9.5 are now quick beta-launch enablers** (SES live) — E9.4 is the literal gate to inviting beta users. E9.6 pairs with the pre-lineup serving theme (master Story 30.8 dependency). E9.2 is also the CLV-bar app surface that Epic E3 strengthens.
 
 ---
 

@@ -14,13 +14,12 @@ const TAG_STYLES: Record<string, string> = {
 }
 
 function formatWeek(week: string) {
-  const d = new Date(week + "T00:00:00")
-  return d.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  })
+  const start = new Date(week + "T00:00:00")
+  const end = new Date(week + "T00:00:00")
+  end.setUTCDate(end.getUTCDate() + 6)
+  const rangeOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", timeZone: "UTC" }
+  const endOpts: Intl.DateTimeFormatOptions = { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }
+  return `${start.toLocaleDateString("en-US", rangeOpts)} – ${end.toLocaleDateString("en-US", endOpts)}`
 }
 
 export default function ChangelogPage() {

@@ -1,6 +1,6 @@
 [
   {
-    "week": "2026-06-18",
+    "week": "2026-06-15",
     "items": [
       {
         "tag": "new",
@@ -17,12 +17,7 @@
       {
         "tag": "fix",
         "text": "Pick write-ups now stay in sync with the served pick. The plain-English explanation and feature drivers are regenerated alongside each day's predictions, so the reasoning you read always matches the pick currently shown — no more stale morning write-up lingering after the pick updates post-lineup."
-      }
-    ]
-  },
-  {
-    "week": "2026-06-15",
-    "items": [
+      },
       {
         "tag": "new",
         "text": "Teams directory launched at /teams — all 30 MLB teams organized by division with current win-loss record, win percentage, and win/loss streak. Click any team to open the detail page."
