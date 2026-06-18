@@ -455,7 +455,13 @@ _TODAY_QUERY = f"""
 WITH ranked AS (
     SELECT
         p.*,
-        g.game_date                                  AS game_start_utc,
+        g.game_date                                                          AS game_start_utc,
+        MAX(p.meta_p_clv_positive) OVER (PARTITION BY p.game_pk)            AS _meta_p,
+        MAX(p.meta_ci_low) OVER (PARTITION BY p.game_pk)                    AS _meta_ci_low,
+        MAX(p.meta_ci_high) OVER (PARTITION BY p.game_pk)                   AS _meta_ci_high,
+        MAX(p.totals_meta_p_clv_positive) OVER (PARTITION BY p.game_pk)     AS _totals_meta_p,
+        MAX(p.totals_meta_ci_low) OVER (PARTITION BY p.game_pk)             AS _totals_meta_ci_low,
+        MAX(p.totals_meta_ci_high) OVER (PARTITION BY p.game_pk)            AS _totals_meta_ci_high,
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
@@ -491,7 +497,10 @@ h2h AS (
         b.inserted_at,
         NULL::FLOAT                                  AS model_total_runs,
         NULL::FLOAT                                  AS market_total_line,
-        b.prediction_type
+        b.prediction_type,
+        b._meta_p                                    AS meta_p_clv_positive,
+        b._meta_ci_low                               AS meta_ci_low,
+        b._meta_ci_high                              AS meta_ci_high
     FROM base b
     WHERE b.layer4_h2h_decision IN ('home', 'away')
 ),
@@ -516,7 +525,10 @@ totals AS (
         b.inserted_at,
         b.pred_total_runs                            AS model_total_runs,
         b.total_line_consensus                       AS market_total_line,
-        b.prediction_type
+        b.prediction_type,
+        b._totals_meta_p                             AS meta_p_clv_positive,
+        b._totals_meta_ci_low                        AS meta_ci_low,
+        b._totals_meta_ci_high                       AS meta_ci_high
     FROM base b
     WHERE b.layer4_totals_decision IN ('over', 'under')
 )
@@ -741,6 +753,12 @@ _GAME_QUERY = f"""
 WITH ranked AS (
     SELECT
         *,
+        MAX(meta_p_clv_positive) OVER (PARTITION BY game_pk)            AS _meta_p,
+        MAX(meta_ci_low) OVER (PARTITION BY game_pk)                    AS _meta_ci_low,
+        MAX(meta_ci_high) OVER (PARTITION BY game_pk)                   AS _meta_ci_high,
+        MAX(totals_meta_p_clv_positive) OVER (PARTITION BY game_pk)     AS _totals_meta_p,
+        MAX(totals_meta_ci_low) OVER (PARTITION BY game_pk)             AS _totals_meta_ci_low,
+        MAX(totals_meta_ci_high) OVER (PARTITION BY game_pk)            AS _totals_meta_ci_high,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
@@ -776,7 +794,10 @@ h2h AS (
         b.game_start_utc,
         b.inserted_at,
         b.pred_total_runs                            AS model_total_runs,
-        b.total_line_consensus                       AS market_total_line
+        b.total_line_consensus                       AS market_total_line,
+        b._meta_p                                    AS meta_p_clv_positive,
+        b._meta_ci_low                               AS meta_ci_low,
+        b._meta_ci_high                              AS meta_ci_high
     FROM base b
     WHERE b.h2h_market_implied_prob IS NOT NULL
 ),
@@ -800,7 +821,10 @@ totals AS (
         b.game_start_utc,
         b.inserted_at,
         b.pred_total_runs                            AS model_total_runs,
-        b.total_line_consensus                       AS market_total_line
+        b.total_line_consensus                       AS market_total_line,
+        b._totals_meta_p                             AS meta_p_clv_positive,
+        b._totals_meta_ci_low                        AS meta_ci_low,
+        b._totals_meta_ci_high                       AS meta_ci_high
     FROM base b
     WHERE b.over_prob_consensus IS NOT NULL
 )
@@ -1309,6 +1333,9 @@ def get_picks_today(
             win_prob_ci_low=r.get("WIN_PROB_CI_LOW"),
             win_prob_ci_high=r.get("WIN_PROB_CI_HIGH"),
             win_prob_ci_width=r.get("WIN_PROB_CI_WIDTH"),
+            meta_p_clv_positive=r.get("META_P_CLV_POSITIVE"),
+            meta_ci_low=r.get("META_CI_LOW"),
+            meta_ci_high=r.get("META_CI_HIGH"),
             lineup_confirmed=r.get("LINEUP_CONFIRMED"),
             home_team=r.get("HOME_TEAM"),
             away_team=r.get("AWAY_TEAM"),
@@ -1489,6 +1516,9 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
             win_prob_ci_low=r.get("WIN_PROB_CI_LOW"),
             win_prob_ci_high=r.get("WIN_PROB_CI_HIGH"),
             win_prob_ci_width=r.get("WIN_PROB_CI_WIDTH"),
+            meta_p_clv_positive=r.get("META_P_CLV_POSITIVE"),
+            meta_ci_low=r.get("META_CI_LOW"),
+            meta_ci_high=r.get("META_CI_HIGH"),
             lineup_confirmed=r.get("LINEUP_CONFIRMED"),
             home_team=r.get("HOME_TEAM"),
             away_team=r.get("AWAY_TEAM"),

@@ -8276,3 +8276,111 @@ models:
         description: Weight in pounds from stg_statsapi_player_profiles; NULL for lineup-only players.
       - name: il_since
         description: Date the current IL stint began; NULL when is_on_il = FALSE.
+
+  # ============================================================================
+  # mart_derivative_closes  (E2.0 — derivative-market closing odds)
+  # ============================================================================
+  - name: mart_derivative_closes
+    description: >
+      Closing derivative-market odds for MLB games. Grain: one row per
+      (game_pk, market_key, bookmaker_key, outcome_name). "Closing" = the last
+      pre-game snapshot in derivative_odds_raw (actual_snapshot_ts <= commence_time).
+      Markets: team_totals, alternate_totals, h2h_h1 (F5 moneyline), totals_h1 (F5 totals).
+      Coverage: 2023-05-03 → present (Odds API additional-market history limit).
+      ⚠️  EVAL/CLV-ONLY — must never be joined into model training feature matrices
+      (market-blind constraint, Edge Program §0.1 Principle 3).
+      Note: for alternate_totals, the ROW_NUMBER dedup keeps one Over and one Under row
+      per (event_id, bookmaker_key) at the most recent pre-game snapshot — if multiple
+      alternate lines share the same snapshot timestamp, the surviving outcome_point is
+      arbitrary. Use raw stg_derivative_odds when all alternate lines are needed.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [game_pk, market_key, bookmaker_key, outcome_name]
+    columns:
+      - name: game_pk
+        description: >
+          MLB Stats API game identifier. Non-null by construction: the INNER JOIN
+          to mart_game_odds_bridge guarantees only events mappable to a game_pk survive.
+        tests: [not_null]
+      - name: event_id
+        description: Odds API event identifier. Joins back to stg_derivative_odds.
+        tests: [not_null]
+      - name: commence_time
+        description: Scheduled game start time (UTC). Leakage guard boundary.
+        tests: [not_null]
+      - name: home_team
+        description: Home team name (Odds API display format).
+      - name: away_team
+        description: Away team name (Odds API display format).
+      - name: close_snapshot_ts
+        description: >
+          Timestamp of the last pre-game snapshot (actual_snapshot_ts from the raw table).
+          Always ≤ commence_time; enforced by the WHERE in the derivative_odds CTE.
+        tests: [not_null]
+      - name: bookmaker_key
+        description: Bookmaker slug (e.g. bovada, pinnacle, fanduel).
+        tests: [not_null]
+      - name: bookmaker_title
+        description: Bookmaker display name.
+      - name: market_key
+        description: >
+          Derivative market key. Exactly one of four values:
+          team_totals (team run total), alternate_totals (alt full-game total),
+          h2h_h1 (F5 moneyline), totals_h1 (F5 run total).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [team_totals, alternate_totals, h2h_h1, totals_h1]
+      - name: outcome_name
+        description: >
+          Outcome name. 'Over' or 'Under' for totals markets; team name for h2h_h1
+          and team_totals.
+        tests: [not_null]
+      - name: outcome_description
+        description: >
+          Team name for team_totals outcomes (identifies which team's total).
+          Null for alternate_totals, h2h_h1, and totals_h1.
+      - name: outcome_price_american
+        description: American-format odds for this outcome.
+      - name: outcome_price_decimal
+        description: Decimal-format odds. Always > 1.0 for valid prices.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1.0
+                max_value: 100.0
+              config:
+                where: "outcome_price_decimal is not null"
+                severity: warn
+      - name: outcome_point
+        description: >
+          Over/Under line for totals markets; null for h2h_h1.
+        tests:
+          - not_null:
+              config:
+                where: "market_key in ('team_totals', 'alternate_totals', 'totals_h1')"
+                severity: warn
+      - name: is_over
+        description: >
+          True when outcome_name = 'over' on a totals market; False for 'under'.
+          Null for h2h_h1 (moneyline) and any non-Over/Under outcome.
+        tests:
+          - not_null:
+              config:
+                where: "market_key in ('team_totals', 'alternate_totals', 'totals_h1') and lower(outcome_name) in ('over', 'under')"
+                severity: warn
+      - name: raw_implied_prob
+        description: >
+          Raw implied probability (= 1 / outcome_price_decimal). Not de-vigged —
+          the two-sided sum will exceed 1.0 due to the book's margin.
+          Null when outcome_price_decimal is null.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+              config:
+                where: "raw_implied_prob is not null"
+                severity: warn

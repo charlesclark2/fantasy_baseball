@@ -61,6 +61,10 @@
       {
         "tag": "fix",
         "text": "Fixed a bug where the \"Why this pick\" write-up could name the wrong team as the model's pick. The narrative now states each team's win probability by name (e.g. SEA: 21%, BAL: 79%) so the model-backed side matches the chip label. A guard now blocks generation if the pick direction is internally inconsistent."
+      },
+      {
+        "tag": "model",
+        "text": "Pick detail pages now show a CLV-confidence bar for both the moneyline and totals markets — a probability bar showing P(closing line moves toward this side) with an 80% credible interval. The totals bar is shown as low-information (the totals CLV model has no demonstrated open-to-close predictive signal at this stage). Both bars are transparency tools framing line-value confidence, not bet recommendations."
       }
     ]
   },

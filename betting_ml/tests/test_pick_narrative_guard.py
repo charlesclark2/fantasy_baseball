@@ -98,14 +98,14 @@ def _prompt_row(pick_side="away", cal_win=0.208, mkt_win=0.520, home="SEA", away
 
 def test_prompt_labels_home_team_probability():
     prompt = _build_prompt(_prompt_row(), {})
-    # Home team SEA probability must be explicitly named
-    assert "Model P(SEA wins): 20.8%" in prompt or "P(SEA wins): 20.8%" in prompt
+    # Home team SEA expands to "Seattle Mariners"; probability must be explicitly named
+    assert "Model P(Seattle Mariners wins): 20.8%" in prompt
 
 
 def test_prompt_labels_away_team_probability():
     prompt = _build_prompt(_prompt_row(), {})
-    # Away team BAL probability must be explicitly named
-    assert "Model P(BAL wins): 79.2%" in prompt or "P(BAL wins): 79.2%" in prompt
+    # Away team BAL expands to "Baltimore Orioles"; probability must be explicitly named
+    assert "Model P(Baltimore Orioles wins): 79.2%" in prompt
 
 
 def test_prompt_no_ambiguous_win_probability():
@@ -116,18 +116,21 @@ def test_prompt_no_ambiguous_win_probability():
 
 def test_prompt_identifies_backed_team_away():
     prompt = _build_prompt(_prompt_row(pick_side="away"), {})
-    assert "The model backs BAL to win" in prompt
+    # BAL expands to "Baltimore Orioles"
+    assert "The model backs Baltimore Orioles to win" in prompt
 
 
 def test_prompt_identifies_backed_team_home():
     prompt = _build_prompt(_prompt_row(pick_side="home", cal_win=0.80, mkt_win=0.52), {})
-    assert "The model backs SEA to win" in prompt
+    # SEA expands to "Seattle Mariners"
+    assert "The model backs Seattle Mariners to win" in prompt
 
 
 def test_prompt_labels_home_team_in_game_line():
     prompt = _build_prompt(_prompt_row(), {})
-    assert "Home team: SEA" in prompt
-    assert "Away team: BAL" in prompt
+    # Abbreviations expanded to full names
+    assert "Home team: Seattle Mariners" in prompt
+    assert "Away team: Baltimore Orioles" in prompt
 
 
 def test_prompt_edge_matches_chip_formula():

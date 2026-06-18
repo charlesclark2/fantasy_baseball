@@ -1,0 +1,1622 @@
+{
+  "target": "run_diff",
+  "metric": "mae",
+  "recipe": "ngboost-Normal(challenger)",
+  "n_features": 167,
+  "n_clusters": 144,
+  "corr_threshold": 0.75,
+  "n_repeats": 3,
+  "pooled_baseline": 3.3879728439324674,
+  "bullpen_version": "v3",
+  "clusters": [
+    {
+      "cluster_id": 24,
+      "n_features": 1,
+      "importance": 0.10935192734781086,
+      "ci_low": 0.08826301844521331,
+      "ci_high": 0.13056328804382725,
+      "is_noise": false,
+      "members": [
+        "home_bp_eb_coverage_pct"
+      ]
+    },
+    {
+      "cluster_id": 26,
+      "n_features": 1,
+      "importance": 0.07892691909337718,
+      "ci_low": 0.05920893348645882,
+      "ci_high": 0.09788272207555739,
+      "is_noise": false,
+      "members": [
+        "away_bp_eb_coverage_pct"
+      ]
+    },
+    {
+      "cluster_id": 4,
+      "n_features": 2,
+      "importance": 0.04469663056295085,
+      "ci_low": 0.029958773013291744,
+      "ci_high": 0.061385388105876924,
+      "is_noise": false,
+      "members": [
+        "elo_diff",
+        "pythagorean_win_exp_diff"
+      ]
+    },
+    {
+      "cluster_id": 66,
+      "n_features": 1,
+      "importance": 0.0055237334721417106,
+      "ci_low": -0.0042597355807025465,
+      "ci_high": 0.015274510316794821,
+      "is_noise": true,
+      "members": [
+        "home_pit_bb_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 79,
+      "n_features": 1,
+      "importance": 0.004847205450143669,
+      "ci_low": 0.0008591213239922671,
+      "ci_high": 0.009002923552274644,
+      "is_noise": false,
+      "members": [
+        "away_vs_lhp_bb_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 3,
+      "n_features": 2,
+      "importance": 0.0027859261722597874,
+      "ci_low": 0.0006907500557195225,
+      "ci_high": 0.004791480301605278,
+      "is_noise": false,
+      "members": [
+        "home_bp_eb_uncertainty",
+        "away_bp_eb_uncertainty"
+      ]
+    },
+    {
+      "cluster_id": 30,
+      "n_features": 1,
+      "importance": 0.002219883129062897,
+      "ci_low": -0.0020797583101084577,
+      "ci_high": 0.006603272485668351,
+      "is_noise": true,
+      "members": [
+        "away_starter_stuff_plus"
+      ]
+    },
+    {
+      "cluster_id": 15,
+      "n_features": 2,
+      "importance": 0.002180122386392882,
+      "ci_low": -0.0007249838378054734,
+      "ci_high": 0.0050708163502623535,
+      "is_noise": true,
+      "members": [
+        "home_off_bb_pct_std",
+        "home_off_bb_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 133,
+      "n_features": 1,
+      "importance": 0.0020583412315434545,
+      "ci_low": 0.00020374395286826012,
+      "ci_high": 0.004056972166261124,
+      "is_noise": false,
+      "members": [
+        "away_lineup_archetype_pa_coverage"
+      ]
+    },
+    {
+      "cluster_id": 59,
+      "n_features": 1,
+      "importance": 0.0020333193176425074,
+      "ci_low": -0.00036562067756453306,
+      "ci_high": 0.004508773674949913,
+      "is_noise": true,
+      "members": [
+        "home_avg_xwoba_30d"
+      ]
+    },
+    {
+      "cluster_id": 63,
+      "n_features": 1,
+      "importance": 0.001735587273021307,
+      "ci_low": 0.0003134577648400889,
+      "ci_high": 0.0031381118127594017,
+      "is_noise": false,
+      "members": [
+        "home_starter_avg_ip_last_3"
+      ]
+    },
+    {
+      "cluster_id": 42,
+      "n_features": 1,
+      "importance": 0.0016007248713885063,
+      "ci_low": -0.0008477178978393577,
+      "ci_high": 0.004132843539956061,
+      "is_noise": true,
+      "members": [
+        "home_away_bp_xwoba_against_30d_pct_diff"
+      ]
+    },
+    {
+      "cluster_id": 95,
+      "n_features": 1,
+      "importance": 0.0015003870533229697,
+      "ci_low": -0.00023705117279429808,
+      "ci_high": 0.003151370328915494,
+      "is_noise": true,
+      "members": [
+        "home_pit_hard_hit_pct_7d"
+      ]
+    },
+    {
+      "cluster_id": 67,
+      "n_features": 1,
+      "importance": 0.001407874346413825,
+      "ci_low": -0.0005048303939209838,
+      "ci_high": 0.003346901635034507,
+      "is_noise": true,
+      "members": [
+        "home_avg_woba_vs_rhp"
+      ]
+    },
+    {
+      "cluster_id": 98,
+      "n_features": 1,
+      "importance": 0.0013834297648987494,
+      "ci_low": -0.00019414564580552487,
+      "ci_high": 0.0028965057055230594,
+      "is_noise": true,
+      "members": [
+        "away_bullpen_pitches_prev_7d"
+      ]
+    },
+    {
+      "cluster_id": 14,
+      "n_features": 2,
+      "importance": 0.0013400543199947239,
+      "ci_low": -0.00027935810861436485,
+      "ci_high": 0.002977199941131389,
+      "is_noise": true,
+      "members": [
+        "away_starter_whiff_rate_std",
+        "away_starter_whiff_rate_14d"
+      ]
+    },
+    {
+      "cluster_id": 33,
+      "n_features": 1,
+      "importance": 0.001311867843531675,
+      "ci_low": -0.0018154559069283665,
+      "ci_high": 0.004488504172171225,
+      "is_noise": true,
+      "members": [
+        "home_away_starter_k_pct_std_pct_diff"
+      ]
+    },
+    {
+      "cluster_id": 87,
+      "n_features": 1,
+      "importance": 0.0012329696793302537,
+      "ci_low": -0.0012947717367186868,
+      "ci_high": 0.0040193049777562445,
+      "is_noise": true,
+      "members": [
+        "away_bp_bb_pct_14d"
+      ]
+    },
+    {
+      "cluster_id": 131,
+      "n_features": 1,
+      "importance": 0.0012171112464029578,
+      "ci_low": -0.0006917158188234882,
+      "ci_high": 0.003183332024066885,
+      "is_noise": true,
+      "members": [
+        "away_injured_player_count"
+      ]
+    },
+    {
+      "cluster_id": 134,
+      "n_features": 1,
+      "importance": 0.0011721021252401231,
+      "ci_low": -0.0012438608002809158,
+      "ci_high": 0.0035731747941002995,
+      "is_noise": true,
+      "members": [
+        "away_pit_xwoba_7d_minus_30d"
+      ]
+    },
+    {
+      "cluster_id": 124,
+      "n_features": 1,
+      "importance": 0.0011055470329272268,
+      "ci_low": 0.00029481386393145106,
+      "ci_high": 0.002023763112469977,
+      "is_noise": false,
+      "members": [
+        "home_starter_bb_pct_vs_rhb"
+      ]
+    },
+    {
+      "cluster_id": 13,
+      "n_features": 2,
+      "importance": 0.0010056545445143556,
+      "ci_low": -0.0019374172994654642,
+      "ci_high": 0.004118441106695082,
+      "is_noise": true,
+      "members": [
+        "away_avg_woba_std",
+        "away_avg_woba_30d"
+      ]
+    },
+    {
+      "cluster_id": 86,
+      "n_features": 1,
+      "importance": 0.0009349384882897758,
+      "ci_low": -0.000768283351595968,
+      "ci_high": 0.002527352472531971,
+      "is_noise": true,
+      "members": [
+        "home_starter_avg_fastball_velo"
+      ]
+    },
+    {
+      "cluster_id": 1,
+      "n_features": 2,
+      "importance": 0.000932768123532801,
+      "ci_low": 5.8546534331942074e-05,
+      "ci_high": 0.0018247210550887607,
+      "is_noise": false,
+      "members": [
+        "home_bp_eb_xwoba",
+        "home_team_sequential_bullpen_xwoba"
+      ]
+    },
+    {
+      "cluster_id": 56,
+      "n_features": 1,
+      "importance": 0.0009176801563289726,
+      "ci_low": 0.00015594992124410255,
+      "ci_high": 0.0017555815660855172,
+      "is_noise": false,
+      "members": [
+        "home_starter_csw_pct_season"
+      ]
+    },
+    {
+      "cluster_id": 121,
+      "n_features": 1,
+      "importance": 0.00091156059703443,
+      "ci_low": -8.85959536037822e-06,
+      "ci_high": 0.0019250529699568009,
+      "is_noise": true,
+      "members": [
+        "away_starter_hard_hit_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 115,
+      "n_features": 1,
+      "importance": 0.0008647698963132676,
+      "ci_low": -0.00042556703997978767,
+      "ci_high": 0.0020803237701823053,
+      "is_noise": true,
+      "members": [
+        "home_avg_hard_hit_pct_vs_lhp"
+      ]
+    },
+    {
+      "cluster_id": 60,
+      "n_features": 1,
+      "importance": 0.0008204498810950367,
+      "ci_low": -0.0005511091514637406,
+      "ci_high": 0.0021225839679368534,
+      "is_noise": true,
+      "members": [
+        "away_starter_changeup_stuff_plus"
+      ]
+    },
+    {
+      "cluster_id": 83,
+      "n_features": 1,
+      "importance": 0.0008083431381771335,
+      "ci_low": -0.0007664583381936031,
+      "ci_high": 0.0025063837012222053,
+      "is_noise": true,
+      "members": [
+        "away_off_hard_hit_pct_7d"
+      ]
+    },
+    {
+      "cluster_id": 16,
+      "n_features": 2,
+      "importance": 0.0007845023239480994,
+      "ci_low": -0.001240527849864714,
+      "ci_high": 0.002851626799015679,
+      "is_noise": true,
+      "members": [
+        "home_starter_xwoba_against_7d",
+        "home_starter_xwoba_7d_minus_std"
+      ]
+    },
+    {
+      "cluster_id": 2,
+      "n_features": 2,
+      "importance": 0.0007821805135205977,
+      "ci_low": -0.0005765345599800263,
+      "ci_high": 0.0021786355772411927,
+      "is_noise": true,
+      "members": [
+        "away_bp_eb_xwoba",
+        "away_team_sequential_bullpen_xwoba"
+      ]
+    },
+    {
+      "cluster_id": 75,
+      "n_features": 1,
+      "importance": 0.0007704910055403914,
+      "ci_low": -0.001989688232252369,
+      "ci_high": 0.003708805755150106,
+      "is_noise": true,
+      "members": [
+        "home_pit_xwoba_against_7d"
+      ]
+    },
+    {
+      "cluster_id": 107,
+      "n_features": 1,
+      "importance": 0.00072249294253092,
+      "ci_low": -0.0012979017449713344,
+      "ci_high": 0.00247019274042849,
+      "is_noise": true,
+      "members": [
+        "away_pit_barrel_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 122,
+      "n_features": 1,
+      "importance": 0.0007170792749957268,
+      "ci_low": -0.0006844667357894261,
+      "ci_high": 0.002175747428379246,
+      "is_noise": true,
+      "members": [
+        "home_lineup_archetype_pa_coverage"
+      ]
+    },
+    {
+      "cluster_id": 18,
+      "n_features": 2,
+      "importance": 0.0006710493943158947,
+      "ci_low": -0.0009102942626936669,
+      "ci_high": 0.002408822312600304,
+      "is_noise": true,
+      "members": [
+        "home_off_xwoba_7d",
+        "home_off_xwoba_14d"
+      ]
+    },
+    {
+      "cluster_id": 99,
+      "n_features": 1,
+      "importance": 0.0006254764078473119,
+      "ci_low": -0.0013348329425946345,
+      "ci_high": 0.002608363429402055,
+      "is_noise": true,
+      "members": [
+        "away_avg_whiff_rate_30d"
+      ]
+    },
+    {
+      "cluster_id": 132,
+      "n_features": 1,
+      "importance": 0.0006242899467640507,
+      "ci_low": -0.0005500537000665906,
+      "ci_high": 0.0018152015129928077,
+      "is_noise": true,
+      "members": [
+        "home_pythagorean_residual_season"
+      ]
+    },
+    {
+      "cluster_id": 19,
+      "n_features": 2,
+      "importance": 0.0006174334865615456,
+      "ci_low": -0.0009945607876166497,
+      "ci_high": 0.002105000094391596,
+      "is_noise": true,
+      "members": [
+        "home_bp_k_pct_30d",
+        "home_bp_k_pct_14d"
+      ]
+    },
+    {
+      "cluster_id": 104,
+      "n_features": 1,
+      "importance": 0.0006126456715514107,
+      "ci_low": -0.0011572933125616346,
+      "ci_high": 0.002330623106843759,
+      "is_noise": true,
+      "members": [
+        "away_starter_bb_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 126,
+      "n_features": 1,
+      "importance": 0.0005477865013765693,
+      "ci_low": -0.0004110898574235371,
+      "ci_high": 0.0014318984389278628,
+      "is_noise": true,
+      "members": [
+        "home_starter_barrel_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 49,
+      "n_features": 1,
+      "importance": 0.0005238319041854025,
+      "ci_low": -0.0004927281146626667,
+      "ci_high": 0.0015629689056706328,
+      "is_noise": true,
+      "members": [
+        "home_starter_k_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 68,
+      "n_features": 1,
+      "importance": 0.000507216025923267,
+      "ci_low": -0.0019052428659846147,
+      "ci_high": 0.0028371524761717616,
+      "is_noise": true,
+      "members": [
+        "away_lineup_iso_vs_starter_archetype"
+      ]
+    },
+    {
+      "cluster_id": 105,
+      "n_features": 1,
+      "importance": 0.0004903885798153388,
+      "ci_low": -0.00036127905862501364,
+      "ci_high": 0.0014413140415461781,
+      "is_noise": true,
+      "members": [
+        "home_pit_barrel_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 71,
+      "n_features": 1,
+      "importance": 0.0004467873549894026,
+      "ci_low": -0.0003121207854330944,
+      "ci_high": 0.0012556511440926464,
+      "is_noise": true,
+      "members": [
+        "home_lineup_bat_speed_vs_starter_velo"
+      ]
+    },
+    {
+      "cluster_id": 117,
+      "n_features": 1,
+      "importance": 0.00043061753565614834,
+      "ci_low": -3.224976217446139e-05,
+      "ci_high": 0.0009390717396631632,
+      "is_noise": true,
+      "members": [
+        "right_line_ft"
+      ]
+    },
+    {
+      "cluster_id": 12,
+      "n_features": 2,
+      "importance": 0.00040622828433547494,
+      "ci_low": -0.0004261739369543393,
+      "ci_high": 0.0012571751534963596,
+      "is_noise": true,
+      "members": [
+        "away_avg_bb_pct_std",
+        "away_avg_bb_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 5,
+      "n_features": 2,
+      "importance": 0.0003948027299091485,
+      "ci_low": -0.003659202231925166,
+      "ci_high": 0.0043545758968624995,
+      "is_noise": true,
+      "members": [
+        "away_elo",
+        "away_team_sequential_win_prob"
+      ]
+    },
+    {
+      "cluster_id": 109,
+      "n_features": 1,
+      "importance": 0.00037697730706086173,
+      "ci_low": -0.0008119045068216504,
+      "ci_high": 0.0016197919299015245,
+      "is_noise": true,
+      "members": [
+        "away_avg_k_pct_vs_rhp"
+      ]
+    },
+    {
+      "cluster_id": 92,
+      "n_features": 1,
+      "importance": 0.0003628502103220557,
+      "ci_low": -0.0004640794115027984,
+      "ci_high": 0.0012386883980115553,
+      "is_noise": true,
+      "members": [
+        "away_starter_avg_fastball_velo"
+      ]
+    },
+    {
+      "cluster_id": 78,
+      "n_features": 1,
+      "importance": 0.0003242063462736627,
+      "ci_low": -0.0016173324431494169,
+      "ci_high": 0.0021364585745254944,
+      "is_noise": true,
+      "members": [
+        "home_avg_hard_hit_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 72,
+      "n_features": 1,
+      "importance": 0.00027534836060951395,
+      "ci_low": -0.00045316596121436434,
+      "ci_high": 0.0011134763907014276,
+      "is_noise": true,
+      "members": [
+        "home_starter_changeup_stuff_plus"
+      ]
+    },
+    {
+      "cluster_id": 88,
+      "n_features": 1,
+      "importance": 0.0002687452178034026,
+      "ci_low": -0.0011807018570975608,
+      "ci_high": 0.001634499784309356,
+      "is_noise": true,
+      "members": [
+        "away_starter_batter_chase_rate_30d"
+      ]
+    },
+    {
+      "cluster_id": 120,
+      "n_features": 1,
+      "importance": 0.0002402519100545088,
+      "ci_low": -0.001618377428793491,
+      "ci_high": 0.0018558995468043115,
+      "is_noise": true,
+      "members": [
+        "home_bp_hard_hit_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 37,
+      "n_features": 1,
+      "importance": 0.00022774555453657203,
+      "ci_low": -0.0019324163004074265,
+      "ci_high": 0.0023299652558144562,
+      "is_noise": true,
+      "members": [
+        "away_starter_csw_pct_season"
+      ]
+    },
+    {
+      "cluster_id": 55,
+      "n_features": 1,
+      "importance": 0.00020460846178618837,
+      "ci_low": -0.0011421352138879805,
+      "ci_high": 0.0015540555829791783,
+      "is_noise": true,
+      "members": [
+        "home_pit_hard_hit_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 61,
+      "n_features": 1,
+      "importance": 0.00018398728075791723,
+      "ci_low": -0.0009332877386595471,
+      "ci_high": 0.0014414035017053081,
+      "is_noise": true,
+      "members": [
+        "away_off_barrel_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 116,
+      "n_features": 1,
+      "importance": 0.00018235540163797528,
+      "ci_low": -0.0012810636192219322,
+      "ci_high": 0.0016881055660432787,
+      "is_noise": true,
+      "members": [
+        "home_woba_with_risp_30d"
+      ]
+    },
+    {
+      "cluster_id": 58,
+      "n_features": 1,
+      "importance": 0.00017361704475513595,
+      "ci_low": -0.0022215703481287736,
+      "ci_high": 0.002438254974497177,
+      "is_noise": true,
+      "members": [
+        "home_avg_xwoba_vs_lhp"
+      ]
+    },
+    {
+      "cluster_id": 6,
+      "n_features": 2,
+      "importance": 0.0001603656451043911,
+      "ci_low": -0.0018377139293860602,
+      "ci_high": 0.0021264278522467824,
+      "is_noise": true,
+      "members": [
+        "away_pit_woba_against_14d",
+        "away_pit_woba_against_7d"
+      ]
+    },
+    {
+      "cluster_id": 94,
+      "n_features": 1,
+      "importance": 0.0001580532491454142,
+      "ci_low": -0.00027033828343452315,
+      "ci_high": 0.0006016663800622228,
+      "is_noise": true,
+      "members": [
+        "home_vs_lhp_woba_std"
+      ]
+    },
+    {
+      "cluster_id": 53,
+      "n_features": 1,
+      "importance": 0.00015471583939099048,
+      "ci_low": -0.0004186835690149058,
+      "ci_high": 0.0007120539704547411,
+      "is_noise": true,
+      "members": [
+        "away_lineup_xwoba_vs_starter_archetype"
+      ]
+    },
+    {
+      "cluster_id": 113,
+      "n_features": 1,
+      "importance": 0.00014549725700708575,
+      "ci_low": -0.0005148191189961661,
+      "ci_high": 0.0008282048454604764,
+      "is_noise": true,
+      "members": [
+        "home_starter_bb_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 44,
+      "n_features": 1,
+      "importance": 0.0001432440975832563,
+      "ci_low": -0.0003574711864017773,
+      "ci_high": 0.000665273030755552,
+      "is_noise": true,
+      "members": [
+        "runs_per_game_at_park"
+      ]
+    },
+    {
+      "cluster_id": 48,
+      "n_features": 1,
+      "importance": 0.00014219151861664597,
+      "ci_low": -0.000292935441915085,
+      "ci_high": 0.0006857178874284525,
+      "is_noise": true,
+      "members": [
+        "home_starter_trailing_fip_30g"
+      ]
+    },
+    {
+      "cluster_id": 108,
+      "n_features": 1,
+      "importance": 0.00011380963307127095,
+      "ci_low": -0.000871220807338225,
+      "ci_high": 0.0011354649207570193,
+      "is_noise": true,
+      "members": [
+        "home_vs_lhp_slugging_30d"
+      ]
+    },
+    {
+      "cluster_id": 22,
+      "n_features": 2,
+      "importance": 0.00010839962023851138,
+      "ci_low": -0.0006292864853324397,
+      "ci_high": 0.0009297130440144691,
+      "is_noise": true,
+      "members": [
+        "home_starter_hard_hit_pct_30d",
+        "home_starter_hard_hit_pct_14d"
+      ]
+    },
+    {
+      "cluster_id": 84,
+      "n_features": 1,
+      "importance": 0.00010326822958576749,
+      "ci_low": -3.0121936420773634e-05,
+      "ci_high": 0.00024414821985683767,
+      "is_noise": true,
+      "members": [
+        "home_n_power_pull"
+      ]
+    },
+    {
+      "cluster_id": 123,
+      "n_features": 1,
+      "importance": 9.867487607352951e-05,
+      "ci_low": -0.00015032151085095954,
+      "ci_high": 0.0003867012935530684,
+      "is_noise": true,
+      "members": [
+        "series_game_number"
+      ]
+    },
+    {
+      "cluster_id": 93,
+      "n_features": 1,
+      "importance": 9.040456190409565e-05,
+      "ci_low": -0.001496583174661378,
+      "ci_high": 0.001667668550924722,
+      "is_noise": true,
+      "members": [
+        "home_avg_chase_rate_30d"
+      ]
+    },
+    {
+      "cluster_id": 118,
+      "n_features": 1,
+      "importance": 7.893863934207458e-05,
+      "ci_low": -0.0005724862879031062,
+      "ci_high": 0.0007581561302491326,
+      "is_noise": true,
+      "members": [
+        "away_high_leverage_used_prev_2d"
+      ]
+    },
+    {
+      "cluster_id": 64,
+      "n_features": 1,
+      "importance": 6.967564723885177e-05,
+      "ci_low": -0.00033047166247251596,
+      "ci_high": 0.0005014293249908034,
+      "is_noise": true,
+      "members": [
+        "away_starter_curveball_stuff_plus"
+      ]
+    },
+    {
+      "cluster_id": 34,
+      "n_features": 1,
+      "importance": 6.265065942073936e-05,
+      "ci_low": -0.0002721228405139102,
+      "ci_high": 0.00038273685455325363,
+      "is_noise": true,
+      "members": [
+        "away_off_runs_per_game_std"
+      ]
+    },
+    {
+      "cluster_id": 103,
+      "n_features": 1,
+      "importance": 3.1450803550109805e-05,
+      "ci_low": -0.00022090174705172462,
+      "ci_high": 0.000279591782362112,
+      "is_noise": true,
+      "members": [
+        "home_starter_xwoba_vs_rhb"
+      ]
+    },
+    {
+      "cluster_id": 74,
+      "n_features": 1,
+      "importance": 2.1636370486967322e-05,
+      "ci_low": -0.0019559514478011473,
+      "ci_high": 0.0015907269583765983,
+      "is_noise": true,
+      "members": [
+        "home_bp_xwoba_against_30d"
+      ]
+    },
+    {
+      "cluster_id": 69,
+      "n_features": 1,
+      "importance": 7.832860012170772e-06,
+      "ci_low": -0.000599906186969439,
+      "ci_high": 0.0006261556751678181,
+      "is_noise": true,
+      "members": [
+        "away_vs_lhp_woba_30d"
+      ]
+    },
+    {
+      "cluster_id": 90,
+      "n_features": 1,
+      "importance": 1.9333722842398452e-06,
+      "ci_low": -0.0002550752020773841,
+      "ci_high": 0.0002717669147458115,
+      "is_noise": true,
+      "members": [
+        "away_starter_whiff_rate_vs_rhb"
+      ]
+    },
+    {
+      "cluster_id": 29,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.446399407257718e-18,
+      "ci_high": 1.1543679333405636e-17,
+      "is_noise": true,
+      "members": [
+        "away_starter_eb_k_pct"
+      ]
+    },
+    {
+      "cluster_id": 38,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.6858391063095717e-18,
+      "ci_high": 1.172625924712179e-17,
+      "is_noise": true,
+      "members": [
+        "away_avg_eb_bb_pct"
+      ]
+    },
+    {
+      "cluster_id": 39,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -3.0635709465799175e-18,
+      "ci_high": 1.2012272539187306e-17,
+      "is_noise": true,
+      "members": [
+        "home_avg_eb_woba"
+      ]
+    },
+    {
+      "cluster_id": 40,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.468971884853299e-18,
+      "ci_high": 1.2400576299344192e-17,
+      "is_noise": true,
+      "members": [
+        "away_avg_eb_iso"
+      ]
+    },
+    {
+      "cluster_id": 41,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.78927248465894e-18,
+      "ci_high": 1.2367717629426567e-17,
+      "is_noise": true,
+      "members": [
+        "home_starter_eb_k_pct"
+      ]
+    },
+    {
+      "cluster_id": 45,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.4806867149978404e-18,
+      "ci_high": 1.1842264638309194e-17,
+      "is_noise": true,
+      "members": [
+        "home_starter_eb_xwoba_against"
+      ]
+    },
+    {
+      "cluster_id": 47,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.7898439397879424e-18,
+      "ci_high": 1.2069132324523012e-17,
+      "is_noise": true,
+      "members": [
+        "home_avg_eb_iso"
+      ]
+    },
+    {
+      "cluster_id": 57,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.6975539364541136e-18,
+      "ci_high": 1.1875409035791318e-17,
+      "is_noise": true,
+      "members": [
+        "home_avg_eb_bb_pct"
+      ]
+    },
+    {
+      "cluster_id": 89,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.7204121416141947e-18,
+      "ci_high": 1.2206853010612499e-17,
+      "is_noise": true,
+      "members": [
+        "home_starter_eb_xwoba_uncertainty"
+      ]
+    },
+    {
+      "cluster_id": 111,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.6415513338119134e-18,
+      "ci_high": 1.2035987927040887e-17,
+      "is_noise": true,
+      "members": [
+        "away_starter_eb_bb_pct"
+      ]
+    },
+    {
+      "cluster_id": 140,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.4001115418085535e-18,
+      "ci_high": 1.2366574719168568e-17,
+      "is_noise": true,
+      "members": [
+        "away_avg_eb_woba_sequential"
+      ]
+    },
+    {
+      "cluster_id": 141,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.6081212087652945e-18,
+      "ci_high": 1.1875409035791318e-17,
+      "is_noise": true,
+      "members": [
+        "away_starter_eb_xwoba_against_sequential"
+      ]
+    },
+    {
+      "cluster_id": 142,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.5146882951734616e-18,
+      "ci_high": 1.224199750104612e-17,
+      "is_noise": true,
+      "members": [
+        "has_starter_platoon_data"
+      ]
+    },
+    {
+      "cluster_id": 143,
+      "n_features": 1,
+      "importance": 4.788793981037066e-18,
+      "ci_low": -2.4363989425001826e-18,
+      "ci_high": 1.2058560404636468e-17,
+      "is_noise": true,
+      "members": [
+        "is_new_venue"
+      ]
+    },
+    {
+      "cluster_id": 17,
+      "n_features": 2,
+      "importance": -2.9070658695465834e-06,
+      "ci_low": -0.0007526480656732084,
+      "ci_high": 0.0007283341994925347,
+      "is_noise": true,
+      "members": [
+        "home_off_xwoba_30d",
+        "home_team_sequential_woba"
+      ]
+    },
+    {
+      "cluster_id": 73,
+      "n_features": 1,
+      "importance": -3.1129353906114656e-06,
+      "ci_low": -0.0005714188329812405,
+      "ci_high": 0.0005115229085604603,
+      "is_noise": true,
+      "members": [
+        "away_starter_k_pct_vs_lhb"
+      ]
+    },
+    {
+      "cluster_id": 136,
+      "n_features": 1,
+      "importance": -1.0472375487309474e-05,
+      "ci_low": -0.0009750918512654229,
+      "ci_high": 0.000991788866543351,
+      "is_noise": true,
+      "members": [
+        "home_bp_innings_pitched_30d"
+      ]
+    },
+    {
+      "cluster_id": 137,
+      "n_features": 1,
+      "importance": -1.8772303144471235e-05,
+      "ci_low": -0.002947665088039994,
+      "ci_high": 0.00294891104761759,
+      "is_noise": true,
+      "members": [
+        "home_starter_appearances_30d"
+      ]
+    },
+    {
+      "cluster_id": 127,
+      "n_features": 1,
+      "importance": -2.3684639502761753e-05,
+      "ci_low": -5.293294866335169e-05,
+      "ci_high": -2.785933603663938e-06,
+      "is_noise": false,
+      "members": [
+        "away_closer_used_prev_1d"
+      ]
+    },
+    {
+      "cluster_id": 77,
+      "n_features": 1,
+      "importance": -2.701264078651733e-05,
+      "ci_low": -0.0002492920089897235,
+      "ci_high": 0.00019726461965083295,
+      "is_noise": true,
+      "members": [
+        "home_off_hard_hit_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 125,
+      "n_features": 1,
+      "importance": -3.3524810233192e-05,
+      "ci_low": -0.0007800318872130711,
+      "ci_high": 0.0006809108412164506,
+      "is_noise": true,
+      "members": [
+        "home_lineup_k_pct_vs_starter_archetype"
+      ]
+    },
+    {
+      "cluster_id": 25,
+      "n_features": 1,
+      "importance": -3.4798460492493836e-05,
+      "ci_low": -0.000867641830358374,
+      "ci_high": 0.0008366727439552572,
+      "is_noise": true,
+      "members": [
+        "away_pit_woba_against_std"
+      ]
+    },
+    {
+      "cluster_id": 110,
+      "n_features": 1,
+      "importance": -4.186091879093007e-05,
+      "ci_low": -0.0007487178874236781,
+      "ci_high": 0.000648480430104768,
+      "is_noise": true,
+      "members": [
+        "home_starter_xwoba_vs_lhb"
+      ]
+    },
+    {
+      "cluster_id": 91,
+      "n_features": 1,
+      "importance": -4.733438134527267e-05,
+      "ci_low": -0.0010700030099440967,
+      "ci_high": 0.0009949267496422182,
+      "is_noise": true,
+      "members": [
+        "home_avg_hard_hit_pct_vs_rhp"
+      ]
+    },
+    {
+      "cluster_id": 20,
+      "n_features": 2,
+      "importance": -5.622398547105311e-05,
+      "ci_low": -0.0025320883280188404,
+      "ci_high": 0.002272226916588342,
+      "is_noise": true,
+      "members": [
+        "home_off_runs_per_game_14d",
+        "home_off_runs_per_game_7d"
+      ]
+    },
+    {
+      "cluster_id": 51,
+      "n_features": 1,
+      "importance": -5.6572357707495257e-05,
+      "ci_low": -0.0003797777595456716,
+      "ci_high": 0.00026125934418166723,
+      "is_noise": true,
+      "members": [
+        "away_off_bb_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 31,
+      "n_features": 1,
+      "importance": -6.200611193503215e-05,
+      "ci_low": -0.00031821572561494785,
+      "ci_high": 0.000201547447827283,
+      "is_noise": true,
+      "members": [
+        "home_away_off_woba_30d_pct_diff"
+      ]
+    },
+    {
+      "cluster_id": 8,
+      "n_features": 2,
+      "importance": -6.783925662887002e-05,
+      "ci_low": -0.0023416520872970655,
+      "ci_high": 0.0021480059816327045,
+      "is_noise": true,
+      "members": [
+        "away_pit_xwoba_against_14d",
+        "away_pit_xwoba_against_7d"
+      ]
+    },
+    {
+      "cluster_id": 138,
+      "n_features": 1,
+      "importance": -7.755138033703817e-05,
+      "ci_low": -0.0001545794467086733,
+      "ci_high": -1.016932712829855e-05,
+      "is_noise": false,
+      "members": [
+        "home_injured_player_count"
+      ]
+    },
+    {
+      "cluster_id": 52,
+      "n_features": 1,
+      "importance": -7.804618993701432e-05,
+      "ci_low": -0.0002818444240252651,
+      "ci_high": 0.00011200688324258496,
+      "is_noise": true,
+      "members": [
+        "away_lineup_vs_home_starter_k_pct_adj"
+      ]
+    },
+    {
+      "cluster_id": 80,
+      "n_features": 1,
+      "importance": -7.952235184178523e-05,
+      "ci_low": -0.0002966647561157504,
+      "ci_high": 0.0001399678502202994,
+      "is_noise": true,
+      "members": [
+        "home_avg_woba_30d"
+      ]
+    },
+    {
+      "cluster_id": 119,
+      "n_features": 1,
+      "importance": -9.976351818585806e-05,
+      "ci_low": -0.00025675479707077667,
+      "ci_high": 4.151069302744662e-05,
+      "is_noise": true,
+      "members": [
+        "away_n_high_whiff"
+      ]
+    },
+    {
+      "cluster_id": 62,
+      "n_features": 1,
+      "importance": -0.00012163056749627483,
+      "ci_low": -0.0011895254505982027,
+      "ci_high": 0.0009487085057841015,
+      "is_noise": true,
+      "members": [
+        "home_starter_avg_ip_season"
+      ]
+    },
+    {
+      "cluster_id": 85,
+      "n_features": 1,
+      "importance": -0.00012768558142016453,
+      "ci_low": -0.0023328099688675924,
+      "ci_high": 0.0019497619233954763,
+      "is_noise": true,
+      "members": [
+        "home_starter_whiff_rate_vs_rhb"
+      ]
+    },
+    {
+      "cluster_id": 23,
+      "n_features": 2,
+      "importance": -0.0001294568407148681,
+      "ci_low": -0.0039955936121500585,
+      "ci_high": 0.0036569620079580658,
+      "is_noise": true,
+      "members": [
+        "ump_run_impact_zscore",
+        "ump_accuracy_zscore"
+      ]
+    },
+    {
+      "cluster_id": 21,
+      "n_features": 2,
+      "importance": -0.00014402261622790987,
+      "ci_low": -0.0035753269609103255,
+      "ci_high": 0.0029902844914190822,
+      "is_noise": true,
+      "members": [
+        "home_bp_whiff_rate_30d",
+        "home_bp_whiff_rate_14d"
+      ]
+    },
+    {
+      "cluster_id": 112,
+      "n_features": 1,
+      "importance": -0.00014865891515816932,
+      "ci_low": -0.0005095982301212223,
+      "ci_high": 0.0001892171855704381,
+      "is_noise": true,
+      "members": [
+        "away_vs_lhp_k_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 82,
+      "n_features": 1,
+      "importance": -0.00016220466346312983,
+      "ci_low": -0.00061805665802101,
+      "ci_high": 0.0002904441719914484,
+      "is_noise": true,
+      "members": [
+        "home_off_barrel_pct_30d"
+      ]
+    },
+    {
+      "cluster_id": 70,
+      "n_features": 1,
+      "importance": -0.0001651652334413756,
+      "ci_low": -0.0013680173255476626,
+      "ci_high": 0.0009954126104640107,
+      "is_noise": true,
+      "members": [
+        "away_pit_bb_pct_7d"
+      ]
+    },
+    {
+      "cluster_id": 28,
+      "n_features": 1,
+      "importance": -0.00018831223843187827,
+      "ci_low": -0.00044891943311630876,
+      "ci_high": 6.739804756483072e-05,
+      "is_noise": true,
+      "members": [
+        "away_games_back"
+      ]
+    },
+    {
+      "cluster_id": 32,
+      "n_features": 1,
+      "importance": -0.00019005033740089153,
+      "ci_low": -0.0005367677602470592,
+      "ci_high": 0.00015065337754377402,
+      "is_noise": true,
+      "members": [
+        "home_pit_k_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 76,
+      "n_features": 1,
+      "importance": -0.0002050235114568308,
+      "ci_low": -0.0005589898540948748,
+      "ci_high": 0.00016811625525485504,
+      "is_noise": true,
+      "members": [
+        "away_avg_hard_hit_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 101,
+      "n_features": 1,
+      "importance": -0.00023392800196994577,
+      "ci_low": -0.0007399843708497033,
+      "ci_high": 0.00026560485205196855,
+      "is_noise": true,
+      "members": [
+        "home_starter_batter_chase_rate_7d"
+      ]
+    },
+    {
+      "cluster_id": 46,
+      "n_features": 1,
+      "importance": -0.00024069054283685327,
+      "ci_low": -0.0012496902311099085,
+      "ci_high": 0.0004722575620237088,
+      "is_noise": true,
+      "members": [
+        "left_ft"
+      ]
+    },
+    {
+      "cluster_id": 43,
+      "n_features": 1,
+      "importance": -0.000264197194373334,
+      "ci_low": -0.0008571692397494927,
+      "ci_high": 0.00030257943700495705,
+      "is_noise": true,
+      "members": [
+        "home_starter_trailing_ra9_30g"
+      ]
+    },
+    {
+      "cluster_id": 81,
+      "n_features": 1,
+      "importance": -0.00028749607326652657,
+      "ci_low": -0.0014561469627305237,
+      "ci_high": 0.0007403999137202913,
+      "is_noise": true,
+      "members": [
+        "home_starter_batter_chase_rate_std"
+      ]
+    },
+    {
+      "cluster_id": 65,
+      "n_features": 1,
+      "importance": -0.00030330442136074345,
+      "ci_low": -0.0015734870102577024,
+      "ci_high": 0.000908023705023987,
+      "is_noise": true,
+      "members": [
+        "away_avg_woba_vs_rhp"
+      ]
+    },
+    {
+      "cluster_id": 9,
+      "n_features": 2,
+      "importance": -0.00031499864898244,
+      "ci_low": -0.001519770713139651,
+      "ci_high": 0.0008888594376311077,
+      "is_noise": true,
+      "members": [
+        "home_off_runs_per_game_std",
+        "home_off_runs_per_game_30d"
+      ]
+    },
+    {
+      "cluster_id": 139,
+      "n_features": 1,
+      "importance": -0.0003162068663970215,
+      "ci_low": -0.001383647526259358,
+      "ci_high": 0.0006020438042764575,
+      "is_noise": true,
+      "members": [
+        "away_team_sequential_woba"
+      ]
+    },
+    {
+      "cluster_id": 135,
+      "n_features": 1,
+      "importance": -0.0003873656911394032,
+      "ci_low": -0.0009656379584319225,
+      "ci_high": 0.0002434508876502977,
+      "is_noise": true,
+      "members": [
+        "home_starter_barrel_pct_7d"
+      ]
+    },
+    {
+      "cluster_id": 106,
+      "n_features": 1,
+      "importance": -0.0004012899079639043,
+      "ci_low": -0.00247058379239337,
+      "ci_high": 0.001587130831388981,
+      "is_noise": true,
+      "members": [
+        "away_lineup_vs_home_starter_h2h_xwoba"
+      ]
+    },
+    {
+      "cluster_id": 97,
+      "n_features": 1,
+      "importance": -0.0004084786920797359,
+      "ci_low": -0.0019818694316371577,
+      "ci_high": 0.0012861262045281497,
+      "is_noise": true,
+      "members": [
+        "away_team_oaa_prior_season"
+      ]
+    },
+    {
+      "cluster_id": 100,
+      "n_features": 1,
+      "importance": -0.0004148850206786679,
+      "ci_low": -0.002441714823911017,
+      "ci_high": 0.0015785875151606479,
+      "is_noise": true,
+      "members": [
+        "away_off_k_pct_std"
+      ]
+    },
+    {
+      "cluster_id": 102,
+      "n_features": 1,
+      "importance": -0.00044969291238975903,
+      "ci_low": -0.0012814000572751985,
+      "ci_high": 0.00038382780903397496,
+      "is_noise": true,
+      "members": [
+        "home_bp_xwoba_against_14d"
+      ]
+    },
+    {
+      "cluster_id": 11,
+      "n_features": 2,
+      "importance": -0.0004993748640995345,
+      "ci_low": -0.001799551202560894,
+      "ci_high": 0.0008008276652612821,
+      "is_noise": true,
+      "members": [
+        "away_vs_lhp_xwoba_std",
+        "away_vs_lhp_xwoba_30d"
+      ]
+    },
+    {
+      "cluster_id": 27,
+      "n_features": 1,
+      "importance": -0.0005095563724434511,
+      "ci_low": -0.0017882157027539415,
+      "ci_high": 0.0007699633497067276,
+      "is_noise": true,
+      "members": [
+        "home_pit_woba_against_30d"
+      ]
+    },
+    {
+      "cluster_id": 130,
+      "n_features": 1,
+      "importance": -0.0005209166240655148,
+      "ci_low": -0.0018826442260375525,
+      "ci_high": 0.0008006181457819029,
+      "is_noise": true,
+      "members": [
+        "home_away_injury_adj_avg_woba_30d_pct_diff"
+      ]
+    },
+    {
+      "cluster_id": 96,
+      "n_features": 1,
+      "importance": -0.0005393069519546107,
+      "ci_low": -0.002199019017864921,
+      "ci_high": 0.0011871812821418809,
+      "is_noise": true,
+      "members": [
+        "home_vs_rhp_slugging_30d"
+      ]
+    },
+    {
+      "cluster_id": 129,
+      "n_features": 1,
+      "importance": -0.0006189129732539848,
+      "ci_low": -0.002259535842294246,
+      "ci_high": 0.001113836343942892,
+      "is_noise": true,
+      "members": [
+        "home_off_bb_pct_7d"
+      ]
+    },
+    {
+      "cluster_id": 36,
+      "n_features": 1,
+      "importance": -0.0006267289805880978,
+      "ci_low": -0.00371003469054537,
+      "ci_high": 0.002488921238549403,
+      "is_noise": true,
+      "members": [
+        "away_lineup_avg_woba_vs_cluster"
+      ]
+    },
+    {
+      "cluster_id": 35,
+      "n_features": 1,
+      "importance": -0.0007356527948431439,
+      "ci_low": -0.004088201622069438,
+      "ci_high": 0.0025790399248603302,
+      "is_noise": true,
+      "members": [
+        "home_away_starter_xwoba_against_std_pct_diff"
+      ]
+    },
+    {
+      "cluster_id": 10,
+      "n_features": 2,
+      "importance": -0.0007962644324848757,
+      "ci_low": -0.0022528085504724326,
+      "ci_high": 0.0006502174949256831,
+      "is_noise": true,
+      "members": [
+        "away_avg_xwoba_std",
+        "away_avg_xwoba_30d"
+      ]
+    },
+    {
+      "cluster_id": 50,
+      "n_features": 1,
+      "importance": -0.0008006470172300421,
+      "ci_low": -0.0018447646985642902,
+      "ci_high": 0.0001915106207799158,
+      "is_noise": true,
+      "members": [
+        "away_starter_xwoba_against_std"
+      ]
+    },
+    {
+      "cluster_id": 7,
+      "n_features": 2,
+      "importance": -0.0010047258684802488,
+      "ci_low": -0.004704581775153728,
+      "ci_high": 0.0027092603289510246,
+      "is_noise": true,
+      "members": [
+        "home_pit_xwoba_against_30d",
+        "home_pit_xwoba_against_14d"
+      ]
+    },
+    {
+      "cluster_id": 128,
+      "n_features": 1,
+      "importance": -0.0010386279734075547,
+      "ci_low": -0.0026141171694057845,
+      "ci_high": 0.00047984699559931526,
+      "is_noise": true,
+      "members": [
+        "home_lineup_vs_away_starter_bb_pct_adj"
+      ]
+    },
+    {
+      "cluster_id": 54,
+      "n_features": 1,
+      "importance": -0.0011222371609122953,
+      "ci_low": -0.003122465422193225,
+      "ci_high": 0.0008389671601658765,
+      "is_noise": true,
+      "members": [
+        "away_starter_k_pct_vs_rhb"
+      ]
+    },
+    {
+      "cluster_id": 114,
+      "n_features": 1,
+      "importance": -0.0022155458904440603,
+      "ci_low": -0.006117628946610304,
+      "ci_high": 0.0015796589590324536,
+      "is_noise": true,
+      "members": [
+        "home_lineup_vs_away_starter_h2h_woba"
+      ]
+    },
+    {
+      "cluster_id": 0,
+      "n_features": 3,
+      "importance": -0.0022863790130545096,
+      "ci_low": -0.008378319972023342,
+      "ci_high": 0.0036098606713216856,
+      "is_noise": true,
+      "members": [
+        "home_elo",
+        "home_pythagorean_win_exp",
+        "home_team_sequential_win_prob"
+      ]
+    }
+  ]
+}

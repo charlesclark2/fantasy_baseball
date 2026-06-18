@@ -54,6 +54,11 @@ class Pick(BaseModel):
     win_prob_ci_low: float | None = None
     win_prob_ci_high: float | None = None
     win_prob_ci_width: float | None = None
+    # CLV meta-model confidence (A0.4.34): H2H from meta_*, totals from totals_meta_*
+    # Both mapped to the same field names; market_type tells the frontend which model produced them
+    meta_p_clv_positive: float | None = None
+    meta_ci_low: float | None = None
+    meta_ci_high: float | None = None
     lineup_confirmed: bool | None = None
     home_team: str | None = None
     away_team: str | None = None

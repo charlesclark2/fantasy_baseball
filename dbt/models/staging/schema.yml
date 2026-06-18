@@ -160,6 +160,55 @@ models:
       - name: x_requests_remaining
         description: API credits remaining as of this request. Null if header absent.
 
+  # ── Derivative odds staging (E2.0 / E5.1) ────────────────────────────────────
+
+  - name: stg_derivative_odds
+    description: >
+      Staged derivative-market closing odds from baseball_data.oddsapi.derivative_odds_raw.
+      Written by scripts/derivative_odds_backfill.py (E2.0).
+      Grain: one row per (actual_snapshot_ts, event_id, bookmaker_key, market_key, outcome_name).
+      Markets: team_totals, alternate_totals, h2h_h1 (F5 moneyline), totals_h1 (F5 totals).
+      Coverage: 2023-05-03 onward.
+      EVAL/CLV-ONLY — never joined into model training feature matrices.
+    columns:
+      - name: event_id
+        description: Odds API event identifier. Joins to mart_game_odds_bridge.odds_api_event_id.
+        tests: [not_null]
+      - name: actual_snapshot_ts
+        description: The snapshot timestamp returned by the API (from the response envelope).
+        tests: [not_null]
+      - name: commence_time
+        description: Game start time (UTC). Closing snapshot guaranteed <= this value.
+      - name: home_team
+        description: Home team name (Odds API format).
+      - name: away_team
+        description: Away team name (Odds API format).
+      - name: bookmaker_key
+        description: Bookmaker identifier (e.g. bovada, pinnacle, fanduel).
+        tests: [not_null]
+      - name: market_key
+        description: >
+          Derivative market key. One of: team_totals, alternate_totals,
+          h2h_h1 (F5 moneyline), totals_h1 (F5 totals).
+        tests: [not_null]
+      - name: outcome_name
+        description: Outcome name (e.g. Over, Under, home team name, away team name).
+        tests: [not_null]
+      - name: outcome_description
+        description: >
+          Team name for team_totals outcomes (identifies which team's total).
+          Null for other markets.
+      - name: outcome_price_american
+        description: American odds.
+      - name: outcome_price_decimal
+        description: Decimal odds derived from American odds.
+      - name: outcome_point
+        description: Over/Under line. Null for h2h_h1 (moneyline has no point).
+      - name: x_requests_remaining
+        description: Credits remaining after this API call.
+      - name: x_requests_last
+        description: Credit cost of this API call.
+
   # ── Parlay API staging models ────────────────────────────────────────────────
 
   - name: stg_parlayapi_odds

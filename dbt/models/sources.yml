@@ -239,6 +239,48 @@ sources:
           - name: x_requests_remaining
             description: Value of the x-requests-remaining response header. Null if header absent.
 
+      - name: derivative_odds_raw
+        description: >
+          One row per (event_id, closing-snapshot) for derivative MLB markets —
+          team totals, alternate totals, first-5-innings (first-half) moneyline
+          and totals. Written by scripts/derivative_odds_backfill.py (E2.0).
+          Coverage: 2023-05-03 onward (Odds API additional-market history limit).
+          EVAL/CLV-ONLY — never join into model training features.
+        columns:
+          - name: ingestion_ts
+            description: Wall-clock UTC timestamp when the row was written to Snowflake.
+            tests: [not_null]
+          - name: load_id
+            description: UUID grouping all rows produced by the same script run.
+            tests: [not_null]
+          - name: event_id
+            description: Odds API event identifier (joins to mlb_events_raw / stg_oddsapi_events).
+            tests: [not_null]
+          - name: requested_snapshot_ts
+            description: The 'date' parameter passed to the API (commence_time = closing snapshot).
+          - name: actual_snapshot_ts
+            description: The 'timestamp' field from the API response envelope (actual snapshot returned).
+          - name: previous_snapshot_ts
+            description: previous_timestamp from the API response envelope.
+          - name: next_snapshot_ts
+            description: next_timestamp from the API response envelope.
+          - name: markets_requested
+            description: Comma-separated market keys requested (e.g. team_totals,alternate_totals,h2h_h1,totals_h1).
+          - name: regions_requested
+            description: Comma-separated regions requested (e.g. us,us2,eu).
+          - name: x_requests_remaining
+            description: Value of the x-requests-remaining header after this call.
+          - name: x_requests_last
+            description: Credit cost of this call (x-requests-last header).
+          - name: raw_json
+            description: >
+              The event data object from the API response (id, commence_time,
+              home_team, away_team, bookmakers[]). Same nested bookmakers →
+              markets → outcomes structure as mlb_odds_raw.
+              NULL for sentinel rows written when fetch_status is not_found /
+              no_data / error — these are idempotency records, not real events.
+              stg_derivative_odds filters them with WHERE raw_json IS NOT NULL.
+
   - name: statsapi
     database: baseball_data
     schema: statsapi

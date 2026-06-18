@@ -19,6 +19,7 @@ This guide is **self-contained for the Edge Program**. A Claude Code session sho
 - Use **`dbtf`**, never `dbt`. Always `--select`-scope local builds; never an unscoped `dbtf build` (it full-rebuilds every mart — the documented cost footgun).
 - **Snowflake = OLAP only.** Access via the Snowflake MCP, fully-qualified `db.schema.table`, no `USE`. **Never add a live Snowflake query to a FastAPI request path** — request-time reads come from Railway PG (see 0.2).
 - Run Python with **`uv run python`**. Hand any >1-min script/query to the user with the command shown. **Do not `git commit`/`push`** — the user owns git.
+- **Session closeout — REQUIRED (both tracks, 2026-06-18):** because sessions don't commit, **every session ends by telling the operator exactly what to run and what to commit**, or the repo drifts out of sync. End with an `⏭️ Operator handoff` block: **(a)** operator-run commands in order (Snowflake/dbt `dbtf --select …`/`uv run …`, >1-min flagged); **(b)** a copy-pasteable **`git add <paths>`** listing *every file the session changed/created that should be committed* — code, dbt models, `sub_model_registry.yaml`, `ablation_results/*.md`, guide/roadmap/`story_prompts.md` edits; **(c)** what to **NOT** commit (large artifacts — `*.pkl`/`*.parquet`/model binaries → S3/registry, gitignored); **(d)** for model work, the validation gate result; for app work, the changelog line + verify-after-deploy. (App sessions get this from `app_session_bootstrap.md`; model/standalone sessions must produce it from this rule.)
 - Dagster in-process ops may **import packaged code only** (`[[feedback_dagster_import_only_packaged_code]]`).
 - **Honest-framing rule (product-wide, non-negotiable):** the point models have **no demonstrated market edge** (`best_alpha = 0`). Nothing user-facing may claim a win-rate or edge, or frame "+EV"/"high conviction"/"high P(CLV)" as "place this bet." US betting is manual (`[[feedback_no_auto_betting]]`). Every new model/signal is a **transparency / confidence** surface unless and until it clears the live gates in §5.
 - **Market-blind by default (architecture Principle 3, non-negotiable):** the market already prices in everything our baseball features contain, so **every model that is not itself modeling market behavior is market-blind** — NO odds, implied-probabilities, line-movement, consensus, or book features in its inputs. A non-market model trained on the line just *relearns the line* (circularity/leakage) and can add nothing orthogonal — the root reason the current stack can't beat the market. Market data is permitted **only** in the market models (**E3, E4**, and CLV/meta) and at the **evaluation/CLV-gating** layer (e.g. E2.6, E5.4). Enforce with a `CONTRACT-GUARD`-style assertion on every non-market feature matrix. Applies to E2, E5, E6, E7, E8.
@@ -74,6 +75,9 @@ Do: <condensed task list>.
 Gate/AC: <the story's AC + which live gate it must clear — E1 PBO/DSR etc.>.
 Conventions (per §0.1): dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min
 scripts to the operator; do not git commit/push [+ market-blind if a non-market model; + honest-framing if user-facing].
+Closeout (per §0.1): END with an ⏭️ Operator handoff — the run-order commands + a copy-pasteable `git add <paths>`
+of EVERY changed/created file to commit (code, dbt, sub_model_registry.yaml, ablation_results/*.md, doc edits),
+what NOT to commit (artifacts → S3/registry), and the gate result (model) / changelog + verify (app).
 ```
 > **App-story prompts MUST also carry the app-target guard (per §0.2):** *"APP TARGET: UI → `frontend/` (Next.js) ONLY; backend → `app/backend/` (live FastAPI). Do NOT edit the legacy Streamlit UI (`app/streamlit_app.py`, `app/home.py`, `app/pages/`, `app/utils/`). First action: `cat frontend/package.json` to confirm Next.js; if doing UI work and you open `app/home.py`/`app/pages/*.py`, STOP — wrong place. If the end user would notice the change, add a `frontend/data/changelog.json` entry as the final step."* Put this in every `[App]` `▶ Story prompt`.
 
@@ -288,18 +292,29 @@ Conventions: dbtf not dbt; Snowflake via MCP, fully-qualified, no USE; uv run py
 to the user; do not git commit/push.
 ```
 
-### E1.7 — De-leak the production bullpen EB feature  ⬜  **[⭐ Tier-0 correctness · touches the live champions · spun out of E2.1b]**
+### E1.7 — De-leak the production bullpen EB feature  ✅ **SHIPPED + VALIDATED 2026-06-18** (steps A–D; champion retrains = step E, gated post-E1.8)  **[⭐ Tier-0 correctness · touches the live champions · spun out of E2.1b]**
 
-**Why:** E2.1b proved `home/away_bp_eb_xwoba` — the #1/#2 feature on every champion — is a **within-game leak**: `eb_bullpen_team_posteriors.sql:33` weights each reliever's EB by `outs_in_game` (outs recorded *in the game being predicted*), over the roster of arms that *actually pitched that game*. It cannot be computed before first pitch, so its backfilled values encode the eval-game outcome. This column is in the **live home_win / run_diff / total_runs training matrices** → it's a **named mechanism for the offline→live skill collapse** (`[[project_prod_model_audit_jun2026]]`, offline corr 0.42 → live 0.001) previously filed broadly as "serving skew."
+> **✅ Validated results (`E1_7_HANDOFF.md`):** **serving-null FIXED — 37/37 scheduled games populate `bp_eb_xwoba` (was 0); 96.9–98.9% historical coverage 2016–26.** Parity SQL↔Python ✅ (Jaccard 1.0, corr 0.962, mean|Δ| 0.0024). **MDA collapse confirmed on ALL THREE targets** — the leaky `bp_eb_xwoba` *value* → ~0% importance retained everywhere; **`bp_eb_coverage_pct` (data depth) rises to #1/#2 on all three** (uncertainty modest/variable). **Slim contracts re-derived (INTERIM — re-derive after E1.8):** total_runs 14→21, home_win 31→21, run_diff 19→15; **`elo_diff` + `pythagorean_win_exp_diff` newly enter both H2H contracts** — real team-strength signal the leak had masked. `bp_eb_xwoba` survives only on the home side of home_win/run_diff as a correlated *passenger* of `home_team_sequential_bullpen_xwoba` (E6.7 may legitimately drop it). **⚠️ dbt gotcha (captured so it won't recur):** `eb_bullpen_posteriors` is a thin ~12-day rolling incremental — a downstream-only `+` rebuild left history null + broke parity; the fix is DROP the 3 bullpen incrementals + full-refresh **including upstream** (`-s eb_bullpen_posteriors+`; `stg_batter_pitches` has all 12 seasons). **Promotion:** any contract must clear `promotion_gate_eval.py --purged-cv` before promotion — especially home_win (near-total 26-drop/16-add turnover). Step E (3 champion retrains) runs once on the post-E1.8 matrix.
 
-**PM decision (2026-06-18): build this as a STANDALONE Tier-0 correctness card** (recommended by the E2.1b handoff) — it touches the live champions and is bigger than a display fix — **and cross-link it to the Epic 30.3 serving-skew thread** (same root cause, now with a mechanism). It is a *correctness* item, not an *edge* item.
+> **⚙️ Weight choice (E1.7 build, 2026-06-18) — ✅ PM-ENDORSED: the dbt port uses EQUAL weight, not expected-leverage.** Equal ≈ expected to 0.001 per-side NLL (E2.1b), and the E2.1b handoff §4 explicitly recommends *"the simplest leakage-safe aggregate is the right replacement."* For a pure-SQL Path A port that matters doubly: porting the expected-leverage weighting (trailing-30d aLI from `delta_home_win_exp` + rest/fatigue availability multipliers) into dbt would be a large, error-prone *second* reimplementation — exactly the divergence risk the parity test exists to catch, amplified. Equal-weight is trivially correct, equivalent on NLL, and parity-checks cleanly against `aggregate_team_v3(weight_mode='equal')`. (Supersedes the "use expected" note below.)
+
+**Why:** E2.1b proved `home/away_bp_eb_xwoba` — the #1/#2 feature on every champion — leaks. This column is in the **live home_win / run_diff / total_runs training matrices** → a **named mechanism for the offline→live skill collapse** (`[[project_prod_model_audit_jun2026]]`, offline corr 0.42 → live 0.001) previously filed broadly as "serving skew."
+
+> **🔍 Refinement (E1.7 session, 2026-06-18) — it's TWO leaks, not one** (`eb_bullpen_team_posteriors.sql:33`): **(1)** the documented **weight** leak — `outs_in_game` weights each reliever's EB by the outs they recorded *in the game being predicted* (within-game peek); **(2)** an under-stated **roster/spine** leak — the table is built off `eb_bullpen_posteriors`, which only has rows for relievers who *actually pitched*, so it **only produces rows for completed games**. For tonight's scheduled slate there's **no row → `bp_eb_xwoba` is null/imputed at serve time.** That roster is both a leak (it encodes who pitched) *and* the **serving-null half of the offline→live collapse**. So the fix is not just "swap the weight" — it must **re-spine the feature onto the scheduled-game spine (`mart_game_spine`) with a leakage-safe trailing-30d pre-game pool** (exactly what `compute_bullpen_v3._load_expected_pen` already does). Per-reliever EBs stay as-of-safe; only **roster + weight** change. (Weight: **equal-weight shipped** — see the ⚙️ block above; equal ≈ expected to 0.001 NLL.) **✅ Serving-null fix verified: 37/37 scheduled games now populate `bp_eb_xwoba`.**
+
+**PM decisions (2026-06-18):**
+- **Standalone Tier-0 correctness card**, cross-linked to the Epic 30.3 serving-skew thread (same root, now with a mechanism). Correctness, not edge.
+- **Implementation = Path A (port to dbt) + a parity guardrail.** Rewrite `eb_bullpen_team_posteriors.sql` to drive off `mart_game_spine` with the leakage-safe trailing-30d pool (equal/expected weight), column names unchanged → zero downstream churn, no new Python op in the incident-prone bullpen freshness chain, self-healing/incremental. **⚠️ The one risk Path A carries:** it re-implements the v3 pool/spine logic in SQL → a *second* implementation of the aggregate E2.1b validated in Python. **Add a SQL-vs-Python parity test** — the SQL port must reproduce `aggregate_team_v3`'s de-leaked values on the E2.1b eval folds — *before* the offline re-derivation/MDA is trusted. (Path B — repoint to the tested `eb_bullpen_team_posteriors_v3` table — is the fallback if we'd rather not maintain two implementations; it trades the parity burden for a Python producer in the daily chain.)
+- **Retrain timing = batch ONCE after E1.7 + E1.8, on the fully de-leaked + leak-swept matrix.** ❌ **Retire the "pre-7M batch" trigger** (`[[project_model_retraining_deferral]]`) for this — **7M is a *legacy*-guide milestone and must not gate an Edge-Program correctness fix.** Rationale: **E1.8 (full leakage sweep) is queued next and will likely surface more leaks needing the same three ≥1hr NGBoost retrains** — retraining for E1.7 now and again post-E1.8 is a wasteful double ~3hr batch. So E1.7 **ships the SQL de-leak + matrix rebuild + MDA + the *prepared* retrain commands**, and the actual champion retrains ride **one batch after E1.8**. *(Guardrail: if E1.8 slips materially, retrain after E1.7 rather than leave leaked champions live indefinitely.)*
 
 **Tasks:**
-- [ ] **Fix the construction:** in `eb_bullpen_team_posteriors.sql`, replace the `outs_in_game` weight + appeared-in-game roster with a **leakage-safe** aggregate — the simplest being equal-weight over a pre-game pool, or the v3 expected-leverage weighting (equivalent on NLL; reuse `aggregate_team_v3(..., weight_mode='equal'|'expected')` + `compute_bullpen_v3.py` from E2.1b). The per-reliever EBs are already as-of-safe; only the **weighting + roster** leak.
-- [ ] **Re-train + re-evaluate the base champions** (home_win / run_diff / total_runs) on the de-leaked feature matrix.
-- [ ] **Re-derive the slim 14/31/19 contracts** on the de-leaked matrix (the prune's importance ranking was contaminated — `coverage_pct`/`uncertainty` rise, the xwOBA value drops out) → feeds E6.7.
-- [ ] **Complete the MDA collapse documentation** on all three targets (run the E2.1b `--bullpen-version v3` MDA for `home_win` + `run_diff`; `total_runs` already done).
-**AC + ⚠️ validation gotcha (critical):** the de-leaked feature **will look WORSE on offline NLL/Brier/importance — that is expected and correct** (you removed a peek); it must **NOT** be read as a regression. Honest validation = **live/forward performance + the serving-parity harness** (does serve-time skill rise toward the now-honest offline number?), **never** offline metrics, which reward the leak. Done = the leaky construction is gone from the production feature, champions re-evaluated on the de-leaked matrix, the offline drop is documented as expected, and forward/serving-parity is the gate.
+- [x] **Fix the construction (Path A):** re-spined `eb_bullpen_team_posteriors.sql` onto `mart_game_spine` with a leakage-safe trailing-30d pre-game pool (**equal** weight — see weight-choice note above); column names unchanged. `schema.yml` updated; `dbtf compile` clean (9/9). 2026-06-18.
+- [x] **Parity test:** `betting_ml/scripts/eb_priors/parity_check_bullpen_deleak.py` — dbt table vs `aggregate_team_v3(weight_mode='equal')`: pool-membership Jaccard + xwoba corr/Δ (residual Δ = the leakage-safe EB-freshness gap). Operator-run (Snowflake).
+- [ ] **Rebuild downstream** (operator; Snowflake >1min): ⚠️ **DROP + `--full-refresh`** (construction changed) → `eb_bullpen_team_posteriors+` rebuilds `mart_bullpen_effectiveness` → `feature_pregame_team_features` → `feature_pregame_game_features`; confirm `bp_eb_xwoba` is now **non-null for scheduled games** (the serving-null fix). See `E1_7_HANDOFF.md` §3.A.
+- [ ] **Prepare (don't run) the 3 champion retrains** on the de-leaked matrix — staged in `E1_7_HANDOFF.md` §3.E for the post-E1.8 batch.
+- [ ] **Re-derive the slim 14/31/19 contracts** on the de-leaked matrix → feeds E6.7 (`E1_7_HANDOFF.md` §3.D).
+- [ ] **Complete the MDA collapse doc** on all three targets (`--bullpen-version v3` for `home_win` + `run_diff`; `total_runs` done) — `E1_7_HANDOFF.md` §3.C.
+**AC + ⚠️ validation gotcha (critical):** the de-leaked feature **will look WORSE on offline NLL/Brier/importance — expected and correct** (you removed a peek); **NOT** a regression. Honest validation = **live/forward + the serving-parity harness** (does serve-time skill rise toward the now-honest offline number, AND does `bp_eb_xwoba` stop being null for scheduled games?), **never** offline metrics. Done (E1.7 scope) = leaky construction gone + re-spined onto the scheduled spine + parity test passes + downstream rebuilt + slim re-derived + MDA complete + retrain commands prepared; the **champion retrain + forward/parity gate completes in the post-E1.8 batch.**
 
 ```
 ▶ New-session prompt — Story E1.7 (de-leak the production bullpen feature)
@@ -358,6 +373,45 @@ Conventions: dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run pyth
 operator; do not git commit/push.
 ```
 
+### E1.9 — v6 clean-slate champion rebuild (model bake-off → Optuna)  ⬜  **[⭐ Model-A · this IS the post-E1.8 retrain — upgraded · needs E1.8 done]**
+
+**Why (PM, 2026-06-18):** the champion retrains deferred by E1.7/E1.8 must **not** be a blind re-fit of the incumbent learner families. The current champions are **XGBoost for H2H (`home_win`) and NGBoost for totals (`total_runs`)** — historical defaults, never validated as best-in-class. Now that the matrix is being scrubbed of leakage (E1.7 + E1.8) and the contracts re-derived, **rebuild v6 from a clean slate: a "best model wins" bake-off across learner classes, decided by the honest gate, THEN Optuna hyper-parameter optimization on the winner** — not "tune the model we happened to start with." (Champions are currently `v5`; this produces **v6**.)
+
+**Scope:** `home_win` (H2H) + `total_runs` (totals) — and `run_diff` on the same pattern — on the **final E1.8-clean matrix** with the **final re-derived slim contracts** (E1.7's are interim).
+
+**Tasks:**
+- [ ] **Model-class bake-off (selection BEFORE tuning):** evaluate a slate of candidate learners under **E1.1 purged CV** with each target's honest metric (H2H: NLL/Brier + calibration; totals: a **distributional** metric — CRPS/NLL — since totals needs a predictive distribution, not a point). Candidates: **XGBoost, LightGBM, CatBoost, NGBoost (distributional), a regularized GLM/logistic baseline, and a simple stack/ensemble** — plus the **no-skill + market baselines** as the floor. Market-blind (CONTRACT-GUARD). Pick the winner **by the gate metric + calibration**, not by incumbency or by a hair of NLL (ties → simpler/ more-calibrated/ distributional-where-needed wins).
+- [ ] **THEN Optuna HPO on the winning class only** — purged-CV objective; **guard the HPO against its own overfitting** (the trial search is a multiple-testing surface): embargoed/nested CV for the objective, a sane trial cap, and **PBO<0.2 + DSR>0 (E1.4) on the selected config** so the tuned champion isn't a search artifact.
+- [ ] **Promotion gate:** v6 must clear `promotion_gate_eval.py --purged-cv` (+ PBO/DSR) vs the v5 champion **on the clean matrix** before promotion; record the bake-off table (every class's CV score) + the chosen config in `ablation_results/`.
+- [ ] Register `v6` in `sub_model_registry.yaml`; keep v5 until v6 clears live/forward.
+**AC:** for each target, a recorded model-class bake-off (candidates × purged-CV metric) with a justified winner, an Optuna-tuned config that passes PBO/DSR, and a promotion-gate result vs v5 on the de-leaked+swept matrix. **⚠️ Honest validation:** offline scores are *lower* post-de-leak by design (not a regression); the trying-many-classes + HPO search is itself a multiple-testing surface → the **DSR/PBO discipline is the guard**, and the real proof is **forward/serving-parity**. **Downstream:** promoting v6 changes served picks for live beta users → coordinate the deploy with a `frontend/data/changelog.json` note. **Deps:** E1.8 (final clean matrix + final contracts); supersedes the bare "retrain" step of E1.7/E1.8.
+
+```
+▶ New-session prompt — Story E1.9 (v6 clean-slate champion rebuild)
+
+You are building Story E1.9 of the MLB Edge Program — rebuilding the v6 champions (home_win, total_runs,
+run_diff) from a CLEAN SLATE on the post-E1.8 de-leaked + leak-swept matrix. This is the deferred E1.7/E1.8
+retrain, UPGRADED: do NOT blindly re-fit the incumbent classes (XGBoost h2h / NGBoost totals) — run a
+"best model wins" bake-off, THEN Optuna-tune the winner.
+
+Read first: edge_program_implementation_guide.md §3 E1.9 + E1.7 (the de-leak) + E1.8 (the sweep — its final
+matrix + contracts) + E1.1 purged CV + E1.4 (PBO/DSR) + the current champion adapters (PlattCalibratedXGBClassifier,
+the NGBoost totals model) + promotion_gate_eval.py + sub_model_registry.yaml.
+
+Do: (1) MODEL-CLASS BAKE-OFF under E1.1 purged CV per target — XGBoost, LightGBM, CatBoost, NGBoost
+(distributional), a regularized GLM/logistic baseline, a simple stack, + no-skill/market floors; H2H scored on
+NLL/Brier+calibration, totals on a DISTRIBUTIONAL metric (CRPS/NLL — totals needs a distribution). Market-blind
+(CONTRACT-GUARD). Winner by the gate metric + calibration, not incumbency. (2) Optuna HPO on the WINNER only —
+purged-CV objective, embargoed/nested CV, trial cap, PBO<0.2 + DSR>0 on the selected config (the search is a
+multiple-testing surface — guard it). (3) Promotion-gate v6 vs v5 on the clean matrix; record the bake-off table +
+chosen config in ablation_results/; register v6, keep v5 until v6 clears live/forward.
+
+⚠️ Offline scores are LOWER post-de-leak BY DESIGN — not a regression. The honest gate is forward/serving-parity +
+PBO/DSR, never raw offline NLL. Promoting v6 shifts live picks → flag a changelog note for the app deploy.
+Conventions: dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min scripts (NGBoost/HPO
+are long) to the operator; do not git commit/push. END with an ⏭️ Operator handoff (run-order + git add).
+```
+
 ---
 
 ## 4. Epic E2 — Per-Side Generative Totals  ⬜  **[Track B-totals · the program's main edge bet — as an honest distribution/derivative *architecture*, not a single-feature signal (the bullpen signal was a leak; see E2.1b)]**
@@ -372,12 +426,31 @@ operator; do not git commit/push.
 
 > **🔢 Sequencing (gating dependency).** The **derivative-odds backfill (E2.0)** — historical F5 / team-total / alt-total closing lines — **must be complete before E2.6** can validate the derivative edge: you cannot gate "beats the derivative's own close" without the historical closes. E2.0 is market-data plumbing (Session B; shares the E5.0/E5.1 Odds-API event-odds ingestion), runs **in parallel with** the market-blind model build (E2.1–E2.5), but **blocks the totality of the epic at the E2.6 gate.** Start it early so it isn't the long pole.
 
-### E2.0 — Derivative-odds backfill (gating dependency)  ⬜  **[Track data / Session B · blocks E2.6 · shares E5.0/E5.1 plumbing]**
-**Tasks:**
+### E2.0 — Derivative-odds backfill (gating dependency)  ✅ **SHIPPED 2026-06-18**  **[Track data / Session B · unblocks E2.6]**
+> **✅ Result:** `scripts/derivative_odds_backfill.py` → `oddsapi.derivative_odds_raw` (idempotent via `fetch_status` sentinels — sentinel'd events are skipped, no wasted credits) → `stg_derivative_odds` → **`mart_derivative_closes`** (grain `game_pk × market_key × bookmaker_key × outcome_name`; "close" = last pre-game snapshot with `actual_snapshot_ts ≤ commence_time` leakage guard; INNER-join to `mart_game_odds_bridge`). **238,421 closes / 5,896 games · 2023-05-03→2026-06-06 · 24 books · zero leakage violations · implied-prob 0.029–0.990 (avg 0.532).** Full dbt tests pass. **EVAL/CLV-ONLY** (Principle 3 — never a training feature). Markets: team_totals, alternate_totals, h2h_h1, totals_h1.
+> **⚠️ Two gaps → E2.0b (live capture follow-on):** **(1) F5 historical is sparse — only ~65 games, all 2023** (the Odds API historical endpoint didn't offer F5 consistently) → **the F5 derivative edge cannot be backtested from history; validating the F5 "softer market" thesis needs *forward* capture.** **(2)** Latest game is 2026-06-06 → ongoing games need a **live capture cadence.** Both are E2.0b.
+
+**Tasks (as built):**
 - [ ] Backfill historical **derivative totals lines** — first-5-innings (F5) totals, team totals, and alternate game totals — via The Odds API **historical event-odds** (`10 × markets × regions`/event/snapshot; additional-market history only after **2023-05-03**; use GET historical events for eventIds). Reuse the E5.0/E5.1 prop-ingestion pattern (Railway cron / batch; raw → staging).
 - [ ] **Closing snapshot per game** first (the CLV reference); optional open snapshot for movement. Leakage-safe snapshot timestamps. Bovada + curated soft books + Pinnacle (sharp reference).
 - [ ] Land in a `game_pk`-keyed mart so E2.6 can join model distribution → derivative line → realized outcome. **Eval/CLV use ONLY — never joined into the E2 model feature matrix** (market-blind constraint, above).
 **AC:** game×market historical derivative-totals lines (F5 / team-total / alt-total), close (+ open where available), 2023-05-03 → present; coverage report; credit spend logged (same order as the E5.1 prop backfill — comfortably inside 5M/mo).
+
+### E2.0b — Live derivative-odds capture (forward cadence)  ⬜  **[Track data / Session B · E2.0 follow-on · feeds the E2.6 forward leg]**
+**Why (from E2.0, 2026-06-18):** the backfill only runs to 2026-06-06, and **F5 historical is too thin to backtest (~65 games, all 2023).** So we need an ongoing capture that (a) keeps `mart_derivative_closes` current for live games, and (b) **accumulates forward F5 closes** — the only way to validate the F5 value thesis, since history can't.
+**Tasks:**
+- [ ] A **scheduled capture** of the four derivative markets (team_totals, alternate_totals, h2h_h1, totals_h1) for the upcoming/in-progress slate — mirror the **A2.18 Railway odds-capture cron** (flat-cost cron, not per-snapshot Dagster), reusing `derivative_odds_backfill.py`'s idempotent sentinel pattern. Snapshot near close; land into the same `derivative_odds_raw` → `mart_derivative_closes` path.
+- [ ] **Credit guard** + cadence tuned to the slate (capture only scheduled games; log spend vs the 5M/mo budget).
+- [ ] **EVAL/CLV-ONLY** (Principle 3) — never a training feature.
+**AC:** `mart_derivative_closes` stays current for live games (no multi-day lag); forward F5 closes accumulate game-over-game so E2.6 can eventually gate F5 on real data; credit spend logged. **Deps:** E2.0 (the pipeline it extends), A2.18 (the cron pattern). Pairs with E5.0 (live prop capture — same plumbing).
+
+```
+▶ Story prompt — E2.0b Live derivative-odds capture (forward cadence)   [Model-B · data · E2.0 follow-on]
+Read: §4 E2.0 + E2.0b + §0 + §6 + scripts/derivative_odds_backfill.py (the pipeline you extend) + A2.18 (services/odds_capture cron pattern) + E5.0 (parallel live prop capture).
+Do: schedule a forward capture of the 4 derivative markets for the upcoming/in-progress slate (mirror the A2.18 Railway cron, reuse the idempotent sentinel pattern), snapshot near close → derivative_odds_raw → stg_derivative_odds → mart_derivative_closes. Credit-guard to scheduled games + log spend. Especially accumulate forward F5 (h2h_h1/totals_h1) closes — history is too thin (~65 games, 2023) to backtest F5, so forward is the only path. EVAL/CLV-ONLY (never a model feature; CONTRACT discipline).
+Gate/AC: mart_derivative_closes stays current for live games; forward F5 closes accumulate; credit logged; EVAL/CLV-only.
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (incl. the cron deploy), git add, what to verify (new closes land for today's slate).
+```
 
 ### E2.1 — Per-side count-distribution model  ✅ **GATE PASS 2026-06-18**  **[market-blind]**
 > **Result:** NegBin beats Poisson on per-side-runs NLL (5/5 purged-CV folds, +0.093 mean), overdispersion recovered (var/mean≈1.6, `r` 8–33 across folds), market-leakage guard clean (0 market cols / 282 feats). Artifact `totals_perside_v1.pkl` + CV record `e2_1_perside_negbin_cv.json` written; **correctly NOT promoted to S3** (gated at E2.6). This marginal is what E2.1b/E2.2/E2.3/E2.5/E2.6 build on. (Two downstream notes folded into E2.2.)
@@ -487,6 +560,7 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 - [ ] A separate Stage-1 NegBin pair on **innings 1–5** run production (from `mart_pitch_play_event` / play-event marts) — starters dominate F5, bullpen barely matters → a different, often sharper signal, and a structurally softer market.
 - [ ] Convolve via the same E2.2/E2.3 machinery → F5 total + F5 team totals + `p_over` at F5 lines.
 **AC:** F5 distribution PIT-calibrated; **do not assume F5 efficiency — measure it** against the E2.0 F5 closes at E2.6.
+> **⚠️ F5 backtest data is thin (E2.0, 2026-06-18): only ~65 historical F5 closes, all 2023.** So the F5 *derivative edge* can't be honestly backtested from history — the F5 value thesis must be validated on **forward** closes (E2.0b live capture). Build the F5 *model* on the per-side machinery as planned, but treat the **F5 edge gate as forward-only** until E2.0b accumulates enough live F5 closes.
 
 ### E2.5 — Signal registration + leakage-safe backfill  ⬜
 **Tasks:**
@@ -498,11 +572,12 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 **Tasks/AC (must clear before any derivative bet surfaces as actionable):**
 - [ ] **Distributional accuracy:** convolved-total `crps_ensemble` beats the `total_runs` champion `crps_normal` under E1.1 CV, via `evaluate_promotion` (plug in as a `SamplesSpec` adapter — no gate changes).
 - [ ] **Main-line un-pause (unchanged rule):** to bet main-line totals it must beat **both** prior-predictive NLL **2.8893** AND prior-naive Brier **0.248** on rolling-60 live.
-- [ ] **Derivative edge (the real value path):** F5 / team-totals / alt-lines gated by **positive CLV vs *that derivative's own close* (from E2.0)** + **PBO<0.2 + DSR>0** (E1.4). ⚠️ Blocked until E2.0's historical derivative closes exist.
+- [ ] **Derivative edge (the real value path):** F5 / team-totals / alt-lines gated by **positive CLV vs *that derivative's own close* (from E2.0)** + **PBO<0.2 + DSR>0** (E1.4). ✅ E2.0's historical closes now exist (238k closes / 5,896 games). ⚠️ **But split the gate by market:** **team-totals + alt-totals** have deep history → backtestable now; **F5** has only ~65 historical closes (all 2023) → its gate is **forward-only**, accumulating via **E2.0b** live capture. Don't gate F5 on the thin history.
 - [ ] **FINAL STEP (§0.3):** generate the E2.7 app-session prompt and write it into §E2.7 (real PG table/columns/payload).
 
 ### E2.7 — Distribution UX  🧩  **[separate app session — prompt emitted by the E2 model session; see §0.3]**
 **Scope:** render the predictive total/run-diff distribution + market-line rule + shaded favorable mass + an alt-line ladder, beside the existing per-pick SHAP `pick_explanation` (Story 30.15). Serve via Railway PG (params + quantiles only, never raw samples at request time). **AC:** distribution + drivers render on the pick detail page; honest-framing copy; changelog entry.
+> **Totals-parity (E9.23):** this is the **honest home for the "totals win-probability CI"** the operator asked for (H2H parity). Include a **calibrated P(over) + an over-probability/total CI** from the E2.3 distribution on the totals pick detail — this is the real version (the current totals model's interval is un-calibrated; don't ship that). The CLV half of E9.23 is separate (E9.2, muted).
 
 ```
 ▶ App-session prompt — Story E2.7 (Distribution UX)  [app repo]
@@ -886,6 +961,7 @@ to the user; do not git commit/push; Dagster ops import packaged code only.
 ### E6.7 — Pre-promotion prune validation (gate on the slim re-promote)  ⬜  **[Track R · BLOCKS the slim-contract re-promote · cheap, high-trust]**
 
 > **⚠️ SEQUENCING (2026-06-18): run this AFTER E1.7 de-leak + E1.8 leakage sweep.** The slim **14/31/19** sets were chosen from an importance ranking topped by the leaky `bp_eb_xwoba` (#1/#2). That ranking is contaminated — once de-leaked, the bullpen xwOBA value drops out and `coverage_pct`/`uncertainty` rise — so **the prune must be re-derived on the de-leaked (and leak-swept) matrix before this validation means anything.** Don't validate/promote a prune built on leaked importances.
+> **Update (E1.7 shipped 2026-06-18):** an **INTERIM** re-derive on the de-leaked matrix already exists (total_runs 14→**21**, home_win 31→**21**, run_diff 19→**15**; `elo_diff` + `pythagorean_win_exp_diff` now enter both H2H sets). These are **interim — re-derive once more after E1.8**, then run E6.7's validation on the final sets. **Candidate to drop:** `bp_eb_xwoba` survives only as a correlated *passenger* of `home_team_sequential_bullpen_xwoba` on the home side of home_win/run_diff — E6.7 may legitimately prune it (kept for now to preserve the reproducible E1.3 rule). Promotion-gate especially **home_win** (near-total 26-drop/16-add turnover).
 
 **Why:** E1.3 produced the slim **14/31/19** contracts on **aggregate** clustered importance, and the plan is to re-promote champions on them. Before we ship a model with ~95% of its features removed, we must confirm the prune is *safe*, not just *smaller-on-average*. The user's two concerns are exactly right and become the gate: **(1) aggregate importance can hide *conditional* importance** — a feature near-useless on average but decisive in a specific game-state slice (extreme weather, bullpen-fatigue games, blowout-prone matchups) — so validate with **per-game (local) importance, not just the rough aggregate**; **(2) before trusting the prune, decide explicitly whether a dimensionality step (PCA) is warranted** rather than assuming.
 
@@ -1003,8 +1079,106 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 | E9.16 | 2026-06-18 | beta user | **Paginate the Bet Log** (~25 picks/page). | P2 | E9.16 (app) | ⬜ triage |
 | E9.17 | 2026-06-18 | beta user | **Bankroll-growth %** on Performance — net P&L ÷ editable initial deposit, alongside Net P&L + % ROI; user sets/edits their deposit. | P2 | E9.17 (app; settings + metric) | ⬜ triage |
 | E9.18 | 2026-06-18 | internal | **Changelog accordion** — the changelog page is getting long (we're shipping a lot); collapse it into a per-week accordion so users can scan/expand rather than scroll a wall. | P3 | E9.18 (app; pure frontend) | ⬜ triage |
+| E9.19 | 2026-06-18 | internal/security | **MFA on the application** — add multi-factor auth (Cognito TOTP) before Stripe / paying customers, so accounts (bet log, deposit, subscription) have account-takeover protection. | **P1 (security · gates E9.8 Stripe)** | E9.19 (app + backend/Cognito; GTM/paid-tier track) | ⬜ triage |
+| E9.20 | 2026-06-18 | operator (live bug) | **🐞 P0 — pick ↔ narrative side mismatch.** Pick chip said "BAL ML / Model 79.2%" but the "Why this pick" narrative attributed the 79.2% to Seattle (and self-contradicted: "favoring the Mariners… favors the underdog Orioles"). A user can't tell which side the model backs → led to a wrong-side bet. | **P0 (live correctness/trust · money impact)** | E9.20 (app + serving/narrative) | ⬜ **top priority** |
+| E9.21 | 2026-06-18 | operator | **PostHog metrics in Admin** — surface the PostHog product-analytics dashboard inside the website's Admin section so it's a one-stop view of site performance (DAU/active users, funnels, retention) alongside internal admin tooling. | P3 (internal/admin) | E9.21 (app; admin-only) | ⬜ triage |
+| E9.22 | 2026-06-18 | operator | **Book Comparison odds-freshness** — the panel shows "Lines as of 7:00 AM CDT — updated hourly" but odds look stale / not refreshing at the stated cadence; the served lines + "as of" timestamp don't reflect the actual odds-capture frequency. | P2 (freshness/trust) | E9.22 (app + serving; **bundle with E9.1/E9.14 — same A0.4.32 surface**) | ⬜ triage |
+| E9.23 | 2026-06-18 | operator | **Totals pick-detail parity** — H2H shows a win-probability CI + CLV confidence; totals shows neither. Wire up the totals equivalents. | P2 (parity) | E9.23 (app; **routes: CLV→E9.2 muted; CI→E2.7 gated on E2.3** — honest constraints below) | ⬜ triage |
+
+### E9.20 — 🐞 Pick ↔ narrative side-attribution mismatch  ✅ **FIXED + SHIPPED 2026-06-18**  **[P0 · narrative-layer fix]**
+> **Resolved 2026-06-18 — the narrative flipped, not the chip.** Source-of-truth: `calibrated_win_prob` is *always* P(home wins); for game_pk=823125 it was **0.208 = P(SEA)**, so the **chip was correct** ("BAL ML 79.2%" via `1−model_prob` for away picks) → **the model genuinely backed BAL, and the SEA bet was the wrong side.** The bug: `generate_pick_narratives.py` sent that 0.208 to Mistral **unlabeled** as "Model win probability," so the LLM attributed it to the picked team and produced the inverted/self-contradictory text. **Fix shipped:** (1) prompt **labels every prob by team** (`Model P(SEA wins): 20.8% / P(BAL wins): 79.2%`) + an explicit `"The model backs BAL to win."` keyed to `layer4_h2h_decision`; (2) edge display switched to `abs(cal_win − mkt_win)` to match the chip — **dropped the broken `h2h_edge=0.0`** (the known posterior bug, which had been feeding the narrative a wrong edge); (3) **`_validate_pick_consistency()` guard** — skips the Cortex call + logs `[E9.20 GUARD] SKIP` if `pick_side` direction contradicts `calibrated_win_prob` (catches future pipeline flips before users see them); (4) QUALIFY dedup → one Cortex call per `game_pk` (killed the ~5× duplicate calls); (5) 14 regression tests (`test_pick_narrative_guard.py`); changelog under week 2026-06-15. **No backend/dbt/frontend changes — the chip was never wrong. Systemic scope: AWAY-team picks were affected (home picks were coincidentally correct).** Operator regenerated today's narratives via `--reset-narratives`.
+
+**Reported (operator, 2026-06-18) — with a real wrong-bet consequence.** On **BAL @ SEA, predicted Jun 18 1:11 PM CDT** (post-lineup), the surfaces disagree on *which team* the model backs:
+- **Pick chip / structured pick:** `BAL ML` · **Edge +31.3%** · **BAL win — Model 79.2% · Market 48.0%**; 80% CI 73.6–84.6%. (Internally consistent: 79.2 − 48.0 ≈ +31.3 on BAL.)
+- **"Why this pick" narrative (POST-LINEUP):** *"low win probability for the Orioles at 21%, favoring the Mariners with a 79% chance to win"* — attributes the **79% to Seattle** — then **self-contradicts**: *"the model takes a contrarian position, as it favors the underdog Orioles to win."*
+
+So the chip says "bet BAL, model 79.2% BAL" while the narrative says "Mariners 79%." The operator read the narrative and bet SEA. **A user genuinely cannot tell which side the model favors → a wrong-side bet.** Top-priority correctness + trust bug (honest-framing rule: a self-contradictory pick explanation is especially damaging) with direct money impact.
+
+> **Mechanic to suspect:** a **home/away (favorite/underdog) attribution flip.** SEA is home, so `home_win = P(SEA wins)`. The chip implies `home_win ≈ 0.208` (BAL 0.792); the narrative implies `home_win ≈ 0.79` (SEA). One layer inverted it. **First job is to establish source-of-truth** — what does the model actually output for this `game_pk`? — because that determines whether (a) the **narrative** flipped (chip right, BAL is the pick) or (b) the **serving/pick layer** mislabeled the side (narrative right, the *recommendation itself* is wrong and SEA was correct). **Do not assume the chip is right.**
+
+**Investigation (find which layer flipped — don't guess):**
+- [ ] **Source-of-truth:** pull the raw model output for this `game_pk` (`daily_model_predictions`, post_lineup row, champion `model_version`) — is the home-team win-prob 0.208 or 0.79? That single number adjudicates chip vs narrative.
+- [ ] **Serving/pick layer** (`scripts/write_serving_store.py`, `app/backend/routers/picks.py`, `app/backend/models/picks.py`): trace how `pick_side` / `model_prob` / `market` / `edge` derive from `home_win` → assert the team label matches the probability (the home/away mapping).
+- [ ] **Narrative layer** (`betting_ml/scripts/generate_pick_narratives.py` + `build_pick_explanations`, 30.15/E9.13): does the Mistral prompt receive the win prob **keyed to the correct team**, with unambiguous home/away labels? The self-contradiction implies flipped/ambiguous inputs. (The 30.15 follow-on already fixed a narrative win-prob *magnitude* bug + hallucinated-edge + the `h2h_edge=0.0` issue — this is the *team-attribution* facet.)
+**Fix + guard:**
+- [ ] Fix the layer that flipped so chip + narrative agree on side, prob, and edge.
+- [ ] **Regression guard** (test + serve/build-time assertion): the narrative's favored side **must equal** `pick_side`, and `model_prob` must match the `home_win`→team mapping; **fail the serve/build if they diverge** — never ship a contradictory pick.
+- [ ] **Audit scope:** check whether other games show the same flip (isolated or systemic?) and flag any picks served wrong-side.
+**AC:** the BAL@SEA pick is consistent across chip + narrative + CI; source-of-truth identified and the flipped layer fixed; a guard blocks chip↔narrative side/prob/edge disagreement going forward; the isolated-vs-systemic audit is done; **changelog entry** (a correctness fix users should know about — especially anyone who saw the contradictory pick). **Deps:** 30.15/E9.13 (narrative pipeline) + the serving layer; relates to the broader attribution-bug pattern (E1.7/E1.8).
+
+```
+▶ Story prompt — E9.20 🐞 Pick ↔ narrative side-attribution mismatch   [App + serving/narrative · ⭐ P0 live bug]
+APP TARGET: UI→frontend/ (pick chip + "Why this pick"); serving→scripts/write_serving_store.py + betting_ml/scripts/generate_pick_narratives.py; backend→app/backend/routers/picks.py + models/picks.py; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+BUG (real wrong-bet consequence): BAL @ SEA, predicted Jun 18 1:11 PM CDT. Chip = "BAL ML · Edge +31.3% · BAL win Model 79.2% / Market 48.0%". Narrative = "Orioles 21%, Mariners 79%" AND self-contradicts ("favors the underdog Orioles"). Operator bet SEA off the narrative. Users can't tell which side the model backs.
+Read: §5F E9.20 + §0.2 + master Story 30.15 (build_pick_explanations) + E9.13 (generate_pick_narratives.py) + the serving layer (write_serving_store.py, picks.py, models/picks.py) + daily_model_predictions.
+Do: (1) SOURCE OF TRUTH FIRST — pull the raw model output for this game_pk (post_lineup, champion model_version): is home_win ≈0.208 (BAL favored → chip right) or ≈0.79 (SEA favored → narrative right & the RECOMMENDATION is wrong)? SEA is home, so home_win = P(SEA). DO NOT assume the chip is correct. (2) trace home/away→pick_side/model_prob/edge in the serving/backend layer + the team-keying + home/away labels fed to the Mistral narrative prompt. (3) fix the layer that flipped so chip + narrative + CI agree. (4) ADD A REGRESSION GUARD: test + serve/build-time assertion that narrative-favored-side == pick_side and model_prob matches the home_win→team mapping — fail rather than ship a contradictory pick. (5) audit other games for the same flip; note any served wrong-side.
+Gate/AC: BAL@SEA consistent across chip+narrative+CI; flipped layer fixed; guard blocks future side/prob disagreement; isolated-vs-systemic audit done; changelog entry. ⚠️ Honest-framing: a self-contradictory pick is a trust failure — fix at the source, not by patching the prose.
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, changelog line, verify-after-deploy (re-check this game_pk renders consistently).
+```
+
+### E9.21 — PostHog metrics in the Admin section (one-stop performance view)  ⬜  **[app · admin-only · P3 internal]**
+**What it is:** surface the **PostHog** product-analytics view inside the website's **Admin** section so the operator has a single place to watch site performance (active/daily users, funnels, retention, top events) next to the existing admin tooling — instead of bouncing to the PostHog app. *(Beta is live: 5 testers, ≥3 DAU as of 2026-06-18 — this is the dashboard to watch that grow.)*
+
+**Recommended approach (PM call — flag if you want it different):**
+- **v1 = embed a PostHog *shared dashboard* (iframe) in an admin tab.** PostHog supports shared/embeddable dashboards via a share token. This is the fastest one-stop-shop: **no secrets in the frontend, no event-quota cost** (embedding doesn't consume the analytics allowance), and it reuses PostHog's own charts. Gate it behind the existing **admin-only** route.
+- **v2 (only if v1 isn't enough) = pull metrics via the PostHog Query API server-side** (personal/project API key in `app/backend` env — **never** in the frontend bundle) and render native admin cards, so PostHog metrics sit *beside* internal numbers (users, picks served, bet-log) in one consistent UI. More work + key management; do it only if the embed's look/blend is insufficient. Free tier covers it (1M API requests/mo).
+
+**Tasks:**
+- [ ] Create the PostHog **shared dashboard** (DAU/WAU, signup→active funnel, retention, key events); generate its embed/share token.
+- [ ] Frontend: an **Admin → Analytics** tab that embeds the dashboard (iframe), **behind the admin-only guard** (same gate as the blog editor); not reachable by regular users.
+- [ ] If any API-key path is used, the key lives **server-side only** (`app/backend` env / secrets) — never shipped to the client.
+- [ ] Document the dashboard URL + token location in `infrastructure/aws_resources.md` (or the app README).
+**AC:** an admin can open Admin → Analytics and see the live PostHog metrics in-app; access is admin-only; no PostHog/API secret is exposed client-side; free-tier-safe (embed = no event cost). **No changelog** (admin-only, not an end-user-facing surface). **Deps:** existing admin section + admin-route guard; PostHog account (free tier). *(Security note: once E9.19 MFA lands, the admin login is a prime account to require MFA on.)*
+
+```
+▶ Story prompt — E9.21 PostHog metrics in the Admin section   [App · admin-only · P3]
+APP TARGET: UI→frontend/ (Admin → Analytics tab); backend→app/backend/ ONLY if a server-side PostHog API-key path is used; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+Read: §5F E9.21 + §0.2 + the existing admin section/route-guard (the blog-editor admin pattern).
+Do: v1 — create a PostHog SHARED dashboard (DAU/WAU, signup→active funnel, retention, key events) + embed it (iframe) in a new Admin → Analytics tab BEHIND the
+admin-only guard. NO PostHog/API secret in the frontend bundle. If you instead pull via the PostHog Query API (v2), the key lives server-side in app/backend env only.
+Embedding consumes NO event quota; free tier is ample. Document the dashboard URL/token in infrastructure/aws_resources.md.
+Gate/AC: admin sees live PostHog metrics in-app; admin-only access; no client-side secret; free-tier-safe. NO changelog (admin-only, not end-user-facing).
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, verify-after-deploy (admin tab renders; non-admin blocked).
+```
+
+### E9.22 — Book Comparison odds-freshness (stale "as of" timestamp / cadence)  ⬜  **[app + serving · P2 freshness/trust · bundle with E9.1/E9.14]**
+**Reported (operator, 2026-06-18):** the **Book Comparison** panel shows *"Lines as of 7:00 AM CDT — updated hourly,"* but the odds appear stale and don't seem to refresh at that cadence — they should update more often. So the served lines (and the displayed "as of" time + the "updated hourly" label) don't reflect the **actual** odds-capture frequency. Same class as E9.13's write-up staleness: the captured data is fresher than what's served.
+
+**Investigate (find the cadence mismatch):**
+- [ ] **Actual capture cadence:** how often does the odds-capture cron run (`services/odds_capture` / A2.18 pattern; E3.0 Pinnacle ingest) → `mart_odds_outcomes`? Is it hourly, or only at the daily/post-lineup pipeline run?
+- [ ] **Serving refresh:** when is the **book-odds payload written to Railway PG** (`scripts/write_serving_store.py --book-odds` → the A0.4.32 payload read by `app/backend/routers/picks.py`)? If it only refreshes on the pipeline run, the panel shows that run's lines regardless of newer captures — the likely root cause.
+- [ ] **Timestamp source:** is the "as of" time the **odds-capture timestamp** or the serving-write time? And is "updated hourly" actually true?
+**Fix:**
+- [ ] Refresh the book-odds serving payload on the **capture cadence** (or have the panel read the freshest captured lines), so the displayed lines move when the market moves.
+- [ ] Make the **"as of" timestamp reflect the true latest odds-capture time**, and the cadence label match reality (honest-framing: don't claim "updated hourly" if it isn't).
+**AC:** Book Comparison lines refresh at the real capture cadence; the "as of" timestamp + cadence label are accurate to when odds were actually pulled; verified against `mart_odds_outcomes` capture times. **Changelog** (user-visible freshness fix). **Deps:** A0.4.32 (book-comparison payload), the odds-capture cron (A2.18 / E3.0); **bundle with E9.1 or E9.14** (same surface) per operator request.
+
+```
+▶ Story prompt — E9.22 Book Comparison odds-freshness   [App + serving · P2]
+APP TARGET: UI→frontend/ (Book Comparison "as of" + lines); serving→scripts/write_serving_store.py (--book-odds); backend→app/backend/routers/picks.py; ingest→services/odds_capture; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+Read: §5F E9.22 + §0.2 + master A0.4.32 (book-comparison payload) + A2.18 (odds-capture cron) + E3.0 (Pinnacle ingest) + mart_odds_outcomes.
+Do: trace capture cadence (cron → mart_odds_outcomes) vs serving refresh (write_serving_store --book-odds → Railway PG → picks.py). Likely root cause: serving payload only refreshes on the pipeline run, not on the capture cadence → stale lines + wrong "as of"/"updated hourly". Fix: refresh book-odds at the capture cadence (or read freshest), make the "as of" timestamp the true latest capture time + the cadence label honest.
+Gate/AC: lines refresh at the real cadence; "as of" + label accurate vs mart_odds_outcomes capture times; changelog. Honest-framing: the timestamp/label must be truthful.
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, changelog line, verify-after-deploy (open the panel, confirm the time matches the latest capture).
+```
+
+### E9.23 — Totals pick-detail parity (win-prob/distribution CI + CLV confidence)  🅿️ **DEFERRED (operator decision 2026-06-18) — leave totals bars OFF until the totals model is recovered (E2.3)**  **[app · P2 parity]**
+
+> **✅ DECISION (operator, 2026-06-18): show NO totals bars for now** — neither the CLV bar nor a CI. Both honest versions depend on model work that isn't ready: the totals meta-model is non-discriminating (AUC≈0.445) and the totals point model is un-calibrated (the Story-29.1 variance deficiency E2 fixes). A muted-noise bar or an un-calibrated interval would mislead, and an empty/absent bar is the most honest state. **Revisit when the totals model is recovered — i.e. when E2.3 produces a calibrated totals distribution** (then E2.7 renders the real CI, and a discriminating totals meta-model can bring back a real CLV bar). No interim provisional CI.
+
+**Reported (operator, 2026-06-18):** the H2H pick detail shows an **80% win-probability CI** + a **CLV confidence bar**; the totals section shows neither. The honest fix depends on the totals model recovery (above) — the two halves have different right homes and honesty constraints, so don't naively mirror H2H.
+
+**The two halves (route each correctly):**
+- **CLV confidence (totals) → already E9.2 (A0.4.34), but MUTED.** E9.2 surfaces both H2H and totals CLV meta bars. ⚠️ **The totals meta-model (v0) has near-zero discrimination (AUC ≈ 0.445) — it's essentially noise.** So the totals CLV bar must render **low-information / muted (no conviction badge)**, NOT as an equal-confidence mirror of H2H. It "appears" with E9.2; it becomes a *real* confidence signal only once a totals meta-model that actually discriminates exists. **Do not present noise as confidence.**
+- **Win-probability / over CI (totals) → the honest version is E2.7, gated on E2.3.** The H2H CI works because that model emits a calibrated probability. The current totals champion has the **Story-29.1 variance deficiency** (under-dispersed — the entire reason E2 exists), so a CI drawn from it today would be a **miscalibrated interval shown as real.** The honest totals CI = the **E2.3 calibrated convolved distribution** (calib_80 ≥ 0.80 → real P(over) + quantiles) rendered via **E2.7 (distribution UX)**. So the proper "totals CI" is E2.7, fed by E2.3 — already in the roadmap.
+
+**When revisited (post-totals-recovery), route each half:**
+- **CLV confidence** → E9.2 pattern, but only once a **discriminating** totals meta-model exists (v0 is AUC≈0.445 noise). Until then, no totals CLV bar.
+- **Win-prob/over CI** → **E2.7, fed by E2.3's calibrated convolved distribution** (real P(over) + quantiles). The current totals model's interval is un-calibrated — never ship it as a CI.
+**AC (for now):** totals pick detail shows **no CLV bar and no CI** (the honest state); the card is **parked until E2.3 recovers the totals model**, then re-opened to wire the CI via E2.7 + a real CLV bar via E9.2. **Deps:** E2.3 (calibrated totals distribution) + E2.7 (distribution UX); E9.2 (CLV pattern).
 
 ### E9.1 — "+EV price range" (breakeven line) per pick  ⬜  **[app; extends A0.4.32 + A0.4.33]**
+> **🔗 While in here (operator request 2026-06-18): also tackle E9.22** — the Book Comparison "as of 7:00 AM / updated hourly" timestamp is stale vs the real odds-capture cadence. Same A0.4.32 surface; bundle it with this card.
 
 **Request (verbatim):** *"I think adding the line would help a lot. Like a range where the bet is still EV+. Mainly for moneyline teams. If LAD or something models out well from a range of lines. Say -110 to -125 is all +EV. That way you can see if lines shift on a book that no longer makes them a good bet."*
 
@@ -1061,6 +1235,8 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 **Operator next step:** run `uv run python betting_ml/scripts/predict_today.py --date <today>` (dev env); confirm `[30.15]` log line appears; then run `uv run python betting_ml/scripts/generate_pick_narratives.py --date <today> --dry-run` to preview prompts before a live run.
 
 ### E9.14 — Add Fanatics to the book-comparison set  ⬜  **[app; extends A0.4.32 · small]**
+> **🔗 While in here (operator request 2026-06-18): also tackle E9.22** — the Book Comparison "as of 7:00 AM / updated hourly" timestamp is stale vs the real odds-capture cadence. Same A0.4.32 surface; bundle it with this card.
+
 **Request:** *beta user — add **Fanatics** to the Book Comparison on the pick-details page.*
 **What it is:** add Fanatics to the curated book allowlist A0.4.32 uses (currently `betmgm, caesars, fanduel, draftkings, bovada, pinnacle`) so its price / de-vigged % / model % / EV / edge appear alongside the others — and flow into E9.11 (best price) + E9.12 (daily card).
 **Tasks:**
@@ -1103,18 +1279,44 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 - [ ] Optional: persist expand/collapse state for the session only (no browser-storage requirement).
 **AC:** changelog renders as a per-week accordion, most-recent week open by default, others collapsed; keyboard/ARIA accessible; tag styling preserved; no change to the JSON contract; changelog entry (this is itself a user-facing change). **Deps:** A0.4.26 (existing changelog page); pairs with the §0.2 Monday-grouping convention.
 
+### E9.19 — MFA on the application (Cognito TOTP)  ⬜  **[⭐ P1 security · app + backend/Cognito · GTM/paid-tier track · HARD GATE before E9.8 Stripe / paying customers]**
+**Why:** before there's a billing relationship and real money in play, accounts need **account-takeover protection.** We don't store card data (Stripe Checkout holds it — E9.8), but a compromised account still exposes the user's bet log, tracked deposit, and subscription. MFA is table-stakes security to have **in place before paying customers exist.**
+
+**Recommended design (PM call — flag if you want it different):**
+- **Method: TOTP (authenticator-app / software token) via Cognito**, not SMS. TOTP is free (no SNS/SES cost), not vulnerable to SIM-swap, and Cognito supports it natively (`associateSoftwareToken` / `verifySoftwareToken` / `respondToAuthChallenge`). SMS can be a later fallback if users ask, but it's weaker and metered.
+- **Enforcement: optional-but-encouraged in beta → mandatory for `subscriber`-group accounts at Stripe launch.** This avoids adding friction to beta onboarding while guaranteeing every *paying* account is protected. (Open decision: if you'd rather make it mandatory for everyone now, say so — it's a one-line policy change in the enrollment gate.)
+- **Federated (Google/E9.7) users** inherit MFA from their Google account → the Cognito-TOTP enrollment applies to **username/password accounts**; note this so we don't double-prompt.
+
+**Tasks:**
+- [ ] **Cognito:** enable the **software-token (TOTP) MFA** option on `credence-prod` user pool (MFA = optional at pool level so per-user enrollment is possible; enforcement policy applied in-app per the decision above).
+- [ ] **Frontend — enrollment:** an MFA section in `frontend/app/settings` (security) — "Enable two-factor": `associateSoftwareToken` → render the QR / secret → user enters a code → `verifySoftwareToken` → `setUserMFAPreference(TOTP)`. Show enabled/disabled state + a disable flow (re-auth required).
+- [ ] **Frontend — login challenge:** handle the `SOFTWARE_TOKEN_MFA` challenge in the login flow (`frontend/app/login` + AuthContext) — prompt for the 6-digit code → `respondToAuthChallenge`. Clear errors for wrong/expired codes.
+- [ ] **Backend:** minimal — Cognito drives the MFA flow; touch `app/backend/routers/auth.py` only if a status/enforcement endpoint is needed (e.g. block `subscriber` access until MFA enrolled, when enforcement turns on). No new email (TOTP needs none).
+- [ ] **Recovery:** a documented account-recovery path for a lost authenticator (admin-assisted reset for beta; self-serve recovery codes can be a follow-up).
+- [ ] **Changelog** (user-facing security feature).
+**AC:** a user can enroll TOTP MFA from Settings (QR → verify → enabled), is challenged for the code on next login, and can disable it with re-auth; federated users aren't double-prompted; the enforcement policy (optional now / mandatory for subscribers at launch) is implemented as a single gate; **E9.8 (Stripe) does not go live until this is in place.** **Deps:** Cognito pool (A0.4.9), AuthContext (A0.4.2); **gates E9.8 (A0.7)**; pairs with E9.7 (OAuth) for the federated-user note.
+
+```
+▶ Story prompt — E9.19 MFA on the application (Cognito TOTP)   [App + backend/Cognito · ⭐ P1 security · gates E9.8 Stripe]
+APP TARGET: UI→frontend/ (settings security + login challenge); backend→app/backend/ only if a status/enforcement endpoint is needed; Cognito console for the pool MFA setting; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+Read: §5F E9.19 + §0.2 + master A0.4.9 (Cognito pool) + A0.4.1/A0.4.2 (login + AuthContext) + A0.6B/E9.7 (federated users) + A0.7/E9.8 (the Stripe rollout this gates).
+Do: enable software-token (TOTP) MFA on the credence-prod Cognito pool (optional at pool level). Frontend enrollment in settings: associateSoftwareToken → QR/secret → verifySoftwareToken → setUserMFAPreference; enabled/disabled state + disable-with-re-auth. Frontend login: handle the SOFTWARE_TOKEN_MFA challenge → respondToAuthChallenge with clear errors. Enforcement: optional-but-encouraged in beta → mandatory for the subscriber group at Stripe launch (single in-app gate; confirm the policy with the operator). Federated (Google) users inherit MFA from Google — apply Cognito TOTP to username/password accounts only, no double-prompt. Document a lost-authenticator recovery path (admin-assisted for beta).
+Gate/AC: enroll (QR→verify→enabled) + login challenge + disable-with-re-auth all work; subscriber-enforcement gate implemented; no double-prompt for federated users; E9.8 stays blocked until this is live; **changelog entry (user-facing security feature).**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands (incl. any Cognito console step), the `git add <paths>`, and verify-after-deploy.
+```
+
 ### Migrated app/infra backlog (from master `implementation_guide.md` Epic A0)
 These existing app/infra stories now live here — **E9 is their tracking home.** Full specs remain in the master guide under the cited A0 IDs; they run as app/infra sessions (mostly pure app-repo with no model upstream → authored directly per §0.3). Status as of migration (2026-06-17):
 
 | ID | Source | Story | Pri | Status | Home / key deps |
 |----|--------|-------|-----|--------|-----------------|
-| E9.2 | A0.4.34 | CLV meta-model confidence bar (H2H + totals) per pick | P2 | ⬜ NEW | app; meta cols on the **morning** row (12.4 / 12.12) — coalesce onto displayed pick; also the §5A app-surface E3 strengthens |
+| E9.2 | A0.4.34 | CLV meta-model confidence bar (**H2H only for now**) per pick | P2 | ⬜ NEW | app; meta cols on the **morning** row (12.4 / 12.12) — coalesce onto displayed pick; also the §5A app-surface E3 strengthens. ⚠️ **Totals CLV bar OFF for now** (operator decision 2026-06-18 — totals meta v0 AUC≈0.445 ≈ noise + totals model being recovered); **ship H2H only**, revisit totals with E9.23 / E2 recovery |
 | E9.3 | A0.4.31 | Live scores via the Odds API scores endpoint → Railway PG | P2 | ⬜ NEW | app + poller; poll only while games in-progress (cost guard); MLB StatsAPI fallback |
-| E9.4 | A0.4.18 | Cognito welcome email + beta-user onboarding | P1 | 🟢 UNBLOCKED (SES prod live 2026-06-18) | backend; **SES now in production → Path A direct (Resend Path B no longer needed)**; brand the invite template + provision beta users |
-| E9.5 | A0.4.22 | Password reset flow | P1 | 🟢 READY (SES prod live 2026-06-18) | app + backend; sandbox-validated → finish: branded "Verification message" template + redeploy `infrastructure/lambda/deploy.sh` + retest with a real non-sandbox email |
+| E9.4 | A0.4.18 | Cognito welcome email + beta-user onboarding | P1 | ✅ SHIPPED 2026-06-18 (beta onboarding live) | branded invite + verification templates (atomic both-together push); SES bounce/complaint handling (suppression + SNS→support@ + config set, simulator-verified); e2e verified; **beta users provisioned** |
+| E9.5 | A0.4.22 | Password reset flow | P1 | ✅ SHIPPED 2026-06-18 | app + backend; validated end-to-end with a real non-sandbox email; branded SES template; `POST /auth/verify-email` auto-verifies admin-created accounts (`CognitoEmailVerify` IAM + lambda redeployed) |
 | E9.6 | A0.4.17 | Morning early pick (pre-lineup "preliminary" surface) | P3 | 🔶 PARTIAL | app done; pipeline blocked on master Story 30.8 (morning-mode model). Pairs with the Edge pre-lineup theme |
 | E9.7 | A0.6B | Google OAuth / social sign-in | P1 | ⬜ | app; Cognito federated identity; **unblocks E9.8** |
-| E9.8 | A0.7 | Stripe subscription billing (Starter/Pro; Cognito groups) | P1 | ⬜ | app + backend; needs E9.7 + Cognito groups (E9.4) — the **paid-tier revenue gate** |
+| E9.8 | A0.7 | Stripe subscription billing (Starter/Pro; Cognito groups) | P1 | ⬜ | app + backend; needs E9.7 + Cognito groups (E9.4) — the **paid-tier revenue gate**; ⛔ **also gated by E9.19 (MFA) before live mode / paying customers** |
 | E9.9 | A0.6 | Push notifications (AWS SNS + Lambda + Web Push / SES) | P1 | ⬜ (SES email path now live) | backend; Dagster publishes post-`predict_today`; **SES email path unblocked 2026-06-18** — remaining work is the SNS/Lambda/DynamoDB/Web-Push build (no longer SES-blocked) |
 | E9.10 | A0.4.11 | Settings: user profile + notification preferences | **P1 (window: unblocked parts only)** | ⚠️ PARTIAL | app; **window scope = profile + sign-out + non-email prefs + editable `initial_deposit`** (no new deps). The **email/push notif toggle is deferred to E9.9** (SES is no longer the blocker — E9.9's backend build is) — not in the current card |
 

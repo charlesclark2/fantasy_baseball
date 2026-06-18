@@ -92,6 +92,10 @@ type Pick = {
   win_prob_ci_low: number | null
   win_prob_ci_high: number | null
   win_prob_ci_width: number | null
+  // CLV meta-model confidence (A0.4.34) — market-routed: H2H from meta_*, totals from totals_meta_*
+  meta_p_clv_positive: number | null
+  meta_ci_low: number | null
+  meta_ci_high: number | null
   home_team: string | null
   away_team: string | null
   pick_side: string | null
@@ -1187,6 +1191,62 @@ export default function PickDetailPage() {
                                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {(mktP * 100).toFixed(1)}%
                               </span>
                             </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* CLV-confidence bar — both markets (A0.4.34) */}
+                      {pick.meta_p_clv_positive != null && pick.meta_ci_low != null && pick.meta_ci_high != null && (() => {
+                        const p = pick.meta_p_clv_positive!
+                        const ciLow = pick.meta_ci_low!
+                        const ciHigh = pick.meta_ci_high!
+                        const isTotals = pick.market_type === "totals"
+                        return (
+                          <div className="border-t border-[#1e1e1e] pt-2 mt-1">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={`text-xs font-medium cursor-help inline-flex items-center gap-1 ${isTotals ? "text-gray-600" : "text-gray-500"}`}>
+                                    {isTotals ? "CLV confidence (low-info)" : "CLV confidence"}
+                                    <Info className="h-3 w-3" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
+                                  {isTotals
+                                    ? "Probability the closing line moves toward the over/under. Totals CLV model v0 has no demonstrated open-to-close predictive signal (temporal AUC 0.445) — all games cluster near 60%. Shown for transparency only; not a conviction signal."
+                                    : "Probability the closing line moves toward the model's side. Based on a Bayesian meta-model trained on historical open-to-close line movement. 80% CI shown. Higher P = sharper money more likely to agree, not a bet recommendation."}
+                                </TooltipContent>
+                              </Tooltip>
+                              <span className={`text-xs font-mono ${isTotals ? "text-gray-600" : "text-gray-500"}`}>
+                                {(p * 100).toFixed(1)}%
+                                <span className="ml-1.5 text-gray-700">({(ciLow * 100).toFixed(0)}–{(ciHigh * 100).toFixed(0)}%)</span>
+                              </span>
+                            </div>
+                            <div className={`relative h-3 rounded-full overflow-hidden ${isTotals ? "bg-[#1a1a1a]" : "bg-[#1e1e1e]"}`}>
+                              {/* 50% reference line */}
+                              <div className="absolute top-0 bottom-0 w-px bg-[#333]" style={{ left: "50%" }} />
+                              {/* CI band */}
+                              <div
+                                className={`absolute top-0 bottom-0 rounded-sm ${isTotals ? "bg-[#4b5563]/20" : "bg-[#6366f1]/25"}`}
+                                style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
+                              />
+                              {/* Point estimate */}
+                              <div
+                                className={`absolute top-0 bottom-0 w-0.5 ${isTotals ? "bg-[#4b5563]" : "bg-[#818cf8]"}`}
+                                style={{ left: `${p * 100}%` }}
+                              />
+                            </div>
+                            {!isTotals && (
+                              <div className="flex items-center gap-4 mt-1.5">
+                                <span className="text-xs text-gray-600 inline-flex items-center gap-1">
+                                  <span className="inline-block h-1.5 w-3 bg-[#818cf8] rounded-full" /> P(CLV&gt;0)
+                                </span>
+                                <span className="text-xs text-gray-700">Line-value signal · not a bet recommendation</span>
+                              </div>
+                            )}
+                            {isTotals && (
+                              <p className="text-xs text-gray-700 mt-1">Low-information — totals line movement not predicted by current model</p>
+                            )}
                           </div>
                         )
                       })()}

@@ -1,0 +1,29 @@
+{
+  "feature_cols": [
+    "away_bp_eb_coverage_pct",
+    "away_bp_eb_uncertainty",
+    "away_closer_used_prev_1d",
+    "away_lineup_archetype_pa_coverage",
+    "away_vs_lhp_bb_pct_30d",
+    "elo_diff",
+    "home_bp_eb_coverage_pct",
+    "home_bp_eb_uncertainty",
+    "home_bp_eb_xwoba",
+    "home_injured_player_count",
+    "home_starter_avg_ip_last_3",
+    "home_starter_bb_pct_vs_rhb",
+    "home_starter_csw_pct_season",
+    "home_team_sequential_bullpen_xwoba",
+    "pythagorean_win_exp_diff"
+  ],
+  "_provenance": {
+    "story": "E1.7",
+    "derived": "2026-06-18",
+    "method": "signal-bearing (non-noise, paired-bootstrap CI>0) cluster members from the DE-LEAKED clustered MDA (--bullpen-version v3), E1.3 procedure on the leakage-safe bullpen matrix",
+    "source_report": "betting_ml/evaluation/feature_selection/clustered_importance/clustered_importance_run_diff_bullpen_v3.json",
+    "supersedes": "betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_2026.json (contaminated: ranking topped by the leaky bp_eb_xwoba)",
+    "n_features": 15,
+    "INTERIM": "Re-derive ONCE MORE after E1.8 (full leakage sweep) before the E6.7 retrain batch consumes this \u2014 E1.8 may de-leak more features and shift the prune. Do NOT promote a retrain on this contract until the post-E1.8 re-derivation.",
+    "bp_eb_note": "bp_eb_xwoba value collapsed to ~0% standalone (the leak); it is retained ONLY where clustered with home_team_sequential_bullpen_xwoba (the cluster's real signal). bp_eb_coverage_pct is the genuine surviving bullpen signal (rises to #1/#2)."
+  }
+}
