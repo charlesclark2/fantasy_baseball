@@ -46,6 +46,7 @@ from betting_ml.utils.probability_layer import (
 )
 from betting_ml.utils.win_prob_uncertainty import compute_win_prob_beta  # Story 19.7
 from betting_ml.utils.sigma_gate import evaluate_sigma_gate             # Story 22.4
+from betting_ml.utils.pick_explanations import build_pick_explanations  # E9.13 / Story 30.15
 from betting_ml.models.total_runs_trainer import p_over_line
 from betting_ml.utils.ml_env import ml_schema
 
@@ -300,13 +301,15 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
     win_prob_ci_low         FLOAT,         -- Story 19.7: 80% credible interval lower = Beta.ppf(0.10)
     win_prob_ci_high        FLOAT,         -- Story 19.7: 80% credible interval upper = Beta.ppf(0.90)
     win_prob_ci_width       FLOAT,         -- Story 19.7: ci_high − ci_low
-    posterior_source        VARCHAR(20),   -- Epic 16.2: game-level least-informed player-quality source {sequential|season_eb|prior_only}
+    posterior_source        VARCHAR(20),   -- Epic 16.2: game-level least-informed player-quality source (sequential|season_eb|prior_only)
     prior_age_days          INTEGER,       -- Epic 16.2: stalest (max) sequential-posterior age in days; >7 raises game_uncertainty_score
     is_backfill             BOOLEAN  DEFAULT FALSE,  -- Story 30.7: TRUE only for rows backfilled after a promotion; live rows are FALSE
     totals_ci_width         FLOAT,                   -- Story 22.4: P(over) 80% CI width (probability units)
     h2h_ci_width            FLOAT,                   -- Story 22.4: P(home win) 80% CI width (probability units)
     sigma_tier              VARCHAR(20),              -- Story 22.4: high_confidence|medium|low|abstain
-    abstain_reason          VARCHAR(200)              -- Story 22.4: '' or reason string when sigma_tier=abstain
+    abstain_reason          VARCHAR(200),             -- Story 22.4: '' or reason string when sigma_tier=abstain
+    pick_explanation        VARCHAR,                  -- Story 30.15 / E9.13: JSON exact-SHAP attribution per target
+    pick_narrative          VARCHAR                   -- E9.13: Cortex LLM plain-English narrative (populated by generate_pick_narratives.py)
 )
 """
 
@@ -334,7 +337,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     win_prob_alpha, win_prob_beta, win_prob_ci_low, win_prob_ci_high, win_prob_ci_width,
     posterior_source, prior_age_days,
     is_backfill,
-    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason
+    totals_ci_width, h2h_ci_width, sigma_tier, abstain_reason,
+    pick_explanation
 ) VALUES (
     %(model_version)s, %(feature_version)s, %(inserted_at)s, %(score_date)s,
     %(game_pk)s, %(game_date)s, %(game_datetime)s,
@@ -353,7 +357,8 @@ INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     %(win_prob_alpha)s, %(win_prob_beta)s, %(win_prob_ci_low)s, %(win_prob_ci_high)s, %(win_prob_ci_width)s,
     %(posterior_source)s, %(prior_age_days)s,
     FALSE,
-    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s
+    %(totals_ci_width)s, %(h2h_ci_width)s, %(sigma_tier)s, %(abstain_reason)s,
+    %(pick_explanation)s
 )
 """
 
@@ -430,6 +435,7 @@ def _write_predictions_to_snowflake(
     feature_version: str,
     data_source: str = "feature_store",
     dry_run: bool = False,
+    explanations: list[dict] | None = None,
 ) -> None:
     def _f(arr, i) -> float | None:
         v = arr[i]
@@ -564,6 +570,10 @@ def _write_predictions_to_snowflake(
             "h2h_ci_width":           sg.get("h2h_ci_width"),
             "sigma_tier":             sg.get("sigma_tier"),
             "abstain_reason":         sg.get("abstain_reason") or "",
+            # E9.13 / Story 30.15 — per-pick SHAP attribution (JSON text)
+            "pick_explanation": (
+                json.dumps(explanations[i]) if explanations and i < len(explanations) else None
+            ),
         }))
 
     if dry_run:
@@ -593,14 +603,33 @@ def _write_predictions_to_snowflake(
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS sigma_tier VARCHAR(20)")
             cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS abstain_reason VARCHAR(200)")
+            # E9.13 / Story 30.15 migration — explanation columns
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")
+            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_narrative VARCHAR")
 
             inserted = 0
             skipped = 0
+            updated_expl = 0
             for row in rows:
-                # Idempotent guard: skip if (game_pk, model_version) already exists
+                # Idempotent guard: skip INSERT if (game_pk, model_version) already exists.
+                # E9.13: for existing rows, refresh pick_explanation so the "why" always matches
+                # the most-recent serve (morning pre-lineup → post-lineup re-score), and NULL
+                # pick_narrative so generate_pick_narratives.py re-generates it.
                 if row.get("game_pk") is not None:
                     cur.execute(_CHECK_DUPLICATE, {"game_pk": row["game_pk"], "model_version": row["model_version"]})
                     if cur.fetchone()[0] > 0:
+                        if row.get("pick_explanation") is not None:
+                            cur.execute(
+                                f"UPDATE {_ML_SCHEMA}.daily_model_predictions "
+                                "SET pick_explanation = %(expl)s, pick_narrative = NULL "
+                                "WHERE game_pk = %(gpk)s AND model_version = %(mv)s",
+                                {
+                                    "expl": row["pick_explanation"],
+                                    "gpk": row["game_pk"],
+                                    "mv": row["model_version"],
+                                },
+                            )
+                            updated_expl += 1
                         skipped += 1
                         continue
                 cur.execute(_INSERT_PREDICTION, row)
@@ -616,7 +645,7 @@ def _write_predictions_to_snowflake(
             print(f"\nWrote {inserted} prediction row(s) to "
                   f"{_ML_SCHEMA}.daily_model_predictions "
                   f"(model_version={model_version}, feature_version={feature_version}, "
-                  f"skipped_duplicates={skipped}, date={target_date})")
+                  f"skipped_duplicates={skipped}, explanation_refreshes={updated_expl}, date={target_date})")
             print(f"  [22.4] sigma_tier distribution: {tier_summary}")
         finally:
             conn.close()
@@ -1071,29 +1100,29 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-tag",
-        default="v3",
+        default="v5",
         help="Default tag used for any per-target tag not explicitly set, "
              "and the model_version label written to Snowflake. "
-             "For pure single-version backfills use 'v0', 'v1', 'v2', or 'v3'. "
+             "For pure single-version backfills use 'v0'–'v5'. "
              "For mixed-version production scoring, use a distinct label like 'prod' "
              "and set --home-win-tag, --total-runs-tag, --run-diff-tag explicitly. "
-             "Default: v3 (Epic 1 market-blind models for all targets)",
+             "Default: v5 (Story 30.4 market-blind + dead-weight-pruned champions for all targets)",
     )
     parser.add_argument(
         "--home-win-tag",
-        choices=["v0", "v1", "v2", "v3", "v4"],
+        choices=["v0", "v1", "v2", "v3", "v4", "v5"],
         default=None,
         help="Artifact tag to load for the home_win model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--total-runs-tag",
-        choices=["v0", "v1", "v2", "v3", "v4"],
+        choices=["v0", "v1", "v2", "v3", "v4", "v5"],
         default=None,
         help="Artifact tag to load for the total_runs model. Defaults to --model-tag.",
     )
     parser.add_argument(
         "--run-diff-tag",
-        choices=["v0", "v1", "v2", "v3", "v4"],
+        choices=["v0", "v1", "v2", "v3", "v4", "v5"],
         default=None,
         help="Artifact tag to load for the run_differential model. Defaults to --model-tag.",
     )
@@ -1137,10 +1166,10 @@ def _parse_args() -> argparse.Namespace:
     for attr in ("home_win_tag", "total_runs_tag", "run_diff_tag"):
         if getattr(args, attr) is None:
             fallback = args.model_tag
-            if fallback not in ("v0", "v1", "v2", "v3"):
+            if fallback not in ("v0", "v1", "v2", "v3", "v4", "v5"):
                 parser.error(
                     f"--{attr.replace('_','-')} not set and --model-tag={fallback!r} is not "
-                    "an artifact tag (v0/v1/v2/v3). Provide an explicit per-target tag."
+                    "an artifact tag (v0–v5). Provide an explicit per-target tag."
                 )
             setattr(args, attr, fallback)
 
@@ -1199,7 +1228,8 @@ def _score_date(
     print(f"  Found {len(df_today)} game(s)")
 
     lineup_cols = ("home_lineup_slot_1", "away_lineup_slot_1")
-    if all(c in df_today.columns for c in lineup_cols):
+    lineup_present = all(c in df_today.columns for c in lineup_cols)
+    if lineup_present:
         before = len(df_today)
         df_today = df_today[
             df_today["home_lineup_slot_1"].notna() & df_today["away_lineup_slot_1"].notna()
@@ -1209,6 +1239,7 @@ def _score_date(
         if df_today.empty:
             print("  No games with confirmed lineups.")
             return
+    served_tier = "post_lineup" if lineup_present else "pre_lineup"
 
     for col in ("has_odds", "home_win_prob_consensus"):
         if col not in df_today.columns:
@@ -1335,6 +1366,28 @@ def _score_date(
         _write_prediction_log(output_rows, target_date, dry_run=False)
         _backfill_outcomes()
 
+    # E9.13 / Story 30.15 — compute per-game SHAP attribution before writing.
+    # Fail-safe: any SHAP error is logged but never blocks scoring.
+    try:
+        explanations = build_pick_explanations(
+            served_tier=served_tier,
+            clf_hw=clf_hw,
+            X_clf=X_clf,
+            hw_feat_cols=clf_feat_cols,
+            ngb_total=ngb_total,
+            X_tot=X_ngb,
+            tot_feat_cols=ngb_feat_cols,
+            ngb_diff=ngb_diff,
+            X_diff=X_diff,
+            diff_feat_cols=diff_feat_cols,
+        )
+        expl_count = sum(1 for e in explanations if e.get("targets"))
+        print(f"  [30.15] attribution computed for {expl_count}/{len(df_today)} game(s) "
+              f"(served_tier={served_tier})")
+    except Exception as _expl_exc:
+        print(f"  [30.15] attribution failed ({_expl_exc}); proceeding without explanations")
+        explanations = []
+
     run_ts = datetime.now(timezone.utc).replace(tzinfo=None)
     _write_predictions_to_snowflake(
         df_today=df_today,
@@ -1357,6 +1410,7 @@ def _score_date(
         feature_version=feature_version,
         data_source=data_source,
         dry_run=dry_run,
+        explanations=explanations,
     )
 
     cal_win_arr = np.array([

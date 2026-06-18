@@ -12628,6 +12628,62 @@ is the most meaningful read. Do not auto-flag "+EV" as "bet this" (ties to the E
 
 **Implementation correction — Normal CDF, not NegBin:** The spec said to use `pred_total_runs` + `totals_r` (NegBin dispersion) via `compute_over_under_probs`. However, `totals_r` is never written to `daily_model_predictions` — the champion totals model is **NGBoost with Normal distribution**, which outputs `pred_total_runs` (μ) and `pred_total_runs_scale` (σ), not NegBin params. `write_serving_store.py` was updated to use `scipy.stats.norm.sf(line, loc=pred_mu, scale=pred_scale)` instead of the NegBin CDF. P(push) = 0 for the continuous Normal approximation. If a future NegBin model is promoted, `pred_total_runs_scale` and the Normal CDF path would need to be revisited.
 
+---
+
+**⚠️ REOPENED — follow-up amendments (2026-06-17). Pull this story back into an app session to ship the two items below.**
+
+**FA-1 — Add Fanatics (+ harden Caesars) to the book set, gated on the odds backfill.** A beta user specifically requested **Fanatics**, so this is high priority once the data lands. Two coverage facts the implementing session MUST know:
+- **The Odds API starter tier omits Fanatics, Caesars-US (`williamhill_us`), and `rebet`.** We fixed the live ingestion on 2026-06-17 so the `/odds` pull uses the **main key first** (full roster) — `scripts/odds_api_ingestion.py` (`run_odds` now passes `prefer_main=True`; `/events` keeps starter-first to conserve credits). **Do NOT add Fanatics to the selector until that fix is deployed AND the backfill has filled the cutover gap** — otherwise the book will render with holes. Coordinate with the odds-backfill session (it owns the gap fill + the `williamhill_us`↔`caesars` identity reconciliation).
+- **Caesars identity caveat:** on the Odds API, Caesars-US = key `williamhill_us`; on the Parlay API it's `caesars`. The shipped selector keys Caesars off `caesars` (Parlay-era). After the cutover to The Odds API, **the live Caesars rows now arrive under `williamhill_us`** — so the existing Caesars row will go stale unless the book allowlist treats `williamhill_us` and `caesars` as the same book. Verify/repair this when adding Fanatics; it's the same root cause.
+- Scope when reopened: extend the curated set to **seven** (add `fanatics`/Fanatics), repair the Caesars key mapping, re-verify `mart_game_odds_bridge` resolves `event_id` for the new/changed keys, and confirm `write_serving_store.py --book-odds` emits them. **Changelog entry required** (new books are a non-admin user-facing change — `[[feedback_story_prompt_and_changelog]]`).
+
+**FA-2 — Keep the book-odds UI fresh at the Railway odds-capture cadence (users are asking for it).** Today the displayed odds appear stale: either the **UI isn't reflecting the updated odds time**, or fresh odds **aren't reaching the PG cache** on the right cadence. Decision (user, 2026-06-17): **accept the compute** and refresh the book-odds PG payload at the **same cadence as the Railway odds-ingestion job** — with one carve-out: **no overnight refresh** (skip the dead hours when no lines move; bound the cost).
+- First, **diagnose which half it is** by surfacing an explicit `odds_as_of` (the max `bookmaker_last_update`/snapshot ts in the payload) both in the API response and on the page. If PG already has fresh odds but the UI shows an old time → it's a frontend display/caching bug. If PG itself is stale → `write_book_odds_op` isn't firing on the capture cadence.
+- `write_book_odds_op` is currently wired into `odds_snapshot_job` + `odds_current_rebuild_job` (refreshes on each odds-mart rebuild). Align its trigger with the **flat-cost Railway odds-capture cron** (the `services/odds_capture/` pattern, A2.18 / Edge E4.1) so the cache turns over every capture cycle, not just on the slower Dagster rebuild.
+- **Overnight guard:** gate the refresh to the active window (≈first reasonable line-posting hour → last first-pitch); skip overnight so we don't pay compute to re-cache unchanged lines. Mirror the lineup-monitor active-window pattern.
+- **Changelog entry required** (fresher odds + a visible "odds as of" timestamp are user-facing).
+
+**▶ App-session prompt (FA-1 + FA-2 reopen)** — copy into a fresh application-repo session:
+```
+You are REOPENING Story A0.4.32 (per-book odds comparison) in the Credence app repo to ship two
+follow-ups. The base story already shipped (book selector + Railway PG book-odds cache via
+write_serving_store.py --book-odds + write_book_odds_op; Pinnacle as sharp reference).
+
+NON-NEGOTIABLE CONVENTIONS:
+- mcp__snowflake__run_snowflake_query for ALL Snowflake lookups (fully-qualified
+  baseball_data.<schema>.<table>; no USE statements). dbtf, not dbt. uv run python ...; never bare python.
+- The user runs all git + all prod/Dagster/Railway deploys. Don't commit, push, or trigger jobs.
+- Any non-admin user-facing change MUST get a changelog entry (both items below qualify).
+
+READ FIRST:
+1. implementation_guide.md — Story A0.4.32 IN FULL, especially the "REOPENED — follow-up amendments
+   (2026-06-17)" block (FA-1, FA-2).
+2. scripts/write_serving_store.py (the --book-odds path) and the write_book_odds_op wiring in the
+   Dagster odds jobs.
+3. app/backend/routers/picks.py (odds-comparison endpoint) + frontend/app/picks/[game_pk]/page.tsx
+   (book selector).
+
+FA-1 — Add Fanatics, repair Caesars key:
+- GATE: only add Fanatics once (a) the odds_api main-key fix is deployed and (b) the odds-backfill
+  session has filled the 2026-06-17 cutover gap for fanatics/williamhill_us/rebet. Confirm both before coding.
+- On The Odds API, Caesars-US = bookmaker_key `williamhill_us` (Parlay-era key was `caesars`). The
+  shipped selector keys Caesars off `caesars`, so live Caesars is going stale post-cutover. Treat
+  williamhill_us ≡ caesars in the book allowlist; pick the freshest row across both keys.
+- Extend the curated set to seven (add fanatics/Fanatics). Re-verify mart_game_odds_bridge resolves
+  event_id for the new/changed keys; confirm write_serving_store.py --book-odds emits them.
+
+FA-2 — Odds freshness (accept the compute; users want it):
+- Add an explicit odds_as_of timestamp to the odds-comparison payload AND render it on the page, FIRST,
+  to diagnose: PG-fresh-but-UI-stale (frontend bug) vs PG-stale (cache not refreshing).
+- Refresh the book-odds PG cache at the SAME cadence as the Railway odds-capture cron (services/odds_capture/
+  pattern), not just the slower Dagster rebuild. EXCEPTION: skip overnight (gate to the active line-movement
+  window, like the lineup monitor) — no overnight refresh.
+
+START HERE: query mart_odds_outcomes for bookmaker_key IN ('fanatics','williamhill_us','caesars') with
+MAX(bookmaker_last_update) by source_system to confirm Fanatics/Caesars are flowing post-fix, then confirm
+the backfill gap status with the operator before touching the selector.
+```
+
 **Tasks:**
 - [x] Backend: `GET /picks/{game_pk}/odds-comparison` returning, per market (h2h, totals), an array over the six books of
       `{book, american, decimal, market_bet_pct, model_prob, ev, edge, kelly?}` — **return all six in one payload** so the frontend
