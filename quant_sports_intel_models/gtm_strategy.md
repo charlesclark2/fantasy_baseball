@@ -7,7 +7,7 @@
 **Hard constraint (shapes everything):** we have **no demonstrated betting edge** and we don't claim one. GTM must sell **process, transparency, and depth** — never "we win." (Same honest-framing rule as the product; see `edge_program/edge_program_executive_summary.md`.)
 **Companion docs:** `multi_sport_roadmap.md` (the NFL-kickoff timing), `edge_program_executive_summary.md` (the tiered value case), `baseball/fantasy/fantasy_dynasty_guide.md` (the Dynasty pillar).
 
----
+> **🟢 BETA IS LIVE — first traction (2026-06-18):** onboarding shipped (E9.4/E9.5) + beta users provisioned; **5 active testers**, **≥3 daily users** validated via **PostHog**. This is the funnel's first real data point (baseline for the 100-subs north-star). Beta feedback already drives the E9 backlog — keep logging traction here as it grows.
 
 ## 0. Track separation & funding reality (decision, 2026-06-17)
 - **Two separate tracks; the model backlog is primary.** The model is the platform's **quality core** — projections, CLV, props, and fantasy all *are* model outputs — so its backlog stands on its own merits and is prioritized independently. **GTM never reprioritizes model stories** (e.g. it does not pull betting-feature work to chase a launch date); the GTM-blocking pieces it *does* depend on (self-serve signup E9.7, Stripe E9.8) are tracked here, not by reordering the model backlog.

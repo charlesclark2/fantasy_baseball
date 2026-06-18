@@ -292,7 +292,9 @@ Conventions: dbtf not dbt; Snowflake via MCP, fully-qualified, no USE; uv run py
 to the user; do not git commit/push.
 ```
 
-### E1.7 — De-leak the production bullpen EB feature  🔄 **CODE-COMPLETE 2026-06-18** (SQL de-leak + parity guardrail shipped; rebuild/retrain = operator → `E1_7_HANDOFF.md`)  **[⭐ Tier-0 correctness · touches the live champions · spun out of E2.1b]**
+### E1.7 — De-leak the production bullpen EB feature  ✅ **SHIPPED + VALIDATED 2026-06-18** (steps A–D; champion retrains = step E, gated post-E1.8)  **[⭐ Tier-0 correctness · touches the live champions · spun out of E2.1b]**
+
+> **✅ Validated results (`E1_7_HANDOFF.md`):** **serving-null FIXED — 37/37 scheduled games populate `bp_eb_xwoba` (was 0); 96.9–98.9% historical coverage 2016–26.** Parity SQL↔Python ✅ (Jaccard 1.0, corr 0.962, mean|Δ| 0.0024). **MDA collapse confirmed on ALL THREE targets** — the leaky `bp_eb_xwoba` *value* → ~0% importance retained everywhere; **`bp_eb_coverage_pct` (data depth) rises to #1/#2 on all three** (uncertainty modest/variable). **Slim contracts re-derived (INTERIM — re-derive after E1.8):** total_runs 14→21, home_win 31→21, run_diff 19→15; **`elo_diff` + `pythagorean_win_exp_diff` newly enter both H2H contracts** — real team-strength signal the leak had masked. `bp_eb_xwoba` survives only on the home side of home_win/run_diff as a correlated *passenger* of `home_team_sequential_bullpen_xwoba` (E6.7 may legitimately drop it). **⚠️ dbt gotcha (captured so it won't recur):** `eb_bullpen_posteriors` is a thin ~12-day rolling incremental — a downstream-only `+` rebuild left history null + broke parity; the fix is DROP the 3 bullpen incrementals + full-refresh **including upstream** (`-s eb_bullpen_posteriors+`; `stg_batter_pitches` has all 12 seasons). **Promotion:** any contract must clear `promotion_gate_eval.py --purged-cv` before promotion — especially home_win (near-total 26-drop/16-add turnover). Step E (3 champion retrains) runs once on the post-E1.8 matrix.
 
 > **⚙️ Weight choice (E1.7 build, 2026-06-18) — ✅ PM-ENDORSED: the dbt port uses EQUAL weight, not expected-leverage.** Equal ≈ expected to 0.001 per-side NLL (E2.1b), and the E2.1b handoff §4 explicitly recommends *"the simplest leakage-safe aggregate is the right replacement."* For a pure-SQL Path A port that matters doubly: porting the expected-leverage weighting (trailing-30d aLI from `delta_home_win_exp` + rest/fatigue availability multipliers) into dbt would be a large, error-prone *second* reimplementation — exactly the divergence risk the parity test exists to catch, amplified. Equal-weight is trivially correct, equivalent on NLL, and parity-checks cleanly against `aggregate_team_v3(weight_mode='equal')`. (Supersedes the "use expected" note below.)
 
@@ -369,6 +371,45 @@ per-feature verdict + prioritized remediation list, and quantify how much of the
 ⚠️ De-leaking lowers offline metrics BY DESIGN — that's correctness, not regression; judge on forward/serving-parity.
 Conventions: dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min scripts to the
 operator; do not git commit/push.
+```
+
+### E1.9 — v6 clean-slate champion rebuild (model bake-off → Optuna)  ⬜  **[⭐ Model-A · this IS the post-E1.8 retrain — upgraded · needs E1.8 done]**
+
+**Why (PM, 2026-06-18):** the champion retrains deferred by E1.7/E1.8 must **not** be a blind re-fit of the incumbent learner families. The current champions are **XGBoost for H2H (`home_win`) and NGBoost for totals (`total_runs`)** — historical defaults, never validated as best-in-class. Now that the matrix is being scrubbed of leakage (E1.7 + E1.8) and the contracts re-derived, **rebuild v6 from a clean slate: a "best model wins" bake-off across learner classes, decided by the honest gate, THEN Optuna hyper-parameter optimization on the winner** — not "tune the model we happened to start with." (Champions are currently `v5`; this produces **v6**.)
+
+**Scope:** `home_win` (H2H) + `total_runs` (totals) — and `run_diff` on the same pattern — on the **final E1.8-clean matrix** with the **final re-derived slim contracts** (E1.7's are interim).
+
+**Tasks:**
+- [ ] **Model-class bake-off (selection BEFORE tuning):** evaluate a slate of candidate learners under **E1.1 purged CV** with each target's honest metric (H2H: NLL/Brier + calibration; totals: a **distributional** metric — CRPS/NLL — since totals needs a predictive distribution, not a point). Candidates: **XGBoost, LightGBM, CatBoost, NGBoost (distributional), a regularized GLM/logistic baseline, and a simple stack/ensemble** — plus the **no-skill + market baselines** as the floor. Market-blind (CONTRACT-GUARD). Pick the winner **by the gate metric + calibration**, not by incumbency or by a hair of NLL (ties → simpler/ more-calibrated/ distributional-where-needed wins).
+- [ ] **THEN Optuna HPO on the winning class only** — purged-CV objective; **guard the HPO against its own overfitting** (the trial search is a multiple-testing surface): embargoed/nested CV for the objective, a sane trial cap, and **PBO<0.2 + DSR>0 (E1.4) on the selected config** so the tuned champion isn't a search artifact.
+- [ ] **Promotion gate:** v6 must clear `promotion_gate_eval.py --purged-cv` (+ PBO/DSR) vs the v5 champion **on the clean matrix** before promotion; record the bake-off table (every class's CV score) + the chosen config in `ablation_results/`.
+- [ ] Register `v6` in `sub_model_registry.yaml`; keep v5 until v6 clears live/forward.
+**AC:** for each target, a recorded model-class bake-off (candidates × purged-CV metric) with a justified winner, an Optuna-tuned config that passes PBO/DSR, and a promotion-gate result vs v5 on the de-leaked+swept matrix. **⚠️ Honest validation:** offline scores are *lower* post-de-leak by design (not a regression); the trying-many-classes + HPO search is itself a multiple-testing surface → the **DSR/PBO discipline is the guard**, and the real proof is **forward/serving-parity**. **Downstream:** promoting v6 changes served picks for live beta users → coordinate the deploy with a `frontend/data/changelog.json` note. **Deps:** E1.8 (final clean matrix + final contracts); supersedes the bare "retrain" step of E1.7/E1.8.
+
+```
+▶ New-session prompt — Story E1.9 (v6 clean-slate champion rebuild)
+
+You are building Story E1.9 of the MLB Edge Program — rebuilding the v6 champions (home_win, total_runs,
+run_diff) from a CLEAN SLATE on the post-E1.8 de-leaked + leak-swept matrix. This is the deferred E1.7/E1.8
+retrain, UPGRADED: do NOT blindly re-fit the incumbent classes (XGBoost h2h / NGBoost totals) — run a
+"best model wins" bake-off, THEN Optuna-tune the winner.
+
+Read first: edge_program_implementation_guide.md §3 E1.9 + E1.7 (the de-leak) + E1.8 (the sweep — its final
+matrix + contracts) + E1.1 purged CV + E1.4 (PBO/DSR) + the current champion adapters (PlattCalibratedXGBClassifier,
+the NGBoost totals model) + promotion_gate_eval.py + sub_model_registry.yaml.
+
+Do: (1) MODEL-CLASS BAKE-OFF under E1.1 purged CV per target — XGBoost, LightGBM, CatBoost, NGBoost
+(distributional), a regularized GLM/logistic baseline, a simple stack, + no-skill/market floors; H2H scored on
+NLL/Brier+calibration, totals on a DISTRIBUTIONAL metric (CRPS/NLL — totals needs a distribution). Market-blind
+(CONTRACT-GUARD). Winner by the gate metric + calibration, not incumbency. (2) Optuna HPO on the WINNER only —
+purged-CV objective, embargoed/nested CV, trial cap, PBO<0.2 + DSR>0 on the selected config (the search is a
+multiple-testing surface — guard it). (3) Promotion-gate v6 vs v5 on the clean matrix; record the bake-off table +
+chosen config in ablation_results/; register v6, keep v5 until v6 clears live/forward.
+
+⚠️ Offline scores are LOWER post-de-leak BY DESIGN — not a regression. The honest gate is forward/serving-parity +
+PBO/DSR, never raw offline NLL. Promoting v6 shifts live picks → flag a changelog note for the app deploy.
+Conventions: dbtf not dbt; Snowflake via MCP fully-qualified no USE; uv run python; hand >1min scripts (NGBoost/HPO
+are long) to the operator; do not git commit/push. END with an ⏭️ Operator handoff (run-order + git add).
 ```
 
 ---
@@ -516,6 +557,7 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 
 ### E2.7 — Distribution UX  🧩  **[separate app session — prompt emitted by the E2 model session; see §0.3]**
 **Scope:** render the predictive total/run-diff distribution + market-line rule + shaded favorable mass + an alt-line ladder, beside the existing per-pick SHAP `pick_explanation` (Story 30.15). Serve via Railway PG (params + quantiles only, never raw samples at request time). **AC:** distribution + drivers render on the pick detail page; honest-framing copy; changelog entry.
+> **Totals-parity (E9.23):** this is the **honest home for the "totals win-probability CI"** the operator asked for (H2H parity). Include a **calibrated P(over) + an over-probability/total CI** from the E2.3 distribution on the totals pick detail — this is the real version (the current totals model's interval is un-calibrated; don't ship that). The CLV half of E9.23 is separate (E9.2, muted).
 
 ```
 ▶ App-session prompt — Story E2.7 (Distribution UX)  [app repo]
@@ -899,6 +941,7 @@ to the user; do not git commit/push; Dagster ops import packaged code only.
 ### E6.7 — Pre-promotion prune validation (gate on the slim re-promote)  ⬜  **[Track R · BLOCKS the slim-contract re-promote · cheap, high-trust]**
 
 > **⚠️ SEQUENCING (2026-06-18): run this AFTER E1.7 de-leak + E1.8 leakage sweep.** The slim **14/31/19** sets were chosen from an importance ranking topped by the leaky `bp_eb_xwoba` (#1/#2). That ranking is contaminated — once de-leaked, the bullpen xwOBA value drops out and `coverage_pct`/`uncertainty` rise — so **the prune must be re-derived on the de-leaked (and leak-swept) matrix before this validation means anything.** Don't validate/promote a prune built on leaked importances.
+> **Update (E1.7 shipped 2026-06-18):** an **INTERIM** re-derive on the de-leaked matrix already exists (total_runs 14→**21**, home_win 31→**21**, run_diff 19→**15**; `elo_diff` + `pythagorean_win_exp_diff` now enter both H2H sets). These are **interim — re-derive once more after E1.8**, then run E6.7's validation on the final sets. **Candidate to drop:** `bp_eb_xwoba` survives only as a correlated *passenger* of `home_team_sequential_bullpen_xwoba` on the home side of home_win/run_diff — E6.7 may legitimately prune it (kept for now to preserve the reproducible E1.3 rule). Promotion-gate especially **home_win** (near-total 26-drop/16-add turnover).
 
 **Why:** E1.3 produced the slim **14/31/19** contracts on **aggregate** clustered importance, and the plan is to re-promote champions on them. Before we ship a model with ~95% of its features removed, we must confirm the prune is *safe*, not just *smaller-on-average*. The user's two concerns are exactly right and become the gate: **(1) aggregate importance can hide *conditional* importance** — a feature near-useless on average but decisive in a specific game-state slice (extreme weather, bullpen-fatigue games, blowout-prone matchups) — so validate with **per-game (local) importance, not just the rough aggregate**; **(2) before trusting the prune, decide explicitly whether a dimensionality step (PCA) is warranted** rather than assuming.
 
@@ -1020,6 +1063,7 @@ It still **belongs to this program**: it reuses E2's distributional machinery, d
 | E9.20 | 2026-06-18 | operator (live bug) | **🐞 P0 — pick ↔ narrative side mismatch.** Pick chip said "BAL ML / Model 79.2%" but the "Why this pick" narrative attributed the 79.2% to Seattle (and self-contradicted: "favoring the Mariners… favors the underdog Orioles"). A user can't tell which side the model backs → led to a wrong-side bet. | **P0 (live correctness/trust · money impact)** | E9.20 (app + serving/narrative) | ⬜ **top priority** |
 | E9.21 | 2026-06-18 | operator | **PostHog metrics in Admin** — surface the PostHog product-analytics dashboard inside the website's Admin section so it's a one-stop view of site performance (DAU/active users, funnels, retention) alongside internal admin tooling. | P3 (internal/admin) | E9.21 (app; admin-only) | ⬜ triage |
 | E9.22 | 2026-06-18 | operator | **Book Comparison odds-freshness** — the panel shows "Lines as of 7:00 AM CDT — updated hourly" but odds look stale / not refreshing at the stated cadence; the served lines + "as of" timestamp don't reflect the actual odds-capture frequency. | P2 (freshness/trust) | E9.22 (app + serving; **bundle with E9.1/E9.14 — same A0.4.32 surface**) | ⬜ triage |
+| E9.23 | 2026-06-18 | operator | **Totals pick-detail parity** — H2H shows a win-probability CI + CLV confidence; totals shows neither. Wire up the totals equivalents. | P2 (parity) | E9.23 (app; **routes: CLV→E9.2 muted; CI→E2.7 gated on E2.3** — honest constraints below) | ⬜ triage |
 
 ### E9.20 — 🐞 Pick ↔ narrative side-attribution mismatch  ✅ **FIXED + SHIPPED 2026-06-18**  **[P0 · narrative-layer fix]**
 > **Resolved 2026-06-18 — the narrative flipped, not the chip.** Source-of-truth: `calibrated_win_prob` is *always* P(home wins); for game_pk=823125 it was **0.208 = P(SEA)**, so the **chip was correct** ("BAL ML 79.2%" via `1−model_prob` for away picks) → **the model genuinely backed BAL, and the SEA bet was the wrong side.** The bug: `generate_pick_narratives.py` sent that 0.208 to Mistral **unlabeled** as "Model win probability," so the LLM attributed it to the picked team and produced the inverted/self-contradictory text. **Fix shipped:** (1) prompt **labels every prob by team** (`Model P(SEA wins): 20.8% / P(BAL wins): 79.2%`) + an explicit `"The model backs BAL to win."` keyed to `layer4_h2h_decision`; (2) edge display switched to `abs(cal_win − mkt_win)` to match the chip — **dropped the broken `h2h_edge=0.0`** (the known posterior bug, which had been feeding the narrative a wrong edge); (3) **`_validate_pick_consistency()` guard** — skips the Cortex call + logs `[E9.20 GUARD] SKIP` if `pick_side` direction contradicts `calibrated_win_prob` (catches future pipeline flips before users see them); (4) QUALIFY dedup → one Cortex call per `game_pk` (killed the ~5× duplicate calls); (5) 14 regression tests (`test_pick_narrative_guard.py`); changelog under week 2026-06-15. **No backend/dbt/frontend changes — the chip was never wrong. Systemic scope: AWAY-team picks were affected (home picks were coincidentally correct).** Operator regenerated today's narratives via `--reset-narratives`.
@@ -1097,6 +1141,21 @@ Do: trace capture cadence (cron → mart_odds_outcomes) vs serving refresh (writ
 Gate/AC: lines refresh at the real cadence; "as of" + label accurate vs mart_odds_outcomes capture times; changelog. Honest-framing: the timestamp/label must be truthful.
 Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, changelog line, verify-after-deploy (open the panel, confirm the time matches the latest capture).
 ```
+
+### E9.23 — Totals pick-detail parity (win-prob/distribution CI + CLV confidence)  🅿️ **DEFERRED (operator decision 2026-06-18) — leave totals bars OFF until the totals model is recovered (E2.3)**  **[app · P2 parity]**
+
+> **✅ DECISION (operator, 2026-06-18): show NO totals bars for now** — neither the CLV bar nor a CI. Both honest versions depend on model work that isn't ready: the totals meta-model is non-discriminating (AUC≈0.445) and the totals point model is un-calibrated (the Story-29.1 variance deficiency E2 fixes). A muted-noise bar or an un-calibrated interval would mislead, and an empty/absent bar is the most honest state. **Revisit when the totals model is recovered — i.e. when E2.3 produces a calibrated totals distribution** (then E2.7 renders the real CI, and a discriminating totals meta-model can bring back a real CLV bar). No interim provisional CI.
+
+**Reported (operator, 2026-06-18):** the H2H pick detail shows an **80% win-probability CI** + a **CLV confidence bar**; the totals section shows neither. The honest fix depends on the totals model recovery (above) — the two halves have different right homes and honesty constraints, so don't naively mirror H2H.
+
+**The two halves (route each correctly):**
+- **CLV confidence (totals) → already E9.2 (A0.4.34), but MUTED.** E9.2 surfaces both H2H and totals CLV meta bars. ⚠️ **The totals meta-model (v0) has near-zero discrimination (AUC ≈ 0.445) — it's essentially noise.** So the totals CLV bar must render **low-information / muted (no conviction badge)**, NOT as an equal-confidence mirror of H2H. It "appears" with E9.2; it becomes a *real* confidence signal only once a totals meta-model that actually discriminates exists. **Do not present noise as confidence.**
+- **Win-probability / over CI (totals) → the honest version is E2.7, gated on E2.3.** The H2H CI works because that model emits a calibrated probability. The current totals champion has the **Story-29.1 variance deficiency** (under-dispersed — the entire reason E2 exists), so a CI drawn from it today would be a **miscalibrated interval shown as real.** The honest totals CI = the **E2.3 calibrated convolved distribution** (calib_80 ≥ 0.80 → real P(over) + quantiles) rendered via **E2.7 (distribution UX)**. So the proper "totals CI" is E2.7, fed by E2.3 — already in the roadmap.
+
+**When revisited (post-totals-recovery), route each half:**
+- **CLV confidence** → E9.2 pattern, but only once a **discriminating** totals meta-model exists (v0 is AUC≈0.445 noise). Until then, no totals CLV bar.
+- **Win-prob/over CI** → **E2.7, fed by E2.3's calibrated convolved distribution** (real P(over) + quantiles). The current totals model's interval is un-calibrated — never ship it as a CI.
+**AC (for now):** totals pick detail shows **no CLV bar and no CI** (the honest state); the card is **parked until E2.3 recovers the totals model**, then re-opened to wire the CI via E2.7 + a real CLV bar via E9.2. **Deps:** E2.3 (calibrated totals distribution) + E2.7 (distribution UX); E9.2 (CLV pattern).
 
 ### E9.1 — "+EV price range" (breakeven line) per pick  ⬜  **[app; extends A0.4.32 + A0.4.33]**
 > **🔗 While in here (operator request 2026-06-18): also tackle E9.22** — the Book Comparison "as of 7:00 AM / updated hourly" timestamp is stale vs the real odds-capture cadence. Same A0.4.32 surface; bundle it with this card.
@@ -1231,7 +1290,7 @@ These existing app/infra stories now live here — **E9 is their tracking home.*
 
 | ID | Source | Story | Pri | Status | Home / key deps |
 |----|--------|-------|-----|--------|-----------------|
-| E9.2 | A0.4.34 | CLV meta-model confidence bar (H2H + totals) per pick | P2 | ⬜ NEW | app; meta cols on the **morning** row (12.4 / 12.12) — coalesce onto displayed pick; also the §5A app-surface E3 strengthens |
+| E9.2 | A0.4.34 | CLV meta-model confidence bar (**H2H only for now**) per pick | P2 | ⬜ NEW | app; meta cols on the **morning** row (12.4 / 12.12) — coalesce onto displayed pick; also the §5A app-surface E3 strengthens. ⚠️ **Totals CLV bar OFF for now** (operator decision 2026-06-18 — totals meta v0 AUC≈0.445 ≈ noise + totals model being recovered); **ship H2H only**, revisit totals with E9.23 / E2 recovery |
 | E9.3 | A0.4.31 | Live scores via the Odds API scores endpoint → Railway PG | P2 | ⬜ NEW | app + poller; poll only while games in-progress (cost guard); MLB StatsAPI fallback |
 | E9.4 | A0.4.18 | Cognito welcome email + beta-user onboarding | P1 | ✅ SHIPPED 2026-06-18 (beta onboarding live) | branded invite + verification templates (atomic both-together push); SES bounce/complaint handling (suppression + SNS→support@ + config set, simulator-verified); e2e verified; **beta users provisioned** |
 | E9.5 | A0.4.22 | Password reset flow | P1 | ✅ SHIPPED 2026-06-18 | app + backend; validated end-to-end with a real non-sandbox email; branded SES template; `POST /auth/verify-email` auto-verifies admin-created accounts (`CognitoEmailVerify` IAM + lambda redeployed) |

@@ -12026,8 +12026,8 @@ Prior work already shipped (do not re-implement):
 - [ ] `next build` passes with zero errors
 - [ ] `https://app.credencesports.com` is live
 
-#### A0.4.18 — Cognito welcome email + beta user onboarding 🟢 UNBLOCKED (SES prod granted 2026-06-18)  **[P1]**
-> **2026-06-18:** SES is out of the sandbox → follow **Path A** (brand the Cognito invite template + provision beta users). **Path B (Resend) is retired.** This is the literal gate to inviting beta users.
+#### A0.4.18 — Cognito welcome email + beta user onboarding ✅ SHIPPED 2026-06-18 (beta onboarding live)  **[P1]**
+> **Shipped 2026-06-18 (Path A / SES):** branded `cognito-invite-template.html` + `cognito-verification-template.html` in `infrastructure/email/`, pushed atomically via `update_cognito_invite_template.py` (describes pool state first + sets BOTH templates together — fixes a mid-session regression where pushing one wiped the forgot-password verification template). **Bounce/complaint handling** for safe bulk sends: account suppression list + SNS topic `credence-prod-ses-bounce-complaint` → `support@credencesports.com` + SES config set `credence-prod-ses-config` wired into Cognito; mailbox-simulator-verified. E2e verified (branded invite from `noreply@credencesports.com` → login → dashboard). **Beta users provisioned** (Cognito console → `beta_tester` group; runbook in `infrastructure/aws_resources.md`). SES also unblocks E9.9's email path. **Path B (Resend) retired.**
 
 Customize the Cognito invite email so beta users receive a branded welcome message, then provision initial beta accounts.
 

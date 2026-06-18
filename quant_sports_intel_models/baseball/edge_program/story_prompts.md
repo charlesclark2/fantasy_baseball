@@ -16,8 +16,8 @@
 ## Epic E1 — CV-Hygiene & Overfitting Audit  ✅ audit COMPLETE (2026-06-18) · ⬜ **2 open remediation cards (E1.7, E1.8)**
 **E1.1–E1.6 built + validated.** Findings — ⚠️ **two revised by E2.1b 2026-06-18:** over-parameterized (slim **14/31/19** — but **re-derive post-de-leak**); history extension a **wash**; ~~no leakage~~ → **a within-game leak WAS present** (`bp_eb_xwoba` weights by `outs_in_game`); ~~bullpen EB dominates~~ → **RETRACTED, that rank was the leak** (de-leaked → noise; real signal is coverage/uncertainty, modest). See guide §3 + `E2_1b_HANDOFF.md`. **Two open cards below.**
 ```
-▶ Story prompt — E1.7 De-leak the production bullpen EB feature   🔄 CODE-COMPLETE 2026-06-18 (SQL de-leak + parity shipped; rebuild/retrain = operator → E1_7_HANDOFF.md)   [Model-A · ⭐ Tier-0 correctness · touches live champions]
-NOTE: dbt port shipped with EQUAL weight (not expected) — equal ≈ expected to 0.001 NLL + simplest pure-SQL port (avoids re-porting leverage×availability); see guide weight-choice note.
+▶ Story prompt — E1.7 De-leak the production bullpen EB feature   ✅ SHIPPED + VALIDATED 2026-06-18 (steps A–D; retrains=E gated post-E1.8)   [Model-A · ⭐ Tier-0 correctness]
+DONE: SQL de-leak (Path A, equal-weight); both leaks fixed; serving-null FIXED 37/37 scheduled games (was 0), 96.9–98.9% hist coverage; parity ✅ (Jaccard 1.0, corr 0.962); MDA collapse confirmed ALL 3 targets (coverage_pct → #1/#2); slim contracts re-derived INTERIM (elo_diff + pythagorean enter both H2H); dbt gotcha captured (full-refresh upstream eb_bullpen_posteriors+). Retrains batch post-E1.8. See E1_7_HANDOFF.md. (Original brief below.)
 Read: guide §3 E1.7 (esp. the TWO-leaks refinement + PM decisions) + E2.1b + E2_1b_HANDOFF.md + eb_bullpen_team_posteriors.sql +
 betting_ml/scripts/eb_priors/compute_bullpen_v3.py (aggregate_team_v3 + _load_expected_pen) + [[project_epic30_3_status]] + [[project_prod_model_audit_jun2026]].
 TWO leaks to fix: (a) the outs_in_game WEIGHT; (b) the appeared-in-game ROSTER — the table only has rows for completed games, so bp_eb_xwoba is NULL for tonight's
@@ -39,7 +39,14 @@ or not knowable before first pitch; prioritize top-N-importance + slim-contract 
 (3) leak-signature A/B + MDA collapse where a clean reconstruction exists. Write ablation_results/feature_leakage_audit.md (per-feature verdict + remediation list);
 quantify how much of the offline→live gap (0.42→0.001) the leaks explain.
 Gate/AC: every top-importance + slim-contract feature carries a leakage verdict; confirmed leaks listed for remediation. ⚠️ De-leaking lowers offline metrics by design — judge on forward/serving-parity.
-**Retrain note:** the 3 champion NGBoost retrains (≥1hr each) are BATCHED to run ONCE after this sweep, on the fully de-leaked + leak-swept matrix (E1.7 prepared them; don't retrain piecemeal). This is the batch boundary — not the legacy "pre-7M" milestone.
+**Retrain note:** the champion retrains run ONCE after this sweep — but **upgraded to E1.9 (v6 clean-slate bake-off → Optuna)**, not a blind re-fit of the incumbent classes. E1.8 produces the final clean matrix + final contracts that E1.9 builds v6 on. (Batch boundary = post-E1.8; the legacy "pre-7M" trigger is retired.)
+```
+```
+▶ Story prompt — E1.9 v6 clean-slate champion rebuild (model bake-off → Optuna)   [Model-A · ⭐ this IS the deferred retrain, upgraded · needs E1.8]
+Read: guide §3 E1.9 + E1.7 + E1.8 (its final matrix + contracts) + E1.1 (purged CV) + E1.4 (PBO/DSR) + the current champion adapters (PlattCalibratedXGBClassifier, NGBoost totals) + promotion_gate_eval.py + sub_model_registry.yaml.
+Do: rebuild v6 (home_win, total_runs, run_diff) from a CLEAN SLATE on the post-E1.8 de-leaked+swept matrix. (1) MODEL-CLASS BAKE-OFF under purged CV per target — XGBoost/LightGBM/CatBoost/NGBoost(distributional)/regularized-GLM/stack vs market+no-skill floors; H2H = NLL/Brier+calibration, totals = a DISTRIBUTIONAL metric (CRPS/NLL); winner by the gate, NOT the incumbent XGBoost/NGBoost defaults; market-blind (CONTRACT-GUARD). (2) Optuna HPO on the WINNER only — purged-CV objective, embargoed/nested CV, trial cap, PBO<0.2 + DSR>0 on the selected config (the search is a multiple-testing surface). (3) promotion-gate v6 vs v5 on the clean matrix; record the bake-off table + chosen config in ablation_results/; register v6, keep v5 until v6 clears live/forward.
+Gate/AC: per target — bake-off table + justified winner + Optuna config passing PBO/DSR + promotion-gate vs v5. ⚠️ offline scores LOWER post-de-leak = correct; honest gate = forward/serving-parity + PBO/DSR. Promoting v6 shifts live picks → app changelog note.
+Closeout (per §0.1): NGBoost/HPO are long → hand to operator; END with an ⏭️ Operator handoff (run-order + git add).
 ```
 
 ## Epic E2 — Per-Side Generative Totals  *(all open; market-blind unless noted)*
@@ -473,6 +480,8 @@ Read: §5F E9.22 + §0.2 + master A0.4.32 (book-comparison payload) + A2.18 (odd
 Do: trace capture cadence (cron → mart_odds_outcomes) vs serving refresh (write_serving_store --book-odds → Railway PG → picks.py). Likely root cause: serving payload only refreshes on the pipeline run, not the capture cadence → stale lines + wrong "as of 7AM / updated hourly". Fix: refresh book-odds at the capture cadence (or read freshest); make the "as of" timestamp the true latest capture time + the cadence label honest.
 Gate/AC: lines refresh at the real cadence; "as of" + label accurate vs mart_odds_outcomes capture times; changelog. Honest-framing: the timestamp/label must be truthful.
 Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, changelog line, verify-after-deploy (open the panel; time matches the latest capture).
+```
+- **E9.23 — Totals pick-detail parity** **[App · P2]** 🅿️ **DEFERRED (operator 2026-06-18): leave totals bars OFF** (no CLV bar, no CI) until the totals model is recovered (E2.3). Both honest versions need model work that isn't ready; empty is the honest state. **E9.2 ships H2H-only for now.** Revisit at E2.3 → CI via E2.7 + a real CLV bar via E9.2. No build now.
 ```
 ▶ Story prompt — E9.15 Fix "Model Skill — All Picks" double-counting   [App + dbt/serving]   ⭐ P1 (metric correctness)
 APP TARGET: dedup logic is dbt (`dbt/models/mart/mart_clv_labeled_games.sql`) + backend (`app/backend/`, live FastAPI); the strip UI is `frontend/app/performance/page.tsx`. ⛔ NEVER edit the legacy Streamlit UI (app/home.py, app/pages/*). `cat frontend/package.json` first.

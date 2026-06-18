@@ -71,7 +71,10 @@ SELECT
     qualified_bet,
     game_conviction_score,
     sigma_tier,
-    pick_explanation
+    pick_explanation,
+    MAX(meta_p_clv_positive) OVER (PARTITION BY game_pk) AS meta_p_clv_positive,
+    MAX(meta_ci_low)         OVER (PARTITION BY game_pk) AS meta_ci_low,
+    MAX(meta_ci_high)        OVER (PARTITION BY game_pk) AS meta_ci_high
 FROM {_ML_SCHEMA}.daily_model_predictions
 WHERE score_date = %(score_date)s
   AND pick_explanation IS NOT NULL
@@ -212,6 +215,18 @@ def _build_prompt(row: dict, expl: dict) -> str:
     qualified = row.get("qualified_bet")
     sigma = row.get("sigma_tier", "")
 
+    # CLV confidence — only H2H; totals CLV is explicitly low-information and omitted.
+    meta_p = row.get("meta_p_clv_positive")
+    meta_ci_low = row.get("meta_ci_low")
+    meta_ci_high = row.get("meta_ci_high")
+    clv_str = ""
+    if meta_p is not None and meta_ci_low is not None and meta_ci_high is not None:
+        clv_str = (
+            f"CLV confidence: P(closing line moves toward model's pick) = {meta_p:.1%} "
+            f"(80% credible interval: {meta_ci_low:.1%}–{meta_ci_high:.1%}). "
+            f"This is a market-transparency indicator — it does not imply a winning bet."
+        )
+
     prompt = f"""You are writing a brief, factual explanation for a baseball analytics app.
 Do NOT recommend placing a bet. Do NOT use phrases like "you should bet" or "this is a good bet."
 Frame the explanation as "what drives the model's prediction" and note the EV signal (edge) as
@@ -238,10 +253,15 @@ Top model drivers for moneyline prediction:
 Top model drivers for total runs prediction:
 {tot_drivers_text or "  (not available)"}
 
+CLV confidence (line-value transparency):
+{clv_str or "  (not available)"}
+
 Write 2-3 sentences explaining what these statistics mean for today's game in plain language.
 Use the exact team names above and reference each team's win probability by name
 (e.g. "{home}: X%, {away}: Y%"). Mention the model-vs-market edge as a measure of divergence —
-it does not guarantee a winning bet. Use "what drove the model's number" framing, not "why you'll win."
+it does not guarantee a winning bet. If CLV confidence is provided, mention it briefly as the
+model's estimate of whether the closing line will move toward its pick — frame it as additional
+context, not as a signal to place a bet. Use "what drove the model's number" framing, not "why you'll win."
 """
     return prompt.strip()
 
