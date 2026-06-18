@@ -44,7 +44,8 @@ from betting_ml.scripts.model_evaluation.analyze_feature_importance import _infe
 # inherits the honesty stance even if read in isolation.
 MODEL_REASONING_DISCLAIMER = (
     "Shows which inputs most moved our model's prediction for this game — it "
-    "explains the model's reasoning, not a betting edge or expected profit."
+    "explains the model's reasoning. The EV signal (edge) shown elsewhere reflects "
+    "model probability vs. market probability; it is not a guarantee of profit."
 )
 
 # What each target's contribution pushes ON (units the frontend can phrase around).
