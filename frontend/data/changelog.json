@@ -3,6 +3,10 @@
     "week": "2026-06-18",
     "items": [
       {
+        "tag": "new",
+        "text": "Settings page now lets you set an initial deposit amount — the starting bankroll you track growth against. Once set, the EV Tracker can show bankroll growth % alongside net P&L. The field saves directly to your account, not just this device."
+      },
+      {
         "tag": "improvement",
         "text": "Model reasoning now covers both H2H and Totals signals in one view. A toggle on the featured pick card and on game detail pages lets you switch between win-probability drivers and run-total drivers — so you can see exactly what's pushing each market, not just the headline pick."
       },

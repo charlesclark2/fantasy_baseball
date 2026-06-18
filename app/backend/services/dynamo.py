@@ -163,3 +163,25 @@ def record_tos_acceptance(user_id: str, tos_version: str) -> None:
         ExpressionAttributeNames={"#ta": "tos_accepted_at", "#tv": "tos_version"},
         ExpressionAttributeValues={":now": now, ":ver": tos_version},
     )
+
+
+def get_user_profile(user_id: str) -> dict:
+    """Return the user's mutable profile fields (initial_deposit etc.)."""
+    resp = _users_table().get_item(Key={"user_id": user_id})
+    item = resp.get("Item", {})
+    raw_deposit = item.get("initial_deposit")
+    return {
+        "initial_deposit": float(raw_deposit) if raw_deposit is not None else None,
+    }
+
+
+def update_user_profile(user_id: str, initial_deposit: float | None) -> dict:
+    """Update mutable profile fields. Only initial_deposit for now."""
+    if initial_deposit is not None:
+        _users_table().update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #id = :v",
+            ExpressionAttributeNames={"#id": "initial_deposit"},
+            ExpressionAttributeValues={":v": Decimal(str(initial_deposit))},
+        )
+    return get_user_profile(user_id)

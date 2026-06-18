@@ -1,8 +1,9 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import Link from "next/link"
+import { useQuery, useMutation } from "@tanstack/react-query"
 import { Nav } from "@/components/nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { Bell, Check, ShieldCheck } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useLocalStorage } from "@/hooks/use-local-storage"
+import { apiFetch } from "@/lib/api"
 
 function tierLabel(groups: string[]): string {
   if (groups.includes("admin")) return "Admin"
@@ -29,12 +31,50 @@ function tierStyle(groups: string[]): string {
 }
 
 export default function SettingsPage() {
-  const { email, groups, signOut } = useAuth()
+  const { email, groups, signOut, accessToken } = useAuth()
   const router = useRouter()
   const [bankroll, setBankroll] = useLocalStorage<number>("ev_bankroll", 1000)
   const [kellyCap, setKellyCap] = useLocalStorage<number>("ev_kelly_cap", 5)
   const [savedVisible, setSavedVisible] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // initial_deposit — persisted to DynamoDB users table
+  const [depositInput, setDepositInput] = useState<string>("")
+  const [depositSaved, setDepositSaved] = useState(false)
+  const depositSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const { data: profile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: () => apiFetch("/users/profile", {}, accessToken),
+    enabled: !!accessToken,
+  })
+
+  // Seed the input once the profile loads (and only once)
+  useEffect(() => {
+    if (profile?.initial_deposit != null) {
+      setDepositInput(String(profile.initial_deposit))
+    }
+  }, [profile])
+
+  const depositMutation = useMutation({
+    mutationFn: (value: number | null) =>
+      apiFetch(
+        "/users/profile",
+        { method: "PUT", body: JSON.stringify({ initial_deposit: value }) },
+        accessToken
+      ),
+    onSuccess: () => {
+      if (depositSavedTimer.current) clearTimeout(depositSavedTimer.current)
+      setDepositSaved(true)
+      depositSavedTimer.current = setTimeout(() => setDepositSaved(false), 2000)
+    },
+  })
+
+  function handleDepositSave() {
+    const parsed = parseFloat(depositInput)
+    const value = depositInput.trim() === "" ? null : isNaN(parsed) ? null : Math.max(0, parsed)
+    depositMutation.mutate(value)
+  }
 
   function markSaved() {
     if (savedTimer.current) clearTimeout(savedTimer.current)
@@ -202,6 +242,59 @@ export default function SettingsPage() {
                 <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">%</span>
               </div>
               <p className="text-[11px] text-gray-600">Max stake per bet as % of bankroll (1–25)</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Performance tracking card                                        */}
+        {/* ---------------------------------------------------------------- */}
+        <section className="rounded-lg border border-[#262626] bg-[#141414]">
+          <div className="px-6 pt-6 pb-4">
+            <h2 className="text-base font-semibold text-white">Performance Tracking</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Used to compute bankroll growth % in the EV Tracker. Leave blank to hide growth tracking.
+            </p>
+          </div>
+
+          <div className="px-6 pb-6">
+            <div className="space-y-2">
+              <Label htmlFor="initial-deposit" className="text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                Initial deposit
+              </Label>
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500">$</span>
+                  <Input
+                    id="initial-deposit"
+                    type="number"
+                    min={0}
+                    step={100}
+                    placeholder="e.g. 1000"
+                    value={depositInput}
+                    onChange={(e) => setDepositInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleDepositSave() }}
+                    className="pl-6 bg-[#0a0a0a] border-[#262626] text-white focus:border-[#10b981] focus:ring-[#10b981]/20"
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleDepositSave}
+                  disabled={depositMutation.isPending}
+                  className="shrink-0 bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] disabled:opacity-50"
+                >
+                  {depositMutation.isPending ? "Saving…" : "Save"}
+                </Button>
+                {depositSaved && (
+                  <span className="flex items-center gap-1 text-xs text-[#10b981]">
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-gray-600">
+                The amount you started with — used for growth % only, not stake sizing.
+              </p>
             </div>
           </div>
         </section>
