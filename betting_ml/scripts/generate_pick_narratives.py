@@ -11,10 +11,17 @@ Versioning: pick_narrative is keyed to (game_pk, model_version). The predict_tod
 UPDATE path ensures that a post-lineup re-score NULLs pick_narrative, so this
 script re-generates it automatically — no stale morning text persists.
 
+E9.20 — side-attribution guard:
+  calibrated_win_prob is ALWAYS P(home team wins). Prompts must label each
+  probability by team name so the LLM can't flip home↔away attribution.
+  A pre-generation consistency check skips any row where pick_side direction
+  contradicts calibrated_win_prob (model data integrity guard).
+
 Usage:
     uv run python betting_ml/scripts/generate_pick_narratives.py --date 2026-06-18
     uv run python betting_ml/scripts/generate_pick_narratives.py  # defaults to today
     uv run python betting_ml/scripts/generate_pick_narratives.py --date 2026-06-18 --dry-run
+    uv run python betting_ml/scripts/generate_pick_narratives.py --date 2026-06-18 --reset-narratives
 """
 from __future__ import annotations
 
@@ -53,13 +60,14 @@ SELECT
     pick,
     model_version,
     score_date,
-    h2h_edge,
+    prediction_type,
     totals_edge,
     totals_model_prob,
     over_prob_consensus,
     total_line_consensus,
     calibrated_win_prob,
     h2h_market_implied_prob,
+    layer4_h2h_decision,
     qualified_bet,
     game_conviction_score,
     sigma_tier,
@@ -70,7 +78,23 @@ WHERE score_date = %(score_date)s
   AND pick_narrative IS NULL
   AND has_odds = TRUE
 {{model_version_clause}}
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY game_pk
+    ORDER BY
+        CASE prediction_type
+            WHEN 'post_lineup' THEN 1
+            WHEN 'morning'     THEN 2
+            ELSE                    3
+        END,
+        model_version DESC
+) = 1
 ORDER BY game_pk
+"""
+
+_RESET_NARRATIVES_SQL = f"""
+UPDATE {_ML_SCHEMA}.daily_model_predictions
+SET pick_narrative = NULL
+WHERE score_date = %(score_date)s
 """
 
 _UPDATE_NARRATIVE = f"""
@@ -91,24 +115,72 @@ def _summarize_drivers(drivers: list[dict], limit: int = 4) -> str:
     return "\n".join(lines) if lines else "  (no drivers available)"
 
 
+def _validate_pick_consistency(row: dict) -> tuple[bool, str]:
+    """E9.20 guard: verify pick direction agrees with calibrated_win_prob.
+
+    calibrated_win_prob is always P(home team wins).
+    If layer4_h2h_decision == 'home', cal_win must be > 0.5 (home favored).
+    If layer4_h2h_decision == 'away', cal_win must be < 0.5 (away favored).
+    Returns (is_valid, reason_string).
+    """
+    pick_side = row.get("layer4_h2h_decision")
+    cal_win = row.get("calibrated_win_prob")
+    game_pk = row.get("game_pk")
+    home = row.get("home_team", "?")
+    away = row.get("away_team", "?")
+
+    if pick_side is None or cal_win is None:
+        return True, ""
+
+    if pick_side == "home" and cal_win < 0.5:
+        return False, (
+            f"game_pk={game_pk} ({away}@{home}): pick_side=home but "
+            f"calibrated_win_prob={cal_win:.3f} < 0.5 — inconsistent model data"
+        )
+    if pick_side == "away" and cal_win > 0.5:
+        return False, (
+            f"game_pk={game_pk} ({away}@{home}): pick_side=away but "
+            f"calibrated_win_prob={cal_win:.3f} > 0.5 — inconsistent model data"
+        )
+    return True, ""
+
+
 def _build_prompt(row: dict, expl: dict) -> str:
-    """Construct the Cortex narrative prompt for one game row."""
+    """Construct the Cortex narrative prompt for one game row.
+
+    E9.20: calibrated_win_prob is always P(home wins). All probabilities are
+    labelled by team name in the prompt so the LLM cannot flip home↔away.
+    """
     home = _canonical_team_name(row["home_team"] or "home team")
     away = _canonical_team_name(row["away_team"] or "away team")
     pick_str = row["pick"] or "N/A"
     score_date = str(row["score_date"])
 
-    # H2H section
-    h2h_edge = row.get("h2h_edge")
-    cal_win = row.get("calibrated_win_prob")
-    mkt_win = row.get("h2h_market_implied_prob")
+    # Determine backed team for unambiguous LLM framing
+    pick_side = row.get("layer4_h2h_decision")
+    if pick_side == "home":
+        model_backed_team = home
+    elif pick_side == "away":
+        model_backed_team = away
+    else:
+        model_backed_team = None
+    backed_line = f"The model backs {model_backed_team} to win." if model_backed_team else ""
+
+    # H2H section — cal_win / mkt_win are BOTH P(home wins); label by team name.
+    cal_win = row.get("calibrated_win_prob")   # P(home wins)
+    mkt_win = row.get("h2h_market_implied_prob")  # P(home wins)
     h2h_ev_str = ""
-    if h2h_edge is not None and cal_win is not None and mkt_win is not None:
-        ev_sign = "+" if h2h_edge >= 0 else ""
+    if cal_win is not None and mkt_win is not None:
+        # Edge matches what the pick chip displays: abs(P_home_model − P_home_market)
+        edge_display = abs(cal_win - mkt_win)
+        model_favors = home if cal_win >= 0.5 else away
         h2h_ev_str = (
-            f"Model win probability: {cal_win:.1%}. "
-            f"Market-implied: {mkt_win:.1%}. "
-            f"Edge (EV signal): {ev_sign}{h2h_edge:.1%}."
+            f"Model P({home} wins): {cal_win:.1%}.  "
+            f"Model P({away} wins): {1 - cal_win:.1%}.  "
+            f"Market P({home} wins): {mkt_win:.1%}.  "
+            f"Market P({away} wins): {1 - mkt_win:.1%}.  "
+            f"Model-vs-market divergence (edge): {edge_display:.1%} "
+            f"(model favors {model_favors})."
         )
 
     # Totals section
@@ -148,12 +220,13 @@ IMPORTANT: Use ONLY the exact team names as given below. Do not substitute histo
 or alternate franchise names (e.g., if the team is called "Guardians", never write "Indians").
 
 Game: {away} at {home} on {score_date}.
-Model pick (moneyline): {pick_str}.
+Home team: {home}. Away team: {away}.
+Model pick (moneyline): {pick_str}. {backed_line}
 Prediction basis: {served_tier} features.
 {f"Conviction score: {conviction:.2f} / qualified: {qualified}" if conviction is not None else ""}
 {f"Confidence tier: {sigma}" if sigma else ""}
 
-Moneyline (H2H) metrics:
+Moneyline (H2H) metrics (all probabilities labelled by team):
 {h2h_ev_str or "  (no H2H market data)"}
 
 Totals metrics:
@@ -166,9 +239,9 @@ Top model drivers for total runs prediction:
 {tot_drivers_text or "  (not available)"}
 
 Write 2-3 sentences explaining what these statistics mean for today's game in plain language.
-Mention the EV signal (edge) as a measure of how much the model's probability differs from
-the market — higher absolute edge means larger model-vs-market divergence, but does not
-guarantee a winning bet. Use "what drove the model's number" framing, not "why you'll win."
+Use the exact team names above and reference each team's win probability by name
+(e.g. "{home}: X%, {away}: Y%"). Mention the model-vs-market edge as a measure of divergence —
+it does not guarantee a winning bet. Use "what drove the model's number" framing, not "why you'll win."
 """
     return prompt.strip()
 
@@ -194,7 +267,19 @@ def generate_narratives(
     score_date_str: str,
     dry_run: bool = False,
     model_version: str | None = None,
+    reset_narratives: bool = False,
 ) -> None:
+    # E9.20: optionally wipe all narratives for the date so they regenerate cleanly.
+    if reset_narratives and not dry_run:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_RESET_NARRATIVES_SQL, {"score_date": score_date_str})
+            conn.commit()
+            print(f"[E9.20] Reset {cur.rowcount} pick_narrative row(s) for {score_date_str}.")
+        finally:
+            conn.close()
+
     mv_clause = "AND model_version = %(model_version)s" if model_version else ""
     fetch_query = _FETCH_QUERY_BASE.format(model_version_clause=mv_clause)
     fetch_params: dict = {"score_date": score_date_str}
@@ -224,11 +309,20 @@ def generate_narratives(
     try:
         generated = 0
         failed = 0
+        skipped = 0
         for rec in records:
             game_pk = rec.get("game_pk")
             home = rec.get("home_team", "?")
             away = rec.get("away_team", "?")
             model_ver = rec.get("model_version", "?")
+            pred_type = rec.get("prediction_type", "?")
+
+            # E9.20 guard: skip before calling Cortex if pick direction is inconsistent.
+            is_valid, reason = _validate_pick_consistency(rec)
+            if not is_valid:
+                print(f"  [E9.20 GUARD] SKIP — {reason}")
+                skipped += 1
+                continue
 
             expl_raw = rec.get("pick_explanation")
             try:
@@ -239,8 +333,9 @@ def generate_narratives(
             prompt = _build_prompt(rec, expl)
 
             if dry_run:
-                print(f"  [dry-run] {away} @ {home} (game_pk={game_pk}, model={model_ver})")
-                print(f"  Prompt (first 200 chars): {prompt[:200]}…")
+                print(f"  [dry-run] {away} @ {home} (game_pk={game_pk}, model={model_ver}, "
+                      f"type={pred_type})")
+                print(f"  Prompt (first 300 chars): {prompt[:300]}…")
                 generated += 1
                 continue
 
@@ -257,14 +352,14 @@ def generate_narratives(
                     },
                 )
                 conn.commit()
-                print(f"  ✓ {away} @ {home} (game_pk={game_pk}): {narrative[:80]}…")
+                print(f"  ✓ {away} @ {home} (game_pk={game_pk}, {pred_type}): {narrative[:80]}…")
                 generated += 1
             else:
                 print(f"  ✗ {away} @ {home} (game_pk={game_pk}): Cortex returned nothing")
                 failed += 1
 
         if not dry_run:
-            print(f"\n[E9.13] Done: {generated} narrative(s) written, {failed} failed.")
+            print(f"\n[E9.13] Done: {generated} written, {failed} failed, {skipped} guard-skipped.")
     finally:
         conn.close()
 
@@ -291,13 +386,27 @@ def _parse_args() -> argparse.Namespace:
             "to avoid generating narratives for every served tier."
         ),
     )
+    parser.add_argument(
+        "--reset-narratives",
+        action="store_true",
+        default=False,
+        help=(
+            "NULL out all pick_narrative rows for the target date before generating. "
+            "Use after a prompt-fix to force full regeneration. Cannot be combined with --dry-run."
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = _parse_args()
     score_date_str = args.date or date.today().isoformat()
-    generate_narratives(score_date_str, dry_run=args.dry_run, model_version=args.model_version)
+    generate_narratives(
+        score_date_str,
+        dry_run=args.dry_run,
+        model_version=args.model_version,
+        reset_narratives=args.reset_narratives,
+    )
 
 
 if __name__ == "__main__":
