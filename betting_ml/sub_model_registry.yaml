@@ -482,6 +482,71 @@ bullpen_v2:
     AC2 PASS: total_runs Δ MAE=-0.0029 (3/3 folds improved); home_win Δ Brier=-0.00008 (2/3 folds).
     Ablation JSON: betting_ml/models/ablation/ablation_reliever_top3_availability_20260610T172543.json
 
+bullpen_v3:
+  # NOTE ON LINEAGE: despite the name, bullpen_v3 is NOT a successor to the bullpen_v1/v2
+  # *runs/quality* sub-models above. It is Story E2.1b's deepening of the EB TEAM POSTERIOR
+  # (`eb_bullpen_team_posteriors`) — the static `home/away_bp_eb_xwoba` feature the E1.3
+  # audit ranked #1/#2 on every target. It has no LightGBM/NGBoost artifact: it is a
+  # re-weighted EB aggregate. Compute: betting_ml/scripts/eb_priors/compute_bullpen_v3.py.
+  kind: eb_team_posterior            # not a fitted distributional model
+  compute_script: betting_ml/scripts/eb_priors/compute_bullpen_v3.py
+  per_reliever_cache: betting_ml/models/sub_models/bullpen_v3/per_reliever_<season>.parquet
+  target:
+    source_table: baseball_data.betting.eb_bullpen_team_posteriors_v3
+    primary_column: team_eb_bullpen_xwoba_v3
+    grain: game_pk x team
+  training_window:
+    start: '2021-01-01'   # honest-OOS Statcart-era; aLI/leverage need mart_pitch_play_event
+    end: null
+  cv_strategy: purged_walk_forward     # E1.1 PurgedWalkForwardSplit
+  cv_metric: perside_negbin_nll        # measured via the E2.1 per-side model A/B
+  cv_score: null                       # set by eval_bullpen_v3_cv.py (operator run)
+  promotion_gate:
+    # The bar is BEAT THE CURRENT BULLPEN INPUT, not the no-skill floor.
+    metric: perside_negbin_nll
+    direction: lower_is_better
+    must_beat: static_eb_bullpen_team_posteriors
+    harness: betting_ml/scripts/totals_generative/eval_bullpen_v3_cv.py
+    honesty_check: |
+      REQUIRED (E2.1b decision): after the leak fix, re-run E1.3 clustered MDA with the v3
+      column swapped in (clustered_feature_importance.py --bullpen-version v3) and report
+      whether bp_eb_xwoba importance DROPS once the leaky outs-weighting is gone.
+  parent_features:
+    - eb_bullpen_posteriors            # per-reliever EB (the values being re-weighted)
+    - mart_reliever_top3_availability  # rest/availability (rolling-30d leverage logic)
+    - mart_bullpen_handedness_splits   # team L/R platoon channel (a)
+    - int_bullpen_ali_by_season        # expected-leverage / aLI roles
+  output_signals:
+    - team_eb_bullpen_xwoba_v3
+    - team_eb_bullpen_uncertainty_v3
+    - team_eb_bullpen_xwoba_vs_lhb_v3
+    - team_eb_bullpen_xwoba_vs_rhb_v3
+    - pen_available_arms
+    - pen_projected_unavailable_arms
+    - pen_effective_size
+    - pen_avg_rest_days
+  downstream_consumers: ['totals_perside_v1']   # E2.1 drop-in (swaps the bp_eb_xwoba channel)
+  promotion_status: pending          # → challenger once eval_bullpen_v3_cv.py gate passes
+  promoted_at: null
+  notes: |
+    Story E2.1b (2026-06-18). The static `eb_bullpen_team_posteriors` aggregates per-reliever
+    EB posteriors weighted by `outs_in_game` = the outs each reliever ACTUALLY recorded that
+    night — as-of-safe EB values but a LEAKY weighting (tonight's usage is unknown pre-game).
+    bullpen_v3 replaces those weights with an EXPECTED composition weight:
+        w_i = expected_leverage_i (trailing-30d aLI, as-of) × availability_i(rest, fatigue)
+    so the team posterior reflects the pen likely to pitch tonight; projected-unavailable
+    (back-to-back / heavy recent use) arms are down-weighted, not dropped. The leak fix IS the
+    composition weighting (E2.1b design decision). Also carries the available pen's L/R platoon
+    channel (team handedness splits — option (a), the leakage-safe baseline) + availability
+    diagnostics (pen_available_arms / pen_projected_unavailable_arms / pen_effective_size).
+    Shrinkage k (prior precision of the per-reliever EB) is swept under purged CV by
+    eval_bullpen_v3_cv.py; the per-reliever cache is k-agnostic so the sweep needs no re-query.
+    Market-blind (CONTRACT-GUARD assert_market_blind on the output columns). Leakage-safe
+    backfill: every pitch-level window is strictly game_date < the game's date.
+    Experiment B (per-reliever × handedness EB) is a GATED follow-up: build only if it beats
+    channel (a) on held-out per-side NLL (expected to shrink toward (a); thin samples).
+    GO-LIVE: pending the operator gate run (eval_bullpen_v3_cv.py) + the honest MDA re-check.
+
 matchup_v1:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/matchup_v1.pkl
   feature_columns_path: models/matchup_v1/matchup_v1_features.json
