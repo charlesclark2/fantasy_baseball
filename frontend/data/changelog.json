@@ -53,6 +53,10 @@
       {
         "tag": "new",
         "text": "Book Comparison panel added to every game detail page — select from BetMGM, Caesars, FanDuel, DraftKings, Bovada, or Pinnacle and see that book's moneyline and totals prices alongside the model's probability, the book's de-vigged implied market %, and expected value per $1. Pinnacle is always shown as the sharp low-vig reference anchor. This is a market transparency tool; our models have no demonstrated market edge and all bets are manual."
+      },
+      {
+        "tag": "new",
+        "text": "You can now reset your password from the login page — click \"Forgot your password?\", enter your email to receive a reset code, then use the code to set a new password. The link appears below the Sign In button."
       }
     ]
   },

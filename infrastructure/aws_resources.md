@@ -111,6 +111,37 @@ GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE CREDENCE_API_RO;
 GRANT ROLE CREDENCE_API_RO TO USER credence_api;
 ```
 
+### IAM additions for POST /auth/verify-email (A0.4.22 — password reset)
+
+The `POST /auth/verify-email` endpoint marks the caller's Cognito `email_verified`
+attribute to `true`, which is required before `forgotPassword()` can send a code to
+admin-created accounts.
+
+Add an inline policy named **`CognitoEmailVerify`** to the Lambda execution role
+(`credence-prod-lambda-execution-role`):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["cognito-idp:AdminUpdateUserAttributes"],
+      "Resource": "arn:aws:cognito-idp:us-east-1:*:userpool/us-east-1_gG9zMbwQt"
+    }
+  ]
+}
+```
+
+Verify it is present before deploying:
+```bash
+aws iam get-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name CognitoEmailVerify
+```
+
+---
+
 ### IAM additions for /admin/finances
 
 The `GET /admin/finances` endpoint calls AWS Cost Explorer. Add this inline policy to
