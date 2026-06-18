@@ -147,6 +147,15 @@ PARQUET_COLS = [
 # Staging table for the Parquet → Snowflake ingest step
 _STAGING_TABLE = "stg_derivative_odds_parquet"
 
+# ── E2.0b live capture / probe endpoints ──────────────────────────────────────
+
+LIVE_EVENTS_ENDPOINT = "/sports/baseball_mlb/events"
+EVENT_MARKETS_ENDPOINT = "/sports/baseball_mlb/events/{event_id}/markets"
+LIVE_EVENT_ODDS_ENDPOINT = "/sports/baseball_mlb/events/{event_id}/odds"
+
+# Default curated bookmakers for the E2.0b probe
+PROBE_BOOKMAKERS = ["bovada", "pinnacle", "fanduel", "draftkings", "betmgm", "caesars"]
+
 
 # ── Target resolution ──────────────────────────────────────────────────────────
 
@@ -430,6 +439,145 @@ def bulk_load_parquet(
     return staged
 
 
+# ── Live events discovery (E2.0b) ────────────────────────────────────────────
+
+def fetch_upcoming_events(api_key: str, lookahead_hours: int = 24) -> list[dict]:
+    """Return upcoming MLB events from the live events endpoint (1 credit).
+
+    Each item: {id, commence_time (ISO str), home_team, away_team, ...}.
+    """
+    now = datetime.now(timezone.utc)
+    url = ODDS_API_BASE_URL + LIVE_EVENTS_ENDPOINT
+    params = {
+        "apiKey":            api_key,
+        "dateFormat":        DEFAULT_DATE_FORMAT,
+        "commenceTimeFrom":  now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "commenceTimeTo":    (now + timedelta(hours=lookahead_hours)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        log.warning("fetch_upcoming_events: request error: %s", exc)
+        return []
+    remaining = resp.headers.get("x-requests-remaining", "?")
+    if resp.status_code != 200:
+        log.warning("fetch_upcoming_events: status %s: %s", resp.status_code, resp.text[:200])
+        return []
+    events = resp.json() or []
+    log.info(
+        "live events: %d upcoming in next %dh  credits_remaining=%s",
+        len(events), lookahead_hours, remaining,
+    )
+    return events
+
+
+def probe_event_markets(event_id: str, api_key: str, bookmakers: list[str]) -> list[dict]:
+    """Call the Event Markets endpoint for one event (Schema 6 — no odds payload).
+
+    Returns list of bookmaker objects: [{key, title, last_update, markets:[{key,last_update}]}].
+    Cheap: no odds payload, ~1 credit per call.
+    """
+    url = ODDS_API_BASE_URL + EVENT_MARKETS_ENDPOINT.format(event_id=event_id)
+    params = {
+        "apiKey":     api_key,
+        "bookmakers": ",".join(bookmakers),
+    }
+    try:
+        resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+    except requests.RequestException as exc:
+        log.warning("probe_event_markets event=%s: request error: %s", event_id, exc)
+        return []
+    if resp.status_code != 200:
+        log.warning(
+            "probe_event_markets event=%s: status %s: %s",
+            event_id, resp.status_code, resp.text[:200],
+        )
+        return []
+    result = resp.json() or []
+    bookmakers_data = result if isinstance(result, list) else result.get("bookmakers", [])
+    log.debug(
+        "  event=%s  %d bookmakers  credits_remaining=%s",
+        event_id, len(bookmakers_data), resp.headers.get("x-requests-remaining", "?"),
+    )
+    return bookmakers_data
+
+
+# ── Live per-event odds fetch (E2.0b) ─────────────────────────────────────────
+
+def fetch_live_event_derivative_odds(
+    event_id: str,
+    markets: list[str],
+    regions: list[str],
+    api_key: str,
+) -> tuple[dict | None, str]:
+    """Fetch live (non-historical) derivative odds for a single upcoming event.
+
+    Unlike fetch_event_derivative_odds(), hits the live per-event endpoint without a
+    date param and returns the event object directly (no timestamp wrapper).
+
+    Returns (payload, status) where status ∈ {'success','not_found','no_data','error'}.
+    Cost: unique markets returned × regions.
+    """
+    url = ODDS_API_BASE_URL + LIVE_EVENT_ODDS_ENDPOINT.format(event_id=event_id)
+    params = {
+        "apiKey":     api_key,
+        "markets":    ",".join(markets),
+        "regions":    ",".join(regions),
+        "oddsFormat": DEFAULT_ODDS_FORMAT,
+        "dateFormat": DEFAULT_DATE_FORMAT,
+    }
+
+    resp = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
+            break
+        except requests.RequestException as exc:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_BACKOFF_SECONDS[attempt - 1]
+                log.warning(
+                    "live odds request error event=%s (attempt %d/%d), retry in %ds: %s",
+                    event_id, attempt, MAX_RETRIES, wait, exc,
+                )
+                time.sleep(wait)
+            else:
+                log.warning(
+                    "live odds request error event=%s: giving up after %d attempts: %s",
+                    event_id, MAX_RETRIES, exc,
+                )
+                return None, "error"
+
+    remaining = resp.headers.get("x-requests-remaining")
+    last = resp.headers.get("x-requests-last")
+
+    if resp.status_code == 404:
+        log.warning("404 for live event=%s", event_id)
+        return None, "not_found"
+    if resp.status_code == 422:
+        log.info("no derivative data (422): live event=%s", event_id)
+        return None, "no_data"
+    if resp.status_code == 429:
+        log.warning("rate limited on live event=%s, sleeping 60s", event_id)
+        time.sleep(60)
+        return None, "error"
+    if resp.status_code != 200:
+        log.warning(
+            "unexpected status %s for live event=%s: %s",
+            resp.status_code, event_id, resp.text[:200],
+        )
+        return None, "error"
+
+    try:
+        payload = resp.json()
+    except ValueError as exc:
+        log.warning("JSON parse error for live event=%s: %s", event_id, exc)
+        return None, "error"
+
+    payload["_x_requests_remaining"] = int(remaining) if remaining else None
+    payload["_x_requests_last"] = int(last) if last else None
+    return payload, "success"
+
+
 # ── Subcommand: fetch ─────────────────────────────────────────────────────────
 
 def cmd_fetch(args: argparse.Namespace) -> None:
@@ -595,6 +743,296 @@ def cmd_ingest(args: argparse.Namespace) -> None:
         conn.close()
 
 
+# ── Subcommand: probe ─────────────────────────────────────────────────────────
+
+def cmd_probe(args: argparse.Namespace) -> None:
+    """E2.0b Step 0: probe the Event Markets endpoint for derivative market availability.
+
+    Queries a sample of upcoming events to answer:
+      (a) Are derivative markets (esp. F5 h2h_h1/totals_h1) offered live right now?
+      (b) What is the per-market last_update cadence → what cron schedule to use?
+
+    No writes. Run this before deploying the capture cron to size the cadence correctly.
+    """
+    api_key = os.environ["ODDS_API_KEY"]
+    log.info("=== E2.0b PROBE: checking derivative market availability ===")
+
+    events = fetch_upcoming_events(api_key, lookahead_hours=args.lookahead_hours)
+    if not events:
+        log.warning(
+            "No upcoming MLB events in next %dh — probe can't run on a non-game window",
+            args.lookahead_hours,
+        )
+        log.warning("Try again closer to a game day, or increase --lookahead-hours")
+        return
+
+    sample = events[:args.sample]
+    log.info(
+        "Found %d upcoming events (lookahead=%dh); sampling %d",
+        len(events), args.lookahead_hours, len(sample),
+    )
+
+    # {bm_key -> set of market_keys offered across sampled events}
+    market_coverage: dict[str, set[str]] = {}
+    # {bm_key -> {mkt_key -> most-recent last_update str}}
+    last_updates: dict[str, dict[str, str]] = {}
+
+    for ev in sample:
+        event_id = ev["id"]
+        label = (
+            f"{ev.get('away_team','?')} @ {ev.get('home_team','?')} "
+            f"({ev.get('commence_time','')})"
+        )
+        log.info("  probing markets: %s", label)
+        bookmakers_data = probe_event_markets(event_id, api_key, args.bookmakers)
+        time.sleep(0.3)
+
+        for bm in bookmakers_data:
+            bm_key = bm.get("key", "unknown")
+            for mkt in bm.get("markets", []):
+                mkt_key = mkt.get("key", "")
+                if not mkt_key:
+                    continue
+                market_coverage.setdefault(bm_key, set()).add(mkt_key)
+                lu = mkt.get("last_update", "")
+                if lu:
+                    existing = last_updates.get(bm_key, {}).get(mkt_key, "")
+                    if lu > existing:
+                        last_updates.setdefault(bm_key, {})[mkt_key] = lu
+
+    if not market_coverage:
+        log.warning("No market data returned — check ODDS_API_KEY or bookmakers list")
+        return
+
+    target = DEFAULT_DERIVATIVE_MARKETS
+    now_utc = datetime.now(timezone.utc)
+
+    log.info("")
+    log.info("=== E2.0b PROBE REPORT ===")
+    log.info(
+        "Sample: %d of %d upcoming events | Lookahead: %dh",
+        len(sample), len(events), args.lookahead_hours,
+    )
+    log.info("")
+    log.info("Market availability by bookmaker (mark = offered in >=1 sampled game):")
+    for bm_key in sorted(market_coverage):
+        offered = market_coverage[bm_key]
+        flags = "  ".join(f"{m} {'YES' if m in offered else 'NO'}" for m in target)
+        log.info("  %-16s %s", bm_key + ":", flags)
+
+    log.info("")
+
+    f5_markets = ("h2h_h1", "totals_h1")
+    f5_books = sorted(
+        bm for bm, mkts in market_coverage.items() if any(m in mkts for m in f5_markets)
+    )
+    if f5_books:
+        log.info("F5 (h2h_h1 / totals_h1): OFFERED by %s", ", ".join(f5_books))
+        log.info("  ACTION: keep h2h_h1 + totals_h1 in DERIVATIVE_CAPTURE_MARKETS")
+    else:
+        log.info("F5 (h2h_h1 / totals_h1): NOT OFFERED by any sampled bookmaker")
+        log.info(
+            "  ACTION: set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals in Railway env"
+        )
+        log.info(
+            "  FLAG to E2.4: forward F5 validation blocked; F5 thesis cannot be confirmed live"
+        )
+
+    log.info("")
+    log.info("Last-update cadence (most recent last_update across sampled events):")
+    cadence_ages: list[float] = []
+    for bm_key in sorted(last_updates):
+        for mkt_key in target:
+            lu_str = last_updates.get(bm_key, {}).get(mkt_key)
+            if lu_str:
+                try:
+                    lu_dt = datetime.fromisoformat(lu_str.replace("Z", "+00:00"))
+                    age_h = (now_utc - lu_dt).total_seconds() / 3600
+                    cadence_ages.append(age_h)
+                    log.info(
+                        "  %-16s %-22s last_update=%s (%.1fh ago)",
+                        bm_key, mkt_key, lu_str, age_h,
+                    )
+                except Exception:
+                    log.info("  %-16s %-22s last_update=%s", bm_key, mkt_key, lu_str)
+
+    log.info("")
+    if cadence_ages:
+        median_age = sorted(cadence_ages)[len(cadence_ages) // 2]
+        if median_age < 1:
+            cron_rec = "*/30 * * * *  (every 30 min)"
+        elif median_age < 3:
+            cron_rec = "0 * * * *    (every 1h)"
+        else:
+            cron_rec = "0 */4 * * *  (every 4h)"
+        log.info(
+            "Observed median cadence: ~%.1fh -> recommended cronSchedule: %s",
+            median_age, cron_rec,
+        )
+
+    log.info("")
+    log.info("NEXT STEPS:")
+    log.info("  1. Set DERIVATIVE_CAPTURE_MARKETS in Railway service env (see F5 verdict above)")
+    log.info("  2. Update cronSchedule in services/derivative_capture/railway.toml")
+    log.info("  3. Deploy: services/derivative_capture/ Railway cron service")
+    log.info("  4. After first captures land: dbtf build --select stg_derivative_odds mart_derivative_closes")
+
+
+# ── Subcommand: capture ───────────────────────────────────────────────────────
+
+def cmd_capture(args: argparse.Namespace) -> None:
+    """E2.0b live forward capture — fetch derivative odds for upcoming MLB games.
+
+    Called by the Railway derivative_capture cron (services/derivative_capture/).
+    Each invocation:
+      1. Gets upcoming events from the live Odds API events endpoint.
+      2. Fetches derivative odds for games starting within --lookahead-hours.
+      3. Writes rows to derivative_odds_raw (same schema as historical backfill).
+      4. mart_derivative_closes picks up the last pre-game snapshot on next dbtf build.
+
+    Multiple snapshots per game are intentional — the cron fires repeatedly during the
+    day; mart_derivative_closes's ROW_NUMBER keeps only the last pre-game snapshot.
+
+    EVAL/CLV-ONLY — derivative odds must NEVER be model training features.
+    """
+    api_key = os.environ["ODDS_API_KEY"]
+
+    # Support DERIVATIVE_CAPTURE_MARKETS env var for Railway configuration (set after probe)
+    env_markets = [
+        m.strip()
+        for m in os.environ.get("DERIVATIVE_CAPTURE_MARKETS", "").split(",")
+        if m.strip()
+    ]
+    markets = env_markets if env_markets else args.markets
+    regions = args.regions
+
+    log.info(
+        "E2.0b capture  markets=%s  regions=%s  lookahead=%dh  dry_run=%s",
+        markets, regions, args.lookahead_hours, args.dry_run,
+    )
+
+    # 1. Get upcoming events from live API (1 credit)
+    now = datetime.now(timezone.utc)
+    events = fetch_upcoming_events(api_key, lookahead_hours=args.lookahead_hours)
+
+    if not events:
+        log.info("No upcoming MLB events in next %dh — nothing to capture", args.lookahead_hours)
+        return
+
+    # Skip games already started (10-min grace window)
+    upcoming = []
+    for ev in events:
+        try:
+            ct = datetime.fromisoformat(ev["commence_time"].replace("Z", "+00:00"))
+            if ct > now - timedelta(minutes=10):
+                upcoming.append(ev)
+        except Exception as exc:
+            log.warning("skipping event %s — bad commence_time: %s", ev.get("id"), exc)
+
+    if not upcoming:
+        log.info("No pre-start games in the capture window — nothing to capture")
+        return
+
+    log.info(
+        "Capturing %d of %d events (pre-start, within next %dh)",
+        len(upcoming), len(events), args.lookahead_hours,
+    )
+
+    if args.dry_run:
+        for ev in upcoming:
+            log.info(
+                "  dry-run: event_id=%s  %s @ %s  %s",
+                ev["id"], ev.get("away_team", "?"), ev.get("home_team", "?"), ev["commence_time"],
+            )
+        return
+
+    cost_per_event = len(markets) * len(regions)
+    log.info(
+        "estimated credits: %d events x %d markets x %d regions = ~%d",
+        len(upcoming), len(markets), len(regions), len(upcoming) * cost_per_event,
+    )
+
+    # 2. Fetch live derivative odds
+    load_id = str(uuid.uuid4())
+    ingestion_ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows: list[dict] = []
+    success_count = 0
+    total_credits = 0
+    x_remaining = None
+
+    for ev in upcoming:
+        event_id = ev["id"]
+        payload, status = fetch_live_event_derivative_odds(event_id, markets, regions, api_key)
+        time.sleep(REQUEST_DELAY_SECONDS)
+
+        x_remaining = (payload or {}).get("_x_requests_remaining")
+        x_last = (payload or {}).get("_x_requests_last")
+
+        base_row: dict = {
+            "ingestion_ts":          ingestion_ts,
+            "load_id":               load_id,
+            "event_id":              event_id,
+            "requested_snapshot_ts": ingestion_ts,
+            "actual_snapshot_ts":    ingestion_ts,  # live snapshot timestamp = request time
+            "previous_snapshot_ts":  None,
+            "next_snapshot_ts":      None,
+            "markets_requested":     ",".join(markets),
+            "regions_requested":     ",".join(regions),
+            "x_requests_remaining":  str(x_remaining) if x_remaining is not None else None,
+            "x_requests_last":       str(x_last) if x_last is not None else None,
+            "raw_json":              None,
+            "fetch_status":          status,
+        }
+
+        if status != "success" or not payload:
+            rows.append(base_row)
+            continue
+
+        # Live endpoint returns the event object directly (no timestamp wrapper);
+        # strip internal bookkeeping keys before storing.
+        data_obj = {k: v for k, v in payload.items() if not k.startswith("_")}
+
+        if not data_obj.get("bookmakers"):
+            rows.append({**base_row, "fetch_status": "no_data"})
+            continue
+
+        if x_last:
+            total_credits += x_last
+
+        rows.append({**base_row, "raw_json": json.dumps(data_obj)})
+        success_count += 1
+
+    non_success = sum(1 for r in rows if r.get("fetch_status") != "success")
+    log.info(
+        "capture complete: %d/%d success  non_success=%d  credits_used=%d  x_remaining=%s",
+        success_count, len(upcoming), non_success, total_credits, x_remaining,
+    )
+
+    if not rows:
+        log.info("no rows to write")
+        return
+
+    # 3. Write Parquet -> Snowflake (same two-phase pattern as historical backfill)
+    ts_str = now.strftime("%Y%m%d_%H%M%S")
+    output_path = args.output or Path(f"/tmp/deriv_live_{ts_str}.parquet")
+    write_parquet(rows, output_path)
+
+    conn = connect_snowflake()
+    try:
+        inserted = bulk_load_parquet(
+            conn, output_path, _target_fqn(), _staging_fqn(), _staging_stage(),
+        )
+        log.info("DONE — %d rows inserted into %s", inserted, _target_fqn())
+        if args.output is None:
+            try:
+                output_path.unlink()
+                log.debug("cleaned up %s", output_path)
+            except Exception:
+                pass
+    finally:
+        conn.close()
+
+
 # ── CLI ────────────────────────────────────────────────────────────────────────
 
 def _default_output(start: date, end: date) -> Path:
@@ -633,6 +1071,53 @@ def main() -> None:
     ingest_p = sub.add_parser("ingest", help="Load a Parquet file into Snowflake (one bulk write)")
     ingest_p.add_argument("--file", required=True, help="Path to the Parquet file from 'fetch'")
 
+    # ── probe (E2.0b) ──────────────────────────────────────────────────────────
+    probe_p = sub.add_parser(
+        "probe",
+        help="E2.0b: probe Event Markets endpoint for derivative market availability (no writes)",
+    )
+    probe_p.add_argument(
+        "--bookmakers", nargs="+", default=PROBE_BOOKMAKERS,
+        help=f"Bookmakers to probe (default: {PROBE_BOOKMAKERS})",
+    )
+    probe_p.add_argument(
+        "--sample", type=int, default=5,
+        help="Number of upcoming events to probe (default: 5)",
+    )
+    probe_p.add_argument(
+        "--lookahead-hours", type=int, default=24,
+        help="Hours ahead to search for upcoming events (default: 24)",
+    )
+
+    # ── capture (E2.0b) ────────────────────────────────────────────────────────
+    capture_p = sub.add_parser(
+        "capture",
+        help="E2.0b: live forward capture for upcoming games (Railway cron subcommand)",
+    )
+    capture_p.add_argument(
+        "--markets", nargs="+", default=DEFAULT_DERIVATIVE_MARKETS,
+        help=(
+            f"Derivative markets to capture (default: {DEFAULT_DERIVATIVE_MARKETS}); "
+            "override at runtime via DERIVATIVE_CAPTURE_MARKETS env var"
+        ),
+    )
+    capture_p.add_argument(
+        "--regions", nargs="+", default=DEFAULT_REGIONS,
+        help=f"Odds API regions (default: {DEFAULT_REGIONS})",
+    )
+    capture_p.add_argument(
+        "--lookahead-hours", type=int, default=12,
+        help="Capture games starting within the next N hours (default: 12)",
+    )
+    capture_p.add_argument(
+        "--output", type=Path, default=None,
+        help="Parquet path for testing (default: auto /tmp/deriv_live_<ts>.parquet, deleted after ingest)",
+    )
+    capture_p.add_argument(
+        "--dry-run", action="store_true",
+        help="List upcoming games without calling the odds endpoint",
+    )
+
     args = parser.parse_args()
 
     if args.command == "fetch":
@@ -644,6 +1129,10 @@ def main() -> None:
         cmd_fetch(args)
     elif args.command == "ingest":
         cmd_ingest(args)
+    elif args.command == "probe":
+        cmd_probe(args)
+    elif args.command == "capture":
+        cmd_capture(args)
 
 
 if __name__ == "__main__":

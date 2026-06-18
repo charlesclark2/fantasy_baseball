@@ -53,7 +53,9 @@ DEFINITION OF DONE for an app story:
    the final step (no edge claims). Weeks group MONDAY→MONDAY — set the entry's `week` to the MONDAY of the
    current week (not the literal ship date) and APPEND to that Monday's block if it already exists; only create
    a new block when this Monday has none. The legacy Streamlit app gets no changelog entry — it isn't shipped.
-4. You do NOT git commit/push, deploy, or run >1-min jobs yourself. Instead, END with an OPERATOR HANDOFF (below).
+4. CI gates BEFORE handoff — never hand off red code. Run green locally first: Python → `uv run pytest`
+   (Unit Tests CI); any dbt → `dbtf build --select state:modified+` AND `dbtf compile` (both dbt-Build CI jobs).
+5. You do NOT git commit/push, deploy, or run >1-min jobs yourself. Instead, END with an OPERATOR HANDOFF (below).
 
 ⏭️ OPERATOR HANDOFF — REQUIRED FINAL OUTPUT (every app session ends with this):
    When your build is code-complete, STOP and present a single "⏭️ Operator handoff" checklist of everything
@@ -62,6 +64,8 @@ DEFINITION OF DONE for an app story:
 
    ```
    ⏭️ OPERATOR HANDOFF — <story id>
+   0. ✅ CI gates green?  — Python `uv run pytest` (Unit Tests); dbt `dbtf build --select state:modified+` +
+        `dbtf compile` (both dbt-Build jobs). State the result; if anything's red, say so — don't hand off red code.
    1. 🔧 Backend/API (Lambda rebuild+deploy)?  — yes/no. If yes: what changed + the command:
         ./infrastructure/lambda/deploy.sh
    2. 🗄️ dbt models to run?  — list each with the exact scoped command, e.g.:
