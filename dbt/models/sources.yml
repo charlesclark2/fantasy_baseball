@@ -277,7 +277,9 @@ sources:
               The event data object from the API response (id, commence_time,
               home_team, away_team, bookmakers[]). Same nested bookmakers →
               markets → outcomes structure as mlb_odds_raw.
-            tests: [not_null]
+              NULL for sentinel rows written when fetch_status is not_found /
+              no_data / error — these are idempotency records, not real events.
+              stg_derivative_odds filters them with WHERE raw_json IS NOT NULL.
 
   - name: statsapi
     database: baseball_data
