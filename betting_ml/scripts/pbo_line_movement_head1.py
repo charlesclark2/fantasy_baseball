@@ -86,7 +86,7 @@ def _oos_predictions(d: pd.DataFrame, target: str, cfg: dict) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True).sort_values("game_date").reset_index(drop=True)
 
 
-def run_market(market: str, d: pd.DataFrame, *, n_buckets: int) -> dict:
+def run_market(market: str, d: pd.DataFrame, *, n_buckets: int, n_trials: int) -> dict:
     spec = MARKETS[market]
     target = spec["target"]
     d = d[d[target].notna() & d[spec["open_col"]].notna()].reset_index(drop=True)
@@ -96,40 +96,75 @@ def run_market(market: str, d: pd.DataFrame, *, n_buckets: int) -> dict:
     preds = {c["name"]: _oos_predictions(d, target, c) for c in grid}
     # Align all configs on a common time order (they share eval folds → same game rows/order).
     base = preds[grid[0]["name"]]
+    y = base["y"].to_numpy()
     n = len(base)
     bucket = np.minimum((np.arange(n) * n_buckets) // n, n_buckets - 1)
 
+    # The BASELINES are configs too — adding them makes PBO adversarial (otherwise it just
+    # ranks ~identical nested feature sets and reports a degenerate ≈0). drift = predict the
+    # pooled mean move (the unconditional drift); no_move = predict 0.
+    drift_const = float(np.mean(y))
+    pred_by_col: dict[str, np.ndarray] = {c["name"]: preds[c["name"]]["pred"].to_numpy() for c in grid}
+    pred_by_col["no_move"] = np.zeros(n)
+    pred_by_col["drift"] = np.full(n, drift_const)
+    model_cols = [c["name"] for c in grid]
+    cols = model_cols + ["no_move", "drift"]
+
     # perf[t, config] = −MAE of that config in time-bucket t (higher is better).
-    perf = np.zeros((n_buckets, len(grid)))
+    perf = np.zeros((n_buckets, len(cols)))
     pooled_mae = {}
-    for j, c in enumerate(grid):
-        p = preds[c["name"]]
-        ae = np.abs(p["y"].to_numpy() - p["pred"].to_numpy())
-        pooled_mae[c["name"]] = float(ae.mean())
+    for j, name in enumerate(cols):
+        ae = np.abs(y - pred_by_col[name])
+        pooled_mae[name] = float(ae.mean())
         for t in range(n_buckets):
             m = bucket == t
             perf[t, j] = -float(ae[m].mean()) if m.any() else 0.0
 
     pbo = pbo_cscv(perf, higher_is_better=True, n_splits=min(n_buckets, 16))
+    # The decisive read: across configs INCLUDING the baselines, who wins OOS? If a baseline
+    # has the best (lowest) pooled MAE, the model adds nothing — PBO being low just means the
+    # NULL is consistently best.
+    best_overall = min(cols, key=lambda nm: pooled_mae[nm])
+    best_model = min(model_cols, key=lambda nm: pooled_mae[nm])
+    model_wins_mae = best_overall in model_cols
 
-    # DSR on the best config's directional CLV-PnL: bet the predicted move, capture the move.
-    best = min(grid, key=lambda c: pooled_mae[c["name"]])["name"]
-    bp = preds[best]
-    moved = bp["y"].to_numpy() != 0
-    ret = np.sign(bp["pred"].to_numpy()[moved]) * bp["y"].to_numpy()[moved]
-    dsr = deflated_sharpe(ret, n_trials=len(grid))   # n_trials = grid size (a floor)
+    # ── Directional skill vs the drift base rate (best model config) ──────────────
+    pm = pred_by_col[best_model]
+    moved = y != 0
+    ym, pmm = y[moved], pm[moved]
+    drift_dir = 1.0 if ym.mean() >= 0 else -1.0
+    base_rate = float((np.sign(ym) == drift_dir).mean())          # majority-direction share
+    dir_acc = float((np.sign(pmm) == np.sign(ym)).mean())
+    dir_lift = dir_acc - base_rate                                # conditional skill over drift
 
-    print(f"  PBO={pbo.pbo:.3f} (ship→shadow<0.5: {pbo.ships_to_shadow})  "
-          f"best config={best} (MAE {pooled_mae[best]:.4f})")
-    print(f"  DSR={dsr.dsr:.3f}  SR={dsr.observed_sr:.3f} vs deflated SR0={dsr.sr0:.3f}  "
-          f"live(≥0.95)={dsr.passes_live}")
+    # ── DSR on the EXCESS return over the drift baseline (the binding edge number) ──
+    # raw directional PnL = sign(pred)·move rewards merely predicting the drift direction (a
+    # constant predictor scores positive). The honest series nets the always-drift bet:
+    #   excess = (sign(pred) − drift_dir)·move  → 0 whenever the model agrees with the drift.
+    # Its Sharpe is positive ONLY if the model's disagreements-with-drift are profitable.
+    excess = (np.sign(pmm) - drift_dir) * ym
+    dsr = deflated_sharpe(excess, n_trials=n_trials)
+    # Reported for transparency only — drift-contaminated, do NOT gate on it.
+    dsr_raw = deflated_sharpe(np.sign(pmm) * ym, n_trials=n_trials)
+
+    edge = bool(model_wins_mae and dsr.passes_live)
+    print(f"  PBO={pbo.pbo:.3f} over {len(cols)} configs (incl. baselines); "
+          f"OOS-best by MAE = {best_overall}  → model_wins_MAE={model_wins_mae}")
+    print(f"  dir-acc(best model)={dir_acc:.3f} vs drift base rate {base_rate:.3f}  "
+          f"→ lift {dir_lift:+.3f}")
+    print(f"  DSR(excess-over-drift)={dsr.dsr:.3f}  SR={dsr.observed_sr:.3f} vs SR0={dsr.sr0:.3f}"
+          f"  (n_trials={n_trials})   [raw drift-contaminated DSR={dsr_raw.dsr:.3f}]")
+    print(f"  → EDGE: {'YES' if edge else 'NO'} "
+          f"(needs model to beat baselines on MAE AND DSR-excess≥0.95)")
     return {
-        "market": market, "n_games": int(len(d)), "n_configs": len(grid),
-        "pooled_mae": pooled_mae, "best_config": best,
-        "pbo": pbo.pbo, "pbo_ships_to_shadow": pbo.ships_to_shadow,
-        "pbo_clears_live": pbo.clears_live_pbo, "n_combos": pbo.n_combos,
-        "dsr": dsr.dsr, "observed_sr": dsr.observed_sr, "deflated_sr0": dsr.sr0,
-        "dsr_passes_live": dsr.passes_live, "n_moved": int(moved.sum()),
+        "market": market, "n_games": int(len(d)), "n_configs": len(cols),
+        "pooled_mae": pooled_mae, "best_overall_config": best_overall,
+        "best_model_config": best_model, "model_wins_mae": model_wins_mae,
+        "dir_acc": dir_acc, "drift_base_rate": base_rate, "dir_lift": dir_lift,
+        "pbo": pbo.pbo, "n_combos": pbo.n_combos,
+        "dsr_excess": dsr.dsr, "dsr_excess_sr": dsr.observed_sr, "dsr_excess_sr0": dsr.sr0,
+        "dsr_raw_contaminated": dsr_raw.dsr, "n_trials": n_trials,
+        "edge": edge, "n_moved": int(moved.sum()),
         "_pbo_obj": pbo, "_dsr_obj": dsr,
     }
 
@@ -138,19 +173,28 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--market", choices=["h2h", "totals", "all"], default="all")
     ap.add_argument("--n-buckets", type=int, default=12)
+    # The program has run 13+ no-edge searches with many configs each. n_trials deflates the
+    # benchmark for that multiple testing; 5 (the grid size) grossly under-deflates. 50 is a
+    # defensible floor for the program-wide trial count.
+    ap.add_argument("--n-trials", type=int, default=50)
     ap.add_argument("--refresh-cache", action="store_true")
     args = ap.parse_args()
 
     d = get_cached_df("edge_e31_line_movement", load_line_movement_dataset,
                       refresh=args.refresh_cache)
     markets = ["h2h", "totals"] if args.market == "all" else [args.market]
-    results = {m: run_market(m, d, n_buckets=args.n_buckets) for m in markets}
+    results = {m: run_market(m, d, n_buckets=args.n_buckets, n_trials=args.n_trials)
+               for m in markets}
 
+    # Dashboard verdict gates on the EXCESS-over-drift DSR (the _dsr_obj is that one), so the
+    # standing report reflects the honest edge test, not the drift-contaminated raw Sharpe.
     entries = [{
         "strategy": f"E3.1 Head-1 line-movement ({m})", "stage": "proposed",
-        "pbo": r["_pbo_obj"], "dsr": r["_dsr_obj"], "live_clv": None,
-        "notes": f"best={r['best_config']}; MAE {r['pooled_mae'][r['best_config']]:.4f}; "
-                 f"loses to no-move (E3.1) — directional skill ≈ drift base rate",
+        "pbo": r["_pbo_obj"], "dsr": r["_dsr_obj"],
+        "live_clv": None if r["edge"] else False,
+        "notes": f"OOS-best by MAE={r['best_overall_config']} (model_wins_MAE={r['model_wins_mae']}); "
+                 f"dir-lift over drift {r['dir_lift']:+.3f}; DSR-excess {r['dsr_excess']:.3f} "
+                 f"(raw drift-contaminated {r['dsr_raw_contaminated']:.3f}) — no robust edge",
     } for m, r in results.items()]
     _DASHBOARD.parent.mkdir(parents=True, exist_ok=True)
     _DASHBOARD.write_text(render_overfitting_dashboard(entries))
@@ -158,10 +202,10 @@ def main() -> None:
     _JSON.write_text(json.dumps({m: {k: v for k, v in r.items() if not k.startswith("_")}
                                  for m, r in results.items()}, indent=2, default=float))
     print(f"\nWrote {_DASHBOARD}\nWrote {_JSON}")
-    print("\n=== E1.4 VERDICT (Head-1) ===")
+    print("\n=== E1.4 VERDICT (Head-1, drift-adjusted) ===")
     for m, r in results.items():
-        verdict = "HOLD" if r["pbo"] >= 0.5 else ("LIVE-elig" if (r["pbo_clears_live"] and r["dsr_passes_live"]) else "SHADOW-elig")
-        print(f"  {m:7s}: PBO={r['pbo']:.3f}  DSR={r['dsr']:.3f}  → {verdict}")
+        print(f"  {m:7s}: PBO={r['pbo']:.3f}  dir-lift={r['dir_lift']:+.3f}  "
+              f"DSR-excess={r['dsr_excess']:.3f}  → EDGE: {'YES' if r['edge'] else 'NO'}")
 
 
 if __name__ == "__main__":

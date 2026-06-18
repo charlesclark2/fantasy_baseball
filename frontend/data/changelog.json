@@ -1,7 +1,11 @@
 [
   {
-    "week": "2026-06-18",
+    "week": "2026-06-15",
     "items": [
+      {
+        "tag": "new",
+        "text": "Settings page now lets you set an initial deposit amount — the starting bankroll you track growth against. Once set, the EV Tracker can show bankroll growth % alongside net P&L. The field saves directly to your account, not just this device."
+      },
       {
         "tag": "improvement",
         "text": "Model reasoning now covers both H2H and Totals signals in one view. A toggle on the featured pick card and on game detail pages lets you switch between win-probability drivers and run-total drivers — so you can see exactly what's pushing each market, not just the headline pick."
@@ -13,12 +17,7 @@
       {
         "tag": "fix",
         "text": "Pick write-ups now stay in sync with the served pick. The plain-English explanation and feature drivers are regenerated alongside each day's predictions, so the reasoning you read always matches the pick currently shown — no more stale morning write-up lingering after the pick updates post-lineup."
-      }
-    ]
-  },
-  {
-    "week": "2026-06-15",
-    "items": [
+      },
       {
         "tag": "new",
         "text": "Teams directory launched at /teams — all 30 MLB teams organized by division with current win-loss record, win percentage, and win/loss streak. Click any team to open the detail page."

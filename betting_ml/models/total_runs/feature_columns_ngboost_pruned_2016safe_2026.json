@@ -1,0 +1,26 @@
+{
+  "feature_cols": [
+    "home_bp_eb_xwoba",
+    "away_bp_eb_xwoba",
+    "away_wins",
+    "away_losses",
+    "home_bp_eb_uncertainty",
+    "away_bp_eb_coverage_pct",
+    "home_bp_eb_coverage_pct",
+    "park_run_factor_3yr",
+    "away_bp_eb_uncertainty",
+    "home_off_xwoba_30d",
+    "away_starter_xwoba_vs_lhb"
+  ],
+  "_provenance": {
+    "source": "E1.6: slim-14 clustered prune MINUS the 3 features not populated pre-2021",
+    "dropped": [
+      "home_starter_stuff_plus",
+      "home_team_sequential_win_prob",
+      "home_team_sequential_woba"
+    ],
+    "reason": "stuff_plus (FanGraphs 2020+ hard floor) + 2 sequential posteriors (Epic-16 backfill 2021+) are absent for the 2016-2020 extension seasons AND are the 3 lowest-importance signal features \u2014 drop them so the 2016+ training set needs NO era-wide imputation (methodologically clean exclusion, not fallback-mean fill)",
+    "n_kept": 11,
+    "n_parent": 14
+  }
+}

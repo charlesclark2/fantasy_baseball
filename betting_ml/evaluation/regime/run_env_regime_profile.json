@@ -1,0 +1,112 @@
+{
+  "target_season": 2026,
+  "trailing_seasons": 2,
+  "trailing_centroid_seasons": [
+    2024,
+    2025
+  ],
+  "bandwidth": 1.5,
+  "dims": [
+    "avg_total_runs",
+    "std_total_runs",
+    "avg_league_off_xwoba"
+  ],
+  "seasons": [
+    {
+      "season": 2015,
+      "avg_total_runs": 8.4998,
+      "std_total_runs": 4.4017,
+      "avg_league_off_xwoba": 0.3081,
+      "regime_dist": 1.135,
+      "regime_weight": 0.779
+    },
+    {
+      "season": 2016,
+      "avg_total_runs": 8.9551,
+      "std_total_runs": 4.4865,
+      "avg_league_off_xwoba": 0.3152,
+      "regime_dist": 0.457,
+      "regime_weight": 0.99
+    },
+    {
+      "season": 2017,
+      "avg_total_runs": 9.293,
+      "std_total_runs": 4.5255,
+      "avg_league_off_xwoba": 0.3185,
+      "regime_dist": 1.523,
+      "regime_weight": 0.619
+    },
+    {
+      "season": 2018,
+      "avg_total_runs": 8.8974,
+      "std_total_runs": 4.5316,
+      "avg_league_off_xwoba": 0.3148,
+      "regime_dist": 0.71,
+      "regime_weight": 0.927
+    },
+    {
+      "season": 2019,
+      "avg_total_runs": 9.6612,
+      "std_total_runs": 4.76,
+      "avg_league_off_xwoba": 0.3193,
+      "regime_dist": 3.678,
+      "regime_weight": 0.051
+    },
+    {
+      "season": 2020,
+      "avg_total_runs": 9.2918,
+      "std_total_runs": 4.5526,
+      "avg_league_off_xwoba": 0.3208,
+      "regime_dist": 1.633,
+      "regime_weight": 0.573
+    },
+    {
+      "season": 2021,
+      "avg_total_runs": 9.0613,
+      "std_total_runs": 4.5181,
+      "avg_league_off_xwoba": 0.3161,
+      "regime_dist": 0.884,
+      "regime_weight": 0.871
+    },
+    {
+      "season": 2022,
+      "avg_total_runs": 8.5663,
+      "std_total_runs": 4.3935,
+      "avg_league_off_xwoba": 0.3097,
+      "regime_dist": 0.987,
+      "regime_weight": 0.835
+    },
+    {
+      "season": 2023,
+      "avg_total_runs": 9.2305,
+      "std_total_runs": 4.5831,
+      "avg_league_off_xwoba": 0.3201,
+      "regime_dist": 1.65,
+      "regime_weight": 0.566
+    },
+    {
+      "season": 2024,
+      "avg_total_runs": 8.7863,
+      "std_total_runs": 4.3117,
+      "avg_league_off_xwoba": 0.3128,
+      "regime_dist": 1.249,
+      "regime_weight": 0.733
+    },
+    {
+      "season": 2025,
+      "avg_total_runs": 8.8947,
+      "std_total_runs": 4.5943,
+      "avg_league_off_xwoba": 0.3242,
+      "regime_dist": 1.249,
+      "regime_weight": 0.733
+    },
+    {
+      "season": 2026,
+      "avg_total_runs": 8.9386,
+      "std_total_runs": 4.4837,
+      "avg_league_off_xwoba": 0.3194,
+      "regime_dist": 0.403,
+      "regime_weight": 1.0
+    }
+  ]
+}

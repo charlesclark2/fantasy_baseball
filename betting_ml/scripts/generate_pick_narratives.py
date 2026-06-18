@@ -35,6 +35,16 @@ _ML_SCHEMA = ml_schema()
 # Snowflake Cortex model — mistral-7b is cheap and sufficient for 2-3 sentence summaries.
 _CORTEX_MODEL = "mistral-7b"
 
+# Map any legacy/outdated team names to their current official names.
+# Checked against MLB.com as of 2026. Add entries here when franchises rename.
+_TEAM_NAME_CORRECTIONS: dict[str, str] = {
+    "Indians": "Guardians",  # Cleveland renamed to Guardians in 2022
+}
+
+
+def _canonical_team_name(name: str) -> str:
+    return _TEAM_NAME_CORRECTIONS.get(name, name)
+
 _FETCH_QUERY_BASE = f"""
 SELECT
     game_pk,
@@ -83,8 +93,8 @@ def _summarize_drivers(drivers: list[dict], limit: int = 4) -> str:
 
 def _build_prompt(row: dict, expl: dict) -> str:
     """Construct the Cortex narrative prompt for one game row."""
-    home = row["home_team"] or "home team"
-    away = row["away_team"] or "away team"
+    home = _canonical_team_name(row["home_team"] or "home team")
+    away = _canonical_team_name(row["away_team"] or "away team")
     pick_str = row["pick"] or "N/A"
     score_date = str(row["score_date"])
 
@@ -134,6 +144,8 @@ def _build_prompt(row: dict, expl: dict) -> str:
 Do NOT recommend placing a bet. Do NOT use phrases like "you should bet" or "this is a good bet."
 Frame the explanation as "what drives the model's prediction" and note the EV signal (edge) as
 a statistical measure — not as a guarantee of profit.
+IMPORTANT: Use ONLY the exact team names as given below. Do not substitute historical, previous,
+or alternate franchise names (e.g., if the team is called "Guardians", never write "Indians").
 
 Game: {away} at {home} on {score_date}.
 Model pick (moneyline): {pick_str}.

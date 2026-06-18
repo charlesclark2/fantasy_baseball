@@ -83,6 +83,7 @@ Rules:
 - Do NOT use the words: guaranteed, win rate, profit, sure bet, prediction, algorithm.
 - Write for a sports-savvy reader, not a data scientist. Explain what wOBA/xwOBA means in parentheses if you use it.
 - CRITICAL: NEVER state or estimate any difference between model and market odds (e.g. "X% edge", "X probability points above the market") UNLESS a "Market comparison" section appears explicitly in the prompt context below. If that section is absent, omit ALL market-vs-model comparisons entirely — do not invent or approximate them.
+- CRITICAL: Use ONLY the exact team names as given in the prompt. Do not substitute historical, previous, or alternate franchise names (e.g., if the team is called "Guardians", never write "Indians").
 
 YOUR RESPONSE MUST:
 - Be at least 3 complete sentences.
@@ -91,6 +92,17 @@ YOUR RESPONSE MUST:
 - Name both teams explicitly — not just "the home team" or "the model's pick."
 - NEVER collapse to a single sentence summary. NEVER omit numbers.
 """
+
+# Map any legacy/outdated team names to their current official names.
+# Checked against MLB.com as of 2026. Add entries here when franchises rename.
+_TEAM_NAME_CORRECTIONS: dict[str, str] = {
+    "Indians": "Guardians",  # Cleveland renamed to Guardians in 2022
+}
+
+
+def _canonical_team_name(name: str) -> str:
+    return _TEAM_NAME_CORRECTIONS.get(name, name)
+
 
 _STRENGTH_LABEL = [
     (0.75, "dominant signal"),
@@ -216,8 +228,8 @@ def _build_prompt(row: dict, expl: dict) -> str | None:
     """Build the Cortex prompt for one game row."""
     import math
 
-    home = row.get("HOME_TEAM") or "Home"
-    away = row.get("AWAY_TEAM") or "Away"
+    home = _canonical_team_name(row.get("HOME_TEAM") or "Home")
+    away = _canonical_team_name(row.get("AWAY_TEAM") or "Away")
     targets = expl.get("targets", {})
 
     hw = targets.get("home_win", {})
@@ -398,8 +410,8 @@ def _template_narrative(row: dict, expl: dict) -> str:
     Always informative — references actual probabilities, run totals, and top driver."""
     import math
 
-    home = row.get("HOME_TEAM") or "Home"
-    away = row.get("AWAY_TEAM") or "Away"
+    home = _canonical_team_name(row.get("HOME_TEAM") or "Home")
+    away = _canonical_team_name(row.get("AWAY_TEAM") or "Away")
     targets = expl.get("targets", {})
     hw = targets.get("home_win", {})
     tot = targets.get("total_runs", {})

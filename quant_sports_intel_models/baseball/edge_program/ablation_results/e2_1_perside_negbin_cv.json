@@ -1,0 +1,93 @@
+{
+  "story": "E2.1",
+  "model_version": "totals_perside_v1",
+  "trained_at": "2026-06-18",
+  "min_year": 2018,
+  "n_perside_rows": 35632,
+  "n_numeric_features": 275,
+  "n_categorical_features": 7,
+  "cv": {
+    "folds": [
+      {
+        "eval_year": 2021,
+        "n_train": 9468,
+        "n_eval": 4644,
+        "poisson_nll": 2.4947,
+        "negbin_nll": 2.4475,
+        "nll_gain": 0.0472,
+        "calib_80": 0.769,
+        "negbin_r": 33.029,
+        "mae": 2.2323,
+        "std_pred": 1.1226,
+        "frac_purged": 0.0752
+      },
+      {
+        "eval_year": 2022,
+        "n_train": 14118,
+        "n_eval": 4748,
+        "poisson_nll": 2.4914,
+        "negbin_nll": 2.4058,
+        "nll_gain": 0.0855,
+        "calib_80": 0.784,
+        "negbin_r": 14.952,
+        "mae": 2.2221,
+        "std_pred": 1.1017,
+        "frac_purged": 0.0513
+      },
+      {
+        "eval_year": 2023,
+        "n_train": 18818,
+        "n_eval": 4744,
+        "poisson_nll": 2.518,
+        "negbin_nll": 2.4175,
+        "nll_gain": 0.1005,
+        "calib_80": 0.801,
+        "negbin_r": 10.53,
+        "mae": 2.3003,
+        "std_pred": 1.2752,
+        "frac_purged": 0.0414
+      },
+      {
+        "eval_year": 2024,
+        "n_train": 23580,
+        "n_eval": 4736,
+        "poisson_nll": 2.4748,
+        "negbin_nll": 2.3771,
+        "nll_gain": 0.0976,
+        "calib_80": 0.817,
+        "negbin_r": 9.263,
+        "mae": 2.2424,
+        "std_pred": 1.1974,
+        "frac_purged": 0.0326
+      },
+      {
+        "eval_year": 2025,
+        "n_train": 28348,
+        "n_eval": 4456,
+        "poisson_nll": 2.5545,
+        "negbin_nll": 2.4219,
+        "nll_gain": 0.1326,
+        "calib_80": 0.808,
+        "negbin_r": 8.29,
+        "mae": 2.3963,
+        "std_pred": 1.195,
+        "frac_purged": 0.0262
+      }
+    ],
+    "mean_poisson_nll": 2.5067,
+    "mean_negbin_nll": 2.414,
+    "mean_nll_gain": 0.0927,
+    "mean_calib_80": 0.796,
+    "mean_negbin_r": 15.213,
+    "folds_negbin_wins": 5,
+    "n_folds": 5
+  },
+  "gate": {
+    "negbin_beats_poisson": true,
+    "overdispersion_recovered": true,
+    "market_blind": true,
+    "pass": true
+  },
+  "final_negbin_r": 7.4492,
+  "final_implied_var_mean": 1.6049
+}
