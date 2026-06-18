@@ -59,7 +59,13 @@ RUN pip install --no-cache-dir \
     boto3 \
     psycopg2-binary \
     arviz \
-    h5netcdf
+    h5netcdf \
+    pymc
+
+# Smoke-check: fail the image build now if any heavy Bayesian dep is missing,
+# rather than silently dying in the weekly Dagster op a day later.
+# pymc's lazy import inside main() means a top-of-file check in the script won't catch this.
+RUN python -c "import pymc; import pytensor; import arviz; import h5netcdf; print('Bayesian deps OK')"
 
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`
