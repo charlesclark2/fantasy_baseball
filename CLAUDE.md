@@ -28,9 +28,16 @@ Three things share confusingly similar paths. Two are live; one is dead.
 ## Conventions (see guide §0.1)
 `dbtf` (not `dbt`); Snowflake via MCP, fully-qualified, no `USE`, never on a request path; `uv run python`; hand >1-min scripts to the operator; **do not `git commit`/`push`**; market-blind for non-market models; honest framing for anything user-facing (no win-rate / edge claims — `best_alpha = 0`).
 
+## CI gates — REQUIRED before any handoff (never hand off red code)
+Run the equivalent CI checks locally and confirm GREEN before the operator handoff:
+- **Python → Unit Tests CI:** `uv run pytest`
+- **dbt → BOTH dbt-Build CI jobs:** `dbtf build --select state:modified+` **and** `dbtf compile`
+If a check fails, fix it (or flag it as a real blocker in the handoff) — don't pass failing CI to the operator. State the result in the handoff.
+
 ## Session closeout — REQUIRED (every session, both tracks)
 Because sessions don't commit, **end every session with an `⏭️ Operator handoff`** so the repo doesn't drift:
-1. **Run-order commands** the operator must execute (Snowflake / `dbtf --select …` / `uv run …`, >1-min flagged).
-2. **`git add <paths>`** — a copy-pasteable list of *every* file the session changed/created that should be committed: code, dbt models, `sub_model_registry.yaml`, `ablation_results/*.md`, and any guide/roadmap/`story_prompts.md` edits.
-3. **Do NOT commit** large artifacts (`*.pkl`, `*.parquet`, model binaries) — those go to S3/registry and are gitignored; list them as excluded.
-4. Model work: the validation gate result. App work: the `frontend/data/changelog.json` line + what to verify after deploy.
+1. **CI-gate result** (Python unit tests + both dbt-Build jobs green — see above).
+2. **Run-order commands** the operator must execute (Snowflake / `dbtf --select …` / `uv run …`, >1-min flagged).
+3. **`git add <paths>`** — a copy-pasteable list of *every* file the session changed/created that should be committed: code, dbt models, `sub_model_registry.yaml`, `ablation_results/*.md`, and any guide/roadmap/`story_prompts.md` edits.
+4. **Do NOT commit** large artifacts (`*.pkl`, `*.parquet`, model binaries) — those go to S3/registry and are gitignored; list them as excluded.
+5. Model work: the validation gate result. App work: the `frontend/data/changelog.json` line + what to verify after deploy.
