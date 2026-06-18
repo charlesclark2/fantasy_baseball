@@ -1,0 +1,55 @@
+version: 2
+
+# ============================================================================
+# Edge Program — Story E3.0b: bookmaker line-quality drift + recency-quality
+# weight (NET-NEW). Documented in its OWN yml so this Edge addition never
+# touches the existing product's model configs. Materializes into
+# baseball_data.betting_features.
+# ============================================================================
+
+models:
+
+  - name: feature_edge_book_market_era_quality
+    description: >
+      Per-(book, market_type, season) bookmaker line-quality trend + a recency-quality
+      sample weight for the E3/E4 market backtests. Metrics on the closing (last
+      pre-game) line: closing Brier and log-loss vs the realized outcome, mean two-way
+      vig, and mean |fair − Pinnacle fair| (distance to the sharp consensus). The
+      recency_quality_weight = exp(-λ·(max_season − season)) ∈ (0,1] down-weights stale
+      eras so the E4.3 sharp-anchor backtest leans on the current regime rather than the
+      easy 2021–2023 soft era (the E4 CLV edge decays as soft books sharpen). Advisory/
+      analysis artifact — not a per-game serving feature; no column asserts a +EV bet.
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - book
+              - market_type
+              - season
+
+    columns:
+      - name: book
+        description: Canonical bookmaker key (williamhill_us folded into caesars).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['pinnacle', 'bovada', 'caesars', 'fanduel']
+      - name: market_type
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['h2h', 'totals']
+      - name: season
+        tests:
+          - not_null
+      - name: recency_quality_weight
+        description: exp(-λ·(max_season − season)) ∈ (0,1]; newest era = 1.0.
+        tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+                inclusive: true
