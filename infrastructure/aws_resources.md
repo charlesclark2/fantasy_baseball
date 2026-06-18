@@ -470,6 +470,139 @@ Static logo assets in `frontend/public/brand/`. Served via Next.js static file h
 
 ---
 
-## SES — Email (A0.5)
+## SES — Email (A0.5 / A0.4.18)
 
-> Not yet provisioned. Domain `credencesports.com` must be verified in us-east-1.
+> **Status as of 2026-06-18: SES PRODUCTION — 50,000 msg/day, 14 msg/s, us-east-1.**
+
+| Resource | Value |
+|---|---|
+| Region | `us-east-1` |
+| Verified identity | `credencesports.com` (domain-level; DKIM RSA-2048 + custom MAIL FROM) |
+| MAIL FROM domain | `mail.credencesports.com` |
+| Sending address | `noreply@credencesports.com` |
+| Production access | ✅ Granted 2026-06-18 (50k msg/day, 14 msg/s) |
+| Configuration set | `credence-prod-ses-config` |
+| Suppression list | Account-level, BOUNCE + COMPLAINT (see below) |
+
+### Cognito SES wiring
+
+Cognito user pool `us-east-1_gG9zMbwQt` sends all auth emails (invites, password reset,
+verification) via SES `noreply@credencesports.com`. Configured via:
+
+```bash
+aws cognito-idp update-user-pool \
+  --user-pool-id us-east-1_gG9zMbwQt \
+  --email-configuration \
+    "SourceArn=arn:aws:ses:us-east-1:ACCOUNT_ID:identity/credencesports.com,\
+EmailSendingAccount=DEVELOPER,\
+From=noreply@credencesports.com,\
+ConfigurationSet=credence-prod-ses-config" \
+  --region us-east-1
+```
+
+Replace `ACCOUNT_ID` with the actual AWS account ID (visible in AWS console top-right).
+
+### Bounce / complaint handling (required before bulk sends)
+
+AWS best-practice: enable account-level suppression list + SNS alerting for bounces/complaints.
+
+**Step 1 — Enable account-level suppression (automatic address suppression on hard bounce/complaint):**
+```bash
+aws sesv2 put-account-suppression-attributes \
+  --suppressed-reasons BOUNCE COMPLAINT \
+  --region us-east-1
+```
+
+**Step 2 — Create SNS topic for bounce/complaint notifications:**
+```bash
+aws sns create-topic \
+  --name credence-prod-ses-bounce-complaint \
+  --region us-east-1
+# ↳ Note the TopicArn returned (format: arn:aws:sns:us-east-1:ACCOUNT_ID:credence-prod-ses-bounce-complaint)
+```
+
+**Step 3 — Subscribe support@credencesports.com to the topic (confirm the subscription email):**
+```bash
+aws sns subscribe \
+  --topic-arn arn:aws:sns:us-east-1:ACCOUNT_ID:credence-prod-ses-bounce-complaint \
+  --protocol email \
+  --notification-endpoint support@credencesports.com \
+  --region us-east-1
+# ↳ Check support@credencesports.com inbox and confirm the subscription link
+```
+
+**Step 4 — Create SES configuration set:**
+```bash
+aws sesv2 create-configuration-set \
+  --configuration-set-name credence-prod-ses-config \
+  --region us-east-1
+```
+
+**Step 5 — Wire SNS bounce/complaint event destination to the configuration set:**
+```bash
+aws sesv2 create-configuration-set-event-destination \
+  --configuration-set-name credence-prod-ses-config \
+  --event-destination-name bounce-complaint-sns \
+  --event-destination '{
+    "Enabled": true,
+    "MatchingEventTypes": ["BOUNCE", "COMPLAINT"],
+    "SnsDestination": {
+      "TopicArn": "arn:aws:sns:us-east-1:ACCOUNT_ID:credence-prod-ses-bounce-complaint"
+    }
+  }' \
+  --region us-east-1
+```
+
+**Step 6 — Test with SES mailbox simulator (sends a raw SES email; confirms bounce handling fires):**
+```bash
+# Hard-bounce test — confirm support@credencesports.com receives an SNS notification
+aws sesv2 send-email \
+  --from-email-address "noreply@credencesports.com" \
+  --destination '{"ToAddresses": ["bounce@simulator.amazonses.com"]}' \
+  --content '{"Simple": {"Subject": {"Data": "Bounce test"}, "Body": {"Text": {"Data": "test"}}}}' \
+  --configuration-set-name credence-prod-ses-config \
+  --region us-east-1
+
+# Complaint test — confirm support@credencesports.com receives an SNS notification
+aws sesv2 send-email \
+  --from-email-address "noreply@credencesports.com" \
+  --destination '{"ToAddresses": ["complaint@simulator.amazonses.com"]}' \
+  --content '{"Simple": {"Subject": {"Data": "Complaint test"}, "Body": {"Text": {"Data": "test"}}}}' \
+  --configuration-set-name credence-prod-ses-config \
+  --region us-east-1
+```
+
+**Important:** Steps 1–6 must complete before provisioning beta users at any scale.
+
+### Cognito invite template
+
+Branded HTML template: `infrastructure/email/cognito-invite-template.html`
+- Dark header, brand green `#10b981` accents, credentials box, "Get Started" CTA → `https://www.credencesports.com/login`
+- Contains required `{username}` and `{####}` Cognito placeholders
+- Sends from `noreply@credencesports.com` (not the default `no-reply@verificationemail.com`)
+
+**Push template to Cognito (run from repo root; requires AWS CLI with admin rights):**
+```bash
+python infrastructure/email/update_cognito_invite_template.py --dry-run   # preview
+python infrastructure/email/update_cognito_invite_template.py             # live push
+```
+
+### Provisioning a beta user (one-time per user, Cognito console)
+
+1. AWS Console → Cognito → User pools → `us-east-1_gG9zMbwQt`
+2. **Users** tab → **Create user**
+3. Set **Username** = user's email address
+4. Select **"Send an invitation"** (triggers the branded invite email)
+5. Select **"Generate a password"** (temp password included in invite)
+6. Leave email pre-verified: ✅ (admin-created users with `email_verified = true` skip the OTP flow and go straight to the set-permanent-password screen)
+7. Assign to the `beta_tester` group after creation: Users → select user → Group memberships → Add to group → `beta_tester`
+
+### Test invite (run before bulk provisioning)
+
+Send a test invite to yourself via Cognito console (same steps as above, username = `ctcb57@gmail.com`).
+Verify:
+- Email arrives from `noreply@credencesports.com` (not AWS default domain)
+- Subject and branding look correct
+- Temp-password login works at `https://www.credencesports.com/login`
+- After setting permanent password, dashboard loads
+- No spam folder

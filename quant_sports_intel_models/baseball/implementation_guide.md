@@ -12039,26 +12039,26 @@ Customize the Cognito invite email so beta users receive a branded welcome messa
 - Configured Cognito to send via SES using `noreply@credencesports.com` (via AWS CLI `update-user-pool --email-configuration`)
 - Submitted SES production access request (AWS support case open as of 2026-06-13); awaiting approval
 
-**Remaining tasks — two paths (pick one):**
+**Remaining tasks — Path A (SES production; Path B retired 2026-06-18):**
 
-_Path A — Wait for SES production approval (original plan):_
-- [ ] Confirm SES production access granted by AWS
-- [ ] Send test invite to own email; verify it arrives from `noreply@credencesports.com` without hitting spam
-- [ ] Provision each beta user via Cognito console (Users → Create user → send invitation email)
+> SES production access granted 2026-06-18. Resend contingency (Path B) is retired. Follow Path A.
+
+- [x] Confirm SES production access granted by AWS ✅ 2026-06-18
+- [ ] Set up bounce/complaint handling before bulk sends (see `infrastructure/aws_resources.md` SES section):
+  - [ ] Enable account-level suppression list (`sesv2 put-account-suppression-attributes --suppressed-reasons BOUNCE COMPLAINT`)
+  - [ ] Create SNS topic `credence-prod-ses-bounce-complaint`; subscribe `support@credencesports.com`; confirm subscription
+  - [ ] Create SES configuration set `credence-prod-ses-config`; add SNS event destination for BOUNCE + COMPLAINT
+  - [ ] Update Cognito SES wiring to include `ConfigurationSet=credence-prod-ses-config`
+  - [ ] Smoke-test: send to `bounce@simulator.amazonses.com` and `complaint@simulator.amazonses.com`; confirm SNS alert arrives at `support@credencesports.com`
+- [ ] Send test invite to own email (`ctcb57@gmail.com`); verify it arrives from `noreply@credencesports.com` without hitting spam
+- [ ] Provision each beta user via Cognito console (Users → Create user → send invitation email → assign `beta_tester` group)
 - [ ] Confirm each beta user can log in and reach the dashboard
-
-_Path B — Resend contingency (if SES approval doesn't arrive before beta launch; see A0.5 Resend section):_
-- [ ] Complete Resend domain verification and deploy `cognito-email-sender` Lambda per A0.5 spec
-- [ ] Verify Lambda intercepts Cognito invitation messages: create a test user in the Cognito console and confirm the invite arrives via Resend (check Resend dashboard for delivery receipt)
-- [ ] Provision each beta user via Cognito console — same steps as Path A; delivery mechanism is transparent once the Lambda is wired
-- [ ] Confirm each beta user can log in and reach the dashboard
-
-**Note:** Path B simultaneously unblocks A0.4.22 (password reset verification codes) and A0.4.11 (email notification toggle) — the `cognito-email-sender` Lambda intercepts all Cognito-originated emails, not just invitations.
 
 **Acceptance criteria:**
 - [x] Invite email shows Credence Sports branding (not the default AWS template)
-- [ ] Invite email arrives from `noreply@credencesports.com` (not `no-reply@verificationemail.com`) — via SES (Path A) or Resend (Path B)
+- [ ] Invite email arrives from `noreply@credencesports.com` (not `no-reply@verificationemail.com`)
 - [x] Temp-password login flow works on `https://www.credencesports.com`
+- [ ] Bounce/complaint SNS alerts reach `support@credencesports.com` (confirmed via mailbox simulator)
 - [ ] All beta users provisioned and able to authenticate
 
 ---
@@ -12147,8 +12147,8 @@ Alert immediately when the site or API goes down so issues are caught before bet
 
 ---
 
-#### A0.4.22 — Password reset flow 🟢 READY (validated 2026-06-14; SES prod granted 2026-06-18)
-> **2026-06-18:** SES is in production → finish via **Path A only** (branded "Verification message" template + redeploy `infrastructure/lambda/deploy.sh` + retest with a real non-sandbox email). **Path B (Resend) is retired.**
+#### A0.4.22 — Password reset flow ✅ SHIPPED 2026-06-18 (validated end-to-end with a real non-sandbox email)
+> **2026-06-18:** done via **Path A (SES)**. Branded "Verification message" template delivers from `noreply@credencesports.com`; `POST /auth/verify-email` (fire-and-forget on login) auto-verifies admin-created accounts via `cognito-idp:AdminUpdateUserAttributes` (new `CognitoEmailVerify` inline policy on `credence-prod-lambda-execution-role`, scoped to the prod pool; lambda redeployed; documented in `infrastructure/aws_resources.md`). Full flow verified: request code → branded email → reset → login. **Path B (Resend) retired.** Changelog added (week 2026-06-15).
 
 Beta users need a self-service way to reset their password without admin intervention.
 
