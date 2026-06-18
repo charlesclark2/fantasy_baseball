@@ -507,12 +507,29 @@ def main() -> int:
         log.info("No rows needing narratives — nothing to do")
         return 0
 
-    log.info("Generating narratives for %d rows", len(rows))
+    # Group by game_pk only — one Cortex call per game.
+    # Within each game, prefer post_lineup (richer data) over morning.
+    # The UPDATE writes to all prediction_types for that game_pk at once.
+    from collections import defaultdict as _defaultdict
+    _by_game: dict = _defaultdict(list)
+    for r in rows:
+        _by_game[r["GAME_PK"]].append(r)
+
+    def _pick_representative(game_rows: list) -> dict:
+        post = [r for r in game_rows if r.get("PREDICTION_TYPE") == "post_lineup"]
+        return post[0] if post else game_rows[0]
+
+    deduped_rows = [_pick_representative(g) for g in _by_game.values()]
+
+    log.info(
+        "Generating narratives for %d games (%d raw rows deduped)",
+        len(deduped_rows), len(rows),
+    )
     success = 0
     skipped = 0
     errors = 0
 
-    for row in rows:
+    for row in deduped_rows:
         game_pk = row["GAME_PK"]
         prediction_type = row["PREDICTION_TYPE"]
 
@@ -540,13 +557,11 @@ def main() -> int:
                 SET pick_narrative = %(narrative)s
                 WHERE game_pk = %(game_pk)s
                   AND game_date = %(date)s
-                  AND prediction_type = %(prediction_type)s
                 """,
                 {
                     "narrative": _NO_PICK_NARRATIVE,
                     "game_pk": game_pk,
                     "date": args.date,
-                    "prediction_type": prediction_type,
                 },
             )
             conn.commit()
@@ -602,17 +617,18 @@ def main() -> int:
                 SET pick_narrative = %(narrative)s
                 WHERE game_pk = %(game_pk)s
                   AND game_date = %(date)s
-                  AND prediction_type = %(prediction_type)s
                 """,
                 {
                     "narrative": narrative,
                     "game_pk": game_pk,
                     "date": args.date,
-                    "prediction_type": prediction_type,
                 },
             )
             conn.commit()
-            log.info("Wrote narrative for game_pk=%s prediction_type=%s", game_pk, prediction_type)
+            log.info(
+                "Wrote narrative for game_pk=%s (source: %s)",
+                game_pk, row.get("PREDICTION_TYPE"),
+            )
             success += 1
 
         except Exception:
