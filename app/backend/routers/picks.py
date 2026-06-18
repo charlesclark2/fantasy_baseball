@@ -371,6 +371,17 @@ def _build_featured_result(
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
     today = datetime.now(_ET).date().isoformat()
+
+    # Railway PG is the primary serving path — written by write_serving_store.py after
+    # each predict run. No Snowflake query on a PG hit.
+    _pg_hit = pg.get_cache("picks/featured", today)
+    if _pg_hit is not None and _pg_hit.get("game_pk") is not None:
+        try:
+            return FeaturedPickResponse(**_pg_hit)
+        except Exception:
+            logger.warning("PG stale/invalid for picks/featured, re-fetching from Snowflake")
+
+    # S3/in-process cache: only populated once narrative is available
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)

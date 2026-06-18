@@ -36,6 +36,7 @@ import os
 import sys
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import boto3
 import psycopg2
@@ -803,6 +804,95 @@ QUALIFY ROW_NUMBER() OVER (
     PARTITION BY game_pk
     ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END, inserted_at DESC
 ) = 1
+"""
+
+_FEATURED_TODAY_SERVING_SQL = """
+WITH ranked AS (
+    SELECT
+        p.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY p.game_pk
+            ORDER BY
+                CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                p.inserted_at DESC
+        ) AS _rn
+    FROM baseball_data.betting_ml.daily_model_predictions p
+    WHERE p.game_date = %(today)s
+      AND p.prediction_type IN ('post_lineup', 'morning')
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT
+        b.game_pk, b.home_team, b.away_team,
+        'h2h'                                                         AS market_type,
+        b.calibrated_win_prob                                         AS model_prob,
+        b.h2h_market_implied_prob                                     AS market_prob,
+        ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
+        b.win_prob_ci_low, b.win_prob_ci_high,
+        b.game_datetime, b.game_date, b.prediction_type,
+        b.layer4_h2h_decision                                         AS pick_side
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT
+        b.game_pk, b.home_team, b.away_team,
+        'totals'                                                      AS market_type,
+        b.totals_model_prob                                           AS model_prob,
+        b.over_prob_consensus                                         AS market_prob,
+        ABS(b.totals_model_prob - b.over_prob_consensus)              AS edge,
+        b.win_prob_ci_low, b.win_prob_ci_high,
+        b.game_datetime, b.game_date, b.prediction_type,
+        b.layer4_totals_decision                                      AS pick_side
+    FROM base b
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date,
+       prediction_type, pick_side
+FROM h2h UNION ALL
+SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
+       edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date,
+       prediction_type, pick_side
+FROM totals
+ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+LIMIT 1
+"""
+
+_FEATURED_YESTERDAY_SERVING_SQL = """
+WITH ranked AS (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (
+            PARTITION BY game_pk
+            ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
+        ) AS _rn
+    FROM baseball_data.betting_ml.daily_model_predictions
+    WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
+      AND qualified_bet = TRUE
+),
+base AS (SELECT * FROM ranked WHERE _rn = 1),
+h2h AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
+           clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
+    WHERE b.layer4_h2h_decision IN ('home', 'away')
+),
+totals AS (
+    SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
+           clv.actual_outcome
+    FROM base b
+    LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
+        ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
+    WHERE b.layer4_totals_decision IN ('over', 'under')
+)
+SELECT * FROM h2h UNION ALL SELECT * FROM totals
+ORDER BY actual_outcome DESC NULLS LAST, game_pk, market_type
+LIMIT 1
 """
 
 _GAME_PICKS_BATCH = """
@@ -1641,6 +1731,115 @@ def main() -> int:
         except Exception:
             log.exception("Failed to write picks/today")
             errors += 1
+
+        # ── picks/featured ───────────────────────────────────────────────────
+        # Prevents /picks/featured from querying Snowflake on every request.
+        # Runs 2 LIMIT-1 queries + 1 targeted explanation lookup; cheap vs per-request cost.
+        if pg and (run_all or args.picks):
+            try:
+                _feat_rows = _sf_query(sf, _FEATURED_TODAY_SERVING_SQL, {"today": today})
+                _yest_rows = _sf_query(sf, _FEATURED_YESTERDAY_SERVING_SQL, {"today": today})
+                if _feat_rows:
+                    fr = _feat_rows[0]
+                    gp = fr.get("GAME_PK")
+                    # Fetch explanation for the featured game (single row lookup)
+                    _expl_rows = _sf_query(sf, _EXPLANATION_BATCH.format(game_pk_list=str(gp))) if gp else []
+                    _expl_data = _expl_rows[0] if _expl_rows else {}
+                    # Parse pick_explanation JSON
+                    _expl_dict = None
+                    _pick_narrative = None
+                    if _expl_data:
+                        _raw_expl = _expl_data.get("PICK_EXPLANATION")
+                        if _raw_expl:
+                            try:
+                                _expl_dict = json.loads(_raw_expl) if isinstance(_raw_expl, str) else _raw_expl
+                            except Exception:
+                                pass
+                        _pick_narrative = _expl_data.get("PICK_NARRATIVE")
+                    # Extract top 3 drivers for both markets
+                    _market_type = fr.get("MARKET_TYPE") or ""
+                    _top_drivers_h2h = None
+                    _top_drivers_totals = None
+                    if _expl_dict:
+                        _h2h_t = (_expl_dict.get("targets") or {}).get("home_win")
+                        if _h2h_t:
+                            _top_drivers_h2h = (_h2h_t.get("drivers") or [])[:3]
+                        _tot_t = (_expl_dict.get("targets") or {}).get("total_runs")
+                        if _tot_t:
+                            _top_drivers_totals = (_tot_t.get("drivers") or [])[:3]
+                    # Build yesterday result
+                    _yesterday = None
+                    if _yest_rows:
+                        yr = _yest_rows[0]
+                        _outcome_flag = yr.get("ACTUAL_OUTCOME")
+                        if _outcome_flag is not None:
+                            _yesterday = {
+                                "matchup": f"{yr.get('AWAY_TEAM') or ''} @ {yr.get('HOME_TEAM') or ''}",
+                                "market_type": yr.get("MARKET_TYPE") or "",
+                                "outcome": "Won" if _outcome_flag == 1 else "Lost",
+                            }
+                    # game_time_et
+                    _game_time_et = None
+                    _gdt = fr.get("GAME_DATETIME")
+                    if _gdt is not None:
+                        try:
+                            _ET_zone = ZoneInfo("America/New_York")
+                            if _gdt.tzinfo is None:
+                                _gdt = _gdt.replace(tzinfo=timezone.utc)
+                            _game_time_et = _gdt.astimezone(_ET_zone).strftime("%-I:%M %p ET")
+                        except Exception:
+                            pass
+                    # ai_summary
+                    _model_prob = fr.get("MODEL_PROB")
+                    _edge_raw = fr.get("EDGE")
+                    _mp = round((_model_prob or 0) * 100, 1)
+                    _ep = round((_edge_raw or 0) * 100, 1)
+                    _sign = "+" if _ep >= 0 else ""
+                    if _market_type == "h2h":
+                        _ai_summary = (f"Model assigns {_mp}% win probability — "
+                                       f"a {_sign}{_ep}pp edge over the Bovada closing line.")
+                    else:
+                        _ai_summary = (f"Totals model assigns {_mp}% probability this game goes over — "
+                                       f"a {_sign}{_ep}pp edge over the consensus line.")
+                    # pick_date
+                    _game_date_raw = fr.get("GAME_DATE")
+                    _pick_date = (_game_date_raw.isoformat() if hasattr(_game_date_raw, "isoformat")
+                                  else str(_game_date_raw) if _game_date_raw else None)
+                    _away = fr.get("AWAY_TEAM") or ""
+                    _home = fr.get("HOME_TEAM") or ""
+                    _prediction_type = fr.get("PREDICTION_TYPE") or ""
+                    _featured_payload = {
+                        "game_pk": gp,
+                        "matchup": f"{_away} @ {_home}",
+                        "game_time_et": _game_time_et,
+                        "market_type": _market_type,
+                        "edge": round(_edge_raw * 100, 2) if _edge_raw is not None else None,
+                        "model_prob": _model_prob,
+                        "market_prob": fr.get("MARKET_PROB"),
+                        "ci_low": fr.get("WIN_PROB_CI_LOW"),
+                        "ci_high": fr.get("WIN_PROB_CI_HIGH"),
+                        "conviction_label": "HIGH CONVICTION",
+                        "ai_summary": _ai_summary,
+                        "yesterday": _yesterday,
+                        "is_stale": False,
+                        "is_preliminary": _prediction_type == "morning",
+                        "pick_date": _pick_date,
+                        "home_team": _home or None,
+                        "away_team": _away or None,
+                        "pick_side": fr.get("PICK_SIDE"),
+                        "model_narrative": _pick_narrative,
+                        "top_drivers_h2h": _top_drivers_h2h,
+                        "top_drivers_totals": _top_drivers_totals,
+                        "served_tier": (_expl_dict or {}).get("served_tier"),
+                    }
+                    _pg_set_cache(pg, "picks/featured", today, _featured_payload)
+                    log.info("PG: picks/featured written (game_pk=%s, market=%s, narrative=%s)",
+                             gp, _market_type, "yes" if _pick_narrative else "no")
+                else:
+                    log.info("No conviction picks for %s — skipping picks/featured cache write", today)
+            except Exception:
+                log.exception("Failed to write picks/featured")
+                errors += 1
 
         # ── picks/ev ────────────────────────────────────────────────────────
         try:

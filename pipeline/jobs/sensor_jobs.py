@@ -17,6 +17,7 @@ from pipeline.ops.daily_ingestion_ops import (
     compute_elo,
     dbt_build_bullpen_posteriors_op,
     dbt_umpire_feature_rebuild,
+    generate_pick_narratives_op,
     predict_today_morning,
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
@@ -57,7 +58,11 @@ def lineup_monitor_job():
     # actual batters. (Was a separate lineup_compute_posteriors Python op.)
     s2c = lineup_dbt_feature_rebuild(start=s2)
     s3 = lineup_predict(start=s2c)
-    s4 = lineup_odds_snapshot(start=s3)
+    # E9.13 — generate plain-English pick narratives after the post-lineup re-score,
+    # before the CLV rebuild + serving store write so Railway PG picks up pick_narrative.
+    # Soft-fail: Cortex outage must not block the odds snapshot or serving write.
+    s3n = generate_pick_narratives_op(start=s3)
+    s4 = lineup_odds_snapshot(start=s3n)
     clv = lineup_dbt_clv_rebuild(start=s4)
     write_serving_store_op(predict_done=clv)
 

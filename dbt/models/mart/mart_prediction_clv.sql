@@ -1,9 +1,14 @@
 -- =============================================================================
 -- mart_prediction_clv.sql
--- Grain: one row per (game_pk, score_date, model_version, retrain_tag).
---        Multiple model variants for the same game (e.g. promoted v2 and a
---        market-blind retrain_tag='market_blind_epic1' challenger) coexist as
---        separate rows so the Model Performance page can compare them.
+-- Grain: one row per (game_pk, model_version, retrain_tag).
+--        score_date is NOT part of the grain — a game re-scored under the same
+--        model_version (e.g. a live morning row later joined by a post_lineup
+--        row, or a backfill of a game that already had a live prediction) resolves
+--        to a single canonical row: post_lineup > morning, live > backfill,
+--        most-recent inserted_at as tiebreaker. (E9.15 fix: removing score_date
+--        from the partition collapsed 9 v5-morning duplicates in 2026.)
+--        Multiple model variants (e.g. v5 champion + pre_lineup_v1 morning model)
+--        coexist as separate rows so the Model Performance page can compare them.
 -- Purpose: Joins daily_model_predictions to mart_closing_line_value to
 --          surface CLV metrics alongside model predictions.
 --
@@ -27,10 +32,14 @@ predictions_ranked as (
     select
         *,
         row_number() over (
-            partition by game_pk, score_date, model_version, coalesce(retrain_tag, '')
+            -- E9.15: score_date removed from partition so same game re-scored under
+            -- the same model_version collapses to one canonical row instead of two.
+            partition by game_pk, model_version, coalesce(retrain_tag, '')
             order by
-                -- prefer post_lineup (has confirmed lineup features); fall back to morning/backfill
+                -- prefer post_lineup (dense confirmed-lineup features) over morning
                 case when prediction_type = 'post_lineup' then 1 else 2 end,
+                -- prefer live serve (is_backfill=FALSE) over after-the-fact backfill
+                case when coalesce(is_backfill, false) then 2 else 1 end,
                 inserted_at desc
         ) as _rn
     from {{ source('betting_ml', 'daily_model_predictions') }}
@@ -105,6 +114,9 @@ select
     c.n_books_with_clv,
     c.clv_data_source,
     c.close_snapshot_ts,
+
+    -- ── Serving provenance ────────────────────────────────────────────────────
+    p.is_backfill,
 
     -- ── CLV has data flag ─────────────────────────────────────────────────────
     (c.clv_home_ml is not null)::boolean                                as has_clv

@@ -122,11 +122,12 @@ ORDER BY prediction_date ASC
 _PREDICTION_LOG_STATS_SQL = """
 SELECT
     COUNT(*)                          AS total_rows,
-    COUNT(*)                          AS rows_with_outcome,
+    COUNT(DISTINCT game_pk)           AS distinct_games,
     COUNT(close_vf_home)              AS rows_with_clv,
     MIN(score_date)                   AS earliest_date,
     MAX(score_date)                   AS latest_date
 FROM baseball_data.betting.mart_prediction_clv
+WHERE model_version = 'v5'
 """
 
 _MART_CLV_SQL = """
@@ -217,9 +218,15 @@ def load_prediction_log_stats() -> dict:
             return {}
         df.columns = [c.lower() for c in df.columns]
         row = df.iloc[0]
+        total = int(row.get("total_rows") or 0)
+        distinct = int(row.get("distinct_games") or 0)
         return {
-            "total_rows": int(row.get("total_rows") or 0),
-            "rows_with_outcome": int(row.get("rows_with_outcome") or 0),
+            "total_rows": total,
+            "distinct_games": distinct,
+            # E9.15 guard: after the mart_prediction_clv grain fix (no score_date in partition),
+            # total_rows == distinct_games for the champion v5 model; a mismatch means
+            # the same game_pk appears twice (new duplicate source — investigate).
+            "guard_ok": total == distinct,
             "rows_with_clv": int(row.get("rows_with_clv") or 0),
             "earliest_date": row.get("earliest_date"),
             "latest_date": row.get("latest_date"),
@@ -276,9 +283,17 @@ if _active_models:
 stats = load_prediction_log_stats()
 
 with st.sidebar:
-    st.subheader("Prediction Log Stats")
-    st.write(f"**Total rows:** {stats.get('total_rows', '—')}")
-    st.write(f"**Rows with outcome:** {stats.get('rows_with_outcome', '—')}")
+    st.subheader("Prediction Log Stats (v5 champion)")
+    distinct = stats.get("distinct_games")
+    total = stats.get("total_rows")
+    guard_ok = stats.get("guard_ok")
+    st.write(f"**Distinct games:** {distinct if distinct is not None else '—'}")
+    # E9.15 guard: total rows should equal distinct games after the mart grain fix.
+    if guard_ok is False:
+        st.warning(
+            f"⚠️ Dedup guard: {total} rows vs {distinct} distinct game_pk — "
+            "investigate for new duplicates in mart_prediction_clv."
+        )
     st.write(f"**Rows with CLV:** {stats.get('rows_with_clv', '—')}")
     earliest = stats.get("earliest_date")
     latest = stats.get("latest_date")
@@ -303,7 +318,7 @@ n_rows = len(df)
 # Empty state guard
 # ---------------------------------------------------------------------------
 
-n_total_logged = stats.get("total_rows", n_rows)
+n_total_logged = stats.get("distinct_games", stats.get("total_rows", n_rows))
 if n_total_logged < 5:
     st.info(
         "Not enough history yet — check back after a few days of predictions. "
@@ -459,7 +474,9 @@ if not actionable.empty:
 
 def _compute_summary_row(df_all: pd.DataFrame, act: pd.DataFrame) -> dict:
     """Compute one row of summary metrics for the given (filtered) df + actionable subset."""
-    row: dict = {"Predictions": len(df_all)}
+    # E9.15: count distinct games, not market rows (h2h UNION ALL totals = 2× games)
+    n_games = df_all["game_pk"].nunique() if "game_pk" in df_all.columns else len(df_all)
+    row: dict = {"Games Scored": n_games}
     if not act.empty:
         row["Win Rate"] = f"{(act['actual_outcome'] == 1).mean():.1%}"
     else:
@@ -493,7 +510,8 @@ def _render_summary(df_all: pd.DataFrame, act: pd.DataFrame) -> None:
         # Single variant — render the classic 5-metric row.
         r = _compute_summary_row(df_all, act)
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Predictions Logged", r["Predictions"])
+        col1.metric("Games Scored", r["Games Scored"],
+                    help="Distinct games in the selected date range / model version (one per game, not per market).")
         col2.metric(
             "Win Rate (Actionable)", r["Win Rate"],
             help=("Percentage of bets won among actionable predictions (EV > 0)."),
@@ -521,7 +539,7 @@ def _render_summary(df_all: pd.DataFrame, act: pd.DataFrame) -> None:
         rows.append({"Variant": vl, **_compute_summary_row(df_v, act_v)})
     st.dataframe(pd.DataFrame(rows), hide_index=True, width='stretch')
     st.caption(
-        "Each row is an independent model variant. Predictions / P&L are NOT additive — "
+        "Each row is an independent model variant. Games Scored / P&L are NOT additive — "
         "the same game is scored once per variant. Compare rows side-by-side rather than summing."
     )
 

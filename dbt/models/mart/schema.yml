@@ -7965,12 +7965,14 @@ models:
   # ============================================================================
   - name: mart_clv_labeled_games
     description: >
-      One row per (game_pk, market_type) for each live game meeting all four
-      CLV label conditions: (1) live pre-game prediction exists, (2) opening
-      market price exists, (3) closing market price exists, (4) game result
-      exists. market_type in {h2h, totals}. This is the canonical source for
-      Epic 12 gate thresholds. "50 CLV-labeled games" means 50 distinct
-      game_pk values in this mart. Live data only (2026-05-10+).
+      One row per (game_pk, market_type) for each game meeting all four
+      CLV label conditions: (1) a v5 champion prediction exists (morning or
+      post_lineup, live or backfill), (2) opening market price exists, (3)
+      closing market price exists, (4) game result exists. market_type in
+      {h2h, totals}. This is the canonical source for Epic 12 gate thresholds.
+      "50 CLV-labeled games" means 50 distinct game_pk values in this mart.
+      Pinned to model_version = 'v5' (E9.15); post_lineup > morning,
+      live > backfill as tiebreakers.
 
     tests:
       - dbt_utils.unique_combination_of_columns:

@@ -12,10 +12,10 @@
 --          This is the gate-threshold tracker referenced by all Epic 12 stories.
 --          "50 CLV-labeled games" means 50 distinct game_pk values in this mart.
 --
--- Prediction selection: one canonical prediction per game_pk, preferring
---          post_lineup over morning, then latest inserted_at as tiebreaker.
---          Backfill and null prediction_type rows are excluded — only real-time
---          pre-game predictions represent bets we could have placed.
+-- Prediction selection: one canonical v5 champion prediction per game_pk.
+--          post_lineup > morning, live > backfill, latest inserted_at as final
+--          tiebreaker. Pinned to model_version = 'v5' so pre_lineup_v1 morning
+--          rows cannot contaminate Model-Skill metrics. (E9.15)
 --
 -- CLV direction: clv and clv_positive are always measured from the home/over
 --          perspective (consistent with mart_closing_line_value). Use model_edge
@@ -31,7 +31,9 @@
 
 with
 
--- One canonical pre-game prediction per game: post_lineup > morning, latest wins
+-- One canonical pre-game prediction per game: post_lineup > morning, live > backfill, latest wins.
+-- E9.15: pin to model_version = 'v5' (production champion) so pre_lineup_v1 morning rows
+-- cannot contaminate the Model-Skill metrics on the performance page.
 best_prediction as (
     select
         *,
@@ -39,10 +41,12 @@ best_prediction as (
             partition by game_pk
             order by
                 case when prediction_type = 'post_lineup' then 1 else 2 end,
+                case when coalesce(is_backfill, false) then 2 else 1 end,
                 inserted_at desc
         ) as _rn
     from {{ source('betting_ml', 'daily_model_predictions') }}
     where prediction_type in ('morning', 'post_lineup')
+      and model_version = 'v5'
 ),
 
 predictions as (

@@ -18,6 +18,7 @@ from pipeline.ops.daily_ingestion_ops import (
     generate_env_state_signals_op,
     generate_matchup_signals_op,
     generate_offense_signals_op,
+    generate_pick_narratives_op,
     generate_run_env_signals_op,
     generate_starter_ip_signals_op,
     generate_starter_signals_op,
@@ -144,9 +145,13 @@ def daily_ingestion_job():
     # handled authoritatively by the lineup_monitor sensor.
     s18 = dbt_umpire_feature_rebuild(start=p_matchup)
     s19 = predict_today_morning(start=s18)
-    write_api_cache_op(predict_done=s19)
-    write_serving_store_op(predict_done=s19)
-    s19b = update_pipeline_status(start=s19)
+    # E9.13 — generate plain-English pick narratives (Snowflake Cortex) BEFORE the
+    # serving writes so Railway PG picks up pick_narrative alongside pick_explanation.
+    # Soft-fail, so a Cortex outage never blocks write_serving_store_op.
+    s19n = generate_pick_narratives_op(start=s19)
+    write_api_cache_op(predict_done=s19n)
+    write_serving_store_op(predict_done=s19n)
+    s19b = update_pipeline_status(start=s19n)
     s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
     s22 = compute_model_health(start=s21)
