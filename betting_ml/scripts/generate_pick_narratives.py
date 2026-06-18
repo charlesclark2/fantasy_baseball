@@ -42,15 +42,70 @@ _ML_SCHEMA = ml_schema()
 # Snowflake Cortex model — mistral-7b is cheap and sufficient for 2-3 sentence summaries.
 _CORTEX_MODEL = "mistral-7b"
 
-# Map any legacy/outdated team names to their current official names.
-# Checked against MLB.com as of 2026. Add entries here when franchises rename.
+# 3-letter MLB abbreviations → full city+nickname.
+# Mistral-7B has no baseball context; "ATH" → "Atlanta Hawks" is a real hallucination
+# unless we expand abbreviations before they enter the prompt.
+_MLB_ABBR_TO_FULL: dict[str, str] = {
+    # AL East
+    "BAL": "Baltimore Orioles",
+    "BOS": "Boston Red Sox",
+    "NYY": "New York Yankees",
+    "TB":  "Tampa Bay Rays",
+    "TBR": "Tampa Bay Rays",
+    "TOR": "Toronto Blue Jays",
+    # AL Central
+    "CWS": "Chicago White Sox",
+    "CHW": "Chicago White Sox",
+    "CLE": "Cleveland Guardians",
+    "DET": "Detroit Tigers",
+    "KC":  "Kansas City Royals",
+    "KCR": "Kansas City Royals",
+    "MIN": "Minnesota Twins",
+    # AL West
+    "HOU": "Houston Astros",
+    "LAA": "Los Angeles Angels",
+    "ANA": "Los Angeles Angels",
+    "ATH": "Athletics",          # Sacramento/Oakland Athletics; NOT Atlanta anything
+    "OAK": "Oakland Athletics",
+    "SAC": "Sacramento Athletics",
+    "SEA": "Seattle Mariners",
+    "TEX": "Texas Rangers",
+    # NL East
+    "ATL": "Atlanta Braves",
+    "MIA": "Miami Marlins",
+    "NYM": "New York Mets",
+    "PHI": "Philadelphia Phillies",
+    "WSH": "Washington Nationals",
+    "WAS": "Washington Nationals",
+    # NL Central
+    "CHC": "Chicago Cubs",
+    "CIN": "Cincinnati Reds",
+    "MIL": "Milwaukee Brewers",
+    "PIT": "Pittsburgh Pirates",
+    "STL": "St. Louis Cardinals",
+    # NL West
+    "ARI": "Arizona Diamondbacks",
+    "COL": "Colorado Rockies",
+    "LAD": "Los Angeles Dodgers",
+    "SD":  "San Diego Padres",
+    "SDP": "San Diego Padres",
+    "SF":  "San Francisco Giants",
+    "SFG": "San Francisco Giants",
+}
+
+# Legacy/renamed team corrections applied AFTER abbreviation expansion.
 _TEAM_NAME_CORRECTIONS: dict[str, str] = {
     "Indians": "Guardians",  # Cleveland renamed to Guardians in 2022
+    "Oakland Athletics": "Athletics",  # franchise moved; use city-neutral name
 }
 
 
 def _canonical_team_name(name: str) -> str:
-    return _TEAM_NAME_CORRECTIONS.get(name, name)
+    """Expand MLB abbreviations and apply rename corrections."""
+    if not name:
+        return name
+    expanded = _MLB_ABBR_TO_FULL.get(name, name)
+    return _TEAM_NAME_CORRECTIONS.get(expanded, expanded)
 
 _FETCH_QUERY_BASE = f"""
 SELECT
@@ -156,7 +211,8 @@ def _build_prompt(row: dict, expl: dict) -> str:
     """
     home = _canonical_team_name(row["home_team"] or "home team")
     away = _canonical_team_name(row["away_team"] or "away team")
-    pick_str = row["pick"] or "N/A"
+    raw_pick = row.get("pick")
+    pick_str = _canonical_team_name(raw_pick) if raw_pick else "N/A"
     score_date = str(row["score_date"])
 
     # Determine backed team for unambiguous LLM framing
@@ -228,11 +284,13 @@ def _build_prompt(row: dict, expl: dict) -> str:
         )
 
     prompt = f"""You are writing a brief, factual explanation for a baseball analytics app.
+These are MLB (Major League Baseball) teams — not NBA, NFL, or any other sport.
 Do NOT recommend placing a bet. Do NOT use phrases like "you should bet" or "this is a good bet."
 Frame the explanation as "what drives the model's prediction" and note the EV signal (edge) as
 a statistical measure — not as a guarantee of profit.
-IMPORTANT: Use ONLY the exact team names as given below. Do not substitute historical, previous,
-or alternate franchise names (e.g., if the team is called "Guardians", never write "Indians").
+IMPORTANT: Use ONLY the exact team names given in the "Home team" and "Away team" fields below.
+Do not invent, substitute, or infer other names — the exact strings below are definitive.
+(e.g., if the team is called "Guardians", never write "Indians"; if it is "Athletics", never write "Hawks" or any NBA/NFL team).
 
 Game: {away} at {home} on {score_date}.
 Home team: {home}. Away team: {away}.

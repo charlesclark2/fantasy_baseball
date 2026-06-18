@@ -426,12 +426,31 @@ are long) to the operator; do not git commit/push. END with an ⏭️ Operator h
 
 > **🔢 Sequencing (gating dependency).** The **derivative-odds backfill (E2.0)** — historical F5 / team-total / alt-total closing lines — **must be complete before E2.6** can validate the derivative edge: you cannot gate "beats the derivative's own close" without the historical closes. E2.0 is market-data plumbing (Session B; shares the E5.0/E5.1 Odds-API event-odds ingestion), runs **in parallel with** the market-blind model build (E2.1–E2.5), but **blocks the totality of the epic at the E2.6 gate.** Start it early so it isn't the long pole.
 
-### E2.0 — Derivative-odds backfill (gating dependency)  ⬜  **[Track data / Session B · blocks E2.6 · shares E5.0/E5.1 plumbing]**
-**Tasks:**
+### E2.0 — Derivative-odds backfill (gating dependency)  ✅ **SHIPPED 2026-06-18**  **[Track data / Session B · unblocks E2.6]**
+> **✅ Result:** `scripts/derivative_odds_backfill.py` → `oddsapi.derivative_odds_raw` (idempotent via `fetch_status` sentinels — sentinel'd events are skipped, no wasted credits) → `stg_derivative_odds` → **`mart_derivative_closes`** (grain `game_pk × market_key × bookmaker_key × outcome_name`; "close" = last pre-game snapshot with `actual_snapshot_ts ≤ commence_time` leakage guard; INNER-join to `mart_game_odds_bridge`). **238,421 closes / 5,896 games · 2023-05-03→2026-06-06 · 24 books · zero leakage violations · implied-prob 0.029–0.990 (avg 0.532).** Full dbt tests pass. **EVAL/CLV-ONLY** (Principle 3 — never a training feature). Markets: team_totals, alternate_totals, h2h_h1, totals_h1.
+> **⚠️ Two gaps → E2.0b (live capture follow-on):** **(1) F5 historical is sparse — only ~65 games, all 2023** (the Odds API historical endpoint didn't offer F5 consistently) → **the F5 derivative edge cannot be backtested from history; validating the F5 "softer market" thesis needs *forward* capture.** **(2)** Latest game is 2026-06-06 → ongoing games need a **live capture cadence.** Both are E2.0b.
+
+**Tasks (as built):**
 - [ ] Backfill historical **derivative totals lines** — first-5-innings (F5) totals, team totals, and alternate game totals — via The Odds API **historical event-odds** (`10 × markets × regions`/event/snapshot; additional-market history only after **2023-05-03**; use GET historical events for eventIds). Reuse the E5.0/E5.1 prop-ingestion pattern (Railway cron / batch; raw → staging).
 - [ ] **Closing snapshot per game** first (the CLV reference); optional open snapshot for movement. Leakage-safe snapshot timestamps. Bovada + curated soft books + Pinnacle (sharp reference).
 - [ ] Land in a `game_pk`-keyed mart so E2.6 can join model distribution → derivative line → realized outcome. **Eval/CLV use ONLY — never joined into the E2 model feature matrix** (market-blind constraint, above).
 **AC:** game×market historical derivative-totals lines (F5 / team-total / alt-total), close (+ open where available), 2023-05-03 → present; coverage report; credit spend logged (same order as the E5.1 prop backfill — comfortably inside 5M/mo).
+
+### E2.0b — Live derivative-odds capture (forward cadence)  ⬜  **[Track data / Session B · E2.0 follow-on · feeds the E2.6 forward leg]**
+**Why (from E2.0, 2026-06-18):** the backfill only runs to 2026-06-06, and **F5 historical is too thin to backtest (~65 games, all 2023).** So we need an ongoing capture that (a) keeps `mart_derivative_closes` current for live games, and (b) **accumulates forward F5 closes** — the only way to validate the F5 value thesis, since history can't.
+**Tasks:**
+- [ ] A **scheduled capture** of the four derivative markets (team_totals, alternate_totals, h2h_h1, totals_h1) for the upcoming/in-progress slate — mirror the **A2.18 Railway odds-capture cron** (flat-cost cron, not per-snapshot Dagster), reusing `derivative_odds_backfill.py`'s idempotent sentinel pattern. Snapshot near close; land into the same `derivative_odds_raw` → `mart_derivative_closes` path.
+- [ ] **Credit guard** + cadence tuned to the slate (capture only scheduled games; log spend vs the 5M/mo budget).
+- [ ] **EVAL/CLV-ONLY** (Principle 3) — never a training feature.
+**AC:** `mart_derivative_closes` stays current for live games (no multi-day lag); forward F5 closes accumulate game-over-game so E2.6 can eventually gate F5 on real data; credit spend logged. **Deps:** E2.0 (the pipeline it extends), A2.18 (the cron pattern). Pairs with E5.0 (live prop capture — same plumbing).
+
+```
+▶ Story prompt — E2.0b Live derivative-odds capture (forward cadence)   [Model-B · data · E2.0 follow-on]
+Read: §4 E2.0 + E2.0b + §0 + §6 + scripts/derivative_odds_backfill.py (the pipeline you extend) + A2.18 (services/odds_capture cron pattern) + E5.0 (parallel live prop capture).
+Do: schedule a forward capture of the 4 derivative markets for the upcoming/in-progress slate (mirror the A2.18 Railway cron, reuse the idempotent sentinel pattern), snapshot near close → derivative_odds_raw → stg_derivative_odds → mart_derivative_closes. Credit-guard to scheduled games + log spend. Especially accumulate forward F5 (h2h_h1/totals_h1) closes — history is too thin (~65 games, 2023) to backtest F5, so forward is the only path. EVAL/CLV-ONLY (never a model feature; CONTRACT discipline).
+Gate/AC: mart_derivative_closes stays current for live games; forward F5 closes accumulate; credit logged; EVAL/CLV-only.
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (incl. the cron deploy), git add, what to verify (new closes land for today's slate).
+```
 
 ### E2.1 — Per-side count-distribution model  ✅ **GATE PASS 2026-06-18**  **[market-blind]**
 > **Result:** NegBin beats Poisson on per-side-runs NLL (5/5 purged-CV folds, +0.093 mean), overdispersion recovered (var/mean≈1.6, `r` 8–33 across folds), market-leakage guard clean (0 market cols / 282 feats). Artifact `totals_perside_v1.pkl` + CV record `e2_1_perside_negbin_cv.json` written; **correctly NOT promoted to S3** (gated at E2.6). This marginal is what E2.1b/E2.2/E2.3/E2.5/E2.6 build on. (Two downstream notes folded into E2.2.)
@@ -541,6 +560,7 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 - [ ] A separate Stage-1 NegBin pair on **innings 1–5** run production (from `mart_pitch_play_event` / play-event marts) — starters dominate F5, bullpen barely matters → a different, often sharper signal, and a structurally softer market.
 - [ ] Convolve via the same E2.2/E2.3 machinery → F5 total + F5 team totals + `p_over` at F5 lines.
 **AC:** F5 distribution PIT-calibrated; **do not assume F5 efficiency — measure it** against the E2.0 F5 closes at E2.6.
+> **⚠️ F5 backtest data is thin (E2.0, 2026-06-18): only ~65 historical F5 closes, all 2023.** So the F5 *derivative edge* can't be honestly backtested from history — the F5 value thesis must be validated on **forward** closes (E2.0b live capture). Build the F5 *model* on the per-side machinery as planned, but treat the **F5 edge gate as forward-only** until E2.0b accumulates enough live F5 closes.
 
 ### E2.5 — Signal registration + leakage-safe backfill  ⬜
 **Tasks:**
@@ -552,7 +572,7 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 **Tasks/AC (must clear before any derivative bet surfaces as actionable):**
 - [ ] **Distributional accuracy:** convolved-total `crps_ensemble` beats the `total_runs` champion `crps_normal` under E1.1 CV, via `evaluate_promotion` (plug in as a `SamplesSpec` adapter — no gate changes).
 - [ ] **Main-line un-pause (unchanged rule):** to bet main-line totals it must beat **both** prior-predictive NLL **2.8893** AND prior-naive Brier **0.248** on rolling-60 live.
-- [ ] **Derivative edge (the real value path):** F5 / team-totals / alt-lines gated by **positive CLV vs *that derivative's own close* (from E2.0)** + **PBO<0.2 + DSR>0** (E1.4). ⚠️ Blocked until E2.0's historical derivative closes exist.
+- [ ] **Derivative edge (the real value path):** F5 / team-totals / alt-lines gated by **positive CLV vs *that derivative's own close* (from E2.0)** + **PBO<0.2 + DSR>0** (E1.4). ✅ E2.0's historical closes now exist (238k closes / 5,896 games). ⚠️ **But split the gate by market:** **team-totals + alt-totals** have deep history → backtestable now; **F5** has only ~65 historical closes (all 2023) → its gate is **forward-only**, accumulating via **E2.0b** live capture. Don't gate F5 on the thin history.
 - [ ] **FINAL STEP (§0.3):** generate the E2.7 app-session prompt and write it into §E2.7 (real PG table/columns/payload).
 
 ### E2.7 — Distribution UX  🧩  **[separate app session — prompt emitted by the E2 model session; see §0.3]**
