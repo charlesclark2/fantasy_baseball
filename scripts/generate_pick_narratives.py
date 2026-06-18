@@ -80,8 +80,9 @@ Rules:
 - If a strong counter-signal exists, acknowledge the tension briefly.
 - Be specific to this game and these teams. Never write something that could apply to any game.
 - Do NOT open with "The model", "The model is", or "The model analyzes". Vary your construction.
-- Do NOT use the words: guaranteed, win rate, profit, edge, sure bet, prediction, algorithm.
+- Do NOT use the words: guaranteed, win rate, profit, sure bet, prediction, algorithm.
 - Write for a sports-savvy reader, not a data scientist. Explain what wOBA/xwOBA means in parentheses if you use it.
+- CRITICAL: NEVER state or estimate any difference between model and market odds (e.g. "X% edge", "X probability points above the market") UNLESS a "Market comparison" section appears explicitly in the prompt context below. If that section is absent, omit ALL market-vs-model comparisons entirely — do not invent or approximate them.
 
 YOUR RESPONSE MUST:
 - Be at least 3 complete sentences.
@@ -255,6 +256,33 @@ def _build_prompt(row: dict, expl: dict) -> str | None:
         context_parts.append(tot_str)
     context = " ".join(context_parts)
 
+    # Build market comparison block from actual DB columns so the LLM
+    # never has to invent or estimate edge / market-vs-model numbers.
+    market_lines = []
+    h2h_edge_v = row.get("H2H_EDGE")
+    h2h_mkt_v = row.get("H2H_MARKET_IMPLIED_PROB")
+    h2h_model_v = row.get("H2H_POSTERIOR_PROB")
+    tot_edge_v = row.get("TOTALS_EDGE")
+    tot_model_v = row.get("TOTALS_MODEL_PROB")
+
+    if h2h_model_v is not None and h2h_mkt_v is not None and h2h_edge_v is not None:
+        sign = "+" if h2h_edge_v >= 0 else ""
+        market_lines.append(
+            f"  H2H: model gives home team {h2h_model_v * 100:.1f}% win probability; "
+            f"market implies {h2h_mkt_v * 100:.1f}% — model is {sign}{h2h_edge_v * 100:.1f}pp "
+            f"{'above' if h2h_edge_v >= 0 else 'below'} the market."
+        )
+    if tot_model_v is not None and tot_edge_v is not None:
+        sign = "+" if tot_edge_v >= 0 else ""
+        market_lines.append(
+            f"  Totals: model assigns {tot_model_v * 100:.1f}% probability of going over; "
+            f"gap vs consensus is {sign}{tot_edge_v * 100:.1f}pp."
+        )
+    market_section = (
+        "\nMarket comparison (use these EXACT numbers if referencing model-vs-market):\n"
+        + "\n".join(market_lines)
+    ) if market_lines else ""
+
     layer4_section = _layer4_section(row, home, away, favored)
 
     hw_section = ""
@@ -311,6 +339,7 @@ def _build_prompt(row: dict, expl: dict) -> str | None:
         f"{_SYSTEM_PROMPT}\n"
         f"---\n"
         f"{context}"
+        f"{market_section}"
         f"{layer4_section}"
         f"{hw_section}"
         f"{tot_section}\n"
@@ -459,7 +488,9 @@ def main() -> int:
     cur.execute(
         f"""
         SELECT game_pk, home_team, away_team, prediction_type, pick_explanation,
-               layer4_h2h_decision, layer4_h2h_rule, layer4_totals_decision
+               layer4_h2h_decision, layer4_h2h_rule, layer4_totals_decision,
+               h2h_edge, totals_edge,
+               h2h_market_implied_prob, h2h_posterior_prob, totals_model_prob
         FROM {ml_schema}.daily_model_predictions
         WHERE game_date = %(date)s
           AND pick_explanation IS NOT NULL

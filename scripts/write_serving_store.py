@@ -1756,14 +1756,17 @@ def main() -> int:
                             except Exception:
                                 pass
                         _pick_narrative = _expl_data.get("PICK_NARRATIVE")
-                    # Extract top 3 drivers
+                    # Extract top 3 drivers for both markets
                     _market_type = fr.get("MARKET_TYPE") or ""
-                    _top_drivers = None
+                    _top_drivers_h2h = None
+                    _top_drivers_totals = None
                     if _expl_dict:
-                        _target_key = "home_win" if _market_type == "h2h" else "total_runs"
-                        _target = (_expl_dict.get("targets") or {}).get(_target_key)
-                        if _target:
-                            _top_drivers = (_target.get("drivers") or [])[:3]
+                        _h2h_t = (_expl_dict.get("targets") or {}).get("home_win")
+                        if _h2h_t:
+                            _top_drivers_h2h = (_h2h_t.get("drivers") or [])[:3]
+                        _tot_t = (_expl_dict.get("targets") or {}).get("total_runs")
+                        if _tot_t:
+                            _top_drivers_totals = (_tot_t.get("drivers") or [])[:3]
                     # Build yesterday result
                     _yesterday = None
                     if _yest_rows:
@@ -1825,7 +1828,8 @@ def main() -> int:
                         "away_team": _away or None,
                         "pick_side": fr.get("PICK_SIDE"),
                         "model_narrative": _pick_narrative,
-                        "top_drivers": _top_drivers,
+                        "top_drivers_h2h": _top_drivers_h2h,
+                        "top_drivers_totals": _top_drivers_totals,
                         "served_tier": (_expl_dict or {}).get("served_tier"),
                     }
                     _pg_set_cache(pg, "picks/featured", today, _featured_payload)

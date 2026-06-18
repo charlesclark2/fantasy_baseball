@@ -50,6 +50,8 @@ type FeaturedPick = {
   // Story 30.15 — model explanation
   model_narrative?: string | null
   top_drivers?: PickDriver[] | null
+  top_drivers_h2h?: PickDriver[] | null
+  top_drivers_totals?: PickDriver[] | null
   served_tier?: string | null
 }
 
@@ -256,7 +258,9 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                 {/* Story 30.15 — model narrative + top drivers */}
                 <FeaturedPickExplanation
                   narrative={pick.model_narrative}
-                  topDrivers={pick.top_drivers}
+                  topDriversH2h={pick.top_drivers_h2h}
+                  topDriversTotals={pick.top_drivers_totals}
+                  defaultMarket={pick.market_type}
                   servedTier={pick.served_tier}
                 />
 

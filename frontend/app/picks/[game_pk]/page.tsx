@@ -825,6 +825,7 @@ export default function PickDetailPage() {
   })
 
   const [selectedBook, setSelectedBook] = useState<string>("pinnacle")
+  const [reasoningMarket, setReasoningMarket] = useState<"h2h" | "totals">("h2h")
 
   const picks = data?.picks ?? []
   const firstPick = picks[0]
@@ -839,6 +840,11 @@ export default function PickDetailPage() {
       })
     }
   }, [gamePk, firstPick])
+
+  useEffect(() => {
+    if (firstPick?.market_type === "totals") setReasoningMarket("totals")
+    else setReasoningMarket("h2h")
+  }, [firstPick?.market_type])
 
   const homeFullName = data?.home_team_name ?? firstPick?.home_team ?? "Home"
   const awayFullName = data?.away_team_name ?? firstPick?.away_team ?? "Away"
@@ -1217,9 +1223,33 @@ export default function PickDetailPage() {
 
                     {expl && (
                       <CollapsibleSection title="Model reasoning" defaultOpen={false}>
+                        {expl.targets?.["home_win"] && expl.targets?.["total_runs"] && (
+                          <div className="flex gap-1 mb-4">
+                            <button
+                              onClick={() => setReasoningMarket("h2h")}
+                              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${
+                                reasoningMarket === "h2h"
+                                  ? "bg-[#10b981] text-black"
+                                  : "bg-[#1e1e1e] text-gray-400 hover:text-gray-200"
+                              }`}
+                            >
+                              H2H
+                            </button>
+                            <button
+                              onClick={() => setReasoningMarket("totals")}
+                              className={`px-2 py-0.5 text-xs rounded font-medium transition-colors ${
+                                reasoningMarket === "totals"
+                                  ? "bg-[#10b981] text-black"
+                                  : "bg-[#1e1e1e] text-gray-400 hover:text-gray-200"
+                              }`}
+                            >
+                              Totals
+                            </button>
+                          </div>
+                        )}
                         <PickExplanationSection
                           explanation={expl}
-                          marketType={primaryMarket}
+                          marketType={reasoningMarket}
                         />
                       </CollapsibleSection>
                     )}

@@ -98,6 +98,8 @@ class FeaturedPickResponse(BaseModel):
     # Story 30.15 — model explanation
     model_narrative: str | None = None
     top_drivers: list[PickDriver] | None = None
+    top_drivers_h2h: list[PickDriver] | None = None
+    top_drivers_totals: list[PickDriver] | None = None
     served_tier: str | None = None
 
 
