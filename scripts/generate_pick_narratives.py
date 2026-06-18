@@ -234,7 +234,20 @@ def _build_prompt(row: dict, expl: dict) -> str | None:
 
     hw_prob_str = ""
     favored = None
-    if hw_pred is not None:
+    # Prefer the ensemble calibrated_win_prob (what the UI displays) over
+    # the sub-model log-odds baked into pick_explanation, which is XGBoost only.
+    calibrated = row.get("CALIBRATED_WIN_PROB") or row.get("CONSENSUS_WIN_PROB")
+    if calibrated is not None:
+        try:
+            hw_prob = float(calibrated)
+            favored = home if hw_prob >= 0.5 else away
+            underdog = away if favored == home else home
+            hw_prob_str = (
+                f"Win probability: {favored} {hw_prob * 100:.0f}% / {underdog} {(1 - hw_prob) * 100:.0f}%."
+            )
+        except Exception:
+            hw_prob_str = ""
+    elif hw_pred is not None:
         try:
             hw_prob = 1.0 / (1.0 + math.exp(-float(hw_pred)))
             favored = home if hw_prob >= 0.5 else away
@@ -259,9 +272,12 @@ def _build_prompt(row: dict, expl: dict) -> str | None:
     # Build market comparison block from actual DB columns so the LLM
     # never has to invent or estimate edge / market-vs-model numbers.
     market_lines = []
-    h2h_edge_v = row.get("H2H_EDGE")
+    # Use layer4_h2h_edge (the gating edge) — h2h_edge is known-broken (posterior=market bug).
+    h2h_edge_v = row.get("LAYER4_H2H_EDGE")
     h2h_mkt_v = row.get("H2H_MARKET_IMPLIED_PROB")
-    h2h_model_v = row.get("H2H_POSTERIOR_PROB")
+    # Use calibrated_win_prob as the model probability so the market comparison
+    # section matches the number shown in the UI.
+    h2h_model_v = row.get("CALIBRATED_WIN_PROB") or row.get("CONSENSUS_WIN_PROB") or row.get("H2H_POSTERIOR_PROB")
     tot_edge_v = row.get("TOTALS_EDGE")
     tot_model_v = row.get("TOTALS_MODEL_PROB")
 
@@ -489,8 +505,10 @@ def main() -> int:
         f"""
         SELECT game_pk, home_team, away_team, prediction_type, pick_explanation,
                layer4_h2h_decision, layer4_h2h_rule, layer4_totals_decision,
-               h2h_edge, totals_edge,
-               h2h_market_implied_prob, h2h_posterior_prob, totals_model_prob
+               layer4_h2h_edge,
+               totals_edge,
+               h2h_market_implied_prob, h2h_posterior_prob, totals_model_prob,
+               calibrated_win_prob, consensus_win_prob
         FROM {ml_schema}.daily_model_predictions
         WHERE game_date = %(date)s
           AND pick_explanation IS NOT NULL

@@ -1,5 +1,22 @@
 [
   {
+    "week": "2026-06-18",
+    "items": [
+      {
+        "tag": "improvement",
+        "text": "Model reasoning now covers both H2H and Totals signals in one view. A toggle on the featured pick card and on game detail pages lets you switch between win-probability drivers and run-total drivers — so you can see exactly what's pushing each market, not just the headline pick."
+      },
+      {
+        "tag": "fix",
+        "text": "The win probability shown in the model write-up now matches the number displayed in the probability bar. Previously the narrative was pulling from a single sub-model output (68%) rather than the full ensemble (74%); both figures now agree."
+      },
+      {
+        "tag": "fix",
+        "text": "Pick write-ups now stay in sync with the served pick. The plain-English explanation and feature drivers are regenerated alongside each day's predictions, so the reasoning you read always matches the pick currently shown — no more stale morning write-up lingering after the pick updates post-lineup."
+      }
+    ]
+  },
+  {
     "week": "2026-06-15",
     "items": [
       {

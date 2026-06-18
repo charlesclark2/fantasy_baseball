@@ -521,6 +521,20 @@ def predict_today_morning(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def generate_pick_narratives_op(context):
+    # E9.13 — generate plain-English pick narrative text via Snowflake Cortex after
+    # SHAP pick_explanation is written by predict_today. Runs for today's date only;
+    # the script skips rows where pick_narrative is already populated (idempotent).
+    # Soft-fail: a Cortex outage must not block write_serving_store_op — the app
+    # renders SHAP drivers from pick_explanation when pick_narrative is NULL.
+    try:
+        _run_script(context, "/app/betting_ml/scripts/generate_pick_narratives.py",
+                    ["--date", _today()])
+    except Exception as e:
+        context.log.warning(f"Narrative generation failed (non-fatal, picks shown without text): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_pipeline_status(context):
     """Upsert today's pipeline run summary into pipeline_status after predict_today_morning."""
     _run_script(context, "update_pipeline_status.py")
