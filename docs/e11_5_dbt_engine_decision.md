@@ -133,7 +133,7 @@ tables:
         error_after: {count: 6, period: hour}
 ```
 
-Apply to the Snowflake-backed sources that T2 will gate on. **Note (2026-06-19): Parlay API ingestion is currently off.** To avoid `dbtf source freshness` aborting the flow, all four parlayapi tables use **warn-only** (no `error_after`) — stale data emits a warning but exits 0, so the state-based build continues. When ingestion resumes, add `error_after` thresholds. Tables that receive data once daily can use `warn_after: {count: 25, period: hour}`.
+Apply to the Snowflake-backed sources that T2 will gate on. **Note (2026-06-19): Parlay API is permanently decommissioned.** All four parlayapi freshness blocks use **warn-only** (no `error_after`). The stale-data warning is the expected steady state — these tables will not receive new data. No `error_after` should ever be added back.
 
 ### 4b. `services/dbt_runner/server.py` — un-bypass the state-aware path (T2 reactivation)
 
@@ -218,6 +218,6 @@ git add docs/e11_5_dbt_engine_decision.md
 
 **CI gate result:** `dbtf parse` exit 0 (no dbt1060); `dbtf compile` exit 0 — 125 models / 1629 tests clean. Only pre-existing warnings (dbt1041 package-lock, dbt1203 cloud deferral).
 
-**Note on Parlay API off (2026-06-19):** All four parlayapi freshness blocks use warn-only (no `error_after`), so `dbtf source freshness` exits 0 even when parlayapi is stale. The state-based build flow is unblocked. When ingestion resumes, add `error_after: {count: 8, period: hour}` to the three intraday tables and `{count: 48, period: hour}` to `mlb_canonical_events_raw`.
+**Note on Parlay API (2026-06-19):** Parlay API is permanently decommissioned. All four parlayapi freshness blocks use warn-only (no `error_after`) — stale-data warnings are the permanent steady state. No `error_after` should be added. If these source tables are eventually dropped, remove their freshness blocks from sources.yml entirely.
 
 No version/install steps needed — dbt-fusion 2.0.0-preview.190 already supports both changes as confirmed empirically.
