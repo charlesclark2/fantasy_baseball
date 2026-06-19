@@ -256,6 +256,36 @@ class TestDbtExecRemote:
             with pytest.raises(TimeoutError):
                 self._fn(ctx, ["run"], "http://runner:8080", timeout_seconds=0)
 
+    def test_busy_409_retries_until_success(self):
+        """409 (runner busy) triggers a wait-and-retry loop; succeeds on the second POST.
+
+        INC-3b (2026-06-19): _run_dbt_remote called raise_for_status() immediately so
+        a 409 from the single-tenant runner blew up as HTTPError → Dagster RetryPolicy.
+        The fix adds a _BUSY_WAIT back-off loop inside _run_dbt_remote.
+        """
+        ctx = self._mock_context()
+
+        busy_resp = MagicMock()
+        busy_resp.status_code = 409
+
+        ok_post_resp = MagicMock()
+        ok_post_resp.status_code = 200
+        ok_post_resp.json.return_value = {"run_id": "r1"}
+        ok_post_resp.raise_for_status = Mock()
+
+        mock_get = MagicMock()
+        mock_get.return_value.json.return_value = {"status": "success", "returncode": 0, "stdout": "OK", "stderr": ""}
+        mock_get.return_value.raise_for_status = Mock()
+
+        mock_post = MagicMock(side_effect=[busy_resp, ok_post_resp])
+
+        with patch.object(self._mod.requests, "post", mock_post), \
+             patch.object(self._mod.requests, "get", mock_get), \
+             patch.object(self._mod.time, "sleep", MagicMock()):
+            self._fn(ctx, ["run", "--select", "mart_odds_outcomes"], "http://runner:8080")
+
+        assert mock_post.call_count == 2
+
     def test_use_state_forwarded_in_payload(self):
         ctx = self._mock_context()
         mock_post = MagicMock()

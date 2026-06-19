@@ -49,17 +49,31 @@ def _run_dbt_remote(
     extra_env = {"DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
 
     url = runner_url.rstrip("/")
-    resp = requests.post(
-        f"{url}/run",
-        json={"args": args, "env": extra_env, "use_state": use_state},
-        headers=headers,
-        timeout=30,
-    )
-    resp.raise_for_status()
+    deadline = time.monotonic() + timeout_seconds
+
+    # 409 = runner busy (single-tenant). Back off and retry until free or deadline.
+    _BUSY_WAIT = 30
+    while True:
+        resp = requests.post(
+            f"{url}/run",
+            json={"args": args, "env": extra_env, "use_state": use_state},
+            headers=headers,
+            timeout=30,
+        )
+        if resp.status_code == 409:
+            remaining = deadline - time.monotonic()
+            if remaining <= _BUSY_WAIT:
+                raise TimeoutError(
+                    f"[dbt-runner] runner still busy (409) after {timeout_seconds}s — giving up"
+                )
+            context.log.info(f"[dbt-runner] runner busy (409) — waiting {_BUSY_WAIT}s before retry")
+            time.sleep(_BUSY_WAIT)
+            continue
+        resp.raise_for_status()
+        break
+
     run_id = resp.json()["run_id"]
     context.log.info(f"[dbt-runner] started run {run_id} — dbtf {' '.join(args[:3])} …")
-
-    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         time.sleep(15)
         status_resp = requests.get(f"{url}/status/{run_id}", headers=headers, timeout=15)
