@@ -144,8 +144,29 @@ def get_snowflake_connection() -> snowflake.connector.SnowflakeConnection:
     if missing:
         raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
 
+    # Normalize SNOWFLAKE_ACCOUNT defensively: the connector (4.6.0+) rejects an
+    # account identifier containing dots/slashes, but a full host or URL sometimes
+    # lands in the env var (e.g. "IHUPICS-DP59975.snowflakecomputing.com",
+    # "https://….snowflakecomputing.com/", or trailing whitespace/newline from a
+    # paste). Strip scheme, path, host-suffix, and whitespace down to the bare
+    # identifier. Logged loudly when normalization changes the value OR can't fully
+    # clean it (e.g. a locator.region form) so the misconfigured env var is fixable.
+    _raw_account = os.environ["SNOWFLAKE_ACCOUNT"]
+    account = _raw_account.strip()
+    if "://" in account:                                  # drop scheme
+        account = account.split("://", 1)[1]
+    account = account.split("/", 1)[0]                    # drop any path/slash
+    account = account.split(".snowflakecomputing.com", 1)[0]  # drop host suffix
+    if account != _raw_account:
+        log.warning("SNOWFLAKE_ACCOUNT normalized: raw=%r -> used=%r", _raw_account, account)
+    if any(c in account for c in "./"):
+        log.warning(
+            "SNOWFLAKE_ACCOUNT still contains a dot/slash after normalization: %r "
+            "— the connector will reject this; fix the env var to the bare "
+            "org-account identifier (e.g. IHUPICS-DP59975).", account)
+
     kwargs: dict = {
-        "account":   os.environ["SNOWFLAKE_ACCOUNT"],
+        "account":   account,
         "user":      os.environ["SNOWFLAKE_USER"],
         "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
         "database":  TARGET_DATABASE,
