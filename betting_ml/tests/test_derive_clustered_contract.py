@@ -15,24 +15,26 @@ from pathlib import Path
 
 import pytest
 
-from betting_ml.scripts.derive_clustered_contract import _signal_members, derive
+from betting_ml.scripts.derive_clustered_contract import (
+    _contract_path, _default_importance_json, _signal_members, derive,
+)
 
 _ROOT = Path(__file__).resolve().parents[2]
 _JSON_DIR = _ROOT / "betting_ml" / "evaluation" / "feature_selection" / "clustered_importance"
 _BULLPEN_V3 = _JSON_DIR / "clustered_importance_total_runs_bullpen_v3.json"
 _STUFFPLUS_STATIC = _JSON_DIR / "clustered_importance_total_runs_stuffplus_deleaked.json"
-_CLEAN_MDA = _JSON_DIR / "clustered_importance_total_runs_bullpen_v3_stuffplus_deleaked.json"
-_TOTALS_CONTRACT = (_ROOT / "betting_ml" / "models" / "total_runs"
-                    / "feature_columns_ngboost_pruned_clustered_deleaked_2026.json")
 
 
-@pytest.mark.skipif(not _CLEAN_MDA.exists() or not _TOTALS_CONTRACT.exists(),
-                    reason="clean (both-de-leak) MDA JSON or totals contract not present")
-def test_shipped_contract_matches_derivation():
-    """The on-disk totals contract == the E1.3 rule applied to its fully de-leaked source MDA."""
-    derived = set(_signal_members(json.loads(_CLEAN_MDA.read_text())))
-    shipped = set(json.loads(_TOTALS_CONTRACT.read_text())["feature_cols"])
-    assert derived == shipped, f"contract drift: +{sorted(derived - shipped)} / -{sorted(shipped - derived)}"
+@pytest.mark.parametrize("target", ["home_win", "run_diff", "total_runs"])
+def test_shipped_contract_matches_derivation(target):
+    """Each shipped contract == the E1.3 rule applied to its fully de-leaked source MDA."""
+    clean_mda = _default_importance_json(target)
+    contract = _contract_path(target)
+    if not clean_mda.exists() or not contract.exists():
+        pytest.skip(f"clean (both-de-leak) MDA or contract for {target} not present")
+    derived = set(_signal_members(json.loads(clean_mda.read_text())))
+    shipped = set(json.loads(contract.read_text())["feature_cols"])
+    assert derived == shipped, f"{target} contract drift: +{sorted(derived - shipped)} / -{sorted(shipped - derived)}"
 
 
 @pytest.mark.skipif(not _STUFFPLUS_STATIC.exists(), reason="stuffplus_deleaked importance JSON not present")
