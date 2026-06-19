@@ -123,6 +123,85 @@ def _swap_bullpen_v3(df: pd.DataFrame, shrinkage_k: float) -> pd.DataFrame:
     return out.drop(columns=["home_team", "away_team"], errors="ignore")
 
 
+# ── Story E1.8: leakage-safe (prior-season) Stuff+/arsenal swap-in ─────────────
+# E1.8's leakage sweep found the FanGraphs Stuff+/arsenal block is LEAKY-season-to-date:
+# `feature_pregame_starter_features` joins `fct_fangraphs_pitcher_arsenal_wide` on
+# `season = year(game_date)` with NO `< game_date` guard, and the source is grain
+# pitcher×season at the LATEST ingestion — so each historical game gets the full-season
+# (end-of-state) value, embedding game-G-and-later pitches. The leakage-safe reconstruction
+# is the SAME starter's PRIOR-SEASON arsenal (`season = game_year - 1`), mirroring how the
+# platoon splits (mart_pitcher_vs_handedness_splits, game_year-1) and team OAA already key
+# season-grain FanGraphs data. `deleaked` swaps it in so this exact clustered-MDA reports
+# whether the Stuff+ block's importance survives the de-leak (the E2.1b template, applied to
+# the E1.8 finding). Default `leaky` leaves the matrix untouched.
+
+# arsenal-wide source column → starter feature suffix (matrix col = f"{side}_{suffix}")
+_STUFF_ARSENAL_MAP = {
+    "overall_stuff_plus":    "starter_stuff_plus",
+    "fastball_stuff_plus":   "starter_fastball_stuff_plus",
+    "slider_stuff_plus":     "starter_slider_stuff_plus",
+    "curveball_stuff_plus":  "starter_curveball_stuff_plus",
+    "changeup_stuff_plus":   "starter_changeup_stuff_plus",
+    "avg_fastball_velo_mph": "starter_avg_fastball_velo",
+    "fastball_pct":          "starter_fastball_pct",
+    "breaking_pct":          "starter_breaking_pct",
+    "offspeed_pct":          "starter_offspeed_pct",
+}
+
+
+def _swap_stuff_plus_deleaked(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace the leaky current-season Stuff+/arsenal columns with the starter's
+    PRIOR-SEASON arsenal (the leakage-safe reconstruction).
+
+    Keeps the leaky value where the prior season is missing (rookies / first MLB season) —
+    a minimal-change A/B, the same fallback convention as `_swap_bullpen_v3`; the fallback
+    count is printed so the operator can read how much of the block was actually de-leaked.
+    NOTE: only the non-windowed season-arsenal columns are swapped — the rolling
+    `*_avg_fastball_velo_{7d,14d,30d,std}` columns are AS-OF-safe (E1.8) and untouched.
+    """
+    min_year = int(pd.to_numeric(df["game_year"]).min())
+    src_cols = ", ".join(f"a.{c}" for c in _STUFF_ARSENAL_MAP)
+    q = (
+        "select s.game_pk::varchar as game_pk, lower(s.side) as side, " + src_cols + " "
+        "from baseball_data.betting_features.feature_pregame_starter_features s "
+        "left join baseball_data.betting.fct_fangraphs_pitcher_arsenal_wide a "
+        "  on a.mlbam_pitcher_id = s.pitcher_id and a.season = s.game_year - 1 "
+        f"where s.game_year >= {min_year}"
+    )
+    conn = get_snowflake_connection()
+    try:
+        cur = conn.cursor()
+        cur.execute(q)
+        pri = pd.DataFrame(cur.fetchall(), columns=[d[0].lower() for d in cur.description])
+    finally:
+        conn.close()
+    if pri.empty:
+        raise RuntimeError("prior-season arsenal query returned no rows — cannot run the Stuff+ de-leak A/B.")
+    pri["game_pk"] = pri["game_pk"].astype(str)
+
+    out = df.copy()
+    out["game_pk"] = out["game_pk"].astype(str)
+    keys = out["game_pk"].to_numpy()
+    n_total = n_fallback = 0
+    for side in ("home", "away"):
+        ps = pri[pri["side"] == side].drop_duplicates("game_pk").set_index("game_pk")
+        for src_col, suffix in _STUFF_ARSENAL_MAP.items():
+            dst = f"{side}_{suffix}"
+            if dst not in out.columns or src_col not in ps.columns:
+                continue
+            new = pd.Series(
+                pd.to_numeric(ps[src_col].reindex(keys), errors="coerce").to_numpy(),
+                index=out.index,
+            )
+            present = new.notna()
+            n_total += int(present.sum())
+            n_fallback += int((~present & out[dst].notna()).sum())
+            out[dst] = new.where(present, out[dst])      # keep leaky where prior-season missing
+    print(f"  Stuff+ de-leak swap-in: {n_total} cells repointed to prior-season "
+          f"({n_fallback} kept leaky as rookie/no-prior fallback) across {len(out)} games")
+    return out
+
+
 def _cluster_features(X: pd.DataFrame, corr_threshold: float) -> dict[int, list[str]]:
     """Hierarchical clustering of columns on distance `1 − |ρ|`.
 
@@ -166,7 +245,8 @@ def _champion_cols(name: str, cfg: dict, df: pd.DataFrame) -> list[str]:
 
 def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         refresh_cache: bool, use_champion: bool, embargo_days: int,
-        bullpen_version: str = "static", shrinkage_k: float = 1.0) -> dict:
+        bullpen_version: str = "static", shrinkage_k: float = 1.0,
+        stuff_plus_version: str = "leaky") -> dict:
     cfg = _TARGETS[target]
     metric = cfg["metric"]
     df = get_cached_df("edge_e1_training", load_features, refresh=refresh_cache).reset_index(drop=True)
@@ -175,6 +255,10 @@ def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
     if bullpen_version == "v3":
         print(f"E2.1b re-check: swapping STATIC bullpen EB → bullpen_v3 (k={shrinkage_k}) ...")
         df = _swap_bullpen_v3(df, shrinkage_k).reset_index(drop=True)
+
+    if stuff_plus_version == "deleaked":
+        print("E1.8 re-check: swapping LEAKY season-to-date Stuff+/arsenal → prior-season (leakage-safe) ...")
+        df = _swap_stuff_plus_deleaked(df).reset_index(drop=True)
 
     # The feature set we audit: the champion-of-record contract (use_champion) or the active
     # tuned challenger contract (default — that is the set E2–E4 would inherit).
@@ -236,9 +320,15 @@ def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         "corr_threshold": corr_threshold, "n_repeats": n_repeats,
         "pooled_baseline": float(np.concatenate(base_scores).mean()),
         "bullpen_version": bullpen_version,
+        "stuff_plus_version": stuff_plus_version,
         "clusters": rows,
     }
-    _write_report(payload, suffix="" if bullpen_version == "static" else f"_bullpen_{bullpen_version}")
+    suffix_parts = []
+    if bullpen_version != "static":
+        suffix_parts.append(f"bullpen_{bullpen_version}")
+    if stuff_plus_version != "leaky":
+        suffix_parts.append(f"stuffplus_{stuff_plus_version}")
+    _write_report(payload, suffix=("_" + "_".join(suffix_parts)) if suffix_parts else "")
     return payload
 
 
@@ -340,11 +430,16 @@ def main() -> None:
                          "compare whether bullpen-EB importance drops once the leaky weighting is gone.")
     ap.add_argument("--shrinkage-k", type=float, default=1.0,
                     help="bullpen_v3 prior-precision multiplier (use the k the CV gate picked).")
+    ap.add_argument("--stuff-plus-version", choices=["leaky", "deleaked"], default="leaky",
+                    help="E1.8 honesty check: 'deleaked' repoints the LEAKY season-to-date "
+                         "Stuff+/arsenal block to the starter's PRIOR-SEASON arsenal (leakage-safe) "
+                         "and writes *_stuffplus_deleaked outputs, to compare whether the Stuff+ "
+                         "block's importance survives the de-leak.")
     args = ap.parse_args()
     run(args.target, corr_threshold=args.corr_threshold, n_repeats=args.n_repeats,
         seed=args.seed, refresh_cache=args.refresh_cache, use_champion=args.use_champion,
         embargo_days=args.embargo_days, bullpen_version=args.bullpen_version,
-        shrinkage_k=args.shrinkage_k)
+        shrinkage_k=args.shrinkage_k, stuff_plus_version=args.stuff_plus_version)
 
 
 if __name__ == "__main__":

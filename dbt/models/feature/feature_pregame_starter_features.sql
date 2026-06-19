@@ -608,7 +608,17 @@ final as (
         and vs.pitcher_id   = pp.pitcher_id
     left join arsenal_features af
         on  af.mlbam_pitcher_id = pp.pitcher_id
-        and af.season           = year(pp.game_date)
+        -- E1.8 LEAKAGE FIX (was `year(pp.game_date)`): the FanGraphs arsenal is a
+        -- full-season pitcher×season value taken at the LATEST ingestion, so joining the
+        -- CURRENT season embedded game-G-and-later pitches (LEAKY-season-to-date). The
+        -- prior season keeps the stable pitch-shape signal (Stuff+ is ~stationary across a
+        -- season) without the peek; rookies / first-MLB-season starters → NULL (imputed).
+        -- A/B (clustered MDA): `home_starter_stuff_plus` importance collapsed ~88%
+        -- (Δmae +0.0065 → +0.0008) when repointed → ~the entire signal was the peek.
+        -- Mirrors the platoon-split / park-factor prior-season convention. NOTE: ZiPS
+        -- (zips_fip below) deliberately stays CURRENT season — it is a PRE-season projection
+        -- published before opening day, not a leak. See ablation_results/feature_leakage_audit.md §3.
+        and af.season           = year(pp.game_date) - 1
     left join zips_fip zf
         on  zf.pitcher_id   = pp.pitcher_id
         and zf.season       = year(pp.game_date)
