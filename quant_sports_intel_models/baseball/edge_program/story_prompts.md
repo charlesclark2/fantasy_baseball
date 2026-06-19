@@ -588,10 +588,7 @@ Gate/AC: CI builds only the modified subtree; daily op rebuilds only fresher-sou
 ✅ E11.3 COMPLETE 2026-06-19 — QUERY_TAG wired end-to-end; cost report at scripts/ops/snowflake_cost_by_job.py.
 ```
 ```
-▶ Story prompt — E11.0 Dockerized dbt runner on Railway/EC2   [Infra · cost · ⭐ foundational · unblocks E11.1/E11.4]
-Read: §5H E11.0 + sport_data_platform.md + §6 + services/odds_capture + services/derivative_capture (Railway container pattern) + the current Dagster dbt op(s).
-Do: containerize the baseball dbt project (dbt-fusion/dbt-duckdb + IAM credential-chain S3+Snowflake); deploy to Railway (or EC2-batch); Dagster TRIGGERS the container (event-driven) instead of running dbt in-process; stream status back. Validate model parity + measure Dagster run-minute drop.
-Gate/AC: dbt runs in container, Dagster only coordinates; measured Dagster reduction; reusable for new sports. Closeout: CI green + ⏭️ handoff.
+✅ E11.0 COMPLETE 2026-06-19 — services/dbt_runner/ (Dockerfile+server.py+entrypoint.sh+railway.toml); DbtRunnerResource; _run_dbt() env-var flag (DBT_RUNNER_URL); _manifest_dict() operation-node strip; 13 CI tests. Operator: deploy Railway service, set DBT_RUNNER_URL+DBT_RUNNER_AUTH_TOKEN in Dagster env, validate one intraday op.
 ```
 ```
 ▶ Story prompt — E11.4 Decompose intraday polling jobs (python→crons, dbt→E11.0)   [Infra · cost · ⭐ biggest Dagster lever · needs E11.0]

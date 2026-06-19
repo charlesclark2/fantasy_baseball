@@ -1,0 +1,24 @@
+# E11.0 — Railway config for the dbt-runner web service.
+#
+# This is an always-on HTTP service (not a cron): Dagster ops POST /run on
+# demand rather than on a schedule. Railway assigns the PORT env var;
+# entrypoint.sh reads it and starts uvicorn on that port.
+#
+# In the Railway dashboard for this service, set:
+#   Settings → Config-as-code → services/dbt_runner/railway.toml
+# (root directory stays at the repo root so the Dockerfile COPY paths work)
+#
+# Required env vars (set in Railway):
+#   SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE, SNOWFLAKE_ROLE
+#   SNOWFLAKE_PRIVATE_KEY   (PEM content — entrypoint.sh writes it to a file)
+#   DBT_RUNNER_AUTH_TOKEN   (shared secret; must match Dagster's env)
+#   TARGET_ENV              (prod | dev)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/dbt_runner/Dockerfile"
+
+[deploy]
+# Restart on crash only — the cron schedule is NOT used here (Dagster triggers via HTTP).
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
