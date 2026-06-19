@@ -1,35 +1,32 @@
 {
   "feature_cols": [
-    "away_avg_k_pct_std",
+    "away_avg_barrel_pct_std",
     "away_bp_eb_coverage_pct",
-    "away_bp_innings_pitched_14d",
-    "away_lineup_iso_vs_starter_archetype",
+    "away_bp_xwoba_against_14d",
+    "away_lineup_avg_attack_angle",
     "away_off_k_pct_std",
-    "away_pit_bb_pct_30d",
-    "away_pit_bb_pct_std",
-    "away_starter_xwoba_vs_rhb",
+    "elevation_ft",
     "elo_diff",
     "home_avg_xwoba_30d",
     "home_avg_xwoba_std",
     "home_bp_eb_coverage_pct",
     "home_bp_eb_xwoba",
     "home_bp_hard_hit_pct_14d",
-    "home_lineup_avg_woba_vs_cluster",
-    "home_lineup_avg_xwoba_vs_cluster",
     "home_starter_appearances_30d",
     "home_starter_k_pct_30d",
+    "home_starter_trailing_ra9_30g",
+    "home_starter_whiff_rate_vs_lhb",
     "home_team_sequential_bullpen_xwoba",
     "home_woba_with_risp_30d",
     "pythagorean_win_exp_diff"
   ],
   "_provenance": {
-    "story": "E1.7",
-    "derived": "2026-06-18",
-    "method": "signal-bearing (non-noise, paired-bootstrap CI>0) cluster members from the DE-LEAKED clustered MDA (--bullpen-version v3), E1.3 procedure on the leakage-safe bullpen matrix",
-    "source_report": "betting_ml/evaluation/feature_selection/clustered_importance/clustered_importance_home_win_bullpen_v3.json",
-    "supersedes": "betting_ml/models/home_win/feature_columns_xgb_classifier_pruned_clustered_2026.json (contaminated: ranking topped by the leaky bp_eb_xwoba)",
-    "n_features": 21,
-    "INTERIM": "Re-derive ONCE MORE after E1.8 (full leakage sweep) before the E6.7 retrain batch consumes this \u2014 E1.8 may de-leak more features and shift the prune. Do NOT promote a retrain on this contract until the post-E1.8 re-derivation.",
-    "bp_eb_note": "bp_eb_xwoba value collapsed to ~0% standalone (the leak); it is retained ONLY where clustered with home_team_sequential_bullpen_xwoba (the cluster's real signal). bp_eb_coverage_pct is the genuine surviving bullpen signal (rises to #1/#2)."
+    "story": "E1.8",
+    "derived": "2026-06-19",
+    "method": "non-noise (season-stratified paired-bootstrap 95% CI excludes 0) cluster members from the FULLY de-leaked clustered MDA (--bullpen-version v3 --stuff-plus-version deleaked); E1.3 rule, derived REPRODUCIBLY by betting_ml/scripts/derive_clustered_contract.py (no hand-pruning)",
+    "source_report": "betting_ml/evaluation/feature_selection/clustered_importance/clustered_importance_home_win_bullpen_v3_stuffplus_deleaked.json",
+    "n_features": 19,
+    "n_noise_clusters_dropped": 158,
+    "FINAL": "Post-E1.8 full-leakage-sweep re-derivation. Both construction de-leaks applied to the source matrix: bullpen EB (E1.7, equal-weight + appeared-roster fix) and FanGraphs Stuff+/arsenal (E1.8, prior-season repoint, feature_pregame_starter_features.sql). Supersedes the INTERIM E1.7 contract that selected Stuff+ columns off the stale leaky ranking. Cleared for the E1.9 v6 retrain."
   }
 }

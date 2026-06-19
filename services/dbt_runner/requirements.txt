@@ -2,3 +2,5 @@
 fastapi>=0.111
 uvicorn[standard]>=0.29
 python-dotenv
+# E11.2 Task 2 — S3 state persistence for source_status:fresher+ daily builds.
+boto3>=1.34

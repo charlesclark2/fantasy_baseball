@@ -760,7 +760,6 @@ sources:
           Season-level catcher framing data from the Baseball Savant catcher
           framing leaderboard. One row per player_id × season. Ingested by
           scripts/ingest_catcher_framing.py. Grain: player_id × season.
-
         columns:
           - name: player_id
             description: MLB player ID.
@@ -784,7 +783,6 @@ sources:
           ft/s (Statcast sprint speed) and is distinct from the FanGraphs Spd
           speed score. Grain: player_mlbam_id × season × snapshot_date (weekly
           Sunday snapshots). Ingested by scripts/ingest_sprint_speed.py.
-
         columns:
           - name: player_mlbam_id
             description: MLBAM player ID.
