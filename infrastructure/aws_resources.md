@@ -402,6 +402,49 @@ without needing S3's permanent prefix. S3 remains as secondary fallback during t
 
 ---
 
+## S3 — ML Artifacts + dbt State (Story I.2 / E11.2)
+
+| Resource | Value |
+|---|---|
+| **Bucket** | `baseball-betting-ml-artifacts` |
+| **Region** | `us-east-1` |
+| **Status** | ✅ Live — pre-existing; ML model artifacts in use |
+
+### Key prefixes
+
+| Prefix | Contents |
+|---|---|
+| `batter_clustering/` | Batter cluster model artifacts |
+| `home_win/` | Home-win model artifacts |
+| `layer3/` | Layer-3 signal model artifacts |
+| `meta_model/` | Meta-model artifacts |
+| `pitcher_clustering/` | Pitcher cluster model artifacts |
+| `run_differential/` | Run-differential model artifacts |
+| `sub_models/` | Sub-model artifacts |
+| `total_runs/` | Total-runs model artifacts |
+| `dbt_state/{env}/` | **E11.2** — dbt `manifest.json` + `sources.json` for `--state` incremental builds; keyed by `TARGET_ENV` (`prod`/`dev`) |
+
+### IAM — dbt-runner Railway service
+
+The Railway dbt-runner writes `dbt_state/{env}/manifest.json` and `sources.json` after
+each successful daily build (E11.2 Task 2). The IAM principal used by the dbt-runner
+needs read+write on the `dbt_state/` prefix:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["s3:GetObject", "s3:PutObject"],
+  "Resource": "arn:aws:aws:s3:::baseball-betting-ml-artifacts/dbt_state/*"
+}
+```
+
+The `baseball-access-user` IAM user (in `.env`) already has broader write access to this
+bucket for model artifact uploads; the same credential set works for dbt state. Set
+`AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` in the Railway dbt-runner service env vars
+if not already present.
+
+---
+
 ## API Cache — S3 (A0.3)
 
 | Resource | Value |

@@ -29,18 +29,26 @@ def _run_script(context, script: str, args: list[str] | None = None) -> str:
     return result.stdout or ""
 
 
-def _run_dbt_remote(context, args: list[str], runner_url: str, timeout_seconds: int = 2700) -> None:
+def _run_dbt_remote(context, args: list[str], runner_url: str, timeout_seconds: int = 2700,
+                    use_state: bool = False) -> None:
     """Delegate a dbt run to the E11.0 dbt-runner Railway service (services/dbt_runner/).
 
     Called when DBT_RUNNER_URL is set — dbt execution runs in the container,
     not on Dagster+ metered compute. Falls back to in-process dbtf when absent.
+    use_state=True (E11.2 Task 2): the server downloads prior manifest/sources.json
+    from S3 and selects source_status:fresher+ instead of the full DAG.
     """
     auth_token = os.environ.get("DBT_RUNNER_AUTH_TOKEN", "")
     headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
     extra_env = {"DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
 
     url = runner_url.rstrip("/")
-    resp = requests.post(f"{url}/run", json={"args": args, "env": extra_env}, headers=headers, timeout=30)
+    resp = requests.post(
+        f"{url}/run",
+        json={"args": args, "env": extra_env, "use_state": use_state},
+        headers=headers,
+        timeout=30,
+    )
     resp.raise_for_status()
     run_id = resp.json()["run_id"]
     context.log.info(f"[dbt-runner] started run {run_id} — dbtf {' '.join(args[:3])} …")
@@ -68,17 +76,23 @@ def _run_dbt_remote(context, args: list[str], runner_url: str, timeout_seconds: 
     raise TimeoutError(f"[dbt-runner] run {run_id} timed out after {timeout_seconds}s")
 
 
-def _run_dbt(context, args: list[str]) -> None:
+def _run_dbt(context, args: list[str], use_state: bool = False) -> None:
     # E11.0 — delegate to the Railway container when DBT_RUNNER_URL is set,
     # removing dbt execution from Dagster+ metered run-minutes.
     runner_url = os.environ.get("DBT_RUNNER_URL")
     if runner_url:
-        _run_dbt_remote(context, args, runner_url)
+        _run_dbt_remote(context, args, runner_url, use_state=use_state)
         return
     # E11.3 — inject DBT_JOB_NAME so dbt's on-run-start QUERY_TAG hook attributes this
     # invocation to its Dagster job in ACCOUNT_USAGE.QUERY_HISTORY.
     env = {**os.environ, "DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
-    cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
+    # E11.2 local fallback: state-aware build when DBT_RUNNER_URL is not set (dev/CI).
+    # Mirrors the Railway server logic: download S3 state → source_status:fresher+ or full.
+    if use_state:
+        effective_args = _local_state_aware_args(context, args, env)
+    else:
+        effective_args = args
+    cmd = ["dbtf"] + effective_args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
     context.log.info(f"Running: {' '.join(cmd)}")
     result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR)
     if result.stdout:
@@ -87,6 +101,68 @@ def _run_dbt(context, args: list[str]) -> None:
         context.log.warning(result.stderr)
     if result.returncode != 0:
         raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{result.stderr}")
+    if use_state and result.returncode == 0:
+        _local_state_upload(context, args, env)
+
+
+def _local_state_aware_args(context, args: list[str], env: dict) -> list[str]:
+    """Download S3 state locally and return source_status:fresher+ args (or full-build fallback)."""
+    state_dir = "/tmp/dbt-state"
+    try:
+        import boto3
+        bucket = os.environ.get("DBT_STATE_BUCKET", "baseball-betting-ml-artifacts")
+        prefix = os.environ.get("DBT_STATE_PREFIX", "dbt_state")
+        target_env = os.environ.get("TARGET_ENV", "dev")
+        s3 = boto3.client("s3")
+        import pathlib
+        pathlib.Path(state_dir).mkdir(parents=True, exist_ok=True)
+        for fname in ("manifest.json", "sources.json"):
+            s3.download_file(bucket, f"{prefix}/{target_env}/{fname}", f"{state_dir}/{fname}")
+        target_args = []
+        try:
+            idx = args.index("--target")
+            target_args = ["--target", args[idx + 1]]
+        except (ValueError, IndexError):
+            pass
+        context.log.info("[dbt-runner] local state: source_status:fresher+ mode")
+        return ["build", "--select", "source_status:fresher+", "--state", state_dir] + target_args
+    except Exception as exc:
+        context.log.warning(f"[dbt-runner] local state download failed ({exc}) — full build")
+        return args
+
+
+def _local_state_upload(context, args: list[str], env: dict) -> None:
+    """After a successful build, run source freshness and upload state to S3."""
+    try:
+        target_args: list[str] = []
+        try:
+            idx = args.index("--target")
+            target_args = ["--target", args[idx + 1]]
+        except (ValueError, IndexError):
+            pass
+        freshness_cmd = (
+            ["dbtf", "source", "freshness",
+             "--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
+            + target_args
+        )
+        freshness = subprocess.run(freshness_cmd, env=env, capture_output=True, text=True, cwd=APP_DIR)
+        if freshness.returncode != 0:
+            context.log.warning(
+                f"[dbt-runner] source freshness failed (rc={freshness.returncode}) — state NOT uploaded"
+            )
+            return
+        import boto3, pathlib
+        bucket = os.environ.get("DBT_STATE_BUCKET", "baseball-betting-ml-artifacts")
+        prefix = os.environ.get("DBT_STATE_PREFIX", "dbt_state")
+        target_env = os.environ.get("TARGET_ENV", "dev")
+        s3 = boto3.client("s3")
+        target_dir = pathlib.Path(DBT_DIR) / "target"
+        for fname in ("manifest.json", "sources.json"):
+            local = target_dir / fname
+            if local.exists():
+                s3.upload_file(str(local), bucket, f"{prefix}/{target_env}/{fname}")
+    except Exception as exc:
+        context.log.warning(f"[dbt-runner] local state upload failed — next run will full-build. ({exc})")
 
 
 def _today() -> str:
@@ -278,8 +354,13 @@ def check_data_freshness(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_daily_build(context):
-    # Sunday → full-refresh; odd day → build; even day → run
-    _run_dbt(context, _dbt_daily_build_args())
+    args = _dbt_daily_build_args()
+    # E11.2 Task 2: on "run" days (the most frequent path — not Sunday and not
+    # the every-3rd-day quality-build), use source_status:fresher+ so only models
+    # downstream of sources with NEW data since the last run are rebuilt.
+    # Sunday full-refresh and the midweek test builds always process the full DAG.
+    use_state = (args[0] == "run")
+    _run_dbt(context, args, use_state=use_state)
 
 
 # ── Epic O.2 — Sub-model signal generation ───────────────────────────────────

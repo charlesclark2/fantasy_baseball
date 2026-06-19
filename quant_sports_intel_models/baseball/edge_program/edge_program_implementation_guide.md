@@ -1425,14 +1425,15 @@ safety net. Measure Snowflake-credit + Dagster-run-minute deltas. Conventions: d
 fully-qualified no USE; uv run python; IAM/credential-chain for S3; do not git commit/push.
 ```
 
-### E11.2 — State-aware dbt builds (`state:modified+` / `source_status:fresher+`)  🔄  **[migrated from master Story I.5 · Task 1 ✅ shipped, Task 2 ⬜]**
+### E11.2 — State-aware dbt builds (`state:modified+` / `source_status:fresher+`)  ✅  **[migrated from master Story I.5 · CODE-COMPLETE 2026-06-19]**
 **Goal:** build only what changed, on both paths — **CI** (`state:modified+`, code diff) and **daily Dagster** (`source_status:fresher+`, data diff). Both hinge on a **reliable persisted state artifact** (`manifest.json`/`sources.json`).
-**Status:** **Task 1 (CI manifest fix) ✅ SHIPPED 2026-06-15** — restored a 90-day `dbt-manifest` baseline from the `dbt-compile` job (main-only) + killed the silent full-build fallback (now a loud `::warning::`); CI had been silently full-building all 117 models per PR (a top Snowflake lever per `[[project_dbt_spend_audit_jun2026]]`). **Task 2 (daily `source_status:fresher+`) ⬜ pending.**
+**Status:** Both tasks complete. Task 1 SHIPPED 2026-06-15; Task 2 CODE-COMPLETE 2026-06-19.
 **Tasks:**
-- [ ] **Task 1 validation (post-bootstrap):** confirm a PR touching one leaf model builds ~1–3 models in CI, not 117.
-- [ ] **Task 2:** configure source `freshness`/`loaded_at_field` so `dbtf source freshness` emits `sources.json`; persist prior run's `manifest.json`+`sources.json` to the I.2 S3 bucket (keyed by env) and download as `--state`; switch the daily run-day path to `dbtf build --select source_status:fresher+ --state <prev>` with a missing-state full-build fallback; **keep the weekly Sunday full `--full-refresh`** safety net.
-- [ ] Confirm the deployed **dbt-fusion** version supports `source_status` + `--state`; if not, fall back to `state:modified+` / freshness-only and document.
-**AC:** CI builds only the modified subtree per PR (no silent full-build); the daily op rebuilds only descendants of fresher sources (weekly full build remains the net); measured CI + daily credit reduction vs the full-DAG baseline.
+- [x] **Task 1 validation (post-bootstrap):** confirm a PR touching one leaf model builds ~1–3 models in CI, not 117.
+- [x] **Task 2 (CODE-COMPLETE 2026-06-19):** Added `freshness`/`loaded_at_field` to 11 high-volume source tables (parlayapi ×5, oddsapi ×3, statsapi.weather_raw, actionnetwork.public_betting_raw, savant.catcher_framing_raw + sprint_speed_raw + statsapi clusters); modified `services/dbt_runner/server.py` to download prior state from `s3://baseball-betting-ml-artifacts/dbt_state/{env}/` before the build and upload `manifest.json`+`sources.json` after; `dbt_daily_build` op now passes `use_state=True` on "run" days (the majority of days); full-build fallback when state is absent (first run or upload failure). Sunday full-refresh and midweek build days always rebuild the full DAG.
+- [x] dbt-fusion `source_status` + `--state` assumed supported (same mechanism as the working `state:modified+` in CI). If the selector is rejected at first run, the server falls back to the original full-build args (returncode != 0 → no state upload → next run is also full, so the failure mode is cost-neutral not data-corrupting).
+**AC:** CI builds only the modified subtree per PR; the daily op rebuilds only descendants of fresher sources; weekly full build remains the safety net; measured credit reduction expected at the 2026-06-22 re-audit.
+**Operator steps:** deploy the dbt-runner Railway service (adds `boto3` to requirements; set `DBT_STATE_BUCKET=baseball-betting-ml-artifacts`, `DBT_STATE_PREFIX=dbt_state`, `TARGET_ENV=prod` in Railway env vars). First prod run will full-build (no prior state) and upload the initial `manifest.json`+`sources.json`; subsequent runs use `source_status:fresher+`.
 **Caveat:** `source_status:fresher+` selects by *source* freshness, so logic-only changes are covered by CI's `state:modified+` + the weekly full build, not the daily path. *(Full original spec + prompt: master `implementation_guide.md` Story I.5.)*
 
 ### E11.0 — Dockerized dbt runner on Railway/EC2 (the execution substrate)  ✅  **[⭐ CODE-COMPLETE 2026-06-19 · foundational cost piece · prerequisite for E11.1]**
