@@ -5,6 +5,8 @@ from datetime import date
 
 from dagster import In, Nothing, OpExecutionContext, Out, RetryPolicy, op
 
+from pipeline.ops._dbt_exec import _failure_detail, _run_dbt
+
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
@@ -38,18 +40,6 @@ _CATCHUP_RETRY = RetryPolicy(max_retries=2, delay=60)  # delay in seconds
 _SUBPROCESS_TIMEOUT = 1800  # seconds (30 min) — hard ceiling per subprocess op
 
 
-def _failure_detail(result) -> str:
-    """Diagnostic tail for a failed subprocess. dbt-fusion writes everything to
-    STDOUT and leaves stderr EMPTY, so a bare `{stderr}` lost the real error to
-    Dagster's 50k log truncation (incident 2026-06-11). Prefer stderr, else fall
-    back to the stdout tail (which carries dbt's end-of-run failure summary)."""
-    err = (result.stderr or "").strip()
-    if err:
-        return err[-4000:]
-    out_tail = (result.stdout or "")[-4000:]
-    return f"(stderr empty — stdout tail)\n{out_tail}"
-
-
 def _today() -> str:
     return date.today().strftime("%Y-%m-%d")
 
@@ -80,25 +70,6 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
         context.log.warning(result.stderr)
     if result.returncode != 0:
         raise Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{_failure_detail(result)}")
-
-
-def _run_dbt(context: OpExecutionContext, args: list[str], timeout: int = _SUBPROCESS_TIMEOUT) -> None:
-    cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
-    context.log.info(f"Running: {' '.join(cmd)}")
-    result = _run(cmd, timeout=timeout)
-    if result.stdout:
-        context.log.info(result.stdout)
-    if result.stderr:
-        context.log.warning(result.stderr)
-    if result.returncode != 0:
-        # Log the dbt failure tail as its OWN short ERROR event. The full stdout
-        # above is truncated to its 50k HEAD by Dagster (dbt's end-of-run failure
-        # summary lives in the tail), and under _CATCHUP_RETRY the raised exception
-        # is swallowed as RetryRequestedFromPolicy — so without this the failing
-        # model/test is invisible in the cloud logs (incident 2026-06-11/12).
-        detail = _failure_detail(result)
-        context.log.error(f"dbtf {args[0]} failed (exit {result.returncode}) — failure tail:\n{detail}")
-        raise Exception(f"dbtf {args[0]} failed (exit {result.returncode})\n{detail}")
 
 
 # ── Statcast catch-up job ops (statcast_freshness_sensor) ─────────────────────
