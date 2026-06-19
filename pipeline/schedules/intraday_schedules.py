@@ -7,6 +7,16 @@ from pipeline.jobs.intraday_jobs import (
     odds_snapshot_job,
 )
 
+# E11.4 (2026-06-19) — intraday_schedule_job and intraday_weather_job have been
+# decomposed onto Railway cron services:
+#   • schedule capture + dbt staging rebuild → services/schedule_capture/ (*/30 * * * *)
+#   • weather capture                        → services/weather_capture/  (0 * * * *)
+# Their Dagster schedule definitions below are RETAINED (not deleted) so both jobs
+# remain available for manual re-runs in the Dagster UI, but their schedules are
+# REMOVED from all_intraday_schedules so they no longer auto-fire on Dagster+ metered
+# compute. Removing ~48 + ~19 = ~67 daily Dagster fires eliminates the bulk of the
+# ~27% run-minute share these two jobs held.
+
 # ── Odds Snapshot (Parlay) — DECOMMISSIONED 2026-06-16 (Story 12.3.7 / A2.18) ──
 # These 17 Parlay `odds_snapshot_job` schedules were the live odds source AND the #1
 # Dagster+ run-minute driver (~1,044 min/mo, ~42%). Retired in favour of The Odds API
@@ -94,12 +104,13 @@ intraday_schedule_capture_overnight = ScheduleDefinition(
     name="intraday_schedule_capture_overnight",
 )
 
-# NOTE: `odds_snapshot_schedules` (Parlay) is intentionally OMITTED here — decommissioned
+# NOTE: `odds_snapshot_schedules` (Parlay) is intentionally OMITTED — decommissioned
 # 2026-06-16 (see header). Re-add it to this tuple to revive the Parlay capture cadence.
+#
+# E11.4 (2026-06-19) — intraday_weather_* and intraday_schedule_capture_* are OMITTED:
+# their jobs are now run by Railway cron services (services/schedule_capture/ and
+# services/weather_capture/) off Dagster's metered compute. The ScheduleDefinition
+# objects above are kept for manual fallback via the Dagster UI.
 all_intraday_schedules = [
     odds_clv_rebuild_schedule,
-    intraday_weather_schedule_daytime,
-    intraday_weather_schedule_overnight,
-    intraday_schedule_capture_daytime,
-    intraday_schedule_capture_overnight,
 ]

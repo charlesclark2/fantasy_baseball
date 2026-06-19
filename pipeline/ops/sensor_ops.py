@@ -130,7 +130,12 @@ def catchup_dbt_rebuild(context: OpExecutionContext) -> None:
 
 @op(out=Out(Nothing))
 def lineup_ingest_schedule(context: OpExecutionContext) -> None:
-    """Re-ingest schedule to pick up retroactive lineup confirmations."""
+    """Re-ingest schedule to pick up retroactive lineup confirmations.
+
+    E11.4 (2026-06-19) — NOT USED in lineup_monitor_job. The Railway
+    schedule_capture cron (services/schedule_capture/) handles statsapi schedule
+    ingestion every 30 min off Dagster's bill. Retained here for manual/emergency
+    use from the Dagster UI."""
     _run_script(context, "ingest_statsapi.py", ["schedule"])
 
 
@@ -147,7 +152,7 @@ def lineup_dbt_staging_rebuild(context: OpExecutionContext) -> None:
     ])
 
 
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+@op(out=Out(Nothing))
 def lineup_ingest_umpires(context: OpExecutionContext) -> None:
     """Story 30.5 — ingest today's HP-umpire ASSIGNMENT here, on the afternoon
     lineup-confirm path, NOT just in the 07:00 daily job. Root cause of the
@@ -157,7 +162,11 @@ def lineup_ingest_umpires(context: OpExecutionContext) -> None:
     so this is when the assignment is actually available for the post_lineup
     re-score (the actionable bet). ingest_umpires.py is now idempotent
     (delete-then-insert scoped to statsapi + today's game_pks), so re-running on
-    every sensor tick is safe. Soft-fail: never block the post-lineup re-score."""
+    every sensor tick is safe. Soft-fail: never block the post-lineup re-score.
+
+    E11.4 (2026-06-19) — removed `start` input: umpire ingest is now the first op
+    in lineup_monitor_job (lineup_ingest_schedule was removed; schedule_capture cron
+    handles statsapi ingestion off Dagster's bill)."""
     try:
         _run_script(context, "ingest_umpires.py", ["--date", _today()])
     except Exception as e:
@@ -230,7 +239,12 @@ def lineup_predict(context: OpExecutionContext) -> None:
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_odds_snapshot(context: OpExecutionContext) -> None:
-    """Capture post-lineup odds snapshot via Parlay API."""
+    """Capture post-lineup odds snapshot via Parlay API.
+
+    E11.4 (2026-06-19) — NOT USED in lineup_monitor_job. The Parlay odds capture
+    was decommissioned 2026-06-16 (Story 12.3.7 / A2.18); live odds now come from
+    The Odds API Railway cron (services/odds_capture/) + odds_current_rebuild_sensor.
+    Retained here for manual/emergency use from the Dagster UI."""
     _run_script(context, "parlay_api_ingestion.py", ["events"])
     _run_script(context, "parlay_api_ingestion.py", ["odds"])
     _run_script(context, "parlay_api_ingestion.py", ["line-movement"])

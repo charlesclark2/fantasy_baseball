@@ -6,9 +6,7 @@ from pipeline.ops.sensor_ops import (
     lineup_dbt_clv_rebuild,
     lineup_dbt_feature_rebuild,
     lineup_dbt_staging_rebuild,
-    lineup_ingest_schedule,
     lineup_ingest_umpires,
-    lineup_odds_snapshot,
     lineup_predict,
     pregame_dbt_clv_rebuild,
     pregame_odds_snapshot,
@@ -37,20 +35,28 @@ from pipeline.ops.daily_ingestion_ops import (
 # NB: RUN-level concurrency — distinct from the op-pool `dagster/concurrency_key` tag.
 @job(executor_def=in_process_executor, tags={"concurrency_group": "lineup_monitor"})
 def lineup_monitor_job():
-    """BUILD-ORDERING INVARIANT (Story 30.13): the intraday self-heal path. Re-ingest
-    schedule/probables/lineups → rebuild staging → rebuild feature store + EB
-    starter/lineup posteriors → re-score. lineup_predict MUST stay last among the
-    rebuild ops (do NOT reorder). Fires every ~10 min in the active window, so an
-    intraday starter/lineup change is absorbed within one cycle (the residual
-    inter-cycle staleness is covered by the serve-time freshness gate, 30.13 Task 4).
-    Overnight-sourced blocks (bullpen/team/pythag/elo) are intentionally NOT rebuilt
-    here — they don't change intraday; they refresh in daily_ingestion_job /
-    statcast_catchup_job."""
-    s1 = lineup_ingest_schedule()
+    """BUILD-ORDERING INVARIANT (Story 30.13): the intraday self-heal path. Rebuild
+    staging → rebuild feature store + EB starter/lineup posteriors → re-score.
+    lineup_predict MUST stay last among the rebuild ops (do NOT reorder). Fires every
+    ~10 min in the active window, so an intraday starter/lineup change is absorbed
+    within one cycle (the residual inter-cycle staleness is covered by the serve-time
+    freshness gate, 30.13 Task 4).  Overnight-sourced blocks (bullpen/team/pythag/elo)
+    are intentionally NOT rebuilt here — they don't change intraday.
+
+    E11.4 (2026-06-19) — removed two ops from the head and tail of this chain:
+      • lineup_ingest_schedule: the 30-min Railway schedule_capture cron now handles
+        statsapi schedule ingestion (services/schedule_capture/), eliminating ~1 min of
+        Dagster run-minutes per trigger and the redundant per-trigger ingest.
+      • lineup_odds_snapshot (Parlay events/odds/line-movement): the Parlay odds capture
+        was decommissioned 2026-06-16 (Story 12.3.7 / A2.18) — live odds now come from
+        The Odds API Railway cron (services/odds_capture/) + odds_current_rebuild_sensor.
+        Removing the dead Parlay call eliminates another ~1 min per trigger and a CLV
+        rebuild that waited on a no-op Parlay API round-trip.
+    """
     # Story 30.5 — ingest today's HP-umpire assignment here (afternoon, when MLB
     # has posted it), idempotently, so the confirmed-lineup re-score reflects the
     # actual umpire. The 07:00 daily ops run too early to ever catch it.
-    s1u = lineup_ingest_umpires(start=s1)
+    s1u = lineup_ingest_umpires()
     s2 = lineup_dbt_staging_rebuild(start=s1u)
     # Story A2.11 — the EB lineup/starter posteriors are now dbt models built INSIDE
     # lineup_dbt_feature_rebuild (incremental → recomputes the confirmed-lineup games)
@@ -60,10 +66,9 @@ def lineup_monitor_job():
     s3 = lineup_predict(start=s2c)
     # E9.13 — generate plain-English pick narratives after the post-lineup re-score,
     # before the CLV rebuild + serving store write so Railway PG picks up pick_narrative.
-    # Soft-fail: Cortex outage must not block the odds snapshot or serving write.
+    # Soft-fail: Cortex outage must not block the serving write.
     s3n = generate_pick_narratives_op(start=s3)
-    s4 = lineup_odds_snapshot(start=s3n)
-    clv = lineup_dbt_clv_rebuild(start=s4)
+    clv = lineup_dbt_clv_rebuild(start=s3n)
     write_serving_store_op(predict_done=clv)
 
 
