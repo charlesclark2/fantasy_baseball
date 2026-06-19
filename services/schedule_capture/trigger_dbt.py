@@ -25,7 +25,13 @@ job_name = os.environ.get("DBT_JOB_NAME", "schedule_capture_cron")
 dbt_args = sys.argv[1:]
 
 if not url:
-    print("[trigger_dbt] DBT_RUNNER_URL not set — skipping remote dbt trigger", flush=True)
+    print(
+        "[trigger_dbt] WARNING: DBT_RUNNER_URL not set — dbt staging rebuild SKIPPED. "
+        "Raw schedule data landed in Snowflake but stg_statsapi_lineups* will NOT be "
+        "refreshed until the next daily build. Set DBT_RUNNER_URL on this service to fix.",
+        file=sys.stderr,
+        flush=True,
+    )
     sys.exit(0)
 
 if not dbt_args:
