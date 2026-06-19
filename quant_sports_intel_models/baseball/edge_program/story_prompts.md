@@ -15,16 +15,9 @@
 
 ## 🐞 Open incidents
 ```
-▶ Debug prompt — INC-1 weekly meta-model retrain failed (h2h + totals)   [Model-A · P1 incident]   ✅ ROOT-CAUSED · ⬜ NOT YET FIXED
-ROOT CAUSE: `ModuleNotFoundError: No module named 'pymc'` — both markets die at the lazy `import pymc as pm` (train_bayesian_meta_model.py:230); the Dagster
-runtime IMAGE is missing pymc (a dependency/packaging cause). NOT data / convergence / E1.7.
-RECONCILE w/ E9.2 (2026-06-18): that session already added `arviz` + `h5netcdf` to the Dockerfile — but that's the SERVE-side gap (loading the trace; fixed the NULL-meta-columns bug),
-NOT pymc (the TRAINING op = this incident). pymc is still missing → the weekly retrain almost certainly STILL FAILS.
-FIX: add `pymc` (+ `pytensor`) to the SAME Dockerfile that now has arviz/h5netcdf (confirm WHY the image's ML deps are incomplete — slim runtime image vs dev env). Rebuild + redeploy; re-run the op → both markets green + trace uploads to S3.
-PREVENTION (do with the fix): add a deploy-time / CI import-smoke check for the weekly ops' heavy deps (pymc, arviz, …) so a missing RUNTIME dep fails loudly at
-deploy, not a day later in the weekly run. (The in-`main()` lazy import means a top-of-file import check won't catch it — assert the deps are importable IN THE IMAGE.)
-Gate/AC: both markets retrain green in Dagster post-deploy; the weekly-op dep is in the image manifest; an import-smoke check guards it going forward.
-Closeout (per §0.1): CI green + ⏭️ Operator handoff (the dep-manifest change + image rebuild/redeploy command + re-run + what to verify in Dagster).
+▶ Debug prompt — INC-1 weekly meta-model retrain failed (h2h + totals)   ✅ RESOLVED 2026-06-18
+DONE: Dagster image was missing `pymc` + `h5py` (in pyproject/dev but not the Dockerfile; E9.2 had added arviz/h5netcdf but missed the training deps). Added both to the Dockerfile pip block + a build-time Bayesian-dep import smoke-check RUN (fails the build if a dep is absent). Operator rebuilt + re-ran → both markets green; pytest 325 ✓.
+📎 LESSON (reuse): the first smoke check FALSE-GREENED — h5netcdf imports fine without h5py (lazy backend), so trace serialization still failed. Smoke checks must import the actual BACKEND deps (h5py), not just the facade package.
 ```
 
 ---
@@ -47,7 +40,8 @@ Gate/AC: ⚠️ offline NLL/Brier/importance WILL DROP — CORRECT, not a regres
 E1.7 done = de-leak + re-spine + parity test + downstream rebuild + slim re-derive + MDA + prepared retrain cmds; the champion retrain + forward gate complete in the post-E1.8 batch. Cross-linked to Epic 30.3.
 ```
 ```
-▶ Story prompt — E1.8 Full feature-surface leakage sweep   [Model-A · ⭐ high priority · gates trust in every offline number]
+▶ Story prompt — E1.8 Full feature-surface leakage sweep   ✅ AUDIT COMPLETE 2026-06-18 (2 A/B confirmations staged)   [Model-A · ⭐ high priority · gates trust in every offline number]
+DONE: swept all signal-bearing + slim-contract features (E2.1b 3-test template). VERDICT — the bullpen leak was the STANDOUT, not the tip of an iceberg. Construction surface is essentially leak-free post-E1.7; exactly 2 residual leaks, both LOW-magnitude: (1) 🟥 **FanGraphs Stuff+/arsenal block = LEAKY-season-to-date** (joined `season = year(game_date)`, no `< game_date` guard; full-season value embeds game-G-and-later pitches) — hits 2 totals-slim-contract features (`home_starter_stuff_plus`, `away_starter_avg_fastball_velo`) → MUST de-leak before E1.9 trusts the totals contract; (2) 🟨 catcher framing = LEAKY-blended-current-season (noise-ranked, no contract, low sev). Everything else AS-OF-SAFE (bullpen E1.7 fix confirmed present; sequential posteriors safe via consumer reading `prior_mu`/strict `<`; standings/ELO/pythagorean/rolling/lineup/park all clean). H2H + run_diff slim contracts FULLY CLEAN. Gap attribution: bullpen leak = largest named construction slice (FIXED); Stuff+/catcher minor; the bulk of the 0.42→0.001 collapse is SERVING skew (30.3 point-in-time), not construction leakage → no offline number distrusted beyond the de-leaks. Deliverable: `ablation_results/feature_leakage_audit.md`. ⏭️ Operator: §7.2 Stuff+ leak-signature A/B + MDA (Snowflake, mirror `--bullpen-version v3`) → repoint prior-season or weekly-snapshot as-of → re-derive totals slim contract BEFORE E1.9; §7.3 add sequential-posterior dbt regression guards. (Original brief below.)
 Read: guide §3 E1.8 + E1.7 + E2_1b_HANDOFF.md (the 3-proof template) + E1.3 clustered_feature_importance.py + the slim 14/31/19 contracts +
 the serving-parity harness + [[project_prod_model_audit_jun2026]] + [[project_epic30_3_status]].
 Do: sweep ALL ~370 features for the same within-row/same-game peek as bullpen. (1) construction/source audit — flag any column reading game-G outcome/usage
@@ -75,11 +69,17 @@ DONE: mart_derivative_closes = 238,421 closes / 5,896 games / 2023-05-03→2026-
 **E2.0b — ✅ CODE-COMPLETE (2026-06-18), pending Railway deploy + first capture.**
 PROBE RESULT (2026-06-18): F5 (h2h_h1/totals_h1) NOT OFFERED by any bookmaker (betmgm/bovada/draftkings/fanduel/pinnacle — 5/5 events sampled). Cadence: ~30min on team_totals + alternate_totals → cronSchedule=*/30. ⚠️ FLAG TO E2.4: live F5 capture blocked; forward F5 validation cannot proceed; E2.4 must source F5 closes from historical-only (65 games, 2023) or wait for F5 to appear live.
 Capture cron: services/derivative_capture/ (Dockerfile + entrypoint.sh + railway.toml with */30 schedule). Markets: team_totals,alternate_totals. Set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals in Railway env. After deploy: dbtf build --select stg_derivative_odds mart_derivative_closes.
-▶ Story prompt — E2.0b Live derivative-odds capture (forward cadence)   [Model-B · data · E2.0 follow-on]
-Read: guide §4 E2.0 + E2.0b + §0 + §6 + scripts/derivative_odds_backfill.py (extend it) + A2.18 (services/odds_capture cron pattern) + E5.0 (parallel live prop capture).
-Do: (0) PROBE FIRST (cheap) — query the Event Markets endpoint GET /v4/sports/baseball_mlb/events/{eventId}/markets (Odds API v4 "Schema 6"; returns per-bookmaker available markets + a per-market last_update, NO odds payload) for a sample of upcoming events across the curated books. Determine (a) whether the derivative markets — ESPECIALLY F5 (h2h_h1/totals_h1) — are offered live right now (if F5 absent → forward-F5 is blocked too; record + flag to E2.4), and (b) the real update cadence from the last_update timestamps → SIZE the capture cadence to match (don't over-poll). (1) THEN schedule a forward capture of the confirmed-available markets (mirror the A2.18 Railway cron, reuse the idempotent sentinel pattern) at the probe-derived cadence, snapshot near close → derivative_odds_raw → stg_derivative_odds → mart_derivative_closes. Credit-guard to scheduled games + log spend. EVAL/CLV-ONLY (never a model feature).
-Gate/AC: probe report recorded first (F5 offered yes/no + per-market cadence); cadence sized from the probe; mart_derivative_closes stays current; forward F5 closes accumulate IF offered (else flag F5 not-live-available to E2.4); credit logged; EVAL/CLV-only.
-Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (incl. cron deploy), git add, verify (new closes land for today's slate).
+▶ Story prompt — E2.0b Live derivative-odds capture (forward cadence)   [Model-B · data]   ✅ SHIPPED 2026-06-18
+DONE: derivative_odds_backfill.py gained `probe` (Schema-6 recon) + `capture` (cron runner); services/derivative_capture/ Railway cron (*/30) capturing team_totals+alt_totals live. 🔴 PROBE: F5 (h2h_h1/totals_h1) offered by ZERO books via The Odds API → forward-F5 blocked at source → F5 needs E2.0c (alt data source) or dies. team_totals=4 books, alt=5, ~30-min cadence.
+```
+```
+**E2.0c — ✅ SURVEY COMPLETE 2026-06-18 · ⏳ PAUSED pending 2 sales inquiries.**
+VERDICT: No source within $150-200/mo budget offers confirmed F5 data with verifiable historical depth. SportsGameOdds is the strongest candidate: explicitly documented `1ix5` → `1h` (first-half = F5 in baseball), Pro plan $299/mo with historical data — but over budget and format inverted vs Odds API. OddsJam: 100+ books, advertises "alternate markets" historical DB, no explicit F5 documentation, contact-only pricing. OpticOdds: enterprise-only ($5,000+/mo). No other viable source found.
+ACTION (operator): send 2 sales inquiries before final kill decision — (1) SportsGameOdds: confirm `1h` = F5; confirm 2021+ historical depth; negotiate price; (2) OddsJam: confirm h2h_h1/totals_h1 availability + pricing. Kill criterion: if BOTH come back no F5 OR no history ≥2021 OR price >$400/mo → formally kill F5 thesis → update E2.4 + E2.6.
+See docs/e2_0c_f5_source_survey.md for full comparison table + integration plan (SportsGameOdds ETL shim design included).
+▶ Story prompt — E2.0c Alternative derivative-odds data source (F5)   [Model-B · data · research]   ✅ RESEARCH DONE 2026-06-18 → 🅿️ PAUSE
+DONE: survey at docs/e2_0c_f5_source_survey.md. F5 scarce market-wide. SportsGameOdds = only one documenting F5 but deprecating 1ix5→1h, history Pro-only ($299/mo=2× budget), inverted JSON (ETL shim). OddsJam unverifiable (contact-only). OpticOdds/Sportradar enterprise (priced out).
+PENDING (operator sales inquiries): SportsGameOdds (1h=F5? history ≥2021? sub-$299 rate?) + OddsJam (carry h2h_h1/totals_h1? history? price?). KILL F5 if both no-F5 OR no history ≥2021 OR >$400/mo → strip the F5 gate from E2.4/E2.6. PM note: cheapest viable F5 source doubles odds spend for a secondary unproven thesis — a kill is honest.
 ```
 **E2.1 — 🔄 CODE-COMPLETE (2026-06-18), pending operator gate run.** `betting_ml/scripts/totals_generative/train_perside_negbin.py` (per-side unpivot of `feature_pregame_game_features`; LightGBM Poisson mean + MLE NegBin `r`; E1.1 purged CV vs Poisson baseline; reusable guard `utils/market_blind.py`; 70 tests). Operator runs it (>1-min Snowflake job); see guide §4 E2.1.
 ```
@@ -564,9 +564,10 @@ Gate/AC: parlay stakes correlation-adjusted vs the day's straight-bet exposure; 
 ```
 - **E10.5 — Frontend parlay surface** ⏳ §0.3 — **[App]** prompt generated by the E10.1/E10.3 session (§0.3).
 
-## Epic E11 — Infrastructure & Cost Savings
+## Epic E11 — Infrastructure & Cost Savings  🟢 **ACTIVE (2026-06-18) — Snowflake reduction NOW; leads Session B ahead of E5.0/E5.1**
+> **Principle: keep Snowflake at MINIMUM until profitable.** ~60% of burn, +25% MoM, pre-revenue. **Start with E11.2-T2 (quick daily win) + E11.1 Wave 1 (heavy Statcast marts).** The 6/22 Snowflake/Dagster audit measures the delta vs the cost baseline (build_roadmap *Cost watch*). **Live serving path stays on Snowflake, moves LAST.**
 ```
-▶ Story prompt — E11.1 Baseball dbt → lean lakehouse   [Infra · cost]   (baseball is LIVE)
+▶ Story prompt — E11.1 Baseball dbt → lean lakehouse (WAVE 1 = Statcast marts)   [Infra · cost · 🟢 ACTIVE]   (baseball is LIVE)
 Read: §5H E11.1 + sport_data_platform.md + §6 + master A2.15/16/17 + baseball_data_mart_inventory.md.
 Do: migrate the baseball dbt transform onto S3-Parquet + dbt-duckdb-in-a-Railway-container, Dagster coordinating
 only. WAVE 1 = the heavy Tier-3 Statcast batch marts (least serving-coupled; the A2.17 pilot). The live predict/
@@ -575,7 +576,7 @@ Gate/AC: model-by-model migration plan; heavy non-serving marts on dbt-duckdb/S3
 Dagster-run-minute reduction; every migrated model value-preserving (grain+fingerprint diff); serving unbroken.
 ```
 ```
-▶ Story prompt — E11.2 State-aware dbt builds   [Infra · cost]   (Task 1 ✅ shipped; Task 2 ⬜)
+▶ Story prompt — E11.2 State-aware dbt builds (Task 2)   [Infra · cost · 🟢 ACTIVE — quick daily win]   (Task 1 ✅ shipped; Task 2 ⬜)
 Read: §5H E11.2 + master Story I.5 (full spec) + Story I.2 (the S3 artifact bucket).
 Do: Task-1 validation (a leaf-model PR builds ~1–3 models in CI, not 117); Task 2 — source freshness/loaded_at →
 sources.json; persist manifest.json + sources.json to S3 (keyed by env) as --state; daily path
