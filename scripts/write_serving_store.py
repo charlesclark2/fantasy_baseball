@@ -103,6 +103,10 @@ def _sf_connect() -> snowflake.connector.SnowflakeConnection:
     role = os.environ.get("SNOWFLAKE_ROLE")
     if role:
         kwargs["role"] = role
+    # E11.3 cost tagging — attribute Snowflake credits to the calling Dagster job.
+    job_tag = os.environ.get("DAGSTER_JOB_NAME", "manual")
+    env_tag = os.environ.get("TARGET_ENV", "dev")
+    kwargs["session_parameters"] = {"QUERY_TAG": f"write_serving_store|{job_tag}|{env_tag}"}
     return snowflake.connector.connect(**kwargs)
 
 
