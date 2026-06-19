@@ -168,15 +168,23 @@ def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state:
 
     effective_args = args
     if use_state:
-        # E11.2: source_status:fresher+ requires freshness/loaded_at_field in sources.yml,
-        # which dbt-fusion (dbt1060) does not yet support. Until it does, we run the
-        # original args unchanged and only upload the manifest to S3 so the state
-        # baseline stays current for when support lands.
-        _download_state()  # pre-warm local dir for future --state use; miss is non-fatal
-        log.append(
-            "[dbt-runner] use_state=True but source_status selector inactive"
-            " (dbt-fusion does not yet support freshness config) — running original args\n"
-        )
+        state_ready = _download_state()
+        if state_ready:
+            # E11.2: run source freshness first (non-fatal; exit 1 from stale-data warnings
+            # is expected when ingest is paused). This writes target/sources.json so the
+            # source_status:fresher+ selector has a freshness baseline to compare against.
+            target_args = _extract_target_args(args)
+            freshness_cmd = ["dbtf", "source", "freshness",
+                             "--project-dir", _DBT_PROJECT_DIR,
+                             "--profiles-dir", _DBT_PROJECT_DIR] + target_args
+            freshness_result = _run_cmd(freshness_cmd, env)
+            log.append(f"[dbt-runner] source freshness exit={freshness_result.returncode} "
+                       f"(non-fatal; stale-warn is expected when ingest is paused)\n")
+            # Switch to source_status:fresher+ selector with state from S3.
+            effective_args = ["build", "--select", "source_status:fresher+",
+                              "--state", _STATE_LOCAL_DIR] + target_args
+        else:
+            log.append("[dbt-runner] no prior state in S3 — full build\n")
 
     cmd = ["dbtf"] + effective_args + [
         "--project-dir", _DBT_PROJECT_DIR, "--profiles-dir", _DBT_PROJECT_DIR
@@ -185,8 +193,6 @@ def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state:
 
     stderr_extra = ""
     if use_state and result.returncode == 0:
-        # Upload manifest.json so the state baseline stays current.
-        # sources.json upload is skipped until dbt-fusion supports freshness config.
         _upload_state()
 
     _runs[run_id] = {
