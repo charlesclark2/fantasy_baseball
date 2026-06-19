@@ -158,7 +158,7 @@ def get_status(run_id: str, authorization: str | None = Header(None)) -> dict[st
     return entry
 
 
-def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state: bool) -> None:
+def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state: bool = False) -> None:
     env = {
         **os.environ,
         **extra_env,
@@ -168,26 +168,15 @@ def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state:
 
     effective_args = args
     if use_state:
-        has_state = _download_state()
-        if has_state:
-            # Override the default args with source_status:fresher+ selection so
-            # only models downstream of sources that have new data since the prior
-            # run are rebuilt. --state points at the downloaded prior sources.json +
-            # manifest.json; dbt compares current freshness against sources.json to
-            # determine which sources are "fresher" and selects their descendants.
-            target_args = _extract_target_args(args)
-            effective_args = (
-                ["build", "--select", "source_status:fresher+",
-                 "--state", _STATE_LOCAL_DIR]
-                + target_args
-            )
-            log.append(
-                "[dbt-runner] mode=source_status:fresher+ (prior state found in S3)\n"
-            )
-        else:
-            log.append(
-                "[dbt-runner] mode=full-build (no prior state in S3 — first run or upload failed)\n"
-            )
+        # E11.2: source_status:fresher+ requires freshness/loaded_at_field in sources.yml,
+        # which dbt-fusion (dbt1060) does not yet support. Until it does, we run the
+        # original args unchanged and only upload the manifest to S3 so the state
+        # baseline stays current for when support lands.
+        _download_state()  # pre-warm local dir for future --state use; miss is non-fatal
+        log.append(
+            "[dbt-runner] use_state=True but source_status selector inactive"
+            " (dbt-fusion does not yet support freshness config) — running original args\n"
+        )
 
     cmd = ["dbtf"] + effective_args + [
         "--project-dir", _DBT_PROJECT_DIR, "--profiles-dir", _DBT_PROJECT_DIR
@@ -196,25 +185,9 @@ def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state:
 
     stderr_extra = ""
     if use_state and result.returncode == 0:
-        # Produce target/sources.json for the next run's freshness comparison.
-        # `dbtf build --select source_status:fresher+` runs freshness internally
-        # for selection but does not persist sources.json; run it explicitly so
-        # the artifact is always fresh and ready to upload.
-        freshness_cmd = (
-            ["dbtf", "source", "freshness",
-             "--project-dir", _DBT_PROJECT_DIR, "--profiles-dir", _DBT_PROJECT_DIR]
-            + _extract_target_args(args)
-        )
-        freshness = _run_cmd(freshness_cmd, env)
-        log.append(freshness.stdout)
-        if freshness.returncode != 0:
-            stderr_extra = (
-                f"[dbt-runner] WARNING: source freshness failed (rc={freshness.returncode})"
-                " — state NOT uploaded; next run will full-build.\n"
-                + freshness.stderr
-            )
-        else:
-            _upload_state()
+        # Upload manifest.json so the state baseline stays current.
+        # sources.json upload is skipped until dbt-fusion supports freshness config.
+        _upload_state()
 
     _runs[run_id] = {
         "status": "success" if result.returncode == 0 else "failed",

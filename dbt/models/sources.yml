@@ -21,10 +21,6 @@ sources:
           differences: canonical_event_id is present (null for historical rows),
           and commence_time is a slate placeholder (19:00:00Z) for all games —
           not the actual scheduled start time.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -58,10 +54,6 @@ sources:
           requested time window. The live events endpoint returns canonical_event_id
           (cross-source stable ID) in addition to the Parlay-specific event id.
           Note: commence_time is a slate placeholder (19:00:00Z) for all games.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -80,10 +72,6 @@ sources:
           source). Includes home_score, away_score, result, and has_odds flag. The
           matches endpoint collapses doubleheader games into a single record — the
           same limitation as the odds endpoint (support ticket open 2026-05-10).
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -112,10 +100,6 @@ sources:
           raw layer — the staging model (stg_parlayapi_line_movement) explodes both
           arrays to one row per (ingestion_ts, event_id, source, market_key,
           player, snapshot_ts).
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -155,10 +139,6 @@ sources:
           parlay_api_ingestion.py. raw_json holds the full response array; the
           staging model (stg_parlayapi_canonical_events) flattens to one row per
           (ingestion_ts, event_id) with the real commence_time exposed.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -193,10 +173,6 @@ sources:
           endpoint. raw_json holds the full response array of upcoming MLB
           events. Rows with null or empty raw_json exist from earlier ingestion
           iterations and are filtered in the staging layer.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -238,10 +214,6 @@ sources:
           object including the nested bookmakers → markets → outcomes structure.
           Convenience columns (event_id, home_team, etc.) are extracted for
           fast filtering without JSON parsing.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -274,10 +246,6 @@ sources:
           and totals. Written by scripts/derivative_odds_backfill.py (E2.0).
           Coverage: 2023-05-03 onward (Odds API additional-market history limit).
           EVAL/CLV-ONLY — never join into model training features.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_ts
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -373,10 +341,6 @@ sources:
           Height, weight, birth_date, and primary_position_code are used as
           features in Epic 7 archetype clustering (stories 7.1 and 7.2).
           Refreshed weekly via Dagster weekly_player_profiles_job.
-        freshness:
-          warn_after: {count: 7, period: day}
-          error_after: {count: 14, period: day}
-        loaded_at_field: last_fetched_at
         columns:
           - name: player_id
             description: MLBAM player ID.
@@ -445,10 +409,6 @@ sources:
           The grain allows multiple fetches per game (intraday refresh);
           a PRIMARY KEY constraint on (game_pk, venue_id) ensures the most
           recent fetch is retained via MERGE INTO upsert.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: loaded_at
         columns:
           - name: game_pk
             description: MLB Stats API game identifier.
@@ -488,10 +448,6 @@ sources:
           (Card 7.K). Populated via DELETE + INSERT for the target season.
           Cluster IDs are per-season and not stable across runs; use cluster_label
           for human-readable interpretation.
-        freshness:
-          warn_after: {count: 30, period: day}
-          error_after: {count: 60, period: day}
-        loaded_at_field: run_timestamp
         columns:
           - name: pitcher_id
             description: MLBAM pitcher ID. Joins to mart_pitch_characteristics.pitcher_id.
@@ -518,10 +474,6 @@ sources:
           Cluster IDs are per-season and not stable across runs; use cluster_label
           for human-readable interpretation. Cluster labels: power_pull,
           patient_obp, groundball_speed, high_whiff, contact_spray, balanced.
-        freshness:
-          warn_after: {count: 30, period: day}
-          error_after: {count: 60, period: day}
-        loaded_at_field: run_timestamp
         columns:
           - name: batter_id
             description: MLBAM batter ID. Joins to mart_pitch_play_event.batter_id.
@@ -808,10 +760,6 @@ sources:
           Season-level catcher framing data from the Baseball Savant catcher
           framing leaderboard. One row per player_id × season. Ingested by
           scripts/ingest_catcher_framing.py. Grain: player_id × season.
-        freshness:
-          warn_after: {count: 7, period: day}
-          error_after: {count: 14, period: day}
-        loaded_at_field: ingestion_timestamp
         columns:
           - name: player_id
             description: MLB player ID.
@@ -835,10 +783,6 @@ sources:
           ft/s (Statcast sprint speed) and is distinct from the FanGraphs Spd
           speed score. Grain: player_mlbam_id × season × snapshot_date (weekly
           Sunday snapshots). Ingested by scripts/ingest_sprint_speed.py.
-        freshness:
-          warn_after: {count: 7, period: day}
-          error_after: {count: 14, period: day}
-        loaded_at_field: ingestion_timestamp
         columns:
           - name: player_mlbam_id
             description: MLBAM player ID.
@@ -949,10 +893,6 @@ sources:
           populates these percentages on book 15 (FanDuel) in practice; the
           ingestion script prefers that book and falls back to any other book
           with non-zero percentages.
-        freshness:
-          warn_after: {count: 1, period: day}
-          error_after: {count: 2, period: day}
-        loaded_at_field: ingestion_timestamp
         columns:
           - name: game_date
             description: Calendar date the game was scheduled (Action Network "date" param).
