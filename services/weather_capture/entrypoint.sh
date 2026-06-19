@@ -5,15 +5,16 @@
 # This replaces the Dagster `intraday_weather_job` (~7% of Dagster+ run-minutes).
 # Each checkpoint is soft-fail: a single API hiccup doesn't kill the whole run.
 #
-# Active window: 10:00 AM – 10:00 PM ET = 14:00–02:00 UTC.
-# Railway cron fires hourly all day; we exit early outside the window.
+# Active window: 06:00 AM – 10:00 PM ET = 10:00–02:00 UTC.
+# Starts at 10:00 UTC (6 AM ET) to cover T-3/T-1 for the earliest morning games
+# (10:00 AM ET first pitch). Railway cron fires hourly all day; exit early outside window.
 set -euo pipefail
 
-# Time-window guard (UTC hours 03–13 = outside 10AM-10PM ET window).
+# Time-window guard (UTC hours 03–09 = outside 10:00 UTC - 02:00 UTC active window).
 HOUR=$(date -u +%H)
 HOUR_INT=$((10#$HOUR))
-if [ "$HOUR_INT" -ge 3 ] && [ "$HOUR_INT" -le 13 ]; then
-  echo "[weather_capture] UTC hour $HOUR_INT outside active window (14-2 UTC), exiting"
+if [ "$HOUR_INT" -ge 3 ] && [ "$HOUR_INT" -le 9 ]; then
+  echo "[weather_capture] UTC hour $HOUR_INT outside active window (10-2 UTC), exiting"
   exit 0
 fi
 
