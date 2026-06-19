@@ -191,8 +191,21 @@ def _load_private_key(path: str, passphrase: str | None) -> bytes:
 
 
 def connect_snowflake() -> snowflake.connector.SnowflakeConnection:
+    _raw_account = os.environ["SNOWFLAKE_ACCOUNT"]
+    account = _raw_account.strip()
+    if "://" in account:
+        account = account.split("://", 1)[1]
+    account = account.split("/", 1)[0]
+    account = account.split(".snowflakecomputing.com", 1)[0]
+    if account != _raw_account:
+        log.warning("SNOWFLAKE_ACCOUNT normalized: raw=%r -> used=%r", _raw_account, account)
+    if any(c in account for c in "./"):
+        log.warning(
+            "SNOWFLAKE_ACCOUNT still contains a dot/slash after normalization: %r "
+            "— the connector will reject this; fix the env var to the bare "
+            "org-account identifier (e.g. IHUPICS-DP59975).", account)
     params: dict[str, Any] = {
-        "account":   os.environ["SNOWFLAKE_ACCOUNT"],
+        "account":   account,
         "user":      os.environ["SNOWFLAKE_USER"],
         "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
     }
