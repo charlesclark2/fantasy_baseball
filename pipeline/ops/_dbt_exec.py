@@ -9,6 +9,7 @@ import subprocess
 import time
 
 import requests
+from dagster import RetryRequested
 
 APP_DIR = "/app"
 DBT_DIR = "/app/dbt"
@@ -51,26 +52,18 @@ def _run_dbt_remote(
     url = runner_url.rstrip("/")
     deadline = time.monotonic() + timeout_seconds
 
-    # 409 = runner busy (single-tenant). Back off and retry until free or deadline.
-    _BUSY_WAIT = 30
-    while True:
-        resp = requests.post(
-            f"{url}/run",
-            json={"args": args, "env": extra_env, "use_state": use_state},
-            headers=headers,
-            timeout=30,
-        )
-        if resp.status_code == 409:
-            remaining = deadline - time.monotonic()
-            if remaining <= _BUSY_WAIT:
-                raise TimeoutError(
-                    f"[dbt-runner] runner still busy (409) after {timeout_seconds}s — giving up"
-                )
-            context.log.info(f"[dbt-runner] runner busy (409) — waiting {_BUSY_WAIT}s before retry")
-            time.sleep(_BUSY_WAIT)
-            continue
-        resp.raise_for_status()
-        break
+    # 409 = runner busy (single-tenant). Raise RetryRequested so Dagster releases the
+    # compute slot during the wait — sleeping in the op holds run-minutes open for nothing.
+    resp = requests.post(
+        f"{url}/run",
+        json={"args": args, "env": extra_env, "use_state": use_state},
+        headers=headers,
+        timeout=30,
+    )
+    if resp.status_code == 409:
+        context.log.info("[dbt-runner] runner busy (409) — releasing compute slot, retry in 30s")
+        raise RetryRequested(max_retries=40, seconds_to_wait=30)
+    resp.raise_for_status()
 
     run_id = resp.json()["run_id"]
     context.log.info(f"[dbt-runner] started run {run_id} — dbtf {' '.join(args[:3])} …")
