@@ -1,0 +1,24 @@
+# Railway config for the E11.4 intraday weather capture cron service.
+#
+# This service replaces the Dagster `intraday_weather_job` (~7% of Dagster+ run-minutes).
+# Pure Python — no dbt involved (weather data is not in the dbt DAG).
+#
+# In the Railway service settings:
+#   Settings -> Config-as-code (Railway Config File) -> services/weather_capture/railway.toml
+#   Root Directory: repo root (dockerfilePath and COPY paths are repo-root-relative)
+#
+# Required env vars to set in the Railway service:
+#   SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE
+#   SNOWFLAKE_PRIVATE_KEY    — PEM key content as a string (entrypoint writes to /tmp)
+#   SNOWFLAKE_ROLE           (optional)
+#   OPENWEATHERMAP_API_KEY   (optional; enables OpenWeatherMap fallback source)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/weather_capture/Dockerfile"
+
+[deploy]
+# Hourly all day; entrypoint exits early outside the 14:00-02:00 UTC active window.
+# Mirrors the two former Dagster schedules (intraday_weather_daytime/overnight).
+cronSchedule = "0 * * * *"
+restartPolicyType = "NEVER"

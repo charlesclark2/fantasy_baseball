@@ -1,0 +1,25 @@
+# Railway config for the E11.4 intraday schedule capture cron service.
+#
+# This service replaces the Dagster `intraday_schedule_job` (~20% of Dagster+ run-minutes).
+# Python ingestion runs here (off Dagster's bill); the dbt rebuild triggers E11.0 directly.
+#
+# In the Railway service settings:
+#   Settings -> Config-as-code (Railway Config File) -> services/schedule_capture/railway.toml
+#   Root Directory: repo root (dockerfilePath and COPY paths are repo-root-relative)
+#
+# Required env vars to set in the Railway service:
+#   SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE
+#   SNOWFLAKE_PRIVATE_KEY    — PEM key content as a string (entrypoint writes to /tmp)
+#   SNOWFLAKE_ROLE           (optional)
+#   DBT_RUNNER_URL           — E11.0 dbt-runner Railway URL (dbt-runner-production-8899.up.railway.app)
+#   DBT_RUNNER_AUTH_TOKEN    — E11.0 bearer token
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "services/schedule_capture/Dockerfile"
+
+[deploy]
+# Every 30 min all day; entrypoint exits early outside the 14:00-03:30 UTC active window.
+# Mirrors the two former Dagster schedules (intraday_schedule_capture_daytime/overnight).
+cronSchedule = "*/30 * * * *"
+restartPolicyType = "NEVER"
