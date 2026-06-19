@@ -152,15 +152,15 @@ uv run python betting_ml/scripts/clustered_feature_importance.py --target total_
 **→ Remediation = (A) prior-season repoint** at `feature_pregame_starter_features.sql:611` (`af.season = year(pp.game_date) - 1`); then **re-derive the totals slim contract** on the clean matrix before E1.9 (`home_starter_stuff_plus` likely survives the prune as a marginal CI>0 member; `away_starter_avg_fastball_velo` may drop as noise). The arm's prior-season swap IS that fix, validated.
 Then: pick remediation (A prior-season in the dbt feature, or B weekly-snapshot as-of), apply it to `feature_pregame_starter_features.sql:609-611`, and **re-derive the totals slim contract on the clean matrix BEFORE E1.9 consumes it.**
 
-### 7.3 ⏭️ Operator hand-off B — dbt hardening tests (cheap, prevents silent regressions)
-The sequential-posterior safety is **consumer-enforced** (read `prior_mu` / strict `<`), so it would silently break if anyone repoints a join to `posterior_mu`-by-game_pk or `is_current`. Add:
-- a dbt test asserting `prior_mu = lag(posterior_mu)` per (team/player, metric, season) on the sequential posterior tables;
-- a unit test pinning the strict `<` in `asof_lookup.load_seq_posteriors_asof`;
-- (if §7.2 ships) an ingestion assertion that ZiPS stays pre-season (guards `starter_proj_fip`).
+### 7.3 ✅ DONE — dbt hardening tests (prevent silent regressions)
+The sequential-posterior safety is **consumer-enforced** (read `prior_mu` / strict `<`), so it would silently break if anyone repoints a join to `posterior_mu`-by-game_pk or `is_current`. Shipped:
+- ✅ **`dbt/tests/assert_no_leakage_sequential_posteriors.sql`** — asserts the producer chain invariant `prior_mu = lag(posterior_mu)` per (team, metric, season) on `team_sequential_posteriors`. **⚠️ Calibration note (found during CI):** a strict `> 1e-6` threshold false-fails on **405/78,735 rows (0.5%)** — verified ALL are doubleheader/re-backfill **reconstruction artifacts** (the table carries up to 3 `update_ts` versions per grain; reconstructing the chain post-hoc across versions has a noise floor of **max 0.0092**, all in one re-backfilled season). **Not leakage** — the live consumer reads `prior_mu` per game_pk and never reconstructs the chain. Threshold set to **0.02** (≈2× the artifact ceiling; a real producer break like "raw EB every game" is 0.05–0.2). **0 violations at 0.02; compiles clean.**
+- ✅ **`betting_ml/tests/test_seq_asof_guard.py`** — pins the strict `<` (never `<=`, never `is_current`) in `asof_lookup.load_seq_posteriors_asof` (the player-path guard). 2 tests, green.
+- (deferred) an ingestion assertion that ZiPS stays pre-season (guards `starter_proj_fip`) — low priority, only matters if in-season ZiPS refreshes are ever ingested.
 
 ### 7.4 Remediation queue (priority order)
-1. **Stuff+ de-leak** (Leak 1) — blocks trustworthy E1.9 totals contract. Run §7.2 → repoint (A) or as-of (B) → re-derive totals slim contract.
-2. **Sequential-posterior regression guards** (§7.3) — cheap, do alongside.
+1. ✅ **Stuff+ de-leak** (Leak 1) — **applied** (prior-season repoint in dbt); ⏭️ operator rebuild `feature_pregame_starter_features+` + re-derive totals slim contract before E1.9.
+2. ✅ **Sequential-posterior regression guards** (§7.3) — **shipped** (dbt singular test @ 0.02 tolerance + asof unit test), CI green.
 3. **Catcher framing as-of** (Leak 2) — low priority, opportunistic (snapshot_date as-of).
 
 ---
