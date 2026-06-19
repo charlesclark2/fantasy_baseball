@@ -21,6 +21,10 @@ sources:
           differences: canonical_event_id is present (null for historical rows),
           and commence_time is a slate placeholder (19:00:00Z) for all games —
           not the actual scheduled start time.
+        config:
+          loaded_at_field: ingestion_ts
+          freshness:
+            warn_after: {count: 3, period: hour}
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -54,6 +58,10 @@ sources:
           requested time window. The live events endpoint returns canonical_event_id
           (cross-source stable ID) in addition to the Parlay-specific event id.
           Note: commence_time is a slate placeholder (19:00:00Z) for all games.
+        config:
+          loaded_at_field: ingestion_ts
+          freshness:
+            warn_after: {count: 3, period: hour}
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -100,6 +108,10 @@ sources:
           raw layer — the staging model (stg_parlayapi_line_movement) explodes both
           arrays to one row per (ingestion_ts, event_id, source, market_key,
           player, snapshot_ts).
+        config:
+          loaded_at_field: ingestion_ts
+          freshness:
+            warn_after: {count: 3, period: hour}
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
@@ -139,6 +151,10 @@ sources:
           parlay_api_ingestion.py. raw_json holds the full response array; the
           staging model (stg_parlayapi_canonical_events) flattens to one row per
           (ingestion_ts, event_id) with the real commence_time exposed.
+        config:
+          loaded_at_field: ingestion_ts
+          freshness:
+            warn_after: {count: 25, period: hour}
         columns:
           - name: ingestion_ts
             description: Wall-clock UTC timestamp when the row was written to Snowflake.
