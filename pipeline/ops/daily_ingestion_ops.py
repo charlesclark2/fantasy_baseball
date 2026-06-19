@@ -1,8 +1,10 @@
 import os
 import subprocess
 import sys
+import time
 from datetime import date, timedelta
 
+import requests
 from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
 
 SCRIPTS_DIR = "/app/scripts"
@@ -27,7 +29,52 @@ def _run_script(context, script: str, args: list[str] | None = None) -> str:
     return result.stdout or ""
 
 
+def _run_dbt_remote(context, args: list[str], runner_url: str, timeout_seconds: int = 2700) -> None:
+    """Delegate a dbt run to the E11.0 dbt-runner Railway service (services/dbt_runner/).
+
+    Called when DBT_RUNNER_URL is set — dbt execution runs in the container,
+    not on Dagster+ metered compute. Falls back to in-process dbtf when absent.
+    """
+    auth_token = os.environ.get("DBT_RUNNER_AUTH_TOKEN", "")
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+    extra_env = {"DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
+
+    url = runner_url.rstrip("/")
+    resp = requests.post(f"{url}/run", json={"args": args, "env": extra_env}, headers=headers, timeout=30)
+    resp.raise_for_status()
+    run_id = resp.json()["run_id"]
+    context.log.info(f"[dbt-runner] started run {run_id} — dbtf {' '.join(args[:3])} …")
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        time.sleep(15)
+        status_resp = requests.get(f"{url}/status/{run_id}", headers=headers, timeout=15)
+        status_resp.raise_for_status()
+        data = status_resp.json()
+        if data["status"] == "running":
+            context.log.debug(f"[dbt-runner] {run_id} still running …")
+            continue
+        if data.get("stdout"):
+            context.log.info(data["stdout"])
+        if data.get("stderr"):
+            context.log.warning(data["stderr"])
+        if data["status"] == "failed":
+            raise Exception(
+                f"[dbt-runner] run {run_id} failed (exit {data.get('returncode')})\n"
+                f"{data.get('stderr', '')}"
+            )
+        context.log.info(f"[dbt-runner] run {run_id} succeeded")
+        return
+    raise TimeoutError(f"[dbt-runner] run {run_id} timed out after {timeout_seconds}s")
+
+
 def _run_dbt(context, args: list[str]) -> None:
+    # E11.0 — delegate to the Railway container when DBT_RUNNER_URL is set,
+    # removing dbt execution from Dagster+ metered run-minutes.
+    runner_url = os.environ.get("DBT_RUNNER_URL")
+    if runner_url:
+        _run_dbt_remote(context, args, runner_url)
+        return
     # E11.3 — inject DBT_JOB_NAME so dbt's on-run-start QUERY_TAG hook attributes this
     # invocation to its Dagster job in ACCOUNT_USAGE.QUERY_HISTORY.
     env = {**os.environ, "DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}

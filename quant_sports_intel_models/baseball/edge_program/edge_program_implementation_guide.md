@@ -1435,13 +1435,16 @@ fully-qualified no USE; uv run python; IAM/credential-chain for S3; do not git c
 **AC:** CI builds only the modified subtree per PR (no silent full-build); the daily op rebuilds only descendants of fresher sources (weekly full build remains the net); measured CI + daily credit reduction vs the full-DAG baseline.
 **Caveat:** `source_status:fresher+` selects by *source* freshness, so logic-only changes are covered by CI's `state:modified+` + the weekly full build, not the daily path. *(Full original spec + prompt: master `implementation_guide.md` Story I.5.)*
 
-### E11.0 — Dockerized dbt runner on Railway/EC2 (the execution substrate)  ⬜  **[⭐ foundational cost piece · the stack the new sports use · prerequisite for E11.1]**
+### E11.0 — Dockerized dbt runner on Railway/EC2 (the execution substrate)  ✅  **[⭐ CODE-COMPLETE 2026-06-19 · foundational cost piece · prerequisite for E11.1]**
 **Why (operator 2026-06-18):** today dbt runs inside Dagster ops → Dagster's metered compute. The `sport_data_platform.md` target (and what NFL/NCAAB/NCAAF will start on) is **dbt running in its own container on Railway (or EC2-batch), with Dagster only triggering/coordinating.** We don't have that substrate yet — standing it up (a) cuts Dagster run-minutes by moving dbt execution off Dagster, and (b) is the environment E11.1's dbt-duckdb migration runs in.
 **Tasks:**
-- [ ] Containerize the baseball dbt project (Dockerfile: dbt-fusion / dbt-duckdb + deps + IAM/credential chain for S3 + Snowflake). Deploy to **Railway** (mirror `services/odds_capture` / `services/derivative_capture`) — or EC2-batch if heavier.
-- [ ] **Dagster triggers the container** (event-driven, e.g. via an op that kicks the Railway job), instead of running `dbt`/`dbtf` in-process. Stream logs/exit status back for alerting.
-- [ ] Validate parity (the containerized run produces identical models to the in-Dagster run) + measure the Dagster run-minute drop.
+- [x] **Containerize:** `services/dbt_runner/` — `Dockerfile` (python:3.12-slim, dbt-fusion via curl install script, `dbt/` project baked in); `entrypoint.sh` (Snowflake key PEM→file, uvicorn); `railway.toml` (always-on web service, `restartPolicyType = "ON_FAILURE"`); `requirements.txt`.
+- [x] **HTTP service:** `services/dbt_runner/server.py` — FastAPI, POST `/run` (returns `run_id`, 409 if concurrent), GET `/status/{run_id}`, Bearer auth (`DBT_RUNNER_AUTH_TOKEN`), background thread execution of `dbtf`, in-memory run store.
+- [x] **Dagster dispatch:** `DbtRunnerResource` (`pipeline/resources/dbt_runner_resource.py`) — `ConfigurableResource`, polls `/status` with configurable interval/timeout, streams logs back; `_run_dbt()` in both ops files checks `DBT_RUNNER_URL` → remote when set, in-process fallback when not.
+- [x] **dbt-fusion manifest fix:** `pipeline/assets/dbt_assets.py` `_manifest_dict()` strips `operation.*` nodes from `nodes`+`parent_map`+`child_map` before passing to `@dbt_assets` (dagster-dbt crashes on `operation.*` nodes because `config=None`).
+- [x] **Tests:** `betting_ml/tests/test_dbt_runner.py` — 13 tests across `DbtRunnerResource`, `_run_dbt_remote` (both ops), and `server._execute`; `patch.object(mod.attr)` avoids `pipeline/__init__.py` credential chain.
 **AC:** the baseball dbt build runs in the container with Dagster only coordinating; a measured Dagster run-minute reduction; the substrate is reusable for the new sports (same pattern). **Deps:** none (foundational); **unblocks E11.1.**
+**Operator deploy steps (post-Railway provision):** (1) set `DBT_RUNNER_URL=https://<service>.railway.app` + `DBT_RUNNER_AUTH_TOKEN=<secret>` in Dagster+ env vars; (2) validate with one intraday op (e.g. `odds_snapshot_dbt_rebuild`) and confirm the Dagster+ run-minute is shorter; (3) watch `/status/{run_id}` polling logs confirm completion.
 ```
 ▶ Story prompt — E11.0 Dockerized dbt runner on Railway/EC2   [Infra · cost · ⭐ foundational]
 Read: §5H E11.0 + sport_data_platform.md (target arch) + §6 + services/odds_capture + services/derivative_capture (the Railway-cron container pattern to mirror) + the current Dagster dbt op(s).

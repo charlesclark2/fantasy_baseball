@@ -1,0 +1,4 @@
+# E11.0 dbt-runner HTTP service — lean deps only (no ML/Dagster stack).
+fastapi>=0.111
+uvicorn[standard]>=0.29
+python-dotenv

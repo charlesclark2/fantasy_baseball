@@ -3,6 +3,7 @@ from pathlib import Path
 
 from dagster_snowflake import SnowflakeResource
 from dagster_dbt import DbtCliResource
+from pipeline.resources.dbt_runner_resource import DbtRunnerResource  # E11.0
 
 # Snowflake private key is injected as a PEM string via env var.
 # Write it to a temp file on import so downstream connectors can reference the path.
