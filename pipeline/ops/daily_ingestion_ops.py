@@ -14,8 +14,10 @@ def _run_script(context, script: str, args: list[str] | None = None) -> str:
     """Run a Python script and return its stdout. Raises on non-zero exit."""
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
     cmd = [sys.executable, path] + (args or [])
+    # E11.3 — propagate job name so script-level Snowflake sessions get QUERY_TAG set.
+    env = {**os.environ, "DAGSTER_JOB_NAME": context.job_name}
     context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR)
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:
@@ -26,9 +28,12 @@ def _run_script(context, script: str, args: list[str] | None = None) -> str:
 
 
 def _run_dbt(context, args: list[str]) -> None:
+    # E11.3 — inject DBT_JOB_NAME so dbt's on-run-start QUERY_TAG hook attributes this
+    # invocation to its Dagster job in ACCOUNT_USAGE.QUERY_HISTORY.
+    env = {**os.environ, "DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
     cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
     context.log.info(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR)
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR)
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:

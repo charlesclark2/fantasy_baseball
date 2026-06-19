@@ -67,6 +67,19 @@ seeds:
         sigma:        float
         n_relievers:  integer
 
+# E11.3 — tag every dbt query with the calling job so ACCOUNT_USAGE.QUERY_HISTORY
+# gives a cost-by-job breakdown. DBT_JOB_NAME is injected by the Dagster op
+# (see pipeline/ops/*_ops.py _run_dbt helpers); falls back to 'dbt_manual' for
+# local / CI runs. TARGET_ENV is set by Dagster as 'prod' (default 'dev').
+on-run-start:
+  - >-
+    ALTER SESSION SET QUERY_TAG =
+    '{{ env_var("DBT_JOB_NAME", "dbt_manual") }}|{{ env_var("TARGET_ENV", "dev") }}|{{ invocation_id }}'
+
+query-comment:
+  comment: "job={{ env_var('DBT_JOB_NAME', 'dbt_manual') }} model={{ node.name }}"
+  append: true
+
 models:
   baseball_betting_and_fantasy:
     staging:

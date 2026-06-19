@@ -60,6 +60,8 @@ def _query_slate(et_date: str):
         role=os.environ.get("SNOWFLAKE_ROLE", ""),
         database="baseball_data",
         private_key=pk,
+        # E11.3 cost tagging
+        session_parameters={"QUERY_TAG": f"odds_current_rebuild_sensor|{os.environ.get('TARGET_ENV', 'dev')}"},
     )
     try:
         cur = conn.cursor()

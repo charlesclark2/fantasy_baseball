@@ -98,6 +98,13 @@ def get_snowflake_connection(
     if role:
         kwargs["role"] = role
 
+    # E11.3 — tag every session with the Dagster job name so ACCOUNT_USAGE.QUERY_HISTORY
+    # gives cost-by-job attribution. Set DAGSTER_JOB_NAME in the subprocess env from each
+    # Dagster op (_run_script injects it); falls back to 'manual' for local runs.
+    job_tag = os.environ.get("DAGSTER_JOB_NAME", "manual")
+    env_tag = os.environ.get("TARGET_ENV", "dev")
+    kwargs["session_parameters"] = {"QUERY_TAG": f"{job_tag}|{env_tag}"}
+
     return snowflake.connector.connect(**kwargs)
 
 

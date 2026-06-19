@@ -1435,6 +1435,73 @@ fully-qualified no USE; uv run python; IAM/credential-chain for S3; do not git c
 **AC:** CI builds only the modified subtree per PR (no silent full-build); the daily op rebuilds only descendants of fresher sources (weekly full build remains the net); measured CI + daily credit reduction vs the full-DAG baseline.
 **Caveat:** `source_status:fresher+` selects by *source* freshness, so logic-only changes are covered by CI's `state:modified+` + the weekly full build, not the daily path. *(Full original spec + prompt: master `implementation_guide.md` Story I.5.)*
 
+### E11.0 — Dockerized dbt runner on Railway/EC2 (the execution substrate)  ⬜  **[⭐ foundational cost piece · the stack the new sports use · prerequisite for E11.1]**
+**Why (operator 2026-06-18):** today dbt runs inside Dagster ops → Dagster's metered compute. The `sport_data_platform.md` target (and what NFL/NCAAB/NCAAF will start on) is **dbt running in its own container on Railway (or EC2-batch), with Dagster only triggering/coordinating.** We don't have that substrate yet — standing it up (a) cuts Dagster run-minutes by moving dbt execution off Dagster, and (b) is the environment E11.1's dbt-duckdb migration runs in.
+**Tasks:**
+- [ ] Containerize the baseball dbt project (Dockerfile: dbt-fusion / dbt-duckdb + deps + IAM/credential chain for S3 + Snowflake). Deploy to **Railway** (mirror `services/odds_capture` / `services/derivative_capture`) — or EC2-batch if heavier.
+- [ ] **Dagster triggers the container** (event-driven, e.g. via an op that kicks the Railway job), instead of running `dbt`/`dbtf` in-process. Stream logs/exit status back for alerting.
+- [ ] Validate parity (the containerized run produces identical models to the in-Dagster run) + measure the Dagster run-minute drop.
+**AC:** the baseball dbt build runs in the container with Dagster only coordinating; a measured Dagster run-minute reduction; the substrate is reusable for the new sports (same pattern). **Deps:** none (foundational); **unblocks E11.1.**
+```
+▶ Story prompt — E11.0 Dockerized dbt runner on Railway/EC2   [Infra · cost · ⭐ foundational]
+Read: §5H E11.0 + sport_data_platform.md (target arch) + §6 + services/odds_capture + services/derivative_capture (the Railway-cron container pattern to mirror) + the current Dagster dbt op(s).
+Do: containerize the baseball dbt project (dbt-fusion/dbt-duckdb + IAM/credential-chain for S3+Snowflake); deploy to Railway (or EC2-batch); switch Dagster from running dbt in-process to TRIGGERING the container (event-driven) + streaming status back. Validate model parity + measure the Dagster run-minute drop. EVAL/CLV discipline unaffected.
+Gate/AC: dbt runs in the container, Dagster only coordinates; measured Dagster reduction; reusable substrate for new sports. Unblocks E11.1.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (deploy steps + git add + what to verify).
+```
+
+### E11.3 — Query/job cost tagging (Snowflake `QUERY_TAG` + Dagster op tags)  ✅  **[⭐ cost observability · COMPLETE 2026-06-19]**
+**Why (operator 2026-06-18):** the bill is currently one opaque number per provider. Tagging every query/op by the job that ran it turns "Snowflake = $359" into "job X = $N" — which makes the 6/22 audit and *every* cost lever measurable (and tells us where to migrate next). Cheap; do it first.
+**Tasks:**
+- [x] **Snowflake `QUERY_TAG`** per dbt run/model — `on-run-start` in `dbt_project.yml` sets `QUERY_TAG = 'DBT_JOB_NAME|TARGET_ENV|invocation_id'`; `query-comment` embeds model name in SQL text; Dagster `_run_dbt()` helpers inject `DBT_JOB_NAME=context.job_name`.
+- [x] **Non-dbt ops** tagged — `check_games_today`, `_query_slate` (odds_current_rebuild_sensor) both use `session_parameters={"QUERY_TAG": ...}`; `_run_script()` in both ops files injects `DAGSTER_JOB_NAME=context.job_name` so scripts using `get_snowflake_connection()` (22+ scripts) and `write_serving_store._sf_connect()` are auto-tagged.
+- [x] **Cost-by-job view** — `scripts/ops/snowflake_cost_by_job.py`: queries `SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY`, estimates compute credits (execution_ms / 3_600_000 × credits/hr by warehouse size), ranks by estimated total credits; `--raw` for CSV.
+**AC:** every job's Snowflake queries carry a `QUERY_TAG`; a cost-by-job breakdown exists (Snowflake credits per tag) and pairs with the Dagster usage-by-job export; the 6/22 audit uses it. **Deps:** none.
+```
+▶ Story prompt — E11.3 Query/job cost tagging   [Infra · cost · ⭐ do first]
+Read: §5H E11.3 + §6 + the dbt project config + Snowflake ACCOUNT_USAGE.QUERY_HISTORY.
+Do: set Snowflake QUERY_TAG per dbt run/model (dbt query_tag/query-comment with job+model+env) + tag non-dbt op queries; add Dagster op tags; build a cost-by-job view (credits per query_tag from QUERY_HISTORY) + pair with the Dagster usage-by-job export.
+Gate/AC: queries tagged by job; a cost-by-job breakdown exists and feeds the 6/22 audit. Cheap, low-risk.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (+ git add).
+```
+
+### E11.4 — Decompose the intraday polling jobs (python→crons, dbt→E11.0)  ⬜  **[⭐ the single biggest Dagster lever — from the 6/2026 usage data]**
+**Why (6/2026 Dagster usage + operator note):** **`lineup_monitor_job` (24%) + `odds_snapshot_job` (21%) + `intraday_schedule_job` (20%) = ~65% of all Dagster usage.** They're frequency-driven AND **each bundles both python scripts *and* dbt jobs in-op — the embedded dbt is part of why the run times are long** (operator). §6: Dagster *coordinates*, Railway/cron + the dbt container *execute*. So this isn't a simple "move the poller" — **decompose** each job: the polling/python part → a cheap Railway cron; the dbt part → the **E11.0 dbt container** (off Dagster's metered compute). That's the largest single Dagster reduction available.
+**Tasks:**
+- [ ] **Split each job into its parts:** python polling/snapshot vs the dbt build(s) it triggers in-op.
+- [ ] Re-home the **python/polling** part of `lineup_monitor` / `odds_snapshot` / `intraday_schedule` (and `intraday_weather`, 7%) as **Railway cron services** (mirror `services/odds_capture` / `services/derivative_capture`); preserve cadence + leakage-safe snapshot timestamps + the PG/Snowflake landing.
+- [ ] Route the **dbt** part to the **E11.0 container** (Dagster triggers it, doesn't run it in-process). *(Depends on E11.0.)*
+- [ ] Dagster keeps only **coordination/trigger** + genuine batch/ML ops; no python-poll-loops or in-op dbt in metered ops.
+- [ ] Validate data continuity (no gaps in lineups/odds/weather) + measure the Dagster usage drop.
+**AC:** the intraday jobs no longer run python-polling or dbt on Dagster's metered compute (python → crons, dbt → E11.0); data continuity preserved; measured Dagster usage reduction (target: the bulk of the ~65%). **Deps:** the Railway cron pattern (exists) + **E11.0** (for the dbt half).
+```
+▶ Story prompt — E11.4 Offload intraday polling jobs → Railway crons   [Infra · cost · ⭐ biggest Dagster lever]
+Read: §5H E11.4 + the 6/2026 Dagster usage-by-job data (lineup_monitor 24% + odds_snapshot 21% + intraday_schedule 20% = ~65%) + services/odds_capture + services/derivative_capture (the Railway cron pattern) + the current Dagster definitions for those jobs.
+Do: re-home lineup_monitor / odds_snapshot / intraday_schedule (+ intraday_weather) as Railway cron services (mirror odds_capture); preserve cadence + leakage-safe timestamps + landing; Dagster keeps only coordination + real batch/ML ops. Validate no data gaps + measure the Dagster drop.
+Gate/AC: polling jobs on Railway crons (not Dagster); data continuity intact; measured Dagster usage reduction.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (deploy + git add + verify no lineup/odds/weather gaps).
+```
+
+---
+
+## 5I. Epic E12 — Serving Parity / Point-in-Time Serving Completeness  🟡 **CODE-COMPLETE (harness + standing guard) 2026-06-19; operator run + forward-validation pending**  **[⭐ the live-performance lever · converted from master Story 30.3]**
+
+> **E12 status (2026-06-19).** **Finding:** there is **no structural train/serve misalignment** — `load_features` (train) and `load_todays_features` (serve) both select `f.*` from the SAME `feature_pregame_game_features` table; the only difference is the `has_full_data` filter. So the skew is **purely point-in-time value-completeness** (sparse pre-game row → dense post-game backfill), exactly the master-30.3 root cause — and the **serve-path FIX already shipped**: Story 33.0 routes the live morning run to a **pre-lineup model** whose contract DROPS the lineup-gated families that are NULL pre-lineup (home_win 211→156 cols, lineup-gated families 32→5), 30.3 defers the actionable edge to the dense post_lineup re-score, 30.13 adds a serve-time freshness gate. **What E12 added this session:** (1) made the parity harness **tier-aware** — it was diffing the sparse morning matrix against the *champion* contract (overstating skew ~30% for a model the morning tier never serves) and now grades the **actually-served** variant, emitting a per-target `parity_ok` + a process **exit code** so it can GATE a serve, not just diagnose; `--champion-shadow` shows why morning routes to pre-lineup. (2) A **standing serving-parity assertion** (`betting_ml/tests/test_serving_parity_guard.py`, 21 tests, no Snowflake) that locks the invariants the fix depends on — pre-lineup ⊆ champion, pre-lineup drops the lineup-gated families, and the pure parity verdict fails on the two live-skill killers (structural-absent + strong-tier flattened). **Operator-pending:** run the tier-aware harness for a live morning slate (the only date with a true sparse profile) to confirm `parity_ok` on the pre-lineup tier, then forward-validate that live home_win skill moves toward offline ~0.42. Files: `betting_ml/scripts/serving_parity_report.py`, `betting_ml/tests/test_serving_parity_guard.py`.
+
+**Why (E1.8 verdict, 2026-06-18):** after E1.7 + E1.8 the *construction* surface is clean, but **the bulk of the offline→live skill collapse (home_win corr 0.42 offline/feature-store → 0.001 live) is point-in-time SERVING SKEW** — strong-tier (lineup-dependent) features arriving **NULL/misaligned at morning `predict_today` serve.** Master Story 30.3 *diagnosed* this (the same model + contract scores 0.42 on the feature-store matrix vs 0.001 on the live served matrix → it's the serve path, not the model). **E12 is the FIX** — and it's plausibly what finally lets the honest offline skill show up live, so it's the highest-value live-performance lever on the model track.
+**Tasks:**
+- [ ] **Serving-parity harness:** per game, diff the live `predict_today` feature matrix vs the feature-store/training matrix — flag every column that is NULL/imputed/misaligned at serve but populated in training (esp. ELO/archetype/EB/lineup-dependent strong-tier features).
+- [ ] **Fix the serve path** so the matrix is point-in-time *complete* at morning serve (or so the model degrades honestly when a feature genuinely isn't available pre-lineup — pairs with the E9.6 pre-lineup theme / master 30.8). Keep the `predict_today` CONTRACT-GUARD (column count/alignment).
+- [ ] **Standing check:** a recurring serving-parity assertion so skew can't silently return.
+**AC:** the live served matrix matches the feature-store matrix (no strong-tier NULL/misalignment at serve, column-aligned); **live home_win skill moves toward the offline ~0.42** (forward-validated); a standing serving-parity guard. **Deps:** master 30.3 (diagnosis) + `predict_today.py`. **⚠️ Sequencing: E12 runs BEFORE E1.9 (data-first, operator 2026-06-18)** — fixing the serve path makes the E1.9 bake-off's CV predictive of *live* skill, so v6 is selected for what's actually servable (E1.8's gap attribution confirms serving skew, not leakage, is the live bottleneck). *(Full diagnosis: master `implementation_guide.md` Epic 30 / Story 30.3.)*
+```
+▶ Story prompt — E12 Serving parity / point-in-time serving completeness   [Model-A · correctness · ⭐ the live lever]
+Read: edge guide §5I E12 + master implementation_guide.md Epic 30 header + Story 30.3 (the serving-skew diagnosis: same model = 0.42 feature-store vs 0.001 live) + predict_today.py (the live serve path + its CONTRACT-GUARD) + the feature-store/training matrix build + [[project_prod_model_audit_jun2026]].
+Do: build a serving-parity harness diffing the live predict_today matrix vs the feature-store/training matrix per game; find the strong-tier (lineup-dependent ELO/archetype/EB) features arriving NULL/misaligned at morning serve; fix the serve path to be point-in-time COMPLETE (or degrade honestly pre-lineup, per 30.8/E9.6); add a standing serving-parity assertion.
+Gate/AC: live served matrix matches the feature-store matrix (no strong-tier NULL/misalignment, aligned); live home_win skill moves toward offline ~0.42 (forward-validated); standing guard. Pairs with v6 (E1.9). Promoting fixes shifts live picks → app changelog.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (run-order + git add + forward-validation to verify).
+```
+
 ---
 
 ## 6. Cost playbook (ported + applied to every Edge story)
