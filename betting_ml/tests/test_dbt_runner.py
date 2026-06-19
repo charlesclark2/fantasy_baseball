@@ -170,22 +170,26 @@ class TestDbtRunnerResource:
                 resource.run(ctx, ["run"])
 
 
-# ── _run_dbt_remote (daily_ingestion_ops) ────────────────────────────────────
+# ── _dbt_exec shared helper ───────────────────────────────────────────────────
+# E11.0c: _run_dbt_remote and _run_dbt now live in pipeline/ops/_dbt_exec.py.
+# Tests load that module directly so patches target the right requests/time/subprocess.
 
-class TestRunDbtRemoteDailyOps:
+class TestDbtExecRemote:
+    """Tests for _dbt_exec._run_dbt_remote (the consolidated remote-delegation helper)."""
+
     @pytest.fixture(autouse=True)
     def _setup(self):
-        mod = _load("_daily_ingestion_ops", "pipeline/ops/daily_ingestion_ops.py")
+        mod = _load("pipeline.ops._dbt_exec", "pipeline/ops/_dbt_exec.py")
         self._fn = mod._run_dbt_remote
         self._mod = mod
 
-    def _mock_context(self):
+    def _mock_context(self, job_name="test_job"):
         ctx = MagicMock()
-        ctx.job_name = "daily_job"
+        ctx.job_name = job_name
         return ctx
 
     def test_success(self):
-        ctx = self._mock_context()
+        ctx = self._mock_context("daily_job")
         mock_post = MagicMock()
         mock_post.return_value.json.return_value = {"run_id": "d1"}
         mock_post.return_value.raise_for_status = Mock()
@@ -234,42 +238,11 @@ class TestRunDbtRemoteDailyOps:
 
         assert mock_post.call_args.kwargs["headers"]["Authorization"] == "Bearer tok123"
 
-
-# ── _run_dbt_remote (intraday_ops) ───────────────────────────────────────────
-
-class TestRunDbtRemoteIntradayOps:
-    @pytest.fixture(autouse=True)
-    def _setup(self):
-        mod = _load("_intraday_ops", "pipeline/ops/intraday_ops.py")
-        self._fn = mod._run_dbt_remote
-        self._mod = mod
-
-    def _mock_context(self):
-        ctx = MagicMock()
-        ctx.job_name = "intraday_job"
-        return ctx
-
-    def test_success(self):
+    def test_timeout_param_controls_deadline(self):
+        """timeout_seconds=0 forces immediate timeout when the run stays in 'running'."""
         ctx = self._mock_context()
         mock_post = MagicMock()
-        mock_post.return_value.json.return_value = {"run_id": "i1"}
-        mock_post.return_value.raise_for_status = Mock()
-        mock_get = MagicMock()
-        mock_get.return_value.json.return_value = {"status": "success", "returncode": 0, "stdout": "", "stderr": ""}
-        mock_get.return_value.raise_for_status = Mock()
-
-        with patch.object(self._mod.requests, "post", mock_post), \
-             patch.object(self._mod.requests, "get", mock_get), \
-             patch.object(self._mod.time, "sleep", MagicMock()):
-            self._fn(ctx, ["run", "--select", "mart_odds_outcomes"], "http://runner:8080")
-
-        mock_post.assert_called_once()
-
-    def test_timeout_param_forwarded(self):
-        """Caller-supplied timeout_seconds controls the deadline."""
-        ctx = self._mock_context()
-        mock_post = MagicMock()
-        mock_post.return_value.json.return_value = {"run_id": "slow2"}
+        mock_post.return_value.json.return_value = {"run_id": "slow"}
         mock_post.return_value.raise_for_status = Mock()
         mock_get = MagicMock()
         mock_get.return_value.json.return_value = {"status": "running"}
@@ -282,6 +255,110 @@ class TestRunDbtRemoteIntradayOps:
              patch.object(self._mod.time, "monotonic", mock_monotonic):
             with pytest.raises(TimeoutError):
                 self._fn(ctx, ["run"], "http://runner:8080", timeout_seconds=0)
+
+    def test_use_state_forwarded_in_payload(self):
+        ctx = self._mock_context()
+        mock_post = MagicMock()
+        mock_post.return_value.json.return_value = {"run_id": "s1"}
+        mock_post.return_value.raise_for_status = Mock()
+        mock_get = MagicMock()
+        mock_get.return_value.json.return_value = {"status": "success", "returncode": 0, "stdout": "", "stderr": ""}
+        mock_get.return_value.raise_for_status = Mock()
+
+        with patch.object(self._mod.requests, "post", mock_post), \
+             patch.object(self._mod.requests, "get", mock_get), \
+             patch.object(self._mod.time, "sleep", MagicMock()):
+            self._fn(ctx, ["build"], "http://runner:8080", use_state=True)
+
+        assert mock_post.call_args.kwargs["json"]["use_state"] is True
+
+
+class TestDbtExecSubprocess:
+    """Tests for _dbt_exec._run_dbt subprocess path (DBT_RUNNER_URL unset)."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        mod = _load("pipeline.ops._dbt_exec", "pipeline/ops/_dbt_exec.py")
+        self._run_dbt = mod._run_dbt
+        self._mod = mod
+
+    def _mock_context(self):
+        ctx = MagicMock()
+        ctx.job_name = "test_job"
+        return ctx
+
+    def test_success_runs_dbtf(self, monkeypatch):
+        """subprocess path builds the right dbtf command and succeeds."""
+        monkeypatch.delenv("DBT_RUNNER_URL", raising=False)
+        ctx = self._mock_context()
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = "OK"
+        result.stderr = ""
+        with patch.object(self._mod.subprocess, "run", return_value=result) as mock_run:
+            self._run_dbt(ctx, ["run", "--select", "mart_odds_outcomes", "--target", "prod"])
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "dbtf"
+        assert "run" in cmd
+        assert "--project-dir" in cmd
+
+    def test_job_name_injected_in_env(self, monkeypatch):
+        """DBT_JOB_NAME and DAGSTER_JOB_NAME are added to the subprocess env."""
+        monkeypatch.delenv("DBT_RUNNER_URL", raising=False)
+        ctx = self._mock_context()
+        ctx.job_name = "my_dagster_job"
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = ""
+        result.stderr = ""
+        with patch.object(self._mod.subprocess, "run", return_value=result) as mock_run:
+            self._run_dbt(ctx, ["run", "--select", "foo"])
+        env = mock_run.call_args.kwargs["env"]
+        assert env["DBT_JOB_NAME"] == "my_dagster_job"
+        assert env["DAGSTER_JOB_NAME"] == "my_dagster_job"
+
+    def test_nonzero_exit_raises(self, monkeypatch):
+        """Non-zero returncode raises Exception with failure detail."""
+        monkeypatch.delenv("DBT_RUNNER_URL", raising=False)
+        ctx = self._mock_context()
+        result = MagicMock()
+        result.returncode = 1
+        result.stdout = "a" * 5000  # long stdout — should use tail
+        result.stderr = ""
+        with patch.object(self._mod.subprocess, "run", return_value=result):
+            with pytest.raises(Exception, match="failed"):
+                self._run_dbt(ctx, ["run", "--select", "bad_model"])
+
+    def test_timeout_expired_raises_exception(self, monkeypatch):
+        """A wedged subprocess (TimeoutExpired) is re-raised as Exception — not a silent hang.
+
+        INC-3 (2026-06-19): statcast_catchup_job ran dbtf in-process on Dagster compute
+        and hung ~1h because sensor_ops._run_dbt had no DBT_RUNNER_URL check. This test
+        verifies that the hard timeout ceiling on the subprocess path actually kills the
+        process and surfaces a fast, visible failure so the op retries rather than hanging.
+        """
+        monkeypatch.delenv("DBT_RUNNER_URL", raising=False)
+        ctx = self._mock_context()
+        import subprocess as _subprocess
+        exc = _subprocess.TimeoutExpired(cmd=["dbtf", "run"], timeout=5, output=b"partial output")
+
+        with patch.object(self._mod.subprocess, "run", side_effect=exc):
+            with pytest.raises(Exception, match="hard timeout"):
+                self._run_dbt(ctx, ["run", "--select", "stg_batter_pitches"], timeout=5)
+
+    def test_delegates_to_remote_when_url_set(self, monkeypatch):
+        """When DBT_RUNNER_URL is set, the subprocess is never called."""
+        monkeypatch.setenv("DBT_RUNNER_URL", "http://runner:8080")
+        ctx = self._mock_context()
+        mock_remote = MagicMock()
+        with patch.object(self._mod, "_run_dbt_remote", mock_remote):
+            # _run_dbt_remote is mocked — subprocess.run should never fire
+            with patch.object(self._mod.subprocess, "run", side_effect=AssertionError("subprocess called")):
+                self._run_dbt(ctx, ["run", "--select", "foo"])
+        mock_remote.assert_called_once()
+        _, kwargs = mock_remote.call_args[0], mock_remote.call_args.kwargs
+        # runner_url should be the env var value
+        assert "http://runner:8080" in mock_remote.call_args[0]
 
 
 # ── server._execute command assembly ─────────────────────────────────────────
