@@ -584,6 +584,30 @@ sources.json; persist manifest.json + sources.json to S3 (keyed by env) as --sta
 weekly full --full-refresh net. Confirm dbt-fusion supports source_status + --state (else fall back to state:modified+).
 Gate/AC: CI builds only the modified subtree; daily op rebuilds only fresher-source descendants; measured credit reduction.
 ```
+```
+✅ E11.3 COMPLETE 2026-06-19 — QUERY_TAG wired end-to-end; cost report at scripts/ops/snowflake_cost_by_job.py.
+```
+```
+▶ Story prompt — E11.0 Dockerized dbt runner on Railway/EC2   [Infra · cost · ⭐ foundational · unblocks E11.1/E11.4]
+Read: §5H E11.0 + sport_data_platform.md + §6 + services/odds_capture + services/derivative_capture (Railway container pattern) + the current Dagster dbt op(s).
+Do: containerize the baseball dbt project (dbt-fusion/dbt-duckdb + IAM credential-chain S3+Snowflake); deploy to Railway (or EC2-batch); Dagster TRIGGERS the container (event-driven) instead of running dbt in-process; stream status back. Validate model parity + measure Dagster run-minute drop.
+Gate/AC: dbt runs in container, Dagster only coordinates; measured Dagster reduction; reusable for new sports. Closeout: CI green + ⏭️ handoff.
+```
+```
+▶ Story prompt — E11.4 Decompose intraday polling jobs (python→crons, dbt→E11.0)   [Infra · cost · ⭐ biggest Dagster lever · needs E11.0]
+Read: §5H E11.4 + the 6/2026 Dagster usage data (lineup_monitor 24% + odds_snapshot 21% + intraday_schedule 20% = ~65%) + services/odds_capture (cron pattern) + the Dagster defs for those jobs. NOTE: each job bundles BOTH python polling AND dbt in-op (the dbt inflates run time).
+Do: split each job — python/polling → Railway cron services (mirror odds_capture, preserve cadence + leakage-safe timestamps + landing); the embedded dbt → the E11.0 container (Dagster triggers, doesn't run in-process). Dagster keeps only coordination. Validate no lineup/odds/weather gaps + measure the Dagster drop.
+Gate/AC: no python-poll or in-op dbt on Dagster metered compute; data continuity intact; measured Dagster reduction. Closeout: CI green + ⏭️ handoff.
+```
+
+## Epic E12 — Serving Parity / Point-in-Time Serving Completeness  ⭐ **the live lever (from master 30.3); runs BEFORE E1.9**
+```
+▶ Story prompt — E12 Serving parity / point-in-time serving completeness   [Model-A · correctness · ⭐ before E1.9]
+Read: guide §5I E12 + master implementation_guide.md Epic 30 + Story 30.3 (the serving-skew diagnosis: same model = 0.42 feature-store vs 0.001 live) + predict_today.py (live serve path + its CONTRACT-GUARD) + the feature-store/training matrix build + [[project_prod_model_audit_jun2026]].
+Do: build a serving-parity harness diffing the live predict_today matrix vs the feature-store/training matrix per game; find the strong-tier (lineup-dependent ELO/archetype/EB) features arriving NULL/misaligned at morning serve; fix the serve path to be point-in-time COMPLETE (or degrade honestly pre-lineup, per 30.8/E9.6); add a standing serving-parity assertion.
+Gate/AC: live served matrix matches the feature-store matrix (no strong-tier NULL/misalignment, aligned); live home_win skill moves toward offline ~0.42 (forward-validated); standing guard. ⚠️ Runs BEFORE E1.9 so the bake-off's CV predicts live. Promoting fixes shifts live picks → changelog.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (run-order + git add + forward-validation).
+```
 
 ---
 

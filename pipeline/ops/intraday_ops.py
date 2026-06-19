@@ -25,9 +25,11 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
                 timeout: int = _SUBPROCESS_TIMEOUT) -> None:
     path = script if os.path.isabs(script) else f"{SCRIPTS_DIR}/{script}"
     cmd = [sys.executable, path] + (args or [])
+    # E11.3 — propagate job name so script-level Snowflake sessions get tagged.
+    env = {**os.environ, "DAGSTER_JOB_NAME": context.job_name}
     context.log.info(f"Running: {' '.join(cmd)} (timeout {timeout}s)")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise Exception(f"{os.path.basename(script)} exceeded {timeout}s hard timeout and was killed")
     if result.stdout:
@@ -39,10 +41,13 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
 
 
 def _run_dbt(context: OpExecutionContext, args: list[str], timeout: int = _SUBPROCESS_TIMEOUT) -> None:
+    # E11.3 — inject DBT_JOB_NAME so the on-run-start QUERY_TAG hook attributes this
+    # dbt invocation to its Dagster job in ACCOUNT_USAGE.QUERY_HISTORY.
+    env = {**os.environ, "DBT_JOB_NAME": context.job_name, "DAGSTER_JOB_NAME": context.job_name}
     cmd = ["dbtf"] + args + ["--project-dir", DBT_DIR, "--profiles-dir", DBT_DIR]
     context.log.info(f"Running: {' '.join(cmd)} (timeout {timeout}s)")
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
+        result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise Exception(f"dbtf {args[0]} exceeded {timeout}s hard timeout and was killed")
     if result.stdout:
@@ -81,6 +86,7 @@ def check_games_today(context: OpExecutionContext) -> bool:
         role=os.environ.get("SNOWFLAKE_ROLE", ""),
         database="baseball_data",
         private_key=private_key_bytes,
+        session_parameters={"QUERY_TAG": f"{context.job_name}|{os.environ.get('TARGET_ENV', 'dev')}"},
     )
     try:
         cur = conn.cursor()
