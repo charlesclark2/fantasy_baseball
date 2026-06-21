@@ -209,19 +209,6 @@ def lineup_predict(context: OpExecutionContext) -> None:
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def lineup_odds_snapshot(context: OpExecutionContext) -> None:
-    """Capture post-lineup odds snapshot via Parlay API.
-
-    E11.4 (2026-06-19) — NOT USED in lineup_monitor_job. The Parlay odds capture
-    was decommissioned 2026-06-16 (Story 12.3.7 / A2.18); live odds now come from
-    The Odds API Railway cron (services/odds_capture/) + odds_current_rebuild_sensor.
-    Retained here for manual/emergency use from the Dagster UI."""
-    _run_script(context, "parlay_api_ingestion.py", ["events"])
-    _run_script(context, "parlay_api_ingestion.py", ["odds"])
-    _run_script(context, "parlay_api_ingestion.py", ["line-movement"])
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_dbt_clv_rebuild(context: OpExecutionContext) -> None:
     """Rebuild lineup-dependent feature models and CLV mart."""
     _run_dbt(context, [
@@ -238,10 +225,10 @@ def lineup_dbt_clv_rebuild(context: OpExecutionContext) -> None:
 
 @op(out=Out(Nothing))
 def pregame_odds_snapshot(context: OpExecutionContext) -> None:
-    """Capture pre-game odds snapshot via Parlay API."""
-    _run_script(context, "parlay_api_ingestion.py", ["events"])
-    _run_script(context, "parlay_api_ingestion.py", ["odds"])
-    _run_script(context, "parlay_api_ingestion.py", ["line-movement"])
+    """Pre-game odds snapshot stub — Parlay API decommissioned 2026-06-16 (E11.6).
+    Live odds now come from The Odds API Railway cron (services/odds_capture/).
+    This op is a no-op retained so pregame_snapshot_job can still be launched
+    from the Dagster UI for manual CLV rebuilds without triggering the dead API."""
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

@@ -124,99 +124,11 @@ odds_events as (
     from odds_events_deduped
     where _rn = 1
 
-),
-
--- ── Parlay API events (2026+) ─────────────────────────────────────────────────
--- Sourced directly from stg_parlayapi_odds — every odds row has event_id,
--- game_date, home_team, away_team. No separate events staging model needed.
--- Resolve to team_id via the same canonical lookup.
-
-parlay_events_resolved as (
-
-    select
-        po.event_id,
-        po.game_date,
-        po.commence_time,
-        h.team_id as home_team_id,
-        a.team_id as away_team_id,
-        po.ingestion_ts
-    from {{ ref('stg_parlayapi_odds') }} po
-    left join team_lookup h
-        on h.name_lower = lower(regexp_replace(trim(po.home_team), '^G[12] ', ''))
-    left join team_lookup a
-        on a.name_lower = lower(regexp_replace(trim(po.away_team), '^G[12] ', ''))
-
-),
-
--- Deduplicate Parlay API to one canonical event_id per matchup per date.
--- Partition includes date_trunc('hour', commence_time) so both DH game slots
--- survive as distinct rows rather than being collapsed to one.
-parlay_events_deduped as (
-
-    select
-        event_id,
-        game_date,
-        commence_time,
-        home_team_id,
-        away_team_id,
-        row_number() over (
-            partition by game_date, home_team_id, away_team_id, date_trunc('hour', commence_time)
-            order by ingestion_ts desc
-        ) as _rn
-    from parlay_events_resolved
-
-),
-
-parlay_events as (
-
-    select
-        event_id          as parlay_api_event_id,
-        game_date,
-        commence_time,
-        home_team_id,
-        away_team_id
-    from parlay_events_deduped
-    where _rn = 1
-
-),
-
--- Assign a game_slot rank to each Parlay event within its matchup/date.
--- Non-19:00 UTC events are ranked first by commence_time (these are real DH game
--- starts with suffixed event_ids added by the 2026-05-11 Parlay API fix).
--- 19:00 UTC events (placeholders for non-DH games, or old DH collapse artifacts)
--- rank last. For a single-game matchup only one event exists and gets slot=1.
--- For DH matchups: slot 1 = earliest real start (Game 1), slot 2 = later (Game 2).
-parlay_events_ranked as (
-
-    select
-        parlay_api_event_id,
-        game_date,
-        commence_time,
-        home_team_id,
-        away_team_id,
-        row_number() over (
-            partition by game_date, home_team_id, away_team_id
-            order by
-                case when time(commence_time) = '19:00:00'::time then 1 else 0 end asc,
-                commence_time asc
-        ) as game_slot
-    from parlay_events
-
-),
-
--- Stats API game_number (1 or 2) and double_header flag for DH routing.
--- game_number is reliable even when the scheduled game_date/time is stale
--- (postponed games replayed as DH makeups keep their original scheduled time
--- in the Stats API game_date column, making time-proximity unusable).
-game_schedule as (
-
-    select
-        game_pk,
-        game_number,
-        double_header
-    from {{ ref('stg_statsapi_games') }}
-
 )
+
+-- E11.6 (2026-06-21): Parlay API permanently decommissioned. parlay_api_event_id
+-- is preserved as a NULL column so downstream consumers (mart_derivative_closes)
+-- compile without changes; their OR join branch simply never matches.
 
 select
 
@@ -235,32 +147,18 @@ select
 
     -- ── Source-specific event keys ────────────────────────────────────────────
     oe.odds_api_event_id,
-    pe.parlay_api_event_id,
+    -- parlay_api_event_id: NULL since E11.6 decommission (2026-06-21); preserved for
+    -- schema compatibility with mart_derivative_closes (OR join branch never fires).
+    null::varchar                                                   as parlay_api_event_id,
 
-    -- ── Coalesced event key: Parlay API preferred, Odds API as fallback ───────
-    -- Use this column for all downstream joins to mart_odds_outcomes.
-    -- Routes automatically: Parlay API for 2026+ games, Odds API for 2021–2025.
-    coalesce(pe.parlay_api_event_id, oe.odds_api_event_id)         as event_id,
+    -- ── Coalesced event key: Odds API only post-E11.6 ────────────────────────
+    oe.odds_api_event_id                                            as event_id,
 
     -- ── Match quality ─────────────────────────────────────────────────────────
-    (coalesce(pe.parlay_api_event_id, oe.odds_api_event_id)
-     is not null)::boolean                                          as has_odds
+    (oe.odds_api_event_id is not null)::boolean                     as has_odds
 
 from game_results gr
-left join game_schedule gs on gs.game_pk = gr.game_pk
 left join odds_events oe
     on  gr.game_date    = oe.commence_date
     and gr.home_team_id = oe.home_team_id
     and gr.away_team_id = oe.away_team_id
-left join parlay_events_ranked pe
-    on  gr.game_date    = pe.game_date
-    and gr.home_team_id = pe.home_team_id
-    and gr.away_team_id = pe.away_team_id
--- Route each game_pk to its correct Parlay event slot using Stats API game_number.
--- abs(game_number - game_slot) = 0 is a perfect match (Game 1→slot 1, Game 2→slot 2).
--- For non-DH games: game_number=1 and only slot 1 exists → always matches correctly.
--- Null pe.game_slot (no Parlay match) sorts last, preserving one row per game_pk.
-qualify row_number() over (
-    partition by gr.game_pk
-    order by abs(coalesce(gs.game_number, 1) - pe.game_slot) asc nulls last
-) = 1
