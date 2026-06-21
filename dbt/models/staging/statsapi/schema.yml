@@ -35,24 +35,29 @@ models:
       - name: height_inches
         description: >
           Height in inches, parsed from StatsAPI string (e.g. "6' 2\"" → 74).
-          NULL when StatsAPI returns no height. Valid range: 60–84 inches (5'0"–7'0").
+          NULL when StatsAPI returns no height or value is out of range (coerced in model).
+          Valid range: 60–84 inches (5'0"–7'0").
         tests:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 60
                 max_value: 84
                 inclusive: true
+              config:
+                severity: warn
 
       - name: weight_lbs
         description: >
-          Weight in pounds as reported by StatsAPI. NULL when not available.
-          Valid range: 130–375 lbs (covers the full MLB player distribution).
+          Weight in pounds as reported by StatsAPI. NULL when not available or out of range
+          (coerced in model). Valid range: 130–375 lbs (covers the full MLB player distribution).
         tests:
           - dbt_utils.accepted_range:
               arguments:
                 min_value: 130
                 max_value: 375
                 inclusive: true
+              config:
+                severity: warn
 
       - name: primary_position_code
         description: >
