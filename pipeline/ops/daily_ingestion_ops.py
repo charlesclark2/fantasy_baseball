@@ -219,12 +219,27 @@ def check_data_freshness(context):
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def dbt_daily_build(context):
     args = _dbt_daily_build_args()
-    # E11.2 Task 2: on "run" days (the most frequent path — not Sunday and not
-    # the every-3rd-day quality-build), use source_status:fresher+ so only models
-    # downstream of sources with NEW data since the last run are rebuilt.
-    # Sunday full-refresh and the midweek test builds always process the full DAG.
-    use_state = (args[0] == "run")
-    _run_dbt(context, args, use_state=use_state)
+    if args[0] != "build":
+        # run days: source_status-aware incremental rebuild, no test gate.
+        _run_dbt(context, args, use_state=True)
+        return
+    # build days (Sunday --full-refresh + every-3rd midweek): split models from tests
+    # so a peripheral data-quality failure never blocks predictions. INC-6 (2026-06-21):
+    # a bad StatsAPI bio row exit-1'd the Sunday build and blocked all predictions.
+    # Step 1 — model rebuild (gates pipeline; preserves --full-refresh on Sunday).
+    run_args = ["run"] + args[1:]
+    _run_dbt(context, run_args, use_state=False)
+    # Step 2 — test suite (non-blocking: warns, never fails the op).
+    target_args = []
+    if "--target" in args:
+        idx = args.index("--target")
+        target_args = args[idx : idx + 2]
+    try:
+        _run_dbt(context, ["test"] + target_args, use_state=False)
+    except Exception as exc:
+        context.log.warning(
+            f"[dbt test] non-blocking suite had failures — predictions are NOT blocked:\n{exc}"
+        )
 
 
 # ── Epic O.2 — Sub-model signal generation ───────────────────────────────────
