@@ -1,0 +1,57 @@
+{
+  "target": "home_win",
+  "tier": "pre_lineup",
+  "gate_metric": "brier",
+  "model_class": "glm_elasticnet",
+  "baseline": "33.0 morning baseline",
+  "tuning_json": "betting_ml/evaluation/tuning_results_v6_glm_elasticnet_home_win_pre_lineup_pre_lineup_home_win_reprune_glm.json",
+  "smoke": false,
+  "v6_overfit_gate": "DEFAULT (no search \u2014 bake-off default config; not an overfit surface)",
+  "n_features": {
+    "v6": 36,
+    "baseline": 154
+  },
+  "decision": "PROMOTE",
+  "overall_delta": -0.0038258052501351373,
+  "boot_ci": [
+    -0.005451564412076823,
+    -0.0021133087091999582
+  ],
+  "single_eval_pass": true,
+  "per_season": [
+    {
+      "season": 2024,
+      "n": 2000,
+      "champion": 0.24639098561869394,
+      "challenger": 0.2426107660386833,
+      "delta": -0.003780219580010624,
+      "complete": true,
+      "regressed": false
+    },
+    {
+      "season": 2025,
+      "n": 2026,
+      "champion": 0.24596411639361057,
+      "challenger": 0.24209331048195074,
+      "delta": -0.003870805911659836,
+      "complete": true,
+      "regressed": false
+    },
+    {
+      "season": 2026,
+      "n": 838,
+      "champion": 0.24657744868631398,
+      "challenger": 0.2477927682410274,
+      "delta": 0.0012153195547134066,
+      "complete": false,
+      "regressed": false
+    }
+  ],
+  "reasons": [
+    "Pooled improvement -0.0038 clears the 0.002 noise floor.",
+    "Paired bootstrap 95% CI upper bound -0.0021 < 0 (significant).",
+    "No completed season regresses beyond tolerance (cross-season consistent).",
+    "Current season 2026 corroborates (+0.0012).",
+    "Single-eval criteria PASS \u2192 PROMOTE candidate. Confirm hysteresis (\u22652 consecutive passes) before deploy."
+  ]
+}

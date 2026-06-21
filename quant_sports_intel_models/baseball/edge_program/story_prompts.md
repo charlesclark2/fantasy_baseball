@@ -13,7 +13,58 @@
 
 ---
 
-## 🐞 Open incidents
+## 🐞 Open incidents — REGISTER + fix prompts (resolve before feature work)
+
+> **🚂 Railway MCP available:** when a fix touches Railway (env vars, service config, redeploys, reading deploy logs), use the **Railway MCP** — it sets variables, triggers redeploys, and tails logs directly, no dashboard clicking. (INC-4's env fix + redeploy on both cron services was done this way.)
+
+**Incident register (full write-ups + severity in `build_roadmap.md` → "🐞 Open incidents"):**
+
+| INC | Severity | Status | One-liner | Fix prompt |
+|-----|----------|--------|-----------|------------|
+| **INC-2** | low — cleanup | 🔄 IN PROGRESS (Session B) | Parlay API permanently off; live serving already on The Odds API (no data risk) → rip out dead ingestion + dbt branch | **↓ below (E11.6)** |
+| **INC-6** | P1 — pipeline | ✅ RESOLVED 6/21 | Sunday build red-failed on zero-height bio; fixed via NULL-coerce + bio tests→warn + run-gates/test-non-blocking split + dbt-runner auto-deploy | resolved (below) |
+| **INC-3** | P2 — cost/reliability | ✅ RESOLVED 6/19 | sensor_ops now delegates to runner (`_dbt_exec`); single-tenant 409 → `RetryRequested` frees the compute slot during backoff | resolved (below) |
+| **INC-5** | P2 — silent gap | ✅ RESOLVED 6/19 | `schedule_capture` dbt staging rebuild silently no-op'd (`DBT_RUNNER_URL`=empty); env set + `trigger_dbt.py` skip made loud | resolved (below) |
+| **INC-4** | P1 — live data gap | ✅ RESOLVED 6/19 | `schedule_capture` Snowflake auth — **trailing space in `SNOWFLAKE_ACCOUNT`** (both cron services); env fixed + 4-script normalization shipped | resolved (below) |
+| **INC-1** | P1 | ✅ RESOLVED 6/18 | weekly meta-model retrain failed (missing `pymc`/`h5py` in the Dagster image) | resolved (below) |
+
+**Suggested order (open):** INC-2 (E11.6, low/cleanup) — only open incident left.
+
+```
+▶ INC-6 fix — ✅ RESOLVED 2026-06-21. Root cause: a zero-height StatsAPI bio row hit stg_statsapi_player_profiles on the Sunday full-refresh; 2 default-ERROR accepted_range tests (height/weight) exit-1'd the whole `build` → blocked predictions. 3 fixes shipped: (1) SQL coerce out-of-range bio → NULL in the model (range test skips NULLs; downstream imputes); (2) both bio tests severity error→warn; (3) build-path split in daily_ingestion_ops.py — build days run `dbtf run` first (gates pipeline) then `dbtf test` in a non-blocking try/except. 🎁 Bonus: new .github/workflows/deploy_dbt_runner.yml auto-redeploys the dbt-runner on main pushes touching dbt/** or services/dbt_runner/** (kills the manual `railway up`). Verified Sunday build GREEN; pytest 405/405, dbtf compile 1761/1761. Residual broader audit → E11.7.
+```
+
+```
+▶ INC-5 fix — ✅ RESOLVED 2026-06-19 ~17:00 UTC. schedule_capture's Step 2 dbt staging rebuild had silently no-op'd since deploy — DBT_RUNNER_URL was an EMPTY STRING on the service, and trigger_dbt.py's guard exited 0 with a quiet print() (job looked green while stg_statsapi_lineups/_wide/probable_pitchers stayed stale until the overnight build). FIX: set DBT_RUNNER_URL=https://dbt-runner-production-8899.up.railway.app on schedule-capture (Railway MCP, auto-redeployed) + hardened trigger_dbt.py — silent skip is now a loud WARNING: to stderr(flush). VERIFIED: 17:00 UTC trigger rebuilt all 3 staging models (4/4 success). trigger_dbt.py + the 4 INC-4 normalization scripts ✅ committed/pushed 2026-06-19. 📎 Lesson (shared w/ INC-3): dbt steps must skip/fail LOUDLY.
+```
+```
+▶ INC-4 fix — ✅ RESOLVED 2026-06-19 ~16:52 UTC. Root cause: a TRAILING SPACE in SNOWFLAKE_ACCOUNT (`IHUPICS-DP59975 `) on BOTH schedule-capture AND weather-capture (same paste) — the connector rejects spaces with the same "no dots or slashes" message, masking diagnosis. Fixed the Railway env to `IHUPICS-DP59975` on both → auto-redeployed SUCCESS; verified connect + 401 games inserted + clean run. HARDENING SHIPPED (pending commit): account-normalization (strip whitespace/scheme/path/.snowflakecomputing.com + loud warn) added to get_snowflake_connection() in all 4 capture scripts — ingest_statsapi.py, ingest_weather.py, derivative_odds_backfill.py, odds_api_ingestion.py. Surfaced INC-5 (DBT_RUNNER_URL unset). Operator: commit the 4 hardened scripts.
+```
+```
+▶ INC-3 fix (E11.0c) — Port runner delegation to sensor_ops + consolidate the 3 _run_dbt copies   [Infra · cost · P2 · pairs with E11.0b]   (2026-06-19)
+CONTEXT: statcast_catchup_job ran `dbtf run --select stg_batter_pitches+ --project-dir /app/dbt …` IN-PROCESS on the Dagster worker and hung ~1 hr (operator re-executed → cleared). Root cause: pipeline/ops/sensor_ops.py has its OWN _run_dbt (L85) that shells dbtf locally with NO DBT_RUNNER_URL check — a third, un-migrated copy. intraday_ops._run_dbt + daily_ingestion_ops._run_dbt already delegate to the E11.0 runner; sensor_ops never got it. So statcast_catchup (heavy stg_batter_pitches+), lineup_monitor, pregame_snapshot all run dbt on metered Dagster compute. NOT a data-integrity bug (dbt runs, wrong executor) → cost + hang-risk.
+Read: pipeline/ops/sensor_ops.py (_run_dbt L85 + _run/_run_script + every _run_dbt caller: catchup_dbt_rebuild, dbt_build_bullpen_posteriors_op, dbt_umpire_feature_rebuild, pregame_dbt_clv_rebuild, lineup_*_rebuild), pipeline/ops/intraday_ops.py (_run_dbt L89 + _run_dbt_remote L45 — the REFERENCE impl), pipeline/ops/daily_ingestion_ops.py (_run_dbt L79 + _run_dbt_remote L32), pipeline/resources/dbt_runner_resource.py.
+Do:
+ (1) Consolidate: extract ONE shared helper (e.g. pipeline/ops/_dbt_exec.py) with `_run_dbt(context, args, timeout=…, use_state=False)` + `_run_dbt_remote(...)` — the DBT_RUNNER_URL-delegates-else-local-subprocess logic, identical behavior to today's intraday/daily versions (incl. the failure-tail logging sensor_ops added + the timeout). Replace all three modules' private copies with imports of the shared helper. ONE source of truth so this drift can't recur.
+ (2) Confirm sensor_ops callers now route through the shared helper → statcast_catchup/lineup_monitor/pregame_snapshot dbt delegates to the runner when DBT_RUNNER_URL is set.
+ (3) Verify the hard timeout actually kills a hung subprocess on every path (INC-3: the 30-min ceiling apparently didn't fire 6/19) — add a test that a wedged subprocess raises within the ceiling.
+ (4) Preserve per-call timeouts (catchup dbt is the longest healthy run) + the in-process fallback for dev/CI (DBT_RUNNER_URL unset).
+NOTE the E11.0b caveat: this stops IN-PROCESS execution but a blocking-poll op still meters Dagster for the dbt wall-clock — full meter cut is E11.0b/cron-direct. Out of scope here: moving these marts off Snowflake = E11.1-W1.
+Gate/AC: single shared dbt-exec helper; all 3 modules import it; sensor-fired dbt delegates to the runner under DBT_RUNNER_URL; timeout-kills-hung-subprocess test green; `uv run pytest` + `dbtf compile` green; changelog = none (backend infra).
+Closeout (per §0.1): ⏭️ Operator handoff — git add the new helper + the 3 refactored ops modules + the test; note any Railway/Dagster env already has DBT_RUNNER_URL set (it does, post-6/19).
+```
+```
+▶ INC-2 fix (E11.6) — Decommission dead Parlay-API ingestion + prune the `parlayapi` dbt branch   [Infra · cost · cleanup · LOW — do after E11.5/T2 deploy + W1]   (2026-06-19)
+CONTEXT: Parlay API is PERMANENTLY off (operator-confirmed 2026-06-19). Live serving was already repointed to The Odds API on 2026-06-16 (Story 12.3.7/A2.18) — `mart_odds_outcomes` dedup PREFERS `oddsapi`, so live picks are NOT at risk. This is pure leftover-cleanup: the 6/16 work retired the intraday Parlay schedules but left Parlay ingestion calls + dead dbt branches in place, which now fail/hang every run.
+Read: pipeline/ops/daily_ingestion_ops.py (L232/237/242 parlay_api_ingestion calls), pipeline/ops/sensor_ops.py (L248–273), pipeline/ops/intraday_ops.py (L168–178), the dbt models mart_odds_outcomes.sql / mart_game_odds_bridge.sql / mart_odds_line_movement.sql (the stg_parlayapi_* branches), dbt/models/sources.yml (the 4 parlayapi freshness blocks), pipeline/schedules/intraday_schedules.py (the 6/16 decommission note — confirm the "dormant manual failover" intent before deleting anything).
+Do:
+ (1) Remove the `parlay_api_ingestion.py` op calls from daily_ingestion_ops.py + sensor_ops.py (+ intraday_ops.py if still wired) so no run tries the dead API. Keep the historical Parlay DATA intact (don't drop tables).
+ (2) Prune the dead stg_parlayapi_* branch from mart_odds_outcomes / mart_game_odds_bridge / mart_odds_line_movement. VALUE-PRESERVING: parity-check each odds mart before/after — output MUST be byte-identical for current games (odds_api already wins the dedup); capture the diff in the handoff.
+ (3) Drop the 4 warn-only parlayapi freshness blocks + the parlayapi source from sources.yml ONLY after the marts no longer ref stg_parlayapi_*. Decide (flag to operator) whether to also drop/retire the stg_parlayapi_* models + parlayapi.* tables or leave them as cold archive.
+ (4) DECISION TO CONFIRM WITH OPERATOR: intraday_schedules.py keeps odds_snapshot_job as a "dormant manual failover." Since Parlay is now PERMANENT-off (not paused), that failover is dead — propose removing those retained defs too, but confirm before deleting.
+Gate/AC: no live code path calls the Parlay API; odds marts parity-identical pre/post (proof in handoff); CI green (`uv run pytest` + `dbtf build --select state:modified+` + `dbtf compile`); changelog = none (backend-only, no user-facing change).
+Closeout (per §0.1): ⏭️ Operator handoff — run-order + git add of every changed op/model/sources.yml + the parity-diff proof + the failover-defs decision.
+```
 ```
 ▶ Debug prompt — INC-1 weekly meta-model retrain failed (h2h + totals)   ✅ RESOLVED 2026-06-18
 DONE: Dagster image was missing `pymc` + `h5py` (in pyproject/dev but not the Dockerfile; E9.2 had added arviz/h5netcdf but missed the training deps). Added both to the Dockerfile pip block + a build-time Bayesian-dep import smoke-check RUN (fails the build if a dep is absent). Operator rebuilt + re-ran → both markets green; pytest 325 ✓.
@@ -566,10 +617,25 @@ Gate/AC: parlay stakes correlation-adjusted vs the day's straight-bet exposure; 
 - **E10.5 — Frontend parlay surface** ⏳ §0.3 — **[App]** prompt generated by the E10.1/E10.3 session (§0.3).
 
 ## Epic E11 — Infrastructure & Cost Savings  🟢 **ACTIVE (2026-06-18) — Snowflake reduction NOW; leads Session B ahead of E5.0/E5.1**
-> **Principle: keep Snowflake at MINIMUM until profitable.** ~60% of burn, +25% MoM, pre-revenue. **Start with E11.2-T2 (quick daily win) + E11.1 Wave 1 (heavy Statcast marts).** The 6/22 Snowflake/Dagster audit measures the delta vs the cost baseline (build_roadmap *Cost watch*). **Live serving path stays on Snowflake, moves LAST.**
+> **🐞 INCIDENT FIX PROMPTS live in the `🐞 Open incidents` REGISTER at the TOP of this file** (one findable place): **INC-4** (schedule_capture down, P1 — fix first), **INC-3 → E11.0c** (sensor_ops runner delegation), **INC-2 → E11.6** (Parlay cleanup). E11.0c/E11.6 are also cost-opt stories tracked in this epic; their runnable prompts are in the register, not duplicated here.
+> **Principle: keep Snowflake at MINIMUM until profitable.** ~60% of burn, +25% MoM, pre-revenue. **STATUS 2026-06-19:** E11.3/E11.0/E11.4 ✅; **E11.5 ✅** (decision: stay dbt-fusion — the T2 blocker was a YAML format issue, not fusion); **E11.2-T2 ✅ LIVE** (dbt-runner redeployed). **NEXT = E11.1-W1** (heavy Statcast marts → dbt-duckdb/S3, the PRIMARY remaining Snowflake lever, runs on fusion), then E11.0b (residual Dagster dbt) + E11.6 (Parlay cleanup). 🎯 **Snowflake reduction is MANDATORY.** The 6/22 Snowflake/Dagster audit measures the delta vs the cost baseline (build_roadmap *Cost watch*) — first real Snowflake movement. **Live serving path stays on Snowflake, moves LAST.**
 ```
-▶ Story prompt — E11.1 Baseball dbt → lean lakehouse (WAVE 1 = Statcast marts)   [Infra · cost · 🟢 ACTIVE]   (baseball is LIVE)
-Read: §5H E11.1 + sport_data_platform.md + §6 + master A2.15/16/17 + baseball_data_mart_inventory.md.
+```
+▶ Story prompt — E11.5 dbt engine decision spike (fusion vs core for the cost-opt lakehouse lane)   [Infra · cost · spike · 🟢 NEXT — gates E11.1-W1 and E11.2-T2]   (NEW 2026-06-19)
+WHY: E11.2-T2 was walled because dbt-fusion (preview) rejects freshness/loaded_at_field config (dbt1060). E11.1-W1 (the primary Snowflake lever) also runs through dbt + the dbt-duckdb adapter, so before migrating anything we must settle WHICH ENGINE drives the cost-opt lane. Snowflake reduction is mandatory; this spike de-risks it. TIME-BOX IT — investigation + one tiny empirical run, not a migration.
+Read: §5H E11.1/E11.2 + §6 + sport_data_platform.md + services/dbt_runner/server.py (the use_state passthrough) + dbt/models/sources.yml (freshness blocks were stripped) + the project's dbt/dbtf version pins.
+Do:
+ (1) ESTABLISH the landscape — current dbt-fusion preview vs dbt-core latest: the engine relationship + versions (VERIFY the operator's hypothesis that "the latest dbt-core runs on the Fusion engine" — do not assume it), adapter coverage for dbt-duckdb AND dbt-snowflake on each, and whether each supports (a) freshness/loaded_at_field config and (b) the source_status:fresher+ / state:modified+ selectors T2 needs. Cite docs/release notes (web).
+ (2) EMPIRICALLY CONFIRM — in a throwaway branch/project, actually (a) run ONE tiny model through the dbt-duckdb adapter and (b) parse a sources.yml freshness block, under BOTH engines available to us. Record exactly what runs vs errors (capture the error codes).
+ (3) DECIDE + WRITE docs/e11_5_dbt_engine_decision.md: recommend one of — (i) stay fusion + wait for freshness support, (ii) DUAL-ENGINE: dbt-core/duckdb for the lakehouse lane, fusion for the Snowflake serving lane, (iii) all dbt-core. Include: the exact config/Makefile/CI delta W1 must adopt, the compatibility cost of dual-engine (two binaries, CI matrix, the `dbtf` convention in CLAUDE.md/§0.1), and WHETHER E11.2-T2 can reactivate on the chosen engine WITHOUT waiting for fusion (if yes, note the 2-file reactivation can ride along).
+CONSTRAINT: Snowflake cost reduction is MANDATORY — recommend whatever engine actually ships W1; do not let `dbtf`-convention purity block the savings. If the recommendation changes the engine convention, flag the CLAUDE.md/§0.1 edit needed (operator approves).
+Gate/AC: decision doc committed + empirical evidence (duckdb run result + freshness-parse result per engine, with error codes) + the concrete config delta W1 inherits + the T2-reactivation verdict.
+Closeout (per §0.1): spike, no long jobs expected; END with an ⏭️ Operator handoff (any version/install steps + git add of the decision doc; flag the CLAUDE.md/§0.1 convention edit if the engine changes).
+```
+```
+▶ Story prompt — E11.1 Baseball dbt → lean lakehouse (WAVE 1 = Statcast marts)   [Infra · cost · 🟢 PRIMARY Snowflake lever · GATED on E11.5]   (baseball is LIVE)
+⛔ HARD GATE: do NOT start until E11.5 (dbt engine decision spike) has landed `docs/e11_5_dbt_engine_decision.md` AND confirmed dbt-duckdb runs end-to-end on the chosen engine. Run W1 on E11.5's chosen engine; inherit its config delta. (E11.2-T2 already proved dbt-fusion preview can wall this — don't repeat that on the duckdb adapter.)
+Read: §5H E11.1 + sport_data_platform.md + §6 + master A2.15/16/17 + baseball_data_mart_inventory.md + docs/e11_5_dbt_engine_decision.md.
 Do: migrate the baseball dbt transform onto S3-Parquet + dbt-duckdb-in-a-Railway-container, Dagster coordinating
 only. WAVE 1 = the heavy Tier-3 Statcast batch marts (least serving-coupled; the A2.17 pilot). The live predict/
 serving path moves LAST, only after its read is repointed — do NOT big-bang it.
@@ -577,13 +643,8 @@ Gate/AC: model-by-model migration plan; heavy non-serving marts on dbt-duckdb/S3
 Dagster-run-minute reduction; every migrated model value-preserving (grain+fingerprint diff); serving unbroken.
 ```
 ```
-▶ Story prompt — E11.2 State-aware dbt builds (Task 2)   [Infra · cost · 🟢 ACTIVE — quick daily win]   (Task 1 ✅ shipped; Task 2 ⬜)
-Read: §5H E11.2 + master Story I.5 (full spec) + Story I.2 (the S3 artifact bucket).
-Do: Task-1 validation (a leaf-model PR builds ~1–3 models in CI, not 117); Task 2 — source freshness/loaded_at →
-sources.json; persist manifest.json + sources.json to S3 (keyed by env) as --state; daily path
-`dbtf build --select source_status:fresher+ --state <prev>` with a missing-state full-build fallback; keep the
-weekly full --full-refresh net. Confirm dbt-fusion supports source_status + --state (else fall back to state:modified+).
-Gate/AC: CI builds only the modified subtree; daily op rebuilds only fresher-source descendants; measured credit reduction.
+✅ E11.2-T2 LIVE — DEPLOYED 2026-06-19. The blocker was a YAML format issue, not dbt-fusion (E11.5): `config:`-nesting `freshness`/`loaded_at_field` makes fusion accept them. server.py un-bypassed → `dbtf source freshness` (non-fatal) then `dbtf build --select source_status:fresher+ --state /tmp/dbt-state/`; first run = cache-miss full build (uploads manifest+sources.json to S3), 2nd+ runs rebuild only fresher-source descendants. Railway dbt-runner redeployed by operator. VERIFY at 6/22 audit: (a) 2nd run skipped unchanged subtrees (runner logs / S3 state hit), (b) Snowflake-credit delta vs 6/18 baseline. The 4 parlayapi freshness blocks are warn-only forever (Parlay decommissioned — E11.6).
+✅ E11.5 DONE 2026-06-19 — dbt engine decision: STAY on dbt-fusion (single engine; drives duckdb too). dbt-core 1.11 is a separate Python pkg (NOT on Fusion); dbt Core v2.0-alpha is the unified-Rust future to monitor. Doc: docs/e11_5_dbt_engine_decision.md.
 ```
 ```
 ✅ E11.3 COMPLETE 2026-06-19 — QUERY_TAG wired end-to-end; cost report at scripts/ops/snowflake_cost_by_job.py.
@@ -597,6 +658,19 @@ Read: §5H E11.4 + the 6/2026 Dagster usage data (lineup_monitor 24% + odds_snap
 Do: split each job — python/polling → Railway cron services (mirror odds_capture, preserve cadence + leakage-safe timestamps + landing); the embedded dbt → the E11.0 container (Dagster triggers, doesn't run in-process). Dagster keeps only coordination. Validate no lineup/odds/weather gaps + measure the Dagster drop.
 Gate/AC: no python-poll or in-op dbt on Dagster metered compute; data continuity intact; measured Dagster reduction. Closeout: CI green + ⏭️ handoff.
 ```
+_(**E11.0c** [fix INC-3] and **E11.6** [fix INC-2] are incident fixes — their runnable prompts live in the **`🐞 Open incidents` register at the top of this file**, not duplicated here. They're also tracked as cost-opt stories in `build_roadmap.md` Track 1.)_
+```
+▶ Story prompt — E11.7 Pipeline failure-semantics audit + resilience hardening   [Infra · reliability · P2 · closes the INC-3/5/6 class · do AFTER INC-6 point-fix]   (2026-06-21)
+WHY: three incidents shared one root — the pipeline's halt/warn/skip semantics are inconsistent. INC-3 ran heavy dbt in-process (wrong executor), INC-5 SILENTLY skipped a step that should have alerted (empty DBT_RUNNER_URL), INC-6 HALTED the whole pipeline on a peripheral data-quality test that should have warned. Whack-a-mole until we define + enforce one contract.
+Read: pipeline/ops/daily_ingestion_ops.py + pipeline/ops/sensor_ops.py + pipeline/ops/intraday_ops.py + pipeline/ops/_dbt_exec.py (the failure handling) + every dbt schema.yml test severity + the services/*_capture trigger scripts (silent-skip paths). INC-3/5/6 in build_roadmap for the pattern.
+Do:
+ (1) DEFINE the contract (write it into CLAUDE.md / guide §0.1): three tiers — HALT (serving-critical failure only: serving marts, predict, contract-guard); WARN-but-continue (peripheral data-quality: bio ranges, soft sources); ALERT-loud-but-continue (a SKIP that hides work: missing env/URL, unreachable runner — must log WARNING, never silent). 
+ (2) AUDIT every dbt test against it — serving-critical contracts stay `error`; peripheral data-quality → `warn`. Produce the error→warn change list (don't blanket-change; serving contracts stay error).
+ (3) AUDIT every op/cron failure path — critical-path dbt runs `run` (not `build`) with tests as a NON-BLOCKING monitor (mirror catchup + INC-6); every graceful-skip logs loudly (INC-5 lesson); heavy dbt delegates to the runner (INC-3, already done — verify no in-process copies remain).
+ (4) Add a regression guard where cheap (e.g. a test that asserts the critical-path op uses `run` not `build`; a lint that flags silent `print()`-only skip paths).
+Gate/AC: the 3-tier contract documented + enforced; a single peripheral data-quality failure can no longer halt predictions; no silent skips on the cron/sensor paths; `uv run pytest` + `dbtf compile` green; changelog = none (infra).
+Closeout (per §0.1): ⏭️ Operator handoff — the contract doc + the error→warn test-severity change list + git add of touched ops/schema files + any regression guards.
+```
 
 ## Epic E12 — Serving Parity / Point-in-Time Serving Completeness  ⭐ **the live lever (from master 30.3); runs BEFORE E1.9**
 ```
@@ -605,6 +679,56 @@ Read: guide §5I E12 + master implementation_guide.md Epic 30 + Story 30.3 (the 
 Do: build a serving-parity harness diffing the live predict_today matrix vs the feature-store/training matrix per game; find the strong-tier (lineup-dependent ELO/archetype/EB) features arriving NULL/misaligned at morning serve; fix the serve path to be point-in-time COMPLETE (or degrade honestly pre-lineup, per 30.8/E9.6); add a standing serving-parity assertion.
 Gate/AC: live served matrix matches the feature-store matrix (no strong-tier NULL/misalignment, aligned); live home_win skill moves toward offline ~0.42 (forward-validated); standing guard. ⚠️ Runs BEFORE E1.9 so the bake-off's CV predicts live. Promoting fixes shifts live picks → changelog.
 Closeout (per §0.1): CI green + ⏭️ Operator handoff (run-order + git add + forward-validation).
+```
+
+---
+
+## Epic E13 — Liquid-Market Model Re-Evaluation  🔬 **(model R&D · commissioned 2026-06-21 · kill-gated)**
+> **Frame:** E1.9 confirmed the straight point-models are signal-thin. This is a BOUNDED edge search on the liquid markets, full LdP discipline (purged CV, PBO<0.2 + DSR>0, **forward CLV = cashability gate**), every workstream pre-registers a hypothesis + kill criterion. **🧭 market-AWARE modeling is in scope here** (an explicit exception to market-blind — see build_roadmap E13 block); a market-aware model is judged on forward CLV / beating the close, not accuracy. **Priority: E13.0 → E13.1 + E13.3 ∥ → E13.2 → E13.4.**
+```
+▶ Story prompt — E13.0 home_win/pre forward-validation (2nd hysteresis pass)   [Model-A · ⭐ do FIRST · cheap + decisive]   (2026-06-21)
+WHY: E1.9 produced the program's first-ever offline PROMOTE — home_win/pre (glm/36 vs the 33.0 morning baseline). It's a CHALLENGER until it clears hysteresis (≥2 consecutive PROMOTEs on fresh windows) + forward/serving-parity. This is also the live-retention test of the whole v6 thesis (de-leaked model should HOLD its honest skill live where leaked-v5 collapsed).
+Read: betting_ml/scripts/gate_v6_vs_v5.py + model_registry.yaml (the home_win/pre challenger stanza + its gate_json ref) + the E1.9 handoff (tier-matched-gate decision: morning compares to 33.0 morning baseline, both on the pre_lineup matrix).
+Do: re-run gate_v6_vs_v5.py --target home_win --tier pre_lineup on the NEXT fresh-cache window (not the one E1.9 used). A 2nd PROMOTE satisfies hysteresis → unlocks the persist→deploy path (fit glm_elasticnet on load_clean_matrix() full data + the 36-feat contract, serialize with the contract sidecar, flip the stanza to a pre_lineup variant, changelog + deploy). A HOLD → stays a challenger, no deploy, log the window.
+Gate/AC: documented 2nd-window verdict; if PROMOTE, the persist+deploy steps + serving-parity check + changelog line; if HOLD, the recorded window + why.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (+ changelog if deployed — this WOULD shift live morning picks).
+
+🔬 VERDICT — E13.0 (2026-06-21): **an offline re-run is NOT a valid 2nd hysteresis window. DEPLOY WITHHELD; the 2nd pass must come from FORWARD live-retention, not a re-gate.** Proof (verified against gate code): `evaluate_promotion` computes the entire decision — pooled Δ, paired-bootstrap CI, and the no-season-regression check — over `comp_mask = completed_seasons {2024,2025}` ONLY; 2026 is `current_season`, corroboration-only, never in the decision. The 2024/2025 per-game scores are a deterministic function of frozen historical rows (point-in-time-as-of-game; games already played) + fixed seed=42 (glm challenger + xgb/Platt baseline both deterministic). ⇒ **Absent an upstream historical restatement, a `--refresh-cache` re-run reproduces pass-1 BYTE-FOR-BYTE on the decisive folds (2024 Δ−0.00378, 2025 Δ−0.00387) → deterministically PROMOTE again.** Two offline gates 2 days apart are NOT independent windows: they share ~99.6% of decisive data, and the program's own hysteresis design (`promotion_gate.py:32`, `MIN_CONSECUTIVE_PASSES=2`) explicitly demands "a respected re-eval interval … to stop monthly redeploys chasing early-season regime noise." Rubber-stamping deploy off a deterministic re-gate would manufacture false hysteresis. The offline verdict is in fact FROZEN at PROMOTE until 2026 itself becomes a completed season (months out). **Pass-1 evidence archived** → `gate_v6_vs_v5_home_win_pre_lineup_pass1_2026-06-19.json` (the canonical gate_json filename is variant-derived and WILL be clobbered by any re-run).
+PASS-2 RAN (operator, 2026-06-21, `--refresh-cache`): verdict **nominal PROMOTE** (pooled Δ−0.0030, CI [−0.0047,−0.0014]) — but the diagnostic fired the **"MOVED"** branch and the move is a CAUTION, not a confirmation:
+  | window | pooled Δ | CI | 2024 Δ (n) | 2025 Δ (n) | 2026 Δ (n) |
+  |---|---|---|---|---|---|
+  | pass-1 (06-19) | −0.0038 | [−0.0055,−0.0021] | −0.0038 (2000) | −0.0039 (2026) | +0.0012 (838) |
+  | pass-2 (06-21) | −0.0030 | [−0.0047,−0.0014] | **−0.0021** (2001) | −0.0039 (2026) | **+0.0017** (864) |
+  - **My "byte-identical absent restatement" prediction was FALSIFIED → the marts are NOT frozen.** Fresh pull = 10,836→10,866 rows (+26 new 2026 games, +1 2024 game, +3 training-season). The 2024 fold MOVED: edge nearly **halved** (−0.0038→−0.0021, now barely clears the 0.002 floor on 2024 alone). Mechanism: the **baseline IMPROVED** under backfill (2024 champ Brier 0.2464→0.2448) while the challenger stayed flat (0.2426→0.2427) — as the arsenal/Stuff+/bullpen backfill fills historical features in, the richer 154-feat xgb closes the gap on the lean 36-feat glm. So the "movement" is feature-restatement on the SAME games, NOT new independent observations → still NOT a clean independent hysteresis window.
+  - **Every forward-leaning signal is unsupportive:** 2026 (newest, genuinely-new games, the most forward-like fold) has the challenger BEHIND in BOTH passes and the gap WIDENED (+0.0012→+0.0017). The PROMOTE rests entirely on completed 2024+2025; on the freshest OOS data the 36-feat glm is slightly worse than the served morning baseline — the "wins on completed/backfilled history, behind on fresh OOS" shape, the exact v5-collapse failure mode the WHY warns about, now faintly visible in v6 on 2026.
+VERDICT STANDS: **DEPLOY WITHHELD** — now on EVIDENCE, not just methodology. Pass-2 archived → `gate_v6_vs_v5_home_win_pre_lineup_pass2_2026-06-21.json` (canonical gate_json now = pass-2). Robustness is deteriorating under restatement; the live-leaning read is negative.
+WHAT TO ACTUALLY DO: the real 2nd pass = **forward/serving-parity**: shadow-serve the 36-feat glm on live morning picks and score vs the served 154-feat champion on 2026 games AS THEY COMPLETE (ties into E12, structurally PASS). Crucial nuance pass-2 exposes — the offline edge shrinks as features get BACKFILLED toward completeness, but LIVE morning serving is SPARSE/point-in-time-incomplete (the 30.3 finding), so neither model sees complete features live; which regime predicts live ranking is unknown → only forward-validation on actually-served sparse features answers it. Deploy unlocks when that curve accrues ≥ the min-games bar with the challenger ahead — NOT on a re-gate. Forward-eval harness = a follow-on story (beyond E13.0's "cheap" scope) → flagged. Persist+deploy recipe pre-staged (no v6 persist script exists yet) but **WITHHELD** — no champion swap, no changelog, no artifact persist this pass.
+```
+```
+▶ Story prompt — E13.1 Market-anchored residual model   [Model-A · ⭐ highest-EV swing · market-AWARE exception]   (2026-06-21)
+HYPOTHESIS (pre-register): a model targeting the RESIDUAL on top of the market line — P(home) = market_implied_devig + learned_residual(features) — finds mispriced spots better than predicting outcomes from scratch, and produces positive forward CLV. KILL CRITERION: no positive forward CLV over ≥100 games (net of vig + the PBO/DSR discipline) → kill the residual thesis, record it.
+Read: guide §3/§7 + E1.1 (purged CV) + E1.4 (PBO/DSR) + mart_odds_outcomes / mart_odds_consensus (the devig'd market line — utils/h2h_probability.devig_home_prob) + feature_pregame_game_features (the clean post-E1.8 contract) + the E4 close (why raw CLV gradient was too small) + gtm_strategy §0 (honest framing).
+Do: (1) build the devig'd market-implied prob as the anchor + the residual target (outcome − market_implied); (2) fit residual models (GBM + GLM) under purged CV, market line as the anchor NOT a leaked feature (it's point-in-time pre-game); (3) judge on FORWARD CLV (beat-the-close) + PBO<0.2/DSR>0, NOT accuracy; (4) honest-framing guard — this is "spots the market misprices, proven by CLV," never a "we predict games" claim. Compare additive-to vs replace the existing market-blind point-model.
+Gate/AC: forward-CLV result over ≥100 games + PBO/DSR on the selected config + a kill-or-promote verdict; if promising, a forward-validation plan (CLV can't be backtested into truth). 
+Closeout (per §0.1): long jobs → operator; ⏭️ Operator handoff (run-order + git add + the CLV/gate evidence + verdict). NOTE: nothing deploys to users without clearing forward CLV first (best_alpha=0 honesty).
+```
+```
+▶ Story prompt — E13.2 Bottom-up PA-level game simulator   [Model-A · alt architecture · feeds E2 totals]   (2026-06-21 · scope below; flesh on sequencing)
+HYPOTHESIS: simulating the game from batter-vs-pitcher matchup distributions (Monte Carlo PA outcomes → innings → run distribution) captures lineup/platoon structure that aggregate team features blur, and natively yields the full run distribution E2 wants. KILL: sim ML/totals don't beat the current models' honest floor by a pre-set margin on purged CV → archive the engine.
+Scope (flesh when sequenced): build the PA-outcome model (batter×pitcher×count→event probs, leak-clean, shrinkage on thin matchups) → inning/game sim → calibrate the run distribution vs actuals → compare to v6/E2 on CRPS/NLL + (if used for ML) forward CLV. Reuse mart_batter_vs_pitch_archetype / mart_pitcher_pitch_archetype / handedness splits. Heavy compute → operator/runner.
+```
+```
+▶ Story prompt — E13.3 Sub-model + meta-model re-eval on de-leaked data   [Model-A · the operator's idea · ∥ with E13.1]   (2026-06-21)
+HYPOTHESIS: the sub-model ensemble (feature_pregame_sub_model_signals) + Bayesian meta-model were built/tuned BEFORE the E1.7/E1.8 de-leak (the bullpen EB sub-model WAS the leak). Re-fitting on the clean construction may reshape which sub-model signals carry — or confirm tapped-out. KILL: no sub-model beats its honest floor by the pre-set margin in N folds → confirm tapped-out, stop (don't rationalize).
+Read: ../implementation_guide.md (master — the sub-model architecture + sub_model_registry.yaml) + betting_ml/scripts/train_bayesian_meta_model.py + feature_pregame_sub_model_signals (dbt) + E2.1b/E1.7/E1.8 (the leak + de-leak) + E1.1 purged CV.
+Do: re-fit each sub-model + the meta-model on the de-leaked matrix under purged CV; compare signal importances + meta-model skill pre/post de-leak; market-blind unless explicitly market-aware; PBO/DSR on anything that looks like a win. Report what the clean data changed (or didn't).
+Gate/AC: per-sub-model honest-floor comparison + meta-model skill delta + a keep/kill verdict per signal; CI green.
+Closeout (per §0.1): operator handoff (run-order + git add incl. sub_model_registry.yaml + ablation_results/*.md).
+```
+```
+▶ Story prompt — E13.4 Orthogonal-signal audit   [Model-A · systematic · last]   (2026-06-21 · scope below; flesh on sequencing)
+HYPOTHESIS: signals NOT in the current contracts carry incremental, leak-clean lift. Candidates: team defense (OAA/DRS), bullpen AVAILABILITY (usage-derived, vs EB quality), velo-trend/injury-proximity, travel/rest/schedule fatigue, weather×park×batted-ball interaction, market microstructure (open line, move velocity, cross-book dispersion). KILL per-signal: fails leak-clean incremental-lift (purged CV + PBO/DSR) → drop it; ship only those that clear.
+Scope (flesh when sequenced): one mini-experiment per candidate — construct leak-clean (as-of < game_date), test incremental lift over the v6 contract, keep only winners. Market-microstructure items overlap E13.1 (market-aware). Pre-register each signal's hypothesis.
 ```
 
 ---
