@@ -1,0 +1,506 @@
+{
+  "story": "E13.1",
+  "tier": "post_lineup",
+  "seed": 42,
+  "smoke": false,
+  "n_games": 8161,
+  "season_range": [
+    2021,
+    2026
+  ],
+  "n_features": 19,
+  "n_folds": 3,
+  "contract": "betting_ml/models/home_win/feature_columns_xgb_classifier_pruned_clustered_deleaked_2026.json",
+  "hold": 0.045,
+  "eval_tau": 0.02,
+  "noise_floor_brier": 0.002,
+  "anchor_brier_mean": 0.2425532320415334,
+  "winner": "gbm_d4_lr0.05",
+  "accuracy_secondary": {
+    "gbm_d3_lr0.05": {
+      "brier_mean": 0.2513836287518139,
+      "delta_vs_market": 0.00883039671028052,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "gbm_d4_lr0.05": {
+      "brier_mean": 0.2538878293204659,
+      "delta_vs_market": 0.01133459727893249,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "gbm_d5_lr0.03": {
+      "brier_mean": 0.25145226536724713,
+      "delta_vs_market": 0.008899033325713734,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.003_l0.5": {
+      "brier_mean": 0.24331079869187364,
+      "delta_vs_market": 0.0007575666503402412,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.01_l0.5": {
+      "brier_mean": 0.24284088982891405,
+      "delta_vs_market": 0.0002876577873806574,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.03_l0.2": {
+      "brier_mean": 0.24276201841944545,
+      "delta_vs_market": 0.00020878637791205135,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "point_model_market_blind": {
+      "brier_mean": 0.2475362873647551,
+      "delta_vs_market": 0.004983055323221713,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "anchor_only_market": {
+      "brier_mean": 0.2425532320415334,
+      "delta_vs_market": 0.0,
+      "beats_market": false,
+      "decision": "HOLD"
+    }
+  },
+  "clv_proxy_by_config": {
+    "gbm_d3_lr0.05": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.504739336492891,
+        "mean_captured_clv": -8.311343128626122e-05,
+        "roi_net_vig": -0.02029644447122671
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3457,
+        "pct_clv_positive": 0.5027480474399768,
+        "mean_captured_clv": -0.000150449387003242,
+        "roi_net_vig": -0.02144468343994258
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3115,
+        "pct_clv_positive": 0.5030497592295345,
+        "mean_captured_clv": -8.773241320635218e-05,
+        "roi_net_vig": -0.02325625773025051
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2815,
+        "pct_clv_positive": 0.5058614564831261,
+        "mean_captured_clv": -0.00012241365683654315,
+        "roi_net_vig": -0.023371598359703722
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2212,
+        "pct_clv_positive": 0.5045207956600362,
+        "mean_captured_clv": -0.00027266301394220284,
+        "roi_net_vig": -0.01793239710193996
+      }
+    ],
+    "gbm_d4_lr0.05": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.5071090047393365,
+        "mean_captured_clv": 0.00020916192448489304,
+        "roi_net_vig": -0.01391666594821096
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3505,
+        "pct_clv_positive": 0.5072753209700428,
+        "mean_captured_clv": 0.0002462867717375503,
+        "roi_net_vig": -0.018359616136045424
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3234,
+        "pct_clv_positive": 0.5105132962275819,
+        "mean_captured_clv": 0.0003162811484776606,
+        "roi_net_vig": -0.014758994197895616
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2939,
+        "pct_clv_positive": 0.5076556651922423,
+        "mean_captured_clv": 9.855577055106076e-05,
+        "roi_net_vig": -0.006443702941586317
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2438,
+        "pct_clv_positive": 0.5069729286300246,
+        "mean_captured_clv": 2.3794843998365187e-05,
+        "roi_net_vig": -0.009318691888962748
+      }
+    ],
+    "gbm_d5_lr0.03": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.5007898894154819,
+        "mean_captured_clv": 3.2118600347255292e-06,
+        "roi_net_vig": 0.0012658150052374227
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3509,
+        "pct_clv_positive": 0.5038472499287546,
+        "mean_captured_clv": 0.00016893063990230212,
+        "roi_net_vig": -0.008847429353058666
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3188,
+        "pct_clv_positive": 0.5065872020075283,
+        "mean_captured_clv": 0.0002230421025127888,
+        "roi_net_vig": -0.005275132255676155
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2850,
+        "pct_clv_positive": 0.5045614035087719,
+        "mean_captured_clv": 4.471644267542915e-05,
+        "roi_net_vig": -0.014315685948789224
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2262,
+        "pct_clv_positive": 0.51105216622458,
+        "mean_captured_clv": 5.2658356669367194e-05,
+        "roi_net_vig": -0.00296935768680799
+      }
+    ],
+    "glm_a0.003_l0.5": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.48051606108478145,
+        "mean_captured_clv": -0.0008545618786837992,
+        "roi_net_vig": 0.016107445313821703
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3141,
+        "pct_clv_positive": 0.4740528494110156,
+        "mean_captured_clv": -0.001140828040235077,
+        "roi_net_vig": 0.013482242073354028
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 2424,
+        "pct_clv_positive": 0.4777227722772277,
+        "mean_captured_clv": -0.0010894056320875094,
+        "roi_net_vig": 0.0183100867077847
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 1746,
+        "pct_clv_positive": 0.47193585337915234,
+        "mean_captured_clv": -0.0011859083125651628,
+        "roi_net_vig": 0.0015711464451196018
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 800,
+        "pct_clv_positive": 0.4575,
+        "mean_captured_clv": -0.0016545268850058031,
+        "roi_net_vig": -0.009731168419269132
+      }
+    ],
+    "glm_a0.01_l0.5": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.4670879410215903,
+        "mean_captured_clv": -0.0013364510331046325,
+        "roi_net_vig": 0.006313983913423927
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 2905,
+        "pct_clv_positive": 0.470223752151463,
+        "mean_captured_clv": -0.0014048582926310745,
+        "roi_net_vig": 0.02414856753140477
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 1883,
+        "pct_clv_positive": 0.4726500265533723,
+        "mean_captured_clv": -0.0011125363222118322,
+        "roi_net_vig": 0.009816041907381626
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 1053,
+        "pct_clv_positive": 0.452991452991453,
+        "mean_captured_clv": -0.0018067014753567821,
+        "roi_net_vig": -0.013673277907561062
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 260,
+        "pct_clv_positive": 0.4307692307692308,
+        "mean_captured_clv": -0.003468002240812952,
+        "roi_net_vig": -0.0412461228823879
+      }
+    ],
+    "glm_a0.03_l0.2": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.46656134807793576,
+        "mean_captured_clv": -0.0014085395715972683,
+        "roi_net_vig": 0.00048503256406979753
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 2845,
+        "pct_clv_positive": 0.470298769771529,
+        "mean_captured_clv": -0.0013458279432137477,
+        "roi_net_vig": 0.025434714020550718
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 1721,
+        "pct_clv_positive": 0.46600813480534575,
+        "mean_captured_clv": -0.0014661056903104615,
+        "roi_net_vig": 0.0009247786214903218
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 808,
+        "pct_clv_positive": 0.4504950495049505,
+        "mean_captured_clv": -0.0020764453672325284,
+        "roi_net_vig": -0.0012346078307207647
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 167,
+        "pct_clv_positive": 0.40718562874251496,
+        "mean_captured_clv": -0.0047754133595325635,
+        "roi_net_vig": -0.05224206210019241
+      }
+    ],
+    "point_model_market_blind": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.5394944707740916,
+        "mean_captured_clv": 0.0020421339916549034,
+        "roi_net_vig": -0.020656164852524722
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3437,
+        "pct_clv_positive": 0.5446610416060518,
+        "mean_captured_clv": 0.0022111001490950828,
+        "roi_net_vig": -0.008673439108127757
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3094,
+        "pct_clv_positive": 0.5504201680672269,
+        "mean_captured_clv": 0.002446733713307396,
+        "roi_net_vig": -0.006278397657921964
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2734,
+        "pct_clv_positive": 0.5508412582297001,
+        "mean_captured_clv": 0.0024560017508984534,
+        "roi_net_vig": 0.0022351164663800384
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2057,
+        "pct_clv_positive": 0.5430238210986874,
+        "mean_captured_clv": 0.002192852794233179,
+        "roi_net_vig": 0.019695472970698593
+      }
+    ],
+    "anchor_only_market": [
+      {
+        "tau": 0.0,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      }
+    ]
+  },
+  "per_season_clv": {
+    "gbm_d3_lr0.05": {
+      "2024": {
+        "n": 1240,
+        "pct_clv_pos": 0.4790322580645161,
+        "mean_captured_clv": -0.0014201193321593296
+      },
+      "2025": {
+        "n": 1277,
+        "pct_clv_pos": 0.5058731401722788,
+        "mean_captured_clv": -6.537054655956276e-05
+      },
+      "2026": {
+        "n": 598,
+        "pct_clv_pos": 0.5468227424749164,
+        "mean_captured_clv": 0.002627323900830005
+      }
+    },
+    "gbm_d4_lr0.05": {
+      "2024": {
+        "n": 1278,
+        "pct_clv_pos": 0.48982785602503914,
+        "mean_captured_clv": -0.0007481587436830101
+      },
+      "2025": {
+        "n": 1307,
+        "pct_clv_pos": 0.5179801071155318,
+        "mean_captured_clv": 0.0005511450265690328
+      },
+      "2026": {
+        "n": 649,
+        "pct_clv_pos": 0.5362095531587057,
+        "mean_captured_clv": 0.001939373742492935
+      }
+    },
+    "gbm_d5_lr0.03": {
+      "2024": {
+        "n": 1284,
+        "pct_clv_pos": 0.4976635514018692,
+        "mean_captured_clv": -0.0002566938262023839
+      },
+      "2025": {
+        "n": 1299,
+        "pct_clv_pos": 0.5096227867590454,
+        "mean_captured_clv": -8.325643529493117e-05
+      },
+      "2026": {
+        "n": 605,
+        "pct_clv_pos": 0.5190082644628099,
+        "mean_captured_clv": 0.0018988482728971032
+      }
+    },
+    "glm_a0.003_l0.5": {
+      "2024": {
+        "n": 1002,
+        "pct_clv_pos": 0.4810379241516966,
+        "mean_captured_clv": -0.0009532887198955253
+      },
+      "2025": {
+        "n": 1048,
+        "pct_clv_pos": 0.4570610687022901,
+        "mean_captured_clv": -0.0020093687214014534
+      },
+      "2026": {
+        "n": 374,
+        "pct_clv_pos": 0.5267379679144385,
+        "mean_captured_clv": 0.001123781992470365
+      }
+    },
+    "glm_a0.01_l0.5": {
+      "2024": {
+        "n": 828,
+        "pct_clv_pos": 0.47705314009661837,
+        "mean_captured_clv": -0.0011533638759780634
+      },
+      "2025": {
+        "n": 815,
+        "pct_clv_pos": 0.4539877300613497,
+        "mean_captured_clv": -0.001947634853356635
+      },
+      "2026": {
+        "n": 240,
+        "pct_clv_pos": 0.5208333333333334,
+        "mean_captured_clv": 0.0018641741669608916
+      }
+    },
+    "glm_a0.03_l0.2": {
+      "2024": {
+        "n": 782,
+        "pct_clv_pos": 0.46675191815856776,
+        "mean_captured_clv": -0.001830060313336639
+      },
+      "2025": {
+        "n": 737,
+        "pct_clv_pos": 0.44640434192673,
+        "mean_captured_clv": -0.0018649590302480183
+      },
+      "2026": {
+        "n": 202,
+        "pct_clv_pos": 0.5346534653465347,
+        "mean_captured_clv": 0.0013980894915729563
+      }
+    },
+    "point_model_market_blind": {
+      "2024": {
+        "n": 1219,
+        "pct_clv_pos": 0.5217391304347826,
+        "mean_captured_clv": 0.0011299009945435418
+      },
+      "2025": {
+        "n": 1277,
+        "pct_clv_pos": 0.552858261550509,
+        "mean_captured_clv": 0.0026184315509579278
+      },
+      "2026": {
+        "n": 598,
+        "pct_clv_pos": 0.6036789297658863,
+        "mean_captured_clv": 0.004764394157276309
+      }
+    },
+    "anchor_only_market": {}
+  },
+  "pbo_slate": NaN,
+  "dsr": {
+    "dsr": 2.1814271490743428e-10,
+    "observed_sr": -0.0669247434456901,
+    "sr0": 0.04520705997956186,
+    "n_trials": 7,
+    "n_obs": 3234
+  },
+  "winner_clv_at_eval_tau": {
+    "tau": 0.02,
+    "n_bets": 3234,
+    "pct_clv_positive": 0.5105132962275819,
+    "mean_captured_clv": 0.0003162811484776606,
+    "roi_net_vig": -0.014758994197895616
+  },
+  "verdict": "KILL (CLV \u2260 cashable)",
+  "rationale": "CLV proxy positive but ROI net of vig <=0 \u2014 the captured CLV does NOT clear the book hold. Same failure mode as the E4 kill (2026-06-18). Record and stop."
+}

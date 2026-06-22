@@ -1,0 +1,506 @@
+{
+  "story": "E13.1",
+  "tier": "pre_lineup",
+  "seed": 42,
+  "smoke": false,
+  "n_games": 8161,
+  "season_range": [
+    2021,
+    2026
+  ],
+  "n_features": 154,
+  "n_folds": 3,
+  "contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win.json",
+  "hold": 0.045,
+  "eval_tau": 0.02,
+  "noise_floor_brier": 0.002,
+  "anchor_brier_mean": 0.2425532320415334,
+  "winner": "gbm_d3_lr0.05",
+  "accuracy_secondary": {
+    "gbm_d3_lr0.05": {
+      "brier_mean": 0.24790998165609832,
+      "delta_vs_market": 0.005356749614564921,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "gbm_d4_lr0.05": {
+      "brier_mean": 0.2494358807482016,
+      "delta_vs_market": 0.006882648706668215,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "gbm_d5_lr0.03": {
+      "brier_mean": 0.24779125284711598,
+      "delta_vs_market": 0.005238020805582583,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.003_l0.5": {
+      "brier_mean": 0.24636718199388397,
+      "delta_vs_market": 0.0038139499523505704,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.01_l0.5": {
+      "brier_mean": 0.24374864793958487,
+      "delta_vs_market": 0.0011954158980514717,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "glm_a0.03_l0.2": {
+      "brier_mean": 0.2433624090071262,
+      "delta_vs_market": 0.000809176965592795,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "point_model_market_blind": {
+      "brier_mean": 0.24576442202163115,
+      "delta_vs_market": 0.003211189980097756,
+      "beats_market": false,
+      "decision": "HOLD"
+    },
+    "anchor_only_market": {
+      "brier_mean": 0.2425532320415334,
+      "delta_vs_market": 0.0,
+      "beats_market": false,
+      "decision": "HOLD"
+    }
+  },
+  "clv_proxy_by_config": {
+    "gbm_d3_lr0.05": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.4976303317535545,
+        "mean_captured_clv": -6.060702789593176e-05,
+        "roi_net_vig": 0.015341016336565436
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3437,
+        "pct_clv_positive": 0.49403549607215597,
+        "mean_captured_clv": -8.937942734598629e-05,
+        "roi_net_vig": 0.013698560691897068
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3096,
+        "pct_clv_positive": 0.499031007751938,
+        "mean_captured_clv": 0.00014650863772082114,
+        "roi_net_vig": 0.01217635642483928
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2766,
+        "pct_clv_positive": 0.49638467100506145,
+        "mean_captured_clv": 0.00012887974746892615,
+        "roi_net_vig": 0.01941878733944011
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2188,
+        "pct_clv_positive": 0.4936014625228519,
+        "mean_captured_clv": 0.00012211745854890003,
+        "roi_net_vig": 0.02435799506453572
+      }
+    ],
+    "gbm_d4_lr0.05": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.48420221169036337,
+        "mean_captured_clv": -0.0005645999007291946,
+        "roi_net_vig": 0.017254966257029932
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3503,
+        "pct_clv_positive": 0.48672566371681414,
+        "mean_captured_clv": -0.0005187078599655373,
+        "roi_net_vig": 0.01886592219796122
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3232,
+        "pct_clv_positive": 0.48514851485148514,
+        "mean_captured_clv": -0.0005105910135128483,
+        "roi_net_vig": 0.01784658449218691
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2984,
+        "pct_clv_positive": 0.48994638069705093,
+        "mean_captured_clv": -0.0004341432377351408,
+        "roi_net_vig": 0.021039062619744687
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2413,
+        "pct_clv_positive": 0.4923331951927062,
+        "mean_captured_clv": -0.00036276748179999037,
+        "roi_net_vig": 0.036089278419075
+      }
+    ],
+    "gbm_d5_lr0.03": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.49631384939441814,
+        "mean_captured_clv": -0.00011471761726635137,
+        "roi_net_vig": 0.015355460619217665
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3465,
+        "pct_clv_positive": 0.49437229437229435,
+        "mean_captured_clv": -0.000288788667260789,
+        "roi_net_vig": 0.011012846142955467
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3145,
+        "pct_clv_positive": 0.49220985691573926,
+        "mean_captured_clv": -0.0004378371775840522,
+        "roi_net_vig": 0.01728518037351007
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2834,
+        "pct_clv_positive": 0.49258997882851097,
+        "mean_captured_clv": -0.0002712729812819689,
+        "roi_net_vig": 0.018456115495648406
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 2197,
+        "pct_clv_positive": 0.4911242603550296,
+        "mean_captured_clv": -0.0001631878312619872,
+        "roi_net_vig": 0.03657442455908577
+      }
+    ],
+    "glm_a0.003_l0.5": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.5018430753027909,
+        "mean_captured_clv": 0.00026800169487345215,
+        "roi_net_vig": 0.0036301372097859437
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3377,
+        "pct_clv_positive": 0.4995558187740598,
+        "mean_captured_clv": 5.7023573467169394e-05,
+        "roi_net_vig": 0.0074007377965209075
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 2941,
+        "pct_clv_positive": 0.49608976538592314,
+        "mean_captured_clv": -0.0002237168576927272,
+        "roi_net_vig": -0.010188777636921038
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2503,
+        "pct_clv_positive": 0.4922093487814622,
+        "mean_captured_clv": -0.00018632104531490738,
+        "roi_net_vig": -0.00825531743510712
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 1803,
+        "pct_clv_positive": 0.4891846921797005,
+        "mean_captured_clv": -0.0005903088610625039,
+        "roi_net_vig": -0.0017339106081412999
+      }
+    ],
+    "glm_a0.01_l0.5": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.4939441811479726,
+        "mean_captured_clv": -4.2019377459707315e-05,
+        "roi_net_vig": -0.014219347014806882
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3090,
+        "pct_clv_positive": 0.49838187702265374,
+        "mean_captured_clv": 0.00013406582158580056,
+        "roi_net_vig": -0.010100793042147938
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 2436,
+        "pct_clv_positive": 0.49712643678160917,
+        "mean_captured_clv": -0.0001742475248316476,
+        "roi_net_vig": -0.005752497462909356
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 1829,
+        "pct_clv_positive": 0.4915254237288136,
+        "mean_captured_clv": -0.0002615194469264306,
+        "roi_net_vig": 0.014621923281621018
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 899,
+        "pct_clv_positive": 0.4783092324805339,
+        "mean_captured_clv": -0.0008294012731210494,
+        "roi_net_vig": 0.0031996095274691608
+      }
+    ],
+    "glm_a0.03_l0.2": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.4915745129015271,
+        "mean_captured_clv": -6.625361977839074e-05,
+        "roi_net_vig": -0.01150175401764623
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 2974,
+        "pct_clv_positive": 0.49562878278412914,
+        "mean_captured_clv": -2.7659401258058448e-05,
+        "roi_net_vig": -0.010038312281471671
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 2196,
+        "pct_clv_positive": 0.49681238615664847,
+        "mean_captured_clv": -6.599808694917638e-05,
+        "roi_net_vig": 0.003679195526666014
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 1514,
+        "pct_clv_positive": 0.48745046235138706,
+        "mean_captured_clv": -0.0003594660263651079,
+        "roi_net_vig": 0.00852906398970387
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 567,
+        "pct_clv_positive": 0.5008818342151675,
+        "mean_captured_clv": 0.0002875513506456412,
+        "roi_net_vig": 0.013269995176167827
+      }
+    ],
+    "point_model_market_blind": [
+      {
+        "tau": 0.0,
+        "n_bets": 3798,
+        "pct_clv_positive": 0.5263296471827278,
+        "mean_captured_clv": 0.0014651904095496077,
+        "roi_net_vig": 0.01986159122515291
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 3448,
+        "pct_clv_positive": 0.5330626450116009,
+        "mean_captured_clv": 0.0016162918518516803,
+        "roi_net_vig": 0.023431221806601975
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 3052,
+        "pct_clv_positive": 0.536697247706422,
+        "mean_captured_clv": 0.001696253018063677,
+        "roi_net_vig": 0.021592662371248225
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 2673,
+        "pct_clv_positive": 0.5375982042648709,
+        "mean_captured_clv": 0.001901085374084081,
+        "roi_net_vig": 0.027232100083093957
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 1976,
+        "pct_clv_positive": 0.5374493927125507,
+        "mean_captured_clv": 0.0018890333645703874,
+        "roi_net_vig": 0.034164298100166086
+      }
+    ],
+    "anchor_only_market": [
+      {
+        "tau": 0.0,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.01,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.02,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.03,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      },
+      {
+        "tau": 0.05,
+        "n_bets": 0,
+        "pct_clv_positive": NaN,
+        "mean_captured_clv": NaN,
+        "roi_net_vig": NaN
+      }
+    ]
+  },
+  "per_season_clv": {
+    "gbm_d3_lr0.05": {
+      "2024": {
+        "n": 1258,
+        "pct_clv_pos": 0.505564387917329,
+        "mean_captured_clv": 0.00016797532785194322
+      },
+      "2025": {
+        "n": 1245,
+        "pct_clv_pos": 0.4923694779116466,
+        "mean_captured_clv": -0.00013005828698359182
+      },
+      "2026": {
+        "n": 593,
+        "pct_clv_pos": 0.4991568296795953,
+        "mean_captured_clv": 0.0006816194725809268
+      }
+    },
+    "gbm_d4_lr0.05": {
+      "2024": {
+        "n": 1275,
+        "pct_clv_pos": 0.4752941176470588,
+        "mean_captured_clv": -0.00111717300078883
+      },
+      "2025": {
+        "n": 1315,
+        "pct_clv_pos": 0.4874524714828897,
+        "mean_captured_clv": -0.0004098938562751693
+      },
+      "2026": {
+        "n": 642,
+        "pct_clv_pos": 0.5,
+        "mean_captured_clv": 0.00048781283696897266
+      }
+    },
+    "gbm_d5_lr0.03": {
+      "2024": {
+        "n": 1250,
+        "pct_clv_pos": 0.5024,
+        "mean_captured_clv": -5.918975423621049e-05
+      },
+      "2025": {
+        "n": 1286,
+        "pct_clv_pos": 0.4860031104199067,
+        "mean_captured_clv": -0.001154830095775263
+      },
+      "2026": {
+        "n": 609,
+        "pct_clv_pos": 0.48440065681444994,
+        "mean_captured_clv": 0.0002990160467330175
+      }
+    },
+    "glm_a0.003_l0.5": {
+      "2024": {
+        "n": 1202,
+        "pct_clv_pos": 0.5316139767054908,
+        "mean_captured_clv": 0.0011312159909087419
+      },
+      "2025": {
+        "n": 1217,
+        "pct_clv_pos": 0.4617912900575185,
+        "mean_captured_clv": -0.0018138827291932097
+      },
+      "2026": {
+        "n": 522,
+        "pct_clv_pos": 0.4942528735632184,
+        "mean_captured_clv": 0.00036364440973470666
+      }
+    },
+    "glm_a0.01_l0.5": {
+      "2024": {
+        "n": 1060,
+        "pct_clv_pos": 0.5405660377358491,
+        "mean_captured_clv": 0.0016530536334032917
+      },
+      "2025": {
+        "n": 1008,
+        "pct_clv_pos": 0.4494047619047619,
+        "mean_captured_clv": -0.0025213207773724044
+      },
+      "2026": {
+        "n": 368,
+        "pct_clv_pos": 0.5027173913043478,
+        "mean_captured_clv": 0.0009912704393858715
+      }
+    },
+    "glm_a0.03_l0.2": {
+      "2024": {
+        "n": 971,
+        "pct_clv_pos": 0.5386199794026777,
+        "mean_captured_clv": 0.0017784422584239492
+      },
+      "2025": {
+        "n": 913,
+        "pct_clv_pos": 0.44687842278203727,
+        "mean_captured_clv": -0.0025827880507873716
+      },
+      "2026": {
+        "n": 312,
+        "pct_clv_pos": 0.5128205128205128,
+        "mean_captured_clv": 0.001558609802880846
+      }
+    },
+    "point_model_market_blind": {
+      "2024": {
+        "n": 1211,
+        "pct_clv_pos": 0.5169281585466556,
+        "mean_captured_clv": 0.0009076288452737257
+      },
+      "2025": {
+        "n": 1263,
+        "pct_clv_pos": 0.5225653206650831,
+        "mean_captured_clv": 0.0011703910791720593
+      },
+      "2026": {
+        "n": 578,
+        "pct_clv_pos": 0.6089965397923875,
+        "mean_captured_clv": 0.004497615478390223
+      }
+    },
+    "anchor_only_market": {}
+  },
+  "pbo_slate": NaN,
+  "dsr": {
+    "dsr": 4.723053170686365e-11,
+    "observed_sr": -0.07562897541774491,
+    "sr0": 0.04002616364972097,
+    "n_trials": 7,
+    "n_obs": 3096
+  },
+  "winner_clv_at_eval_tau": {
+    "tau": 0.02,
+    "n_bets": 3096,
+    "pct_clv_positive": 0.499031007751938,
+    "mean_captured_clv": 0.00014650863772082114,
+    "roi_net_vig": 0.01217635642483928
+  },
+  "verdict": "KILL (no CLV edge)",
+  "rationale": "no positive in-sample CLV proxy on the selected config under purged CV \u2014 the residual lean does not anticipate the close. Record the kill."
+}
