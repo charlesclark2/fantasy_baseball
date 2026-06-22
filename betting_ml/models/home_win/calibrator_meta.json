@@ -1,16 +1,24 @@
 {
-  "method": "platt",
-  "train_n": 460,
-  "eval_n": 116,
-  "ece_before": 0.048375,
-  "ece_after": 0.00534,
-  "train_date_range": [
-    "2026-03-26",
-    "2026-04-30"
+  "story": "E13.6",
+  "method": "temperature",
+  "calibrator_version": "temperature_v1",
+  "temperature_T": 6.2998,
+  "fit_set": "v5 served calibrated_win_prob (daily_model_predictions), 2026 honest-OOS, n=1138",
+  "applies_to": "v5 champion / post_lineup serve (and v5-stamped morning until pre_lineup_v1 accrues live data)",
+  "ece_before": 0.1541,
+  "ece_after": 0.0329,
+  "brier_before": 0.2761,
+  "brier_after": 0.2487,
+  "spread_before": 0.2015,
+  "spread_after": 0.0365,
+  "REFIT_GUARD": "INTERIM honesty measure. The shrink partly compensates 30.3 serving-skew (point-in-time sparsity). MANDATORY re-audit + re-fit after any serving-completeness fix (Epic 33/30.3 dense post_lineup re-score) OR the v6 rebuild (E1.9) \u2014 the honest band may legitimately WIDEN (T toward 1) once the model serves on complete features. Do NOT treat as permanent.",
+  "reaudit_trigger": [
+    "epic_33_dense_serving_shipped",
+    "30.3_serving_completeness_fix",
+    "e1_9_v6_promotion"
   ],
-  "eval_date_range": [
-    "2026-04-30",
-    "2026-05-06"
-  ],
-  "fitted_at": "2026-05-08T21:34:43.989070+00:00"
+  "pre_lineup_v1_status": "DEFERRED \u2014 only 3 settled live games as of fit; fit/track its own temperature once it accrues ~150+ settled live games",
+  "supersedes": "A2.9 identity (validated on the now-removed-leak 376-dim model; reversed for the SERVED de-leaked v5 surface)",
+  "reverts_to": "calibrator.joblib identity = betting_ml/utils/calibration.IdentityCalibrator (A2.9) \u2014 rollback path",
+  "fitted_at": "2026-06-22T02:30:55.802687+00:00"
 }

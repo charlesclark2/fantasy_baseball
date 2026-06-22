@@ -3,6 +3,10 @@
     "week": "2026-06-15",
     "items": [
       {
+        "tag": "improvement",
+        "text": "Win probabilities are now calibrated to be honest about how close most MLB games are. We checked every model win-prob against what actually happened this season and found the numbers were overconfident — picks shown near 75–85% were really landing closer to a coin flip. We've corrected the calibration so the displayed probability now reflects the true rate (when we say 55%, the home team wins about 55%). Expect tighter, more honest numbers: single baseball games are high-variance, so treat each pick as a lean, not a lock."
+      },
+      {
         "tag": "new",
         "text": "Settings page now lets you set an initial deposit amount — the starting bankroll you track growth against. Once set, the EV Tracker can show bankroll growth % alongside net P&L. The field saves directly to your account, not just this device."
       },

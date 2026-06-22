@@ -725,6 +725,22 @@ Do: (1) persist a challenger as a SHADOW artifact (not promoted, not user-shown)
 Gate/AC: one challenger (start with E13.1's output or home_win/pre) shadow-served + forward-accruing without touching the champion's served picks; reusable for the next; CI green.
 Closeout (per §0.1): operator handoff (run-order + git add). Sequence: AFTER E13.1 is built offline (its residual model is the first real consumer), or whenever home_win/pre's live tiebreaker is wanted.
 ```
+```
+▶ Story prompt — E13.6 H2H prediction-quality: calibration / reliability audit + honest accuracy   ✅ DONE 2026-06-21 — RECALIBRATED.
+Served v5 win-prob was OVERCONFIDENT (ECE 0.154; "75%" picks won 56%; Brier 0.276 > no-skill 0.249; corr 0.07; uniform across all segments incl. fully-dense post_lineup). Reverses A2.9 identity (validated on the now-removed-leak 376-dim model). PM decision → promoted spread-honest **TemperatureCalibrator(T=6.30)** (betting_ml/utils/calibration.py) → ECE 0.033, Brier 0.249, band ~0.43–0.57. INTERIM — registry `calibrator_refit_required_after` guards a mandatory re-fit after E12/30.3 dense serving or E1.9 v6 (band may widen, T→1). Report: ablation_results/h2h_calibration_e13_6.md; harness: betting_ml/scripts/h2h_calibration_audit_e13_6.py; changelog shipped. Disclosure framing → E9.18 below.
+WHY: surfacing a calibrated H2H win-prob is a hard product requirement (operator 2026-06-21). The EDGE is dead (E3.1/E4/E1.9/E13.1) and we don't claim it — but the PREDICTION must be as accurate + trustworthy as possible. The product value is a well-CALIBRATED, explained estimate (when we say 58%, home wins ~58%), NOT beating the market. Honest ceiling: MLB single-game H2H is high-variance (~55–58% calibrated band); don't imply accuracy beyond what the sport allows.
+Read: predict_today.py (calibrator load + calibrated_win_prob) + betting_ml/models/home_win/calibrator* + the v6 home_win artifacts/registry + E1.4 (eval discipline) + gtm_strategy §1 (transparency wedge).
+Do: (1) reliability diagrams + ECE for the SERVED win-prob — overall AND by segment (home/away, favorite/dog, by month, run-environment); (2) confirm the Platt/calibrator is still well-fit on the v6 + de-leaked construction (it was fit on an earlier artifact) — recalibrate (Platt/isotonic) if drift; (3) Brier/log-loss vs the no-skill + market-implied baselines (context, not a beat-claim); (4) surface honest variance framing for the app (the "why" + that single games are high-variance). Objective metric = Brier/log-loss/ECE; CLV is irrelevant here.
+Gate/AC: reliability/ECE report (overall + segments) + a recalibration if ECE materially improves + the served calibrated_win_prob confirmed honest on v6. If a recalibration ships and changes served probs → app changelog.
+Closeout (per §0.1): CI green + ⏭️ Operator handoff (+ changelog if served probs change).
+```
+
+▶ Story prompt — E9.18 Honest win-prob variance framing in the app (E13.6 follow-on)   [App · frontend · 🔒 NON-NEGOTIABLE transparency]   (2026-06-21)
+WHY: E13.6 recalibrated the served H2H win-prob to be honest (TemperatureCalibrator T=6.30 → calibrated band ~0.43–0.57). The NUMBER is now honest, but the app must also set honest EXPECTATIONS: single MLB games are near coin-flips and the model's de-leaked H2H edge is dead (E3.1/E4/E1.9). Users must read each pick as a LEAN, not a lock — no manufactured confidence, no win-rate/edge claims (gtm §1 transparency wedge).
+Read: ablation_results/h2h_calibration_e13_6.md (the "Honest variance framing" copy block) + the frontend pick card / game detail + the Story 19.7 win_prob CI (win_prob_ci_low/high) already on daily_model_predictions.
+Do: on the H2H pick card + game detail — (1) present the win-prob as a lean (e.g. label toss-ups, soften 0.50–0.56 language); (2) make the existing win-prob credible interval (19.7) visible alongside the point estimate; (3) add the variance copy ("single MLB games are high-variance; treat as a lean, not a lock") in the model write-up / a tooltip; (4) never render a confident-looking extreme the calibrated model no longer produces. Frontend only — no model change.
+Gate/AC: pick card + detail show the lean + CI + variance copy; QA against the calibrated served band; changelog entry (user-facing).
+Closeout: CI green + ⏭️ Operator handoff + changelog.
 
 ---
 

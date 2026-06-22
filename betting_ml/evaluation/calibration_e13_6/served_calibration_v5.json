@@ -1,0 +1,327 @@
+{
+  "story": "E13.6",
+  "model_version": "v5",
+  "since": "2026-01-01",
+  "n": 1138,
+  "generated_at": "2026-06-22T02:09:09.135734+00:00",
+  "overall": {
+    "n": 1138,
+    "brier": 0.2761,
+    "log_loss": 0.7585,
+    "ece": 0.1541,
+    "spread": 0.2015,
+    "mean_pred": 0.4964,
+    "base_rate": 0.5325,
+    "corr": 0.0733
+  },
+  "reliability": [
+    {
+      "bin_lo": 0.0,
+      "bin_hi": 0.1,
+      "n": 2,
+      "avg_pred": 0.0985,
+      "avg_actual": 0.5
+    },
+    {
+      "bin_lo": 0.1,
+      "bin_hi": 0.2,
+      "n": 66,
+      "avg_pred": 0.1676,
+      "avg_actual": 0.3939
+    },
+    {
+      "bin_lo": 0.2,
+      "bin_hi": 0.3,
+      "n": 173,
+      "avg_pred": 0.2563,
+      "avg_actual": 0.4971
+    },
+    {
+      "bin_lo": 0.3,
+      "bin_hi": 0.4,
+      "n": 182,
+      "avg_pred": 0.3507,
+      "avg_actual": 0.4945
+    },
+    {
+      "bin_lo": 0.4,
+      "bin_hi": 0.5,
+      "n": 155,
+      "avg_pred": 0.4502,
+      "avg_actual": 0.5419
+    },
+    {
+      "bin_lo": 0.5,
+      "bin_hi": 0.6,
+      "n": 196,
+      "avg_pred": 0.5456,
+      "avg_actual": 0.5969
+    },
+    {
+      "bin_lo": 0.6,
+      "bin_hi": 0.7,
+      "n": 120,
+      "avg_pred": 0.6477,
+      "avg_actual": 0.5333
+    },
+    {
+      "bin_lo": 0.7,
+      "bin_hi": 0.8,
+      "n": 160,
+      "avg_pred": 0.7524,
+      "avg_actual": 0.5625
+    },
+    {
+      "bin_lo": 0.8,
+      "bin_hi": 0.9,
+      "n": 80,
+      "avg_pred": 0.8374,
+      "avg_actual": 0.55
+    },
+    {
+      "bin_lo": 0.9,
+      "bin_hi": 1.0,
+      "n": 4,
+      "avg_pred": 0.9058,
+      "avg_actual": 1.0
+    }
+  ],
+  "baselines": {
+    "no_skill_base_rate": {
+      "n": 1138,
+      "brier": 0.2489,
+      "log_loss": 0.691,
+      "ece": 0.0,
+      "spread": 0.0,
+      "mean_pred": 0.5325,
+      "base_rate": 0.5325,
+      "corr": 0.0
+    },
+    "no_skill_coinflip": {
+      "n": 1138,
+      "brier": 0.25,
+      "log_loss": 0.6931,
+      "ece": 0.0325,
+      "spread": 0.0,
+      "mean_pred": 0.5,
+      "base_rate": 0.5325,
+      "corr": 0.0
+    },
+    "served_model_on_mkt_games": {
+      "n": 567,
+      "brier": 0.2673,
+      "log_loss": 0.7393,
+      "ece": 0.1365,
+      "spread": 0.2065,
+      "mean_pred": 0.4963,
+      "base_rate": 0.5238,
+      "corr": 0.1238
+    },
+    "market_implied": {
+      "n": 567,
+      "brier": 0.2469,
+      "log_loss": 0.6867,
+      "ece": 0.033,
+      "spread": 0.0698,
+      "mean_pred": 0.525,
+      "base_rate": 0.5238,
+      "corr": 0.1065
+    }
+  },
+  "segments": {
+    "tier:morning_backfill": {
+      "n": 1031,
+      "brier": 0.274,
+      "log_loss": 0.7536,
+      "ece": 0.1429,
+      "spread": 0.2018,
+      "mean_pred": 0.4957,
+      "base_rate": 0.5286,
+      "corr": 0.0846
+    },
+    "tier:post_lineup_live": {
+      "n": 107,
+      "brier": 0.2966,
+      "log_loss": 0.8059,
+      "ece": 0.2633,
+      "spread": 0.1976,
+      "mean_pred": 0.5025,
+      "base_rate": 0.5701,
+      "corr": -0.0402
+    },
+    "market:home_favorite": {
+      "n": 377,
+      "brier": 0.2638,
+      "log_loss": 0.7299,
+      "ece": 0.1345,
+      "spread": 0.2041,
+      "mean_pred": 0.5201,
+      "base_rate": 0.5464,
+      "corr": 0.1298
+    },
+    "market:home_dog": {
+      "n": 190,
+      "brier": 0.2742,
+      "log_loss": 0.7579,
+      "ece": 0.1584,
+      "spread": 0.2031,
+      "mean_pred": 0.4491,
+      "base_rate": 0.4789,
+      "corr": 0.086
+    },
+    "pred:home_lean(p>0.55)": {
+      "n": 449,
+      "brier": 0.2774,
+      "log_loss": 0.7658,
+      "ece": 0.1518,
+      "spread": 0.0955,
+      "mean_pred": 0.7069,
+      "base_rate": 0.5568,
+      "corr": 0.0107
+    },
+    "pred:toss_up(0.45-0.55)": {
+      "n": 194,
+      "brier": 0.2493,
+      "log_loss": 0.6917,
+      "ece": 0.0997,
+      "spread": 0.0284,
+      "mean_pred": 0.5033,
+      "base_rate": 0.6031,
+      "corr": 0.0305
+    },
+    "pred:away_lean(p<0.45)": {
+      "n": 495,
+      "brier": 0.2854,
+      "log_loss": 0.7781,
+      "ece": 0.1802,
+      "spread": 0.0833,
+      "mean_pred": 0.3026,
+      "base_rate": 0.4828,
+      "corr": 0.0448
+    },
+    "month:2026-03": {
+      "n": 76,
+      "brier": 0.2567,
+      "log_loss": 0.7127,
+      "ece": 0.1223,
+      "spread": 0.1852,
+      "mean_pred": 0.4667,
+      "base_rate": 0.5789,
+      "corr": 0.1856
+    },
+    "month:2026-04": {
+      "n": 391,
+      "brier": 0.2926,
+      "log_loss": 0.7976,
+      "ece": 0.1817,
+      "spread": 0.1955,
+      "mean_pred": 0.5032,
+      "base_rate": 0.5294,
+      "corr": -0.0236
+    },
+    "month:2026-05": {
+      "n": 419,
+      "brier": 0.2624,
+      "log_loss": 0.7261,
+      "ece": 0.1276,
+      "spread": 0.203,
+      "mean_pred": 0.498,
+      "base_rate": 0.5251,
+      "corr": 0.1424
+    },
+    "month:2026-06": {
+      "n": 252,
+      "brier": 0.2789,
+      "log_loss": 0.7657,
+      "ece": 0.1691,
+      "spread": 0.2116,
+      "mean_pred": 0.4919,
+      "base_rate": 0.5357,
+      "corr": 0.078
+    },
+    "run_env:low(<7)": {
+      "n": 359,
+      "brier": 0.2751,
+      "log_loss": 0.7572,
+      "ece": 0.1533,
+      "spread": 0.2064,
+      "mean_pred": 0.5027,
+      "base_rate": 0.5404,
+      "corr": 0.0842
+    },
+    "run_env:mid(7-11)": {
+      "n": 488,
+      "brier": 0.2793,
+      "log_loss": 0.7652,
+      "ece": 0.1662,
+      "spread": 0.2012,
+      "mean_pred": 0.4889,
+      "base_rate": 0.5553,
+      "corr": 0.0629
+    },
+    "run_env:high(>11)": {
+      "n": 291,
+      "brier": 0.272,
+      "log_loss": 0.7489,
+      "ece": 0.1369,
+      "spread": 0.1952,
+      "mean_pred": 0.5012,
+      "base_rate": 0.4845,
+      "corr": 0.0826
+    }
+  },
+  "recalibration": {
+    "eval_stats": {
+      "identity": {
+        "n": 285,
+        "brier": 0.2802,
+        "log_loss": 0.7683,
+        "ece": 0.1745,
+        "spread": 0.2092,
+        "mean_pred": 0.4875,
+        "base_rate": 0.5509,
+        "corr": 0.0719,
+        "method": "identity"
+      },
+      "platt": {
+        "n": 285,
+        "brier": 0.2468,
+        "log_loss": 0.6868,
+        "ece": 0.0265,
+        "spread": 0.0351,
+        "mean_pred": 0.5244,
+        "base_rate": 0.5509,
+        "corr": 0.072,
+        "method": "platt"
+      },
+      "isotonic": {
+        "n": 285,
+        "brier": 0.2483,
+        "log_loss": 0.6936,
+        "ece": 0.0738,
+        "spread": 0.0857,
+        "mean_pred": 0.5241,
+        "base_rate": 0.5509,
+        "corr": 0.0843,
+        "method": "isotonic"
+      },
+      "temperature": {
+        "n": 285,
+        "brier": 0.2488,
+        "log_loss": 0.6907,
+        "ece": 0.053,
+        "spread": 0.0397,
+        "mean_pred": 0.4979,
+        "base_rate": 0.5509,
+        "corr": 0.0757,
+        "method": "temperature",
+        "T": 6.0895
+      }
+    },
+    "brier_pick": "platt",
+    "ece_pick": "platt",
+    "temperature_T": 6.0895,
+    "eval_n": 285,
+    "split": 853
+  }
+}
