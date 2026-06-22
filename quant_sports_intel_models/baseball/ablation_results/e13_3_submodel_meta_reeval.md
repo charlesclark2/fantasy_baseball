@@ -1,6 +1,6 @@
 # E13.3 — Sub-model + meta-model re-eval on de-leaked data
 
-**Date:** 2026-06-21 · **Track:** Model-A (operator's hypothesis) · **Status:** ✅ COMPLETE — **CONFIRMED TAPPED OUT, with one correction.** Cheap closure as scoped.
+**Date:** 2026-06-21 · **Track:** Model-A (operator's hypothesis) · **Status:** ✅ COMPLETE — **CONFIRMED TAPPED OUT, with one correction.** Cheap closure as scoped. **Operator confirmation run executed 2026-06-21 — result below decisively matched the pre-registration: bullpen flipped promote → REJECT on both targets.**
 
 ---
 
@@ -17,7 +17,7 @@
 
 1. **The de-leak's blast radius on the sub-model ensemble is tiny and fully scoped: only `bullpen_v1`/`bullpen_v2` are leak-exposed. 10 of 12 sub-models consume *zero* bullpen-EB columns** (source-audited) → for them the de-leak is a **guaranteed no-op**: their Story 9.5 verdicts stand byte-for-byte. Re-fitting them would reproduce the same coefficients on the same matrix; there is nothing to re-fit.
 
-2. **Clean data does reshape the landscape — but it *removes* a fake signal, it does not *reveal* a new one.** The single **strongest** promoted Layer-3 signal — **bullpen (`bullpen_v2`)**, NLL −0.0292 (4/4) on totals, Brier −0.0266 (4/4) on h2h, the **largest stacking weight (0.337 totals / 0.507 h2h)** — was trained on the leaky `eb_bullpen_xwoba` columns that E2.1b/E1.7 proved collapse to statistical noise once de-leaked. That promotion is **leak-inflated**. This is the sub-model/Layer-3 mirror of the E2.1b base-matrix finding (`bp_eb_xwoba` was #1/#2 → noise).
+2. **Clean data does reshape the landscape — but it *removes* a fake signal, it does not *reveal* a new one.** The single **strongest** promoted Layer-3 signal — **bullpen (`bullpen_v2`)**, NLL −0.0292 (4/4) on totals, Brier −0.0266 (4/4) on h2h, the **largest stacking weight (0.337 totals / 0.507 h2h)** — was trained on the leaky `eb_bullpen_xwoba` columns that E2.1b/E1.7 proved collapse to statistical noise once de-leaked. That promotion is **leak-inflated**. This is the sub-model/Layer-3 mirror of the E2.1b base-matrix finding (`bp_eb_xwoba` was #1/#2 → noise). **✅ CONFIRMED EMPIRICALLY 2026-06-21** (operator re-eval, §6): on de-leaked features bullpen **flipped to REJECT on both targets** — `total_runs` Δnll **+0.0003** (1/4 folds), `home_win` Δbrier **+0.0001** (2/4 folds). The sign *reversed*; the whole −0.0292/−0.0266 was the leak. (Landed past the pre-registered "defer at best" → full reject.)
 
 3. **No live impact.** The Layer-3 stacked model is **not served** — `layer3_totals`/`layer3_h2h` are inert registry stubs (`artifact_path: null`); `predict_today.py` falls back to the monolithic champions ([`predict_today.py:128-150`](../../../betting_ml/scripts/predict_today.py#L128)). The leak-inflated bullpen weight never reached production. (The leaky *base* feature that DID reach the live monolithic matrix is E1.7/E1.9's domain, already de-leaked + v6-rebuilt.)
 
@@ -78,7 +78,7 @@ Bullpen is the **largest** delta on **both** targets and the **dominant** stacki
 
 A feature that ranked **#1/#2 by MDA** when leaky now correlates **~0.05** with the target — statistical noise — while remaining densely populated (~1.1% null = the de-leak is live and serving-complete). The signal `bullpen_v2` leaned on is gone.
 
-**Verdict:** bullpen's −0.0292 / −0.0266 Layer-3 promote is **leak-inflated and is RETRACTED**. On de-leaked features the bullpen signal is **expected to fall below the floor** (its only de-leak-surviving content is data-depth `coverage_pct`/`uncertainty`, which E2.1b graded "modest" — at best a *defer*, not a *promote*). Demoting bullpen also collapses the Layer-3 stacking weights (a 0.337/0.507 weight on a fake signal). The exact landing (defer vs reject) is settled by the pre-registered operator confirmation run in §6 — but the **keep/kill call does not depend on it**: a leak-inflated promote cannot stand.
+**Verdict:** bullpen's −0.0292 / −0.0266 Layer-3 promote is **leak-inflated and is RETRACTED**. **✅ Operator re-eval 2026-06-21 (§6) settled it as REJECT on both targets** — `total_runs` Δnll **+0.0003** (1/4 folds), `home_win` Δbrier **+0.0001** (2/4 folds). The delta *sign reversed* (a stronger result than the pre-registered "defer at best"): de-leaked, the bullpen signal is not merely below the floor, it is mildly *anti-helpful*. Confirms the entire −0.0292/−0.0266 was the within-game peek. Demoting bullpen also voids the Layer-3 stacking weights (a 0.337/0.507 weight sat on a fake signal — recompute/flag if Layer-3 is ever revived; unserved today so no live action).
 
 ---
 
@@ -90,11 +90,16 @@ A feature that ranked **#1/#2 by MDA** when leaky now correlates **~0.05** with 
 | offense (offense_v2) | promote (both) | No | **KEEP — unchanged** (clean; no-op) |
 | starter (starter_v1) | defer / defer | No | **HOLD (defer) — unchanged** (clean) |
 | starter_ip (starter_ip_v1) | defer / defer | No | **HOLD (defer) — unchanged** (clean) |
-| matchup (matchup_v1) | defer / reject | No | **HOLD (defer/reject) — unchanged** (clean) |
-| **bullpen (bullpen_v2)** | **promote (both), #1 weight** | **YES (leaky)** | **🔴 KILL the promote — leak-inflated; DEMOTE (expect defer at best, possibly reject). Confirm landing via §6.** |
+| matchup (matchup_v1) | defer / reject | No | **HOLD (defer/reject) — unchanged** (clean) ✅ confirmed |
+| **bullpen (bullpen_v2)** | **promote (both), #1 weight** | **YES (leaky)** | **🔴 KILLED — leak-inflated promote → ✅ confirmed REJECT on both** (totals Δnll +0.0003 1/4; h2h Δbrier +0.0001 2/4) |
 | Bayesian meta-model (12.4) | converged, near-flat P(CLV>0) | No (market-aware; inputs de-leak-invariant) | **No skill delta — re-fit gated on a *served* v6 champion, not the de-leak** |
 
-**Net:** clean data leaves the promoted-and-trustworthy ensemble as **{run_env, offense}** only — both already promoted, both bullpen-clean. No previously-deferred signal is promoted by clean data; no new signal is revealed. The reshaping is purely *subtractive* (remove the inflated #1).
+**Net:** clean data leaves the promoted-and-trustworthy ensemble as **{run_env, offense}** only — both already promoted, both bullpen-clean. No previously-deferred signal is promoted by clean data; no new signal is revealed. The reshaping is purely *subtractive* (remove the inflated #1). **(`defense_quality` — added to the eval since 9.5, not previously scored — lands defer/defer on clean data, consistent with the "clean sub-models don't clear the floor" picture.)**
+
+**✅ Empirical confirmation (operator run, 2026-06-21):** de-leaked Layer-3 eval over 11,907 games (7 groups incl. defense_quality) reproduced every clean-signal verdict and demoted bullpen to **reject/reject**. Full verdict block:
+- `total_runs`: run_env **promote** (−0.0143, 4/4) · offense **promote** (−0.0122, 3/4) · starter defer (−0.0023, 4/4) · starter_ip defer (−0.0006, 3/4) · **bullpen reject (+0.0003, 1/4)** · matchup defer (−0.0006, 3/4) · defense_quality defer (−0.0009, 4/4)
+- `home_win`: run_env defer (−0.0003, 3/4) · offense **promote** (−0.0131, 3/4) · starter defer (−0.0007, 4/4) · starter_ip defer (−0.0007, 3/4) · **bullpen reject (+0.0001, 2/4)** · matchup reject (+0.0000, 0/4) · defense_quality defer (−0.0000, 3/4)
+- Artifact: `layer3_signal_evaluation_20260621_231932.{json,md}`.
 
 ---
 
@@ -110,11 +115,13 @@ The story lists the meta-model alongside the sub-model ensemble, so it is addres
 
 ---
 
-## 6. Operator confirmation run (pre-registered — settles defer-vs-reject for bullpen only)
+## 6. Operator confirmation run (pre-registered — ✅ EXECUTED 2026-06-21 → REJECT/REJECT)
 
-The keep/kill verdict above is decided. The one open *empirical* question — whether de-leaked bullpen lands at **defer** or **reject** — needs a re-train + re-eval (heavy / Snowflake; handed off per the >1-min rule). **Pre-registered so the result cannot be rationalized after the fact:**
+The keep/kill verdict above is decided. The one open *empirical* question — whether de-leaked bullpen lands at **defer** or **reject** — was settled by the run below. **Pre-registered before running so the result could not be rationalized after the fact — and it landed past the prediction (full reject, sign-reversed).**
 
-**Protocol**
+> **Result (steps 3–4 run by the operator; step 2 used the existing `bullpen_v2.pkl` scored on the now-de-leaked live features rather than a fresh re-train — a strictly *generous* test of the leaky-trained artifact on clean inputs, and it still rejects):** `total_runs` bullpen → **reject** (Δnll +0.0003, 1/4); `home_win` bullpen → **reject** (Δbrier +0.0001, 2/4). A full re-train on de-leaked features could at most recover the modest `coverage_pct`/`uncertainty` content (E2.1b), which is itself below the promote floor — so reject/defer stands either way; **promote is dead.** Artifact `layer3_signal_evaluation_20260621_231932.{json,md}`.
+
+**Protocol (as pre-registered)**
 1. Rebuild the bullpen training parquet from the **de-leaked** `mart_bullpen_effectiveness` (depends on the rebuilt `eb_bullpen_team_posteriors` — already live, §3).
 2. Re-train **bullpen_v2** (LightGBM+NegBin) on the de-leaked features — same architecture/tuning harness (`train_bullpen_distributional.py`); **purged CV** (`betting_ml/utils/cv.PurgedWalkForwardSplit`, `embargo_days=3`, feature-aware purge).
 3. Regenerate the bullpen signals: `uv run python betting_ml/scripts/generate_bullpen_signals.py --backfill`.
@@ -122,12 +129,12 @@ The keep/kill verdict above is decided. The one open *empirical* question — wh
 
 **Pre-registered gate (the honest floor — identical to Story 9.5):**
 - Bullpen **stays promoted** only if de-leaked Layer-3 `total_runs` **NLL Δ ≤ −0.005** AND/OR `home_win` **Brier Δ ≤ −0.001**, each with **≥ 3/4** folds.
-- **Expectation (pre-registered):** **FAIL the gate → demote to defer/reject.** The de-leak-surviving bullpen content is data-depth only (modest, per E2.1b). If by some surprise it *clears* the floor on clean data, that is the only branch that warrants **PBO/CSCV + DSR** (`betting_ml/utils/overfitting.py`: ship-to-shadow `PBO<0.5`, live `PBO<0.2 & DSR≥0.95`) before any re-promotion — a single de-leaked re-train is one trial, so treat a surprise win as suspect until PBO/DSR clears it.
+- **Expectation (pre-registered):** **FAIL the gate → demote to defer/reject.** ✅ **Outcome: FAILED — reject on both** (Δ sign reversed). The PBO/CSCV + DSR branch (`betting_ml/utils/overfitting.py`: ship-to-shadow `PBO<0.5`, live `PBO<0.2 & DSR≥0.95`) was reserved for a *surprise clear* of the floor — it did not occur, so no overfitting gate is needed.
 
-No PBO/DSR is run in this session because **nothing looks like a win** — the gates exist to defend *promotions*, and E13.3 produces a *demotion* + confirmations of unchanged/null. Running them on a null result would be theater.
+No PBO/DSR was run because **nothing looked like a win** — the gates exist to defend *promotions*, and E13.3 produced a *demotion* (bullpen reject) + confirmations of unchanged/null. Running them on a null result would be theater.
 
 ---
 
 ## 7. What clean data changed (the one-line answer the story asked for)
 
-> **It removed a fake signal; it revealed none.** The de-leak's only effect on the sub-model ensemble is to demote bullpen — the ensemble's strongest, most heavily-weighted Layer-3 signal — from leak-inflated #1 to (expected) below-floor. The two genuinely-carrying signals (run_env, offense) were always bullpen-clean and are unchanged. The market-aware meta-model is de-leak-invariant. **The sub-model edge search is tapped out; closing it.**
+> **It removed a fake signal; it revealed none.** The de-leak's only effect on the sub-model ensemble is to demote bullpen — the ensemble's strongest, most heavily-weighted Layer-3 signal — from leak-inflated #1 all the way to **reject** (confirmed: Δ sign reversed on both targets). The two genuinely-carrying signals (run_env, offense) were always bullpen-clean and are unchanged. The market-aware meta-model is de-leak-invariant. **The sub-model edge search is tapped out; closing it.**

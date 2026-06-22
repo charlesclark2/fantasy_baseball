@@ -491,7 +491,14 @@ bullpen_v2:
     Ablation JSON: betting_ml/models/ablation/ablation_reliever_top3_availability_20260610T172543.json
   e13_3_reeval:
     date: '2026-06-21'
-    verdict: PROMOTE_RETRACTED_LEAK_INFLATED
+    verdict: PROMOTE_RETRACTED_CONFIRMED_REJECT
+    confirmed_result: |
+      ✅ Operator re-eval 2026-06-21: de-leaked Layer-3 eval (11,907 games) DEMOTED bullpen
+      to REJECT on BOTH targets — total_runs Δnll +0.0003 (1/4 folds), home_win Δbrier
+      +0.0001 (2/4 folds). Delta SIGN REVERSED from the leaky promote (−0.0292/−0.0266):
+      the entire prior lift was the within-game peek. All clean sub-models reproduced their
+      9.5 verdicts (run_env/offense promote; starter/starter_ip/matchup/defense_quality
+      defer/reject). Artifact: layer3_signal_evaluation_20260621_231932.{json,md}.
     finding: |
       Story E13.3 (sub-model re-eval on de-leaked data). bullpen_v2 was trained 2026-06-10
       (PRE the 2026-06-18 E1.7 de-leak) on the LEAKY EB columns eb_bullpen_xwoba /
@@ -511,11 +518,13 @@ bullpen_v2:
       NO live impact: the Layer-3 stack is NOT served (layer3_totals/h2h are inert stubs,
       artifact_path null; predict_today falls back to the monolithic champions).
     confirm_run: |
-      Defer-vs-reject is settled by the pre-registered operator run (see
-      ablation_results/e13_3_submodel_meta_reeval.md §6): rebuild de-leaked bullpen parquet
-      → re-train bullpen_v2 under purged CV → generate_bullpen_signals.py --backfill →
-      evaluate_layer3_signals.py --targets total_runs,home_win. Gate = Story 9.5 floor;
-      PBO/DSR only if it surprises with a clear win. NOT yet run (heavy/Snowflake hand-off).
+      ✅ EXECUTED 2026-06-21 (generate_bullpen_signals.py --backfill → evaluate_layer3_signals.py
+      --targets total_runs,home_win). Result = REJECT/REJECT (above). Step 2 (full re-train under
+      purged CV) was NOT needed — scoring the existing bullpen_v2.pkl on de-leaked live features
+      already rejects, and a re-train could at most recover the modest coverage/uncertainty content
+      (E2.1b), still below the promote floor. No PBO/DSR (no win to defend).
+      Follow-up (non-blocking): stacking_weights.json still carries bullpen 0.337/0.507 — recompute
+      or flag if the (currently unserved/inert) Layer-3 stack is ever revived.
     report: quant_sports_intel_models/baseball/ablation_results/e13_3_submodel_meta_reeval.md
 
 bullpen_v3:
