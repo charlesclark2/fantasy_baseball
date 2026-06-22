@@ -239,6 +239,9 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
+                -- Prefer rows carrying market data so a degraded run (post_lineup
+                -- with NULL odds/abstain) never shadows a complete morning row.
+                CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 p.inserted_at DESC
         ) AS _rn
@@ -311,6 +314,7 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 inserted_at DESC
         ) AS _rn
@@ -818,7 +822,8 @@ WHERE game_pk IN ({game_pk_list})
   AND pick_explanation IS NOT NULL
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY game_pk
-    ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END, inserted_at DESC
+    ORDER BY CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+             CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END, inserted_at DESC
 ) = 1
 """
 
@@ -829,6 +834,9 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
+                -- Prefer rows carrying market data so a degraded run (post_lineup
+                -- with NULL odds/abstain) never shadows a complete morning row.
+                CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 p.inserted_at DESC
         ) AS _rn
@@ -924,7 +932,8 @@ WITH ranked AS (
         MAX(p.totals_meta_ci_high) OVER (PARTITION BY p.game_pk)            AS _totals_meta_ci_high,
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
-            ORDER BY CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+            ORDER BY CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                     CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                      p.inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions p
@@ -1030,7 +1039,8 @@ WITH ranked AS (
         home_team, away_team,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+            ORDER BY CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                     CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                      inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
