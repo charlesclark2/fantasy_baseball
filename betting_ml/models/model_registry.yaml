@@ -168,6 +168,59 @@ home_win:
 
       '
   challengers:
+  - card: Edge Program E1.9
+    model_name: v6_glm_elasticnet_deleaked
+    artifact_path: null  # NOT persisted to S3 — gate retrains per-fold in-memory; persist deferred to forward-validation (see note)
+    market_blind: true
+    promoted: false
+    status: challenger
+    evaluated: '2026-06-19'
+    model_class: glm_elasticnet
+    config: default-config (HPO overfits home_win on any lean contract — PBO 0.372-0.375; --default-config is the resolution both tiers)
+    tiers:
+      post_lineup:
+        contract: betting_ml/models/home_win/feature_columns_xgb_classifier_pruned_clustered_deleaked_2026.json
+        features: 19
+        baseline: dense v5 champion (xgb_classifier_market_blind, 374-feat)
+        gate_metric: brier
+        delta: -0.0011
+        verdict: HOLD
+        detail: v6 better on all 3 folds but sub-noise (floor 0.002); a ~20x-leaner, leak-clean EQUAL of v5.
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_home_win_post_lineup.json
+      pre_lineup:
+        contract: betting_ml/models/home_win/feature_columns_pre_lineup_home_win_reprune_glm.json
+        features: 36
+        baseline: 33.0 morning baseline (xgb_platt, 154-feat)
+        gate_metric: brier
+        delta: -0.0038
+        verdict: PROMOTE
+        detail: "FIRST and ONLY PROMOTE in the Edge Program. Re-pruned 36-feat glm beats the served
+          154-feat morning model significantly — 2024 Δ-0.0038, 2025 Δ-0.0039 both clear the 0.002
+          floor, paired-bootstrap 95% CI [-0.0055,-0.0021] excludes 0, 2026-partial +0.0012 corroborates.
+          single_eval_pass=True. STILL a challenger: deploy requires hysteresis (≥2 consecutive passes on
+          a fresh eval window) AND forward/serving-parity, per the codified gate.
+          E13.0 (2026-06-21): pass-2 re-gate RAN (--refresh-cache) → nominal PROMOTE (pooled Δ−0.0030,
+          CI [-0.0047,-0.0014]) but DEPLOY WITHHELD on evidence. The decision is computed over
+          completed_seasons {2024,2025} ONLY (2026 corroboration-only). Marts are NOT frozen: fresh pull
+          restated 2024 features (+1 game), and the 2024 edge nearly HALVED (Δ-0.0038→-0.0021) because
+          the backfill helped the richer 154-feat baseline close on the lean 36-feat glm — feature
+          restatement on the same games, not new independent evidence → not a clean 2nd window. Every
+          forward-leaning signal is unsupportive: 2026 (newest OOS) has the challenger BEHIND in both
+          passes, widening (+0.0012→+0.0017). The real 2nd pass = FORWARD live-retention on actually-
+          served SPARSE morning features, not a re-gate (offline edge shrinks as features backfill toward
+          completeness; live serving is point-in-time-sparse per 30.3). No champion swap this pass."
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_home_win_pre_lineup_pre_lineup_home_win_reprune_glm.json  # now = pass-2 (2026-06-21)
+        gate_json_pass1: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_home_win_pre_lineup_pass1_2026-06-19.json
+        gate_json_pass2: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_home_win_pre_lineup_pass2_2026-06-21.json
+    notes: "Edge Program E1.9 v6 clean-slate rebuild (2026-06-19): model-class bake-off → Optuna HPO →
+      codified promotion gate, all on the E1.8 de-leaked matrix (bullpen_v3 + Stuff+ prior-season swaps),
+      market-blind (CONTRACT-GUARD), PBO/DSR-disciplined. home_win is a confirmed THIN-SIGNAL target —
+      tree/HPO overfits on lean contracts, so the winner is glm_elasticnet at default config both tiers.
+      v6's value = radical leanness (19/36 vs 374/154 feats) + de-leak correctness, NOT an offline edge
+      (post-tier is a sub-noise tie). The pre_lineup PROMOTE is real but gated on forward + hysteresis;
+      v5 stays champion. Artifact persist to S3 deferred until the 2nd hysteresis pass accrues live —
+      persisting an un-served model now would be premature. To persist: fit glm_elasticnet (default params)
+      on load_clean_matrix() full data + the tier contract, serialize with the contract sidecar."
   - card: Epic 1 / Story 1.1
     model_name: elasticnet_market_blind
     artifact_path: betting_ml/models/home_win/elasticnet_market_blind_2026.pkl
@@ -347,6 +400,42 @@ run_differential:
       \ full feature set + add market exclusion equivalent to _MARKET_COLS_TO_EXCLUDE.\
       \ See betting_ml/evaluation/phase_8_batch_retrain_impact.md.\n"
   challengers:
+  - card: Edge Program E1.9
+    model_name: v6_ngboost_normal_deleaked
+    artifact_path: null  # NOT persisted to S3 — gate retrains per-fold in-memory; persist deferred to forward-validation (see note)
+    market_blind: true
+    promoted: false
+    status: challenger
+    evaluated: '2026-06-19'
+    model_class: ngboost_normal
+    config: Optuna HPO (PBO-clean both tiers; gains sub-noise → v6 ≈ bake-off defaults)
+    tiers:
+      post_lineup:
+        contract: betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_deleaked_2026.json
+        features: 13
+        baseline: dense v5 champion (ngboost_tuned_market_blind, 374-feat)
+        gate_metric: mae
+        delta: +0.0021
+        verdict: HOLD
+        detail: Statistical tie (Δ within noise floor 0.02); a ~29x-leaner, leak-clean EQUAL of v5.
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_run_diff_post_lineup.json
+      pre_lineup:
+        contract: betting_ml/models/run_differential/feature_columns_pre_lineup_run_diff.json
+        features: 124
+        baseline: 33.0 morning baseline (ngboost Normal, 124-feat)
+        gate_metric: mae
+        delta: -0.0150
+        verdict: HOLD
+        detail: "STRONGEST sub-floor result in the program: pooled Δ-0.0150 with paired-bootstrap 95% CI
+          [-0.0252,-0.0049] (SIGNIFICANT) + all folds consistent. HOLD only because |Δ|<0.02 noise floor
+          (effect_size gate). A real, significant improvement over the served morning model — vindicates
+          re-pointing the morning gate to the 33.0 baseline (vs dense v5 it would read as a wash)."
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_run_diff_pre_lineup.json
+    notes: "Edge Program E1.9 v6 clean-slate rebuild (2026-06-19). run_diff WON cleanly with the incumbent
+      learner class (ngboost_normal) — no winner-conditioned re-prune needed (its contracts were already
+      MDA-pruned). post-tier is a 13-feat tie with the 374-feat v5; pre-tier is a significant-but-sub-floor
+      beat of the 33.0 morning model. run_diff is not bet directly (feeds the h2h consensus), so any future
+      promotion also resets the 28.6b conviction window. v5 stays champion; persist deferred (see home_win note)."
   - card: Epic 1 / Story 1.3
     model_name: ngboost_market_blind
     artifact_path: betting_ml/models/run_differential/ngboost_market_blind_2026.pkl
@@ -533,6 +622,43 @@ total_runs:
   v4_dist: Normal
   v4_feature_columns_path: betting_ml/models/total_runs/feature_columns_eb_2026.json
   challengers:
+  - card: Edge Program E1.9
+    model_name: v6_ngboost_normal_deleaked
+    artifact_path: null  # NOT persisted to S3 — gate retrains per-fold in-memory; persist deferred to forward-validation (see note)
+    market_blind: true
+    promoted: false
+    status: challenger
+    evaluated: '2026-06-19'
+    model_class: ngboost_normal
+    config: Optuna HPO (post); winner-conditioned re-prune + HPO (pre, fixed the PBO-0.543 overfit → 0.054)
+    tiers:
+      post_lineup:
+        contract: betting_ml/models/total_runs/feature_columns_ngboost_pruned_clustered_deleaked_2026.json
+        features: 13
+        baseline: dense v5 champion (ngboost_tuned_seasonnorm, 367-feat)
+        gate_metric: mae
+        delta: -0.0180
+        verdict: HOLD
+        detail: "v6 better, NEARLY clears the 0.02 floor (strong 2025 Δ-0.0261) but 2026-partial regresses
+          +0.0309 — totals regime-sensitivity / directional-bias watch item (consistent with the standing
+          totals over-bias gate). A ~28x-leaner, leak-clean near-equal of v5."
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_total_runs_post_lineup.json
+      pre_lineup:
+        contract: betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs_reprune_ngb.json
+        features: 14
+        baseline: 33.0 morning baseline (ngboost Normal; re-pruned from the unpruned 87-feat contract)
+        gate_metric: mae
+        delta: +0.0063
+        verdict: HOLD
+        detail: "Re-prune FIXED the overfit (87-feat contract had PBO 0.543 → 14-feat re-prune PBO 0.054)
+          but there is no edge: pooled Δ+0.0063 (sub-floor), 2025 regresses +0.0347, CI [-0.0150,+0.0283]
+          includes 0. The de-leak/de-overfit is the win; the morning totals signal itself is thin."
+        gate_json: betting_ml/evaluation/feature_selection/promotion_gate/gate_v6_vs_v5_total_runs_pre_lineup_pre_lineup_total_runs_reprune_ngb.json
+    notes: "Edge Program E1.9 v6 clean-slate rebuild (2026-06-19). Re-confirms the standing totals verdict
+      (Epic 10.6 / 16.6 / 30.x): no offline edge on clean data, either tier. v6's value here = leanness +
+      leak-clean correctness + fixing the morning-contract overfit (the 87-feat pre_lineup_total_runs was
+      never clustered-MDA-pruned). bet_paused stays true regardless — this is a projection source, not a
+      betting un-pause. v5 stays champion; persist deferred (see home_win note)."
   - card: Epic 1 / Story 1.2
     model_name: ngboost_market_blind
     artifact_path: betting_ml/models/total_runs/ngboost_market_blind_2026.pkl

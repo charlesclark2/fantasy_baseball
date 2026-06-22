@@ -27,6 +27,7 @@ Three things share confusingly similar paths. Two are live; one is dead.
 
 ## Conventions (see guide §0.1)
 `dbtf` (not `dbt`); Snowflake via MCP, fully-qualified, no `USE`, never on a request path; `uv run python`; hand >1-min scripts to the operator; **do not `git commit`/`push`**; market-blind for non-market models; honest framing for anything user-facing (no win-rate / edge claims — `best_alpha = 0`).
+- **🚂 Railway MCP available:** for any Railway work (env vars, service config, redeploys, deploy logs) use the **Railway MCP** rather than hand-walking the operator through the dashboard — it sets vars, redeploys, and tails logs directly.
 
 ## CI gates — REQUIRED before any handoff (never hand off red code)
 Run the equivalent CI checks locally and confirm GREEN before the operator handoff:

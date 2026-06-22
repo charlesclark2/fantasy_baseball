@@ -1,0 +1,97 @@
+{
+  "target": "total_runs",
+  "tier": "post_lineup",
+  "metric": "crps",
+  "n_features": 13,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "glm_elasticnet",
+  "winner_within_noise_tie": 3,
+  "pbo_slate": 0.07,
+  "noise_floor": 0.02,
+  "table": [
+    {
+      "candidate": "floor_market",
+      "is_floor": true,
+      "crps_mean": 2.418194946733283,
+      "nll_mean": 2.887203739757806,
+      "mae_mean": 3.4054975152619287,
+      "calibration": NaN,
+      "n": 4857
+    },
+    {
+      "candidate": "ngboost_normal",
+      "is_floor": false,
+      "crps_mean": 2.420068211671953,
+      "nll_mean": 2.8864794452132037,
+      "mae_mean": 3.4263937075748556,
+      "calibration": 0.06292657520930522,
+      "n": 4857
+    },
+    {
+      "candidate": "ngboost_lognormal",
+      "is_floor": false,
+      "crps_mean": 2.424423824637362,
+      "nll_mean": 2.8963413514347156,
+      "mae_mean": 3.4339733758045643,
+      "calibration": 0.0676880016964777,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "crps_mean": 2.429768704297232,
+      "nll_mean": 2.886689892052078,
+      "mae_mean": 3.444683137758898,
+      "calibration": 0.057499280216412985,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "crps_mean": 2.462053100856446,
+      "nll_mean": 2.903178887993066,
+      "mae_mean": 3.4927313934465403,
+      "calibration": 0.07269874569031477,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "crps_mean": 2.4742926983757765,
+      "nll_mean": 2.930421786540621,
+      "mae_mean": 3.4892535303327463,
+      "calibration": 0.09026232897961321,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "crps_mean": 2.480679195925022,
+      "nll_mean": 2.9065031737133116,
+      "mae_mean": 3.512412190836145,
+      "calibration": 0.10808358934450968,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "crps_mean": 2.5052707785011537,
+      "nll_mean": 2.9447884784827973,
+      "mae_mean": 3.529766455633247,
+      "calibration": 0.09480975404864633,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "crps_mean": 2.618112778702505,
+      "nll_mean": 3.13710548235959,
+      "mae_mean": 3.596068058674493,
+      "calibration": 0.1326728158721316,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/total_runs/feature_columns_ngboost_pruned_clustered_deleaked_2026.json"
+}

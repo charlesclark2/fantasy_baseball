@@ -34,9 +34,6 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_fangraphs_stuff_plus,
     ingest_oaa,
     ingest_sprint_speed,
-    ingest_parlay_canonical_events,
-    ingest_parlay_events,
-    ingest_parlay_odds,
     ingest_statcast,
     ingest_statsapi_schedule,
     ingest_transactions,
@@ -63,10 +60,7 @@ def daily_ingestion_job():
     predict (or write_api_cache/write_serving_store) ahead of any rebuild op; the
     `start=`/`predict_done=` threading is the guarantee. Serve-time freshness is the
     backstop if a rebuild silently fails (Story 30.13 Task 4 gate in predict_today)."""
-    s1 = ingest_parlay_events()
-    s2 = ingest_parlay_canonical_events(start=s1)
-    s3 = ingest_parlay_odds(start=s2)
-    s4 = ingest_action_network(start=s3)
+    s4 = ingest_action_network()
     s5 = ingest_statcast(start=s4)
     s6 = ingest_statsapi_schedule(start=s5)
     s7 = ingest_weather(start=s6)

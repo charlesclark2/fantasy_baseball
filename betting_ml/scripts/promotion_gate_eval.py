@@ -195,17 +195,23 @@ class XGBPlattSpec:
 @dataclass
 class NGBoostSpec:
     """NGBoost Normal/LogNormal — returns the full predictive (loc/scale) so crps/nll
-    work, falling back to a point output if dist-param extraction ever changes."""
+    work, falling back to a point output if dist-param extraction ever changes.
+
+    `learning_rate`/`minibatch_frac` are optional E1.9-tunable knobs; their defaults
+    reproduce the prior fixed behavior so existing callers are unaffected."""
     n_estimators: int = 500
     dist: str = "Normal"
     name: str = "ngboost"
     seed: int = 42
+    learning_rate: float = 0.01
+    minibatch_frac: float = 1.0
 
     def fit(self, Xtr, ytr, Xcal=None, ycal=None, sample_weight=None):
         from ngboost import NGBRegressor
         from ngboost.distns import LogNormal, Normal
         D = {"Normal": Normal, "LogNormal": LogNormal}[self.dist]
         m = NGBRegressor(n_estimators=self.n_estimators, Dist=D, verbose=False,
+                         learning_rate=self.learning_rate, minibatch_frac=self.minibatch_frac,
                          random_state=self.seed)
         m.fit(Xtr.values, ytr, sample_weight=sample_weight)
         dist = self.dist

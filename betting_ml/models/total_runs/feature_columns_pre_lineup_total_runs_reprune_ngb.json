@@ -1,0 +1,29 @@
+{
+  "feature_cols": [
+    "away_bp_eb_coverage_pct",
+    "away_bp_eb_uncertainty",
+    "away_bp_eb_xwoba_seasonnorm",
+    "away_losses",
+    "away_team_sequential_bullpen_xwoba_seasonnorm",
+    "away_wins",
+    "home_bp_eb_uncertainty",
+    "home_bp_eb_xwoba_seasonnorm",
+    "home_bp_hard_hit_pct_30d_seasonnorm",
+    "home_off_xwoba_30d_seasonnorm",
+    "home_pit_hard_hit_pct_30d_seasonnorm",
+    "home_starter_slider_stuff_plus",
+    "home_starter_whiff_rate_14d",
+    "home_team_sequential_woba"
+  ],
+  "_provenance": {
+    "story": "E1.9",
+    "derived": "2026-06-19",
+    "method": "non-noise (season-stratified paired-bootstrap 95% CI excludes 0) cluster members from the FULLY de-leaked clustered MDA (--bullpen-version v3 --stuff-plus-version deleaked); E1.3 rule, derived REPRODUCIBLY by betting_ml/scripts/derive_clustered_contract.py (no hand-pruning)",
+    "source_report": "betting_ml/evaluation/feature_selection/clustered_importance/clustered_importance_total_runs_bullpen_v3_stuffplus_deleaked_scorer_ngboost_normal_pre_lineup_total_runs.json",
+    "n_features": 14,
+    "n_noise_clusters_dropped": 68,
+    "scorer": "ngboost_normal",
+    "input_contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json",
+    "FINAL": "E1.9 winner-conditioned re-prune. Clustered-MDA scorer = ngboost_normal (the bake-off winner, not the incumbent), audited feature set = betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json, on the both-de-leak matrix. Tests whether the winning learner wants a different feature set than the incumbent-derived slim."
+  }
+}

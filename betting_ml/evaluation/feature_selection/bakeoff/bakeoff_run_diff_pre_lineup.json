@@ -1,0 +1,79 @@
+{
+  "target": "run_diff",
+  "tier": "pre_lineup",
+  "metric": "crps",
+  "n_features": 124,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "glm_elasticnet",
+  "winner_within_noise_tie": 3,
+  "pbo_slate": 0.0,
+  "noise_floor": 0.02,
+  "table": [
+    {
+      "candidate": "ngboost_normal",
+      "is_floor": false,
+      "crps_mean": 2.4477821150207912,
+      "nll_mean": 2.9048559143482238,
+      "mae_mean": 3.4458486549942537,
+      "calibration": 0.03327337327470947,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "crps_mean": 2.4495863831390183,
+      "nll_mean": 2.902990150064162,
+      "mae_mean": 3.4379436386524436,
+      "calibration": 0.03105009585853913,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "crps_mean": 2.453953881036151,
+      "nll_mean": 2.926394023619535,
+      "mae_mean": 3.4437374614024625,
+      "calibration": 0.03835139941490232,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "crps_mean": 2.496938965870923,
+      "nll_mean": 3.030292613077823,
+      "mae_mean": 3.458902174056049,
+      "calibration": 0.07050123887693631,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "crps_mean": 2.5079521135093423,
+      "nll_mean": 2.9245914351052433,
+      "mae_mean": 3.5610393109159433,
+      "calibration": 0.1103970951132247,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "crps_mean": 2.52364116140387,
+      "nll_mean": 3.0647754025051404,
+      "mae_mean": 3.488166848728771,
+      "calibration": 0.07690484722961695,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "crps_mean": 2.726967056190077,
+      "nll_mean": 4.184246151728568,
+      "mae_mean": 3.5070845365274463,
+      "calibration": 0.17528195513707814,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/run_differential/feature_columns_pre_lineup_run_diff.json"
+}

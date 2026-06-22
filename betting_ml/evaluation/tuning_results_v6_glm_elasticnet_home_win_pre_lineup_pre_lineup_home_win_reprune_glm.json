@@ -1,0 +1,24 @@
+{
+  "target": "home_win",
+  "tier": "pre_lineup",
+  "model_class": "glm_elasticnet",
+  "metric": "brier",
+  "n_features": 36,
+  "n_trials": 0,
+  "smoke": false,
+  "seed": 42,
+  "best_params": {
+    "alpha": 0.1,
+    "l1_ratio": 0.5,
+    "C": 0.5
+  },
+  "best_cv_score": 0.24328801786590867,
+  "noise_floor": 0.002,
+  "pbo": null,
+  "pbo_pass": null,
+  "dsr": null,
+  "dsr_pass": null,
+  "overfit_gate": "DEFAULT (no search \u2014 bake-off default config; not an overfit surface)",
+  "contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win_reprune_glm.json",
+  "variant": "pre_lineup_home_win_reprune_glm"
+}

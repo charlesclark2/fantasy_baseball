@@ -86,7 +86,7 @@ def _rel(p: Path) -> str:
 
 
 def derive(target: str, importance_json: Path, *, allow_leaky: bool,
-           dry_run: bool, date: str) -> dict:
+           dry_run: bool, date: str, out_path: Path | None = None) -> dict:
     importance_json = importance_json.resolve()
     if not importance_json.exists():
         raise SystemExit(
@@ -113,30 +113,39 @@ def derive(target: str, importance_json: Path, *, allow_leaky: bool,
 
     feature_cols = _signal_members(payload)
     n_noise = sum(c["is_noise"] for c in payload["clusters"])
+    scorer = payload.get("scorer")
+    input_contract = payload.get("input_contract")
 
-    contract = {
-        "feature_cols": feature_cols,
-        "_provenance": {
-            "story": "E1.8",
-            "derived": date,
-            "method": (
-                "non-noise (season-stratified paired-bootstrap 95% CI excludes 0) cluster "
-                "members from the FULLY de-leaked clustered MDA "
-                "(--bullpen-version v3 --stuff-plus-version deleaked); E1.3 rule, derived "
-                "REPRODUCIBLY by betting_ml/scripts/derive_clustered_contract.py (no hand-pruning)"),
-            "source_report": _rel(importance_json),
-            "n_features": len(feature_cols),
-            "n_noise_clusters_dropped": n_noise,
-            "FINAL": (
-                "Post-E1.8 full-leakage-sweep re-derivation. Both construction de-leaks applied "
-                "to the source matrix: bullpen EB (E1.7, equal-weight + appeared-roster fix) and "
-                "FanGraphs Stuff+/arsenal (E1.8, prior-season repoint, feature_pregame_starter_features.sql). "
-                "Supersedes the INTERIM E1.7 contract that selected Stuff+ columns off the stale "
-                "leaky ranking. Cleared for the E1.9 v6 retrain."),
-        },
+    prov = {
+        "story": "E1.9" if scorer or input_contract else "E1.8",
+        "derived": date,
+        "method": (
+            "non-noise (season-stratified paired-bootstrap 95% CI excludes 0) cluster "
+            "members from the FULLY de-leaked clustered MDA "
+            "(--bullpen-version v3 --stuff-plus-version deleaked); E1.3 rule, derived "
+            "REPRODUCIBLY by betting_ml/scripts/derive_clustered_contract.py (no hand-pruning)"),
+        "source_report": _rel(importance_json),
+        "n_features": len(feature_cols),
+        "n_noise_clusters_dropped": n_noise,
     }
+    if scorer or input_contract:
+        prov["scorer"] = scorer
+        prov["input_contract"] = input_contract
+        prov["FINAL"] = (
+            f"E1.9 winner-conditioned re-prune. Clustered-MDA scorer = {scorer or 'incumbent'} "
+            f"(the bake-off winner, not the incumbent), audited feature set = "
+            f"{input_contract or 'default contract'}, on the both-de-leak matrix. Tests whether the "
+            "winning learner wants a different feature set than the incumbent-derived slim.")
+    else:
+        prov["FINAL"] = (
+            "Post-E1.8 full-leakage-sweep re-derivation. Both construction de-leaks applied "
+            "to the source matrix: bullpen EB (E1.7, equal-weight + appeared-roster fix) and "
+            "FanGraphs Stuff+/arsenal (E1.8, prior-season repoint, feature_pregame_starter_features.sql). "
+            "Supersedes the INTERIM E1.7 contract that selected Stuff+ columns off the stale "
+            "leaky ranking. Cleared for the E1.9 v6 retrain.")
+    contract = {"feature_cols": feature_cols, "_provenance": prov}
 
-    out = _contract_path(target)
+    out = out_path.resolve() if out_path else _contract_path(target)
     print(f"target          : {target}")
     print(f"source MDA      : {importance_json.name}  (bullpen={bullpen}, stuff_plus={stuffp})")
     print(f"signal features : {len(feature_cols)}  (dropped {n_noise} noise clusters)")
@@ -160,11 +169,14 @@ def main() -> None:
                     help="Bypass the leakage guard (validation/inspection only — never a production write).")
     ap.add_argument("--dry-run", action="store_true", help="Print the derived contract; do not write.")
     ap.add_argument("--date", default=_dt.date.today().isoformat(), help="Provenance date (default: today).")
+    ap.add_argument("--out-path", type=Path, default=None,
+                    help="Write the contract here instead of the canonical path (E1.9 re-prune variants "
+                         "— winner-conditioned / morning-pruned — must NOT clobber the FINAL slim contract).")
     args = ap.parse_args()
 
     importance_json = args.importance_json or _default_importance_json(args.target)
     derive(args.target, importance_json, allow_leaky=args.allow_leaky,
-           dry_run=args.dry_run, date=args.date)
+           dry_run=args.dry_run, date=args.date, out_path=args.out_path)
 
 
 if __name__ == "__main__":

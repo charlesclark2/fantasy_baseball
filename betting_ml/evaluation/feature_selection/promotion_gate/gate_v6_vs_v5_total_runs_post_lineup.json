@@ -1,0 +1,56 @@
+{
+  "target": "total_runs",
+  "tier": "post_lineup",
+  "gate_metric": "mae",
+  "model_class": "ngboost_normal",
+  "baseline": "dense v5 champion",
+  "tuning_json": "betting_ml/evaluation/tuning_results_v6_ngboost_normal_total_runs_post_lineup.json",
+  "smoke": false,
+  "v6_overfit_gate": "PASS",
+  "n_features": {
+    "v6": 13,
+    "baseline": 367
+  },
+  "decision": "HOLD",
+  "overall_delta": -0.018162650194043537,
+  "boot_ci": [
+    -0.039691802001500465,
+    0.0035772650047338336
+  ],
+  "single_eval_pass": false,
+  "per_season": [
+    {
+      "season": 2024,
+      "n": 2000,
+      "champion": 3.413679211841398,
+      "challenger": 3.4044186531311236,
+      "delta": -0.009260558710274314,
+      "complete": true,
+      "regressed": false
+    },
+    {
+      "season": 2025,
+      "n": 2026,
+      "champion": 3.628243897934282,
+      "challenger": 3.601293398299202,
+      "delta": -0.026950499635079783,
+      "complete": true,
+      "regressed": false
+    },
+    {
+      "season": 2026,
+      "n": 838,
+      "champion": 3.422830380242336,
+      "challenger": 3.453123052512784,
+      "delta": 0.030292672270447962,
+      "complete": false,
+      "regressed": false
+    }
+  ],
+  "reasons": [
+    "Pooled improvement -0.0182 does NOT clear the 0.02 noise floor.",
+    "Paired bootstrap 95% CI upper bound +0.0036 \u2265 0 (not significant).",
+    "No completed season regresses beyond tolerance (cross-season consistent).",
+    "\u26a0 Current season 2026 REGRESSES (+0.0303) \u2014 does not block (corroboration only), but watch for a regime shift before promoting."
+  ]
+}

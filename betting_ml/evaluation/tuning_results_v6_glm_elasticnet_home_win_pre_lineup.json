@@ -1,0 +1,23 @@
+{
+  "target": "home_win",
+  "tier": "pre_lineup",
+  "model_class": "glm_elasticnet",
+  "metric": "brier",
+  "n_features": 154,
+  "n_trials": 60,
+  "smoke": false,
+  "seed": 42,
+  "best_params": {
+    "alpha": 0.030105600227420315,
+    "l1_ratio": 0.8442024478281799,
+    "C": 0.019104180831245692
+  },
+  "best_cv_score": 0.2414476340790306,
+  "noise_floor": 0.002,
+  "pbo": 0.002,
+  "pbo_pass": true,
+  "dsr": 0.9999937179746939,
+  "dsr_pass": true,
+  "overfit_gate": "PASS",
+  "contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win.json"
+}

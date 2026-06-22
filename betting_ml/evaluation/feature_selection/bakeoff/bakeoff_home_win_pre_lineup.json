@@ -1,0 +1,93 @@
+{
+  "target": "home_win",
+  "tier": "pre_lineup",
+  "metric": "brier",
+  "n_features": 154,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "lightgbm",
+  "winner_reason": "tie within 0.002 noise floor among 5 (stack_mean, glm_elasticnet, lightgbm, xgboost, catboost) \u2192 picked on best calibration; primary-leader=stack_mean, simplest=glm_elasticnet",
+  "winner_within_noise_tie": 5,
+  "tie_members": [
+    "stack_mean",
+    "glm_elasticnet",
+    "lightgbm",
+    "xgboost",
+    "catboost"
+  ],
+  "primary_leader": "stack_mean",
+  "simplest_in_tie": "glm_elasticnet",
+  "winner_margin_vs_floors": {
+    "vs_floor_market": -0.0013,
+    "vs_floor_no_skill": 0.0056
+  },
+  "pbo_slate": 0.052,
+  "noise_floor": 0.002,
+  "table": [
+    {
+      "candidate": "floor_market",
+      "is_floor": true,
+      "brier_mean": 0.2422122066853525,
+      "nll_mean": 0.677143695072587,
+      "mae_mean": 0.4841376035805165,
+      "calibration": 0.021546538537560195,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "brier_mean": 0.24263703336135847,
+      "nll_mean": 0.6781281826707946,
+      "mae_mean": 0.48817830888305325,
+      "calibration": 0.02105252517639114,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "brier_mean": 0.2432876958166858,
+      "nll_mean": 0.6794349871438571,
+      "mae_mean": 0.4879658007117893,
+      "calibration": 0.017141675625603436,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "brier_mean": 0.2435375096313802,
+      "nll_mean": 0.6799511497336317,
+      "mae_mean": 0.4879630967430689,
+      "calibration": 0.013424900605642437,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "brier_mean": 0.243741382015242,
+      "nll_mean": 0.6803594472237066,
+      "mae_mean": 0.48860602919430146,
+      "calibration": 0.01709126071679273,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "brier_mean": 0.2442364273846148,
+      "nll_mean": 0.6813908242305844,
+      "mae_mean": 0.48981830314146674,
+      "calibration": 0.014119386744929898,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "brier_mean": 0.24913885330915395,
+      "nll_mean": 0.6914240469252617,
+      "mae_mean": 0.4980424356979461,
+      "calibration": 0.008790648445454963,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win.json"
+}

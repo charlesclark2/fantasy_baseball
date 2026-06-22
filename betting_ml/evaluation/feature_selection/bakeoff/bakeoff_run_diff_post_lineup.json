@@ -1,0 +1,79 @@
+{
+  "target": "run_diff",
+  "tier": "post_lineup",
+  "metric": "crps",
+  "n_features": 13,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "ngboost_normal",
+  "winner_within_noise_tie": 2,
+  "pbo_slate": 0.0,
+  "noise_floor": 0.02,
+  "table": [
+    {
+      "candidate": "ngboost_normal",
+      "is_floor": false,
+      "crps_mean": 2.3840749827563243,
+      "nll_mean": 2.861964915014845,
+      "mae_mean": 3.360311013093461,
+      "calibration": 0.031371461084179396,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "crps_mean": 2.4001418525154627,
+      "nll_mean": 2.892013638318422,
+      "mae_mean": 3.364203713828221,
+      "calibration": 0.03240169983518396,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "crps_mean": 2.415277616573481,
+      "nll_mean": 2.9145339009273945,
+      "mae_mean": 3.372726740054363,
+      "calibration": 0.046026675847474115,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "crps_mean": 2.419070211573431,
+      "nll_mean": 2.8905940191746495,
+      "mae_mean": 3.3843748927457318,
+      "calibration": 0.028684412904293206,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "crps_mean": 2.4361293177101704,
+      "nll_mean": 2.9430553885900106,
+      "mae_mean": 3.394326153163035,
+      "calibration": 0.048067964956180424,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "crps_mean": 2.5079521135093423,
+      "nll_mean": 2.9245914351052433,
+      "mae_mean": 3.5610393109159433,
+      "calibration": 0.1103970951132247,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "crps_mean": 2.5332585061575488,
+      "nll_mean": 3.188189024644934,
+      "mae_mean": 3.432279912565266,
+      "calibration": 0.09709447044227694,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_deleaked_2026.json"
+}

@@ -89,23 +89,6 @@ def _dbt_daily_build_args() -> list[str]:
     return ["run"] + target
 
 
-# ── Parlay API ───────────────────────────────────────────────────────────────
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def ingest_parlay_events(context):
-    _run_script(context, "parlay_api_ingestion.py", ["events"])
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def ingest_parlay_canonical_events(context):
-    _run_script(context, "parlay_api_ingestion.py", ["events-canonical"])
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def ingest_parlay_odds(context):
-    _run_script(context, "parlay_api_ingestion.py", ["odds"])
-
-
 # ── Daily ingestion ──────────────────────────────────────────────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
