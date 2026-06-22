@@ -138,20 +138,22 @@ SUPERSEDED by the COMPLETE banner above: the premise ("deepen the dominant bullp
 within-game leak. There is no lift to chase. The real follow-up is **E1.7 (de-leak the production feature)**; the broader sweep
 is **E1.8**. The original deepen-the-bullpen brief is kept in guide §4 E2.1b for provenance only.
 ```
+**E2.2 — ✅ GATE RAN 2026-06-22 — honest finding (NOT-MET = the finding, like E2.1b): home/away runs are essentially INDEPENDENT (residual ρ=−0.0035); the totals variance deficiency is MARGINAL UNDER-DISPERSION, not dependence.** Harness: `betting_ml/utils/copula.py` (discrete distributional-transform → normal-scores ρ estimator, `kendall_tau_to_rho`, vectorized `sample_gaussian_copula_negbin`, `analytic_total_variance`, `GaussianCopulaParams`) + `betting_ml/scripts/totals_generative/fit_copula.py` (OOS-purged-CV marginals, ρ + ρ/r bucket-conditioning, sim+analytic AC validation, **dispersion diagnostic**) + 14 tests `betting_ml/tests/test_copula.py`; `uv run pytest` 405✓/1s. **Operator run (11,659 eval games 2021–25):** residual ρ=−0.0035 (Kendall −0.0046, naive raw +0.0002) → **copula UNNECESSARY** (global, no material bucket ρ); corr AC ✅, but **var(total) AC ❌ — copula 15.15 ≈ independent 15.18 vs empirical 19.99 (~24% shortfall, identical with/without coupling)** ⇒ the gap is in the MARGINALS. **Root cause = under-dispersion: E2.1 fits NegBin `r` on optimistic TRAIN-fit means → `r` too high; the dispersion diagnostic confirms an OOS-calibrated `r` (~4 vs train ~6–15) reproduces var(total) → closes the gap.** **🔑 Load-bearing design choice (still correct):** ρ was fit on the RESIDUAL dependence after E2.1 conditional means absorb shared park/weather/ump (distributional-transform→normal-scores), NOT raw pairs (double-count). **➡️ E2.3 directives: (1) DROP the copula coupling (ρ≈0, convolve independently); (2) CALIBRATE the per-side dispersion on HELD-OUT residuals, not E2.1's train-fit r — that is the lever for calib_80≥0.80 / PIT.** Operator: re-run `fit_copula.py` once to bake the dispersion diagnostic into `ablation_results/e2_2_copula_fit.json` + `e2_2_copula_decision.md` (first run predated that block). `copula_v1.json` records ρ_global≈0.
 ```
-▶ Story prompt — E2.2 Dependence structure (copula)   [Model-A · market-blind]
+▶ Story prompt — E2.2 Dependence structure (copula)   [Model-A · market-blind]   ✅ DONE 2026-06-22 — finding above (copula unnecessary; gap is marginal dispersion)
 Read: §4 E2.2 + §0 + spec WS-B (B.2).
 Do: fit a Gaussian copula over the two NegBin marginals; estimate rho on historical (home_runs, away_runs) pairs
 from mart_game_results (test conditioning on park/weather/run-env buckets vs a single global rho).
 Gate/AC: joint samples reproduce the empirical home/away run correlation AND realized total-runs variance;
 independent convolution (rho=0) shown insufficient on the tails.
+Operator: uv run python betting_ml/scripts/totals_generative/fit_copula.py  (default = OOS purged CV; add --no-save to dry-run the gate).
 ```
 ```
 ▶ Story prompt — E2.3 Convolution → predictive distributions   [Model-A · market-blind]
-Read: §4 E2.3 + §0 + §6.
-Do: draw N joint (home,away) samples (vectorized; cap ~10k/game) → derive total (sum), run-diff (difference),
-team totals (marginals); emit a P05…P95 quantile grid + p_over_<line>; store PARAMS + grid (not raw samples).
-Gate/AC: PIT-flat / calib_80 ≥ 0.80 for the full-game total; team-total + run-diff marginals also PIT-calibrated.
+⚠️ FOLD IN THE E2.2 FINDING (2026-06-22): home/away runs are ESSENTIALLY INDEPENDENT (residual ρ=−0.0035) → DO NOT couple; convolve the two marginals independently (the copula layer is confirmed unnecessary). The ~24% total-variance shortfall E2.2 surfaced is MARGINAL UNDER-DISPERSION: E2.1 fits the NegBin `r` on optimistic TRAIN-fit means (~8.5) → too tight; the HELD-OUT `r` is ~3.7. So E2.3's FIRST task is dispersion calibration: **fit a SINGLE stable per-side `r ≈ 3.7` on HELD-OUT residuals (rolling/prior-window, leakage-safe), not E2.1's train-fit r and NOT per-period** — the dispersion diagnostic in fit_copula.py shows held-out r (mean 3.71, stable ~3.4–3.9 across folds) reproduces var(total), and that E2.1's "r drifts 33→8" is a train-set-size estimation artifact, not real non-stationarity. This is the lever for the calib_80≥0.80 / PIT gate; without it the convolved total stays ~24% too narrow.
+Read: §4 E2.3 + §0 + §6 + the E2.2 dispersion diagnostic (ablation_results/e2_2_copula_decision.md) + betting_ml/utils/copula.py (sample_gaussian_copula_negbin reused with ρ=0).
+Do: calibrate per-side dispersion on held-out residuals → draw N independent (home,away) samples (vectorized; cap ~10k/game; ρ=0) → derive total (sum), run-diff (difference), team totals (marginals); emit a P05…P95 quantile grid + p_over_<line>; store PARAMS + grid (not raw samples).
+Gate/AC: PIT-flat / calib_80 ≥ 0.80 for the full-game total (the var-deficiency fix is the dispersion calibration, NOT a copula); team-total + run-diff marginals also PIT-calibrated.
 ```
 ```
 ▶ Story prompt — E2.4 First-5-innings (F5) per-side model   [Model-A · market-blind]
@@ -720,12 +722,8 @@ HYPOTHESIS: simulating the game from batter-vs-pitcher matchup distributions (Mo
 Scope (flesh when sequenced): build the PA-outcome model (batter×pitcher×count→event probs, leak-clean, shrinkage on thin matchups) → inning/game sim → calibrate the run distribution vs actuals → compare to v6/E2 on CRPS/NLL + (if used for ML) forward CLV. Reuse mart_batter_vs_pitch_archetype / mart_pitcher_pitch_archetype / handedness splits. Heavy compute → operator/runner.
 ```
 ```
-▶ Story prompt — E13.3 Sub-model + meta-model re-eval on de-leaked data   [Model-A · the operator's idea · ∥ with E13.1]   (2026-06-21)
-HYPOTHESIS: the sub-model ensemble (feature_pregame_sub_model_signals) + Bayesian meta-model were built/tuned BEFORE the E1.7/E1.8 de-leak (the bullpen EB sub-model WAS the leak). Re-fitting on the clean construction may reshape which sub-model signals carry — or confirm tapped-out. KILL: no sub-model beats its honest floor by the pre-set margin in N folds → confirm tapped-out, stop (don't rationalize).
-Read: ../implementation_guide.md (master — the sub-model architecture + sub_model_registry.yaml) + betting_ml/scripts/train_bayesian_meta_model.py + feature_pregame_sub_model_signals (dbt) + E2.1b/E1.7/E1.8 (the leak + de-leak) + E1.1 purged CV.
-Do: re-fit each sub-model + the meta-model on the de-leaked matrix under purged CV; compare signal importances + meta-model skill pre/post de-leak; market-blind unless explicitly market-aware; PBO/DSR on anything that looks like a win. Report what the clean data changed (or didn't).
-Gate/AC: per-sub-model honest-floor comparison + meta-model skill delta + a keep/kill verdict per signal; CI green.
-Closeout (per §0.1): operator handoff (run-order + git add incl. sub_model_registry.yaml + ablation_results/*.md).
+▶ Story prompt — E13.3 Sub-model + meta-model re-eval on de-leaked data   ✅ DONE 2026-06-21 — TAPPED OUT (kill criterion met).
+Clean data deleted a fake signal, revealed none. 10/12 sub-models touch zero bullpen-EB cols (de-leak = no-op; verdicts unchanged — run_env+offense PROMOTE, rest defer/reject). The one exposed signal, bullpen Layer-3 (`bullpen_v2`, the set's strongest, weight 0.337/0.507), COLLAPSED to REJECT on clean data (sign reversed −0.029→+0.000) = its value was the leak (Layer-3 mirror of E2.1b). Net promoted = {run_env, offense} only (clean, unchanged). Bayesian meta-model invariant (consumes the logged live H2H prob, not sub-signals; no champion swap → same fit) → meta re-fit gated on a SERVED de-leaked v6 champion, not this. No live impact (Layer-3 stack unserved). ⚠️ Loose end: stacking_weights.json still gives bullpen 0.337/0.507 — recompute IF Layer-3 ever revived. Report e13_3_submodel_meta_reeval.md; 410 tests green; no changelog. ⇒ sub-model/ensemble edge lever EXHAUSTED → pivot stands: totals (E2.2/E2.3) + props (E5).
 ```
 ```
 ▶ Story prompt — E13.4 Orthogonal-signal audit   [Model-A · systematic · last]   (2026-06-21 · scope below; flesh on sequencing)
