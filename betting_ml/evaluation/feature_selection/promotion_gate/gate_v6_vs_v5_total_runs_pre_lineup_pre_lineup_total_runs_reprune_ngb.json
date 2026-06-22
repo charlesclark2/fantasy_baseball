@@ -1,0 +1,56 @@
+{
+  "target": "total_runs",
+  "tier": "pre_lineup",
+  "gate_metric": "mae",
+  "model_class": "ngboost_normal",
+  "baseline": "33.0 morning baseline",
+  "tuning_json": "betting_ml/evaluation/tuning_results_v6_ngboost_normal_total_runs_pre_lineup_pre_lineup_total_runs_reprune_ngb.json",
+  "smoke": false,
+  "v6_overfit_gate": "PASS",
+  "n_features": {
+    "v6": 14,
+    "baseline": 87
+  },
+  "decision": "HOLD",
+  "overall_delta": 0.006287644554251856,
+  "boot_ci": [
+    -0.015039707836853329,
+    0.028343120866500076
+  ],
+  "single_eval_pass": false,
+  "per_season": [
+    {
+      "season": 2024,
+      "n": 2000,
+      "champion": 3.4082761006848394,
+      "challenger": 3.385754964578793,
+      "delta": -0.022521136106046225,
+      "complete": true,
+      "regressed": false
+    },
+    {
+      "season": 2025,
+      "n": 2026,
+      "champion": 3.615688255978017,
+      "challenger": 3.6504149732472726,
+      "delta": 0.03472671726925558,
+      "complete": true,
+      "regressed": true
+    },
+    {
+      "season": 2026,
+      "n": 838,
+      "champion": 3.456152877966392,
+      "challenger": 3.457106026451472,
+      "delta": 0.000953148485080213,
+      "complete": false,
+      "regressed": false
+    }
+  ],
+  "reasons": [
+    "Pooled improvement +0.0063 does NOT clear the 0.02 noise floor.",
+    "Paired bootstrap 95% CI upper bound +0.0283 \u2265 0 (not significant).",
+    "Regresses beyond tolerance on completed season(s) [2025] \u2192 overfitting risk; HOLD.",
+    "Current season 2026 corroborates (+0.0010)."
+  ]
+}

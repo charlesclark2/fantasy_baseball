@@ -1,0 +1,111 @@
+{
+  "target": "total_runs",
+  "tier": "pre_lineup",
+  "metric": "crps",
+  "n_features": 14,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "ngboost_normal",
+  "winner_reason": "tie within 0.02 noise floor among 4 (ngboost_normal, ngboost_lognormal, catboost, glm_elasticnet) \u2192 picked on best calibration; primary-leader=ngboost_normal, simplest=glm_elasticnet",
+  "winner_within_noise_tie": 4,
+  "tie_members": [
+    "ngboost_normal",
+    "ngboost_lognormal",
+    "catboost",
+    "glm_elasticnet"
+  ],
+  "primary_leader": "ngboost_normal",
+  "simplest_in_tie": "glm_elasticnet",
+  "winner_margin_vs_floors": {
+    "vs_floor_market": 0.0408,
+    "vs_floor_no_skill": 0.1033
+  },
+  "pbo_slate": 0.144,
+  "noise_floor": 0.02,
+  "table": [
+    {
+      "candidate": "ngboost_normal",
+      "is_floor": false,
+      "crps_mean": 2.3774152649265416,
+      "nll_mean": 2.87236716888282,
+      "mae_mean": 3.358540308539888,
+      "calibration": 0.061407707347037786,
+      "n": 4857
+    },
+    {
+      "candidate": "ngboost_lognormal",
+      "is_floor": false,
+      "crps_mean": 2.377772041500892,
+      "nll_mean": 2.87403261229513,
+      "mae_mean": 3.3695889927371803,
+      "calibration": 0.06269400361256032,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "crps_mean": 2.390228409980576,
+      "nll_mean": 2.8828565755450124,
+      "mae_mean": 3.3713755081205643,
+      "calibration": 0.06346592760286633,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "crps_mean": 2.3965073634707146,
+      "nll_mean": 2.874107607079401,
+      "mae_mean": 3.3993506363513544,
+      "calibration": 0.06759852364915228,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "crps_mean": 2.4067991454971076,
+      "nll_mean": 2.922404850520734,
+      "mae_mean": 3.369059856337513,
+      "calibration": 0.07972420120394601,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_market",
+      "is_floor": true,
+      "crps_mean": 2.418194946733283,
+      "nll_mean": 2.887203739757806,
+      "mae_mean": 3.4054975152619287,
+      "calibration": NaN,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "crps_mean": 2.427882674558778,
+      "nll_mean": 2.931084821065082,
+      "mae_mean": 3.3944060323364527,
+      "calibration": 0.0770967472012792,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "crps_mean": 2.480679195925022,
+      "nll_mean": 2.9065031737133116,
+      "mae_mean": 3.512412190836145,
+      "calibration": 0.10808358934450968,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "crps_mean": 2.5312664530798306,
+      "nll_mean": 3.2027081490481213,
+      "mae_mean": 3.4407989199911215,
+      "calibration": 0.12826197010572574,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs_reprune_ngb.json",
+  "variant": "pre_lineup_total_runs_reprune_ngb"
+}

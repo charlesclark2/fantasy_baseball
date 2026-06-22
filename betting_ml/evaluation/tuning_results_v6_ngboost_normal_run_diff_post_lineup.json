@@ -1,0 +1,23 @@
+{
+  "target": "run_diff",
+  "tier": "post_lineup",
+  "model_class": "ngboost_normal",
+  "metric": "crps",
+  "n_features": 13,
+  "n_trials": 50,
+  "smoke": false,
+  "seed": 42,
+  "best_params": {
+    "n_estimators": 460,
+    "learning_rate": 0.009776854331372627,
+    "minibatch_frac": 0.8059264473611898
+  },
+  "best_cv_score": 2.379647328739253,
+  "noise_floor": 0.02,
+  "pbo": 0.086,
+  "pbo_pass": true,
+  "dsr": 0.9983297029702318,
+  "dsr_pass": true,
+  "overfit_gate": "PASS",
+  "contract": "betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_deleaked_2026.json"
+}

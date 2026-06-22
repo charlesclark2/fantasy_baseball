@@ -1,0 +1,23 @@
+{
+  "target": "run_diff",
+  "tier": "pre_lineup",
+  "model_class": "ngboost_normal",
+  "metric": "crps",
+  "n_features": 124,
+  "n_trials": 50,
+  "smoke": false,
+  "seed": 42,
+  "best_params": {
+    "n_estimators": 500,
+    "learning_rate": 0.005488220787788181,
+    "minibatch_frac": 0.5773490856840877
+  },
+  "best_cv_score": 2.437207976845046,
+  "noise_floor": 0.02,
+  "pbo": 0.099,
+  "pbo_pass": true,
+  "dsr": 0.9999954868003399,
+  "dsr_pass": true,
+  "overfit_gate": "PASS",
+  "contract": "betting_ml/models/run_differential/feature_columns_pre_lineup_run_diff.json"
+}

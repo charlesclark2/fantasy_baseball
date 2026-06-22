@@ -1,0 +1,97 @@
+{
+  "target": "total_runs",
+  "tier": "pre_lineup",
+  "metric": "crps",
+  "n_features": 87,
+  "n_folds": 3,
+  "seed": 42,
+  "smoke": false,
+  "winner": "glm_elasticnet",
+  "winner_within_noise_tie": 4,
+  "pbo_slate": 0.543,
+  "noise_floor": 0.02,
+  "table": [
+    {
+      "candidate": "ngboost_normal",
+      "is_floor": false,
+      "crps_mean": 2.374474488925276,
+      "nll_mean": 2.868895315545405,
+      "mae_mean": 3.360099626204385,
+      "calibration": 0.06544165894401431,
+      "n": 4857
+    },
+    {
+      "candidate": "ngboost_lognormal",
+      "is_floor": false,
+      "crps_mean": 2.3768366842206254,
+      "nll_mean": 2.8752232792950365,
+      "mae_mean": 3.359754659970717,
+      "calibration": 0.06665817541314033,
+      "n": 4857
+    },
+    {
+      "candidate": "glm_elasticnet",
+      "is_floor": false,
+      "crps_mean": 2.378137187877885,
+      "nll_mean": 2.8677565084612606,
+      "mae_mean": 3.3662768602324977,
+      "calibration": 0.05826085530362126,
+      "n": 4857
+    },
+    {
+      "candidate": "catboost",
+      "is_floor": false,
+      "crps_mean": 2.380029742151055,
+      "nll_mean": 2.8951172280101574,
+      "mae_mean": 3.3483475011360566,
+      "calibration": 0.0753160687627301,
+      "n": 4857
+    },
+    {
+      "candidate": "stack_mean",
+      "is_floor": false,
+      "crps_mean": 2.4130522400291254,
+      "nll_mean": 2.9819520908911414,
+      "mae_mean": 3.3489729770945167,
+      "calibration": 0.10809946281748485,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_market",
+      "is_floor": true,
+      "crps_mean": 2.418194946733283,
+      "nll_mean": 2.887203739757806,
+      "mae_mean": 3.4054975152619287,
+      "calibration": NaN,
+      "n": 4857
+    },
+    {
+      "candidate": "xgboost",
+      "is_floor": false,
+      "crps_mean": 2.446797695391599,
+      "nll_mean": 3.0246265842907833,
+      "mae_mean": 3.379682336983574,
+      "calibration": 0.1108849727933756,
+      "n": 4857
+    },
+    {
+      "candidate": "floor_no_skill",
+      "is_floor": true,
+      "crps_mean": 2.480679195925022,
+      "nll_mean": 2.9065031737133116,
+      "mae_mean": 3.512412190836145,
+      "calibration": 0.10808358934450968,
+      "n": 4857
+    },
+    {
+      "candidate": "lightgbm",
+      "is_floor": false,
+      "crps_mean": 2.619073000464653,
+      "nll_mean": 4.011480920498339,
+      "mae_mean": 3.3833985559301936,
+      "calibration": 0.20298136884836473,
+      "n": 4857
+    }
+  ],
+  "contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json"
+}

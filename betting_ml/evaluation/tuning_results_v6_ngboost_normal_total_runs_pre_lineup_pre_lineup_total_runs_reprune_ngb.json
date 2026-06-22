@@ -1,0 +1,24 @@
+{
+  "target": "total_runs",
+  "tier": "pre_lineup",
+  "model_class": "ngboost_normal",
+  "metric": "crps",
+  "n_features": 14,
+  "n_trials": 50,
+  "smoke": false,
+  "seed": 42,
+  "best_params": {
+    "n_estimators": 280,
+    "learning_rate": 0.006747763348035857,
+    "minibatch_frac": 0.600118882478347
+  },
+  "best_cv_score": 2.472561741883614,
+  "noise_floor": 0.02,
+  "pbo": 0.054,
+  "pbo_pass": true,
+  "dsr": 0.41891462722188116,
+  "dsr_pass": true,
+  "overfit_gate": "PASS",
+  "contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs_reprune_ngb.json",
+  "variant": "pre_lineup_total_runs_reprune_ngb"
+}
