@@ -1,3 +1,12 @@
+> ⚠️ **E13.3 ADDENDUM (2026-06-21) — the `bullpen` promote below is RETRACTED as leak-inflated.**
+> `bullpen_v2` was trained (2026-06-10) on the leaky `eb_bullpen_xwoba` columns (the `outs_in_game`
+> within-game leak proven by E2.1b; de-leaked by E1.7 on 2026-06-18). Its Layer-3 promote (the
+> **largest** delta + stacking weight on both targets) inherits that peek. On de-leaked data the
+> bullpen signal is expected to fall below the gate (defer/reject) — only data-depth survives.
+> **No live impact** (Layer-3 stack is unserved — inert registry stubs). run_env + offense are
+> bullpen-clean and stand unchanged. Defer-vs-reject pending the pre-registered operator re-eval.
+> Full analysis: [`e13_3_submodel_meta_reeval.md`](e13_3_submodel_meta_reeval.md).
+
 # Layer 3 Signal Promotion Log (Epic 9, Story 9.5)
 
 Durable audit of each sub-model signal group's Layer 3 evaluation. Source of
