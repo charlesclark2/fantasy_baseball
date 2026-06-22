@@ -15,7 +15,23 @@
 -- pitch_sk stays unique across the whole table. The complete 2015→present
 -- history is retained for the ~30 downstream marts that scan it. Use
 -- `--full-refresh` (after DROP) to rebuild from scratch.
+--
+-- E11.1-W1 duckdb target: reads pre-exported S3 Parquet (output of
+-- scripts/export_statcast_to_s3.py). No transforms needed — pitch_sk is
+-- already computed. Run export script before first duckdb build.
 -- =============================================================================
+
+{% if target.name == 'duckdb' %}
+
+{{
+    config(materialized='view')
+}}
+
+-- Read-through view over S3 Parquet exported by scripts/export_statcast_to_s3.py.
+-- pitch_sk is pre-computed; md5_number_upper64 is Snowflake-only and not called here.
+select * from read_parquet('{{ lakehouse_loc("stg_batter_pitches") }}**/*.parquet', union_by_name=true)
+
+{% else %}
 
 {{
     config(
@@ -450,5 +466,7 @@ select
             inning_half::varchar
         )
     )                                                   as pitch_sk,
-    * 
+    *
 from renamed
+
+{% endif %}

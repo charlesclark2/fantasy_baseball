@@ -184,6 +184,29 @@ def ingest_oaa(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def ingest_statcast_to_s3_op(context):
+    # E11.1-W1 parallel track: write today's Statcast directly to S3 Parquet
+    # (bypassing Snowflake). Runs after ingest_statcast so both pipelines don't
+    # hit Baseball Savant simultaneously. Soft-fail — Snowflake path is primary
+    # during the parallel validation window.
+    try:
+        _run_script(context, "ingest_statcast_to_s3.py")
+    except Exception as e:
+        context.log.warning(f"Statcast→S3 ingest failed (non-fatal, Snowflake path still live): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def run_w1_lakehouse_op(context):
+    # E11.1-W1 parallel track: rebuild mart_pitch_* S3 Parquets from the fresh
+    # stg_batter_pitches data. Dead-end branch during the validation window —
+    # nothing downstream depends on these until Snowflake mart_pitch_* is decommissioned.
+    try:
+        _run_script(context, "run_w1_lakehouse.py")
+    except Exception as e:
+        context.log.warning(f"W1 lakehouse rebuild failed (non-fatal): {e}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def compute_elo(context):
     _run_script(context, "/app/betting_ml/scripts/compute_elo.py")
 

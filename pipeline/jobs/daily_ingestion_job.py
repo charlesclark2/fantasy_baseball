@@ -35,6 +35,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_oaa,
     ingest_sprint_speed,
     ingest_statcast,
+    ingest_statcast_to_s3_op,
     ingest_statsapi_schedule,
     ingest_transactions,
     ingest_umpire_scorecards,
@@ -42,6 +43,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_umpires_late,
     ingest_weather,
     predict_today_morning,
+    run_w1_lakehouse_op,
     settle_user_bets_op,
     update_lineup_state_scd2,
     update_market_features_scd2,
@@ -149,4 +151,11 @@ def daily_ingestion_job():
     s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
     s22 = compute_model_health(start=s21)
-    backfill_prediction_log(start=s22)
+    s23 = backfill_prediction_log(start=s22)
+    # E11.1-W1 parallel validation track: direct Savant→S3 ingest + lakehouse rebuild.
+    # Chained after backfill_prediction_log so the full critical prediction path
+    # (ingest → dbt → signals → SCD-2 → posteriors → predict → serve) is done before
+    # these run. soft-fail dead-end branches; nothing downstream depends on them during
+    # the parallel validation window.
+    s3_ingest = ingest_statcast_to_s3_op(start=s23)
+    run_w1_lakehouse_op(start=s3_ingest)
