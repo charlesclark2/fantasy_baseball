@@ -691,11 +691,13 @@ WITH ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY inserted_at DESC
+            ORDER BY
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
     WHERE game_date = %(target_date)s
-      AND prediction_type = 'post_lineup'
+      AND prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (
     SELECT r.*, g.game_date AS game_start_utc
