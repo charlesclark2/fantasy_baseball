@@ -246,7 +246,8 @@ def _champion_cols(name: str, cfg: dict, df: pd.DataFrame) -> list[str]:
 def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         refresh_cache: bool, use_champion: bool, embargo_days: int,
         bullpen_version: str = "static", shrinkage_k: float = 1.0,
-        stuff_plus_version: str = "leaky") -> dict:
+        stuff_plus_version: str = "leaky", scorer: str | None = None,
+        input_contract: str | None = None) -> dict:
     cfg = _TARGETS[target]
     metric = cfg["metric"]
     df = get_cached_df("edge_e1_training", load_features, refresh=refresh_cache).reset_index(drop=True)
@@ -260,13 +261,26 @@ def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         print("E1.8 re-check: swapping LEAKY season-to-date Stuff+/arsenal → prior-season (leakage-safe) ...")
         df = _swap_stuff_plus_deleaked(df).reset_index(drop=True)
 
-    # The feature set we audit: the champion-of-record contract (use_champion) or the active
-    # tuned challenger contract (default — that is the set E2–E4 would inherit).
-    if use_champion:
+    # The feature set we audit: an explicit --input-contract (E1.9 winner-conditioned re-prune,
+    # e.g. the morning/pre_lineup contract), else the champion-of-record (use_champion) or the
+    # active tuned challenger contract (default — the set E2–E4 would inherit).
+    if input_contract:
+        feat_cols = _contract_cols(input_contract, df)
+    elif use_champion:
         feat_cols = _champion_cols(target, cfg, df)
-        spec, _ = _build_specs(target, cfg, seed=seed)
     else:
         feat_cols = _contract_cols(cfg["challenger_contract"], df)
+    # The importance SCORER: --scorer pins the bake-off-winner learner (E1.9) so the prune is
+    # conditioned on the model v6 will actually train, not the incumbent. Default = the
+    # incumbent champion (use_champion) / challenger spec.
+    if scorer:
+        from betting_ml.scripts.optuna_hpo import _DEFAULT_PARAMS, _make_spec
+        kind = "clf" if cfg["kind"] == "classification" else "reg"
+        spec = _make_spec(scorer, kind, _DEFAULT_PARAMS[scorer], seed=seed)
+        spec.name = f"{scorer}(scorer)"
+    elif use_champion:
+        spec, _ = _build_specs(target, cfg, seed=seed)
+    else:
         _, spec = _build_specs(target, cfg, seed=seed)
     print(f"Auditing {len(feat_cols)} features with recipe {spec.name}")
 
@@ -321,6 +335,7 @@ def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         "pooled_baseline": float(np.concatenate(base_scores).mean()),
         "bullpen_version": bullpen_version,
         "stuff_plus_version": stuff_plus_version,
+        "scorer": scorer, "input_contract": input_contract,
         "clusters": rows,
     }
     suffix_parts = []
@@ -328,6 +343,11 @@ def run(target: str, *, corr_threshold: float, n_repeats: int, seed: int,
         suffix_parts.append(f"bullpen_{bullpen_version}")
     if stuff_plus_version != "leaky":
         suffix_parts.append(f"stuffplus_{stuff_plus_version}")
+    if scorer:
+        suffix_parts.append(f"scorer_{scorer}")
+    if input_contract:  # tag morning/alt contracts so they don't collide with the default audit
+        tag = Path(input_contract).stem.replace("feature_columns_", "")
+        suffix_parts.append(tag)
     _write_report(payload, suffix=("_" + "_".join(suffix_parts)) if suffix_parts else "")
     return payload
 
@@ -367,6 +387,7 @@ def _write_report(payload: dict, suffix: str = "") -> None:
     target = payload["target"]
     jpath = _JSON_DIR / f"clustered_importance_{target}{suffix}.json"
     jpath.write_text(json.dumps(payload, indent=2, default=float))
+    payload["_json_path"] = str(jpath)  # for in-memory chaining (reprune.py); not in the written file
 
     rows = payload["clusters"]
     n_noise = sum(r["is_noise"] for r in rows)
@@ -435,11 +456,19 @@ def main() -> None:
                          "Stuff+/arsenal block to the starter's PRIOR-SEASON arsenal (leakage-safe) "
                          "and writes *_stuffplus_deleaked outputs, to compare whether the Stuff+ "
                          "block's importance survives the de-leak.")
+    ap.add_argument("--scorer", choices=["xgboost", "lightgbm", "catboost", "ngboost_normal",
+                                         "ngboost_lognormal", "glm_elasticnet"], default=None,
+                    help="E1.9 winner-conditioned re-prune: pin the bake-off-winner learner as the "
+                         "MDA importance scorer (default config) instead of the incumbent champion.")
+    ap.add_argument("--input-contract", default=None,
+                    help="E1.9: audit an explicit feature-set contract (e.g. the pre_lineup morning "
+                         "contract that was never clustered-MDA-pruned) instead of the default set.")
     args = ap.parse_args()
     run(args.target, corr_threshold=args.corr_threshold, n_repeats=args.n_repeats,
         seed=args.seed, refresh_cache=args.refresh_cache, use_champion=args.use_champion,
         embargo_days=args.embargo_days, bullpen_version=args.bullpen_version,
-        shrinkage_k=args.shrinkage_k, stuff_plus_version=args.stuff_plus_version)
+        shrinkage_k=args.shrinkage_k, stuff_plus_version=args.stuff_plus_version,
+        scorer=args.scorer, input_contract=args.input_contract)
 
 
 if __name__ == "__main__":
