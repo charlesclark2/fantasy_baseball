@@ -8,8 +8,6 @@ from pipeline.ops.sensor_ops import (
     lineup_dbt_staging_rebuild,
     lineup_ingest_umpires,
     lineup_predict,
-    pregame_dbt_clv_rebuild,
-    pregame_odds_snapshot,
 )
 from pipeline.ops.daily_ingestion_ops import (
     compute_elo,
@@ -70,12 +68,6 @@ def lineup_monitor_job():
     s3n = generate_pick_narratives_op(start=s3)
     clv = lineup_dbt_clv_rebuild(start=s3n)
     write_serving_store_op(predict_done=clv)
-
-
-@job(executor_def=in_process_executor, tags={"concurrency_group": "pregame_snapshot"})
-def pregame_snapshot_job():
-    start = pregame_odds_snapshot()
-    pregame_dbt_clv_rebuild(start=start)
 
 
 @job(executor_def=in_process_executor, tags={"concurrency_group": "statcast_catchup"})

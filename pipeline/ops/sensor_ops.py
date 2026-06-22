@@ -221,23 +221,3 @@ def lineup_dbt_clv_rebuild(context: OpExecutionContext) -> None:
     ])
 
 
-# ── Pre-game Snapshot job ops ─────────────────────────────────────────────────
-
-@op(out=Out(Nothing))
-def pregame_odds_snapshot(context: OpExecutionContext) -> None:
-    """Pre-game odds snapshot stub — Parlay API decommissioned 2026-06-16 (E11.6).
-    Live odds now come from The Odds API Railway cron (services/odds_capture/).
-    This op is a no-op retained so pregame_snapshot_job can still be launched
-    from the Dagster UI for manual CLV rebuilds without triggering the dead API."""
-
-
-@op(ins={"start": In(Nothing)}, out=Out(Nothing))
-def pregame_dbt_clv_rebuild(context: OpExecutionContext) -> None:
-    """Rebuild CLV mart with the new pre-game snapshot."""
-    _run_dbt(context, [
-        "run",
-        "--select",
-        "mart_closing_line_value",
-        "mart_prediction_clv",
-        "--target", "baseball_betting_and_fantasy",
-    ])
