@@ -1,0 +1,164 @@
+{
+  "target": "perside_runs",
+  "metric": "crps",
+  "n_eval": 11404,
+  "n_configs": 4,
+  "pbo": {
+    "pbo": 0.217,
+    "n_combos": 1000,
+    "n_configs": 4,
+    "n_slices": 16,
+    "clears_live": false,
+    "threshold": 0.2
+  },
+  "candidates": {
+    "candidate": {
+      "extra_cols": [
+        "opp_starter_tto3_xwoba_penalty"
+      ],
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 11404,
+          "base_metric": 1.705651594542482,
+          "cand_metric": 1.705651594542482,
+          "lift": 0.0,
+          "lift_pct": 0.0
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 9628,
+          "base_metric": 1.6865833276349713,
+          "cand_metric": 1.6865833276349713,
+          "lift": 0.0,
+          "lift_pct": 0.0
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1776,
+          "base_metric": 1.8090239333856761,
+          "cand_metric": 1.8090239333856761,
+          "lift": 0.0,
+          "lift_pct": 0.0
+        }
+      },
+      "dsr": null,
+      "orthogonality": {
+        "opp_starter_tto3_xwoba_penalty": {
+          "max_abs_corr": 0.6886,
+          "vs": "off_lineup_cluster_slot_coverage"
+        }
+      },
+      "gate": {
+        "lift_positive_all_and_noncold": false,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "SHIP": false
+      }
+    },
+    "sanity_noise": {
+      "extra_cols": [
+        "__sanity_noise__"
+      ],
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 11404,
+          "base_metric": 1.705651594542482,
+          "cand_metric": 1.704065186503567,
+          "lift": 0.001586408038914966,
+          "lift_pct": 0.0009300891483295558
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 9628,
+          "base_metric": 1.6865833276349713,
+          "cand_metric": 1.6854506046235964,
+          "lift": 0.0011327230113749032,
+          "lift_pct": 0.0006716080924168007
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1776,
+          "base_metric": 1.8090239333856761,
+          "cand_metric": 1.8049780211546684,
+          "lift": 0.004045912231007698,
+          "lift_pct": 0.00223651669629134
+        }
+      },
+      "dsr": {
+        "dsr": 0.7263151962341823,
+        "observed_sr": 0.013619434021195592,
+        "sr0": 0.007985845008913414,
+        "n_trials": 3,
+        "n_obs": 11404,
+        "passes_live": false,
+        "threshold": 0.95
+      },
+      "orthogonality": {
+        "__sanity_noise__": {
+          "max_abs_corr": 0.0309,
+          "vs": "right_center_ft"
+        }
+      },
+      "gate": {
+        "lift_positive_all_and_noncold": true,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "SHIP": false
+      }
+    },
+    "sanity_dup": {
+      "extra_cols": [
+        "__sanity_dup__is_home"
+      ],
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 11404,
+          "base_metric": 1.705651594542482,
+          "cand_metric": 1.7043018041908597,
+          "lift": 0.0013497903516221932,
+          "lift_pct": 0.00079136346246858
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 9628,
+          "base_metric": 1.6865833276349713,
+          "cand_metric": 1.6860012469430052,
+          "lift": 0.0005820806919660804,
+          "lift_pct": 0.00034512418238019047
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1776,
+          "base_metric": 1.8090239333856761,
+          "cand_metric": 1.8035122575592952,
+          "lift": 0.005511675826380902,
+          "lift_pct": 0.0030467677760711177
+        }
+      },
+      "dsr": {
+        "dsr": 0.6520791715601615,
+        "observed_sr": 0.011648228714368835,
+        "sr0": 0.007985845008913414,
+        "n_trials": 3,
+        "n_obs": 11404,
+        "passes_live": false,
+        "threshold": 0.95
+      },
+      "orthogonality": {
+        "__sanity_dup__is_home": {
+          "max_abs_corr": 1.0,
+          "vs": "is_home"
+        }
+      },
+      "gate": {
+        "lift_positive_all_and_noncold": true,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "SHIP": false
+      }
+    }
+  }
+}
