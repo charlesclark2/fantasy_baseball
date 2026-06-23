@@ -10,11 +10,13 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  Clock,
   Database,
   Eye,
   FlaskConical,
   Pencil,
   ShieldCheck,
+  XCircle,
   Zap,
 } from "lucide-react"
 
@@ -26,6 +28,7 @@ type YesterdayResult = {
   matchup: string
   market_type: string
   outcome: string
+  status?: "win" | "loss" | "pending"
 }
 
 type FeaturedPick = {
@@ -272,10 +275,22 @@ function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
                         <span className="text-gray-400 font-medium">Yesterday:</span>{" "}
                         {pick.yesterday.matchup}
                       </span>
-                      <Badge className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/25 text-xs">
-                        <CheckCircle2 className="mr-1 h-3 w-3" />
-                        {pick.yesterday.outcome}
-                      </Badge>
+                      {pick.yesterday.status === "win" ? (
+                        <Badge className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/25 text-xs">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          {pick.yesterday.outcome}
+                        </Badge>
+                      ) : pick.yesterday.status === "loss" ? (
+                        <Badge className="bg-red-500/10 text-red-400 border border-red-500/25 text-xs">
+                          <XCircle className="mr-1 h-3 w-3" />
+                          {pick.yesterday.outcome}
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-500/10 text-gray-400 border border-gray-500/25 text-xs">
+                          <Clock className="mr-1 h-3 w-3" />
+                          {pick.yesterday.outcome}
+                        </Badge>
+                      )}
                     </div>
                   </>
                 )}
