@@ -4,11 +4,11 @@
   "n_eval": 11404,
   "n_configs": 4,
   "pbo": {
-    "pbo": 0.217,
+    "pbo": 0.189,
     "n_combos": 1000,
     "n_configs": 4,
     "n_slices": 16,
-    "clears_live": false,
+    "clears_live": true,
     "threshold": 0.2
   },
   "candidates": {
@@ -16,79 +16,93 @@
       "extra_cols": [
         "opp_starter_tto3_xwoba_penalty"
       ],
+      "candidate_eval_std": 0.01592751461411362,
       "lift": {
         "all": {
           "stratum": "all",
           "n": 11404,
-          "base_metric": 1.705651594542482,
-          "cand_metric": 1.705651594542482,
-          "lift": 0.0,
-          "lift_pct": 0.0
+          "base_metric": 1.7054855938810771,
+          "cand_metric": 1.7048507643625417,
+          "lift": 0.0006348295185354402,
+          "lift_pct": 0.0003722280157704496
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 9628,
-          "base_metric": 1.6865833276349713,
-          "cand_metric": 1.6865833276349713,
-          "lift": 0.0,
-          "lift_pct": 0.0
+          "n": 9631,
+          "base_metric": 1.687714110232765,
+          "cand_metric": 1.6870957013484689,
+          "lift": 0.0006184088842962066,
+          "lift_pct": 0.00036641803285683095
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1776,
-          "base_metric": 1.8090239333856761,
-          "cand_metric": 1.8090239333856761,
-          "lift": 0.0,
-          "lift_pct": 0.0
+          "n": 1773,
+          "base_metric": 1.8020209345561429,
+          "cand_metric": 1.8012969075596845,
+          "lift": 0.000724026996458349,
+          "lift_pct": 0.00040178611833756783
         }
       },
-      "dsr": null,
+      "dsr": {
+        "dsr": 0.3944842470640116,
+        "observed_sr": 0.005478763175876482,
+        "sr0": 0.007985845008913414,
+        "n_trials": 3,
+        "n_obs": 11404,
+        "passes_live": false,
+        "threshold": 0.95
+      },
       "orthogonality": {
         "opp_starter_tto3_xwoba_penalty": {
-          "max_abs_corr": 0.6886,
-          "vs": "off_lineup_cluster_slot_coverage"
+          "max_abs_corr": 0.0921,
+          "vs": "off_avg_eb_woba_uncertainty"
         }
       },
+      "degenerate": false,
+      "degenerate_reason": null,
       "gate": {
-        "lift_positive_all_and_noncold": false,
-        "pbo_clears_live": false,
+        "lift_positive_all_and_noncold": true,
+        "pbo_clears_live": true,
         "dsr_passes_live": false,
+        "not_degenerate": true,
         "SHIP": false
-      }
+      },
+      "verdict": "NO-SHIP (record null)"
     },
     "sanity_noise": {
       "extra_cols": [
         "__sanity_noise__"
       ],
+      "candidate_eval_std": 0.9996648224230092,
       "lift": {
         "all": {
           "stratum": "all",
           "n": 11404,
-          "base_metric": 1.705651594542482,
-          "cand_metric": 1.704065186503567,
-          "lift": 0.001586408038914966,
-          "lift_pct": 0.0009300891483295558
+          "base_metric": 1.7054855938810771,
+          "cand_metric": 1.7035922640174566,
+          "lift": 0.001893329863620563,
+          "lift_pct": 0.001110141223363851
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 9628,
-          "base_metric": 1.6865833276349713,
-          "cand_metric": 1.6854506046235964,
-          "lift": 0.0011327230113749032,
-          "lift_pct": 0.0006716080924168007
+          "n": 9631,
+          "base_metric": 1.687714110232765,
+          "cand_metric": 1.6859997301980774,
+          "lift": 0.0017143800346877125,
+          "lift_pct": 0.0010158000245973353
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1776,
-          "base_metric": 1.8090239333856761,
-          "cand_metric": 1.8049780211546684,
-          "lift": 0.004045912231007698,
-          "lift_pct": 0.00223651669629134
+          "n": 1773,
+          "base_metric": 1.8020209345561429,
+          "cand_metric": 1.7991555427622072,
+          "lift": 0.0028653917939356344,
+          "lift_pct": 0.0015900990598876762
         }
       },
       "dsr": {
-        "dsr": 0.7263151962341823,
-        "observed_sr": 0.013619434021195592,
+        "dsr": 0.8156712523282034,
+        "observed_sr": 0.01640616748660043,
         "sr0": 0.007985845008913414,
         "n_trials": 3,
         "n_obs": 11404,
@@ -97,50 +111,55 @@
       },
       "orthogonality": {
         "__sanity_noise__": {
-          "max_abs_corr": 0.0309,
-          "vs": "right_center_ft"
+          "max_abs_corr": 0.031,
+          "vs": "opp_pit_bb_pct_7d"
         }
       },
+      "degenerate": false,
+      "degenerate_reason": null,
       "gate": {
         "lift_positive_all_and_noncold": true,
-        "pbo_clears_live": false,
+        "pbo_clears_live": true,
         "dsr_passes_live": false,
+        "not_degenerate": true,
         "SHIP": false
-      }
+      },
+      "verdict": "NO-SHIP (record null)"
     },
     "sanity_dup": {
       "extra_cols": [
         "__sanity_dup__is_home"
       ],
+      "candidate_eval_std": 0.5000219235744301,
       "lift": {
         "all": {
           "stratum": "all",
           "n": 11404,
-          "base_metric": 1.705651594542482,
-          "cand_metric": 1.7043018041908597,
-          "lift": 0.0013497903516221932,
-          "lift_pct": 0.00079136346246858
+          "base_metric": 1.7054855938810771,
+          "cand_metric": 1.704511918244758,
+          "lift": 0.0009736756363192267,
+          "lift_pct": 0.0005709081564878471
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 9628,
-          "base_metric": 1.6865833276349713,
-          "cand_metric": 1.6860012469430052,
-          "lift": 0.0005820806919660804,
-          "lift_pct": 0.00034512418238019047
+          "n": 9631,
+          "base_metric": 1.687714110232765,
+          "cand_metric": 1.6870095045184588,
+          "lift": 0.0007046057143063056,
+          "lift_pct": 0.0004174911556609124
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1776,
-          "base_metric": 1.8090239333856761,
-          "cand_metric": 1.8035122575592952,
-          "lift": 0.005511675826380902,
-          "lift_pct": 0.0030467677760711177
+          "n": 1773,
+          "base_metric": 1.8020209345561429,
+          "cand_metric": 1.799585661390831,
+          "lift": 0.002435273165311891,
+          "lift_pct": 0.0013514122497759577
         }
       },
       "dsr": {
-        "dsr": 0.6520791715601615,
-        "observed_sr": 0.011648228714368835,
+        "dsr": 0.5179145660967295,
+        "observed_sr": 0.008406708268784256,
         "sr0": 0.007985845008913414,
         "n_trials": 3,
         "n_obs": 11404,
@@ -153,12 +172,16 @@
           "vs": "is_home"
         }
       },
+      "degenerate": false,
+      "degenerate_reason": null,
       "gate": {
         "lift_positive_all_and_noncold": true,
-        "pbo_clears_live": false,
+        "pbo_clears_live": true,
         "dsr_passes_live": false,
+        "not_degenerate": true,
         "SHIP": false
-      }
+      },
+      "verdict": "NO-SHIP (record null)"
     }
   }
 }

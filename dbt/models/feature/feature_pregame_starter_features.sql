@@ -489,6 +489,42 @@ platoon_rhb as (
         and hs.game_year    = year(pp.game_date) - 1
 ),
 
+-- ── E13.4 Candidate B1: times-through-order penalty (prior season; leak-clean) ──
+-- The starter's prior-season 3rd-time-through xwOBA-against fade. Joined on
+-- game_year - 1 (same doctrine as platoon/arsenal). NULL for rookies/first-MLB-season
+-- starters → the downstream shrink collapses to the league baseline below.
+tto_splits as (
+    select
+        pp.game_pk,
+        pp.pitcher_id,
+        ts.tto3_xwoba_penalty,
+        ts.tto_min_bf
+    from probable_pitchers pp
+    left join {{ ref('mart_starter_tto_splits') }} ts
+        on  ts.pitcher_id = pp.pitcher_id
+        and ts.season     = year(pp.game_date) - 1
+),
+
+-- BF-weighted prior-season league-mean TTO penalty — the empirical-Bayes shrink prior
+-- (and the cold-start fill). Weighted by the binding bucket's batters-faced so noisy
+-- small-sample pitcher-seasons don't distort the league anchor.
+tto_yr_baseline as (
+    select
+        season,
+        sum(tto3_xwoba_penalty * tto_min_bf) / nullif(sum(tto_min_bf), 0) as league_tto_penalty
+    from {{ ref('mart_starter_tto_splits') }}
+    where tto3_xwoba_penalty is not null
+    group by season
+),
+
+-- All-seasons pooled fallback for the earliest data year (no prior season to anchor on).
+tto_all_baseline as (
+    select
+        sum(tto3_xwoba_penalty * tto_min_bf) / nullif(sum(tto_min_bf), 0) as league_tto_penalty_all
+    from {{ ref('mart_starter_tto_splits') }}
+    where tto3_xwoba_penalty is not null
+),
+
 final as (
     select
         pp.game_pk,
@@ -664,7 +700,25 @@ final as (
         -- archetype/Stuff+/platoon values above are population baselines, not the
         -- pitcher's own prior-season profile. Exposed for the E13.4 lift-tests
         -- (stratify) and future MiLB-prior models (Epic 7) to condition on.
-        (pa.starter_pitcher_archetype is null)::boolean as is_cold_start
+        (pa.starter_pitcher_archetype is null)::boolean as is_cold_start,
+
+        -- ── E13.4 Candidate B1: times-through-order penalty (eval-only) ────────
+        -- The starter's 3rd-time-through xwOBA-against fade (3rd+ minus 1st time),
+        -- from his PRIOR season, empirical-Bayes shrunk toward the prior-season
+        -- league mean by the binding bucket's batters-faced (k=150 pseudo-PA, so a
+        -- <150-BF sample regresses hard — a short-sample fade is mostly variance).
+        -- Cold-start starters (no prior season) collapse to the league baseline.
+        -- NOT yet in any production contract — surfaced for the E13.4 lift-test only.
+        round(
+            (
+                coalesce(tts.tto_min_bf, 0)
+                  * coalesce(tts.tto3_xwoba_penalty,
+                             coalesce(tyb.league_tto_penalty, tab.league_tto_penalty_all))
+                + 150 * coalesce(tyb.league_tto_penalty, tab.league_tto_penalty_all)
+            ) / nullif(coalesce(tts.tto_min_bf, 0) + 150, 0)
+        , 4)                                    as starter_tto3_xwoba_penalty,
+        -- prior-season batters-faced backing the penalty (0 = cold-start, baseline-only).
+        coalesce(tts.tto_min_bf, 0)             as starter_tto_min_bf_prior
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -716,6 +770,13 @@ final as (
     left join pitcher_archetype pa
         on  pa.game_pk      = pp.game_pk
         and pa.pitcher_id   = pp.pitcher_id
+    -- E13.4 Candidate B1 TTO: prior-season penalty + year-1 league anchor + pooled fallback.
+    left join tto_splits tts
+        on  tts.game_pk     = pp.game_pk
+        and tts.pitcher_id  = pp.pitcher_id
+    left join tto_yr_baseline tyb
+        on  tyb.season      = year(pp.game_date) - 1
+    cross join tto_all_baseline tab
     -- E13.7 cold-start baselines: year-1 league means (leak-clean, prior season) with an
     -- all-seasons pooled fallback for the earliest data year. Platoon baselines are
     -- hand-specific (L for the LHB split, R for the RHB split).
