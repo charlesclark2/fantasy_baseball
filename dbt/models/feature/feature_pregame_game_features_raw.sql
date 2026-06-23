@@ -20,7 +20,19 @@
 -- This model assembles pre-computed features only — no new stat joins here.
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.9-T2 — incremental (was full-CTAS `table`). Every intraday/daily rebuild
+-- previously did a `create or replace` of ALL history (~25.7k games) on each tick
+-- (~3,233×/7d); now only the recent-window games are re-materialized. delete+insert
+-- replaces whole rows by game_pk (cleaner than a ~700-col MERGE SET); the weekly
+-- Sunday `dbtf build --full-refresh` net corrects any drift. The is_incremental()
+-- spine filter below is the ONLY behavioural change — every E1.8 as-of `< game_date`
+-- guard downstream is untouched, so point-in-time semantics are byte-for-byte identical.
+{{ config(
+    materialized='incremental',
+    unique_key='game_pk',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns'
+) }}
 
 with
 
@@ -37,6 +49,16 @@ games as (
         is_scheduled
     from {{ ref('mart_game_spine') }}
     where game_type = 'R'
+    -- E11.9-T2 incremental scope. A game's features change all day (lineups,
+    -- weather, odds, EB posteriors) AND again when it completes (is_scheduled
+    -- flips true→false, switching the as-of CTEs from carry-forward to the exact
+    -- game_pk row), so "today only" under-scopes. Re-materialize every game in a
+    -- generous trailing window (covers the ≤2-day settle of completed games + the
+    -- spine's -1..+2 scheduled cushion, over-scoped to N=7). Older rows never
+    -- change except via backfills, which the weekly full-refresh corrects.
+    {% if is_incremental() %}
+    and game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
+    {% endif %}
 ),
 
 home_lineup as (

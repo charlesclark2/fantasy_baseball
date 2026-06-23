@@ -90,6 +90,15 @@ query-comment:
   comment: "job={{ env_var('DBT_JOB_NAME', 'dbt_manual') }} model={{ node.name }}"
   append: true
 
+# E11.9-T2 — trailing-day window for the incremental rebuild of
+# feature_pregame_game_features(_raw). Every game with game_date in the last N
+# days is re-materialized on each run (covers the morning→post-game feature
+# transition + late-settling inputs). Over-scoped to 7 for safety; the weekly
+# full-refresh corrects anything older. Override at the CLI with
+# `--vars 'pregame_incremental_lookback_days: <N>'`.
+vars:
+  pregame_incremental_lookback_days: 7
+
 models:
   baseball_betting_and_fantasy:
     staging:
