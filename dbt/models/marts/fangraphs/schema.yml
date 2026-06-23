@@ -126,20 +126,34 @@ models:
       per batter per season. ZiPS is the base; leaderboard enriches with rolling
       in-season actuals via LEFT JOIN. Use proj_* columns as early-season priors
       and rolling_wrc_plus_* columns to track in-season form.
+      NOTE: NOT a betting-model input — lineage dead-ends at profile marts;
+      clustering is Statcast-derived. Maintained for fantasy use. Tests are
+      severity:warn (E11.7: non-serving peripheral asset).
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [fg_batter_id, season]
+          config:
+            severity: warn
     columns:
       - name: fg_batter_id
         description: FanGraphs batter ID. Primary grain key.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: batter_name
         description: Batter's full name.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: season
         description: MLB season year.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: proj_wrc_plus
         description: ZiPS projected wRC+. League average is 100.
       - name: proj_obp
