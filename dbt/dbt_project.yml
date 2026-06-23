@@ -8,14 +8,6 @@ version: '1.0.0'
 # This setting configures which "profile" dbt uses for this project.
 profile: 'baseball_betting_and_fantasy'
 
-# E11.1-W1: dbt-duckdb adapter adds `format` and `overwrite` to the `external`
-# materialization config, but dbt-fusion's schema only knows `location`. Demote
-# UnusedConfigKey (dbt1060) to a warning so the adapter-specific keys pass through.
-flags:
-  warn_error_options:
-    warn:
-      - UnusedConfigKey
-
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
 # found in the "models/" directory. You probably won't need to change these!
