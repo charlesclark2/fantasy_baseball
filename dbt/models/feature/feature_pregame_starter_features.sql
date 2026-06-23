@@ -234,6 +234,73 @@ arsenal_features as (
     where mlbam_pitcher_id is not null
 ),
 
+-- ── E13.7 cold-start league baselines (rookie / call-up fallback prior) ──────────────
+-- Pitchers with no prior-season profile (true rookies / call-ups, ~87% of NULL-archetype
+-- pitchers per the E13.7 scoping note) leave the prior-season Stuff+/platoon/archetype joins
+-- blank — ~15-27% of starters, RISING into the late-season recent window the E13.4 lift-tests
+-- judge edge on. Instead of a blank (preprocessing → train-mean / "__NA__"), fill with a
+-- LEAK-CLEAN league/role baseline = the EB prior at n=0 (full shrinkage to the population mean,
+-- since a true rookie has no MLB sample). PRODUCT/COVERAGE fix, NOT an edge play — the
+-- pitcher-specific prior is the MiLB-equivalent (Epic 7). See E13_7_cold_start_scoping.md.
+--
+-- Leak-clean: per-season league means are joined on year-1 in `final` (strictly prior season,
+-- mirroring the existing arsenal / platoon prior-season convention). `*_all_baseline` is an
+-- all-seasons fallback for the earliest data year only (year-1 absent); it pools full-history
+-- league means, which for a strictly-prior fill is leakage-immaterial (a stationary population
+-- constant, not a pitcher-specific or current-season value).
+arsenal_yr_baseline as (
+    select
+        season,
+        avg(overall_stuff_plus)    as base_stuff_plus,
+        avg(fastball_pct)          as base_fastball_pct,
+        avg(breaking_pct)          as base_breaking_pct,
+        avg(offspeed_pct)          as base_offspeed_pct,
+        avg(fastball_stuff_plus)   as base_fastball_stuff_plus,
+        avg(slider_stuff_plus)     as base_slider_stuff_plus,
+        avg(curveball_stuff_plus)  as base_curveball_stuff_plus,
+        avg(changeup_stuff_plus)   as base_changeup_stuff_plus,
+        avg(avg_fastball_velo_mph) as base_avg_fastball_velo
+    from arsenal_features
+    group by season
+),
+
+arsenal_all_baseline as (
+    select
+        avg(overall_stuff_plus)    as base_stuff_plus,
+        avg(fastball_pct)          as base_fastball_pct,
+        avg(breaking_pct)          as base_breaking_pct,
+        avg(offspeed_pct)          as base_offspeed_pct,
+        avg(fastball_stuff_plus)   as base_fastball_stuff_plus,
+        avg(slider_stuff_plus)     as base_slider_stuff_plus,
+        avg(curveball_stuff_plus)  as base_curveball_stuff_plus,
+        avg(changeup_stuff_plus)   as base_changeup_stuff_plus,
+        avg(avg_fastball_velo_mph) as base_avg_fastball_velo
+    from arsenal_features
+),
+
+platoon_yr_baseline as (
+    select
+        game_year   as season,
+        batter_hand,
+        avg(k_pct)          as base_k_pct,
+        avg(bb_pct)         as base_bb_pct,
+        avg(xwoba_against)  as base_xwoba,
+        avg(whiff_rate)     as base_whiff
+    from {{ ref('mart_pitcher_vs_handedness_splits') }}
+    group by game_year, batter_hand
+),
+
+platoon_all_baseline as (
+    select
+        batter_hand,
+        avg(k_pct)          as base_k_pct,
+        avg(bb_pct)         as base_bb_pct,
+        avg(xwoba_against)  as base_xwoba,
+        avg(whiff_rate)     as base_whiff
+    from {{ ref('mart_pitcher_vs_handedness_splits') }}
+    group by batter_hand
+),
+
 -- ZiPS pre-season FIP projections (Card 8.B)
 -- proj_xfip is NULL in current ingestion (FanGraphs ZiPS export does not include xFIP).
 -- fip_era_gap omitted: earned runs are not available in the pipeline.
@@ -498,17 +565,17 @@ final as (
         pgr.games_30d                                as appearances_30d,
         pgr.games_std                                as appearances_std,
 
-        -- ── Prior-season platoon splits vs LHB ───────────────────────────────
-        pl.k_pct_vs_lhb,
-        pl.bb_pct_vs_lhb,
-        pl.xwoba_vs_lhb,
-        pl.whiff_rate_vs_lhb,
+        -- ── Prior-season platoon splits vs LHB (E13.7: cold-start → league baseline) ──
+        coalesce(pl.k_pct_vs_lhb,      plbl.base_k_pct,  plal.base_k_pct)  as k_pct_vs_lhb,
+        coalesce(pl.bb_pct_vs_lhb,     plbl.base_bb_pct, plal.base_bb_pct) as bb_pct_vs_lhb,
+        coalesce(pl.xwoba_vs_lhb,      plbl.base_xwoba,  plal.base_xwoba)  as xwoba_vs_lhb,
+        coalesce(pl.whiff_rate_vs_lhb, plbl.base_whiff,  plal.base_whiff)  as whiff_rate_vs_lhb,
 
-        -- ── Prior-season platoon splits vs RHB ───────────────────────────────
-        pr.k_pct_vs_rhb,
-        pr.bb_pct_vs_rhb,
-        pr.xwoba_vs_rhb,
-        pr.whiff_rate_vs_rhb,
+        -- ── Prior-season platoon splits vs RHB (E13.7: cold-start → league baseline) ──
+        coalesce(pr.k_pct_vs_rhb,      plbr.base_k_pct,  plar.base_k_pct)  as k_pct_vs_rhb,
+        coalesce(pr.bb_pct_vs_rhb,     plbr.base_bb_pct, plar.base_bb_pct) as bb_pct_vs_rhb,
+        coalesce(pr.xwoba_vs_rhb,      plbr.base_xwoba,  plar.base_xwoba)  as xwoba_vs_rhb,
+        coalesce(pr.whiff_rate_vs_rhb, plbr.base_whiff,  plar.base_whiff)  as whiff_rate_vs_rhb,
 
         -- ── Recent IP trend, cumulative workload, and history flag ──────────
         -- avg_ip_last_3: average decimal innings over the 3 most recent starts
@@ -523,16 +590,18 @@ final as (
         (ips.game_pk is not null)::boolean       as has_ip_history,
 
         -- ── FanGraphs Stuff+ arsenal features (Card 7.F) ─────────────────────
-        af.overall_stuff_plus                    as starter_stuff_plus,
-        af.primary_pitch_type                    as starter_primary_pitch_type,
-        af.fastball_pct                          as starter_fastball_pct,
-        af.breaking_pct                          as starter_breaking_pct,
-        af.offspeed_pct                          as starter_offspeed_pct,
-        af.fastball_stuff_plus                   as starter_fastball_stuff_plus,
-        af.slider_stuff_plus                     as starter_slider_stuff_plus,
-        af.curveball_stuff_plus                  as starter_curveball_stuff_plus,
-        af.changeup_stuff_plus                   as starter_changeup_stuff_plus,
-        af.avg_fastball_velo_mph                 as starter_avg_fastball_velo,
+        -- E13.7: cold-start (rookie / call-up) NULLs → leak-clean prior-season league
+        -- baseline (year-1 first, all-seasons fallback for the earliest data year).
+        coalesce(af.overall_stuff_plus,   ayb.base_stuff_plus,           aab.base_stuff_plus)           as starter_stuff_plus,
+        coalesce(af.primary_pitch_type, 'league_baseline')               as starter_primary_pitch_type,
+        coalesce(af.fastball_pct,         ayb.base_fastball_pct,         aab.base_fastball_pct)         as starter_fastball_pct,
+        coalesce(af.breaking_pct,         ayb.base_breaking_pct,         aab.base_breaking_pct)         as starter_breaking_pct,
+        coalesce(af.offspeed_pct,         ayb.base_offspeed_pct,         aab.base_offspeed_pct)         as starter_offspeed_pct,
+        coalesce(af.fastball_stuff_plus,  ayb.base_fastball_stuff_plus,  aab.base_fastball_stuff_plus)  as starter_fastball_stuff_plus,
+        coalesce(af.slider_stuff_plus,    ayb.base_slider_stuff_plus,    aab.base_slider_stuff_plus)    as starter_slider_stuff_plus,
+        coalesce(af.curveball_stuff_plus, ayb.base_curveball_stuff_plus, aab.base_curveball_stuff_plus) as starter_curveball_stuff_plus,
+        coalesce(af.changeup_stuff_plus,  ayb.base_changeup_stuff_plus,  aab.base_changeup_stuff_plus)  as starter_changeup_stuff_plus,
+        coalesce(af.avg_fastball_velo_mph, ayb.base_avg_fastball_velo,   aab.base_avg_fastball_velo)    as starter_avg_fastball_velo,
 
         -- ── ZiPS projected FIP and trailing FIP/RA9 (Card 8.B) ───────────────
         -- proj_xfip is NULL in current ingestion (FanGraphs ZiPS export omits xFIP).
@@ -583,9 +652,19 @@ final as (
         eb.posterior_source,
 
         -- ── Prior-season pitcher archetype label (Story 7.4) ─────────────────
-        -- NULL for rookies or pitchers not in the prior-season cluster table.
-        -- Epic 7A falls back to the Dirichlet prior for NULL starters.
-        pa.starter_pitcher_archetype
+        -- E13.7: NULL (rookies / not in prior-season cluster table) → explicit
+        -- 'league_baseline' category — an honest "generic starter, profile unknown"
+        -- bucket (NOT the modal cluster, which would mislabel the pitcher). Paired
+        -- with is_cold_start so a retrained model can learn a rookie-specific offset.
+        coalesce(pa.starter_pitcher_archetype, 'league_baseline') as starter_pitcher_archetype,
+
+        -- ── E13.7 cold-start flag ─────────────────────────────────────────────
+        -- True when the starter had no prior-season archetype (the broadest of the
+        -- three cold-start blocks; ~87% true rookies/call-ups). Signals that the
+        -- archetype/Stuff+/platoon values above are population baselines, not the
+        -- pitcher's own prior-season profile. Exposed for the E13.4 lift-tests
+        -- (stratify) and future MiLB-prior models (Epic 7) to condition on.
+        (pa.starter_pitcher_archetype is null)::boolean as is_cold_start
 
     from probable_pitchers pp
     left join pre_game_rolling pgr
@@ -637,6 +716,22 @@ final as (
     left join pitcher_archetype pa
         on  pa.game_pk      = pp.game_pk
         and pa.pitcher_id   = pp.pitcher_id
+    -- E13.7 cold-start baselines: year-1 league means (leak-clean, prior season) with an
+    -- all-seasons pooled fallback for the earliest data year. Platoon baselines are
+    -- hand-specific (L for the LHB split, R for the RHB split).
+    left join arsenal_yr_baseline ayb
+        on  ayb.season      = year(pp.game_date) - 1
+    cross join arsenal_all_baseline aab
+    left join platoon_yr_baseline plbl
+        on  plbl.season     = year(pp.game_date) - 1
+        and plbl.batter_hand = 'L'
+    left join platoon_yr_baseline plbr
+        on  plbr.season     = year(pp.game_date) - 1
+        and plbr.batter_hand = 'R'
+    left join platoon_all_baseline plal
+        on  plal.batter_hand = 'L'
+    left join platoon_all_baseline plar
+        on  plar.batter_hand = 'R'
 )
 
 select * from final

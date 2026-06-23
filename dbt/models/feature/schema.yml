@@ -804,22 +804,18 @@ models:
 
       - name: xwoba_vs_lhb
         description: >
-          Prior-season xwOBA against vs LHB. Null for 2015 starters (no 2014 data)
-          and for any pitcher who had no prior-season appearances (injury, minor leagues,
-          or debut). Approximately 22% null across the full 2015-present dataset.
+          Prior-season xwOBA against vs LHB. E13.7: cold-start starters (no prior-season
+          handedness split — formerly ~22% null, rising into the recent window) now fall
+          back to the leak-clean prior-season league-average vs LHB (all-seasons pooled
+          mean for the earliest data year), so the column is non-null. is_cold_start
+          flags these baseline-filled rows.
         tests:
-          - not_null:
-              config:
-                warn_if: ">= 100"
-                error_if: ">= 20000"
+          - not_null
 
       - name: xwoba_vs_rhb
-        description: Prior-season xwOBA against vs RHB. Same null pattern as xwoba_vs_lhb.
+        description: Prior-season xwOBA against vs RHB. Same E13.7 league-baseline fill as xwoba_vs_lhb.
         tests:
-          - not_null:
-              config:
-                warn_if: ">= 100"
-                error_if: ">= 20000"
+          - not_null
 
       - name: k_pct_7d_minus_std
         description: >
@@ -916,9 +912,29 @@ models:
           the prior season is unavailable (injury absence, COVID-2020 data thinness).
           Possible values: power_swing_and_miss, changeup_deceptive, contact_sinker_ball,
           multi_pitch_mix, soft_command.
-          NULL for true rookies with no MLB cluster assignment in either prior season.
-          Story 7.4; both lookbacks are leakage-safe (strictly prior seasons).
-          Achieved coverage: ~83% for 2021+ games (ceiling set by true rookies).
+          E13.7: true rookies / pitchers with no prior-season cluster (formerly NULL,
+          ~15-27% rising into the late-season window) now get the explicit
+          'league_baseline' category — an honest "generic starter, profile unknown"
+          bucket paired with is_cold_start. NOT the modal cluster (which would mislabel
+          the pitcher). Story 7.4; both lookbacks are leakage-safe (strictly prior seasons).
+        tests:
+          - not_null
+
+      - name: is_cold_start
+        description: >
+          E13.7 cold-start flag. True when the starter had no prior-season archetype —
+          the broadest of the three cold-start blocks (archetype/Stuff+/platoon), ~87%
+          true rookies/call-ups. Signals that starter_pitcher_archetype, the Stuff+
+          arsenal columns, and the platoon splits are LEAGUE-BASELINE priors (the EB
+          prior at n=0), not the pitcher's own prior-season profile. Leak-clean: derived
+          only from strictly-prior-season cluster availability. Exposed for the E13.4
+          lift-tests to stratify on and for the future MiLB-equivalent prior (Epic 7) to
+          condition on. FRAME: product/model-coverage, not a betting-edge feature.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
 
   - name: feature_pregame_team_features
     description: >
