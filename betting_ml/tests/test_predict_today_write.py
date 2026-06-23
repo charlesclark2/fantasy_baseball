@@ -154,3 +154,58 @@ class TestLineupsConfirmedGate:
         assert actionable(False, None) is True       # flags absent → fail-open → bet
         assert actionable(False, False) is False     # pre-lineup → defer to post_lineup
         assert actionable(True, True) is False        # degraded → abstain regardless
+
+
+# ── E11.9 — daily_model_predictions column migration only ALTERs missing cols ───
+
+class _FakeCursor:
+    """Records SQL passed to execute(); fetchall() returns the configured columns."""
+    def __init__(self, existing_columns):
+        self._existing = [(c,) for c in existing_columns]
+        self.executed = []
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+
+    def fetchall(self):
+        return self._existing
+
+    @property
+    def alters(self):
+        return [s for s, _ in self.executed if "ADD COLUMN" in s]
+
+
+class TestPredictionColumnMigration:
+    def test_no_alter_when_all_columns_present(self):
+        # Steady state: every migrated column already exists → 1 metadata SELECT, 0 DDL.
+        every_col = [c for c, _ in predict_today._PREDICTION_COLUMN_MIGRATIONS]
+        cur = _FakeCursor(every_col)
+        predict_today._migrate_prediction_columns(cur, "baseball_data.betting_ml")
+        assert cur.alters == []
+        assert len(cur.executed) == 1  # only the INFORMATION_SCHEMA read
+
+    def test_alters_only_missing_columns(self):
+        all_cols = [c for c, _ in predict_today._PREDICTION_COLUMN_MIGRATIONS]
+        missing = {"sigma_tier", "abstain_reason"}
+        cur = _FakeCursor([c for c in all_cols if c not in missing])
+        predict_today._migrate_prediction_columns(cur, "baseball_data.betting_ml")
+        assert len(cur.alters) == len(missing)
+        for col in missing:
+            assert any(f"ADD COLUMN IF NOT EXISTS {col} " in s for s in cur.alters)
+
+    def test_column_match_is_case_insensitive(self):
+        # Snowflake upper-cases identifiers; existing cols come back upper.
+        all_cols = [c.upper() for c, _ in predict_today._PREDICTION_COLUMN_MIGRATIONS]
+        cur = _FakeCursor(all_cols)
+        predict_today._migrate_prediction_columns(cur, "baseball_data.betting_ml")
+        assert cur.alters == []
+
+    def test_information_schema_targets_correct_database(self):
+        cur = _FakeCursor([])
+        predict_today._migrate_prediction_columns(cur, "baseball_data.betting_ml_dev")
+        select_sql, params = cur.executed[0]
+        assert "baseball_data.information_schema.columns" in select_sql
+        assert params == ["betting_ml_dev"]
+        # All columns missing → every migration column gets an ALTER on the fq schema.
+        assert len(cur.alters) == len(predict_today._PREDICTION_COLUMN_MIGRATIONS)
+        assert all("baseball_data.betting_ml_dev.daily_model_predictions" in s for s in cur.alters)

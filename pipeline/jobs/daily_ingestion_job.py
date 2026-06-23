@@ -24,6 +24,7 @@ from pipeline.ops.daily_ingestion_ops import (
     generate_starter_signals_op,
     signal_freshness_check,
     signal_freshness_failure_hook,
+    update_archetype_posteriors_op,
     update_pipeline_status,
     update_player_posteriors_op,
     update_team_posteriors_op,
@@ -134,12 +135,19 @@ def daily_ingestion_job():
     p_player  = update_player_posteriors_op(start=eb_bullpen)
     p_team    = update_team_posteriors_op(start=p_player)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
+    # E11.8 (INC-8 fix) — archetype posteriors MUST also run in the daily job,
+    # not only in statcast_catchup_job. The catchup sensor skips when Statcast
+    # data arrived before the 07:00 run (rare but real), leaving
+    # mart_player_archetype_posteriors un-updated for that day. Running here
+    # after sequential posteriors (they share the mart_game_results dependency)
+    # and before dbt_umpire_feature_rebuild mirrors the catchup job's ordering.
+    p_archetype = update_archetype_posteriors_op(start=p_matchup)
     # Story A2.11 — the forward-looking today's-slate EB posteriors (starter +
     # lineup) are now dbt models built INSIDE dbt_umpire_feature_rebuild, after the
     # sequential update ops (so their as-of sequential column is fresh) and before
     # the features that ref() them. Lineup confirmations after this point are still
     # handled authoritatively by the lineup_monitor sensor.
-    s18 = dbt_umpire_feature_rebuild(start=p_matchup)
+    s18 = dbt_umpire_feature_rebuild(start=p_archetype)
     s19 = predict_today_morning(start=s18)
     # E9.13 — generate plain-English pick narratives (Snowflake Cortex) BEFORE the
     # serving writes so Railway PG picks up pick_narrative alongside pick_explanation.

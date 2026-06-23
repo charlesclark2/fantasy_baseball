@@ -123,15 +123,17 @@ def statcast_freshness_sensor(context: SensorEvaluationContext):
 
     if now_et >= deadline:
         fp = first_pitch.strftime("%H:%M ET") if first_pitch else "n/a"
-        context.log.error(
-            f"[SLA BREACH] Statcast for {yesterday} still not published and we are "
-            f"within {_DEADLINE_LEAD} of today's first pitch ({fp}). Today's slate will "
-            f"score WITHOUT {yesterday}'s completed games. Manual check of Baseball Savant "
-            f"/ savant_ingestion.py needed."
+        # E11.8 (INC-5 / monitor-the-monitors): yield SkipReason here was a silent
+        # path — the tick never failed, so Dagster never sent an email-on-failure
+        # alert. Raising converts the SLA breach into a visible tick failure, which
+        # triggers the standard Dagster+ email alert. The sensor still retries on
+        # every subsequent 30-min tick, so Statcast arriving later self-heals.
+        raise Exception(
+            f"[SLA BREACH] Statcast for {yesterday} still not published within "
+            f"{_DEADLINE_LEAD} of today's first pitch ({fp}). "
+            f"Today's slate will score WITHOUT {yesterday}'s completed games. "
+            f"Manual check: uv run python scripts/savant_ingestion.py batter_pitches"
         )
-        yield SkipReason(f"PAST DEADLINE: {yesterday} Statcast missing within "
-                         f"{_DEADLINE_LEAD} of first pitch — see ERROR log / alert.")
-        return
 
     # Missing, before the deadline → fire the catch-up. Hourly run_key bounds
     # retries to ~1/hour; once the catch-up lands the data the next tick sees it

@@ -1,0 +1,9 @@
+{
+  "version": "copula_v1",
+  "rho_global": -0.0035,
+  "bucket_scheme": "global",
+  "rho_by_bucket": {},
+  "conditioning": "global",
+  "r_decision": "single global held-out-calibrated r \u2248 3.71 (held-out r is STABLE across folds, spread 0.53 / CV 0.054; the E2.1 train-fit r-drift 9.3-wide is an ESTIMATION ARTIFACT of fitting r on optimistic train means, NOT temporal non-stationarity \u2192 do NOT condition r on period)",
+  "notes": "No bucket scheme is both significant (|z|\u22652) and materially different (max|\u0394\u03c1|\u22650.04); a single global \u03c1 is the simplest fit."
+}

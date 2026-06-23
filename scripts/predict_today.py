@@ -257,6 +257,78 @@ CREATE TABLE IF NOT EXISTS {_ML_SCHEMA}.daily_model_predictions (
 )
 """
 
+# E11.9 — columns added to daily_model_predictions across stories. These exist in
+# _CREATE_PREDICTIONS_TABLE for a fresh table; the migration below ADDs any that are
+# missing on a PRE-EXISTING prod/dev table. (col_name, snowflake_type) — names are
+# matched case-insensitively against INFORMATION_SCHEMA so we ALTER only what's absent.
+_PREDICTION_COLUMN_MIGRATIONS = [
+    ("posterior_source", "VARCHAR(20)"),                  # Epic 16.2
+    ("prior_age_days", "INTEGER"),                        # Epic 16.2
+    ("layer4_totals_decision", "VARCHAR(10)"),
+    ("layer4_totals_over_signal", "FLOAT"),
+    ("layer4_h2h_decision", "VARCHAR(10)"),
+    ("layer4_h2h_rule", "VARCHAR(20)"),
+    ("layer4_h2h_edge", "FLOAT"),
+    ("lineup_confirmed", "BOOLEAN"),
+    ("bullpen_z_score_home", "FLOAT"),                    # Story 17.1b
+    ("bullpen_z_score_away", "FLOAT"),
+    ("bullpen_signal_ood", "BOOLEAN"),
+    ("data_source", "VARCHAR(20)"),                       # A1.10
+    ("feature_coverage_score", "FLOAT"),
+    ("layer4_h2h_bovada_ml_home", "INTEGER"),             # Story 28.3
+    ("layer4_h2h_bovada_ml_away", "INTEGER"),
+    ("layer4_h2h_conviction_flag", "BOOLEAN"),            # Story 28.6b
+    ("layer4_h2h_conviction_disagree", "FLOAT"),
+    ("imputed_feature_count", "INTEGER"),                 # A2.5
+    ("imputed_discriminative_count", "INTEGER"),
+    ("discriminative_coverage", "FLOAT"),
+    ("is_degraded", "BOOLEAN"),
+    ("imputed_features", "VARCHAR(4000)"),
+    ("qualified_bet", "BOOLEAN"),                         # A1
+    ("gate_signals_met", "INTEGER"),                      # Story 19.7
+    ("game_conviction_score", "FLOAT"),
+    ("win_prob_alpha", "FLOAT"),
+    ("win_prob_beta", "FLOAT"),
+    ("win_prob_ci_low", "FLOAT"),
+    ("win_prob_ci_high", "FLOAT"),
+    ("win_prob_ci_width", "FLOAT"),
+    ("meta_p_clv_positive", "FLOAT"),                     # Story 12.4
+    ("meta_ci_low", "FLOAT"),
+    ("meta_ci_high", "FLOAT"),
+    ("meta_ci_width", "FLOAT"),
+    ("meta_n_games_trained", "INTEGER"),
+    ("totals_meta_p_clv_positive", "FLOAT"),              # Story 12.12
+    ("totals_meta_ci_low", "FLOAT"),
+    ("totals_meta_ci_high", "FLOAT"),
+    ("totals_meta_ci_width", "FLOAT"),
+    ("totals_meta_n_games_trained", "INTEGER"),
+    ("pick_explanation", "VARCHAR"),                      # Story 30.15
+    ("totals_ci_width", "FLOAT"),                         # Story 22.4
+    ("h2h_ci_width", "FLOAT"),
+    ("sigma_tier", "VARCHAR(20)"),
+    ("abstain_reason", "VARCHAR(200)"),
+]
+
+
+def _migrate_prediction_columns(cur, ml_schema: str) -> None:
+    """ADD any missing daily_model_predictions columns — reading the current schema
+    ONCE and issuing DDL only for absent columns (E11.9 cost fix). ``ml_schema`` is
+    the fully-qualified ``database.schema`` from ml_env.ml_schema()."""
+    db, _, schema = ml_schema.rpartition(".")
+    cur.execute(
+        f"SELECT column_name FROM {db}.information_schema.columns "
+        f"WHERE table_schema = UPPER(%s) AND table_name = 'DAILY_MODEL_PREDICTIONS'",
+        [schema],
+    )
+    existing = {row[0].upper() for row in cur.fetchall()}
+    missing = [(c, t) for c, t in _PREDICTION_COLUMN_MIGRATIONS if c.upper() not in existing]
+    for col, coltype in missing:
+        cur.execute(f"ALTER TABLE {ml_schema}.daily_model_predictions ADD COLUMN IF NOT EXISTS {col} {coltype}")
+    if missing:
+        print(f"  [E11.9 migration] added {len(missing)} missing column(s): "
+              f"{', '.join(c for c, _ in missing)}")
+
+
 _INSERT_PREDICTION = f"""
 INSERT INTO {_ML_SCHEMA}.daily_model_predictions (
     model_version, inserted_at, score_date, prediction_type, lineup_confirmed,
@@ -1170,56 +1242,12 @@ def _write_predictions_to_snowflake(
         try:
             cur = conn.cursor()
             cur.execute(_CREATE_PREDICTIONS_TABLE)
-            # Idempotent column migrations — safe on every scoring pass.
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS posterior_source VARCHAR(20)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS prior_age_days INTEGER")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_decision VARCHAR(10)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_totals_over_signal FLOAT")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_decision VARCHAR(10)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_rule VARCHAR(20)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_edge FLOAT")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS lineup_confirmed BOOLEAN")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_home FLOAT")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_z_score_away FLOAT")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS bullpen_signal_ood BOOLEAN")
-            # A1.10 — feature-source observability
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS data_source VARCHAR(20)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS feature_coverage_score FLOAT")
-            # Story 28.3 — actual Bovada American moneyline for kill-criterion monitor
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_home INTEGER")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_bovada_ml_away INTEGER")
-            # Story 28.6b — conviction-gate overlay (self-healing across dev/prod schemas)
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_conviction_flag BOOLEAN")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS layer4_h2h_conviction_disagree FLOAT")
-            # A2.5 — per-game imputation transparency
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_feature_count INTEGER")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_discriminative_count INTEGER")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS discriminative_coverage FLOAT")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS is_degraded BOOLEAN")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS imputed_features VARCHAR(4000)")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS qualified_bet BOOLEAN")
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS gate_signals_met INTEGER")        # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS game_conviction_score FLOAT")     # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_alpha FLOAT")            # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_beta FLOAT")             # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_low FLOAT")           # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_high FLOAT")          # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS win_prob_ci_width FLOAT")         # Story 19.7
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_p_clv_positive FLOAT")      # Story 12.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_low FLOAT")              # Story 12.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_high FLOAT")             # Story 12.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_ci_width FLOAT")            # Story 12.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS meta_n_games_trained INTEGER")   # Story 12.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_p_clv_positive FLOAT")     # Story 12.12
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_low FLOAT")             # Story 12.12
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_high FLOAT")            # Story 12.12
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_ci_width FLOAT")           # Story 12.12
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_meta_n_games_trained INTEGER")  # Story 12.12
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS pick_explanation VARCHAR")  # Story 30.15
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS totals_ci_width FLOAT")   # Story 22.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS h2h_ci_width FLOAT")      # Story 22.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS sigma_tier VARCHAR(20)")  # Story 22.4
-            cur.execute(f"ALTER TABLE {_ML_SCHEMA}.daily_model_predictions ADD COLUMN IF NOT EXISTS abstain_reason VARCHAR(200)")  # Story 22.4
+            # E11.9 — column migrations: read existing columns ONCE and ADD only the
+            # missing ones. Previously 49 unconditional `ALTER … ADD COLUMN IF NOT
+            # EXISTS` ran on EVERY scoring pass (8,850 idempotent DDLs / 7d in the
+            # 6/22 Snowflake audit). In steady state this is now a single
+            # INFORMATION_SCHEMA read and ZERO DDL.
+            _migrate_prediction_columns(cur, _ML_SCHEMA)
             # A1.2 — overwrite semantics for post_lineup + lineup_confirmed runs:
             # delete existing rows for this date+type before inserting so re-runs
             # (pitcher changes, sensor re-fires) don't accumulate duplicate rows.

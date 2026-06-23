@@ -153,6 +153,27 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "game_day_only": False,
         "non_blocking": True,
     },
+    # ── E11.8 additions (2026-06-22) ────────────────────────────────────────
+    # Derivative odds (team_totals / alt_totals) — Railway E2.0b cron, every 30 min.
+    # EVAL/CLV-only (not model-training inputs), so peripheral (non_blocking).
+    # 4h = ≥ 7 missed cron fires; only the first stall within a day is meaningful.
+    "baseball_data.oddsapi.derivative_odds_raw": {
+        "ts_col": "ingestion_ts",
+        "max_stale_hours": 4,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # Park factors — annual source (game_year-1), updated once at season start via
+    # betting_ml/scripts/eb_priors/fit_park_priors.py (hand-run). Feeds
+    # feature_pregame_park_features → feature_pregame_game_features_raw → serving.
+    # Very loose threshold (180 days) catches a missed season-start update while
+    # never false-alarming mid-season (data legitimately unchanged since spring).
+    "baseball_data.betting.eb_park_factors_raw": {
+        "ts_col": "fit_date",   # DATE; annual update at season start
+        "max_stale_hours": 4320,   # 180 days
+        "game_day_only": False,
+        "non_blocking": True,
+    },
 }
 
 # ---------------------------------------------------------------------------
