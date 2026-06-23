@@ -464,7 +464,21 @@ def update_matchup_cell_posteriors_op(context):
 # pinned to prod baseball_data.betting, so no TARGET_ENV needed.
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_archetype_posteriors_op(context):
-    _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py", ["--mode", "today"])
+    # E11.7 failure tier: ALERT-loud-but-continue. Archetype posteriors are a peripheral
+    # model-input refresh (the archetype-matchup block degrades gracefully — the pipeline
+    # ran for weeks on stale posteriors with no serving outage), so a failure here must NOT
+    # HALT the serving-critical daily job (predictions / dbt rebuilds run downstream).
+    # Log a loud WARNING and succeed; the source-scoped freshness monitor (E11.8) pages if
+    # the table goes stale. INC (2026-06-23): the op HALTed the whole daily job when the
+    # centroids/scaler pkls were missing from the image — now loaded from S3 + non-blocking.
+    try:
+        _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py", ["--mode", "today"])
+    except Exception as exc:  # noqa: BLE001 — peripheral; never block the serving pipeline.
+        context.log.warning(
+            "WARNING: update_archetype_posteriors_op failed; continuing without a fresh "
+            "archetype refresh (mart_player_archetype_posteriors may be stale — the freshness "
+            f"monitor will alert if so). Error: {exc}"
+        )
 
 
 # Story A2.11 — the forward-looking TODAY's-slate EB posteriors (starter + lineup)

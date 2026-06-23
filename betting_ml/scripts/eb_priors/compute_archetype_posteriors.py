@@ -57,6 +57,14 @@ _PRIORS_PATH  = _MODELS_DIR / "eb_priors" / "archetype_priors.json"
 _BATTER_DIR   = _MODELS_DIR / "batter_archetypes"
 _PITCHER_DIR  = _MODELS_DIR / "pitcher_archetypes"
 
+# Archetype centroids/scalers live in S3 (the prod source of truth — .pkl files are
+# gitignored and not baked into the Dagster image). The fit_*_archetypes.py scripts
+# upload here after saving locally; this script prefers S3 and falls back to the local
+# dir for dev. Keys mirror the local layout: <prefix>/{kmeans,scaler}_<fit_date>.pkl.
+_S3_BUCKET         = "baseball-betting-ml-artifacts"
+_BATTER_S3_PREFIX  = "batter_archetypes"
+_PITCHER_S3_PREFIX = "pitcher_archetypes"
+
 _TARGET = "baseball_data.betting.mart_player_archetype_posteriors"
 _TMP    = "baseball_data.betting.tmp_archetype_posteriors"
 
@@ -285,18 +293,41 @@ WHERE season = %(season)s
 
 # ── Model loading ──────────────────────────────────────────────────────────────
 
-def _load_latest_pkl(model_dir: Path, prefix: str):
+def _latest_s3_key(s3_prefix: str, prefix: str) -> str | None:
+    """Return the latest (date-stamped names sort lexicographically) S3 key for
+    <s3_prefix>/<prefix>_*.pkl, or None if S3 is unreachable / has no match."""
+    try:
+        import boto3
+        s3 = boto3.client("s3")
+        resp = s3.list_objects_v2(Bucket=_S3_BUCKET, Prefix=f"{s3_prefix}/{prefix}_")
+        keys = [c["Key"] for c in resp.get("Contents", []) if c["Key"].endswith(".pkl")]
+        return sorted(keys)[-1] if keys else None
+    except Exception as exc:  # noqa: BLE001 — fall back to local; surface why.
+        print(f"  [WARN] S3 lookup for {s3_prefix}/{prefix} failed ({exc}); trying local.")
+        return None
+
+
+def _load_latest_pkl(model_dir: Path, prefix: str, s3_prefix: str):
+    """Load the latest centroid/scaler artifact. Prefers S3 (prod source of truth —
+    .pkl files are gitignored and absent from the image); falls back to the local dir."""
+    key = _latest_s3_key(s3_prefix, prefix)
+    if key is not None:
+        from betting_ml.utils.artifact_store import load_artifact
+        return load_artifact(f"s3://{_S3_BUCKET}/{key}")
+
     files = sorted(model_dir.glob(f"{prefix}_*.pkl"), reverse=True)
     if not files:
-        raise FileNotFoundError(f"No {prefix} pkl in {model_dir}")
+        raise FileNotFoundError(
+            f"No {prefix} pkl in s3://{_S3_BUCKET}/{s3_prefix}/ or local {model_dir}"
+        )
     return joblib.load(files[0])
 
 
 def _load_models():
-    b_km  = _load_latest_pkl(_BATTER_DIR, "kmeans")
-    b_sc  = _load_latest_pkl(_BATTER_DIR, "scaler")
-    p_km  = _load_latest_pkl(_PITCHER_DIR, "kmeans")
-    p_sc  = _load_latest_pkl(_PITCHER_DIR, "scaler")
+    b_km  = _load_latest_pkl(_BATTER_DIR,  "kmeans", _BATTER_S3_PREFIX)
+    b_sc  = _load_latest_pkl(_BATTER_DIR,  "scaler", _BATTER_S3_PREFIX)
+    p_km  = _load_latest_pkl(_PITCHER_DIR, "kmeans", _PITCHER_S3_PREFIX)
+    p_sc  = _load_latest_pkl(_PITCHER_DIR, "scaler", _PITCHER_S3_PREFIX)
     priors = json.loads(_PRIORS_PATH.read_text())
     return b_km, b_sc, p_km, p_sc, priors
 

@@ -72,6 +72,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from betting_ml.utils.data_loader import get_snowflake_connection
 
 _MODELS_DIR = PROJECT_ROOT / "betting_ml" / "models" / "pitcher_archetypes"
+# S3 is the prod source of truth (.pkl files are gitignored / not baked into the image).
+# compute_archetype_posteriors.py loads the latest centroids/scaler from here.
+_S3_PREFIX = "s3://baseball-betting-ml-artifacts/pitcher_archetypes"
 _SILHOUETTE_WARN = 0.15  # Realistic ceiling for pitcher continuum data; warn if below
 
 FEATURE_COLS = [
@@ -484,6 +487,14 @@ def _save_artifacts(
     if model is not None:
         joblib.dump(model, _MODELS_DIR / f"kmeans_{fit_date}.pkl")
     print(f"Artifacts saved to {_MODELS_DIR}/")
+
+    # Mirror to S3 so the Dagster image / compute_archetype_posteriors.py can load them
+    # (skips silently if AWS creds are absent — see upload_artifact).
+    from betting_ml.utils.artifact_store import upload_artifact
+    upload_artifact(_MODELS_DIR / f"meta_{fit_date}.pkl",   f"{_S3_PREFIX}/meta_{fit_date}.pkl")
+    upload_artifact(_MODELS_DIR / f"scaler_{fit_date}.pkl", f"{_S3_PREFIX}/scaler_{fit_date}.pkl")
+    if model is not None:
+        upload_artifact(_MODELS_DIR / f"kmeans_{fit_date}.pkl", f"{_S3_PREFIX}/kmeans_{fit_date}.pkl")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
