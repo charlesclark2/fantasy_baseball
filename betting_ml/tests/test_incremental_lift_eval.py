@@ -108,6 +108,24 @@ def test_degenerate_flags_zero_effect_candidate():
     assert deg and "NO effect" in reason
 
 
+def test_degenerate_flags_low_coverage_candidate():
+    # healthy std + a non-zero lift, but the column is non-null on only ~2.5% of eval games
+    # (the B2 home_win case: incremental build left the column NULL across history). INVALID.
+    class _DSR:
+        pass
+    deg, reason = candidate_is_degenerate(14.2, all_lift=-0.0014, dsr=_DSR(), cand_coverage=0.025)
+    assert deg and "under-built" in reason
+
+
+def test_degenerate_passes_well_covered_candidate():
+    # a candidate covering most eval games (e.g. 85%, a normal prior-season-join null rate)
+    # is NOT flagged on coverage grounds
+    class _DSR:
+        pass
+    deg, reason = candidate_is_degenerate(0.02, all_lift=0.0015, dsr=_DSR(), cand_coverage=0.85)
+    assert not deg and reason is None
+
+
 def test_degenerate_passes_a_real_candidate():
     class _DSR:  # a real candidate has variance + a computable DSR → not degenerate
         pass

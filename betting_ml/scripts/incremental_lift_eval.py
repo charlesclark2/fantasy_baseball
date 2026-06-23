@@ -218,24 +218,49 @@ def max_abs_corr(df: pd.DataFrame, cand_cols: list[str], base_cols: list[str]) -
     return out
 
 
-def candidate_is_degenerate(cand_eval_std, all_lift: float, dsr) -> tuple[bool, str | None]:
-    """Guard against a corrupt/constant feature being recorded as a 'no edge' null (E13.4 — the
-    exact failure that nearly happened when a dbt build silently zeroed the TTO column).
+def candidate_is_degenerate(cand_eval_std, all_lift: float, dsr, cand_coverage=None,
+                            min_coverage: float = 0.5) -> tuple[bool, str | None]:
+    """Guard against a corrupt/constant/under-built feature being recorded as a 'no edge' null
+    (E13.4 — the failures that nearly happened when a dbt build silently zeroed the TTO column,
+    and when an incremental build left the B2 column NULL across all history).
 
-    A candidate is DEGENERATE when it had NO real effect on the model:
+    A candidate is DEGENERATE when it could not have produced a trustworthy lift:
       * its eval-set values are ~constant (zero variance) → it entered the matrix as a constant
         and the tree dropped it, OR the upstream feature is corrupt/missing; or
       * it produced byte-identical per-game scores to base (lift ≡ 0 AND a zero-variance
-        improvement series → DSR n/a).
-    Either way the result is a DATA/COVERAGE failure, NOT a trustworthy signal null — the lift
-    study must NOT bank it as 'no edge'. Returns (is_degenerate, reason)."""
+        improvement series → DSR n/a); or
+      * it is non-null for only a small fraction of the eval games (`cand_coverage` < min_coverage)
+        → the model trained/scored on a mostly-imputed-constant column, so any lift is on ~nothing.
+        This is the incremental-not-full-refreshed signature (2026-06-23 B2): an `incremental` model
+        only repopulated the 7-day lookback, so the new column was NULL across history. NOTE this
+        fires even when std looks fine — std is computed on the few non-null rows, which can look
+        healthy while >99% of the column is imputed (exactly what slipped past the std/byte-identical
+        checks on the B2 home_win run).
+    Any of these is a DATA/COVERAGE failure, NOT a trustworthy signal null — the lift study must NOT
+    bank it as 'no edge'. Returns (is_degenerate, reason)."""
     if cand_eval_std is not None and cand_eval_std < 1e-9:
         return True, (f"candidate column is ~constant on the eval set (std={cand_eval_std:.2e}) "
                       f"— corrupt/missing/collapsed feature, NOT a signal null")
+    if cand_coverage is not None and cand_coverage < min_coverage:
+        return True, (f"candidate column is non-null on only {cand_coverage:.1%} of eval games "
+                      f"(< {min_coverage:.0%}) — under-built / not full-refreshed across history "
+                      f"(an incremental build only repopulated recent rows?), NOT a signal null")
     if abs(all_lift) < 1e-12 and dsr is None:
         return True, ("candidate produced byte-identical scores to base (lift≡0, zero-variance "
                       "improvement) — the feature had NO effect (constant/dropped); NOT a signal null")
     return False, None
+
+
+def _candidate_eval_coverage(df: pd.DataFrame, extra_cols: list[str]) -> float | None:
+    """Min non-null fraction across a candidate's present columns on the (eval) frame — the share
+    of games for which the model actually saw a real (non-imputed) value. None if no column is
+    present. Pairs with the dbt-side coverage check (output-null-while-parent-populated)."""
+    fracs = []
+    for c in extra_cols:
+        if c in df.columns and len(df):
+            v = pd.to_numeric(df[c], errors="coerce")
+            fracs.append(float(v.notna().mean()))
+    return min(fracs) if fracs else None
 
 
 def _candidate_eval_std(df: pd.DataFrame, extra_cols: list[str]) -> float | None:
@@ -518,11 +543,14 @@ def _assemble(target, metric, df, common, dates, non_cold_mask, scores, configs,
         # Degenerate-candidate guard: a constant/dropped/corrupt feature must NOT be banked as a
         # null. A degenerate candidate is neither SHIP nor a trustworthy null — it's INVALID.
         cand_std = _candidate_eval_std(df.loc[common], extra_by_name[name])
-        degenerate, degen_reason = candidate_is_degenerate(cand_std, by["all"]["lift"], dsr)
+        cand_cov = _candidate_eval_coverage(df.loc[common], extra_by_name[name])
+        degenerate, degen_reason = candidate_is_degenerate(
+            cand_std, by["all"]["lift"], dsr, cand_coverage=cand_cov)
         ship = bool(lift_pos and pbo.clears_live_pbo and dsr_ok and not degenerate)
         results["candidates"][name] = {
             "extra_cols": extra_by_name[name],
             "candidate_eval_std": cand_std,
+            "candidate_eval_coverage": cand_cov,
             "lift": by,
             "dsr": (None if dsr is None else
                     {"dsr": dsr.dsr, "observed_sr": dsr.observed_sr, "sr0": dsr.sr0,
@@ -554,8 +582,10 @@ def _print_report(res: dict) -> None:
     print(f"  PBO (over {p['n_configs']} configs, {p['n_slices']} slices, {p['n_combos']} combos) "
           f"= {p['pbo']:.3f}  → clears_live(<{p['threshold']}) = {p['clears_live']}")
     for name, c in res["candidates"].items():
+        _cov = c.get("candidate_eval_coverage")
         print(f"\n  ── candidate '{name}'  (+{c['extra_cols']})  "
-              f"[eval std={c.get('candidate_eval_std')}]")
+              f"[eval std={c.get('candidate_eval_std')}, "
+              f"eval coverage={'n/a' if _cov is None else f'{_cov:.1%}'}]")
         if c.get("degenerate"):
             print(f"    🛑 DEGENERATE — {c['degenerate_reason']}")
             print(f"       This is INVALID, not a null. Re-check the feature build/coverage "

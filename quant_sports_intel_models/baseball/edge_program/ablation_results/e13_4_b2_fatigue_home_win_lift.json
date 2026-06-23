@@ -1,14 +1,14 @@
 {
   "target": "home_win",
   "metric": "nll",
-  "n_eval": 4915,
+  "n_eval": 4913,
   "n_configs": 2,
   "pbo": {
-    "pbo": 0.09,
+    "pbo": 0.963,
     "n_combos": 1000,
     "n_configs": 2,
     "n_slices": 16,
-    "clears_live": true,
+    "clears_live": false,
     "threshold": 0.2
   },
   "candidates": {
@@ -17,57 +17,58 @@
         "home_bullpen_fatigue_short_leash",
         "away_bullpen_fatigue_short_leash"
       ],
-      "candidate_eval_std": 14.238327693137608,
+      "candidate_eval_std": 16.623562105715223,
+      "candidate_eval_coverage": 0.9739466720944433,
       "lift": {
         "all": {
           "stratum": "all",
-          "n": 4915,
-          "base_metric": 0.6835615785853651,
-          "cand_metric": 0.6850002572539119,
-          "lift": -0.0014386786685467445,
-          "lift_pct": -0.0021046804174162316
+          "n": 4913,
+          "base_metric": 0.6830505534021968,
+          "cand_metric": 0.6830025772593205,
+          "lift": 4.797614287632701e-05,
+          "lift_pct": 7.023805578864306e-05
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 3475,
-          "base_metric": 0.6828268658492076,
-          "cand_metric": 0.6839604243437744,
-          "lift": -0.0011335584945667554,
-          "lift_pct": -0.0016600965065382844
+          "n": 3479,
+          "base_metric": 0.6818610370505873,
+          "cand_metric": 0.6823209969705494,
+          "lift": -0.00045995991996206076,
+          "lift_pct": -0.0006745654832422054
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1440,
-          "base_metric": 0.6853345832785227,
-          "cand_metric": 0.687509576255806,
-          "lift": -0.0021749929772832965,
-          "lift_pct": -0.003173622096930385
+          "n": 1434,
+          "base_metric": 0.6859364162942815,
+          "cand_metric": 0.6846561461746864,
+          "lift": 0.0012802701195950839,
+          "lift_pct": 0.001866455970528062
         }
       },
       "dsr": {
-        "dsr": 0.07284738929786447,
-        "observed_sr": -0.020780794359372207,
+        "dsr": 0.5180773486104358,
+        "observed_sr": 0.0006467507725066415,
         "sr0": 0.0,
         "n_trials": 1,
-        "n_obs": 4915,
+        "n_obs": 4913,
         "passes_live": false,
         "threshold": 0.95
       },
       "orthogonality": {
         "home_bullpen_fatigue_short_leash": {
-          "max_abs_corr": 0.6627,
-          "vs": "home_bp_innings_pitched_30d"
+          "max_abs_corr": 0.5892,
+          "vs": "home_starter_avg_ip_last_3"
         },
         "away_bullpen_fatigue_short_leash": {
-          "max_abs_corr": 0.6642,
-          "vs": "away_starter_avg_ip_season"
+          "max_abs_corr": 0.5873,
+          "vs": "away_starter_avg_ip_last_3"
         }
       },
       "degenerate": false,
       "degenerate_reason": null,
       "gate": {
         "lift_positive_all_and_noncold": false,
-        "pbo_clears_live": true,
+        "pbo_clears_live": false,
         "dsr_passes_live": false,
         "not_degenerate": true,
         "SHIP": false
