@@ -574,7 +574,7 @@ def generate_pick_narratives_op(context):
     # renders SHAP drivers from pick_explanation when pick_narrative is NULL.
     try:
         _run_script(context, "/app/betting_ml/scripts/generate_pick_narratives.py",
-                    ["--date", _today()])
+                    ["--date", _today(), "--pick-delta-guard"])
     except Exception as e:
         context.log.warning(f"Narrative generation failed (non-fatal, picks shown without text): {e}")
 
