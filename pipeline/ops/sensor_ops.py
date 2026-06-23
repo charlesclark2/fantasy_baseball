@@ -139,7 +139,7 @@ def lineup_ingest_umpires(context: OpExecutionContext) -> None:
     in lineup_monitor_job (lineup_ingest_schedule was removed; schedule_capture cron
     handles statsapi ingestion off Dagster's bill)."""
     try:
-        _run_script(context, "ingest_umpires.py", ["--date", _today()])
+        _run_script(context, "ingest_umpires.py", ["--date", _today(), "--skip-if-exists"])
     except Exception as e:
         context.log.warning(f"Lineup-path umpire assignment ingest failed (non-fatal): {e}")
 

@@ -186,7 +186,33 @@ def main():
                         help="Game date in YYYY-MM-DD format")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print extracted assignments without writing to Snowflake")
+    parser.add_argument("--skip-if-exists", action="store_true",
+                        help=(
+                            "E11.11: skip ingest if today's statsapi umpire assignments "
+                            "are already in the table. MLB posts assignments once (afternoon); "
+                            "subsequent lineup_monitor fires are no-ops."
+                        ))
     args = parser.parse_args()
+
+    # E11.11 — once-captured guard: skip the MLB API call if today's data is already present.
+    # The delete-then-insert is idempotent, but hitting the API and re-writing on every
+    # lineup_monitor fire (~every 10 min) is wasteful after the first successful ingest.
+    if args.skip_if_exists and not args.dry_run:
+        conn = get_snowflake_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT COUNT(*) FROM {TABLE_FQN} "
+                    f"WHERE game_date = %(d)s AND data_source = 'statsapi'",
+                    {"d": args.date},
+                )
+                existing = cur.fetchone()[0]
+        finally:
+            conn.close()
+        if existing > 0:
+            log.info("[E11.11] %d umpire assignment(s) already ingested for %s, skipping.",
+                     existing, args.date)
+            return
 
     assignments = fetch_hp_umpires(args.date)
 
