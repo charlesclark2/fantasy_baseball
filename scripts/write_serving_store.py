@@ -891,31 +891,50 @@ WITH ranked AS (
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
+            ORDER BY
+                -- Mirror today's ranking: prefer rows with market data, then post_lineup,
+                -- then latest inserted_at — so yesterday's "featured" pick is the same
+                -- one that would have been shown as today's pick on that date.
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
         ) AS _rn
     FROM baseball_data.betting_ml.daily_model_predictions
     WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
-      AND qualified_bet = TRUE
+      AND prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
-    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
-           clv.actual_outcome
+    SELECT
+        b.game_pk, b.home_team, b.away_team,
+        'h2h'                     AS market_type,
+        b.layer4_h2h_decision     AS pick_side,
+        b.game_datetime,
+        clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
-    WHERE b.layer4_h2h_decision IN ('home', 'away')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
 ),
 totals AS (
-    SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
-           clv.actual_outcome
+    SELECT
+        b.game_pk, b.home_team, b.away_team,
+        'totals'                      AS market_type,
+        b.layer4_totals_decision      AS pick_side,
+        b.game_datetime,
+        clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
-    WHERE b.layer4_totals_decision IN ('over', 'under')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT * FROM h2h UNION ALL SELECT * FROM totals
-ORDER BY actual_outcome DESC NULLS LAST, game_pk, market_type
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+FROM h2h UNION ALL
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+FROM totals
+ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
 LIMIT 1
 """
 
@@ -1810,12 +1829,30 @@ def main() -> int:
                     if _yest_rows:
                         yr = _yest_rows[0]
                         _outcome_flag = yr.get("ACTUAL_OUTCOME")
-                        if _outcome_flag is not None:
-                            _yesterday = {
-                                "matchup": f"{yr.get('AWAY_TEAM') or ''} @ {yr.get('HOME_TEAM') or ''}",
-                                "market_type": yr.get("MARKET_TYPE") or "",
-                                "outcome": "Won" if _outcome_flag == 1 else "Lost",
-                            }
+                        _pick_side = (yr.get("PICK_SIDE") or "").lower()
+                        if _outcome_flag is None:
+                            # Game not yet settled (e.g. postponed or CLV mart not refreshed)
+                            _status = "pending"
+                            _outcome_str = "Pending"
+                        else:
+                            # actual_outcome semantics:
+                            #   h2h:    1 = home team won  (home-perspective CLV)
+                            #   totals: 1 = over hit
+                            # Map to "did the picked side win?"
+                            if _pick_side in ("home", "over"):
+                                _bet_won = int(_outcome_flag) == 1
+                            elif _pick_side in ("away", "under"):
+                                _bet_won = int(_outcome_flag) == 0
+                            else:
+                                _bet_won = bool(_outcome_flag)
+                            _status = "win" if _bet_won else "loss"
+                            _outcome_str = "Won" if _bet_won else "Lost"
+                        _yesterday = {
+                            "matchup": f"{yr.get('AWAY_TEAM') or ''} @ {yr.get('HOME_TEAM') or ''}",
+                            "market_type": yr.get("MARKET_TYPE") or "",
+                            "outcome": _outcome_str,
+                            "status": _status,
+                        }
                     # game_time_et
                     _game_time_et = None
                     _gdt = fr.get("GAME_DATETIME")

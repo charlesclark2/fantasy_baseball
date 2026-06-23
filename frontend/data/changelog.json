@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-06-23",
+    "items": [
+      {
+        "tag": "fix",
+        "text": "The 'Yesterday' badge on the front page now shows the real result of the featured pick. Previously, the badge always appeared green even after a loss — the system was surfacing whichever of yesterday's picks happened to win, not the actual pick that was shown. The pick selection now uses the same logic as today's featured pick, and the badge correctly shows green for a win, red for a loss, and gray for a game that hasn't been settled yet."
+      }
+    ]
+  },
+  {
     "week": "2026-06-15",
     "items": [
       {
