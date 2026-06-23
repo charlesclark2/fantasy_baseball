@@ -61,13 +61,15 @@ RUN pip install --no-cache-dir \
     arviz \
     h5netcdf \
     h5py \
-    pymc
+    pymc \
+    "duckdb>=1.1.0"
 
 # Smoke-check: fail the image build now if any heavy Bayesian dep is missing,
 # rather than silently dying in the weekly Dagster op a day later.
 # h5py is h5netcdf's HDF5 backend — importing h5netcdf alone succeeds but file
 # writes fail at runtime without h5py, so we must check both explicitly.
 RUN python -c "import pymc; import pytensor; import arviz; import h5netcdf; import h5py; print('Bayesian deps OK')"
+RUN python -c "import duckdb; print('duckdb OK')"
 
 # Install dbt-fusion AFTER pip so it overwrites dbt-core's `dbt` CLI entry point.
 # The pip install of dagster-dbt pulls in dbt-core which places its own `dbt`
