@@ -167,19 +167,83 @@ Each candidate's hypothesis, build, and pass/fail are fixed here so the verdict 
 
 ## 6. ⏭️ OPERATOR HANDOFF
 
-**CI gate (this session):** no code/dbt changed yet — dossier + pre-registration only. Nothing to compile. Candidate builds (§5) ship only AFTER a passing lift verdict; each will carry its own `dbtf build --select state:modified+` + `dbtf compile` + `uv run pytest` gate at integration time.
+### 6.1 Session 2026-06-23 — lift HARNESS built + Candidate B1 built (lift RUNS pending)
 
-**Run-order for the operator (long fits → operator):**
-1. Build candidate B1 mart + feature (TTO) — *spec in §5; ~build then test, do not promote on build.*
-2. Incremental-lift test, **per-side first**, against the v6/E2.1 contract:
-   `uv run python betting_ml/scripts/rebaseline_purged_cv.py --target perside_runs --add-features <B1 cols> --pbo --dsr` (then `--target home_win`).
-3. Repeat for B2; for Candidate A, run the **orthogonality pre-check first** (corr vs `off_woba_30d`) and STOP if ≥0.7.
-4. Gate every winner on PBO < 0.2 AND DSR > 0 (`betting_ml/utils/overfitting.py`), purged CV via `betting_ml/utils/cv.py::PurgedWalkForwardSplit`.
-5. Write per-candidate CV JSON to `quant_sports_intel_models/baseball/edge_program/ablation_results/e13_4_<candidate>_cv.json` (match `e2_1_perside_negbin_cv.json` shape). Ship winners into BOTH the E2.1 per-side marginals AND the H2H contract; record nulls.
+**What shipped this session (no long fits run — those are below):**
+
+1. **The incremental-lift harness — `betting_ml/scripts/incremental_lift_eval.py`** (the must-ship
+   deliverable). The §5/§6 lift-tests previously had **no runnable command** — the handoff above
+   pointed at `rebaseline_purged_cv.py --add-features … --pbo --dsr`, which does NOT exist (that
+   script only re-scores the *fixed* champion recipe across CV regimes). The new harness is the
+   real thing: for ONE target it holds the recipe fixed and changes ONLY the feature set (base vs
+   base+candidate) — a pure feature lift, not a recipe swap. It reports:
+   - **incremental lift** (base−candidate per-game LOSS), pooled **AND stratified on `is_cold_start`**
+     (the trustworthy read is the **non_cold_start** stratum — an E13.7 baseline-filled rookie row
+     can't manufacture or dilute the signal);
+   - **PBO** (AFML §11.4) over {base, candidates…} on a time-sliced perf matrix — gate PBO < 0.2;
+   - **DSR** (AFML §14) on the per-game improvement series, deflated by the candidate count — gate DSR ≥ 0.95;
+   - **orthogonality** = max|corr| of each candidate col vs the base contract (the Candidate-A redundancy pre-check).
+   Two backends: **`perside_runs`** (E2.1 NegBin — the PRIORITY target; reuses `train_perside_negbin`
+   assembly; CRPS/NLL; can derive `off_*`/`opp_*` candidates from the wide mart on the fly so a
+   candidate stays OUT of the production per-side feature list until it earns promotion) and the
+   **champions** (`home_win`/`run_diff`/`total_runs`; reuses the `promotion_gate_eval` adapters,
+   same spec on both arms). Pure-logic unit-tested (`betting_ml/tests/test_incremental_lift_eval.py`,
+   10 tests; PBO matrix, lift+strat, DSR mapping, EB-shrink, NegBin CRPS/NLL).
+
+2. **Candidate B1 (TTO penalty) — built, eval-only, NOT promoted.**
+   - `dbt/models/mart/mart_starter_tto_splits.sql` — per pitcher×season, xwOBA-against split by
+     times-through-order (1st vs 3rd+); penalty = `tto3_xwoba_against − tto1_xwoba_against`. xwOBA
+     convention mirrors `mart_pitcher_rolling_stats`; regular season only; `table` mat like the
+     analogous `mart_pitcher_vs_handedness_splits`.
+   - `feature_pregame_starter_features.sql` — prior-season join (`game_year − 1`, leak-clean per the
+     E1.8 doctrine) + **EB shrink** toward the BF-weighted prior-season league penalty (k=150 pseudo-PA;
+     a <150-BF sample regresses hard). Emits `starter_tto3_xwoba_penalty` + `starter_tto_min_bf_prior`.
+   - `feature_pregame_game_features_raw.sql` — surfaces `home_/away_starter_tto3_xwoba_penalty`
+     (+ `_tto_min_bf_prior`). **No production contract references these** (verified) → purely a feature-
+     store add the lift harness consumes; champions/E2.1 contracts are untouched.
+
+**CI gate (this session):** `uv run pytest betting_ml/tests/test_incremental_lift_eval.py` **GREEN**
+(10/10) + full-suite **collection clean** (462 tests, no import breakage). **dbt compile/build NOT run
+locally** — the local `dbt` has no Snowflake adapter (project uses dbt-fusion via the remote runner);
+the two dbt-Build CI jobs are an **operator step** (see run-order #0).
+
+### 6.2 Run-order for the operator (long fits → operator)
+
+0. **dbt CI + build the new feature** (HALT-tier; the lift needs the column materialized):
+   `dbtf build --select state:modified+` **and** `dbtf compile` (the two CI jobs). This builds
+   `mart_starter_tto_splits` → `feature_pregame_starter_features` → `feature_pregame_game_features(_raw)`.
+   (`mart_starter_tto_splits` scans the full pitch table — minutes; same cost class as the handedness mart.)
+1. **VALIDATE THE HARNESS FIRST** (sanity configs — noise ⇒ ~0 lift/high PBO, in-contract dup ⇒ ~0
+   incremental). `perside_runs` is the fastest backend:
+   `uv run python betting_ml/scripts/incremental_lift_eval.py --target perside_runs --sanity`
+   If those don't read ~null, the harness — not the feature — is the finding; stop and inspect.
+2. **B1 lift — PER-SIDE FIRST** (the priority integration target, E2.2 §4.5):
+   `uv run python betting_ml/scripts/incremental_lift_eval.py --target perside_runs --add-features opp_starter_tto3_xwoba_penalty --run-name e13_4_b1_tto`
+   then **H2H second**:
+   `uv run python betting_ml/scripts/incremental_lift_eval.py --target home_win --add-features home_starter_tto3_xwoba_penalty,away_starter_tto3_xwoba_penalty --run-name e13_4_b1_tto`
+   (optionally `--target run_diff` / `--target total_runs` likewise).
+3. **Read the verdict on the `non_cold_start` stratum** + PBO<0.2 + DSR≥0.95. SHIP only if all hold
+   (the harness prints `SHIP ✅` / `NO-SHIP (record null)`). A clean leak-tight null is itself the
+   deliverable — record it; do **not** chase the main total (E13.8: empirically efficient).
+4. Output JSON lands at `ablation_results/<run-name>_<target>_lift.json`. If B1 ships, integrate the
+   column into the target contract(s) + retrain through the standard promotion gate; else record the null.
+   B2 (bullpen-fatigue × game-length) and Candidate A (FanGraphs orthogonality pre-check) are next
+   candidates — they drop into the SAME harness with no harness changes (`--add-features`).
 
 **`git add` (this session):**
+- `betting_ml/scripts/incremental_lift_eval.py`
+- `betting_ml/tests/test_incremental_lift_eval.py`
+- `dbt/models/mart/mart_starter_tto_splits.sql`
+- `dbt/models/mart/schema.yml`
+- `dbt/models/feature/feature_pregame_starter_features.sql`
+- `dbt/models/feature/feature_pregame_game_features_raw.sql`
 - `quant_sports_intel_models/baseball/edge_program/E13_4_COVERAGE_DOSSIER.md`
 
-**Excluded from git:** none (no artifacts produced this session).
+**Excluded from git:** none (the model artifact / CV JSONs are produced by the operator's lift runs).
+
+### 6.3 (superseded) original handoff
+
+The original handoff command (`rebaseline_purged_cv.py --add-features … --pbo --dsr`) was aspirational —
+that interface never existed; §6.2 replaces it with the real `incremental_lift_eval.py` harness.
 
 **Honest expectation (recorded):** MLB momentum is weak, markets move on form, and the most-promoted gap (FanGraphs in-season windows) is **largely redundant** with existing Statcast rolling offense. TTO (B1) is the single candidate with a genuine orthogonality + market-underweighting case; B2/B3 are interaction terms trees may already capture (value concentrated in the GLM lane). **A clean null after these tests is the deliverable** — it lets us honestly conclude the model track's value is product-quality (calibrated projections/distributions/transparency) + fantasy, not a betting edge. This dossier is the coverage proof that makes that null defensible: we checked the axes, not just the columns.

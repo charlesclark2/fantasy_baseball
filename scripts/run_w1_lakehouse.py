@@ -92,13 +92,19 @@ def extract_duckdb_sql(model_name: str) -> str:
         )
 
     else:
-        # Layout B: strip the entire {% if target.name … %}…{% endif %} block
-        # (it only contains the config() call for mart models)
+        # Layout B: mart_pitch_* models have {{ config() }} at the top level
+        # (NOT inside a {% if target.name %} conditional — strip it directly).
+        sql = text
+
+        # Strip {{ config(...) }} — multi-line block at the top of each model
+        sql = re.sub(r'\{\{\s*config\(.*?\)\s*\}\}', '', sql, flags=re.DOTALL)
+
+        # Strip any remaining {% if target.name == 'duckdb' %} … {% endif %} blocks
         sql = re.sub(
             r'\{%-?\s*if\s+target\.name\s*==\s*[\'"]duckdb[\'"]\s*-?%\}'
             r'.*?'
             r'\{%-?\s*endif\s*-?%\}',
-            '', text, flags=re.DOTALL,
+            '', sql, flags=re.DOTALL,
         )
 
         # Resolve {{ ref('model') }} → model
@@ -109,11 +115,16 @@ def extract_duckdb_sql(model_name: str) -> str:
             r"\{\{\s*source\(['\"][^'\"]+['\"],\s*['\"](\w+)['\"]\)\s*\}\}", r'\1', sql
         )
 
-        # Strip {% if is_incremental() %} … {% endif %} blocks
+        # Strip {% if is_incremental() %} … {% endif %} blocks (removes {{ this }})
         sql = re.sub(
             r'\{%-?\s*if\s+is_incremental\(\)\s*-?%\}.*?\{%-?\s*endif\s*-?%\}',
             '', sql, flags=re.DOTALL,
         )
+
+    # Guard: any surviving Jinja will cause a DuckDB parser error
+    if re.search(r'\{[{%]', sql):
+        sample = re.findall(r'\{[{%][^}]*?[%}]\}', sql)[:3]
+        raise ValueError(f"Unresolved Jinja in {model_name}.sql: {sample}")
 
     return sql.strip()
 
