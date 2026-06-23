@@ -20,7 +20,17 @@
 -- the z-score to 0 (an average, regime-neutral matchup).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- E11.9-T2 — incremental, mirroring feature_pregame_game_features_raw. This thin
+-- wrapper passes raw.* through and adds the _seasonnorm columns; both the upstream
+-- _raw and this wrapper are rebuilt together by every feature-rebuild op, so the
+-- same N-day window keeps the served slate (today + recent) fresh. delete+insert
+-- by game_pk; weekly full-refresh net corrects drift.
+{{ config(
+    materialized='incremental',
+    unique_key='game_pk',
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns'
+) }}
 
 {%- set cc = contact_quality_columns() -%}
 
@@ -36,3 +46,8 @@ from {{ ref('feature_pregame_game_features_raw') }} raw
 left join {{ ref('feature_league_contact_baseline') }} b
     on  b.game_year = raw.game_year
     and b.game_date = raw.game_date
+{% if is_incremental() %}
+-- E11.9-T2 — match the _raw incremental scope so we only re-derive _seasonnorm for
+-- the games _raw re-materialized this run.
+where raw.game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
+{% endif %}
