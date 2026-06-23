@@ -615,8 +615,11 @@ final as (
         h_st.offspeed_pct_drift_5start          as home_starter_offspeed_pct_drift_5start,
 
         -- ── Home starter: pitcher archetype label (Story 7.4) ────────────────
-        -- Prior-season cluster label. NULL for rookies / pitchers not in table.
+        -- Prior-season cluster label. E13.7: rookies / not-in-table → 'league_baseline'.
         h_st.starter_pitcher_archetype          as home_starter_pitcher_archetype,
+        -- E13.7 cold-start flag: archetype/Stuff+/platoon above are league baselines, not
+        -- this pitcher's prior-season profile (true for rookies / call-ups).
+        h_st.is_cold_start                      as home_starter_is_cold_start,
 
         -- ── Home starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         h_st.eb_xwoba_against                   as home_starter_eb_xwoba_against,
@@ -713,8 +716,11 @@ final as (
         a_st.offspeed_pct_drift_5start          as away_starter_offspeed_pct_drift_5start,
 
         -- ── Away starter: pitcher archetype label (Story 7.4) ────────────────
-        -- Prior-season cluster label. NULL for rookies / pitchers not in table.
+        -- Prior-season cluster label. E13.7: rookies / not-in-table → 'league_baseline'.
         a_st.starter_pitcher_archetype          as away_starter_pitcher_archetype,
+        -- E13.7 cold-start flag: archetype/Stuff+/platoon above are league baselines, not
+        -- this pitcher's prior-season profile (true for rookies / call-ups).
+        a_st.is_cold_start                      as away_starter_is_cold_start,
 
         -- ── Away starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         a_st.eb_xwoba_against                   as away_starter_eb_xwoba_against,
