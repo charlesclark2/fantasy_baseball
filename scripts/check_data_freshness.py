@@ -108,6 +108,51 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 36,
         "game_day_only": False,
     },
+    # ── Odds ingestion (INC-2, 2026-06-22) ──────────────────────────────────
+    # The Odds API /events feed died silently on 2026-06-04 and went unnoticed for
+    # 18 days because NO odds feed was monitored — it froze mart_game_odds_bridge
+    # (event_id NULL → has_odds=false → null serving odds + null totals). Monitor
+    # the LIVE /odds ingest (mlb_odds_raw). The /events table is now orphaned (the
+    # bridge was repointed onto /odds), so /odds is the feed that matters. It pulls
+    # hourly, 24/7, so a tight BLOCKING threshold is safe and has no off-day gap.
+    "baseball_data.oddsapi.mlb_odds_raw": {
+        "ts_col": "ingestion_ts",
+        "max_stale_hours": 8,   # hourly feed; 8h catches a real stall with no false alarm
+        "game_day_only": False,
+    },
+    # ── Model-feature posteriors (INC-2 sweep, 2026-06-22) ──────────────────
+    # These archetype / sequential / EB posteriors feed the matchup + bullpen
+    # contract blocks but were UNMONITORED. The sweep found
+    # mart_player_archetype_posteriors DEAD since 2026-05-31
+    # (compute_archetype_posteriors.py stalled) → 3-week-stale clusters served for
+    # all June games. ALERT-ONLY (non_blocking) so a stall surfaces in the summary
+    # without red-failing the daily ingestion job — the model still serves
+    # degraded-but-present via stale/imputed posteriors, not a hard outage.
+    # Promote archetype to blocking once its backfill + daily re-wire is confirmed.
+    "baseball_data.betting.mart_player_archetype_posteriors": {
+        "ts_col": "as_of_date",   # DATE = last game_date included; daily cadence
+        "max_stale_hours": 48,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    "baseball_data.betting.player_sequential_posteriors": {
+        "ts_col": "update_ts",
+        "max_stale_hours": 36,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    "baseball_data.betting.team_sequential_posteriors": {
+        "ts_col": "update_ts",
+        "max_stale_hours": 36,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    "baseball_data.betting.eb_bullpen_team_posteriors": {
+        "ts_col": "fit_date",   # DATE; compute_bullpen_posteriors writes this table
+        "max_stale_hours": 48,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
 }
 
 # ---------------------------------------------------------------------------

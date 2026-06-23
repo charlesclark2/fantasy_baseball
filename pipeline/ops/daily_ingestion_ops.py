@@ -454,6 +454,19 @@ def update_matchup_cell_posteriors_op(context):
     _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py", ["--date", _one_day_ago()])
 
 
+# INC-2 (2026-06-22): compute_archetype_posteriors.py had NO scheduled caller and
+# silently stopped on 2026-05-31 — mart_player_archetype_posteriors served 3-week-
+# stale batter/pitcher cluster assignments (the archetype-matchup contract block, a
+# heavy home_win component) for all of June. Wired here in statcast_catchup_job after
+# the sequential posteriors so it refreshes daily once the completed-game data lands,
+# BEFORE the feature rebuild reads mart_player_archetype_posteriors. `--mode today`
+# is the daily incremental (writes the current as_of_date); target table is hard-
+# pinned to prod baseball_data.betting, so no TARGET_ENV needed.
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def update_archetype_posteriors_op(context):
+    _run_script(context, f"{_EB_DIR}/compute_archetype_posteriors.py", ["--mode", "today"])
+
+
 # Story A2.11 — the forward-looking TODAY's-slate EB posteriors (starter + lineup)
 # are now dbt models: eb_starter_posteriors (sourced from the full probable-pitcher
 # spine → covers +1/+2-day games, closing the Story 30.6 residual) and

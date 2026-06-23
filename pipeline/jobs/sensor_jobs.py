@@ -15,6 +15,7 @@ from pipeline.ops.daily_ingestion_ops import (
     dbt_umpire_feature_rebuild,
     generate_pick_narratives_op,
     predict_today_morning,
+    update_archetype_posteriors_op,
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
     update_team_posteriors_op,
@@ -83,13 +84,18 @@ def statcast_catchup_job():
     pp = update_player_posteriors_op(start=eb)
     pt = update_team_posteriors_op(start=pp)
     pm = update_matchup_cell_posteriors_op(start=pt)
+    # INC-2 (2026-06-22): refresh the archetype posteriors daily here too (previously
+    # unwired → stale since 2026-05-31), after the sequential posteriors and before
+    # dbt_umpire_feature_rebuild folds mart_player_archetype_posteriors into the
+    # feature store + the morning re-score reads it.
+    ar = update_archetype_posteriors_op(start=pm)
     # A2.3: recompute Elo on the now-current mart_game_results (compute_elo reads
     # mart_game_results, which is pitch-derived and therefore lagged by the same
     # Statcast availability gap this catch-up resolves). Without this, Elo stays
     # stale until the next 07:00 daily run even after the catch-up self-heals.
     # Story A2.11 — starter/lineup EB posteriors are now built inside
     # dbt_umpire_feature_rebuild (after the sequential ops), so no separate ops here.
-    el = compute_elo(start=pm)
+    el = compute_elo(start=ar)
     s3 = dbt_umpire_feature_rebuild(start=el)
     s4 = predict_today_morning(start=s3)
     write_serving_store_op(predict_done=s4)
