@@ -697,6 +697,25 @@ def write_serving_store_op(context):
     _run_script(context, "write_serving_store.py")
 
 
+@op(
+    ins={"predict_done": In(Nothing)},
+    out=Out(Nothing),
+    description="Intraday-scoped serving store write: picks, game-detail, and book-odds only. "
+                "Used by sensor jobs (lineup_monitor, statcast_catchup) where teams/players/"
+                "history/performance don't change — daily_ingestion_job owns the full run_all.",
+)
+def write_serving_store_intraday_op(context):
+    """Volatile sections only: --picks --game-detail --book-odds.
+
+    E11.10 (2026-06-23): lineup_monitor fires ~every 10 min intraday. Running
+    run_all (--teams --players --history --performance) on each fire was ~8 min of
+    wasted wall-clock — those sections are static within a day and owned by the
+    once-daily daily_ingestion_job. This variant cuts each intraday fire to the
+    three sections that actually change when a lineup or odds update posts.
+    """
+    _run_script(context, "write_serving_store.py", ["--picks", "--game-detail", "--book-odds"])
+
+
 # ── User bet settlement (Performance page redesign, story B1) ─────────────────
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

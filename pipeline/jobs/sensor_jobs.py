@@ -19,7 +19,7 @@ from pipeline.ops.daily_ingestion_ops import (
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
     update_team_posteriors_op,
-    write_serving_store_op,
+    write_serving_store_intraday_op,
 )
 
 
@@ -68,7 +68,7 @@ def lineup_monitor_job():
     # Soft-fail: Cortex outage must not block the serving write.
     s3n = generate_pick_narratives_op(start=s3)
     clv = lineup_dbt_clv_rebuild(start=s3n)
-    write_serving_store_op(predict_done=clv)
+    write_serving_store_intraday_op(predict_done=clv)
 
 
 @job(executor_def=in_process_executor, tags={"concurrency_group": "statcast_catchup"})
@@ -98,4 +98,4 @@ def statcast_catchup_job():
     el = compute_elo(start=ar)
     s3 = dbt_umpire_feature_rebuild(start=el)
     s4 = predict_today_morning(start=s3)
-    write_serving_store_op(predict_done=s4)
+    write_serving_store_intraday_op(predict_done=s4)
