@@ -2,7 +2,25 @@ home_win:
   artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_market_blind_2026.pkl
   prev_artifact_path: s3://baseball-betting-ml-artifacts/home_win/xgb_classifier_tuned_2026.pkl
   backfill_date: '2026-06-01'
-  calibrator_last_fit_date: '2026-05-08'
+  calibrator_last_fit_date: '2026-06-21'
+  # Story E13.6 (2026-06-21) — the SERVED prob was overconfident (ECE 0.154, Brier 0.276 >
+  # no-skill 0.249, corr 0.07). Promoted a spread-honest TemperatureCalibrator(T=6.30) fit on
+  # the v5 served sample → ECE 0.033, Brier 0.249. REVERSES the A2.9 identity (which was
+  # validated on the now-removed-leak 376-dim model). Class: betting_ml.utils.calibration.
+  calibrator_version: temperature_v1
+  calibrator_method: temperature
+  calibrator_temperature_T: 6.2998
+  calibrator_artifact: betting_ml/models/home_win/calibrator_temperature_v1.joblib
+  calibrator_rollback: betting_ml/models/home_win/calibrator.joblib=IdentityCalibrator (A2.9)
+  # ⚠️ INTERIM. The shrink partly compensates 30.3 serving-skew. MANDATORY re-audit + re-fit
+  # (betting_ml/scripts/h2h_calibration_audit_e13_6.py) after ANY of these — the honest band
+  # may legitimately widen (T→1) once the model serves on complete features:
+  calibrator_refit_required_after:
+    - epic_33_dense_serving_shipped
+    - story_30_3_serving_completeness_fix
+    - e1_9_v6_promotion
+  calibrator_pre_lineup_status: DEFERRED — pre_lineup_v1 had only 3 settled live games at fit;
+    fit/track its own temperature once it accrues ~150+ settled live games
   cv_brier: 0.1948
   deployed_date: '2026-06-12'
   promoted_at: '2026-06-12'

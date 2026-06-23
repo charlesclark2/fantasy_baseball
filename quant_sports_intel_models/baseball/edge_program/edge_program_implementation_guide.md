@@ -570,7 +570,8 @@ daily Dagster op only scores the upcoming slate's available-pen state. Conventio
 via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operator; do not git commit/push.
 ```
 
-### E2.2 — Dependence structure (copula)  ⬜  **[market-blind · the load-bearing story for E2.3's gate]**
+### E2.2 — Dependence structure (copula)  ✅  **[market-blind · finding: copula UNNECESSARY; the gap is marginal dispersion]**
+> **✅ GATE RAN 2026-06-22 — honest finding (NOT-MET = the finding, like E2.1b).** `betting_ml/utils/copula.py` + `betting_ml/scripts/totals_generative/fit_copula.py` + 14 tests. ρ fit on the **residual** dependence after the E2.1 conditional means absorb shared park/weather/ump (distributional transform → normal scores → Pearson; discrete-marginal-correct), NOT raw pairs (double-count). **Operator run (11,659 eval games 2021–25): residual ρ = −0.0035** (Kendall −0.0046, naive raw +0.0002) → home/away runs are **essentially INDEPENDENT; the Gaussian copula is unnecessary** (global, no material bucket ρ). The corr AC passes; **the var(total) AC fails — but identically with and without coupling** (copula 15.15 ≈ independent 15.18 vs empirical 19.99, ~24% shortfall) ⇒ the totals variance deficiency (Story 29.1) is in the **MARGINALS, not the dependence.** The added **dispersion diagnostic** pins the cause: E2.1 fits the NegBin `r` on optimistic TRAIN-fit means → `r` biased high (under-dispersed); an **OOS-calibrated `r` (~4 vs train ~6–15) reproduces var(total) → closes the gap.** **➡️ E2.3: (1) drop the copula (convolve independently); (2) calibrate the per-side dispersion on held-out residuals.** `copula_v1.json` records ρ_global≈0; re-run once to bake the dispersion diagnostic into the ablation JSON/MD.
 
 > **From E2.1 (gate-pass 2026-06-18) — two findings that shape this story:**
 > 1. **Per-side calibration ≠ convolution calibration.** The E2.1 marginal already trends `calib_80` ≈ 0.77→0.81 (2025 fold 0.808), which is encouraging for E2.3's `calib_80 ≥ 0.80` gate — **but a ~calibrated per-side marginal does NOT guarantee the convolved total is calibrated.** Getting the home/away dependence right here is what makes (or breaks) that gate — treat E2.2 as load-bearing, not a formality.
@@ -582,10 +583,12 @@ via MCP fully-qualified no USE; uv run python; hand >1min scripts to the operato
 **AC:** joint samples reproduce the empirical home/away run correlation **and** the realized total-runs variance; independent convolution (ρ=0) is shown insufficient on the tails (the variance/tail miss is the entire reason E2 exists); the ρ/`r` conditioning decision is recorded with its evidence.
 
 ### E2.3 — Convolution → predictive distributions  ⬜  **[market-blind]**
+> **⚠️ Fold in the E2.2 finding (2026-06-22):** home/away runs are essentially **independent** (ρ=−0.0035) → **convolve the two marginals independently; do NOT couple.** E2.2 showed the ~24% total-variance shortfall is **marginal under-dispersion** (E2.1 fits `r` on optimistic train-fit means → ~8.5; the held-out `r` is **~3.7**), so E2.3's **first task is dispersion calibration: fit per-side `r` on held-out residuals** (leakage-safe rolling/prior-window) — the lever for the calib_80 gate. **Use a SINGLE stable `r ≈ 3.7`, not a per-period one — E2.1's "r drifts 33→8" is a train-set-size estimation artifact (held-out `r` is stable ~3.4–3.9 across folds), not real non-stationarity.** Reuse `betting_ml/utils/copula.py::sample_gaussian_copula_negbin` with ρ=0.
 **Tasks:**
-- [ ] Draw N joint (home, away) samples (vectorized; cap N ~10k/game per §6) → derive **total** (sum), **run-diff** (difference; a distributional H2H input), and **team totals** (marginals).
+- [ ] **Calibrate a single stable per-side NegBin dispersion `r ≈ 3.7` on held-out residuals** (not E2.1's train-fit `r`, not per-period) — the dispersion diagnostic (`ablation_results/e2_2_copula_decision.md`) confirms this closes the variance gap and that the held-out `r` is stationary.
+- [ ] Draw N **independent** (home, away) samples (vectorized; cap N ~10k/game per §6; ρ=0) → derive **total** (sum), **run-diff** (difference; a distributional H2H input), and **team totals** (marginals).
 - [ ] Emit a quantile grid (P05…P95) + `p_over_<line>` for the relevant lines; store **params + grid, not raw samples** (§6).
-**AC:** PIT histogram flat / `calib_80 ≥ 0.80` for the full-game total (the current totals model fails this); team-total and run-diff marginals also PIT-calibrated.
+**AC:** PIT histogram flat / `calib_80 ≥ 0.80` for the full-game total (the current totals model fails this — and the fix is the dispersion calibration, not a copula); team-total and run-diff marginals also PIT-calibrated.
 
 ### E2.4 — First-5-innings (F5) per-side model  ⬜  **[market-blind]**
 **Tasks:**

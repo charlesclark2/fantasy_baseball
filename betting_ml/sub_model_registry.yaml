@@ -417,6 +417,14 @@ bullpen_v1:
 
     v1.1 (supervised refinement) requires mart_bullpen_game_outcomes (Story 2.8) —
     deferred until after Epic 6 v1.0 ships and signal value is evaluated.
+  e13_3_reeval:
+    date: '2026-06-21'
+    verdict: LEAK_EXPOSED_SUPERSEDED
+    note: |
+      Story E13.3. bullpen_v1 (trained 2026-05-30, pre-de-leak) also consumed the leaky
+      EB columns (eb_bullpen_xwoba/uncertainty/coverage_pct). Superseded by bullpen_v2 as
+      the Layer-3 bullpen champion; same leak exposure + same E13.3 retraction applies (see
+      bullpen_v2.e13_3_reeval). Not separately re-trained — v2 is the live signal source.
 
 bullpen_v2:
   artifact_path: s3://baseball-betting-ml-artifacts/sub_models/bullpen_v2.pkl
@@ -481,6 +489,43 @@ bullpen_v2:
     AC1 PASS: 99.3% non-null across 13,144 game-pks (0.0% null across 46,268 training rows).
     AC2 PASS: total_runs Δ MAE=-0.0029 (3/3 folds improved); home_win Δ Brier=-0.00008 (2/3 folds).
     Ablation JSON: betting_ml/models/ablation/ablation_reliever_top3_availability_20260610T172543.json
+  e13_3_reeval:
+    date: '2026-06-21'
+    verdict: PROMOTE_RETRACTED_CONFIRMED_REJECT
+    confirmed_result: |
+      ✅ Operator re-eval 2026-06-21: de-leaked Layer-3 eval (11,907 games) DEMOTED bullpen
+      to REJECT on BOTH targets — total_runs Δnll +0.0003 (1/4 folds), home_win Δbrier
+      +0.0001 (2/4 folds). Delta SIGN REVERSED from the leaky promote (−0.0292/−0.0266):
+      the entire prior lift was the within-game peek. All clean sub-models reproduced their
+      9.5 verdicts (run_env/offense promote; starter/starter_ip/matchup/defense_quality
+      defer/reject). Artifact: layer3_signal_evaluation_20260621_231932.{json,md}.
+    finding: |
+      Story E13.3 (sub-model re-eval on de-leaked data). bullpen_v2 was trained 2026-06-10
+      (PRE the 2026-06-18 E1.7 de-leak) on the LEAKY EB columns eb_bullpen_xwoba /
+      eb_bullpen_uncertainty / eb_bullpen_coverage_pct (FEATURE_COLS in
+      train_bullpen_distributional.py, sourced via mart_bullpen_effectiveness ←
+      eb_bullpen_team_posteriors, the outs_in_game within-game leak proven by E2.1b).
+      In the Story 9.5 Layer-3 eval bullpen was the STRONGEST promoted signal on BOTH
+      targets (total_runs NLL −0.0292 4/4; home_win Brier −0.0266 4/4) and carried the
+      LARGEST stacking weight (0.337 totals / 0.507 h2h). That promote is LEAK-INFLATED:
+      bullpen_mu_v2 inherits the within-game peek, so its Layer-3 held-out delta encodes
+      the eval-game outcome. Fresh 2026-06-21 confirmation: the de-leaked base bp_eb_xwoba
+      now corr ~0.05 with total_runs (was #1/#2 by MDA when leaky) — noise.
+      → The Layer-3 bullpen PROMOTE is RETRACTED. On de-leaked features the bullpen signal
+      is expected to fall below the Story 9.5 floor (NLL ≤ −0.005 / Brier ≤ −0.001, ≥3/4);
+      only data-depth (coverage/uncertainty) survives the de-leak, and E2.1b graded that
+      modest → expect DEFER at best, possibly REJECT.
+      NO live impact: the Layer-3 stack is NOT served (layer3_totals/h2h are inert stubs,
+      artifact_path null; predict_today falls back to the monolithic champions).
+    confirm_run: |
+      ✅ EXECUTED 2026-06-21 (generate_bullpen_signals.py --backfill → evaluate_layer3_signals.py
+      --targets total_runs,home_win). Result = REJECT/REJECT (above). Step 2 (full re-train under
+      purged CV) was NOT needed — scoring the existing bullpen_v2.pkl on de-leaked live features
+      already rejects, and a re-train could at most recover the modest coverage/uncertainty content
+      (E2.1b), still below the promote floor. No PBO/DSR (no win to defend).
+      Follow-up (non-blocking): stacking_weights.json still carries bullpen 0.337/0.507 — recompute
+      or flag if the (currently unserved/inert) Layer-3 stack is ever revived.
+    report: quant_sports_intel_models/baseball/ablation_results/e13_3_submodel_meta_reeval.md
 
 bullpen_v3:
   # NOTE ON LINEAGE: despite the name, bullpen_v3 is NOT a successor to the bullpen_v1/v2

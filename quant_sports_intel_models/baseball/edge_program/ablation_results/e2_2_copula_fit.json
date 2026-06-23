@@ -1,0 +1,213 @@
+{
+  "story": "E2.2",
+  "model_version": "totals_perside_v1",
+  "fit_at": "2026-06-22",
+  "min_year": 2018,
+  "marginal_source": "oos_purged_cv",
+  "n_games": 11659,
+  "rho": {
+    "residual_gaussian_copula": -0.0035,
+    "kendall_tau_implied": -0.0046,
+    "naive_raw_pairs_contrast": 0.0002
+  },
+  "conditioning": {
+    "park_run_factor_tercile": {
+      "buckets": {
+        "park_high": {
+          "n": 3887,
+          "rho": 0.0178,
+          "delta_vs_global": 0.0213,
+          "z_gap_sd": 1.33,
+          "var_mean_total": 2.368
+        },
+        "park_low": {
+          "n": 3886,
+          "rho": -0.0109,
+          "delta_vs_global": -0.0074,
+          "z_gap_sd": -0.46,
+          "var_mean_total": 2.177
+        },
+        "park_mid": {
+          "n": 3886,
+          "rho": -0.0186,
+          "delta_vs_global": -0.0151,
+          "z_gap_sd": -0.94,
+          "var_mean_total": 2.153
+        }
+      },
+      "rho_spread": 0.0364,
+      "max_abs_delta": 0.0213,
+      "any_significant": false
+    },
+    "temp_bucket": {
+      "buckets": {
+        "cold": {
+          "n": 1309,
+          "rho": -0.0257,
+          "delta_vs_global": -0.0222,
+          "z_gap_sd": -0.8,
+          "var_mean_total": 2.163
+        },
+        "hot": {
+          "n": 6353,
+          "rho": 0.0036,
+          "delta_vs_global": 0.0071,
+          "z_gap_sd": 0.57,
+          "var_mean_total": 2.31
+        },
+        "mild": {
+          "n": 3659,
+          "rho": -0.0039,
+          "delta_vs_global": -0.0004,
+          "z_gap_sd": -0.02,
+          "var_mean_total": 2.152
+        },
+        "temp_na": {
+          "n": 338,
+          "rho": -0.0641,
+          "delta_vs_global": -0.0606,
+          "z_gap_sd": -1.11,
+          "var_mean_total": 1.863
+        }
+      },
+      "rho_spread": 0.0677,
+      "max_abs_delta": 0.0606,
+      "any_significant": false
+    },
+    "roof": {
+      "buckets": {
+        "open": {
+          "n": 11659,
+          "rho": -0.0047,
+          "delta_vs_global": -0.0012,
+          "z_gap_sd": -0.12,
+          "var_mean_total": 2.25
+        }
+      },
+      "rho_spread": 0.0,
+      "max_abs_delta": 0.0012,
+      "any_significant": false
+    }
+  },
+  "conditioning_decision": {
+    "chosen_scheme": "global",
+    "rationale": "No bucket scheme is both significant (|z|\u22652) and materially different (max|\u0394\u03c1|\u22650.04); a single global \u03c1 is the simplest fit.",
+    "r_decision": "single global held-out-calibrated r \u2248 3.71 (held-out r is STABLE across folds, spread 0.53 / CV 0.054; the E2.1 train-fit r-drift 9.3-wide is an ESTIMATION ARTIFACT of fitting r on optimistic train means, NOT temporal non-stationarity \u2192 do NOT condition r on period)"
+  },
+  "validation": {
+    "empirical": {
+      "corr_home_away": 0.0002,
+      "mean_total": 8.8882,
+      "var_total": 19.9945,
+      "std_total": 4.4715,
+      "p_total_ge_5": 0.8506,
+      "p_total_ge_7": 0.6785,
+      "p_total_ge_9": 0.4885,
+      "p_total_ge_11": 0.3244,
+      "p_total_ge_13": 0.1998
+    },
+    "copula": {
+      "corr_home_away": -0.0014,
+      "mean_total": 8.9337,
+      "var_total": 15.1461,
+      "std_total": 3.8918,
+      "p_total_ge_5": 0.8869,
+      "p_total_ge_7": 0.715,
+      "p_total_ge_9": 0.5027,
+      "p_total_ge_11": 0.3108,
+      "p_total_ge_13": 0.1713
+    },
+    "independent_rho0": {
+      "corr_home_away": 0.0021,
+      "mean_total": 8.9247,
+      "var_total": 15.1764,
+      "std_total": 3.8957,
+      "p_total_ge_5": 0.8863,
+      "p_total_ge_7": 0.7133,
+      "p_total_ge_9": 0.5016,
+      "p_total_ge_11": 0.3099,
+      "p_total_ge_13": 0.1712
+    },
+    "analytic_variance": {
+      "within_game": 14.2531,
+      "between_game_means": 0.8943,
+      "coupling_2cov": -0.0497,
+      "total_variance": 15.1474,
+      "total_variance_rho0": 15.1971
+    },
+    "copula_tail_l1": 0.02582,
+    "independent_tail_l1": 0.02534,
+    "var_rel_err_copula": 0.2425,
+    "var_rel_err_independent": 0.241,
+    "corr_abs_err_copula": 0.0016,
+    "corr_abs_err_independent": 0.0019
+  },
+  "dispersion_diagnostic": {
+    "empirical_var_total": 19.9962,
+    "sim_var_total_r_oos": 20.7605,
+    "analytic_var_total_r_oos": 20.7648,
+    "rel_err_r_oos": 0.0382,
+    "tail_l1_r_oos": 0.00613,
+    "per_fold_r": [
+      {
+        "eval_year": 2021,
+        "r_train": 15.031,
+        "r_oos": 3.856,
+        "n": 2316
+      },
+      {
+        "eval_year": 2022,
+        "r_train": 8.749,
+        "r_oos": 3.612,
+        "n": 2375
+      },
+      {
+        "eval_year": 2023,
+        "r_train": 6.954,
+        "r_oos": 3.888,
+        "n": 2371
+      },
+      {
+        "eval_year": 2024,
+        "r_train": 6.211,
+        "r_oos": 3.836,
+        "n": 2369
+      },
+      {
+        "eval_year": 2025,
+        "r_train": 5.74,
+        "r_oos": 3.358,
+        "n": 2228
+      }
+    ],
+    "r_train_mean": 8.541,
+    "r_oos_mean": 3.714,
+    "r_oos_fold_spread": 0.53,
+    "r_train_fold_spread": 9.291,
+    "r_oos_cv": 0.0542,
+    "r_oos_stable": true,
+    "closes_variance_gap": true
+  },
+  "finding": {
+    "rho_negligible": true,
+    "dependence_verdict": "home/away runs essentially independent (\u03c1\u22480) \u2192 Gaussian copula unnecessary; independent convolution adequate for the dependence",
+    "variance_gap_is_marginal_dispersion": true,
+    "recommendation_for_e2_3": "Calibrate the per-side NegBin dispersion on HELD-OUT residuals (E2.1 fits r on optimistic train-fit means \u2192 under-dispersed \u2192 ~24% total-variance shortfall that the copula cannot fix). Skip the copula coupling (\u03c1\u22480)."
+  },
+  "gate": {
+    "reproduces_correlation": true,
+    "reproduces_total_variance": false,
+    "independent_insufficient_on_tails": false,
+    "market_blind": true,
+    "pass": false
+  },
+  "params": {
+    "version": "copula_v1",
+    "rho_global": -0.0035,
+    "bucket_scheme": "global",
+    "rho_by_bucket": {},
+    "conditioning": "global",
+    "r_decision": "single global held-out-calibrated r \u2248 3.71 (held-out r is STABLE across folds, spread 0.53 / CV 0.054; the E2.1 train-fit r-drift 9.3-wide is an ESTIMATION ARTIFACT of fitting r on optimistic train means, NOT temporal non-stationarity \u2192 do NOT condition r on period)",
+    "notes": "No bucket scheme is both significant (|z|\u22652) and materially different (max|\u0394\u03c1|\u22650.04); a single global \u03c1 is the simplest fit."
+  }
+}

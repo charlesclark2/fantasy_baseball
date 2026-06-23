@@ -70,6 +70,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 p.inserted_at DESC
         ) AS _rn
@@ -136,6 +140,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 p.inserted_at DESC
         ) AS _rn
@@ -465,6 +473,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY p.game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (p.h2h_market_implied_prob IS NOT NULL OR p.over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN p.prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 p.inserted_at DESC
         ) AS _rn
@@ -624,6 +636,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 inserted_at DESC
         ) AS _rn
@@ -692,6 +708,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 inserted_at DESC
         ) AS _rn
@@ -764,6 +784,10 @@ WITH ranked AS (
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
+                -- Prefer rows that actually carry market data: a degraded run
+                -- (post_lineup with NULL odds/abstain decisions) must never shadow
+                -- a complete morning row and get filtered out downstream.
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 inserted_at DESC
         ) AS _rn

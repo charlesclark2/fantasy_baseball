@@ -76,23 +76,32 @@ game_results as (
 
 ),
 
--- ── Odds API events (2021–2025 historical) ────────────────────────────────────
--- Resolve historical franchise names to team_id via the canonical lookup
--- (handles "Cleveland Indians" → Guardians, "Oakland Athletics" → Athletics).
+-- ── Odds API events (all eras) ────────────────────────────────────────────────
+-- INC-2 fix (2026-06-22): resolve events from mart_odds_outcomes (the live /odds
+-- feed) instead of mart_odds_events (the /events feed). The /events ingest
+-- (stg_oddsapi_events) silently stalled on 2026-06-04, freezing mart_odds_events at
+-- commence_date 2026-06-05; every 2026 game after that resolved to a NULL event_id
+-- → has_odds=false → null odds throughout feature_pregame_* and the feature_store
+-- serving path. mart_odds_outcomes carries the same Odds API event_id + commence_date
+-- + team names (all eras), stays live with /odds, and shares the exact event_id space
+-- that mart_odds_consensus joins on downstream — so this is both the live fix and a
+-- strictly tighter join key. Resolve franchise names to team_id via the canonical
+-- lookup (handles "Cleveland Indians" → Guardians, "Oakland Athletics" → Athletics).
 
 odds_events_resolved as (
 
     select
-        oe.event_id,
-        oe.commence_date,
+        o.event_id,
+        o.commence_date,
         h.team_id as home_team_id,
         a.team_id as away_team_id,
-        oe.ingestion_ts
-    from {{ ref('mart_odds_events') }} oe
+        max(o.ingestion_ts) as ingestion_ts
+    from {{ ref('mart_odds_outcomes') }} o
     left join team_lookup h
-        on h.name_lower = lower(regexp_replace(trim(oe.home_team), '^G[12] ', ''))
+        on h.name_lower = lower(regexp_replace(trim(o.home_team), '^G[12] ', ''))
     left join team_lookup a
-        on a.name_lower = lower(regexp_replace(trim(oe.away_team), '^G[12] ', ''))
+        on a.name_lower = lower(regexp_replace(trim(o.away_team), '^G[12] ', ''))
+    group by 1, 2, 3, 4
 
 ),
 

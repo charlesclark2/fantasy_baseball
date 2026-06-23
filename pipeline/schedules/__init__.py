@@ -5,6 +5,7 @@ from pipeline.schedules.weekly_player_profiles_schedule import weekly_player_pro
 from pipeline.schedules.weekly_clv_monitoring_schedule import weekly_clv_monitoring_schedule
 from pipeline.schedules.weekly_ml_schedules import weekly_meta_model_schedule, weekly_ml_schedule
 from pipeline.schedules.magnitude_monitor_schedule import magnitude_monitor_schedule
+from pipeline.schedules.w1_parity_schedule import w1_parity_schedule
 
 all_schedules = [
     daily_ingestion_schedule,
@@ -14,4 +15,5 @@ all_schedules = [
     weekly_ml_schedule,
     weekly_meta_model_schedule,
     magnitude_monitor_schedule,
+    w1_parity_schedule,
 ] + all_intraday_schedules
