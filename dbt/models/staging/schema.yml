@@ -170,13 +170,21 @@ models:
       Markets: team_totals, alternate_totals, h2h_h1 (F5 moneyline), totals_h1 (F5 totals).
       Coverage: 2023-05-03 onward.
       EVAL/CLV-ONLY — never joined into model training feature matrices.
+      Tests are severity:warn (E11.7: non-serving peripheral feed — mart_derivative_closes is
+      EVAL/CLV-ONLY, never on the prediction or feature-store path).
     columns:
       - name: event_id
         description: Odds API event identifier. Joins to mart_game_odds_bridge.odds_api_event_id.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: actual_snapshot_ts
         description: The snapshot timestamp returned by the API (from the response envelope).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: commence_time
         description: Game start time (UTC). Closing snapshot guaranteed <= this value.
       - name: home_team
@@ -185,15 +193,24 @@ models:
         description: Away team name (Odds API format).
       - name: bookmaker_key
         description: Bookmaker identifier (e.g. bovada, pinnacle, fanduel).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: market_key
         description: >
           Derivative market key. One of: team_totals, alternate_totals,
           h2h_h1 (F5 moneyline), totals_h1 (F5 totals).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: outcome_name
         description: Outcome name (e.g. Over, Under, home team name, away team name).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
       - name: outcome_description
         description: >
           Team name for team_totals outcomes (identifies which team's total).
@@ -401,39 +418,62 @@ models:
       total bases, home runs, etc.). Use snapshot_ts — not ingestion_ts — as
       the authoritative timestamp for leakage guards. Live endpoint only;
       no historical backfill path exists.
+      Tests are severity:warn (E11.7: CLV/eval feed only — feeds mart_odds_line_movement
+      which is EVAL/CLV; never on the prediction or feature-store serving path).
 
     columns:
 
       - name: ingestion_ts
         description: Wall-clock UTC time the row was written to Snowflake (from the raw table).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: load_id
         description: UUID grouping all rows produced by the same ingestion run.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: event_id
         description: Parlay API event identifier. Joins to stg_parlayapi_odds.event_id and mart_game_odds_bridge.parlay_api_event_id.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: home_team
         description: Full home team name as returned by the Parlay API.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: away_team
         description: Full away team name as returned by the Parlay API.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: bookmaker_key
         description: Bookmaker slug (e.g. 'fanduel', 'draftkings'). Non-suffixed live keys only — this endpoint is live-only.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: player
         description: Player name for player prop markets. Null for team markets (moneyline, totals).
 
       - name: market_key
         description: Market type (e.g. 'moneyline', 'totals', 'player_strikeouts').
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: current_line
         description: Current total or prop line value. Null for moneyline markets.
@@ -463,14 +503,20 @@ models:
         description: >
           UTC timestamp of this specific price snapshot. Use this column — not ingestion_ts —
           as the authoritative timestamp for leakage guards and time-series feature engineering.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: snapshot_ts_ms
         description: Millisecond epoch timestamp of this snapshot (raw from API).
 
       - name: snapshot_over_price
         description: American odds for the over/home outcome at this snapshot.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: snapshot_under_price
         description: >
@@ -494,15 +540,24 @@ models:
 
       - name: is_player_prop
         description: True when player is non-null (this row is a player prop market).
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_h2h_market
         description: True when market_key = 'moneyline'.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
       - name: is_totals_market
         description: True when market_key = 'totals'.
-        tests: [not_null]
+        tests:
+          - not_null:
+              config:
+                severity: warn
 
   - name: stg_parlayapi_canonical_events
     description: >

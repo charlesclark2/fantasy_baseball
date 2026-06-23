@@ -29,6 +29,43 @@ Three things share confusingly similar paths. Two are live; one is dead.
 `dbtf` (not `dbt`); Snowflake via MCP, fully-qualified, no `USE`, never on a request path; `uv run python`; hand >1-min scripts to the operator; **do not `git commit`/`push`**; market-blind for non-market models; honest framing for anything user-facing (no win-rate / edge claims — `best_alpha = 0`).
 - **🚂 Railway MCP available:** for any Railway work (env vars, service config, redeploys, deploy logs) use the **Railway MCP** rather than hand-walking the operator through the dashboard — it sets vars, redeploys, and tails logs directly.
 
+## Pipeline failure-handling contract (E11.7 — ENFORCE on every new op/test)
+
+Three tiers govern how pipeline failures behave. Every new op, cron, sensor, and dbt test is assigned to exactly one tier:
+
+| Tier | Behaviour | When to use |
+|------|-----------|-------------|
+| **HALT** | raise Exception / exit 1; fails the op/job | Serving-critical path only — `predict_today`, the feature store, serving-mart `dbt run`, the contract-guard, `write_serving_store`, signal freshness gate |
+| **WARN-but-continue** | `context.log.warning(...)` + catch, op succeeds | Peripheral data-quality — non-serving ingestion (weather, OAA, bios), `dbt test` suite, user-bet settlement, narrative generation |
+| **ALERT-loud-but-continue** | `context.log.warning(...)` or `echo WARNING` to stderr, then exit 0 | Any graceful skip that hides work — missing env var (DBT_RUNNER_URL unset), unreachable runner, no-op ingest; NEVER a silent `print()`/`pass` |
+
+**Rules:**
+- No in-process `dbtf` invocations anywhere — all dbt must go through `pipeline/ops/_dbt_exec._run_dbt` (enforces the remote-runner path and hard timeout).
+- On `dbt build` days, the serving-critical step is always `dbt run` first (HALT on failure); the test suite is a separate non-blocking step (WARN tier). Never a single `dbt build` that gates predictions on a peripheral test failure (INC-6).
+- Any `except` block in ops/sensor/cron files that does NOT call `context.log.warning()` (or write to stderr) is a contract violation.
+- `dbt test` severity: serving-critical model contracts stay `error`; peripheral / non-serving data-quality checks use `severity: warn`.
+
+**Op → tier map** (canonical; update when adding ops):
+
+| Op / script | Tier | Reason |
+|-------------|------|--------|
+| `dbt_daily_build` → run step | HALT | gates feature store & mart rebuilds |
+| `dbt_daily_build` → test step | WARN | peripheral data-quality; non-blocking |
+| `predict_today_morning` / `lineup_predict` | HALT | primary serving output |
+| `write_serving_store_op`, `write_api_cache_op` | HALT | gates Railway PG / S3 serve |
+| `signal_freshness_check` | HALT | gates predict on stale inputs |
+| `dbt_umpire_feature_rebuild`, `dbt_build_bullpen_posteriors_op` | HALT | rebuild critical feature blocks |
+| `ingest_statcast`, `catchup_ingest_statcast`, `catchup_dbt_rebuild` | HALT | core pitch data; predictions depend |
+| `ingest_weather`, `ingest_oaa`, `ingest_umpires_early/late` | WARN | non-critical; predictions run without |
+| `ingest_umpire_scorecards`, `settle_user_bets_op` | WARN | post-game enrichment; non-blocking |
+| `generate_pick_narratives_op`, `check_data_freshness` | WARN | advisory; fallback exists |
+| `ingest_statcast_to_s3_op`, `run_w1_lakehouse_op` | WARN | S3 track; Snowflake path is primary |
+| `intraday_weather_capture`, `write_book_odds_op` | WARN | supplemental; never blocks predictions |
+| `schedule_capture` cron → dbt trigger | ALERT | skip must log WARNING to stderr |
+| `trigger_dbt.py` when DBT_RUNNER_URL unset | ALERT | skip is loud (INC-5) |
+| dbt tests on serving-critical marts | HALT (severity: error) | contract enforcement |
+| dbt tests on peripheral/non-serving models | WARN (severity: warn) | data-quality advisory |
+
 ## CI gates — REQUIRED before any handoff (never hand off red code)
 Run the equivalent CI checks locally and confirm GREEN before the operator handoff:
 - **Python → Unit Tests CI:** `uv run pytest`
