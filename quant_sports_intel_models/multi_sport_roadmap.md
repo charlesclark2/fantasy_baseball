@@ -78,3 +78,15 @@ Lambda is 15-min max + limited memory/ephemeral disk, and `nfl_data_py`+pandas+p
 
 ## 7. What "ready by kickoff" honestly means
 By each season's start we aim to have: **(1)** the sport's data flowing + a master data inventory, **(2)** honest edge-free surfaces live (parlay calculator, CLV/per-book transparency, fantasy projections), and **(3)** baseline distributional models in shadow. **Validated betting edge is a post-kickoff, gated outcome** — not a launch promise. This keeps the multi-sport expansion fast where it's safe (data + transparency + projections) and disciplined where it's risky (claimed edge).
+
+## 8. Orchestration timing — do NOT wire up recurring schedules until pre-season
+
+The one-time history backfill scripts (`backfill_multisport_odds_to_s3.py`, and future scores/stats ingest scripts) are **run manually once** to populate S3. **No recurring orchestration (Lambda + EventBridge, Dagster) should be set up until ~2–4 weeks before each sport's season starts:**
+
+| Sport | Season start | Wire up orchestration by |
+|---|---|---|
+| NCAAF | ~late Aug 2026 | ~early Aug 2026 |
+| NFL | ~early Sept 2026 | ~mid Aug 2026 |
+| NCAAB | ~early Nov 2026 | ~mid Oct 2026 |
+
+**Why:** Standing schedules on pre-season sports cost credits/compute for zero value — there are no games to ingest. The incremental-only ingest scripts are cheap to re-run from scratch at season start given S3 already has the history; a full-history re-pull is never needed again. Set a calendar reminder per sport; do not pre-build cron infrastructure months in advance.
