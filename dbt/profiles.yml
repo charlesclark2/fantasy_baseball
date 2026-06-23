@@ -10,6 +10,14 @@ baseball_betting_and_fantasy:
       warehouse: COMPUTE_WH
       schema: betting
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
+      # E11.9 — connection-level QUERY_TAG. The E11.3 on-run-start ALTER SESSION SET
+      # QUERY_TAG did NOT propagate to dbt-fusion's per-model queries (the 6/22 audit
+      # found 96.7% of warehouse queries UNTAGGED — the normal DBT_RW workload). The
+      # `query_tag` profile key is applied as a session parameter at CONNECT time on
+      # EVERY connection fusion opens, so every model/test query is attributed to the
+      # calling job. DBT_JOB_NAME is injected by the Dagster ops / runner; TARGET_ENV
+      # is the env. Falls back to 'dbt_manual' for local/CI.
+      query_tag: "{{ env_var('DBT_JOB_NAME', 'dbt_manual') }}|{{ env_var('TARGET_ENV', 'dev') }}"
 
     dev:
       type: snowflake
@@ -20,6 +28,7 @@ baseball_betting_and_fantasy:
       warehouse: COMPUTE_WH
       schema: dev_betting
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
+      query_tag: "{{ env_var('DBT_JOB_NAME', 'dbt_manual') }}|{{ env_var('TARGET_ENV', 'dev') }}"
 
     ci:
       type: snowflake
@@ -30,3 +39,19 @@ baseball_betting_and_fantasy:
       warehouse: COMPUTE_WH
       schema: ci_betting
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
+      query_tag: "{{ env_var('DBT_JOB_NAME', 'dbt_manual') }}|{{ env_var('TARGET_ENV', 'dev') }}"
+
+    # E11.1-W1: lakehouse target — dbt-duckdb reads/writes S3 Parquet for heavy
+    # Tier-3 Statcast batch marts. Run with:
+    #   dbtf run --target duckdb --select stg_batter_pitches mart_pitch_*
+    # Prerequisites: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_DEFAULT_REGION
+    # in env; stg_batter_pitches exported to S3 via scripts/export_statcast_to_s3.py
+    duckdb:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '/tmp/baseball_lakehouse.duckdb') }}"
+      extensions:
+        - httpfs
+      # S3 credentials + region are injected via CREATE PERSISTENT SECRET (PROVIDER
+      # credential_chain) in the on-run-start hook (see macros/lakehouse.sql →
+      # setup_duckdb_s3_secret). dbt-fusion does not apply env_var() from the settings
+      # dict to DuckDB connections, so the hook is the only reliable injection point.

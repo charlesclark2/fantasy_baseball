@@ -210,11 +210,23 @@ def lineup_predict(context: OpExecutionContext) -> None:
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def lineup_dbt_clv_rebuild(context: OpExecutionContext) -> None:
-    """Rebuild lineup-dependent feature models and CLV mart."""
+    """Recompute the CLV marts against the just-written post-lineup predictions.
+
+    E11.9 (2026-06-22) — was `+stg_statsapi_lineups+ mart_closing_line_value
+    mart_prediction_clv`. The `+stg_statsapi_lineups+` selector rebuilt the ENTIRE
+    lineup→feature-store subtree (feature_pregame_lineup_features →
+    feature_pregame_game_features_raw → feature_pregame_game_features + every other
+    descendant) a SECOND time on every lineup trigger — immediately after
+    lineup_dbt_feature_rebuild already built it one op earlier. Neither CLV mart
+    consumes those models: mart_closing_line_value refs stg_statsapi_games / odds
+    marts / mart_game_odds_bridge, and mart_prediction_clv refs
+    daily_model_predictions + mart_closing_line_value. So the feature re-build was
+    pure waste — a top contributor to the 6/22 audit's feature_pregame full-CTAS
+    count. Select ONLY the two CLV marts; their upstreams are kept fresh by the odds
+    path + daily build."""
     _run_dbt(context, [
         "run",
         "--select",
-        "+stg_statsapi_lineups+",
         "mart_closing_line_value",
         "mart_prediction_clv",
         "--target", "baseball_betting_and_fantasy",

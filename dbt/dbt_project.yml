@@ -71,10 +71,20 @@ seeds:
 # gives a cost-by-job breakdown. DBT_JOB_NAME is injected by the Dagster op
 # (see pipeline/ops/*_ops.py _run_dbt helpers); falls back to 'dbt_manual' for
 # local / CI runs. TARGET_ENV is set by Dagster as 'prod' (default 'dev').
+#
+# E11.9 — the PRIMARY tagging mechanism is now the connection-level `query_tag` in
+# profiles.yml: the 6/22 audit proved this on-run-start ALTER SESSION did NOT reach
+# dbt-fusion's per-model queries (96.7% untagged). The profile key tags every
+# connection at connect time. This hook is RETAINED as a belt-and-suspenders for the
+# hook connection, and is now kept IDENTICAL to the profile tag (no invocation_id) so
+# every query — model, test, hook — groups under the same job|env value in the
+# cost-by-job report rather than fragmenting one connection per run.
 on-run-start:
-  - >-
-    ALTER SESSION SET QUERY_TAG =
-    '{{ env_var("DBT_JOB_NAME", "dbt_manual") }}|{{ env_var("TARGET_ENV", "dev") }}|{{ invocation_id }}'
+  # E11.1-W1: ALTER SESSION is Snowflake-only; skip for the duckdb lakehouse target.
+  - "{% if target.name != 'duckdb' %}ALTER SESSION SET QUERY_TAG = '{{ env_var('DBT_JOB_NAME', 'dbt_manual') }}|{{ env_var('TARGET_ENV', 'dev') }}'{% endif %}"
+  # E11.1-W1: dbt-fusion does not apply env_var() from profiles.yml settings to DuckDB;
+  # inject S3 credentials via CREATE PERSISTENT SECRET instead (macro in macros/lakehouse.sql).
+  - "{{ setup_duckdb_s3_secret() }}"
 
 query-comment:
   comment: "job={{ env_var('DBT_JOB_NAME', 'dbt_manual') }} model={{ node.name }}"

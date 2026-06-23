@@ -1,6 +1,6 @@
 # E13.4 — Feature/Signal COVERAGE Completeness Dossier
 
-**Status:** Inventory + gap-map COMPLETE; candidate testing PRE-REGISTERED, lift-runs handed to operator (long fits).
+**Status:** Inventory + gap-map COMPLETE; candidate testing PRE-REGISTERED, lift-runs handed to operator (long fits). **§7 data-integrity gate: integrity breaches CLEARED 2026-06-22 (archetype staleness fixed + 6 freshness monitors added); one documented caveat remains — the archetype-matchup structural null (§7 Issue 2b), a model-feature follow-up, not an integrity blocker.**
 **Date:** 2026-06-22
 **Author track:** Model-A (edge direction)
 **Purpose (operator's exit criterion):** make the H2H/totals "no edge" conclusion *defensible as a coverage conclusion* — i.e. we checked the signal **axes**, not just the columns we happened to have. Until coverage is demonstrably complete, "no edge" only means "no edge given what we happened to model." This dossier closes that gap.
@@ -144,6 +144,26 @@ Each candidate's hypothesis, build, and pass/fail are fixed here so the verdict 
 **Shrinkage discipline (applies to all recency candidates):** a short-window value is mostly variance — every candidate must isolate *persistent change* via regression-to-mean (empirical-Bayes shrink toward the season/league mean by sample size) before entering the model. Raw 7d deltas are disallowed.
 
 ---
+
+## 7. DATA-INTEGRITY GATE — coverage ≠ integrity (added 2026-06-22, BLOCKS finalization)
+
+**Why this section exists:** §0–§5 audit **coverage** (is the signal axis *represented*?). They do NOT audit **integrity** (is the data behind a present column *fresh and correct*?). A 2026-06-22 production incident (the Odds API `/events` feed died silently on 2026-06-04 and went unnoticed for 18 days — see [[project_odds_bridge_events_outage_jun2026]]) forced an integrity sweep, which found a **second** silent feed death. A degraded feature can *manufacture or mask* an edge signal, so the dossier's "clean null = trustworthy" claim is **conditional on integrity**, which was NOT established by the coverage audit.
+
+**Findings of the 2026-06-22 freshness sweep:**
+- **`check_data_freshness.py` monitors only 7 feeds** (Statcast, FanGraphs Stuff+, FanGraphs hitting, umpires ×2, transactions, schedule, Action Network). **UNMONITORED:** every odds feed, the archetype/sequential posteriors, lineups, weather. This blind spot is the root mechanism — silent deaths in unmonitored feeds are invisible.
+- **Issue 1 (FIXED): Odds API `/events` dead since 2026-06-04** → `mart_odds_events` frozen → bridge `event_id` NULL → `has_odds=false` on all post-06-05 games. Repointed bridge to the live `/odds` mart. **Impact on THIS dossier: low** — models are market-blind, so odds null hit display/CLV/market-comparison, not the model contracts.
+- **Issue 2 (FIXED — staleness): `mart_player_archetype_posteriors` was dead since 2026-05-31** (`compute_archetype_posteriors.py` had NO scheduled caller — unwired, last manual run 05-31). The batter-archetype × pitcher-cluster matchup block — a **heavy** home_win contract component (§2.1) — was served **frozen at 05-31 clusters** for all June games. **Resolved 2026-06-22:** backfilled `--mode backfill --season 2026` (posteriors now current to 06-21) + wired `update_archetype_posteriors_op` into the daily `statcast_catchup_job` so it can't silently re-stale.
+- **Issue 2b (STRUCTURAL, pre-existing — NOT the stall): the archetype-matchup null rate is a growing seasonal coverage floor.** Post-backfill + full rebuild, `home_lineup_avg_woba_vs_cluster` null is **still ~22%** — because the null was never caused by the stall (the stall produced *stale*, not *null*, values). Weekly trend: **~7% at Opening Day → ~16% in May → 20–27% by mid-June**, both sides, present even in the pre-stall fresh window (Apr-May ≈ 15%). Mechanism: pitcher archetype posteriors cluster off **prior-season** data, so the growing pool of 2026 rookies/callups/openers has no cluster → null matchup feature — **worst in exactly the recent OOS window the edge eval uses.** This is a genuine coverage limitation of the archetype axis: nominally "covered," but null for ~1-in-5-to-4 recent games. **Candidate fix (graceful degradation):** assign uncategorized pitchers to a nearest-centroid / population-prior cluster (EB shrinkage to the global prior) so the feature degrades to a prior instead of NULL. Pre-register + test alongside §5.
+- **Baseline null profile (last 14d / 190 games):** archetype ~22% (structural — Issue 2b), starter Stuff+ 13.2%, platoon-adj 12.6%, park 6.8%; elo/pythag/ump/oaa/odds clean. Stuff+ & platoon nulls are also partly **expected** (prior-season joins null first-season pitchers — the E1.8 de-leak tradeoff) — i.e. the same new-pitcher / prior-season-coverage mechanism recurs across three blocks.
+- **Healthy:** Statcast `batter_pitches`, FanGraphs (hitting + Stuff+), Action Network, EB bullpen/starter/batter, player/team/matchup-cell sequential posteriors, lineups — all fresh (06-21/06-22).
+
+**GATE (must clear before finalizing the "no edge" conclusion or running the §5 lift-tests):**
+1. **Restore archetype posteriors — ✅ DONE 2026-06-22.** Backfilled `--mode backfill --season 2026` (current to 06-21) + wired `update_archetype_posteriors_op` into `statcast_catchup_job`. Staleness resolved.
+2. **Close the monitoring blind spot — ✅ DONE 2026-06-22.** Added 6 monitors to `check_data_freshness.py`: `oddsapi.mlb_odds_raw` (blocking, 8h) + archetype / player-seq / team-seq / eb-bullpen posteriors (alert-only). The archetype monitor (48h) would have caught this on day 2 instead of day 18.
+3. **STILL OPEN — archetype structural null (Issue 2b):** decide whether to ship the graceful-degradation fallback (nearest-centroid / population prior for uncategorized pitchers) before trusting the archetype block in the OOS edge eval. Until then, the §5 lift-tests and the "no edge" read must note the archetype axis is ~20% null (rising) in the eval window — a real coverage caveat, distinct from the now-fixed integrity breach.
+4. **Run §5 lift-tests only on integrity-verified marts** — now that staleness is fixed, this is satisfied for archetype *freshness*; the structural null (item 3) remains a documented caveat, not a blocker.
+
+**Net effect on the conclusion:** the coverage verdict in §0–§5 stands (the *axes* are checked). But "a clean null is trustworthy" is **earned only after** the integrity gate — otherwise it's "no edge given coverage we have AND given whatever silent degradation we didn't check." The user flagged exactly this risk; the two found issues confirm it is real, not hypothetical.
 
 ## 6. ⏭️ OPERATOR HANDOFF
 
