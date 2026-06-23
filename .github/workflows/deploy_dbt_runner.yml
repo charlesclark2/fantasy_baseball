@@ -26,4 +26,5 @@ jobs:
           railway up \
             --service dbt-runner \
             --project faa64ea4-7d9e-4d7f-97e3-db5e3de746b3 \
+            --environment production \
             --detach
