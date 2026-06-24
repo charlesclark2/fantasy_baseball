@@ -69,8 +69,9 @@ def extract_duckdb_sql(model_name: str) -> str:
     """
     text = find_model(model_name).read_text()
 
-    if model_name == "stg_batter_pitches":
-        # Layout A: pull the duckdb branch out of the if/else
+    if model_name.startswith("stg_"):
+        # Layout A: the entire SELECT lives inside the duckdb branch (stg_batter_pitches,
+        # stg_ref_players). Pull the duckdb branch out of the if/else.
         m = re.search(
             r'\{%-?\s*if\s+target\.name\s*==\s*[\'"]duckdb[\'"]\s*-?%\}'
             r'(.*?)'
@@ -78,16 +79,16 @@ def extract_duckdb_sql(model_name: str) -> str:
             text, re.DOTALL,
         )
         if not m:
-            raise ValueError("Could not find duckdb branch in stg_batter_pitches.sql")
+            raise ValueError(f"Could not find duckdb branch in {model_name}.sql")
         sql = m.group(1)
 
         # Strip {{ config(...) }}
         sql = re.sub(r'\{\{[^}]*config[^}]*\}\}', '', sql)
 
-        # Resolve {{ lakehouse_loc("stg_batter_pitches") }} → S3 path
+        # Resolve any {{ lakehouse_loc("X") }} → S3 path (generic over model name)
         sql = re.sub(
-            r'\{\{\s*lakehouse_loc\([\'"]stg_batter_pitches[\'"]\)\s*\}\}',
-            f"{LAKEHOUSE}/stg_batter_pitches/",
+            r'\{\{\s*lakehouse_loc\([\'"](\w+)[\'"]\)\s*\}\}',
+            rf"{LAKEHOUSE}/\1/",
             sql,
         )
 
@@ -148,21 +149,14 @@ def run(dry_run: bool = False) -> None:
     n = conn.execute("SELECT count(*) FROM stg_batter_pitches").fetchone()[0]
     print(f"stg_batter_pitches: {n:,} pitches loaded from S3")
 
-    # mart_pitch_hitter_profile and mart_pitch_pitcher_profile left-join ref_players
-    # for display names.  ref_players lives in Snowflake (baseball_data.savant.ref_players)
-    # and is not yet on S3.  Create an empty stub so the left join compiles; player name
-    # columns (batter_name, pitcher_name, etc.) will be NULL until ref_players is exported.
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ref_players (
-            mlb_bam_id       INTEGER,
-            first_name       VARCHAR,
-            last_name        VARCHAR,
-            player_name      VARCHAR,
-            mlb_played_first INTEGER,
-            mlb_played_last  INTEGER
-        )
-    """)
-    print("ref_players: empty stub (player name cols will be NULL)")
+    # mart_pitch_hitter_profile and mart_pitch_pitcher_profile left-join the player-name
+    # dimension. As of the ref_players S3 export (scripts/export_ref_players_to_s3.py),
+    # stg_ref_players reads real names from S3 — register it as a view (same Layout-A
+    # extraction as stg_batter_pitches) so the marts' `from stg_ref_players` resolves.
+    stg_ref_sql = extract_duckdb_sql("stg_ref_players")
+    conn.execute(f"CREATE OR REPLACE VIEW stg_ref_players AS {stg_ref_sql}")
+    n_ref = conn.execute("SELECT count(*) FROM stg_ref_players").fetchone()[0]
+    print(f"stg_ref_players: {n_ref:,} players loaded from S3")
 
     for model in MART_MODELS:
         loc = f"{LAKEHOUSE}/{model}/data.parquet"

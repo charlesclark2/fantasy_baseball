@@ -23,7 +23,17 @@
 -- Gates: E13.2 (PA-outcome model), E13.10 (downstream enrichment).
 -- =============================================================================
 
-{{ config(materialized='table') }}
+-- Cost-hygiene guard (E13.2 Phase 0): this is a NEW, off-serving, ~1.96M-row
+-- Statcast mart. It must NEVER materialize on Snowflake — otherwise the daily
+-- `source_status:fresher+` build (the savant source refreshes daily) would sweep
+-- it in and CTAS the full table on the bill the cost posture is cutting. Enable
+-- ONLY on the duckdb/S3 lakehouse target; disabled (never built, never selected,
+-- tests auto-skipped) on every Snowflake target. Matches the schema.yml note:
+-- "Lakehouse path only … do not run against Snowflake".
+{{ config(
+    enabled=(target.name == 'duckdb'),
+    materialized='table'
+) }}
 
 with
 

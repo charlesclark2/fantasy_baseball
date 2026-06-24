@@ -587,21 +587,16 @@ models:
   # ============================================================================
   - name: mart_game_odds_bridge
     description: >
-      Bridge table linking every game in mart_game_results to its corresponding
-      odds event_id(s) from The Odds API and/or Parlay API. Enables downstream
-      models to combine game outcomes with pre-game betting odds from either source.
-      Two source-specific columns (odds_api_event_id, parlay_api_event_id) preserve
-      the full audit trail. The coalesced event_id column prefers Parlay API when
-      both exist, falling back to Odds API for historical games — use this column
-      for all downstream joins to mart_odds_outcomes.
-      Priority by era: 2021–2025 = Odds API only; 2026 overlap = Parlay preferred;
-      2026 post-cutover = Parlay API only.
+      Bridge table linking every game_pk to its Odds API event_id. Enables
+      downstream models to join game outcomes with pre-game odds from mart_odds_outcomes.
+      parlay_api_event_id is preserved as a NULL column (E11.6, 2026-06-21) for
+      schema compatibility with mart_derivative_closes; Odds API is the sole live
+      source post-decommission.
       Join logic (A1.9): game_date = commence_date AND home_team_id = odds home_team_id
-      AND away_team_id = odds away_team_id. Every feed/Stats API team name is
-      resolved to a team_id through dim_team_name_lookup, so the join is immune to
-      cross-source name drift ("Cleveland Indians" → Guardians, "Oakland Athletics"
-      → Athletics, etc.) — new variants are added to the ref_team_aliases seed, not
-      this model.
+      AND away_team_id = odds away_team_id AND game_number = game_slot. Every team name
+      is resolved to a team_id through dim_team_name_lookup so the join is immune to
+      cross-source name drift. game_slot ordering (1=earliest, 2=next by commence_time)
+      routes doubleheader game_pks (game_number 1/2) to their correct event.
       Grain: one row per game_pk.
 
     columns:

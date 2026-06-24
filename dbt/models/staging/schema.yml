@@ -2,6 +2,34 @@ version: 2
 
 models:
 
+  # ── Reference dimensions ─────────────────────────────────────────────────────
+
+  - name: stg_ref_players
+    description: >
+      Player-name dimension (savant.ref_players), resolvable on BOTH the Snowflake
+      and duckdb/S3 lakehouse targets. On duckdb it reads the Parquet written by
+      scripts/export_ref_players_to_s3.py; on Snowflake it is a passthrough view
+      over the source. Exists to let the duckdb-built mart_pitch_hitter_profile /
+      mart_pitch_pitcher_profile resolve the name join without hitting the
+      Snowflake-only `baseball_data.savant.ref_players` FQN. Grain is one row per
+      player BUT mlb_bam_id is NOT unique (~1.2k legacy/non-MLB dup ids that never
+      match an active pitcher/batter id — confirmed no fan-out), so it carries a
+      not_null test only, no unique test.
+    columns:
+      - name: mlb_bam_id
+        description: MLB Advanced Media (Statcast) player ID. Join key to pitcher_id / batter_id.
+        tests: [not_null]
+      - name: first_name
+        description: Player first name.
+      - name: last_name
+        description: Player last name.
+      - name: player_name
+        description: Display name.
+      - name: mlb_played_first
+        description: First MLB season the player appeared (float in source; cast downstream).
+      - name: mlb_played_last
+        description: Last MLB season the player appeared (float in source; cast downstream).
+
   # ── Odds API staging models ──────────────────────────────────────────────────
 
   - name: stg_oddsapi_events
