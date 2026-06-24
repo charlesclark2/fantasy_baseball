@@ -387,7 +387,7 @@ class BookOddsTotals(BaseModel):
 
 
 class BookOddsComparison(BaseModel):
-    """Full per-book comparison for one game (h2h + totals, all six books)."""
+    """Full per-book comparison for one game (h2h + totals, all seven books)."""
     game_pk: int
     home_team: str | None = None
     away_team: str | None = None

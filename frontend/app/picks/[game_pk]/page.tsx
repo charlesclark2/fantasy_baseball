@@ -290,13 +290,14 @@ function fmtGameTime(utc: string | null): string | null {
 // A0.4.32 — BookOddsSection helpers + component
 // ---------------------------------------------------------------------------
 
-const BOOK_ORDER = ["pinnacle", "betmgm", "caesars", "fanduel", "draftkings", "bovada"]
+const BOOK_ORDER = ["pinnacle", "betmgm", "caesars", "fanduel", "draftkings", "fanatics", "bovada"]
 const BOOK_LABELS: Record<string, string> = {
   pinnacle: "Pinnacle",
   betmgm: "BetMGM",
   caesars: "Caesars",
   fanduel: "FanDuel",
   draftkings: "DraftKings",
+  fanatics: "Fanatics",
   bovada: "Bovada",
 }
 
@@ -1004,7 +1005,7 @@ export default function PickDetailPage() {
     enabled: !!accessToken && !!gamePk,
   })
 
-  // A0.4.32 — per-book odds comparison (separate query; all 6 books in one payload)
+  // A0.4.32 — per-book odds comparison (separate query; all 7 books in one payload)
   const { data: bookOdds } = useQuery<BookOddsComparison>({
     queryKey: ["book-odds", gamePk, accessToken],
     queryFn: () => apiFetch(`/picks/${gamePk}/odds-comparison`, {}, accessToken),

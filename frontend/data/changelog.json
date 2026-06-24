@@ -1,7 +1,15 @@
 [
   {
-    "week": "2026-06-23",
+    "week": "2026-06-22",
     "items": [
+      {
+        "tag": "new",
+        "text": "Fanatics is now included in the Book Comparison on each pick's detail page. Where Fanatics offers a line, you'll see its moneyline and total prices alongside its de-vigged market probability, model EV, edge, and breakeven price — the same full treatment every other US book receives. Fanatics is also counted in the cross-book '+EV' pill ('N of M books +EV')."
+      },
+      {
+        "tag": "fix",
+        "text": "Caesars was not appearing in the Book Comparison despite having live lines. The data pipeline was ingesting Caesars under a legacy key ('williamhill_us') that the serving store's book filter didn't recognize. The filter has been updated and Caesars will show correctly after the next odds refresh."
+      },
       {
         "tag": "new",
         "text": "Book Comparison now shows a model breakeven price for each pick — the price at which the model's edge reaches exactly zero. A green chip means the current book price is still better than breakeven; red means the line has moved past the point where the model rates it +EV. Pinnacle's sharp no-vig fair value is always shown alongside for context. This is a transparency tool: our models have no demonstrated market edge, so 'breakeven' is model-relative, not a guarantee."
