@@ -367,7 +367,7 @@ function BookOddsSection({
 
   return (
     <Collapsible
-      defaultOpen={false}
+      defaultOpen={true}
       className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden"
     >
       <CollapsibleTrigger asChild>
@@ -428,6 +428,67 @@ function BookOddsSection({
               </button>
             ))}
           </div>
+
+          {/* Cross-book +EV summary — shows "N of M books +EV" or "No book +EV" per pick side */}
+          {(h2hPickSide || totalsPickSide) && (() => {
+            const booksWithH2HLine = bookOdds.h2h.filter((b) => b.book_key !== "pinnacle" && b.home_american != null)
+            const booksWithTotalsLine = bookOdds.totals.filter((b) => b.book_key !== "pinnacle" && b.line != null)
+
+            const h2hPlusEV = h2hPickSide ? booksWithH2HLine.filter((b) => {
+              if (h2hPickSide === "away") {
+                const p = b.model_prob_home != null ? 1 - b.model_prob_home : null
+                const dec = b.away_decimal
+                return p != null && dec != null && p * (dec - 1) - (1 - p) > 0
+              }
+              return (b.ev_home ?? -1) > 0
+            }) : []
+
+            const totalsPlusEV = totalsPickSide ? booksWithTotalsLine.filter((b) => {
+              const ev = totalsPickSide === "under" ? b.ev_under : b.ev_over
+              return (ev ?? -1) > 0
+            }) : []
+
+            const h2hLabel = h2hPickSide === "away" ? `${awayFullName} ML` : h2hPickSide === "home" ? `${homeFullName} ML` : null
+            const consensusLine = bookOdds.totals.find((b) => b.line != null)?.line
+            const totalsLabel = totalsPickSide === "under"
+              ? `Under${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
+              : totalsPickSide === "over"
+              ? `Over${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
+              : null
+
+            if (!h2hLabel && !totalsLabel) return null
+
+            return (
+              <div className="flex flex-wrap gap-2">
+                {h2hLabel && booksWithH2HLine.length > 0 && (
+                  h2hPlusEV.length > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#10b981]/10 border border-[#10b981]/25 px-3 py-1 text-xs text-[#10b981]">
+                      {h2hPlusEV.length === 1
+                        ? `${BOOK_LABELS[h2hPlusEV[0].book_key] ?? h2hPlusEV[0].book_key} +EV · ${h2hLabel}`
+                        : `${h2hPlusEV.length} of ${booksWithH2HLine.length} books +EV · ${h2hLabel}`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] border border-[#262626] px-3 py-1 text-xs text-gray-500">
+                      No book +EV · {h2hLabel}
+                    </span>
+                  )
+                )}
+                {totalsLabel && booksWithTotalsLine.length > 0 && (
+                  totalsPlusEV.length > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#10b981]/10 border border-[#10b981]/25 px-3 py-1 text-xs text-[#10b981]">
+                      {totalsPlusEV.length === 1
+                        ? `${BOOK_LABELS[totalsPlusEV[0].book_key] ?? totalsPlusEV[0].book_key} +EV · ${totalsLabel}`
+                        : `${totalsPlusEV.length} of ${booksWithTotalsLine.length} books +EV · ${totalsLabel}`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] border border-[#262626] px-3 py-1 text-xs text-gray-500">
+                      No book +EV · {totalsLabel}
+                    </span>
+                  )
+                )}
+              </div>
+            )
+          })()}
 
           {/* Odds freshness timestamp */}
           {oddsTimeLabel && (
@@ -1431,7 +1492,7 @@ export default function PickDetailPage() {
                   2. Bovada Lines
               ============================================================ */}
               {bov && (bov.h2h || bov.totals) && (
-                <CollapsibleSection title="Bovada Lines">
+                <CollapsibleSection title="Bovada Lines" defaultOpen={false}>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3">
                       <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Moneyline</p>
