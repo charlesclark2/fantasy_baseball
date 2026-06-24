@@ -40,11 +40,17 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 FRESHNESS_THRESHOLDS: dict[str, dict] = {
+    # E11.12 antipattern fix: game_date is an EVENT date (the date games were played),
+    # not an ingest heartbeat. On multi-day off periods (e.g. All-Star break) it
+    # doesn't advance even though the daily job still fires — triggering false
+    # staleness alerts. game_day_only=True skips off-day checks; the HARD-ALERT
+    # statcast_freshness_sensor is the authoritative monitor for "is today's pitch
+    # data here?" and the check_data_freshness check is an auxiliary WARN backstop.
     "baseball_data.savant.batter_pitches": {
         "ts_col": "game_date",       # DATE; cast to TIMESTAMP_NTZ in query
         "eod_offset_hours": 33,      # games end ~11pm ET; Statcast publishes ~9am ET next day ≈ 33h after UTC midnight
         "max_stale_hours": 48,
-        "game_day_only": False,
+        "game_day_only": True,       # E11.12 fix: was False; event-date col → only check on game days
     },
     "baseball_data.fangraphs.fg_stuff_plus_raw": {
         "ts_col": "ingestion_ts",
@@ -73,6 +79,11 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # ump may not be posted pre-game, e.g. 824589 on 2026-06-11) and settled games
     # are backfilled from UmpScorecards post-hoc — so these must warn, never fail
     # (a hard fail would death-spiral the predict job that carries the retry).
+    # E11.12 antipattern note: game_date is an EVENT date (the date of the game,
+    # not when we ingested). On off-days it doesn't advance. For the statsapi source,
+    # game_day_only=True limits checks to game days — correct behavior. For
+    # umpscorecards, the 96h threshold covers ~4 game-day gaps and is WARN-only,
+    # so false positives on off-day streaks are non-blocking and acceptable.
     "umpire_game_log [statsapi HP assignment]": {
         "table": "baseball_data.statsapi.umpire_game_log",
         "where": "data_source = 'statsapi'",
@@ -105,9 +116,16 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "max_stale_hours": 36,
         "game_day_only": False,
     },
+    # E11.12 antipattern note: month_end_date is a calendar-month boundary, NOT an
+    # ingest heartbeat. It cannot detect mid-month feed failures — if the current
+    # month's schedule was already loaded, month_end_date stays in the future
+    # (always appears fresh) even if the schedule_capture cron breaks for days.
+    # This check only catches a missed MONTHLY load (month_end_date is weeks stale).
+    # The HARD-ALERT schedule_freshness_alert_sensor is the authoritative monitor for
+    # daily feed continuity (stale > 4h OR 0 games on game day after 14:30 UTC).
     "baseball_data.statsapi.monthly_schedule": {
         "ts_col": "month_end_date",  # DATE; future value when current month is loaded → always fresh
-        "max_stale_hours": 48,       # catches missing month (would show as weeks stale)
+        "max_stale_hours": 48,       # catches missed monthly load (shows weeks stale); NOT mid-month failures
         "game_day_only": True,
     },
     "baseball_data.actionnetwork.public_betting_raw": {
@@ -136,10 +154,15 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # without red-failing the daily ingestion job — the model still serves
     # degraded-but-present via stale/imputed posteriors, not a hard outage.
     # Promote archetype to blocking once its backfill + daily re-wire is confirmed.
+    # E11.12 antipattern fix: as_of_date = MAX(game_date) of completed games processed,
+    # NOT the date the computation ran (event-date antipattern). On off-days the
+    # computation still fires but as_of_date stays at the last game date — false
+    # staleness after 2+ consecutive off-days. game_day_only=True avoids false positives;
+    # the check only fires on game days when posteriors should have advanced to yesterday.
     "baseball_data.betting.mart_player_archetype_posteriors": {
-        "ts_col": "as_of_date",   # DATE = last game_date included; daily cadence
+        "ts_col": "as_of_date",   # DATE = last game_date included — event-date; see note above
         "max_stale_hours": 48,
-        "game_day_only": False,
+        "game_day_only": True,    # E11.12 fix: was False; event-date col → only check on game days
         "non_blocking": True,
     },
     "baseball_data.betting.player_sequential_posteriors": {
@@ -178,6 +201,56 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     "baseball_data.betting.eb_park_factors_raw": {
         "ts_col": "fit_date",   # DATE; annual update at season start
         "max_stale_hours": 4320,   # 180 days
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # ── E11.12 additions — feeds with no prior monitor ───────────────────────
+    # Sprint speed — Sunday-only ingest (ingest_sprint_speed_op in daily job).
+    # snapshot_date is today's date when the script runs (ingest heartbeat, not
+    # event-date). 192h = 8 days covers one full weekly cycle with a 1-day buffer.
+    # WARN only: prior-season sprint speed imputes if stale; serving is not blocked.
+    "baseball_data.savant.sprint_speed_raw": {
+        "ts_col": "snapshot_date",  # DATE stored as VARCHAR ISO string; ingest heartbeat
+        "max_stale_hours": 192,     # 8 days — Sunday-only ingest
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # Catcher framing — Sunday-only ingest (ingest_fangraphs_catcher_framing in daily job).
+    # snapshot_date is the ingest heartbeat. 192h = 8 days. WARN only: framing feeds
+    # the umpire/catcher block; missing a weekly refresh degrades but doesn't block.
+    "baseball_data.savant.catcher_framing_raw": {
+        "ts_col": "snapshot_date",  # DATE stored as VARCHAR ISO string; ingest heartbeat
+        "max_stale_hours": 192,     # 8 days — Sunday-only ingest
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # OAA (Outs Above Average) — daily ingest (ingest_oaa_op in daily job, soft-fail).
+    # loaded_at = CURRENT_TIMESTAMP when each row is written (true ingest heartbeat).
+    # 48h threshold mirrors other daily non-critical feeds. Only prior-season OAA is
+    # used in features (leakage guard), so a missed daily refresh uses yesterday's value.
+    "baseball_data.external.oaa_team_season_raw": {
+        "ts_col": "loaded_at",   # TIMESTAMP_NTZ; ingest heartbeat (CURRENT_TIMESTAMP on insert)
+        "max_stale_hours": 48,
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # Player profiles — weekly update mode (weekly_player_profiles_job, ingest_player_profiles.py update).
+    # last_fetched_at = TIMESTAMP_NTZ ingest heartbeat set on every write. 192h = 8 days.
+    # WARN only: player height/weight/position is slow-changing; a missed weekly run is
+    # non-critical but a 2-week outage (call-up detection broken) should surface.
+    "baseball_data.statsapi.player_profiles_raw": {
+        "ts_col": "last_fetched_at",  # TIMESTAMP_NTZ; ingest heartbeat
+        "max_stale_hours": 192,       # 8 days — weekly update
+        "game_day_only": False,
+        "non_blocking": True,
+    },
+    # Matchup-cell sequential posteriors — daily update (update_matchup_cell_posteriors_op).
+    # update_ts = datetime.now(UTC) at write time (true ingest heartbeat). 36h mirrors
+    # player/team sequential posteriors. WARN only: matchup-cell coverage is sparse
+    # mid-season (archetype pairs with thin history) and predictions degrade gracefully.
+    "baseball_data.betting.matchup_cell_sequential_posteriors": {
+        "ts_col": "update_ts",   # TIMESTAMP_NTZ; ingest heartbeat
+        "max_stale_hours": 36,
         "game_day_only": False,
         "non_blocking": True,
     },
