@@ -165,15 +165,26 @@ def get_performance_by_model() -> PerformanceByModelResponse:
 
 # ── C1: model skill metrics ───────────────────────────────────────────────────
 
+# E13.11 — metrics are conditioned on the MODEL'S DIRECTIONAL PICK, not the raw
+# home/over perspective the mart stores. The mart records actual_outcome, clv and
+# clv_positive from the home/over side (see mart_clv_labeled_games header); here we
+# orient them to the side the model actually favored — home/over when model_prob >= 0.5,
+# otherwise away/under (flip the sign of the home/over clv). So:
+#   win_rate         = % of the model's picks whose chosen side won
+#   avg_clv          = CLV in the direction of the model's pick
+#   clv_positive_pct = % of picks whose side gained closing-line value
+# Brier stays a proper home/over-perspective probability score (orientation-invariant).
 _MODEL_METRICS_QUERY = """
 SELECT
     YEAR(m.game_date)                                             AS season,
     m.market_type,
     COUNT(*)                                                      AS n_predictions,
     AVG(POWER(m.model_prob - m.actual_outcome, 2))               AS brier_score,
-    AVG(m.clv)                                                    AS avg_clv,
-    AVG(CASE WHEN m.clv_positive THEN 1.0 ELSE 0.0 END)          AS clv_positive_pct,
-    AVG(m.actual_outcome)                                         AS win_rate
+    AVG(CASE WHEN m.model_prob >= 0.5 THEN m.clv ELSE -m.clv END) AS avg_clv,
+    AVG(CASE WHEN (CASE WHEN m.model_prob >= 0.5 THEN m.clv ELSE -m.clv END) > 0
+             THEN 1.0 ELSE 0.0 END)                              AS clv_positive_pct,
+    AVG(CASE WHEN (m.model_prob >= 0.5) = (m.actual_outcome = 1)
+             THEN 1.0 ELSE 0.0 END)                              AS win_rate
 FROM baseball_data.betting.mart_clv_labeled_games m
 LEFT JOIN (
     SELECT game_pk, MAX(CASE WHEN is_degraded THEN 1 ELSE 0 END) AS is_degraded

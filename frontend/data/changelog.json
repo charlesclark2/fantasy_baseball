@@ -13,6 +13,10 @@
       {
         "tag": "fix",
         "text": "The 'Yesterday' badge on the front page now shows the real result of the featured pick. Previously, the badge always appeared green even after a loss — the system was surfacing whichever of yesterday's picks happened to win, not the actual pick that was shown. The pick selection now uses the same logic as today's featured pick, and the badge correctly shows green for a win, red for a loss, and gray for a game that hasn't been settled yet."
+      },
+      {
+        "tag": "fix",
+        "text": "The Performance page's Win % and CLV stats now measure the side the model actually favored. Previously they reported the raw home-team win rate (Moneyline) and Over rate (Totals) regardless of which side the model picked, so 'Win %' was a base rate rather than the model's accuracy. Win % is now the share of the model's directional picks that won, and Closing Line Value is measured in the pick's direction. Tooltips were rewritten to match. Brier Score (calibration) is unchanged."
       }
     ]
   },
