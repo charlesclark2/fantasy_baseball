@@ -13,6 +13,14 @@ per date, not reloaded per date), writing is_backfill=TRUE rows. Set TARGET_ENV=
 the prod schema:
     TARGET_ENV=prod uv run python scripts/predict_today.py --start 2024-01-01 --is-backfill --no-log-snowflake
     TARGET_ENV=prod uv run python scripts/predict_today.py --start 2026-03-01 --end 2026-06-12 --is-backfill --no-log-snowflake
+
+E13.11 backfill cost optimization — a multi-date --is-backfill run additionally (a) pulls the
+WHOLE window's serving features in ONE Snowflake read into a local parquet (deleted on exit),
+serving each date from it instead of one read per date, and (b) buffers every date's prediction
+rows and writes them in ONE transaction (single scoped DELETE + chunked executemany + single
+commit) instead of DELETE+INSERT+commit per date — so the warehouse spins up once for the whole
+backfill, not ~N times. The live single-date path and per-date post_lineup/morning writes are
+unchanged (the batch is armed only when is_backfill AND >1 date resolves).
 """
 
 from __future__ import annotations
@@ -24,6 +32,7 @@ import math
 import os
 import re
 import sys
+import tempfile
 import warnings
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -36,7 +45,13 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from betting_ml.utils.data_loader import load_features, load_todays_features, get_snowflake_connection
+from betting_ml.utils.data_loader import (
+    load_features,
+    load_todays_features,
+    get_snowflake_connection,
+    load_range_features,        # E13.11 — one-shot range feature pull for the backfill cache
+    set_range_feature_cache,    # E13.11 — install/clear the backfill range feature cache
+)
 from betting_ml.utils.preprocessing import build_imputation_pipeline
 from betting_ml.utils.feature_selection import load_retained_features
 from betting_ml.utils.model_io import load_model
@@ -67,6 +82,12 @@ from betting_ml.scripts.evaluation.bayesian_model_eval import (
 # ---------------------------------------------------------------------------
 
 MODEL_VERSION = "v0"
+
+# E13.11 backfill cost optimization — non-None ONLY during a --is-backfill RANGE run.
+# When active, _write_predictions_to_snowflake buffers each date's rows here instead of
+# writing per date; _flush_backfill_predictions() drains the buffer in ONE transaction at
+# end-of-range. None on every live / single-date path. Shape: {"rows": list[dict]}.
+_BACKFILL_BATCH: dict | None = None
 
 # A1.12 — write target resolved by the shared resolver so this scorer, the
 # betting_ml/ scorer, and the app all agree on dev vs prod (TARGET_ENV=prod →
@@ -1266,6 +1287,23 @@ def _write_predictions_to_snowflake(
             stacklevel=2,
         )
 
+    # E13.11 backfill batching — in a --is-backfill RANGE run, buffer this date's rows and
+    # defer the write to a single end-of-range flush (_flush_backfill_predictions): one
+    # range-scoped DELETE + one executemany + one commit for the WHOLE backfill instead of
+    # a DELETE+INSERT+commit per date, so the warehouse spins up once, not ~N times. The
+    # live single-date path and per-date post_lineup/morning writes below are untouched.
+    if _BACKFILL_BATCH is not None:
+        _BACKFILL_BATCH["rows"].extend(rows)
+        tier_counts: dict[str, int] = {}
+        for _r in rows:
+            _t = _r.get("sigma_tier") or "unknown"
+            tier_counts[_t] = tier_counts.get(_t, 0) + 1
+        _tier_summary = ", ".join(f"{k}={v}" for k, v in sorted(tier_counts.items()))
+        print(f"  [backfill-batch] buffered {len(rows)} row(s) for {target_date} "
+              f"(running total {len(_BACKFILL_BATCH['rows'])}); write deferred to end-of-range flush")
+        print(f"  [22.4] sigma_tier distribution: {_tier_summary}")
+        return
+
     try:
         conn = get_snowflake_connection()
         try:
@@ -1317,6 +1355,113 @@ def _write_predictions_to_snowflake(
     except Exception as exc:
         print(f"\nWarning: Could not write predictions to Snowflake ({exc}). "
               "Parquet output is still valid.")
+
+
+# ---------------------------------------------------------------------------
+# E13.11 — backfill cost optimization (range / --is-backfill ONLY)
+#
+# Two changes, both scoped to a multi-date --is-backfill run; the live single-date
+# path and per-date post_lineup/morning writes are untouched:
+#   (1) features: pull the WHOLE window's serving features in ONE Snowflake read →
+#       a local parquet (deleted on exit); each date is served from it (set_range_
+#       feature_cache) instead of one read per date.
+#   (2) writes:  buffer every date's prediction rows, then write them in ONE
+#       transaction — a single DELETE scoped to the buffered (score_date, model_version)
+#       set + a single executemany + a single commit — instead of DELETE+INSERT+commit
+#       per date. So the warehouse spins up once for the backfill, not ~N times.
+#
+# Write mechanism note: this reuses the proven `_INSERT_PREDICTION` executemany rather
+# than write_pandas/COPY. For a season backfill (~1–2k rows) one executemany IS a single
+# batched statement, and it avoids the documented write_pandas DATE/TIMESTAMP_NTZ
+# serialization corruption while reusing the exact, tested per-column casts.
+# ---------------------------------------------------------------------------
+
+
+def _activate_backfill_batch(dates: list[str]) -> str:
+    """Pull all serving features for [dates[0], dates[-1]] in ONE query → a local parquet,
+    install it as the per-date feature cache, and arm the prediction-row buffer. Returns the
+    parquet path (deleted by _deactivate_backfill_batch)."""
+    global _BACKFILL_BATCH
+    start, end = dates[0], dates[-1]
+    print(f"\n[backfill-batch] ACTIVE for {start}..{end} ({len(dates)} date(s)): pulling all "
+          f"serving features in ONE query → local parquet; predictions buffered for a single "
+          f"end-of-range write (warehouse spins up once, not per date).")
+    feats = load_range_features(start, end)
+    scratch = Path(tempfile.gettempdir())
+    pq = scratch / f"predict_today_backfill_features_{start}_{end}.parquet"
+    feats.to_parquet(pq, index=False)
+    size_mb = pq.stat().st_size / 1e6
+    print(f"[backfill-batch] cached {len(feats)} feature row(s) → {pq} ({size_mb:.1f} MB)")
+    set_range_feature_cache(pd.read_parquet(pq))
+    _BACKFILL_BATCH = {"rows": []}
+    return str(pq)
+
+
+def _flush_backfill_predictions() -> None:
+    """Drain the backfill row buffer in ONE transaction: ensure table + migrate columns once,
+    DELETE the buffered (score_date, model_version, is_backfill=TRUE) set, executemany all
+    rows, single commit. Idempotent — deletes only the dates/versions actually being rewritten,
+    so a date that failed mid-run keeps its prior backfill rows."""
+    if _BACKFILL_BATCH is None:
+        return
+    rows = _BACKFILL_BATCH["rows"]
+    if not rows:
+        print("[backfill-batch] no rows buffered; nothing to flush.")
+        return
+    score_dates = sorted({r["score_date"] for r in rows})
+    versions = sorted({r["model_version"] for r in rows})
+    date_ph = ", ".join(["%s"] * len(score_dates))
+    ver_ph = ", ".join(["%s"] * len(versions))
+    try:
+        conn = get_snowflake_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(_CREATE_PREDICTIONS_TABLE)
+            _migrate_prediction_columns(cur, _ML_SCHEMA)
+            cur.execute(
+                f"DELETE FROM {_ML_SCHEMA}.daily_model_predictions "
+                f"WHERE score_date IN ({date_ph}) AND model_version IN ({ver_ph}) "
+                f"AND is_backfill = TRUE",
+                [*score_dates, *versions],
+            )
+            print(f"[backfill-batch] cleared {cur.rowcount} prior backfill row(s) across "
+                  f"{len(score_dates)} date(s) for model_version(s) {versions}")
+            # executemany binds values client-side; chunk so a full-season buffer can't blow
+            # Snowflake's statement-size limit. All chunks share ONE connection + ONE commit,
+            # so the warehouse still spins up exactly once for the whole backfill.
+            _CHUNK = 500
+            for _start in range(0, len(rows), _CHUNK):
+                cur.executemany(_INSERT_PREDICTION, rows[_start:_start + _CHUNK])
+            conn.commit()
+            tier_counts: dict[str, int] = {}
+            for _r in rows:
+                _t = _r.get("sigma_tier") or "unknown"
+                tier_counts[_t] = tier_counts.get(_t, 0) + 1
+            _tier_summary = ", ".join(f"{k}={v}" for k, v in sorted(tier_counts.items()))
+            print(f"\n[backfill-batch] wrote {len(rows)} prediction row(s) in ONE transaction "
+                  f"to {_ML_SCHEMA}.daily_model_predictions "
+                  f"(model_version(s)={versions}, {len(score_dates)} date(s))")
+            print(f"  [22.4] sigma_tier distribution: {_tier_summary}")
+        finally:
+            conn.close()
+    except Exception as exc:
+        print(f"\n[backfill-batch] ERROR: batched write FAILED ({exc}). No predictions were "
+              f"committed for this range — re-run the backfill (it is idempotent).")
+        raise
+
+
+def _deactivate_backfill_batch(pq_path: str | None) -> None:
+    """Clear the feature cache + row buffer and delete the local parquet. Safe to call in a
+    finally even if activation half-failed."""
+    global _BACKFILL_BATCH
+    set_range_feature_cache(None)
+    _BACKFILL_BATCH = None
+    if pq_path and os.path.exists(pq_path):
+        try:
+            os.remove(pq_path)
+            print(f"[backfill-batch] removed local feature parquet {pq_path}")
+        except OSError as exc:
+            print(f"[backfill-batch] WARNING could not remove parquet {pq_path}: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -2178,16 +2323,29 @@ if __name__ == "__main__":
     _args = _parse_args()
     _dates = _resolve_target_dates(_args)
     _failures: list[str] = []
-    for _i, _d in enumerate(_dates, 1):
-        if len(_dates) > 1:
-            print(f"\n===== [{_i}/{len(_dates)}] {_d} =====")
-        try:
-            main(_d, _args)
-        except Exception as _exc:  # one bad date must not abort a multi-date backfill
-            if len(_dates) == 1:
-                raise
-            print(f"  ✗ {_d} failed: {_exc} — continuing")
-            _failures.append(_d)
+    # E13.11 — batch a multi-date --is-backfill run: features pulled once → local parquet,
+    # predictions buffered and written in ONE transaction at end-of-range. Single-date runs
+    # and live (non-backfill) runs keep the per-date write path unchanged.
+    _batch_active = bool(_args.is_backfill and len(_dates) > 1)
+    _parquet_path: str | None = None
+    if _batch_active:
+        _parquet_path = _activate_backfill_batch(_dates)
+    try:
+        for _i, _d in enumerate(_dates, 1):
+            if len(_dates) > 1:
+                print(f"\n===== [{_i}/{len(_dates)}] {_d} =====")
+            try:
+                main(_d, _args)
+            except Exception as _exc:  # one bad date must not abort a multi-date backfill
+                if len(_dates) == 1:
+                    raise
+                print(f"  ✗ {_d} failed: {_exc} — continuing")
+                _failures.append(_d)
+        if _batch_active:
+            _flush_backfill_predictions()
+    finally:
+        if _batch_active:
+            _deactivate_backfill_batch(_parquet_path)
     if _failures:
         print(f"\n{len(_failures)}/{len(_dates)} date(s) failed (re-run is idempotent per "
               f"date+version): {_failures}")

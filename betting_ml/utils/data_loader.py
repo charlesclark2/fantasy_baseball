@@ -653,6 +653,42 @@ def load_todays_features_via_statsapi(target_date: str) -> pd.DataFrame:
     return _numeric_convert(df)
 
 
+# E13.11 backfill cost optimization — when this in-memory frame is set, load_todays_features
+# serves each date's slice FROM IT (sourced once via load_range_features → a local parquet in
+# the predict_today driver) instead of issuing one Snowflake read per date across a multi-date
+# backfill. None on every live/single-date path, so live serving is byte-for-byte unchanged.
+_RANGE_FEATURE_CACHE: pd.DataFrame | None = None
+
+
+def set_range_feature_cache(df: pd.DataFrame | None) -> None:
+    """Install (or clear with None) the backfill range feature cache. Set by the
+    predict_today range driver; reset in its finally so the process never leaks it."""
+    global _RANGE_FEATURE_CACHE
+    _RANGE_FEATURE_CACHE = df
+
+
+def load_range_features(start_date: str, end_date: str) -> pd.DataFrame:
+    """One-shot pull of feature_store rows for every game_date in [start_date, end_date]
+    (inclusive). Backs the backfill parquet cache: ONE Snowflake read for the whole window
+    instead of one per date. Mirrors _TODAY_QUERY's `SELECT f.*` so the per-date slices are
+    schema-identical to the live single-date path."""
+    conn = _connect()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT f.* FROM baseball_data.betting_features.feature_pregame_game_features f "
+            "WHERE f.game_date BETWEEN %(s)s AND %(e)s",
+            {"s": start_date, "e": end_date},
+        )
+        columns = [desc[0].lower() for desc in cur.description]
+        rows = cur.fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame(rows, columns=columns)
+
+
 def load_todays_features(target_date: str) -> pd.DataFrame:
     """Load pregame features for all regular-season games on target_date.
 
@@ -671,6 +707,27 @@ def load_todays_features(target_date: str) -> pd.DataFrame:
     Does NOT join to mart_game_results (today's scores don't exist yet).
     Does NOT apply has_full_data or min_games_played filters.
     """
+    # E13.11 backfill cache — serve this date's slice from the pre-pulled range frame
+    # (one Snowflake read for the whole window). Same coverage gate / numeric coercion /
+    # data_source stamp as the live feature_store branch, so downstream is identical. If a
+    # cached slice is empty or below the coverage gate, fall through to the normal live path
+    # (which may re-query or assemble via Stats API) — never silently degrade a backfill.
+    if _RANGE_FEATURE_CACHE is not None:
+        df = _RANGE_FEATURE_CACHE[
+            _RANGE_FEATURE_CACHE["game_date"].astype(str) == target_date
+        ]
+        if not df.empty:
+            cov = _feature_store_mean_coverage(df)
+            if cov >= _MIN_FEATURE_STORE_COVERAGE:
+                print(f"[INFO] [backfill-cache] feature_store serving {len(df)} game(s) for "
+                      f"{target_date} from local parquet (mean block coverage {cov:.2f} ≥ "
+                      f"{_MIN_FEATURE_STORE_COVERAGE:.2f}); no per-date Snowflake read.")
+                df = df.copy()
+                df["data_source"] = "feature_store"
+                return _numeric_convert(df)
+            print(f"[INFO] [backfill-cache] cached rows for {target_date} below coverage gate "
+                  f"({cov:.2f} < {_MIN_FEATURE_STORE_COVERAGE:.2f}); falling through to live load.")
+
     conn = _connect()
     try:
         query = _TODAY_QUERY.format(target_date=target_date)

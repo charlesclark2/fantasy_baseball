@@ -32,8 +32,11 @@
 with
 
 -- One canonical pre-game prediction per game: post_lineup > morning, live > backfill, latest wins.
--- E9.15: pin to model_version = 'v5' (production champion) so pre_lineup_v1 morning rows
--- cannot contaminate the Model-Skill metrics on the performance page.
+-- E9.15 / E13.11: pin to the production champion model_version so the Model-Skill metrics on the
+-- performance page reflect the CURRENT model, and pre_lineup morning rows (stamped
+-- 'pre_lineup_<ver>', a different string) cannot contaminate them.
+-- ⚠️ MUST be bumped to the new champion version on every champion promotion (see
+--    docs/model_promotion_runbook.md). E13.11 (2026-06-23): 'v5' → 'v6' (de-leaked champion).
 best_prediction as (
     select
         *,
@@ -46,7 +49,7 @@ best_prediction as (
         ) as _rn
     from {{ source('betting_ml', 'daily_model_predictions') }}
     where prediction_type in ('morning', 'post_lineup')
-      and model_version = 'v5'
+      and model_version = 'v6'
 ),
 
 predictions as (
