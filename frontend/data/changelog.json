@@ -4,6 +4,14 @@
     "items": [
       {
         "tag": "fix",
+        "text": "The Book Comparison on each pick's detail page was showing odds captured after the game started, which can't be bet. Lines now freeze at the last pre-game snapshot, so every price displayed is one that was actually available before first pitch."
+      },
+      {
+        "tag": "improvement",
+        "text": "The models behind the picks have been upgraded to leak-free versions, and the 'why this pick' explanations now reflect them. The previous models' driver explanations were dominated by a bullpen metric that was partly computed from the game being predicted — an internal data artifact, not a real signal — so nearly every game over-credited the bullpen. The new models remove that leak and are far leaner; the displayed drivers (team strength/ELO, run-based win expectation, and pitching/offense form) now show what the model actually weighs. Picks and probabilities may shift as a result. As always, treat each pick as a lean, not a lock."
+      },
+      {
+        "tag": "fix",
         "text": "The 'Yesterday' badge on the front page now shows the real result of the featured pick. Previously, the badge always appeared green even after a loss — the system was surfacing whichever of yesterday's picks happened to win, not the actual pick that was shown. The pick selection now uses the same logic as today's featured pick, and the badge correctly shows green for a win, red for a loss, and gray for a game that hasn't been settled yet."
       }
     ]
