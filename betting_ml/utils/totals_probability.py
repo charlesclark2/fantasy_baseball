@@ -80,6 +80,21 @@ def compute_totals_edge(p_over: float, bovada_devig_over_prob: float) -> float:
     return float(p_over) - float(bovada_devig_over_prob)
 
 
+def prob_to_american(p: float) -> int:
+    """Convert a win probability to its breakeven American-odds price (no-vig).
+
+    Breakeven means EV = 0 exactly: decimal = 1/p.
+    Returns an int rounded toward zero (standard sportsbook display convention).
+    Clamps p to (0.001, 0.999) to avoid divide-by-zero at the extremes.
+    """
+    p = max(0.001, min(0.999, float(p)))
+    decimal = 1.0 / p
+    if decimal >= 2.0:                      # underdog
+        return int(round((decimal - 1.0) * 100.0))
+    else:                                   # favorite
+        return int(round(-100.0 / (decimal - 1.0)))
+
+
 def compute_conformal_total_runs_pi(mu: float, r: float, q_hat: float) -> tuple[int, int]:
     """Conformal-adjusted run-count PI with empirical ≥80% coverage (Story 10.9).
 

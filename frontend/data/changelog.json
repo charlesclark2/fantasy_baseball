@@ -3,6 +3,10 @@
     "week": "2026-06-23",
     "items": [
       {
+        "tag": "new",
+        "text": "Book Comparison now shows a model breakeven price for each pick — the price at which the model's edge reaches exactly zero. A green chip means the current book price is still better than breakeven; red means the line has moved past the point where the model rates it +EV. Pinnacle's sharp no-vig fair value is always shown alongside for context. This is a transparency tool: our models have no demonstrated market edge, so 'breakeven' is model-relative, not a guarantee."
+      },
+      {
         "tag": "fix",
         "text": "The Performance page's Win % and CLV stats now measure the side the model actually favored. Previously they reported the raw home-team win rate (Moneyline) and Over rate (Totals) regardless of which side the model picked, so 'Win %' was a base rate rather than the model's accuracy. Win % is now the share of the model's directional picks that won, and Closing Line Value is measured in the pick's direction. Tooltips were rewritten to match. Brier Score (calibration) is unchanged."
       },

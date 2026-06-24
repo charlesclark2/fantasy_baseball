@@ -354,6 +354,9 @@ class BookOddsH2H(BaseModel):
     kelly_home: float | None = None
     # ISO timestamp of the snapshot these prices came from
     odds_as_of: str | None = None
+    # E9.1 — breakeven American price at which EV=0 (model-relative, not a bet rec)
+    breakeven_american_home: int | None = None
+    breakeven_american_away: int | None = None
 
 
 class BookOddsTotals(BaseModel):
@@ -378,6 +381,9 @@ class BookOddsTotals(BaseModel):
     kelly_over: float | None = None
     # ISO timestamp of the snapshot these prices came from
     odds_as_of: str | None = None
+    # E9.1 — breakeven American price at which EV=0 (model-relative, not a bet rec)
+    breakeven_american_over: int | None = None
+    breakeven_american_under: int | None = None
 
 
 class BookOddsComparison(BaseModel):

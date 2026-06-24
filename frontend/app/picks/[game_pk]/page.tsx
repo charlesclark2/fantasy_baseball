@@ -37,6 +37,9 @@ type BookOddsH2H = {
   edge_home: number | null
   kelly_home: number | null
   odds_as_of: string | null
+  // E9.1 — model breakeven price (EV=0 at this price; model-relative, not a bet rec)
+  breakeven_american_home: number | null
+  breakeven_american_away: number | null
 }
 
 type BookOddsTotals = {
@@ -57,6 +60,9 @@ type BookOddsTotals = {
   edge_over: number | null
   kelly_over: number | null
   odds_as_of: string | null
+  // E9.1 — model breakeven price (EV=0 at this price; model-relative, not a bet rec)
+  breakeven_american_over: number | null
+  breakeven_american_under: number | null
 }
 
 type BookOddsComparison = {
@@ -330,12 +336,16 @@ function BookOddsSection({
   awayFullName,
   selectedBook,
   setSelectedBook,
+  h2hPickSide,
+  totalsPickSide,
 }: {
   bookOdds: BookOddsComparison
   homeFullName: string
   awayFullName: string
   selectedBook: string
   setSelectedBook: (b: string) => void
+  h2hPickSide?: string | null
+  totalsPickSide?: string | null
 }) {
   const hasH2H = bookOdds.h2h.some((b) => b.home_american != null)
   const hasTotals = bookOdds.totals.some((b) => b.line != null)
@@ -355,9 +365,22 @@ function BookOddsSection({
     return (h?.home_american != null) || (t?.line != null)
   })
 
+  // When layer4 abstains, pick_side is null but we can still show EV direction by
+  // deriving which side the model thinks is undervalued (model_prob > market_bet_pct).
+  const effectiveH2HPickSide: string | null = h2hPickSide ?? (() => {
+    const ref = bookOdds.h2h.find((b) => b.model_prob_home != null && b.market_bet_pct_home != null)
+    if (!ref) return null
+    return (ref.model_prob_home! > ref.market_bet_pct_home!) ? "home" : "away"
+  })()
+  const effectiveTotalsPickSide: string | null = totalsPickSide ?? (() => {
+    const ref = bookOdds.totals.find((b) => b.model_prob_over != null && b.market_bet_pct_over != null)
+    if (!ref) return null
+    return (ref.model_prob_over! > ref.market_bet_pct_over!) ? "over" : "under"
+  })()
+
   return (
     <Collapsible
-      defaultOpen={false}
+      defaultOpen={true}
       className="rounded-xl border border-[#262626] bg-[#141414] overflow-hidden"
     >
       <CollapsibleTrigger asChild>
@@ -418,6 +441,67 @@ function BookOddsSection({
               </button>
             ))}
           </div>
+
+          {/* Cross-book +EV summary — shows "N of M books +EV" or "No book +EV" per pick side */}
+          {(effectiveH2HPickSide || effectiveTotalsPickSide) && (() => {
+            const booksWithH2HLine = bookOdds.h2h.filter((b) => b.book_key !== "pinnacle" && b.home_american != null)
+            const booksWithTotalsLine = bookOdds.totals.filter((b) => b.book_key !== "pinnacle" && b.line != null)
+
+            const h2hPlusEV = effectiveH2HPickSide ? booksWithH2HLine.filter((b) => {
+              if (effectiveH2HPickSide === "away") {
+                const p = b.model_prob_home != null ? 1 - b.model_prob_home : null
+                const dec = b.away_decimal
+                return p != null && dec != null && p * (dec - 1) - (1 - p) > 0
+              }
+              return (b.ev_home ?? -1) > 0
+            }) : []
+
+            const totalsPlusEV = effectiveTotalsPickSide ? booksWithTotalsLine.filter((b) => {
+              const ev = effectiveTotalsPickSide === "under" ? b.ev_under : b.ev_over
+              return (ev ?? -1) > 0
+            }) : []
+
+            const h2hLabel = effectiveH2HPickSide === "away" ? `${awayFullName} ML` : effectiveH2HPickSide === "home" ? `${homeFullName} ML` : null
+            const consensusLine = bookOdds.totals.find((b) => b.line != null)?.line
+            const totalsLabel = effectiveTotalsPickSide === "under"
+              ? `Under${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
+              : effectiveTotalsPickSide === "over"
+              ? `Over${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
+              : null
+
+            if (!h2hLabel && !totalsLabel) return null
+
+            return (
+              <div className="flex flex-wrap gap-2">
+                {h2hLabel && booksWithH2HLine.length > 0 && (
+                  h2hPlusEV.length > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#10b981]/10 border border-[#10b981]/25 px-3 py-1 text-xs text-[#10b981]">
+                      {h2hPlusEV.length === 1
+                        ? `${BOOK_LABELS[h2hPlusEV[0].book_key] ?? h2hPlusEV[0].book_key} +EV · ${h2hLabel}`
+                        : `${h2hPlusEV.length} of ${booksWithH2HLine.length} books +EV · ${h2hLabel}`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] border border-[#262626] px-3 py-1 text-xs text-gray-500">
+                      No book +EV · {h2hLabel}
+                    </span>
+                  )
+                )}
+                {totalsLabel && booksWithTotalsLine.length > 0 && (
+                  totalsPlusEV.length > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#10b981]/10 border border-[#10b981]/25 px-3 py-1 text-xs text-[#10b981]">
+                      {totalsPlusEV.length === 1
+                        ? `${BOOK_LABELS[totalsPlusEV[0].book_key] ?? totalsPlusEV[0].book_key} +EV · ${totalsLabel}`
+                        : `${totalsPlusEV.length} of ${booksWithTotalsLine.length} books +EV · ${totalsLabel}`}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1a1a] border border-[#262626] px-3 py-1 text-xs text-gray-500">
+                      No book +EV · {totalsLabel}
+                    </span>
+                  )
+                )}
+              </div>
+            )
+          })()}
 
           {/* Odds freshness timestamp */}
           {oddsTimeLabel && (
@@ -490,6 +574,58 @@ function BookOddsSection({
                   </div>
                 )}
               </div>
+
+              {/* E9.1 — Breakeven chip: shown per picked side */}
+              {(() => {
+                const isAwaySide = effectiveH2HPickSide === "away"
+                const beAmerican = isAwaySide
+                  ? selH2H?.breakeven_american_away
+                  : selH2H?.breakeven_american_home
+                const currentAmerican = isAwaySide
+                  ? selH2H?.away_american
+                  : selH2H?.home_american
+                const ev = isAwaySide
+                  ? (selH2H?.away_decimal != null && selH2H.model_prob_home != null
+                      ? (1 - selH2H.model_prob_home) * (selH2H.away_decimal - 1) - selH2H.model_prob_home
+                      : null)
+                  : selH2H?.ev_home
+                if (beAmerican == null || currentAmerican == null || !effectiveH2HPickSide) return null
+                const isPlusEV = ev != null && ev > 0
+                const sideName = isAwaySide ? awayFullName : homeFullName
+                return (
+                  <div className={`mt-2 rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 ${
+                    isPlusEV
+                      ? "border-[#10b981]/30 bg-[#10b981]/5"
+                      : "border-[#f87171]/20 bg-[#f87171]/5"
+                  }`}>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                      Model breakeven · {sideName}
+                    </span>
+                    {isPlusEV ? (
+                      <span className="text-xs text-[#10b981] font-medium">
+                        +EV to <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                        <span className="text-gray-500 font-normal ml-2">· current <span className="font-mono">{fmtAmerican(currentAmerican)}</span></span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#f87171] font-medium">
+                        No longer +EV per model
+                        <span className="text-gray-500 font-normal ml-2">
+                          · breakeven <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                          {" · current "}<span className="font-mono">{fmtAmerican(currentAmerican)}</span>
+                        </span>
+                      </span>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-gray-600 cursor-help shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                        Model-relative breakeven: the price at which EV = 0 given our model&apos;s probability. Our models have no demonstrated market edge (best alpha = 0) — this is a transparency tool, not a bet recommendation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
 
               {/* Pinnacle reference (always shown when selected book ≠ Pinnacle) */}
               {selectedBook !== "pinnacle" && pinnacleH2H?.home_american != null && (
@@ -594,6 +730,54 @@ function BookOddsSection({
                   Model projected total: {bookOdds.pred_total_runs.toFixed(1)} runs — P(over) is recomputed at each book&apos;s own line.
                 </p>
               )}
+
+              {/* E9.1 — Breakeven chip for totals pick side */}
+              {(() => {
+                const isUnderSide = effectiveTotalsPickSide === "under"
+                const beAmerican = isUnderSide
+                  ? selTotals?.breakeven_american_under
+                  : selTotals?.breakeven_american_over
+                const currentAmerican = isUnderSide
+                  ? selTotals?.under_american
+                  : selTotals?.over_american
+                const ev = isUnderSide ? selTotals?.ev_under : selTotals?.ev_over
+                if (beAmerican == null || currentAmerican == null || !effectiveTotalsPickSide) return null
+                const isPlusEV = ev != null && ev > 0
+                const sideName = isUnderSide ? `Under ${selTotals?.line?.toFixed(1) ?? ""}` : `Over ${selTotals?.line?.toFixed(1) ?? ""}`
+                return (
+                  <div className={`mt-2 rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 ${
+                    isPlusEV
+                      ? "border-[#10b981]/30 bg-[#10b981]/5"
+                      : "border-[#f87171]/20 bg-[#f87171]/5"
+                  }`}>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                      Model breakeven · {sideName}
+                    </span>
+                    {isPlusEV ? (
+                      <span className="text-xs text-[#10b981] font-medium">
+                        +EV to <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                        <span className="text-gray-500 font-normal ml-2">· current <span className="font-mono">{fmtAmerican(currentAmerican)}</span></span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#f87171] font-medium">
+                        No longer +EV per model
+                        <span className="text-gray-500 font-normal ml-2">
+                          · breakeven <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                          {" · current "}<span className="font-mono">{fmtAmerican(currentAmerican)}</span>
+                        </span>
+                      </span>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-gray-600 cursor-help shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                        Model-relative breakeven: the price at which EV = 0 given our model&apos;s probability. Our models have no demonstrated market edge (best alpha = 0) — this is a transparency tool, not a bet recommendation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
 
               {/* Pinnacle reference for totals */}
               {selectedBook !== "pinnacle" && pinnacleTotals?.line != null && (
@@ -1321,7 +1505,7 @@ export default function PickDetailPage() {
                   2. Bovada Lines
               ============================================================ */}
               {bov && (bov.h2h || bov.totals) && (
-                <CollapsibleSection title="Bovada Lines">
+                <CollapsibleSection title="Bovada Lines" defaultOpen={false}>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="rounded-lg border border-[#1e1e1e] bg-[#0d0d0d] px-4 py-3">
                       <p className="mb-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Moneyline</p>
@@ -1384,6 +1568,8 @@ export default function PickDetailPage() {
                   awayFullName={awayFullName}
                   selectedBook={selectedBook}
                   setSelectedBook={setSelectedBook}
+                  h2hPickSide={picks.find((p) => p.market_type === "h2h")?.pick_side ?? null}
+                  totalsPickSide={picks.find((p) => p.market_type === "totals")?.pick_side ?? null}
                 />
               )}
 

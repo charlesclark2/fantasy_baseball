@@ -50,7 +50,7 @@ from cryptography.hazmat.primitives import serialization
 from scipy.stats import norm as _scipy_norm
 
 from betting_ml.utils.h2h_probability import devig_home_prob
-from betting_ml.utils.totals_probability import devig_over_prob
+from betting_ml.utils.totals_probability import devig_over_prob, prob_to_american
 from betting_ml.utils.probability_layer import compute_kelly
 
 load_dotenv()
@@ -1276,6 +1276,9 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                         kelly_home = None
                 else:
                     mkt_pct_home = None
+                # E9.1 — breakeven American price for home and away sides
+                be_home = prob_to_american(calib_win_prob)
+                be_away = prob_to_american(1.0 - calib_win_prob)
                 h2h_rows.append({
                     "book_key": book_key, "book_name": book_name,
                     "is_sharp_reference": is_sharp,
@@ -1287,6 +1290,8 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "edge_home": round(edge_home, 4) if edge_home is not None else None,
                     "kelly_home": round(kelly_home, 4) if kelly_home is not None else None,
                     "odds_as_of": h2h_odds_as_of,
+                    "breakeven_american_home": be_home,
+                    "breakeven_american_away": be_away,
                 })
             else:
                 # Book has no line for this game — include placeholder so frontend knows
@@ -1298,6 +1303,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "market_bet_pct_home": None, "model_prob_home": None,
                     "ev_home": None, "edge_home": None, "kelly_home": None,
                     "odds_as_of": None,
+                    "breakeven_american_home": None, "breakeven_american_away": None,
                 })
 
             # ── Totals ────────────────────────────────────────────────────────
@@ -1341,6 +1347,9 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                         pass
                 elif mkt_pct_over is not None and mkt_pct_over != mkt_pct_over:  # NaN guard
                     mkt_pct_over = None
+                # E9.1 — breakeven American price for over and under sides
+                be_over = prob_to_american(p_over) if p_over is not None else None
+                be_under = prob_to_american(p_under) if p_under is not None else None
                 totals_rows.append({
                     "book_key": book_key, "book_name": book_name,
                     "is_sharp_reference": is_sharp,
@@ -1356,6 +1365,8 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "edge_over": round(edge_over, 4) if edge_over is not None else None,
                     "kelly_over": round(kelly_over, 4) if kelly_over is not None else None,
                     "odds_as_of": totals_odds_as_of,
+                    "breakeven_american_over": be_over,
+                    "breakeven_american_under": be_under,
                 })
             else:
                 totals_rows.append({
@@ -1367,6 +1378,7 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
                     "model_prob_under": None, "p_push": None,
                     "ev_over": None, "ev_under": None, "edge_over": None, "kelly_over": None,
                     "odds_as_of": None,
+                    "breakeven_american_over": None, "breakeven_american_under": None,
                 })
 
         result[gp] = {
