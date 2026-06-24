@@ -620,6 +620,9 @@ final as (
         -- E13.7 cold-start flag: archetype/Stuff+/platoon above are league baselines, not
         -- this pitcher's prior-season profile (true for rookies / call-ups).
         h_st.is_cold_start                      as home_starter_is_cold_start,
+        -- E13.4 Candidate B1 (eval-only): prior-season 3rd-time-through xwOBA-against fade.
+        h_st.starter_tto3_xwoba_penalty         as home_starter_tto3_xwoba_penalty,
+        h_st.starter_tto_min_bf_prior           as home_starter_tto_min_bf_prior,
 
         -- ── Home starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         h_st.eb_xwoba_against                   as home_starter_eb_xwoba_against,
@@ -721,6 +724,9 @@ final as (
         -- E13.7 cold-start flag: archetype/Stuff+/platoon above are league baselines, not
         -- this pitcher's prior-season profile (true for rookies / call-ups).
         a_st.is_cold_start                      as away_starter_is_cold_start,
+        -- E13.4 Candidate B1 (eval-only): prior-season 3rd-time-through xwOBA-against fade.
+        a_st.starter_tto3_xwoba_penalty         as away_starter_tto3_xwoba_penalty,
+        a_st.starter_tto_min_bf_prior           as away_starter_tto_min_bf_prior,
 
         -- ── Away starter: Empirical Bayes posteriors (Epic 5A) ────────────────
         a_st.eb_xwoba_against                   as away_starter_eb_xwoba_against,
@@ -814,6 +820,17 @@ final as (
         h_tm.bullpen_ip_prev_1d                 as home_bullpen_ip_prev_1d,
         h_tm.bullpen_ip_prev_2d                 as home_bullpen_ip_prev_2d,
         h_tm.pitchers_used_prev_2d              as home_pitchers_used_prev_2d,
+
+        -- ── Edge Program E13.4 Candidate B2: bullpen-fatigue × short-leash ────
+        -- Interaction term (eval-only; no production contract references it). Domain:
+        -- a tired pen bites harder behind a starter expected to be pulled early, so the
+        -- PRODUCT carries skill the two levels don't. = bullpen_pitches_prev_3d × (1 /
+        -- starter_avg_ip_last_3). nullif guards the season-opener / no-IP-history case
+        -- (→ NULL, imputed downstream). `::float` forces float division — NEVER write a
+        -- bare `::numeric`/`::number` on a ratio (= NUMBER(38,0) = scale 0 = integer
+        -- truncation; the bug that silently zeroed the B1 TTO mart, 2026-06-23).
+        (h_tm.bullpen_pitches_prev_3d::float
+            / nullif(h_st.avg_ip_last_3, 0))    as home_bullpen_fatigue_short_leash,
         h_tm.bp_k_pct_14d                       as home_bp_k_pct_14d,
         h_tm.bp_bb_pct_14d                      as home_bp_bb_pct_14d,
         h_tm.bp_xwoba_against_14d               as home_bp_xwoba_against_14d,
@@ -937,6 +954,13 @@ final as (
         a_tm.bullpen_ip_prev_1d                 as away_bullpen_ip_prev_1d,
         a_tm.bullpen_ip_prev_2d                 as away_bullpen_ip_prev_2d,
         a_tm.pitchers_used_prev_2d              as away_pitchers_used_prev_2d,
+
+        -- ── Edge Program E13.4 Candidate B2: bullpen-fatigue × short-leash ────
+        -- Mirror of home_bullpen_fatigue_short_leash (see the home block above for the
+        -- hypothesis + the ::numeric truncation footgun). Per-side harness reads this via
+        -- opp_bullpen_fatigue_short_leash (the FACED pitching side).
+        (a_tm.bullpen_pitches_prev_3d::float
+            / nullif(a_st.avg_ip_last_3, 0))    as away_bullpen_fatigue_short_leash,
         a_tm.bp_k_pct_14d                       as away_bp_k_pct_14d,
         a_tm.bp_bb_pct_14d                      as away_bp_bb_pct_14d,
         a_tm.bp_xwoba_against_14d               as away_bp_xwoba_against_14d,

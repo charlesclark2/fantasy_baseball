@@ -3,6 +3,38 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_starter_tto_splits  (Edge Program E13.4 — Candidate B1: TTO penalty)
+  # ============================================================================
+  - name: mart_starter_tto_splits
+    description: >
+      Per pitcher × season, xwOBA-against split by times-through-the-order (1st time
+      vs 3rd+ time), so a pre-game feature can carry the pitcher's 3rd-time FADE that
+      the market under-prices vs his season average. xwOBA-against mirrors
+      mart_pitcher_rolling_stats (sum(xwoba)/count(xwoba), batted balls). LEAK-SAFE:
+      a per-season aggregate — consumers MUST join on the PRIOR season (game_year - 1),
+      like mart_pitcher_vs_handedness_splits. Regular season only. EVAL-ONLY candidate
+      (gated by the E13.4 lift-test); not in any production contract.
+    columns:
+      - name: pitcher_id
+        description: MLB pitcher id.
+      - name: season
+        description: Season (game_year) the splits were measured in. Join on season + 1 downstream.
+      - name: tto3_xwoba_penalty
+        description: >
+          3rd+-time-through xwOBA-against minus 1st-time. Positive = the pitcher fades
+          deeper into the order. NULL if either bucket had no batted balls that season.
+      - name: tto1_xwoba_against
+        description: xwOBA-against the 1st time through the order.
+      - name: tto3_xwoba_against
+        description: xwOBA-against the 3rd+ time through the order.
+      - name: tto1_bf
+        description: Batters faced (PA-ending events) the 1st time through.
+      - name: tto3_bf
+        description: Batters faced (PA-ending events) the 3rd+ time through.
+      - name: tto_min_bf
+        description: least(tto1_bf, tto3_bf) — the binding sample size backing the EB shrinkage.
+
+  # ============================================================================
   # dim_team_name_lookup  (Epic A1.9 — canonical cross-source team resolver)
   # ============================================================================
   - name: dim_team_name_lookup
