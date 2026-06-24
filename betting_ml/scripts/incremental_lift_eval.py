@@ -91,6 +91,37 @@ _NOISE_COL = "__sanity_noise__"
 _DUP_PREFIX = "__sanity_dup__"
 
 
+def merge_feature_parquet(df: pd.DataFrame, path: str | None) -> pd.DataFrame:
+    """Left-join a game_pk-keyed candidate-feature parquet onto the loaded feature frame (opt-in;
+    no-op when path is None, so the default Snowflake-only behaviour is untouched).
+
+    This is the bridge for features the heavy LAKEHOUSE build produces OUTSIDE Snowflake (E13.10's
+    zone-overlap is built from S3 pitch parquet via duckdb, NOT a dbt mart) — it lets a lakehouse
+    feature be lift-tested without a Snowflake write + dbt full-refresh just to probe a likely-null
+    candidate. The parquet must carry `game_pk` plus the candidate column(s); rows are matched on
+    game_pk (coerced to int). Columns already present in df are NOT overwritten (fail-safe)."""
+    if not path:
+        return df
+    feat = pd.read_parquet(path)
+    if "game_pk" not in feat.columns:
+        raise SystemExit(f"--feature-parquet {path}: missing required 'game_pk' column "
+                         f"(has {list(feat.columns)})")
+    if "game_pk" not in df.columns:
+        raise SystemExit("feature frame has no 'game_pk' to join the --feature-parquet on.")
+    new_cols = [c for c in feat.columns if c != "game_pk" and c not in df.columns]
+    if not new_cols:
+        print(f"  [feature-parquet] no new columns to add from {path} (all already present?)")
+        return df
+    feat = feat[["game_pk"] + new_cols].copy()
+    feat["game_pk"] = pd.to_numeric(feat["game_pk"], errors="coerce").astype("Int64")
+    out = df.copy()
+    out["game_pk"] = pd.to_numeric(out["game_pk"], errors="coerce").astype("Int64")
+    merged = out.merge(feat, on="game_pk", how="left")
+    cov = float(merged[new_cols[0]].notna().mean())
+    print(f"  [feature-parquet] merged {new_cols} from {path}  (coverage {cov:.1%} of rows)")
+    return merged
+
+
 # ════════════════════════════════════════════════════════════════════════════
 #  PURE-LOGIC primitives (unit-tested; no Snowflake / no model dependency)
 # ════════════════════════════════════════════════════════════════════════════
@@ -306,7 +337,8 @@ _CHAMP_METRIC = {"home_win": "nll", "run_diff": "mae", "total_runs": "mae"}  # n
 
 
 def _champion_backend(target: str, configs: list[Config], *, metric: str, embargo_days: int,
-                      min_year: int, n_slices: int, seed: int) -> dict:
+                      min_year: int, n_slices: int, seed: int,
+                      feature_parquet: str | None = None) -> dict:
     from betting_ml.scripts.promotion_gate_eval import (
         _TARGETS, _build_specs, _contract_cols, _impute, _reconstruct_champion_cols,
         make_gate_splitter,
@@ -316,6 +348,7 @@ def _champion_backend(target: str, configs: list[Config], *, metric: str, embarg
     cfg = _TARGETS[target]
     print(f"Loading features from Snowflake (min_year={min_year}) ...")
     df = load_features(min_year=min_year).reset_index(drop=True)
+    df = merge_feature_parquet(df, feature_parquet)
     print(f"  {len(df)} rows, seasons {sorted(df['game_year'].dropna().unique().tolist())}")
 
     base_cols = (_reconstruct_champion_cols(df) if cfg["champion_kind"] == "reconstruct"
@@ -385,7 +418,7 @@ def _champion_backend(target: str, configs: list[Config], *, metric: str, embarg
 # ════════════════════════════════════════════════════════════════════════════
 
 def _perside_backend(configs: list[Config], *, metric: str, embargo_days: int, min_year: int,
-                     n_slices: int, seed: int) -> dict:
+                     n_slices: int, seed: int, feature_parquet: str | None = None) -> dict:
     from betting_ml.scripts.totals_generative.train_perside_negbin import (
         _MIN_MU, _TARGET, _fit_lgbm, _impute_means, _prepare_matrix, build_perside_frame,
         fit_negbin_r, load_wide,
@@ -396,6 +429,9 @@ def _perside_backend(configs: list[Config], *, metric: str, embargo_days: int, m
     wide = load_wide(min_year)
     # Carry the faced-starter cold-start flag through the unpivot for stratification.
     wide.columns = [c.lower() for c in wide.columns]
+    # Opt-in lakehouse feature bridge: land home_<base>/away_<base> in the wide mart so the
+    # per-side unpivot can derive off_<base>/opp_<base> (e.g. opp_zone_overlap for E13.10).
+    wide = merge_feature_parquet(wide, feature_parquet)
     df, numeric_cols, cat_cols = build_perside_frame(wide)
     df = _attach_perside_coldstart(df, wide)
 
@@ -634,6 +670,10 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--run-name", default=None,
                     help="Output basename → ablation_results/<run-name>_<target>_lift.json")
+    ap.add_argument("--feature-parquet", default=None,
+                    help="Opt-in: a game_pk-keyed parquet of candidate column(s) built OUTSIDE "
+                         "Snowflake (e.g. the E13.10 lakehouse zone-overlap feature) to left-join "
+                         "before evaluation. Default None ⇒ Snowflake-only (unchanged).")
     args = ap.parse_args()
 
     add = [c.strip() for c in args.add_features.split(",") if c.strip()]
@@ -642,12 +682,14 @@ def main() -> None:
     if args.target == "perside_runs":
         metric = args.metric or "crps"
         res = _perside_backend(configs, metric=metric, embargo_days=args.embargo_days,
-                               min_year=args.min_year, n_slices=args.n_slices, seed=args.seed)
+                               min_year=args.min_year, n_slices=args.n_slices, seed=args.seed,
+                               feature_parquet=args.feature_parquet)
     else:
         metric = args.metric or _CHAMP_METRIC[args.target]
         res = _champion_backend(args.target, configs, metric=metric,
                                 embargo_days=args.embargo_days, min_year=args.min_year,
-                                n_slices=args.n_slices, seed=args.seed)
+                                n_slices=args.n_slices, seed=args.seed,
+                                feature_parquet=args.feature_parquet)
 
     _print_report(res)
 

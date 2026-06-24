@@ -24,10 +24,11 @@ S3 LAYOUT
 One Parquet file per (sport, market_key, season, calendar_date).
 Each row = one (event × snapshot_ts × bookmaker × player).
 
-CREDIT BUDGET (as of 2026-06-23)
-    Surplus remaining : ~3,770,000 credits
-    Reserve           : 400,000 (buffer for unexpected overruns)
-    Available         : ~3,370,000 credits
+CREDIT BUDGET (as of 2026-06-24 — pre-7/1 conservation window)
+    Surplus remaining : ~888,000 credits (renewing to 5M on 7/1)
+    Reserve           : 88,000 (10% hold-back; stop well before 0)
+    Available         : ~800,000 credits
+    Pre-7/1 scope     : MLB key derivatives only (F5 + NRFI)
     Value rank        : MLB → NFL → NCAAF → NCAAB
     Script stops when remaining credits drop below CREDIT_RESERVE.
 
@@ -97,9 +98,9 @@ BUCKET            = "baseball-betting-ml-artifacts"
 AWS_REGION        = "us-east-2"
 REQUEST_DELAY     = 1.0  # seconds between API calls
 
-CREDIT_SURPLUS    = 3_770_000
-CREDIT_RESERVE    = 400_000   # hold back; stop well before 0
-CREDIT_AVAILABLE  = CREDIT_SURPLUS - CREDIT_RESERVE  # 3,370,000
+CREDIT_SURPLUS    = 888_000    # updated 2026-06-24: pre-7/1 conservation window
+CREDIT_RESERVE    = 88_000    # ~10% hold-back; stop well before 0
+CREDIT_AVAILABLE  = CREDIT_SURPLUS - CREDIT_RESERVE  # 800,000
 
 # Historical prop data floor (per Odds API docs)
 PROP_FLOOR = date(2023, 5, 3)
@@ -114,11 +115,29 @@ SPORTS_CONFIG: dict[str, dict] = {
         "label"   : "mlb",
         "display" : "MLB",
         "markets" : [
+            # Player props (already backfilled)
             "pitcher_strikeouts",
             "pitcher_outs",
             "batter_total_bases",
             "batter_hits",
             "batter_home_runs",
+            # Tier 1 — highest edge-lane value (F5 + NRFI)
+            "h2h_1st_5_innings",
+            "totals_1st_5_innings",
+            "totals_1st_1_innings",
+            "alternate_totals_1st_5_innings",
+            # Tier 2 — F1/F3/F7 derivatives + F5 run-line
+            "h2h_1st_1_innings",
+            "h2h_1st_3_innings",
+            "totals_1st_3_innings",
+            "h2h_1st_7_innings",
+            "totals_1st_7_innings",
+            "spreads_1st_5_innings",
+            "alternate_spreads_1st_5_innings",
+            # Tier 3 — full-game derivatives (confirmed gaps in S3)
+            "alternate_team_totals",
+            "alternate_spreads",
+            "spreads",
         ],
         # Season label = calendar year (MLB season is within one calendar year).
         # 2023 start = Odds API prop floor; probe may confirm earlier.
@@ -141,11 +160,44 @@ SPORTS_CONFIG: dict[str, dict] = {
         "label"   : "nfl",
         "display" : "NFL",
         "markets" : [
+            # Player props (already backfilled)
             "player_pass_yds",
             "player_rush_yds",
             "player_reception_yds",
             "player_receptions",
             "player_anytime_td",
+            "player_pass_yds_alternate",
+            "player_rush_yds_alternate",
+            "player_reception_yds_alternate",
+            "player_receptions_alternate",
+            # Tier 1 — 1st-half game markets
+            "h2h_h1",
+            "spreads_h1",
+            "totals_h1",
+            # Tier 2 — 1st quarter + team totals + alts
+            "h2h_q1",
+            "spreads_q1",
+            "totals_q1",
+            "team_totals",
+            "team_totals_h1",
+            "alternate_spreads",
+            "alternate_totals",
+            "alternate_spreads_h1",
+            "alternate_totals_h1",
+            # Tier 3 — 2nd half + remaining quarters + alt team totals
+            "h2h_h2",
+            "spreads_h2",
+            "totals_h2",
+            "h2h_q2",
+            "spreads_q2",
+            "totals_q2",
+            "h2h_q3",
+            "spreads_q3",
+            "totals_q3",
+            "h2h_q4",
+            "spreads_q4",
+            "totals_q4",
+            "alternate_team_totals",
         ],
         # Season label = year the season starts (NFL season spans two calendar years).
         "season_ranges": {
@@ -163,9 +215,41 @@ SPORTS_CONFIG: dict[str, dict] = {
         "label"   : "ncaaf",
         "display" : "NCAAF",
         "markets" : [
+            # Player props (already backfilled)
             "player_pass_yds",
             "player_rush_yds",
             "player_reception_yds",
+            "player_pass_yds_alternate",
+            "player_rush_yds_alternate",
+            "player_reception_yds_alternate",
+            # Tier 1 — 1st-half game markets
+            "h2h_h1",
+            "spreads_h1",
+            "totals_h1",
+            # Tier 2 — 1st quarter + team totals + alts
+            "h2h_q1",
+            "spreads_q1",
+            "totals_q1",
+            "team_totals",
+            "team_totals_h1",
+            "alternate_spreads",
+            "alternate_totals",
+            "alternate_spreads_h1",
+            "alternate_totals_h1",
+            # Tier 3 — 2nd half + remaining quarters + alt team totals
+            "h2h_h2",
+            "spreads_h2",
+            "totals_h2",
+            "h2h_q2",
+            "spreads_q2",
+            "totals_q2",
+            "h2h_q3",
+            "spreads_q3",
+            "totals_q3",
+            "h2h_q4",
+            "spreads_q4",
+            "totals_q4",
+            "alternate_team_totals",
         ],
         "season_ranges": {
             2023: (date(2023,  8, 26), date(2024,  1, 22)),  # through CFP championship
@@ -182,9 +266,31 @@ SPORTS_CONFIG: dict[str, dict] = {
         "label"   : "ncaab",
         "display" : "NCAAB",
         "markets" : [
+            # Player props (already backfilled)
             "player_points",
             "player_rebounds",
             "player_assists",
+            "player_points_alternate",
+            "player_rebounds_alternate",
+            "player_assists_alternate",
+            # Tier 1 — 1st-half game markets
+            "h2h_h1",
+            "spreads_h1",
+            "totals_h1",
+            # Tier 2 — 2nd half + team totals + alts (halves only; no q1-q4 for NCAAB)
+            "h2h_h2",
+            "spreads_h2",
+            "totals_h2",
+            "team_totals",
+            "team_totals_h1",
+            "alternate_spreads",
+            "alternate_totals",
+            "alternate_spreads_h1",
+            "alternate_totals_h1",
+            # Tier 3 — alt team totals + 2nd-half alts
+            "alternate_team_totals",
+            "alternate_spreads_h2",
+            "alternate_totals_h2",
         ],
         # Season label = calendar year the season STARTS in November.
         "season_ranges": {
@@ -365,21 +471,30 @@ def fetch_event_props(
 # ── Row extraction ─────────────────────────────────────────────────────────────
 
 def _pivot_prop_outcomes(outcomes: list[dict]) -> dict[str, dict]:
-    """Pivot Over/Under pairs → {player_name: {line, over_price, under_price}}."""
+    """Pivot outcomes → {player_name: {line, over_price, under_price}}.
+
+    Player props: description=player name, name=Over/Under, point=line.
+    Game markets (h2h, spreads): no description, name=team/side, price=moneyline.
+    For game markets, price is stored in over_price; under_price is left None.
+    """
     players: dict[str, dict] = {}
     for o in outcomes:
-        side   = (o.get("name") or "").strip().lower()
-        player = (o.get("description") or "").strip()
+        side   = (o.get("name") or "").strip()
+        player = (o.get("description") or side).strip()
         if not player:
             continue
         if player not in players:
             players[player] = {"line": None, "over_price": None, "under_price": None}
         if (line := o.get("point")) is not None:
             players[player]["line"] = float(line)
-        if side == "over":
+        side_lower = side.lower()
+        if side_lower == "over":
             players[player]["over_price"] = o.get("price")
-        elif side == "under":
+        elif side_lower == "under":
             players[player]["under_price"] = o.get("price")
+        else:
+            # Game market: name is team/side label; store moneyline in over_price
+            players[player]["over_price"] = o.get("price")
     return players
 
 
@@ -500,6 +615,7 @@ def run_probe(
     regions: list[str],
     api_key: str,
     sleep_secs: float,
+    markets_override: list[str] | None = None,
 ) -> None:
     print()
     print("══ MULTI-SPORT PLAYER PROPS — PHASE 0 PROBE ════════════════════════════════")
@@ -512,7 +628,7 @@ def run_probe(
     for sport in sports:
         cfg = SPORTS_CONFIG[sport]
         probe_date   = cfg["probe_date"]
-        markets      = cfg["markets"]
+        markets      = markets_override if markets_override else cfg["markets"]
         snapshots    = cfg["snapshots"]
         snap         = snapshots[0]
         snap_ts_str  = _snap_ts(probe_date, snap)
@@ -633,6 +749,7 @@ def run_backfill(
     limit: int | None,
     force: bool,
     dry_run: bool,
+    markets_override: list[str] | None = None,
 ) -> None:
     if dry_run:
         print()
@@ -670,7 +787,7 @@ def run_backfill(
     for sport in sports:
         cfg      = SPORTS_CONFIG[sport]
         label    = cfg["label"]
-        markets  = cfg["markets"]
+        markets  = markets_override if markets_override else cfg["markets"]
         regions_ = regions
         snaps    = cfg["snapshots"]
         cr_per_event = _credits_per_event(markets, regions_)
@@ -726,10 +843,17 @@ def run_backfill(
                 time.sleep(sleep_secs)
                 continue
 
-            # Step 2: for each snapshot, fetch props per event
+            # Step 2: fetch props for all snapshots, accumulate across all
+            # snapshots into one dict, then write once per market per date.
+            # NOTE: rows_by_market is intentionally OUTSIDE the snapshot loop —
+            # initialising it inside caused the second snapshot to overwrite the
+            # first S3 write with a smaller row set (games past commence_time
+            # are leakage-filtered at the later snapshot, so the surviving file
+            # would be missing early-game coverage AND we paid for both pulls).
+            rows_by_market: dict[str, list[dict]] = {}
+
             for snap_hhmm in snaps:
                 snap_ts_str = _snap_ts(game_date, snap_hhmm)
-                rows_by_market: dict[str, list[dict]] = {}
 
                 for event in events:
                     event_id      = event.get("id", "")
@@ -762,12 +886,12 @@ def run_backfill(
                     for mkt_key, rows in event_rows.items():
                         rows_by_market.setdefault(mkt_key, []).extend(rows)
 
-                # Write one Parquet per market per (season, date)
-                for mkt_key, rows in rows_by_market.items():
-                    if not rows:
-                        continue
-                    key = s3_key(label, mkt_key, season, game_date)
-                    write_to_s3(rows, key, s3_client, BUCKET)
+            # Write once after all snapshots — one Parquet per (market, season, date)
+            for mkt_key, rows in rows_by_market.items():
+                if not rows:
+                    continue
+                key = s3_key(label, mkt_key, season, game_date)
+                write_to_s3(rows, key, s3_client, BUCKET)
 
             log.info(
                 "  done  date=%s  calls_so_far=%d  est_credits_used=%d  api_remaining=%s",
@@ -800,8 +924,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--regions",
-        default="us,eu",
-        help="Comma-separated regions (default: us,eu).  eu = Pinnacle.",
+        default="us",
+        help="Comma-separated regions (default: us).  Add eu for Pinnacle coverage.",
     )
     p.add_argument(
         "--sleep-seconds",
@@ -825,6 +949,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print credit estimates only; make no API or S3 calls.",
     )
+    p.add_argument(
+        "--markets",
+        default=None,
+        help=(
+            "Comma-separated market keys to override the sport's default market list. "
+            "Use this to backfill a single new market without re-fetching existing ones. "
+            "Example: --sport baseball_mlb --markets h2h_1st_5_innings"
+        ),
+    )
     return p
 
 
@@ -838,8 +971,13 @@ def main() -> None:
         log.error("ODDS_API_KEY not set — check .env")
         sys.exit(1)
 
+    markets_override = (
+        [m.strip() for m in args.markets.split(",") if m.strip()]
+        if args.markets else None
+    )
+
     if args.mode == "probe":
-        run_probe(sports, regions, api_key, args.sleep_seconds)
+        run_probe(sports, regions, api_key, args.sleep_seconds, markets_override)
         return
 
     # Backfill mode — needs S3
@@ -852,14 +990,15 @@ def main() -> None:
         s3_client = None
 
     run_backfill(
-        sports      = sports,
-        regions     = regions,
-        api_key     = api_key,
-        s3_client   = s3_client,
-        sleep_secs  = args.sleep_seconds,
-        limit       = args.limit,
-        force       = args.force,
-        dry_run     = args.dry_run,
+        sports           = sports,
+        regions          = regions,
+        api_key          = api_key,
+        s3_client        = s3_client,
+        sleep_secs       = args.sleep_seconds,
+        limit            = args.limit,
+        force            = args.force,
+        dry_run          = args.dry_run,
+        markets_override = markets_override,
     )
 
 
