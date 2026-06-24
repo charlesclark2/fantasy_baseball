@@ -1,0 +1,147 @@
+{
+  "story": "E13.2",
+  "phase": 1,
+  "model": "v2",
+  "classes": [
+    "1B",
+    "2B",
+    "3B",
+    "HR",
+    "BB",
+    "IBB",
+    "HBP",
+    "K",
+    "out",
+    "other"
+  ],
+  "feature_set": "v2",
+  "n_pa": 1960682,
+  "n_features": 65,
+  "n_pit": 52,
+  "kappa": 100.0,
+  "kappa_split": 200.0,
+  "regime_boundary": 2023,
+  "regime_edge_2023plus": false,
+  "summary": {
+    "mean_logloss_model": 1.48377,
+    "mean_logloss_log5": 1.48807,
+    "mean_logloss_marginal": 1.50942,
+    "mean_delta_vs_log5": 0.0043,
+    "mean_delta_vs_marginal": 0.02564,
+    "beats_log5_all_folds": true,
+    "beats_marginal_all_folds": true,
+    "nll_noise_floor": 0.01,
+    "clears_noise_floor_vs_log5": false
+  },
+  "reliability_ece": {
+    "1B": 0.00328,
+    "2B": 0.00038,
+    "3B": 0.00069,
+    "HR": 0.00081,
+    "BB": 0.00326,
+    "IBB": 5e-05,
+    "HBP": 0.0003,
+    "K": 0.00691,
+    "out": 0.00936,
+    "other": 0.00123,
+    "mean": 0.00263
+  },
+  "regime_split": {
+    "pre_2023": {
+      "mean": 0.00295,
+      "ci_lo": 0.00243,
+      "ci_hi": 0.00346,
+      "n_pa": 768868,
+      "n_games": 10203
+    },
+    "2023_plus": {
+      "mean": 0.00655,
+      "ci_lo": 0.00604,
+      "ci_hi": 0.00706,
+      "n_pa": 548586,
+      "n_games": 7289
+    }
+  },
+  "folds": [
+    {
+      "eval_year": 2018,
+      "n_train": 521977,
+      "n_eval": 153223,
+      "logloss_model": 1.48106,
+      "logloss_log5": 1.4831,
+      "logloss_marginal": 1.50568,
+      "delta_vs_log5": 0.00204,
+      "delta_vs_marginal": 0.02462
+    },
+    {
+      "eval_year": 2019,
+      "n_train": 676965,
+      "n_eval": 186025,
+      "logloss_model": 1.49821,
+      "logloss_log5": 1.49969,
+      "logloss_marginal": 1.52585,
+      "delta_vs_log5": 0.00148,
+      "delta_vs_marginal": 0.02763
+    },
+    {
+      "eval_year": 2020,
+      "n_train": 861326,
+      "n_eval": 66400,
+      "logloss_model": 1.5062,
+      "logloss_log5": 1.50928,
+      "logloss_marginal": 1.53048,
+      "delta_vs_log5": 0.00308,
+      "delta_vs_marginal": 0.02428
+    },
+    {
+      "eval_year": 2021,
+      "n_train": 927274,
+      "n_eval": 181348,
+      "logloss_model": 1.48408,
+      "logloss_log5": 1.48822,
+      "logloss_marginal": 1.51226,
+      "delta_vs_log5": 0.00413,
+      "delta_vs_marginal": 0.02818
+    },
+    {
+      "eval_year": 2022,
+      "n_train": 1109691,
+      "n_eval": 181872,
+      "logloss_model": 1.46907,
+      "logloss_log5": 1.47304,
+      "logloss_marginal": 1.49313,
+      "delta_vs_log5": 0.00398,
+      "delta_vs_marginal": 0.02406
+    },
+    {
+      "eval_year": 2023,
+      "n_train": 1291471,
+      "n_eval": 183773,
+      "logloss_model": 1.49016,
+      "logloss_log5": 1.49489,
+      "logloss_marginal": 1.51513,
+      "delta_vs_log5": 0.00473,
+      "delta_vs_marginal": 0.02497
+    },
+    {
+      "eval_year": 2024,
+      "n_train": 1475142,
+      "n_eval": 182175,
+      "logloss_model": 1.47121,
+      "logloss_log5": 1.47836,
+      "logloss_marginal": 1.49653,
+      "delta_vs_log5": 0.00715,
+      "delta_vs_marginal": 0.02531
+    },
+    {
+      "eval_year": 2025,
+      "n_train": 1659366,
+      "n_eval": 182638,
+      "logloss_model": 1.47019,
+      "logloss_log5": 1.47798,
+      "logloss_marginal": 1.49628,
+      "delta_vs_log5": 0.00779,
+      "delta_vs_marginal": 0.02609
+    }
+  ]
+}
