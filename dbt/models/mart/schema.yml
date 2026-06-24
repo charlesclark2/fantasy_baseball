@@ -3,6 +3,92 @@ version: 2
 models:
 
   # ============================================================================
+  # mart_pa_outcome_substrate  (Edge Program E13.12 — PA-grain outcome substrate)
+  # ============================================================================
+  - name: mart_pa_outcome_substrate
+    description: >
+      E13.12 — PA-grain training substrate for the E13.2 PA-outcome model and
+      Monte-Carlo simulator. One row per plate appearance (game_pk × at_bat_number).
+      Carries: (1) the ENTERING 24-state base-out context (base_out_state enum,
+      e.g. '1-3|2'), score/inning, platoon matchup, and pitcher times-through-order
+      sourced from the FIRST pitch of the PA; (2) the PA OUTCOME mapped to a
+      9+1 multinomial label {1B, 2B, 3B, HR, BB, IBB, HBP, K, out, other} with
+      woba_value / woba_denom from the terminal pitch.
+      Lakehouse path only (dbt-duckdb/S3, run with --target duckdb; do not run
+      against Snowflake — cost posture: profitable-system-first).
+      Leak-clean: historical record. Eval/serving consumers must filter
+      game_date < <target_date> before joining to per-player season aggregates.
+      Gates E13.2 (PA-outcome model) and E13.10.
+    columns:
+      - name: game_pk
+        description: MLB game identifier.
+        tests: [not_null]
+      - name: at_bat_number
+        description: Sequential plate appearance number within the game.
+        tests: [not_null]
+      - name: game_date
+        description: Date of the game.
+      - name: game_year
+        description: Season year.
+      - name: game_type
+        description: "R=Regular Season, S=Spring Training, etc."
+      - name: home_team
+        description: Statcast abbreviation of the home team.
+      - name: away_team
+        description: Statcast abbreviation of the away team.
+      - name: inning
+        description: Inning number at PA entry.
+      - name: inning_half
+        description: "Top or Bot."
+      - name: outs_at_entry
+        description: Outs in the inning before this PA began (0, 1, or 2).
+      - name: base_state
+        description: >
+          8-way base occupancy at PA entry: '---', '1--', '-2-', '--3', '12-',
+          '1-3', '-23', or '123'. Matches mart_pitch_game_context convention.
+      - name: base_out_state
+        description: >
+          24-state base × outs enum: '<base_state>|<outs_at_entry>',
+          e.g. '---|0', '1-3|2'. The full entering state for RE24-style features.
+      - name: runner_on_1b
+        description: Boolean — runner on first base at PA entry.
+      - name: runner_on_2b
+        description: Boolean — runner on second base at PA entry.
+      - name: runner_on_3b
+        description: Boolean — runner on third base at PA entry.
+      - name: entry_bat_score_diff
+        description: Batting team score minus fielding team score at PA entry.
+      - name: entry_home_score
+        description: Home team score before the PA.
+      - name: entry_away_score
+        description: Away team score before the PA.
+      - name: batter_id
+        description: MLB Player ID for the batter.
+      - name: pitcher_id
+        description: MLB Player ID for the pitcher.
+      - name: batter_hand
+        description: Batter handedness (L or R).
+      - name: pitcher_hand
+        description: Pitcher throwing hand (L or R).
+      - name: platoon_matchup
+        description: "'same' when batter and pitcher share handedness; 'opposite' otherwise."
+      - name: batter_prior_pas_this_game
+        description: Number of plate appearances the batter had earlier in this game.
+      - name: pitcher_times_thru_order_at_entry
+        description: How many times the pitcher had been through the batting order before this PA.
+      - name: raw_event
+        description: Raw Statcast plate_appearance_event value (e.g. 'single', 'strikeout').
+      - name: pa_outcome_label
+        description: >
+          Multinomial outcome label: 1B, 2B, 3B, HR, BB, IBB, HBP, K, out, or other.
+          'out' covers all ball-in-play outs, sacrifices, and errors.
+          'other' covers catcher interference and other rare terminal events.
+      - name: woba_value
+        description: Realized wOBA value for this PA result.
+      - name: woba_denom
+        description: wOBA denominator (1 if PA counts toward wOBA, 0 otherwise).
+
+  # ============================================================================
   # mart_starter_tto_splits  (Edge Program E13.4 — Candidate B1: TTO penalty)
   # ============================================================================
   - name: mart_starter_tto_splits
