@@ -1954,7 +1954,7 @@ def get_game_detail(game_pk: int) -> GameDetailResponse:
 def get_odds_comparison(game_pk: int) -> BookOddsComparison:
     """A0.4.32 — Per-book odds comparison for a game.
 
-    Returns all six books (Pinnacle, BetMGM, Caesars, FanDuel, DraftKings, Bovada)
+    Returns all seven books (Pinnacle, BetMGM, Caesars, FanDuel, DraftKings, Fanatics, Bovada)
     in one payload for both h2h and totals markets. Model EV / edge / de-vigged market %
     are pre-computed server-side. Pinnacle is the sharp low-vig reference anchor.
 

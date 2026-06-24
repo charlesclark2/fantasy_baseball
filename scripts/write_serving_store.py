@@ -55,13 +55,14 @@ from betting_ml.utils.probability_layer import compute_kelly
 
 load_dotenv()
 
-# A0.4.32 — curated book set (verified live 2026-06-17)
+# A0.4.32 — curated book set (verified live 2026-06-17; Fanatics added E9.14)
 _BOOK_DISPLAY: dict[str, str] = {
     "pinnacle": "Pinnacle",
     "betmgm": "BetMGM",
     "caesars": "Caesars",
     "fanduel": "FanDuel",
     "draftkings": "DraftKings",
+    "fanatics": "Fanatics",
     "bovada": "Bovada",
 }
 _BOOK_ORDER = list(_BOOK_DISPLAY.keys())  # Pinnacle first (sharp reference)
@@ -1022,7 +1023,7 @@ all_odds AS (
         o.ingestion_ts
     FROM baseball_data.betting.mart_odds_outcomes o
     INNER JOIN bridge b ON b.event_id = o.event_id
-    WHERE o.bookmaker_key IN ('betmgm', 'caesars', 'fanduel', 'draftkings', 'bovada', 'pinnacle')
+    WHERE o.bookmaker_key IN ('betmgm', 'williamhill_us', 'fanduel', 'draftkings', 'fanatics', 'bovada', 'pinnacle')
       AND (b.game_start_ts IS NULL OR o.ingestion_ts < b.game_start_ts)  -- pre-game-start guard (E9.27); fail-open when start time unknown
 ),
 -- Latest ingestion_ts for which the full set of outcomes is present
@@ -1214,10 +1215,13 @@ def _compute_book_odds_payloads(sf, game_pks: list[int]) -> dict[int, dict]:
     dist_by_pk: dict[int, dict] = {r["GAME_PK"]: r for r in dist_rows}
 
     # Group odds by game_pk → bookmaker_key → market_key → list[row]
+    # Canonicalize williamhill_us → caesars (Parlay API still sends the Odds API key).
+    _BOOK_KEY_CANONICAL = {"williamhill_us": "caesars"}
     odds_by_pk: dict[int, dict] = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
     for row in odds_rows:
         gp = row["GAME_PK"]
         bk = str(row["BOOKMAKER_KEY"]).lower()
+        bk = _BOOK_KEY_CANONICAL.get(bk, bk)
         mk = str(row["MARKET_KEY"]).lower()
         odds_by_pk[gp][bk][mk].append(row)
 

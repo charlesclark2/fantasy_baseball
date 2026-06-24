@@ -1,5 +1,18 @@
 [
   {
+    "week": "2026-06-24",
+    "items": [
+      {
+        "tag": "new",
+        "text": "Fanatics is now included in the Book Comparison on each pick's detail page. Where Fanatics offers a line, you'll see its moneyline and total prices alongside its de-vigged market probability, model EV, edge, and breakeven price — the same full treatment every other US book receives. Fanatics is also counted in the cross-book '+EV' pill ('N of M books +EV')."
+      },
+      {
+        "tag": "fix",
+        "text": "Caesars was not appearing in the Book Comparison despite having live lines. The data pipeline was ingesting Caesars under a legacy key ('williamhill_us') that the serving store's book filter didn't recognize. The filter has been updated and Caesars will show correctly after the next odds refresh."
+      }
+    ]
+  },
+  {
     "week": "2026-06-23",
     "items": [
       {
