@@ -365,6 +365,19 @@ function BookOddsSection({
     return (h?.home_american != null) || (t?.line != null)
   })
 
+  // When layer4 abstains, pick_side is null but we can still show EV direction by
+  // deriving which side the model thinks is undervalued (model_prob > market_bet_pct).
+  const effectiveH2HPickSide: string | null = h2hPickSide ?? (() => {
+    const ref = bookOdds.h2h.find((b) => b.model_prob_home != null && b.market_bet_pct_home != null)
+    if (!ref) return null
+    return (ref.model_prob_home! > ref.market_bet_pct_home!) ? "home" : "away"
+  })()
+  const effectiveTotalsPickSide: string | null = totalsPickSide ?? (() => {
+    const ref = bookOdds.totals.find((b) => b.model_prob_over != null && b.market_bet_pct_over != null)
+    if (!ref) return null
+    return (ref.model_prob_over! > ref.market_bet_pct_over!) ? "over" : "under"
+  })()
+
   return (
     <Collapsible
       defaultOpen={true}
@@ -430,12 +443,12 @@ function BookOddsSection({
           </div>
 
           {/* Cross-book +EV summary — shows "N of M books +EV" or "No book +EV" per pick side */}
-          {(h2hPickSide || totalsPickSide) && (() => {
+          {(effectiveH2HPickSide || effectiveTotalsPickSide) && (() => {
             const booksWithH2HLine = bookOdds.h2h.filter((b) => b.book_key !== "pinnacle" && b.home_american != null)
             const booksWithTotalsLine = bookOdds.totals.filter((b) => b.book_key !== "pinnacle" && b.line != null)
 
-            const h2hPlusEV = h2hPickSide ? booksWithH2HLine.filter((b) => {
-              if (h2hPickSide === "away") {
+            const h2hPlusEV = effectiveH2HPickSide ? booksWithH2HLine.filter((b) => {
+              if (effectiveH2HPickSide === "away") {
                 const p = b.model_prob_home != null ? 1 - b.model_prob_home : null
                 const dec = b.away_decimal
                 return p != null && dec != null && p * (dec - 1) - (1 - p) > 0
@@ -443,16 +456,16 @@ function BookOddsSection({
               return (b.ev_home ?? -1) > 0
             }) : []
 
-            const totalsPlusEV = totalsPickSide ? booksWithTotalsLine.filter((b) => {
-              const ev = totalsPickSide === "under" ? b.ev_under : b.ev_over
+            const totalsPlusEV = effectiveTotalsPickSide ? booksWithTotalsLine.filter((b) => {
+              const ev = effectiveTotalsPickSide === "under" ? b.ev_under : b.ev_over
               return (ev ?? -1) > 0
             }) : []
 
-            const h2hLabel = h2hPickSide === "away" ? `${awayFullName} ML` : h2hPickSide === "home" ? `${homeFullName} ML` : null
+            const h2hLabel = effectiveH2HPickSide === "away" ? `${awayFullName} ML` : effectiveH2HPickSide === "home" ? `${homeFullName} ML` : null
             const consensusLine = bookOdds.totals.find((b) => b.line != null)?.line
-            const totalsLabel = totalsPickSide === "under"
+            const totalsLabel = effectiveTotalsPickSide === "under"
               ? `Under${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
-              : totalsPickSide === "over"
+              : effectiveTotalsPickSide === "over"
               ? `Over${consensusLine != null ? ` ${consensusLine.toFixed(1)}` : ""}`
               : null
 
@@ -564,7 +577,7 @@ function BookOddsSection({
 
               {/* E9.1 — Breakeven chip: shown per picked side */}
               {(() => {
-                const isAwaySide = h2hPickSide === "away"
+                const isAwaySide = effectiveH2HPickSide === "away"
                 const beAmerican = isAwaySide
                   ? selH2H?.breakeven_american_away
                   : selH2H?.breakeven_american_home
@@ -576,7 +589,7 @@ function BookOddsSection({
                       ? (1 - selH2H.model_prob_home) * (selH2H.away_decimal - 1) - selH2H.model_prob_home
                       : null)
                   : selH2H?.ev_home
-                if (beAmerican == null || currentAmerican == null || !h2hPickSide) return null
+                if (beAmerican == null || currentAmerican == null || !effectiveH2HPickSide) return null
                 const isPlusEV = ev != null && ev > 0
                 const sideName = isAwaySide ? awayFullName : homeFullName
                 return (
@@ -720,7 +733,7 @@ function BookOddsSection({
 
               {/* E9.1 — Breakeven chip for totals pick side */}
               {(() => {
-                const isUnderSide = totalsPickSide === "under"
+                const isUnderSide = effectiveTotalsPickSide === "under"
                 const beAmerican = isUnderSide
                   ? selTotals?.breakeven_american_under
                   : selTotals?.breakeven_american_over
@@ -728,7 +741,7 @@ function BookOddsSection({
                   ? selTotals?.under_american
                   : selTotals?.over_american
                 const ev = isUnderSide ? selTotals?.ev_under : selTotals?.ev_over
-                if (beAmerican == null || currentAmerican == null || !totalsPickSide) return null
+                if (beAmerican == null || currentAmerican == null || !effectiveTotalsPickSide) return null
                 const isPlusEV = ev != null && ev > 0
                 const sideName = isUnderSide ? `Under ${selTotals?.line?.toFixed(1) ?? ""}` : `Over ${selTotals?.line?.toFixed(1) ?? ""}`
                 return (
