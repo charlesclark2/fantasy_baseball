@@ -37,6 +37,9 @@ type BookOddsH2H = {
   edge_home: number | null
   kelly_home: number | null
   odds_as_of: string | null
+  // E9.1 — model breakeven price (EV=0 at this price; model-relative, not a bet rec)
+  breakeven_american_home: number | null
+  breakeven_american_away: number | null
 }
 
 type BookOddsTotals = {
@@ -57,6 +60,9 @@ type BookOddsTotals = {
   edge_over: number | null
   kelly_over: number | null
   odds_as_of: string | null
+  // E9.1 — model breakeven price (EV=0 at this price; model-relative, not a bet rec)
+  breakeven_american_over: number | null
+  breakeven_american_under: number | null
 }
 
 type BookOddsComparison = {
@@ -330,12 +336,16 @@ function BookOddsSection({
   awayFullName,
   selectedBook,
   setSelectedBook,
+  h2hPickSide,
+  totalsPickSide,
 }: {
   bookOdds: BookOddsComparison
   homeFullName: string
   awayFullName: string
   selectedBook: string
   setSelectedBook: (b: string) => void
+  h2hPickSide?: string | null
+  totalsPickSide?: string | null
 }) {
   const hasH2H = bookOdds.h2h.some((b) => b.home_american != null)
   const hasTotals = bookOdds.totals.some((b) => b.line != null)
@@ -491,6 +501,58 @@ function BookOddsSection({
                 )}
               </div>
 
+              {/* E9.1 — Breakeven chip: shown per picked side */}
+              {(() => {
+                const isAwaySide = h2hPickSide === "away"
+                const beAmerican = isAwaySide
+                  ? selH2H?.breakeven_american_away
+                  : selH2H?.breakeven_american_home
+                const currentAmerican = isAwaySide
+                  ? selH2H?.away_american
+                  : selH2H?.home_american
+                const ev = isAwaySide
+                  ? (selH2H?.away_decimal != null && selH2H.model_prob_home != null
+                      ? (1 - selH2H.model_prob_home) * (selH2H.away_decimal - 1) - selH2H.model_prob_home
+                      : null)
+                  : selH2H?.ev_home
+                if (beAmerican == null || currentAmerican == null || !h2hPickSide) return null
+                const isPlusEV = ev != null && ev > 0
+                const sideName = isAwaySide ? awayFullName : homeFullName
+                return (
+                  <div className={`mt-2 rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 ${
+                    isPlusEV
+                      ? "border-[#10b981]/30 bg-[#10b981]/5"
+                      : "border-[#f87171]/20 bg-[#f87171]/5"
+                  }`}>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                      Model breakeven · {sideName}
+                    </span>
+                    {isPlusEV ? (
+                      <span className="text-xs text-[#10b981] font-medium">
+                        +EV to <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                        <span className="text-gray-500 font-normal ml-2">· current <span className="font-mono">{fmtAmerican(currentAmerican)}</span></span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#f87171] font-medium">
+                        No longer +EV per model
+                        <span className="text-gray-500 font-normal ml-2">
+                          · breakeven <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                          {" · current "}<span className="font-mono">{fmtAmerican(currentAmerican)}</span>
+                        </span>
+                      </span>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-gray-600 cursor-help shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                        Model-relative breakeven: the price at which EV = 0 given our model&apos;s probability. Our models have no demonstrated market edge (best alpha = 0) — this is a transparency tool, not a bet recommendation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
+
               {/* Pinnacle reference (always shown when selected book ≠ Pinnacle) */}
               {selectedBook !== "pinnacle" && pinnacleH2H?.home_american != null && (
                 <div className="mt-2 rounded-lg border border-[#a78bfa]/20 bg-[#a78bfa]/5 px-4 py-3">
@@ -594,6 +656,54 @@ function BookOddsSection({
                   Model projected total: {bookOdds.pred_total_runs.toFixed(1)} runs — P(over) is recomputed at each book&apos;s own line.
                 </p>
               )}
+
+              {/* E9.1 — Breakeven chip for totals pick side */}
+              {(() => {
+                const isUnderSide = totalsPickSide === "under"
+                const beAmerican = isUnderSide
+                  ? selTotals?.breakeven_american_under
+                  : selTotals?.breakeven_american_over
+                const currentAmerican = isUnderSide
+                  ? selTotals?.under_american
+                  : selTotals?.over_american
+                const ev = isUnderSide ? selTotals?.ev_under : selTotals?.ev_over
+                if (beAmerican == null || currentAmerican == null || !totalsPickSide) return null
+                const isPlusEV = ev != null && ev > 0
+                const sideName = isUnderSide ? `Under ${selTotals?.line?.toFixed(1) ?? ""}` : `Over ${selTotals?.line?.toFixed(1) ?? ""}`
+                return (
+                  <div className={`mt-2 rounded-lg border px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 ${
+                    isPlusEV
+                      ? "border-[#10b981]/30 bg-[#10b981]/5"
+                      : "border-[#f87171]/20 bg-[#f87171]/5"
+                  }`}>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                      Model breakeven · {sideName}
+                    </span>
+                    {isPlusEV ? (
+                      <span className="text-xs text-[#10b981] font-medium">
+                        +EV to <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                        <span className="text-gray-500 font-normal ml-2">· current <span className="font-mono">{fmtAmerican(currentAmerican)}</span></span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-[#f87171] font-medium">
+                        No longer +EV per model
+                        <span className="text-gray-500 font-normal ml-2">
+                          · breakeven <span className="font-mono">{fmtAmerican(beAmerican)}</span>
+                          {" · current "}<span className="font-mono">{fmtAmerican(currentAmerican)}</span>
+                        </span>
+                      </span>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-gray-600 cursor-help shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
+                        Model-relative breakeven: the price at which EV = 0 given our model&apos;s probability. Our models have no demonstrated market edge (best alpha = 0) — this is a transparency tool, not a bet recommendation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
 
               {/* Pinnacle reference for totals */}
               {selectedBook !== "pinnacle" && pinnacleTotals?.line != null && (
@@ -1384,6 +1494,8 @@ export default function PickDetailPage() {
                   awayFullName={awayFullName}
                   selectedBook={selectedBook}
                   setSelectedBook={setSelectedBook}
+                  h2hPickSide={picks.find((p) => p.market_type === "h2h")?.pick_side ?? null}
+                  totalsPickSide={picks.find((p) => p.market_type === "totals")?.pick_side ?? null}
                 />
               )}
 
