@@ -3,13 +3,18 @@
 -- =============================================================================
 -- stg_actionnetwork_public_betting_snapshots.sql
 -- Story 15.6 — all ingestion snapshots from public_betting_raw, normalized and
--- joined to mart_game_results for game_pk resolution.
+-- joined to the pregame game-feature spine for game_pk resolution.
 --
 -- Grain: one row per (game_pk, loaded_at) after dedup.
 --
 -- Coverage: 2026-05-07 onward (Epic T.3 raw-capture start date).
--- Same-day games that have not yet completed are excluded; they resolve to
--- game_pk on the next dbt run after mart_game_results is updated.
+-- game_pk resolution uses feature_pregame_game_features (the canonical pregame
+-- spine: regular-season games only, INCLUDES today's not-yet-completed games and
+-- retains full history). Previously this joined mart_game_results, which only
+-- contains COMPLETED games — so public betting for today's slate was silently
+-- dropped until each game finished (the "Market Action" panel was blank pre-game,
+-- which is exactly the window it serves). The pregame spine has no public-betting
+-- dependency, so this join stays acyclic.
 --
 -- Record hash covers the 4 independent pct columns:
 --   home_ml_money_pct, home_ml_ticket_pct, over_money_pct, over_ticket_pct
@@ -65,11 +70,12 @@ with_game_pk as (
         )                                                       as record_hash,
         s.loaded_at
     from source s
-    inner join {{ ref('mart_game_results') }} g
-        on  s.game_date      = g.game_date
+    -- Pregame spine (regular-season, includes today + full history) → resolves
+    -- game_pk for not-yet-completed games, unlike the completed-only mart_game_results.
+    inner join {{ ref('feature_pregame_game_features') }} g
+        on  s.game_date      = g.game_date::date
         and s.home_team_norm = g.home_team
         and s.away_team_norm = g.away_team
-        and g.game_type      = 'R'
 )
 
 select *
