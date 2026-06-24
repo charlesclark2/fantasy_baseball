@@ -10,10 +10,14 @@ pick." This is PER-PICK, PER-GAME local attribution — distinct from:
                            COMPLETENESS signal, not a contribution).
 
 Method — exact SHAP for every target (no approximation):
-  - home_win (XGBoost): shap.TreeExplainer on the underlying XGBClassifier is
-    native + exact. Contributions are in margin (log-odds) space; the Platt
-    calibrator is monotonic, so sign + ranking are preserved through calibration
-    — i.e. a positive contribution pushes the calibrated P(home win) up.
+  - home_win — dispatched by model class (home_win_is_linear):
+      • XGBoost (v5): shap.TreeExplainer on the underlying XGBClassifier is
+        native + exact.
+      • glm_elasticnet (E1.9 de-leaked v6): exact linear SHAP, coef_j·z_j on the
+        StandardScaler-standardized inputs (E[z]=0 by construction), base=intercept.
+    Both are in margin (log-odds) space; the Platt calibrator is monotonic, so
+    sign + ranking are preserved through calibration — i.e. a positive
+    contribution pushes the calibrated P(home win) up.
   - run_diff / total_runs (NGBoost): NGBoost models the loc (mean) parameter as
     an ADDITIVE ensemble of sklearn DecisionTreeRegressors. SHAP is additive over
     an additive model, so summing per-stage TreeSHAP (scaled by the stage's
@@ -223,6 +227,69 @@ def home_win_shap(clf, X: np.ndarray, feat_cols: list[str]) -> tuple[np.ndarray,
     return sv, base
 
 
+def _extract_linear_pipeline(clf):
+    """Return (scaler_or_None, linear_estimator) for a glm_elasticnet home_win model.
+
+    Accepts the PlattCalibratedLinearClassifier wrapper (.linear_pipeline /
+    .pipeline), a bare sklearn Pipeline(StandardScaler, LogisticRegression), or a
+    bare LogisticRegression. Returns None if no linear estimator is found.
+    """
+    target = getattr(clf, "linear_pipeline", None) or getattr(clf, "pipeline", None) or clf
+    steps = getattr(target, "steps", None)
+    if steps:  # an sklearn Pipeline → find the scaler + the estimator with coef_
+        scaler = next((e for _, e in steps if hasattr(e, "scale_") and hasattr(e, "mean_")), None)
+        linear = next((e for _, e in steps if hasattr(e, "coef_")), None)
+        return (scaler, linear) if linear is not None else None
+    if hasattr(target, "coef_"):  # a bare linear estimator (no scaler)
+        return (None, target)
+    return None
+
+
+def home_win_is_linear(clf) -> bool:
+    """True iff the home_win model is the glm_elasticnet (linear) v6 champion.
+
+    XGBoost (v5) carries `.xgb_classifier`; the linear v6 exposes a pipeline with
+    a `.coef_` estimator. Used to dispatch TreeSHAP vs exact linear SHAP.
+    """
+    if hasattr(clf, "xgb_classifier"):
+        return False
+    return _extract_linear_pipeline(clf) is not None
+
+
+def home_win_linear_shap(clf, X: np.ndarray, feat_cols: list[str]) -> tuple[np.ndarray, float] | None:
+    """Exact local SHAP for the glm_elasticnet home_win champion (margin/log-odds).
+
+    For a standardized linear model logit(p) = intercept + Σ_j coef_j · z_j (where
+    z = StandardScaler(X)), SHAP_j(x) = coef_j · (z_j − E[z_j]). The scaler centers
+    the training set, so E[z_j] = 0 and SHAP_j = coef_j · z_j EXACTLY, with
+    base_value = intercept. The Platt calibrator and the served TemperatureCalibrator
+    are both monotonic, so a positive contribution pushes the calibrated P(home win)
+    up — same guarantee the XGBoost TreeSHAP path documents.
+
+    Self-checks additivity (Σcontrib + base ≈ decision_function) and returns None on
+    any mismatch → caller emits a 'deferred' payload (fail safe, never blocks scoring).
+    """
+    pair = _extract_linear_pipeline(clf)
+    if pair is None:
+        return None
+    scaler, linear = pair
+    try:
+        Xv = np.asarray(X, dtype=float)
+        z = scaler.transform(Xv) if scaler is not None else Xv
+        coef = np.asarray(linear.coef_, dtype=float).reshape(-1)
+        if coef.shape[0] != z.shape[1]:
+            return None
+        contribs = z * coef[None, :]
+        base = float(np.asarray(linear.intercept_, dtype=float).reshape(-1)[0])
+        # additivity self-check: contributions + base must reconstruct the logit
+        logit = z @ coef + base
+        if not np.allclose(contribs.sum(axis=1) + base, logit, atol=1e-6):
+            return None
+        return contribs, base
+    except Exception:
+        return None
+
+
 def ngboost_loc_shap(
     model, X: np.ndarray, feat_cols: list[str], loc_param_idx: int = 0
 ) -> tuple[np.ndarray, float] | None:
@@ -298,9 +365,22 @@ def build_pick_explanations(
 
     if clf_hw is not None and X_clf is not None and hw_feat_cols is not None:
         try:
-            sv, base = home_win_shap(clf_hw, np.asarray(X_clf), hw_feat_cols)
-            per_target["home_win"] = {"sv": sv, "base": base, "cols": hw_feat_cols,
-                                      "method": "treeshap_exact"}
+            # Dispatch by model class: glm_elasticnet v6 (E1.9 de-leaked) → exact
+            # linear SHAP; XGBoost v5 → TreeSHAP. TreeExplainer would throw on a
+            # linear model, so the dispatch (not a try/except) is what keeps the
+            # v6 home_win explanations populated rather than 'deferred'.
+            if home_win_is_linear(clf_hw):
+                res = home_win_linear_shap(clf_hw, np.asarray(X_clf), hw_feat_cols)
+                if res is None:
+                    per_target["home_win"] = {"err": "linear_shap_deferred"}
+                else:
+                    sv, base = res
+                    per_target["home_win"] = {"sv": sv, "base": base, "cols": hw_feat_cols,
+                                              "method": "linear_shap_exact"}
+            else:
+                sv, base = home_win_shap(clf_hw, np.asarray(X_clf), hw_feat_cols)
+                per_target["home_win"] = {"sv": sv, "base": base, "cols": hw_feat_cols,
+                                          "method": "treeshap_exact"}
         except Exception as exc:  # never block scoring on an explainability failure
             per_target["home_win"] = {"err": f"shap_failed: {exc}"}
 

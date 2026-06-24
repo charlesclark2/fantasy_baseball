@@ -1,0 +1,40 @@
+{
+  "feature_cols": [
+    "away_bp_eb_coverage_pct",
+    "away_bp_eb_uncertainty",
+    "away_bp_eb_xwoba_seasonnorm",
+    "away_losses",
+    "away_team_sequential_bullpen_xwoba_seasonnorm",
+    "away_wins",
+    "home_bp_eb_uncertainty",
+    "home_bp_eb_xwoba_seasonnorm",
+    "home_bp_hard_hit_pct_30d_seasonnorm",
+    "home_off_xwoba_30d_seasonnorm",
+    "home_pit_hard_hit_pct_30d_seasonnorm",
+    "home_starter_slider_stuff_plus",
+    "home_starter_whiff_rate_14d",
+    "home_team_sequential_woba",
+    "has_starter_platoon_data",
+    "is_new_venue"
+  ],
+  "_provenance": {
+    "story": "E13.11",
+    "derived": "2026-06-23",
+    "model_class": "ngboost_normal",
+    "tier": "pre_lineup",
+    "registry_target": "total_runs",
+    "source_contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs_reprune_ngb.json",
+    "n_contract": 14,
+    "n_served": 16,
+    "method": "E1.9 v6 de-leaked champion finalized on full load_clean_matrix() (bullpen_v3 + Stuff+ prior-season), post-imputation served columns. Edge-agnostic integrity deploy (E13.11); v5 retained as rollback.",
+    "sidecar_only": false,
+    "smoke": false,
+    "refresh_cache": true,
+    "config": {
+      "n_estimators": 400,
+      "learning_rate": 0.01,
+      "minibatch_frac": 1.0,
+      "dist": "Normal"
+    }
+  }
+}

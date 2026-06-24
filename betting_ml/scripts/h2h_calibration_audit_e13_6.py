@@ -266,6 +266,13 @@ def main() -> int:
     ap.add_argument("--since", default="2026-01-01", help="honest-OOS window start (default 2026-01-01)")
     ap.add_argument("--eval-frac", type=float, default=0.25, help="chronological hold-out fraction")
     ap.add_argument("--promote", action="store_true", help="overwrite live calibrator.joblib (default: candidate only)")
+    ap.add_argument("--from-consensus", action="store_true",
+                    help="Fit recalibration candidates on consensus_win_prob (the RAW model output) "
+                         "instead of the already-calibrated calibrated_win_prob. REQUIRED when re-fitting "
+                         "after a champion swap (E13.11 v6): backfilled rows carry the PRIOR calibrator in "
+                         "calibrated_win_prob, so fitting on it would double-calibrate. Fitting on "
+                         "consensus maps raw->truth, exactly as the original E13.6 fit did when the live "
+                         "calibrator was identity (A2.9). Measurement stats still reflect the served prob.")
     args = ap.parse_args()
 
     conn = get_snowflake_connection()
@@ -293,8 +300,12 @@ def main() -> int:
 
     segments = segment_report(df)
 
-    # Recalibration candidates (chronological — df already ordered by date).
-    cand = fit_candidates(p, y, args.eval_frac)
+    # Recalibration candidates (chronological — df already ordered by date). After a champion
+    # swap (--from-consensus), fit the deployable calibrator on the RAW consensus so it maps
+    # consensus->truth and won't compose with the prior (stale) calibrator baked into `p`.
+    fit_source = df["cons"].to_numpy() if args.from_consensus else p
+    cand = fit_candidates(fit_source, y, args.eval_frac)
+    print(f"  [recalibration fit source: {'consensus_win_prob' if args.from_consensus else 'calibrated_win_prob'}]")
 
     # ---- console summary
     print("\n=== OVERALL served win-prob ===")
@@ -314,6 +325,7 @@ def main() -> int:
     _EVAL_DIR.mkdir(parents=True, exist_ok=True)
     out = {
         "story": "E13.6", "model_version": args.model_version, "since": args.since,
+        "recalibration_fit_source": "consensus_win_prob" if args.from_consensus else "calibrated_win_prob",
         "n": int(len(df)), "generated_at": datetime.now(timezone.utc).isoformat(),
         "overall": overall, "reliability": reliability, "baselines": baselines,
         "segments": segments,
@@ -329,8 +341,17 @@ def main() -> int:
     joblib.dump(cand["candidate"], _CANDIDATE)
     print(f"  Wrote candidate ({cand['candidate_method']}) → {_CANDIDATE}")
     if args.promote:
-        joblib.dump(cand["candidate"], _OUT_DIR / "calibrator.joblib")
+        live = _OUT_DIR / "calibrator.joblib"
+        joblib.dump(cand["candidate"], live)
         print("  PROMOTED candidate → live calibrator.joblib")
+        # Production serves the calibrator from S3 (same path as the model artifacts), so keep
+        # S3 in sync — otherwise predict_today would load a stale S3 copy / fall back to local.
+        try:
+            from betting_ml.utils.artifact_store import upload_artifact
+            upload_artifact(live, "s3://baseball-betting-ml-artifacts/home_win/calibrator.joblib")
+        except Exception as exc:
+            print(f"  [WARN] calibrator S3 upload failed ({exc}) — local copy promoted only. "
+                  f"Re-upload before deploy so prod sources the new calibrator from S3.")
     else:
         print("  Candidate only — live calibrator untouched (operator promotes after review).")
     return 0

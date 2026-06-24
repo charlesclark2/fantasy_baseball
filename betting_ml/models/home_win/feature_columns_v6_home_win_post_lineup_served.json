@@ -1,0 +1,43 @@
+{
+  "feature_cols": [
+    "away_avg_barrel_pct_std",
+    "away_bp_eb_coverage_pct",
+    "away_bp_xwoba_against_14d",
+    "away_lineup_avg_attack_angle",
+    "away_off_k_pct_std",
+    "elevation_ft",
+    "elo_diff",
+    "home_avg_xwoba_30d",
+    "home_avg_xwoba_std",
+    "home_bp_eb_coverage_pct",
+    "home_bp_eb_xwoba",
+    "home_bp_hard_hit_pct_14d",
+    "home_starter_appearances_30d",
+    "home_starter_k_pct_30d",
+    "home_starter_trailing_ra9_30g",
+    "home_starter_whiff_rate_vs_lhb",
+    "home_team_sequential_bullpen_xwoba",
+    "home_woba_with_risp_30d",
+    "pythagorean_win_exp_diff",
+    "has_starter_platoon_data",
+    "is_new_venue"
+  ],
+  "_provenance": {
+    "story": "E13.11",
+    "derived": "2026-06-23",
+    "model_class": "glm_elasticnet",
+    "tier": "post_lineup",
+    "registry_target": "home_win",
+    "source_contract": "betting_ml/models/home_win/feature_columns_xgb_classifier_pruned_clustered_deleaked_2026.json",
+    "n_contract": 19,
+    "n_served": 21,
+    "method": "E1.9 v6 de-leaked champion finalized on full load_clean_matrix() (bullpen_v3 + Stuff+ prior-season), post-imputation served columns. Edge-agnostic integrity deploy (E13.11); v5 retained as rollback.",
+    "sidecar_only": false,
+    "smoke": false,
+    "refresh_cache": true,
+    "config": {
+      "l1_ratio": 0.5,
+      "C": 0.5
+    }
+  }
+}
