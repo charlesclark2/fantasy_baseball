@@ -35,7 +35,7 @@ players as (
         player_name,
         mlb_played_first::integer   as mlb_played_first,
         mlb_played_last::integer    as mlb_played_last
-    from {{ source('savant', 'ref_players') }}
+    from {{ ref('stg_ref_players') }}
 
 ),
 

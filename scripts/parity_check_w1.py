@@ -50,6 +50,21 @@ W1_MODELS = [
 _PK = "pitch_sk"
 _ROW_COUNT_TOLERANCE = 0.001  # 0.1%
 
+# E13.2 Phase 0: stg_batter_pitches is the TRAINING SOURCE for the PA-outcome
+# substrate (mart_pa_outcome_substrate → stg_batter_pitches). On the duckdb target
+# it resolves to S3 Parquet written by scripts/ingest_statcast_to_s3.py — a
+# DIFFERENT op than the W1 mart_pitch_* path (which the INC-10 regression broke).
+# Before trusting a heavy lakehouse training run we confirm the S3 copy is COMPLETE
+# vs Snowflake: row-count by season + PK uniqueness. We deliberately do NOT compare
+# pitch_sk VALUES across sources — Snowflake derives it via md5_number_upper64 (INT64)
+# while the S3 ingest uses SHA-256 hex (VARCHAR); the keys are unique within each
+# source but not equal across them, so a cross-source value hash is expected to differ.
+_STG_MODEL = "stg_batter_pitches"
+_STG_SEASON_COL = "game_year"
+# Nested year=/game_date= partitions (vs the flat *.parquet of the W1 marts), and
+# the per-year schema evolves (bat-tracking 2023+, intercept 2024+) → union_by_name.
+_STG_S3_GLOB = f"s3://{_S3_BUCKET}/{_S3_PREFIX}/{_STG_MODEL}/**/*.parquet"
+
 
 # ── Snowflake connection ─────────────────────────────────────────────────────
 
@@ -195,16 +210,124 @@ def check_model(duck, sf_conn, model: str, sample_n: int) -> bool:
     return ok
 
 
+def check_stg_batter_pitches(duck, sf_conn) -> bool:
+    """E13.2 Phase 0: row-count-by-season + PK-uniqueness for stg_batter_pitches.
+
+    Confirms the S3 training source (ingest_statcast_to_s3 output) is COMPLETE vs
+    Snowflake season-by-season. Fails on any season whose row count diverges beyond
+    tolerance, on a season present in one source but missing in the other, or on a
+    non-unique pitch_sk in S3.
+    """
+    print(f"\n── {_STG_MODEL}  (E13.2 training source) ──")
+    ok = True
+
+    # Snowflake counts by season
+    try:
+        cur = sf_conn.cursor()
+        cur.execute(
+            f"SELECT {_STG_SEASON_COL}, COUNT(*) "
+            f"FROM {_SNOWFLAKE_SCHEMA}.{_STG_MODEL.upper()} "
+            f"GROUP BY {_STG_SEASON_COL} ORDER BY {_STG_SEASON_COL}"
+        )
+        sf_by_season = {int(r[0]): int(r[1]) for r in cur.fetchall() if r[0] is not None}
+        cur.close()
+    except Exception as e:
+        print(f"  seasons❌  Snowflake count ERROR: {e}")
+        return False
+
+    # DuckDB/S3 counts by season
+    try:
+        rows = duck.execute(
+            f"SELECT {_STG_SEASON_COL}, COUNT(*) "
+            f"FROM read_parquet('{_STG_S3_GLOB}', union_by_name=true) "
+            f"GROUP BY {_STG_SEASON_COL} ORDER BY {_STG_SEASON_COL}"
+        ).fetchall()
+        s3_by_season = {int(r[0]): int(r[1]) for r in rows if r[0] is not None}
+    except Exception as e:
+        print(f"  seasons❌  S3 count ERROR: {e}")
+        return False
+
+    all_seasons = sorted(set(sf_by_season) | set(s3_by_season))
+    sf_total = duck_total = 0
+    for yr in all_seasons:
+        sf_n = sf_by_season.get(yr, 0)
+        s3_n = s3_by_season.get(yr, 0)
+        sf_total += sf_n
+        duck_total += s3_n
+        delta = abs(sf_n - s3_n) / max(sf_n, 1)
+        status = "✅" if (sf_n > 0 and s3_n > 0 and delta <= _ROW_COUNT_TOLERANCE) else "❌"
+        if status == "❌":
+            ok = False
+        print(f"  {yr}  {status}  Snowflake={sf_n:>9,}  S3={s3_n:>9,}  delta={delta:.4%}")
+
+    total_delta = abs(sf_total - duck_total) / max(sf_total, 1)
+    tstatus = "✅" if total_delta <= _ROW_COUNT_TOLERANCE else "❌"
+    print(f"  TOTAL  {tstatus}  Snowflake={sf_total:,}  S3={duck_total:,}  delta={total_delta:.4%}")
+    if total_delta > _ROW_COUNT_TOLERANCE:
+        ok = False
+
+    # PK uniqueness in S3 (surrogate key)
+    try:
+        unique = duck.execute(
+            f"SELECT COUNT(*) = COUNT(DISTINCT {_PK}) "
+            f"FROM read_parquet('{_STG_S3_GLOB}', union_by_name=true)"
+        ).fetchone()[0]
+        status = "✅" if unique else "❌"
+        print(f"  pk_uniq{status}  {_PK} unique in S3 output: {bool(unique)}")
+        if not unique:
+            ok = False
+    except Exception as e:
+        print(f"  pk_uniq❌  ERROR: {e}")
+        ok = False
+
+    # NATURAL-key uniqueness in S3 (encoding-independent).
+    # The surrogate pitch_sk check above has a BLIND SPOT: if two writers with
+    # DIFFERENT key encodings both land in the glob (e.g. a stale Snowflake-export
+    # year-parquet with INT64 md5 keys overlapping SHA-256-hex daily partitions),
+    # union_by_name casts pitch_sk to VARCHAR and the duplicate logical pitches get
+    # non-equal surrogate strings → COUNT(DISTINCT pitch_sk) falsely passes while the
+    # data is double-counted. Hashing the NATURAL composite catches it regardless of
+    # surrogate encoding. (This is exactly the bug found 2026-06-23 in year=2026.)
+    try:
+        nat_unique = duck.execute(
+            "SELECT COUNT(*) = COUNT(DISTINCT (game_pk, at_bat_number, pitch_number, "
+            "batter_id, pitcher_id, inning_half)) "
+            f"FROM read_parquet('{_STG_S3_GLOB}', union_by_name=true)"
+        ).fetchone()[0]
+        status = "✅" if nat_unique else "❌"
+        print(f"  nat_key{status}  natural composite unique in S3 output: {bool(nat_unique)}")
+        if not nat_unique:
+            ok = False
+    except Exception as e:
+        print(f"  nat_key❌  ERROR: {e}")
+        ok = False
+
+    return ok
+
+
 def main():
     ap = argparse.ArgumentParser(description="E11.1-W1 parity gate: Snowflake vs DuckDB/S3")
-    ap.add_argument("--model", help="Check a single model (default: all W1 models)")
+    ap.add_argument("--model", help="Check a single mart_pitch_* model (default: all W1 models)")
     ap.add_argument("--sample", type=int, default=10_000, help="Sample size for column hash")
+    ap.add_argument(
+        "--stg-only", action="store_true",
+        help="Run ONLY the E13.2 stg_batter_pitches season/PK check (skip W1 marts).",
+    )
+    ap.add_argument(
+        "--no-stg", action="store_true",
+        help="Skip the E13.2 stg_batter_pitches season/PK check.",
+    )
     args = ap.parse_args()
 
-    models = [args.model] if args.model else W1_MODELS
+    run_w1 = not args.stg_only
+    run_stg = (args.stg_only or not args.no_stg) and not args.model
+    models = [args.model] if args.model else (W1_MODELS if run_w1 else [])
 
-    print("E11.1-W1 parity check: Snowflake vs S3 Parquet")
-    print(f"Models: {models}")
+    print("Parity check: Snowflake vs S3 Parquet")
+    if models:
+        print(f"W1 models: {models}")
+    if run_stg:
+        print(f"E13.2 source: {_STG_MODEL} (season row-count + PK uniqueness)")
 
     duck = get_duckdb_conn()
     sf_conn = get_snowflake_conn()
@@ -212,6 +335,8 @@ def main():
     results = {}
     for model in models:
         results[model] = check_model(duck, sf_conn, model, args.sample)
+    if run_stg:
+        results[_STG_MODEL] = check_stg_batter_pitches(duck, sf_conn)
 
     sf_conn.close()
     duck.close()
