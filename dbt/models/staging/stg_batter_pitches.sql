@@ -386,6 +386,14 @@ renamed as (
             -- Vertical (depth) distance (inches) between ball and batter intercept point.
             -- Companion to intercept_offset_x_inches. Same source/vintage.
 
+        miss_distance::float                                as miss_distance,
+            -- Bat-to-ball miss distance on swings (populated only on swinging_strike /
+            -- swinging_strike_blocked; null on all other pitch outcomes). Part of
+            -- Savant's swing-timing bat-tracking suite (leaderboard path:
+            -- /leaderboard/bat-tracking/swing-timing-miss-distance). Added 2026.
+            -- Units not formally documented; treated as feet per Statcast convention.
+            -- Candidate feature: E5.2 (K props — whiff severity) + E13.10 (matchup viz).
+
         -- -----------------------------------------------------------------------
         -- Fielding alignment
         -- -----------------------------------------------------------------------

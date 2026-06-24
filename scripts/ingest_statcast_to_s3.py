@@ -209,6 +209,10 @@ RENAME_MAP: dict[str, tuple[str, str]] = {
     "attack_direction":                           ("attack_direction_degrees",           "float64"),
     "swing_path_tilt":                            ("swing_path_tilt_degrees",           "float64"),
     "hyper_speed":                                ("hyper_speed",                      "float64"),
+    # miss distance (2026+) — bat-to-ball whiff severity; populated only on
+    # swinging_strike / swinging_strike_blocked; null on all other outcomes.
+    # Candidate: E5.2 (K props) + E13.10 (matchup viz).
+    "miss_distance":                              ("miss_distance",                    "float64"),
     # batter intercept (2024+)
     "intercept_ball_minus_batter_pos_x_inches":   ("intercept_offset_x_inches",        "float64"),
     "intercept_ball_minus_batter_pos_y_inches":   ("intercept_offset_y_inches",        "float64"),
@@ -257,11 +261,20 @@ def compute_pitch_sk(df: pd.DataFrame) -> pd.Series:
 
 def transform(raw: pd.DataFrame) -> pd.DataFrame:
     """Apply column renames, type casts, and derived columns. Returns staged df."""
-    # Keep only columns we know about; new Savant columns are silently dropped.
     keep = [c for c in raw.columns if c in RENAME_MAP]
     dropped = [c for c in raw.columns if c not in RENAME_MAP and not c.startswith("Unnamed")]
     if dropped:
-        log.debug("Dropping %d unknown columns: %s", len(dropped), dropped[:10])
+        import sys
+        banner = (
+            "\n" + "=" * 72 + "\n"
+            "ACTION NEEDED — NEW SAVANT COLUMN(S) NOT IN RENAME_MAP (S3 path):\n"
+            f"  {dropped}\n"
+            "  Add to RENAME_MAP in ingest_statcast_to_s3.py, then\n"
+            "  add to stg_batter_pitches.sql (duckdb branch) before capturing.\n"
+            + "=" * 72 + "\n"
+        )
+        print(banner, file=sys.stderr)
+        log.warning("Dropping %d unknown column(s) not in RENAME_MAP: %s", len(dropped), dropped)
 
     df = raw[keep].copy()
     df.rename(columns={raw_col: staged for raw_col, (staged, _) in RENAME_MAP.items() if raw_col in df.columns}, inplace=True)

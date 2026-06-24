@@ -39,6 +39,9 @@ import dataclasses
 import io
 import logging
 import os
+import pathlib
+import sys
+import tempfile
 import time
 from datetime import date, timedelta
 from typing import Iterator
@@ -72,6 +75,14 @@ REQUEST_TIMEOUT = 90       # seconds; Baseball Savant can be slow
 REQUEST_DELAY   = 2.0      # seconds between requests
 MAX_RETRIES     = 3
 RETRY_BACKOFF   = 10       # seconds; doubles on each retry
+# INC-13: re-fetch the trailing window on every incremental run so late-arriving
+# games are absorbed.  Two failure modes this guards against:
+#   (a) UTC-boundary: a game starts before midnight ET but Savant hasn't published
+#       its data yet when the ingest runs; the lookback re-checks that date next day.
+#   (b) Postponed/makeup games: Savant files them under the ORIGINAL official_date,
+#       which the ingest already passed by the time the game is actually played.
+# Matches the LOOKBACK_DAYS in ingest_statcast_to_s3.py (the S3 path).
+LOOKBACK_DAYS   = 14
 
 
 # ── Data structures ────────────────────────────────────────────────────────────
@@ -287,6 +298,31 @@ def fetch_day(
     )
 
 
+# ── Column normalization ───────────────────────────────────────────────────────
+
+def _normalize_df(df: pd.DataFrame, table_columns: set[str]) -> pd.DataFrame:
+    """Uppercase columns; emit loud warning + drop any CSV columns not in the table."""
+    df = df.copy()
+    df.columns = [c.upper() for c in df.columns]
+    extra = [c for c in df.columns if c not in table_columns]
+    if extra:
+        # ALERT-loud-but-continue: print to stderr so this surfaces in Dagster logs and
+        # operator terminals even when log level is above WARNING. Silently dropping a new
+        # Savant field is how useful data (e.g. miss_distance) disappears for a full season.
+        banner = (
+            "\n" + "=" * 72 + "\n"
+            "ACTION NEEDED — NEW SAVANT COLUMN(S) NOT IN TARGET TABLE:\n"
+            f"  {extra}\n"
+            "  ALTER TABLE savant.batter_pitches ADD COLUMN <name> TEXT\n"
+            "  then add to stg_batter_pitches.sql before these can be captured.\n"
+            + "=" * 72 + "\n"
+        )
+        print(banner, file=sys.stderr)
+        log.warning("Dropping %d CSV column(s) not in target table: %s", len(extra), extra)
+        df = df.drop(columns=extra)
+    return df
+
+
 # ── Snowflake write ────────────────────────────────────────────────────────────
 
 def load_day(
@@ -296,16 +332,13 @@ def load_day(
     df: pd.DataFrame,
     table_columns: set[str],
 ) -> int:
-    """Delete the day's existing rows, then bulk-insert df. Returns row count inserted."""
-    date_str = _date_str(day)
+    """Delete the day's existing rows, then bulk-insert df. Returns row count inserted.
 
-    # Uppercase to match Snowflake column names; drop any CSV columns not in the table.
-    df = df.copy()
-    df.columns = [c.upper() for c in df.columns]
-    extra = [c for c in df.columns if c not in table_columns]
-    if extra:
-        log.warning("  Dropping %d CSV column(s) not in target table: %s", len(extra), extra)
-        df = df.drop(columns=extra)
+    Single-day path — used by tests and explicit single-date CLI runs. Production
+    multi-day runs go through run_endpoint which batches all days into one write.
+    """
+    date_str = _date_str(day)
+    df = _normalize_df(df, table_columns)
 
     with conn.cursor() as cur:
         cur.execute(
@@ -331,6 +364,41 @@ def load_day(
     return nrows
 
 
+def batch_write(
+    conn: snowflake.connector.SnowflakeConnection,
+    endpoint: StatcastEndpoint,
+    loaded_dates: list[date],
+    combined_df: pd.DataFrame,
+) -> int:
+    """Delete all loaded_dates with one IN clause, then insert combined_df in a single
+    write_pandas call. combined_df must already be normalized (uppercase, extras dropped).
+    Returns total rows inserted.
+    """
+    placeholders = ", ".join(["%s"] * len(loaded_dates))
+    with conn.cursor() as cur:
+        cur.execute(
+            f"DELETE FROM {endpoint.target.qualified_name} "
+            f"WHERE {endpoint.date_column.upper()}::date IN ({placeholders})",
+            [_date_str(d) for d in loaded_dates],
+        )
+        deleted = cur.rowcount
+    if deleted:
+        log.info("Batch deleted %d existing row(s) across %d date(s)", deleted, len(loaded_dates))
+
+    success, _, nrows, _ = write_pandas(
+        conn,
+        combined_df,
+        table_name        = endpoint.target.table.upper(),
+        database          = endpoint.target.database.upper(),
+        schema            = endpoint.target.schema.upper(),
+        quote_identifiers = False,
+    )
+    if not success:
+        raise RuntimeError("write_pandas failed for batch")
+
+    return nrows
+
+
 # ── Date iteration ─────────────────────────────────────────────────────────────
 
 def date_range(start: date, end: date) -> Iterator[date]:
@@ -349,9 +417,7 @@ def run_endpoint(
     end_date: date,
 ) -> None:
     total_days   = (end_date - start_date).days + 1
-    loaded_days  = 0
     skipped_days = 0
-    total_rows   = 0
 
     log.info(
         "Savant ingest → %s  [%s → %s]  %d day(s) to process",
@@ -365,6 +431,11 @@ def run_endpoint(
     session       = requests.Session()
     session.headers.update({"User-Agent": "baseball-ingest/1.0 (research)"})
 
+    # ── Phase 1: fetch all days from Baseball Savant (no warehouse activity) ───
+    # All HTTP work happens here so the warehouse is idle during the slow fetch loop.
+    frames: list[pd.DataFrame] = []
+    loaded_dates: list[date]   = []
+
     for day in date_range(start_date, end_date):
         log.info("[%s] Fetching…", _date_str(day))
         df = fetch_day(session, endpoint, day)
@@ -375,15 +446,45 @@ def run_endpoint(
             time.sleep(REQUEST_DELAY)
             continue
 
-        nrows = load_day(conn, endpoint, day, df, table_columns)
-        log.info("[%s] Loaded %d row(s)", _date_str(day), nrows)
-        loaded_days += 1
-        total_rows  += nrows
+        frames.append(_normalize_df(df, table_columns))
+        loaded_dates.append(day)
+        log.info("[%s] Fetched %d row(s)", _date_str(day), len(frames[-1]))
         time.sleep(REQUEST_DELAY)
+
+    if not frames:
+        log.info(
+            "Ingest complete — 0 day(s) loaded | %d skipped (no data) | 0 total rows",
+            skipped_days,
+        )
+        return
+
+    # ── Phase 2: batch write to Snowflake via a temp Parquet staging file ──────
+    # One DELETE IN (...) + one write_pandas instead of N per-day round-trips.
+    combined = pd.concat(frames, ignore_index=True)
+    del frames  # free memory before writing to disk
+
+    fd, tmp_name = tempfile.mkstemp(suffix=".parquet", prefix="savant_ingest_")
+    os.close(fd)  # mkstemp holds an open fd; close it so pandas can write the file
+    tmp_path = pathlib.Path(tmp_name)
+
+    try:
+        log.info(
+            "Staging %d row(s) across %d date(s) to temp Parquet: %s",
+            len(combined), len(loaded_dates), tmp_path,
+        )
+        combined.to_parquet(tmp_path, index=False)
+        del combined  # free memory; read back cleanly from Parquet
+
+        batch_df   = pd.read_parquet(tmp_path)
+        log.info("Batch writing to Snowflake…")
+        total_rows = batch_write(conn, endpoint, loaded_dates, batch_df)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+        log.info("Removed temp Parquet: %s", tmp_path)
 
     log.info(
         "Ingest complete — %d day(s) loaded | %d skipped (no data) | %d total rows",
-        loaded_days, skipped_days, total_rows,
+        len(loaded_dates), skipped_days, total_rows,
     )
 
 
@@ -429,10 +530,10 @@ def main() -> None:
     else:
         last_loaded = get_last_loaded_date(conn, endpoint)
         if last_loaded:
-            start_date = last_loaded + timedelta(days=1)
+            start_date = last_loaded - timedelta(days=LOOKBACK_DAYS)
             log.info(
-                "Auto-detected last loaded date: %s → starting from %s",
-                last_loaded, start_date,
+                "Auto-detected last loaded date: %s → starting from %s (%d-day lookback)",
+                last_loaded, start_date, LOOKBACK_DAYS,
             )
         else:
             raise SystemExit(

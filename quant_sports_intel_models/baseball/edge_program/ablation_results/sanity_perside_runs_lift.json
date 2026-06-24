@@ -1,10 +1,10 @@
 {
   "target": "perside_runs",
   "metric": "crps",
-  "n_eval": 11408,
+  "n_eval": 11428,
   "n_configs": 3,
   "pbo": {
-    "pbo": 0.431,
+    "pbo": 0.992,
     "n_combos": 1000,
     "n_configs": 3,
     "n_slices": 16,
@@ -16,90 +16,98 @@
       "extra_cols": [
         "__sanity_noise__"
       ],
+      "candidate_eval_std": 0.9992301853108388,
+      "candidate_eval_coverage": 1.0,
       "lift": {
         "all": {
           "stratum": "all",
-          "n": 11408,
-          "base_metric": 1.7050705611180692,
-          "cand_metric": 1.7063926058830499,
-          "lift": -0.0013220447649806566,
-          "lift_pct": -0.0007753607358711006
+          "n": 11428,
+          "base_metric": 1.7057634774836676,
+          "cand_metric": 1.7063888199220276,
+          "lift": -0.0006253424383599882,
+          "lift_pct": -0.00036660559720887544
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 9633,
-          "base_metric": 1.6874459535924067,
-          "cand_metric": 1.6883123212680526,
-          "lift": -0.0008663676756459626,
-          "lift_pct": -0.0005134195105932436
+          "n": 9655,
+          "base_metric": 1.6865276831201603,
+          "cand_metric": 1.6871248217127972,
+          "lift": -0.0005971385926368811,
+          "lift_pct": -0.0003540639140486238
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1775,
-          "base_metric": 1.8007200508615682,
-          "cand_metric": 1.804515074444326,
-          "lift": -0.0037950235827577394,
-          "lift_pct": -0.00210750337396531
+          "n": 1773,
+          "base_metric": 1.8105133898241432,
+          "cand_metric": 1.8112923183484908,
+          "lift": -0.0007789285243475774,
+          "lift_pct": -0.0004302252216003967
         }
       },
       "dsr": {
-        "dsr": 0.039997373779687075,
-        "observed_sr": -0.011530040918893694,
-        "sr0": 0.004866247653601078,
+        "dsr": 0.1335681194351957,
+        "observed_sr": -0.005521155261848947,
+        "sr0": 0.004861987609316435,
         "n_trials": 2,
-        "n_obs": 11408,
+        "n_obs": 11428,
         "passes_live": false,
         "threshold": 0.95
       },
       "orthogonality": {
         "__sanity_noise__": {
-          "max_abs_corr": 0.0254,
-          "vs": "center_ft"
+          "max_abs_corr": 0.0375,
+          "vs": "off_lhb_count"
         }
       },
+      "degenerate": false,
+      "degenerate_reason": null,
       "gate": {
         "lift_positive_all_and_noncold": false,
         "pbo_clears_live": false,
         "dsr_passes_live": false,
+        "not_degenerate": true,
         "SHIP": false
-      }
+      },
+      "verdict": "NO-SHIP (record null)"
     },
     "sanity_dup": {
       "extra_cols": [
         "__sanity_dup__is_home"
       ],
+      "candidate_eval_std": 0.5000218775295998,
+      "candidate_eval_coverage": 1.0,
       "lift": {
         "all": {
           "stratum": "all",
-          "n": 11408,
-          "base_metric": 1.7050705611180692,
-          "cand_metric": 1.7060195909931353,
-          "lift": -0.0009490298750660653,
-          "lift_pct": -0.000556592728012239
+          "n": 11428,
+          "base_metric": 1.7057634774836676,
+          "cand_metric": 1.7057781936672647,
+          "lift": -1.471618359705218e-05,
+          "lift_pct": -8.627329516259433e-06
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
-          "n": 9633,
-          "base_metric": 1.6874459535924067,
-          "cand_metric": 1.6881657100458916,
-          "lift": -0.0007197564534848766,
-          "lift_pct": -0.00042653600368805045
+          "n": 9655,
+          "base_metric": 1.6865276831201603,
+          "cand_metric": 1.6865293930004663,
+          "lift": -1.7098803060111578e-06,
+          "lift_pct": -1.0138465695670017e-06
         },
         "cold_start": {
           "stratum": "cold_start",
-          "n": 1775,
-          "base_metric": 1.8007200508615682,
-          "cand_metric": 1.8029133572831635,
-          "lift": -0.00219330642159532,
-          "lift_pct": -0.0012180163266055242
+          "n": 1773,
+          "base_metric": 1.8105133898241432,
+          "cand_metric": 1.8105989327749563,
+          "lift": -8.554295081308894e-05,
+          "lift_pct": -4.724789736097881e-05
         }
       },
       "dsr": {
-        "dsr": 0.08160357904932164,
-        "observed_sr": -0.008190783963036172,
-        "sr0": 0.004866247653601078,
+        "dsr": 0.2967991993362836,
+        "observed_sr": -0.00012996396948595034,
+        "sr0": 0.004861987609316435,
         "n_trials": 2,
-        "n_obs": 11408,
+        "n_obs": 11428,
         "passes_live": false,
         "threshold": 0.95
       },
@@ -109,12 +117,16 @@
           "vs": "is_home"
         }
       },
+      "degenerate": false,
+      "degenerate_reason": null,
       "gate": {
         "lift_positive_all_and_noncold": false,
         "pbo_clears_live": false,
         "dsr_passes_live": false,
+        "not_degenerate": true,
         "SHIP": false
-      }
+      },
+      "verdict": "NO-SHIP (record null)"
     }
   }
 }
