@@ -1,0 +1,31 @@
+{
+  "version": "totals_distribution_v1",
+  "dispersion_r": 3.7311,
+  "dispersion_r_home": 4.0645,
+  "dispersion_r_away": 3.3977,
+  "rho": 0.0,
+  "n_draws": 10000,
+  "quantile_levels": [
+    0.05,
+    0.1,
+    0.15,
+    0.2,
+    0.25,
+    0.3,
+    0.35,
+    0.4,
+    0.45,
+    0.5,
+    0.55,
+    0.6,
+    0.65,
+    0.7,
+    0.75,
+    0.8,
+    0.85,
+    0.9,
+    0.95
+  ],
+  "r_calibration": "expanding-window held-out residuals (leakage-safe)",
+  "notes": "E2.3 independent convolution (E2.2 \u03c1\u22480). Stable per-side held-out-calibrated r_home=4.064 / r_away=3.398 (E2.1 train-fit r=8.527 was under-dispersed). Leakage-safe expanding-window calibration confirms r stable across seasons \u2192 single global per-side r served. Per-side (not shared) calibrates run-diff, which is sensitive to the home/away dispersion asymmetry the sum is blind to."
+}

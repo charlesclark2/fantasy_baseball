@@ -104,3 +104,27 @@ def invalidate_today() -> None:
         logger.info("Cache invalidated for prefix: %s", prefix)
     except Exception as e:
         logger.error("Cache invalidation error: %s", e)
+
+
+def invalidate_permanent_picks() -> int:
+    """Delete all permanent picks/game/* objects from S3.
+
+    Targeted scope — only touches api-cache/permanent/picks/game/*, not other
+    permanent blobs. Use after a champion promotion to clear stale Final-game
+    detail blobs. Returns the object count deleted. Idempotent — safe to re-run.
+    """
+    if not CACHE_BUCKET:
+        return 0
+    prefix = f"{_PERMANENT_PREFIX}/picks/game"
+    deleted = 0
+    try:
+        paginator = _s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=CACHE_BUCKET, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                _s3.delete_object(Bucket=CACHE_BUCKET, Key=obj["Key"])
+                deleted += 1
+        logger.info("invalidate_permanent_picks: deleted %d S3 objects under %s", deleted, prefix)
+        return deleted
+    except Exception as e:
+        logger.error("invalidate_permanent_picks S3 error: %s", e)
+        return 0

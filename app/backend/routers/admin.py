@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from app.backend.dependencies import get_admin_user
 from app.backend.services import pg
 from app.backend.services.s3_cache import invalidate_game as s3_invalidate_game
+from app.backend.services.s3_cache import invalidate_permanent_picks as s3_invalidate_permanent_picks
 from app.backend.services.s3_cache import invalidate_today
 from app.backend.services.snowflake import execute_query
 
@@ -84,6 +85,28 @@ def invalidate_cache(
     invalidate_today()
     pg.invalidate_today(today_str)
     return {"status": "ok", "message": "Cache invalidated — next request will re-query Snowflake"}
+
+
+@router.post("/cache/invalidate-permanent")
+def invalidate_permanent_cache(_: str = Depends(get_admin_user)) -> dict:
+    """Purge permanent-tier picks/game/* caches from both S3 and Railway PG.
+
+    Use after a champion promotion to clear stale Final-game detail blobs that
+    day-scoped invalidations never touch (the is_permanent=TRUE blobs from
+    api-cache/permanent/ and the corresponding PG rows). Stale blobs regenerate
+    lazily on the next page load. Idempotent — safe to re-run.
+    """
+    s3_deleted = s3_invalidate_permanent_picks()
+    pg_deleted = pg.invalidate_permanent_picks()
+    return {
+        "status": "ok",
+        "s3_objects_deleted": s3_deleted,
+        "pg_rows_deleted": pg_deleted,
+        "message": (
+            f"Permanent picks/game cache cleared: {s3_deleted} S3 objects, "
+            f"{pg_deleted} PG rows. Stale Final-game blobs will regen on next page load."
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
