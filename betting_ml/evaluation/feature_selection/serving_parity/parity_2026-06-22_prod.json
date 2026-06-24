@@ -1,0 +1,44 @@
+{
+  "date": "2026-06-22",
+  "data_source": "feature_store",
+  "n_games": 12,
+  "tier": "prod",
+  "targets": {
+    "total_runs": {
+      "contract_len": 113,
+      "served": 113,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 2,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "prod"
+    },
+    "run_differential": {
+      "contract_len": 169,
+      "served": 169,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 12,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "prod"
+    },
+    "home_win": {
+      "contract_len": 211,
+      "served": 211,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 15,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "prod"
+    }
+  }
+}
