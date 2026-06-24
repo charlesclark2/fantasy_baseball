@@ -68,7 +68,7 @@ Three tiers govern how pipeline failures behave. Every new op, cron, sensor, and
 
 ## CI gates — REQUIRED before any handoff (never hand off red code)
 Run the equivalent CI checks locally and confirm GREEN before the operator handoff:
-- **Python → Unit Tests CI:** `uv run pytest`
+- **Python → Unit Tests CI:** Run only the tests that exercise the changed modules — find the matching test file(s) under `betting_ml/tests/` or the relevant test directory and run those directly (e.g. `uv run pytest betting_ml/tests/test_derivative_odds.py`). Only run the full `uv run pytest` if the session changes are cross-cutting (shared utilities, pipeline ops, dbt-runner paths) or you cannot identify the relevant test files. The full suite takes ~4 minutes; targeted runs take seconds.
 - **dbt → BOTH dbt-Build CI jobs:** `dbtf build --select state:modified+` **and** `dbtf compile`
 If a check fails, fix it (or flag it as a real blocker in the handoff) — don't pass failing CI to the operator. State the result in the handoff.
 
