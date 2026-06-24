@@ -26,16 +26,13 @@
 --          name drift (e.g. Stats API "Athletics" vs Odds API "Oakland
 --          Athletics", "Cleveland Indians" → Guardians). New variants are handled
 --          by adding a row to the ref_team_aliases seed — no model change.
---          For DH games, QUALIFY on Stats API game_number distinguishes G1 from G2.
---
---          Doubleheader handling: Parlay API fixed the DH collapse bug (2026-05-11).
---          Both DH games now return distinct events with real commence_time values.
---          The dedup partitions on date_trunc('hour', commence_time) to keep both
---          DH game slots separate. QUALIFY routes each game_pk to the correct slot
---          using Stats API game_number: game_number=1 → earliest non-placeholder event
---          (game_slot=1); game_number=2 → next event (game_slot=2). Time-proximity
---          cannot be used because Stats API scheduled times for DH Game 2 game_pks
---          reflect the original postponement time, not the actual DH start time.
+--          Doubleheader handling (restored post-E11.6): The Odds API returns two
+--          events for a DH with distinct commence_times. odds_events assigns a
+--          game_slot (1=earliest, 2=next) per (date, home, away) ordered by
+--          commence_time asc. The final join adds game_number = game_slot so each
+--          Stats API game_pk routes to its correct event: game_number=1 → G1 event,
+--          game_number=2 → G2 event. For regular games only one event exists so
+--          game_slot=1 always matches game_number=1.
 -- =============================================================================
 
 {{
@@ -64,11 +61,16 @@ game_results as (
         gr.away_team,
         gr.away_team_name,
         h.team_id as home_team_id,
-        a.team_id as away_team_id
+        a.team_id as away_team_id,
+        -- game_number for DH slot routing (1 for G1/regular, 2 for G2).
+        -- COALESCE to 1: historical completed games may predate stg_statsapi_games
+        -- coverage; all non-DH games have game_number=1 so slot-1 is always correct.
+        coalesce(sg.game_number, 1) as game_number
     -- A1.11 — spine on mart_game_spine so today's scheduled games get an odds
     -- bridge row too (mart_game_results is completed-games only). Historical
     -- rows are unchanged.
     from {{ ref('mart_game_spine') }} gr
+    left join {{ ref('stg_statsapi_games') }} sg on sg.game_pk = gr.game_pk
     left join team_lookup h
         on h.name_lower = lower(regexp_replace(trim(gr.home_team_name), '^G[12] ', ''))
     left join team_lookup a
@@ -90,9 +92,13 @@ game_results as (
 
 odds_events_resolved as (
 
+    -- One row per event_id: collapse multiple ingestion snapshots of the same
+    -- event, keeping commence_time (same for all rows of an event_id) and the
+    -- most-recent ingestion_ts for dedup ordering below.
     select
         o.event_id,
         o.commence_date,
+        o.commence_time,
         h.team_id as home_team_id,
         a.team_id as away_team_id,
         max(o.ingestion_ts) as ingestion_ts
@@ -101,37 +107,28 @@ odds_events_resolved as (
         on h.name_lower = lower(regexp_replace(trim(o.home_team), '^G[12] ', ''))
     left join team_lookup a
         on a.name_lower = lower(regexp_replace(trim(o.away_team), '^G[12] ', ''))
-    group by 1, 2, 3, 4
+    group by 1, 2, 3, 4, 5
 
 ),
 
--- Deduplicate Odds API to one canonical event_id per matchup per date.
--- The API occasionally returns different event_ids for the same game
--- across separate ingestion runs; pick the most recently ingested one.
-odds_events_deduped as (
-
-    select
-        event_id,
-        commence_date,
-        home_team_id,
-        away_team_id,
-        row_number() over (
-            partition by commence_date, home_team_id, away_team_id
-            order by ingestion_ts desc
-        ) as _rn
-    from odds_events_resolved
-
-),
-
+-- Assign a game_slot per (date, home_team, away_team) ordered by commence_time.
+-- For regular games there is exactly one event → game_slot = 1.
+-- For doubleheaders the Odds API returns two events with distinct commence_times:
+--   game_slot 1 = earliest event (G1)
+--   game_slot 2 = next event     (G2)
+-- The final join routes each Stats API game_pk to its correct slot via game_number.
 odds_events as (
 
     select
         event_id          as odds_api_event_id,
         commence_date,
         home_team_id,
-        away_team_id
-    from odds_events_deduped
-    where _rn = 1
+        away_team_id,
+        row_number() over (
+            partition by commence_date, home_team_id, away_team_id
+            order by commence_time asc
+        ) as game_slot
+    from odds_events_resolved
 
 )
 
@@ -171,3 +168,4 @@ left join odds_events oe
     on  gr.game_date    = oe.commence_date
     and gr.home_team_id = oe.home_team_id
     and gr.away_team_id = oe.away_team_id
+    and gr.game_number  = oe.game_slot
