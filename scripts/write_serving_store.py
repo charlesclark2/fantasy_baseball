@@ -996,9 +996,18 @@ ORDER BY game_pk, market_type
 # feed update causes e.g. home +315 / away +139 (both positive — impossible).
 _BOOK_ODDS_BATCH = """
 WITH bridge AS (
-    SELECT game_pk, event_id
-    FROM baseball_data.betting.mart_game_odds_bridge
-    WHERE game_pk IN ({game_pk_list})
+    -- E9.27: left-join precise game-start time for the pre-game-start leakage guard.
+    -- game_date from stg_statsapi_games is TIMESTAMP_TZ (real scheduled UTC start).
+    -- QUALIFY picks the latest ingestion when multiple schedule snapshots exist.
+    SELECT b.game_pk, b.event_id, gs.game_start_ts
+    FROM baseball_data.betting.mart_game_odds_bridge b
+    LEFT JOIN (
+        SELECT game_pk, game_date::TIMESTAMP_NTZ AS game_start_ts
+        FROM baseball_data.betting.stg_statsapi_games
+        WHERE game_pk IN ({game_pk_list})
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY game_pk ORDER BY ingestion_ts DESC) = 1
+    ) gs ON gs.game_pk = b.game_pk
+    WHERE b.game_pk IN ({game_pk_list})
 ),
 all_odds AS (
     SELECT
@@ -1014,6 +1023,7 @@ all_odds AS (
     FROM baseball_data.betting.mart_odds_outcomes o
     INNER JOIN bridge b ON b.event_id = o.event_id
     WHERE o.bookmaker_key IN ('betmgm', 'caesars', 'fanduel', 'draftkings', 'bovada', 'pinnacle')
+      AND (b.game_start_ts IS NULL OR o.ingestion_ts < b.game_start_ts)  -- pre-game-start guard (E9.27); fail-open when start time unknown
 ),
 -- Latest ingestion_ts for which the full set of outcomes is present
 -- (h2h needs 2 sides, totals needs over+under). Prevents mixing a partial
