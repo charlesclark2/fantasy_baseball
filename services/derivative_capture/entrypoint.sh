@@ -9,7 +9,9 @@
 #   SNOWFLAKE_ROLE                 (optional)
 #   ODDS_TARGET_DATABASE           (default: baseball_data)
 #   ODDS_TARGET_SCHEMA             (default: oddsapi)
-#   DERIVATIVE_CAPTURE_MARKETS     (optional; set after probe — e.g. team_totals,alternate_totals)
+#   DERIVATIVE_CAPTURE_MARKETS     (optional; overrides code default — correct value confirmed 2026-06-24:
+#                                   team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings
+#                                   NOTE: h2h_h1/totals_h1 are WRONG keys; baseball books don't use the generic 1st-Half family)
 #
 # EVAL/CLV-ONLY: derivative odds are never model training features.
 set -euo pipefail

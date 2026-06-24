@@ -112,7 +112,15 @@ HIST_EVENT_ODDS_ENDPOINT = "/historical/sports/baseball_mlb/events/{event_id}/od
 
 DERIVATIVE_HISTORY_START = date(2023, 5, 3)
 
-DEFAULT_DERIVATIVE_MARKETS = ["team_totals", "alternate_totals", "h2h_h1", "totals_h1"]
+# Correct baseball F5 keys (confirmed live 2026-06-24: 16 books offered on the live endpoint).
+# h2h_h1/totals_h1 are the WRONG "generic 1st Half" family — baseball books don't populate them.
+DEFAULT_DERIVATIVE_MARKETS = [
+    "team_totals",
+    "alternate_totals",
+    "h2h_1st_5_innings",
+    "totals_1st_5_innings",
+    "totals_1st_1_innings",   # NRFI
+]
 DEFAULT_REGIONS = ["us", "us2", "eu"]
 DEFAULT_ODDS_FORMAT = "american"
 DEFAULT_DATE_FORMAT = "iso"
@@ -762,7 +770,7 @@ def cmd_probe(args: argparse.Namespace) -> None:
     """E2.0b Step 0: probe the Event Markets endpoint for derivative market availability.
 
     Queries a sample of upcoming events to answer:
-      (a) Are derivative markets (esp. F5 h2h_h1/totals_h1) offered live right now?
+      (a) Are derivative markets (esp. F5 h2h_1st_5_innings/totals_1st_5_innings) offered live right now?
       (b) What is the per-market last_update cadence → what cron schedule to use?
 
     No writes. Run this before deploying the capture cron to size the cadence correctly.
@@ -835,20 +843,30 @@ def cmd_probe(args: argparse.Namespace) -> None:
 
     log.info("")
 
-    f5_markets = ("h2h_h1", "totals_h1")
+    # Correct baseball F5 keys (NOT h2h_h1/totals_h1 which are the generic 1st-Half family).
+    f5_markets = ("h2h_1st_5_innings", "totals_1st_5_innings", "totals_1st_1_innings")
     f5_books = sorted(
         bm for bm, mkts in market_coverage.items() if any(m in mkts for m in f5_markets)
     )
     if f5_books:
-        log.info("F5 (h2h_h1 / totals_h1): OFFERED by %s", ", ".join(f5_books))
-        log.info("  ACTION: keep h2h_h1 + totals_h1 in DERIVATIVE_CAPTURE_MARKETS")
+        log.info(
+            "F5 (h2h_1st_5_innings / totals_1st_5_innings / totals_1st_1_innings): OFFERED by %s",
+            ", ".join(f5_books),
+        )
+        log.info(
+            "  ACTION: keep correct keys in DERIVATIVE_CAPTURE_MARKETS "
+            "(team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings)"
+        )
     else:
-        log.info("F5 (h2h_h1 / totals_h1): NOT OFFERED by any sampled bookmaker")
+        log.info(
+            "F5 (h2h_1st_5_innings / totals_1st_5_innings / totals_1st_1_innings): "
+            "NOT OFFERED by any sampled bookmaker"
+        )
         log.info(
             "  ACTION: set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals in Railway env"
         )
         log.info(
-            "  FLAG to E2.4: forward F5 validation blocked; F5 thesis cannot be confirmed live"
+            "  NOTE: correct keys are *_1st_5_innings — not offered LIVE at this source as of today"
         )
 
     log.info("")

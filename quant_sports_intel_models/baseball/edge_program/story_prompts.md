@@ -110,10 +110,17 @@ DONE: mart_derivative_closes = 238,421 closes / 5,896 games / 2023-05-03→2026-
 ```
 ```
 **E2.0b — ✅ CODE-COMPLETE (2026-06-18), pending Railway deploy + first capture.**
-PROBE RESULT (2026-06-18): F5 (h2h_h1/totals_h1) NOT OFFERED by any bookmaker (betmgm/bovada/draftkings/fanduel/pinnacle — 5/5 events sampled). Cadence: ~30min on team_totals + alternate_totals → cronSchedule=*/30. ⚠️ FLAG TO E2.4: live F5 capture blocked; forward F5 validation cannot proceed; E2.4 must source F5 closes from historical-only (65 games, 2023) or wait for F5 to appear live.
-Capture cron: services/derivative_capture/ (Dockerfile + entrypoint.sh + railway.toml with */30 schedule). Markets: team_totals,alternate_totals. Set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals in Railway env. After deploy: dbtf build --select stg_derivative_odds mart_derivative_closes.
+PROBE RESULT (2026-06-18 WRONG KEYS): queried h2h_h1/totals_h1 — NOT OFFERED (generic 1st-Half family; baseball books don't use it). ~~FLAG TO E2.4: live F5 blocked~~ — RETRACTED (see below).
+✅ CORRECTED PROBE (2026-06-24 E2.0b-fix): queried correct keys h2h_1st_5_innings/totals_1st_5_innings/totals_1st_1_innings → 16 books (FanDuel/BetMGM/Pinnacle/Bovada/DraftKings/Caesars/etc.) LIVE. F5 IS available; prior "zero books" verdict was a wrong-key artifact (third time). Code default corrected; service NOT YET DEPLOYED.
+Capture cron: services/derivative_capture/ (Dockerfile + entrypoint.sh + railway.toml with */30 schedule). Markets: team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings. Set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings in Railway env. After deploy: dbtf build --select stg_derivative_odds mart_derivative_closes.
 ▶ Story prompt — E2.0b Live derivative-odds capture (forward cadence)   [Model-B · data]   ✅ SHIPPED 2026-06-18
-DONE: derivative_odds_backfill.py gained `probe` (Schema-6 recon) + `capture` (cron runner); services/derivative_capture/ Railway cron (*/30) capturing team_totals+alt_totals live. 🔴 PROBE: F5 (h2h_h1/totals_h1) offered by ZERO books via The Odds API → forward-F5 blocked at source → F5 needs E2.0c (alt data source) or dies. team_totals=4 books, alt=5, ~30-min cadence.
+DONE: derivative_odds_backfill.py gained `probe` (Schema-6 recon) + `capture` (cron runner); services/derivative_capture/ code ready (*/30). 🔴→✅ PROBE CORRECTED 2026-06-24: F5 IS available on correct keys (h2h_1st_5_innings/totals_1st_5_innings). team_totals=4 books, alt=5, F5=16 books, ~30-min cadence. SERVICE NOT DEPLOYED yet.
+```
+```
+▶ Story prompt — E2.0b-fix Correct the live F5 capture keys   [Model-B · data · Railway cron]   ✅ COMPLETE 2026-06-24 → BRANCH A
+PROBE (2026-06-24): h2h_1st_5_innings/totals_1st_5_innings/totals_1st_1_innings → 16 books LIVE (FanDuel/BetMGM/Pinnacle/Bovada/DraftKings/Caesars/etc). F5 IS fully available. The prior "HISTORICAL-ONLY" claim (E5.0 session) was a third wrong-key probe artifact.
+DONE: (1) `DEFAULT_DERIVATIVE_MARKETS` in `derivative_odds_backfill.py` updated to correct keys; (2) probe subcommand f5_markets updated; (3) stale comments in `railway.toml`/`entrypoint.sh` fixed; (4) build_roadmap.md E2.0b OPEN ACTION marked RESOLVED + E5.0 audit "HISTORICAL-ONLY" claim corrected. No double-write concern (live capture is one write per event per run).
+REMAINING (operator): `services/derivative_capture/` is NOT YET DEPLOYED to Railway — it has never been deployed. Create the service, copy secrets (SNOWFLAKE_*, ODDS_API_KEY) from odds-api-data-feed, set DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings, deploy. After first capture: dbtf build --select stg_derivative_odds mart_derivative_closes. LOW-PRI: remove dead DERIVATIVE_CAPTURE_MARKETS var from odds-api-data-feed (wrong service).
 ```
 ```
 **E2.0c — ✅ SURVEY COMPLETE 2026-06-18 · ⏳ PAUSED pending 2 sales inquiries.**
@@ -160,7 +167,7 @@ Gate/AC: PIT-flat / calib_80 ≥ 0.80 for the full-game total (the var-deficienc
 ```
 ```
 ▶ Story prompt — E2.4 First-5-innings (F5) per-side model   [Model-A · market-blind]
-⚠️ DATA GAP (from E2.0b probe 2026-06-18): F5 (h2h_h1/totals_h1) is NOT OFFERED live by any bookmaker. Historical closes = 65 games (2023 only) in mart_derivative_closes. The model can be built and PIT-calibrated on Statcast innings-split data without closes, but efficiency eval at E2.6 is thin until F5 lines appear live. Begin the session by re-running the probe (uv run python scripts/derivative_odds_backfill.py probe) to check whether F5 has since become available.
+✅ DATA GAP RESOLVED (E2.0b-fix 2026-06-24): F5 IS available live on correct keys (h2h_1st_5_innings/totals_1st_5_innings) — 16 books including Pinnacle/Bovada/FanDuel. Historical F5 closes (correct keys) are in S3 from the E5.1 backfill (full 2023–2026). The live derivative_capture service code is fixed; awaiting Railway deploy (operator). After deploy + dbtf build → mart_derivative_closes will have live+historical F5 closes for E2.6 efficiency eval. The old "ZERO books / 65 games" figure was a wrong-key probe artifact.
 Read: §4 E2.4 + §0 + E2.2/E2.3 (reuse the copula+convolution).
 Do: a separate Stage-1 NegBin pair on innings 1–5 run production (from mart_pitch_play_event); convolve → F5 total
 + F5 team totals + p_over at F5 lines.
@@ -386,6 +393,7 @@ Gate/AC: BAL@SEA consistent across chip+narrative+CI; flipped layer fixed; guard
 Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, changelog line, verify-after-deploy (re-check this game_pk renders consistently).
 ```
 ```
+▶ Story prompt — E9.28 Bulk permanent-cache invalidation for champion promotions   ✅ SHIPPED 2026-06-24 (Sonnet, prod). New `POST /admin/cache/invalidate-permanent` (admin-guarded, idempotent) → `invalidate_permanent_picks()` on BOTH stores: PG (`services/pg.py` — DELETE `is_permanent=TRUE AND cache_key LIKE 'picks/game/%'`, rollback→0 on error) + S3 (`services/s3_cache.py` — targeted `api-cache/permanent/picks/game/` prefix only, returns object count); endpoint in `routers/admin.py` returns `{status, s3_objects_deleted, pg_rows_deleted}`. 7 tests (`test_invalidate_permanent_cache.py`); CI 566 pass. **Runbook Step 6b added** (`docs/model_promotion_runbook.md`) — runs right after the redeploy; the v6 manual surgery is now one curl. No open items. (Orig prompt ↓.)
 ▶ Story prompt — E9.28 Bulk permanent-cache invalidation for champion promotions   [App · backend admin tool · promotion-runbook infra · Sonnet]   (2026-06-24, operator)
 ⚠️ APP-TARGET: backend → `app/backend/` (admin router + `services/pg.py` cache helpers); any admin UI button → `frontend/` ONLY; ⛔ never legacy Streamlit. `cat frontend/package.json` first if touching UI.
 WHY: champion promotions (the v6 deploy) leave STALE PERMANENT caches the day-scoped invalidations never touch — `is_permanent` blobs in S3 (`api-cache/permanent/`) + Railway PG (`is_permanent=true`, e.g. `picks/game/%`). Every promotion currently needs MANUAL surgery (v6 = manual S3 purge + delete 33 PG rows + a 7-day serving rewrite) → error-prone when correctness matters most (a user can see the OLD model's picks on Final-game detail). Same `is_permanent` class as INC-12 (its ORDER BY fix handled read non-determinism; this handles promotion staleness).
@@ -487,16 +495,21 @@ Gate/AC: test-mode checkout → 'subscriber' group → access; cancel → access
 **changelog: add ONLY when the paywall flips to live mode at launch (not while test-mode/bypassed).**
 ```
 ```
-▶ Story prompt — E9.9 (A0.6) Push notifications (SNS + Lambda + Web Push)   [Backend + App]   🟢 SES email path unblocked 2026-06-18
-APP TARGET: UI→frontend/ (settings opt-in); backend→app/backend/routers/alerts.py + a new push-notification-sender Lambda + Dagster predict_today.py; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
-STATUS: SES is now PRODUCTION, so the email path is unblocked — remaining work is the SNS/Lambda/DynamoDB/Web-Push BUILD (this is no longer SES-gated). Completes E9.10's notification toggle.
-Read: master Story A0.6 in full + §0.2 + §6 + predict_today.py (the publish hook) + A0.4.2 (user identity).
-Do: AWS — SNS topic qualified-bets-today + DynamoDB user_push_subscriptions (PK = Cognito sub; type email|push|both). Lambda push-notification-sender — on SNS
-message, query subs, send Web Push (pywebpush) + SES emails. VAPID keys (py-vapid): public in frontend env, private in the Lambda env. frontend — Web Push opt-in
-in settings → POST /alerts/subscribe → DynamoDB. Dagster — publish to SNS in predict_today.py AFTER compute_bet_permission, only when qualified_bet>0, WRAPPED IN
-try/except so a publish failure NEVER crashes predict_today.
-Gate/AC: push arrives <5min after the run, email <10min; no-permission users fall back to email; an SNS failure does not crash predict_today;
-**changelog: yes — push/email bet alerts are a user-facing capability.**
+▶ Story prompt — E9.9 (A0.6) Push notifications (SNS + Lambda + Web Push)   [Backend + App · P1]   🟢 SES email path unblocked 2026-06-18   (spec'd 2026-06-24)
+APP TARGET: UI→frontend/ (settings opt-in + the service worker); backend→app/backend/routers/alerts.py; NEW Lambda `push-notification-sender`; Dagster→betting_ml/scripts/predict_today.py (the publish hook); ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+STATUS: SES is PRODUCTION (50k/day, us-east-1) → the EMAIL path is unblocked; the whole story is now just the SNS/Lambda/DynamoDB/Web-Push BUILD. **This completes E9.10's "Coming soon" notification toggle** — once shipped, flip that placeholder to a live opt-in.
+WHY: beta users asked to be told when the model posts qualified plays for today's slate, without having to check the app. Selective by design — we only notify when `qualified_bet>0` (most days, nothing fires — that's correct, not a bug).
+Read: master Story A0.6 in full + §0.2 + §6 (cost guard) + betting_ml/scripts/predict_today.py (where `compute_bet_permission`/`qualified_bet` is computed = the publish point) + master A0.4.2 (Cognito user identity / `sub`) + E9.10 (the toggle this completes; its `/alerts/preferences` was deferred here).
+Do:
+  • AWS infra (infrastructure/, document in aws_resources.md): SNS topic `credence-prod-qualified-bets-today`; DynamoDB `credence-prod-user-push-subscriptions` (PK = Cognito `sub`; attrs: channel ∈ {email,push,both}, web-push endpoint+keys, email, `enabled`, created_at). IAM: the sender Lambda needs SNS-subscribe + Dynamo-read + SES-send; predict_today's role needs SNS-publish.
+  • Lambda `push-notification-sender` (SNS-triggered): parse the message (date + the qualified plays summary), scan/query enabled subs, fan out — Web Push via `pywebpush` (channel push|both) + SES email via the existing branded template (channel email|both). Per-recipient try/except (one bad endpoint never blocks the batch); prune 410 Gone push endpoints from Dynamo.
+  • VAPID keys (`py-vapid`): PUBLIC key in frontend env (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`), PRIVATE key in the Lambda env ONLY (never the bundle).
+  • Frontend: a service worker (`public/sw.js`) for `push`/`notificationclick`; settings opt-in flips E9.10's toggle live → `Notification.requestPermission()` → `pushManager.subscribe()` → `POST /alerts/subscribe` (writes Dynamo); also an email-only opt-in (no browser permission needed); unsubscribe path. `app/backend/routers/alerts.py`: `POST /alerts/subscribe`, `GET/PUT /alerts/preferences`, `DELETE /alerts/subscribe`.
+  • Dagster: in `predict_today.py`, AFTER `compute_bet_permission`, publish to SNS ONLY when `qualified_bet>0` — **WRAP IN try/except + context.log.warning on failure (WARN tier per the failure-semantics contract): a publish failure must NEVER crash predict_today** (it's peripheral to the serving-critical prediction write).
+  • Honest framing (required): the alert says "the model posted N value play(s) for today" — it is **NOT** a "+EV / you'll win" claim (best_alpha=0). Mirror the E9.1/E9.12 model-relative wording in both the push body and the email.
+Gate/AC: opt-in (push + email) persists to Dynamo; a `qualified_bet>0` run delivers push <5 min / email <10 min; no-push-permission users fall back to email; **an SNS/Lambda failure does not crash predict_today** (verify with a forced-failure test); 410-stale push subs pruned; honest non-+EV copy; E9.10 toggle now live. `uv run pytest` green.
+**changelog: yes — push/email bet alerts are a new user-facing capability.**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (infra create steps + Lambda deploy + Dagster redeploy for the publish hook + Cognito/IAM), `git add <paths>`, the changelog line, verify-after-deploy (opt in on a real account → force a qualified-play run → confirm delivery).
 ```
 ```
 ▶ Story prompt — E9.10 (A0.4.11) Settings: profile + prefs (UNBLOCKED PARTS ONLY)   [App + backend]   ✅ SHIPPED 2026-06-18
@@ -511,14 +524,13 @@ Gate/AC: real email shown; sign-out-everywhere works; gear-icon nav; editable in
 **changelog entry (user-facing settings page).**
 ```
 ```
-▶ Story prompt — E9.18 Changelog accordion (collapsible per-week)   [App · pure frontend]
+▶ Story prompt — E9.18 Changelog accordion (collapsible per-week)   [App · pure frontend · P3]   (spec'd 2026-06-24)
 APP TARGET: UI→frontend/ ONLY (`frontend/app/changelog`, reads `frontend/data/changelog.json`); ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
-Read: §5F E9.18 + §0.2 (the Monday→Monday changelog convention) + master A0.4.26 (the existing changelog page).
-Do: frontend only — render each `week` block as an accordion item (header = week label + count/summary; body = the items); NO change to the JSON contract
-([{week, items:[{tag,text}]}]). DEFAULT-EXPAND the most recent week (current Monday), collapse the rest; keyboard + ARIA disclosure pattern (use the
-accessibility-review skill); preserve the new/improvement/fix tag styling inside each section. Optional: session-only expand state (no browser storage).
-Gate/AC: per-week accordion; most-recent week open by default, others collapsed; keyboard/ARIA accessible; tag styling preserved; JSON contract unchanged;
-**changelog entry (this is itself user-facing).**
+WHY: we ship a lot — the changelog page is a growing wall of entries. Collapse it into a per-week accordion so users scan week headers and expand what they care about, instead of scrolling. Pairs with the Monday→Monday grouping convention (§0.2). Pure presentation — NO data/contract change.
+Read: §5F E9.18 + §0.2 (the Monday→Monday changelog convention) + master A0.4.26 (the existing changelog page) + the current `frontend/app/changelog/page.tsx` + `frontend/data/changelog.json` (confirm the live shape before coding — verify it's `[{week, items:[{tag,text}]}]`; if the shape differs, match what's there, don't reshape it).
+Do: frontend only — render each `week` block as an accordion item (header = the week label + an item count / one-line summary; body = that week's items). **NO change to the JSON contract.** DEFAULT-EXPAND the most recent week (current Monday), collapse the rest. Keyboard + ARIA disclosure pattern — **run the `design:accessibility-review` skill on the result** (focus order, `aria-expanded`, `aria-controls`, Enter/Space toggle, visible focus ring). Preserve the new/improvement/fix tag styling inside each section. Optional polish: an "expand all / collapse all" affordance; session-only expand state (React state, **NO browser storage** per the artifact rules).
+Gate/AC: per-week accordion; most-recent week open by default, others collapsed; keyboard + ARIA accessible (passes the a11y review); tag styling preserved; JSON contract unchanged; renders correctly with the live `changelog.json`. **changelog entry (this is itself user-facing — and it'll be the first entry users see demoing the new accordion).**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — `git add <paths>` (frontend only), the changelog line, verify-after-deploy (accordion renders; most-recent week open; keyboard nav works).
 ```
 ```
 ▶ E9.24 H2H pick honest "lean" framing — the canonical, fuller prompt is in the App/E9 section below (search "E9.24 Honest win-prob"). (De-duplicated 2026-06-22; "E9.18" elsewhere was a mislabel = the changelog accordion.)
@@ -545,25 +557,47 @@ Embedding consumes NO event quota; free tier is ample (1M events / 5k recordings
 Gate/AC: admin sees live PostHog metrics in-app; admin-only access; no client-side secret; free-tier-safe. NO changelog (admin-only, not end-user-facing).
 Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order commands, `git add <paths>`, verify-after-deploy (admin tab renders; non-admin blocked).
 ```
-▶ Story prompt — E9.11 Best price across top books   [App + backend]
-APP TARGET: UI→frontend/ ONLY; backend→app/backend/routers/picks.py; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
-Read: §5F E9.11 + §0.2 + master A0.4.32 (per-book odds) + E9.1 + betting_ml/utils devig_*/compute_kelly.
-Do: backend — across the six curated books (betmgm, caesars, fanduel, draftkings, bovada, pinnacle) compute the BEST available price per play + EV
-(reuse the A0.4.32 payload + devig, no new odds math); a "+EV plays" endpoint filtered to model_prob > best de-vigged price; each row = play + best book +
-best price + E9.1 breakeven + Pinnacle fair value; precompute to Railway PG. frontend — highlight the best-price book per play + a sortable "+EV plays" list (best edge first).
-Gate/AC: best-priced book + EV per play; ranked +EV view; Pinnacle anchor + breakeven shown; model-relative framing (line-shopping, not "bets you'll win");
-**changelog entry (user-facing).**
+▶ Story prompt — E9.30 Public "About Us" page (adapted from the first Credence blog post)   [App · pure frontend · P2 · marketing/trust]   (2026-06-24, operator)
+APP TARGET: UI→frontend/ ONLY — NEW route `frontend/app/about/page.tsx` (confirm none exists: there's `app/team`/`app/faq`/`app/contact`/`app/privacy`/`app/terms` but NO `app/about`). Reuse the `@/components/nav` `Nav` + whatever footer the static pages use; ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+WHY: we have a strong founding blog post (post #1 — the "penumbra" / intellectual-honesty manifesto that the later "The Leak" post opens by quoting: *"a different kind of intellectual honesty — the willingness to say, in public, that a model didn't pass its own evaluation criteria"*). It's currently buried in the blog. Turn it into a permanent, public **"About Us"** page — a top-of-funnel trust/marketing surface for the GTM push (a public visitor should be able to read who we are and what we stand for without an account).
+SOURCE CONTENT: read the EARLIEST published post from the blog (`GET {NEXT_PUBLIC_API_URL}/blog/posts` → pick the first/founding post by `published_at`; fetch its body via the post detail route the blog `[id]` page uses). That post is the raw material. **ADAPT, don't just transclude** — an About page is evergreen and second-person/brand-voice ("Credence Sports is…", "We operate in the penumbra…"), where a blog post is dated and first-person. Keep the philosophy + the Penumbra Partners framing + the honest-transparency thesis; drop blog-specific scaffolding (date, "in this post").
+Read: §0.2 (honest-framing rule) + the existing static-page pattern (`app/faq/page.tsx` / `app/privacy/page.tsx` for structure, metadata, Nav/footer usage) + `app/blog/page.tsx` + `app/blog/[id]/page.tsx` (how posts are fetched + the "A product of Penumbra Partners" eyebrow) + the founding blog post itself.
+Do:
+  • Build `app/about/page.tsx` as a public, statically-rendered page (no auth) — hardcode the adapted prose as JSX (don't live-fetch the blog post at request time; this is curated evergreen copy). Include `export const metadata` (title "About Us — Credence Sports", description) for SEO.
+  • Sections (suggested): the eyebrow "Credence Sports · A product of Penumbra Partners"; a headline; what Credence is; what "the penumbra" means; the transparency/honest-evaluation thesis; optionally a short "what we don't claim" line; a CTA (to the blog and/or sign-up).
+  • Add an "About" link in the primary `Nav` and the footer (wherever the static pages link).
+  • **HONEST FRAMING (required, non-negotiable — and it's literally the brand): NO edge/win-rate/"beat the market" claims. The page's whole pitch is honesty + transparency + careful reasoning ("we show our work, including the unflattering parts"), NOT profit promises (`best_alpha=0`). The tone is the differentiator — lean into it.** Do not invent facts about the team/company beyond what the source post + existing site state.
+  • Mobile-responsive; matches the site's typographic system (reuse the blog/static-page classes).
+Gate/AC: `/about` renders publicly (no login) with adapted, evergreen About copy faithful to post #1's philosophy; metadata set; "About" linked in Nav + footer; honest framing held (no edge claims); responsive; build passes. **changelog entry (user-facing — new public page).**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — `git add <paths>` (frontend only), the changelog line, verify-after-deploy (`/about` loads logged-out; Nav/footer link works; copy reads as evergreen, not a dated blog post).
 ```
 ```
-▶ Story prompt — E9.12 Daily card   [App + serving]
-APP TARGET: UI→frontend/ ONLY; backend/serving→app/backend/ + scripts/write_serving_store.py (Railway PG); ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
-DEP: needs E9.11 (best price) + E9.13 (fresh write-up) + the Epic 19 decision/permission gate; gated behind the E1 live gate for any "+EV" framing.
-Read: §5F E9.12 + master Epic 19 (compute_bet_permission/qualified_bet) + A0.4.33 (conviction/CI) + E9.11 + E9.1 + E9.13 + Story 22.4 (σ-Kelly).
-Do: backend/serving — assemble the day's QUALIFIED plays (Epic 19) ⋈ E9.11 best-price ⋈ E9.1 breakeven ⋈ Pinnacle fair value ⋈ E9.13 explanation; precompute
-to Railway PG per game_date. frontend — a "Today's Card" view (side, model fair/breakeven price, best book+price, conviction, the "why"), σ-Kelly shown
-ADVISORY-ONLY, and an HONEST EMPTY STATE when nothing qualifies (the common case).
-Gate/AC: card of qualified plays (side + breakeven price + best book/price + conviction + why); honest empty state; advisory/model-relative framing;
-**changelog entry (user-facing).**
+▶ Story prompt — E9.11 Best price across top books (line-shopping for the model's value plays)   [App + backend · P2]   (spec'd 2026-06-24)
+APP TARGET: UI→frontend/ ONLY; backend→app/backend/routers/picks.py + scripts/write_serving_store.py (Railway PG writer); ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+WHY (beta request): *"Get data from the top books to quickly see who's offering the best price on +EV plays."* Mostly GLUE — A0.4.32 already pulls all six books per game/market into Railway PG; this surfaces the best number + a ranked line-shopping view. Builds directly on the shipped E9.1 (breakeven chip) + E9.14 (Fanatics now in the book set) + E9.27 (the pre-start leakage guard that froze book odds — best-price reads the SAME guarded payload, so no new leakage surface).
+Read: §5F E9.11 (full) + §0.2 + master A0.4.32 (per-book odds comparison payload — the live foundation) + E9.1 (breakeven fields already in the payload) + betting_ml/utils `devig_*`/`compute_kelly` (REUSE — no new odds math).
+Do:
+  • Backend: across the curated books (`betmgm, caesars, fanduel, draftkings, bovada, pinnacle` + `fanatics` now live per E9.14) compute the BEST available (most favorable) price per play (side/market) + EV at that price, reusing the A0.4.32 payload + `devig_*`. **Totals nuance (carry from A0.4.32): the champion totals model is NGBoost-Normal — recompute `model_prob` at EACH book's own line via the Normal CDF on the stored μ/σ (`totals_r` is never written); don't compare across mismatched lines.** Exclude Pinnacle from "best US price" (not US-bettable) but keep it as the sharp fair-value anchor row.
+  • A "+EV plays" endpoint/view: filter to plays where `model_prob > best-book de-vigged price`; each row = play + best book + best price + the E9.1 model breakeven + Pinnacle fair value; sortable by edge (biggest first).
+  • Serving: precompute into Railway PG with the book-odds payload (A0.4.32 pattern; no request-time odds math); slot into the existing `write_book_odds_op` write.
+  • Frontend: highlight the best-price book per play in the Book Comparison; a sortable "+EV plays" list page/section.
+  • **Honest framing (required, non-negotiable): "+EV" is MODEL-RELATIVE — the point models have NO demonstrated market edge (`best_alpha=0`). This is a LINE-SHOPPING / transparency aid ("if you're going to take this side, here's the best number + where the model breaks even + the sharp fair price"), NOT a bet recommendation or an edge claim. No "+EV ⇒ bet" language.** Pair the best price with the Pinnacle fair-value anchor (more truthful than implying our breakeven is the market's).
+Gate/AC: per play, the best-priced US book + EV at that price; a +EV-plays view ranked by edge; Pinnacle anchor + E9.1 breakeven shown on each row; model-relative framing held in all copy; reads the E9.27-guarded (pre-start) odds only. `uv run pytest` green. **changelog entry (user-facing).**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (serving rewrite for the new fields + Lambda/Vercel deploy), `git add <paths>`, the changelog line, verify-after-deploy (best-price highlight + ranked view render; framing reads as line-shopping not a bet rec).
+```
+```
+▶ Story prompt — E9.12 Daily card (the day's plays + the price to get them at)   [App + serving · P2]   (spec'd 2026-06-24)
+APP TARGET: UI→frontend/ ONLY (new "Today's Card" view); backend/serving→app/backend/ + scripts/write_serving_store.py (Railway PG); ⛔ never the legacy Streamlit UI. `cat frontend/package.json` first.
+WHY (beta request): *"Could you have a daily card? What bets should be made and at what price?"* One curated card of the model's value plays for the slate, each with the price at which it's +EV (the E9.1 breakeven) and the best book offering it (E9.11). The set = the QUALIFIED plays from the decision/permission gate — selective by design.
+🔗 DEPENDENCIES (build these first): **E9.11** (best price — supplies the price-per-play) + **E9.13** (✅ done — the fresh post-lineup write-up) + the **Epic 19 decision/permission gate** (`qualified_bet`). **🛑 HARD HONESTY GATE: any "+EV"/"recommended play" framing on this surface is gated behind the E1 live gate (PBO/DSR) — which the program has NOT cleared (`best_alpha=0`, 6 no-edge confirmations). So v1 ships as "the model's value plays at the model's prices," advisory + model-relative, NOT "bets you will win." Do not imply demonstrated edge.** (Cross-track dep already recorded in build_roadmap.md.)
+Read: §5F E9.12 (full) + master Epic 19 (`compute_bet_permission`/`qualified_bet`) + A0.4.33 (conviction/CI fields) + E9.11 (best price) + E9.1 (breakeven) + E9.13 (the explanation, already served) + Story 22.4 (σ-aware Kelly sizing).
+Do:
+  • Backend/serving: assemble the card from the QUALIFIED plays (Epic 19 `qualified_bet`/conviction; A0.4.33 conviction + CI) ⋈ E9.11 best-price/book ⋈ E9.1 breakeven ⋈ Pinnacle fair value ⋈ E9.13 explanation; precompute to Railway PG per `game_date` (no request-time compute).
+  • Frontend: a "Today's Card" view — per play: side, the model fair/breakeven price, **best available price + book** (E9.11), conviction (early/partial per A0.4.33), and the "why" (E9.13). σ-Kelly sizing (Story 22.4) shown **ADVISORY-ONLY** (a suggested fraction, never an instruction; US betting is manual).
+  • **HONEST EMPTY CARD (required): when no plays qualify — the COMMON case ("most games, most days, do nothing") — say so plainly. The empty state is a feature, not a failure.** Don't manufacture a play to fill the card.
+  • Honest framing (required): the card is the model's value plays at the model's prices — advisory, model-relative, not "bets you will win." Reads the E9.27-guarded pre-start odds only.
+Gate/AC: a daily card of qualified plays (side + breakeven price + best book/price + conviction + explanation); an honest empty state that renders cleanly on a no-qualifier day; advisory/model-relative framing throughout; no "+EV ⇒ bet" language; depends on E9.11 being live. `uv run pytest` green. **changelog entry (user-facing).**
+Closeout (per §0.1): END with an ⏭️ Operator handoff — run-order (serving rewrite for the card payload + deploy), `git add <paths>`, the changelog line, verify-after-deploy (card renders on a qualifier day; empty state renders on a no-qualifier day; framing is advisory).
 ```
 ```
 ▶ Story prompt — E9.13 Keep the pick write-up up to date   [Serving]   ✅ DONE 2026-06-18 (was P1 staleness bug)

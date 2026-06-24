@@ -9,16 +9,19 @@
 # The probe output will recommend a cronSchedule based on the observed last_update cadence
 # and will confirm which markets to set in DERIVATIVE_CAPTURE_MARKETS.
 #
-# ALSO set DERIVATIVE_CAPTURE_MARKETS in the Railway service env after the probe:
-#   - If F5 (h2h_h1/totals_h1) is offered:   team_totals,alternate_totals,h2h_h1,totals_h1
-#   - If F5 is NOT offered:                   team_totals,alternate_totals
+# DERIVATIVE_CAPTURE_MARKETS (set in Railway service env):
+#   Correct baseball F5 keys: h2h_1st_5_innings / totals_1st_5_innings / totals_1st_1_innings
+#   (NOT h2h_h1/totals_h1 — those are the generic "1st Half" family; baseball books don't populate them)
+#   Live probe 2026-06-24 confirmed 16 books return F5 on the correct keys.
+#   Full value: team_totals,alternate_totals,h2h_1st_5_innings,totals_1st_5_innings,totals_1st_1_innings
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "services/derivative_capture/Dockerfile"
 
 [deploy]
-# Cadence sized from E2.0b probe (2026-06-18): last_update ~every 30min on team_totals/alternate_totals.
-# F5 (h2h_h1/totals_h1) NOT OFFERED by any bookmaker — DERIVATIVE_CAPTURE_MARKETS=team_totals,alternate_totals
+# Cadence sized from E2.0b probe: last_update ~every 30min on team_totals/alternate_totals.
+# Updated 2026-06-24: correct F5 keys added (h2h_1st_5_innings/totals_1st_5_innings/totals_1st_1_innings);
+# prior cron was capturing ZERO F5 because it used the wrong h2h_h1/totals_h1 keys.
 cronSchedule = "*/30 * * * *"
 restartPolicyType = "NEVER"
