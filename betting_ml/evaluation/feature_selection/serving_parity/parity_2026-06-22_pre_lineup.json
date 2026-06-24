@@ -1,0 +1,44 @@
+{
+  "date": "2026-06-22",
+  "data_source": "feature_store",
+  "n_games": 12,
+  "tier": "pre_lineup",
+  "targets": {
+    "total_runs": {
+      "contract_len": 89,
+      "served": 89,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 1,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "pre_lineup"
+    },
+    "run_differential": {
+      "contract_len": 126,
+      "served": 126,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 9,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "pre_lineup"
+    },
+    "home_win": {
+      "contract_len": 156,
+      "served": 156,
+      "absent": [],
+      "served_but_all_null": [],
+      "imputed_to_constant_frac": 0.0,
+      "order_ok": true,
+      "strong_tier_total": 11,
+      "strong_tier_degraded": [],
+      "parity_ok": true,
+      "variant": "pre_lineup"
+    }
+  }
+}
