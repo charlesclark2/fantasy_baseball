@@ -4,7 +4,7 @@
   "n_eval": 11428,
   "n_configs": 3,
   "pbo": {
-    "pbo": 0.992,
+    "pbo": 0.996,
     "n_combos": 1000,
     "n_configs": 3,
     "n_slices": 16,
@@ -22,31 +22,31 @@
         "all": {
           "stratum": "all",
           "n": 11428,
-          "base_metric": 1.7057634774836676,
-          "cand_metric": 1.7063888199220276,
-          "lift": -0.0006253424383599882,
-          "lift_pct": -0.00036660559720887544
+          "base_metric": 1.7057725804630826,
+          "cand_metric": 1.7063783832105823,
+          "lift": -0.0006058027474997729,
+          "lift_pct": -0.00035514860212802215
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
           "n": 9655,
-          "base_metric": 1.6865276831201603,
-          "cand_metric": 1.6871248217127972,
-          "lift": -0.0005971385926368811,
-          "lift_pct": -0.0003540639140486238
+          "base_metric": 1.6865361294590364,
+          "cand_metric": 1.6871092339142941,
+          "lift": -0.0005731044552577114,
+          "lift_pct": -0.00033981154939238513
         },
         "cold_start": {
           "stratum": "cold_start",
           "n": 1773,
-          "base_metric": 1.8105133898241432,
-          "cand_metric": 1.8112923183484908,
-          "lift": -0.0007789285243475774,
-          "lift_pct": -0.0004302252216003967
+          "base_metric": 1.8105260685872038,
+          "cand_metric": 1.811309932254948,
+          "lift": -0.000783863667744189,
+          "lift_pct": -0.00043294801513454943
         }
       },
       "dsr": {
-        "dsr": 0.1335681194351957,
-        "observed_sr": -0.005521155261848947,
+        "dsr": 0.13757735082757355,
+        "observed_sr": -0.005348778924707642,
         "sr0": 0.004861987609316435,
         "n_trials": 2,
         "n_obs": 11428,
@@ -80,31 +80,31 @@
         "all": {
           "stratum": "all",
           "n": 11428,
-          "base_metric": 1.7057634774836676,
-          "cand_metric": 1.7057781936672647,
-          "lift": -1.471618359705218e-05,
-          "lift_pct": -8.627329516259433e-06
+          "base_metric": 1.7057725804630826,
+          "cand_metric": 1.7057625788486044,
+          "lift": 1.0001614478172272e-05,
+          "lift_pct": 5.863392689462177e-06
         },
         "non_cold_start": {
           "stratum": "non_cold_start",
           "n": 9655,
-          "base_metric": 1.6865276831201603,
-          "cand_metric": 1.6865293930004663,
-          "lift": -1.7098803060111578e-06,
-          "lift_pct": -1.0138465695670017e-06
+          "base_metric": 1.6865361294590364,
+          "cand_metric": 1.686511574083376,
+          "lift": 2.4555375660373358e-05,
+          "lift_pct": 1.4559649942542054e-05
         },
         "cold_start": {
           "stratum": "cold_start",
           "n": 1773,
-          "base_metric": 1.8105133898241432,
-          "cand_metric": 1.8105989327749563,
-          "lift": -8.554295081308894e-05,
-          "lift_pct": -4.724789736097881e-05
+          "base_metric": 1.8105260685872038,
+          "cand_metric": 1.8105953205340417,
+          "lift": -6.925194683793379e-05,
+          "lift_pct": -3.8249627022477904e-05
         }
       },
       "dsr": {
-        "dsr": 0.2967991993362836,
-        "observed_sr": -0.00012996396948595034,
+        "dsr": 0.3049249635822526,
+        "observed_sr": 8.833443424286599e-05,
         "sr0": 0.004861987609316435,
         "n_trials": 2,
         "n_obs": 11428,
@@ -120,7 +120,7 @@
       "degenerate": false,
       "degenerate_reason": null,
       "gate": {
-        "lift_positive_all_and_noncold": false,
+        "lift_positive_all_and_noncold": true,
         "pbo_clears_live": false,
         "dsr_passes_live": false,
         "not_degenerate": true,

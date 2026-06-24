@@ -382,6 +382,27 @@ class TestDbtExecSubprocess:
         # runner_url should be the env var value
         assert "http://runner:8080" in mock_remote.call_args[0]
 
+    def test_state_aware_local_args_include_view_selector(self):
+        """INC-13 regression: _local_state_aware_args must union config.materialized:view
+        with source_status:fresher+ so unmodified views are always rebuilt (DDL-only,
+        cheap) rather than silently skipped, which causes cryptic 'object does not exist'
+        errors when a downstream model references a never-built view.
+        """
+        ctx = self._mock_context()
+        mock_s3 = MagicMock()
+        mock_boto3 = MagicMock()
+        mock_boto3.client.return_value = mock_s3
+
+        with patch.dict(sys.modules, {"boto3": mock_boto3}):
+            result = self._mod._local_state_aware_args(
+                ctx, ["build", "--target", "prod"], {}
+            )
+
+        assert "--select" in result, "state-aware args must contain --select"
+        select_val = result[result.index("--select") + 1]
+        assert "source_status:fresher+" in select_val, "must keep incremental selector"
+        assert "config.materialized:view" in select_val, "INC-13: views must always be rebuilt"
+
 
 # ── server._execute command assembly ─────────────────────────────────────────
 
@@ -434,3 +455,29 @@ class TestServerExecute:
         assert self._server._runs["fail1"]["status"] == "failed"
         assert self._server._runs["fail1"]["returncode"] == 1
         assert "compilation error" in self._server._runs["fail1"]["stderr"]
+
+    def test_state_aware_select_includes_view_selector(self):
+        """INC-13 regression: server _execute with use_state=True must include
+        config.materialized:view in the --select to prevent the view-skip bug
+        where state:fresher+ omits unmodified views that downstream models need.
+        """
+        captured: dict = {}
+
+        def fake_run(cmd, **_kw):
+            captured["cmd"] = cmd
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            result.stderr = ""
+            return result
+
+        with patch("subprocess.run", side_effect=fake_run), \
+             patch.object(self._server, "_download_state", return_value=True), \
+             patch.object(self._server, "_upload_state"):
+            self._server._execute("x_inc13", ["build"], {}, use_state=True)
+
+        assert "--select" in captured["cmd"], "state-aware build must have --select"
+        select_idx = captured["cmd"].index("--select")
+        select_val = captured["cmd"][select_idx + 1]
+        assert "source_status:fresher+" in select_val, "must keep incremental selector"
+        assert "config.materialized:view" in select_val, "INC-13: views must always be rebuilt"

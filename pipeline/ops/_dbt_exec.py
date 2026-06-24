@@ -158,8 +158,12 @@ def _local_state_aware_args(context, args: list[str], env: dict) -> list[str]:
             target_args = ["--target", args[idx + 1]]
         except (ValueError, IndexError):
             pass
-        context.log.info("[dbt-runner] local state: source_status:fresher+ mode")
-        return ["build", "--select", "source_status:fresher+", "--state", state_dir] + target_args
+        context.log.info("[dbt-runner] local state: source_status:fresher+ + views mode")
+        # INC-13: union config.materialized:view so views are always rebuilt
+        # (pure DDL, cheap) — skipping them causes cryptic "object does not
+        # exist" errors when a fresh consumer references an unbuilt view.
+        return ["build", "--select", "source_status:fresher+ config.materialized:view",
+                "--state", state_dir] + target_args
     except Exception as exc:
         context.log.warning(f"[dbt-runner] local state download failed ({exc}) — full build")
         return args

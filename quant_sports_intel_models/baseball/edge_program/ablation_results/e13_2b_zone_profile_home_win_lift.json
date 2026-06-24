@@ -1,0 +1,129 @@
+{
+  "target": "home_win",
+  "metric": "nll",
+  "n_eval": 4927,
+  "n_configs": 2,
+  "pbo": {
+    "pbo": 0.142,
+    "n_combos": 1000,
+    "n_configs": 2,
+    "n_slices": 16,
+    "clears_live": true,
+    "threshold": 0.2
+  },
+  "candidates": {
+    "candidate": {
+      "extra_cols": [
+        "home_zone_fb",
+        "away_zone_fb",
+        "home_zone_br",
+        "away_zone_br",
+        "home_zone_os",
+        "away_zone_os",
+        "home_zone_whiff",
+        "away_zone_whiff",
+        "home_zone_xwoba",
+        "away_zone_xwoba",
+        "home_zone_peak",
+        "away_zone_peak"
+      ],
+      "candidate_eval_std": 0.0005333492437332372,
+      "candidate_eval_coverage": 0.8962857722752182,
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 4927,
+          "base_metric": 0.683073873337291,
+          "cand_metric": 0.6846021803659739,
+          "lift": -0.001528307028682896,
+          "lift_pct": -0.0022373964051882896
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 3488,
+          "base_metric": 0.6819350251212732,
+          "cand_metric": 0.68344639283972,
+          "lift": -0.0015113677184467322,
+          "lift_pct": -0.0022162928472224393
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1439,
+          "base_metric": 0.6858343337802859,
+          "cand_metric": 0.6874037000960458,
+          "lift": -0.0015693663157598792,
+          "lift_pct": -0.0022882586048289643
+        }
+      },
+      "dsr": {
+        "dsr": 0.07261055280056992,
+        "observed_sr": -0.02078185221475374,
+        "sr0": 0.0,
+        "n_trials": 1,
+        "n_obs": 4927,
+        "passes_live": false,
+        "threshold": 0.95
+      },
+      "orthogonality": {
+        "home_zone_fb": {
+          "max_abs_corr": 0.2836,
+          "vs": "home_lineup_vs_away_starter_bb_pct_adj"
+        },
+        "away_zone_fb": {
+          "max_abs_corr": 0.2872,
+          "vs": "away_lineup_avg_xwoba_vs_cluster"
+        },
+        "home_zone_br": {
+          "max_abs_corr": 0.2301,
+          "vs": "home_lineup_avg_xwoba_vs_cluster"
+        },
+        "away_zone_br": {
+          "max_abs_corr": 0.2374,
+          "vs": "away_lineup_avg_xwoba_vs_cluster"
+        },
+        "home_zone_os": {
+          "max_abs_corr": 0.1337,
+          "vs": "away_starter_avg_fastball_velo"
+        },
+        "away_zone_os": {
+          "max_abs_corr": 0.1516,
+          "vs": "home_starter_changeup_stuff_plus"
+        },
+        "home_zone_whiff": {
+          "max_abs_corr": 0.3758,
+          "vs": "away_starter_fastball_pct"
+        },
+        "away_zone_whiff": {
+          "max_abs_corr": 0.2665,
+          "vs": "home_starter_whiff_rate_vs_rhb"
+        },
+        "home_zone_xwoba": {
+          "max_abs_corr": 0.38,
+          "vs": "left_ft"
+        },
+        "away_zone_xwoba": {
+          "max_abs_corr": 0.2159,
+          "vs": "away_avg_bb_pct_vs_rhp"
+        },
+        "home_zone_peak": {
+          "max_abs_corr": 0.2516,
+          "vs": "away_starter_fastball_pct"
+        },
+        "away_zone_peak": {
+          "max_abs_corr": 0.2273,
+          "vs": "home_starter_slider_stuff_plus"
+        }
+      },
+      "degenerate": false,
+      "degenerate_reason": null,
+      "gate": {
+        "lift_positive_all_and_noncold": false,
+        "pbo_clears_live": true,
+        "dsr_passes_live": false,
+        "not_degenerate": true,
+        "SHIP": false
+      },
+      "verdict": "NO-SHIP (record null)"
+    }
+  }
+}

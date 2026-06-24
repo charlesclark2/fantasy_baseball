@@ -181,7 +181,11 @@ def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state:
             log.append(f"[dbt-runner] source freshness exit={freshness_result.returncode} "
                        f"(non-fatal; stale-warn is expected when ingest is paused)\n")
             # Switch to source_status:fresher+ selector with state from S3.
-            effective_args = ["build", "--select", "source_status:fresher+",
+            # INC-13: union config.materialized:view so views are always rebuilt
+            # (pure DDL, cheap) — skipping them causes cryptic "object does not
+            # exist" errors when a fresh consumer references an unbuilt view.
+            effective_args = ["build", "--select",
+                              "source_status:fresher+ config.materialized:view",
                               "--state", _STATE_LOCAL_DIR] + target_args
         else:
             log.append("[dbt-runner] no prior state in S3 — full build\n")

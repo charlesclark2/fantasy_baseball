@@ -130,6 +130,98 @@ def test_game_side_overlap_pivots_to_home_away():
     assert row["home_zone_overlap_n"] == 1 and row["away_zone_overlap_n"] == 1
 
 
+# ── E13.2b richer profile decomposition (the form the scalar collapsed) ─────────
+def _rich_bval():
+    # RHB crushes FB (value 1.0, low whiff, high xwoba-con), weak vs BR (value -0.5, high whiff).
+    return pd.DataFrame([
+        dict(batter_id=1, b_hand="R", vs_p_hand="R", pgroup="FB", ix=2, iz=2,
+             value=1.0, whiff_rate=0.10, xwoba_con=0.50),
+        dict(batter_id=1, b_hand="R", vs_p_hand="R", pgroup="BR", ix=2, iz=2,
+             value=-0.5, whiff_rate=0.40, xwoba_con=0.25),
+    ])
+
+
+def test_compute_profile_overlap_decomposes_channels():
+    bval = _rich_bval()
+    pfreq = pd.DataFrame([
+        dict(pitcher_id=9, p_hand="R", vs_b_hand="R", pgroup="FB", ix=2, iz=2, freq=0.7),
+        dict(pitcher_id=9, p_hand="R", vs_b_hand="R", pgroup="BR", ix=2, iz=2, freq=0.3),
+    ])
+    pairs = pd.DataFrame([dict(batter_id=1, b_hand="R", pitcher_id=9, p_hand="R")])
+    r = overlap.compute_profile_overlap(bval, pfreq, pairs).iloc[0]
+    # total value == the old scalar overlap
+    assert abs(r["value"] - (0.7 * 1.0 + 0.3 * -0.5)) < 1e-9
+    # per-group partial sums carry the pitcher's MIX (NOT renormalised) and re-sum to the total
+    assert abs(r["fb"] - 0.7 * 1.0) < 1e-9
+    assert abs(r["br"] - 0.3 * -0.5) < 1e-9
+    assert abs(r["os"] - 0.0) < 1e-9
+    assert abs((r["fb"] + r["br"] + r["os"]) - r["value"]) < 1e-9
+    # whiff/xwoba are the SAME freq-weighting on the channels the scalar ignored
+    assert abs(r["whiff"] - (0.7 * 0.10 + 0.3 * 0.40)) < 1e-9
+    assert abs(r["xwoba"] - (0.7 * 0.50 + 0.3 * 0.25)) < 1e-9
+    # peak = the single largest cell contribution (FB cell: 0.7*1.0=0.7 beats BR: 0.3*-0.5)
+    assert abs(r["peak"] - 0.7) < 1e-9
+    assert r["cells"] == 2
+
+
+def test_game_side_profile_features_pivots_all_channels():
+    bval = pd.DataFrame([
+        dict(batter_id=1, b_hand="R", vs_p_hand="L", pgroup="FB", ix=2, iz=2,
+             value=0.4, whiff_rate=0.2, xwoba_con=0.45),
+        dict(batter_id=2, b_hand="L", vs_p_hand="R", pgroup="FB", ix=2, iz=2,
+             value=0.8, whiff_rate=0.1, xwoba_con=0.55),
+    ])
+    pfreq = pd.DataFrame([
+        dict(pitcher_id=50, p_hand="L", vs_b_hand="R", pgroup="FB", ix=2, iz=2, freq=1.0),
+        dict(pitcher_id=60, p_hand="R", vs_b_hand="L", pgroup="FB", ix=2, iz=2, freq=1.0),
+    ])
+    lineups = pd.DataFrame([
+        dict(game_pk=100, side="home", batter_id=1, b_hand="R"),
+        dict(game_pk=100, side="away", batter_id=2, b_hand="L"),
+    ])
+    starters = pd.DataFrame([
+        dict(game_pk=100, side="home", pitcher_id=60, p_hand="R"),
+        dict(game_pk=100, side="away", pitcher_id=50, p_hand="L"),
+    ])
+    out = overlap.game_side_profile_features(lineups, starters, bval, pfreq)
+    row = out[out["game_pk"] == 100].iloc[0]
+    # home offense (b1, R) faces away starter 50 (L) → value vs_p_hand=L = 0.4 (all in FB)
+    assert abs(row["home_zone_value"] - 0.4) < 1e-9
+    assert abs(row["home_zone_fb"] - 0.4) < 1e-9
+    assert abs(row["home_zone_whiff"] - 0.2) < 1e-9
+    assert abs(row["away_zone_value"] - 0.8) < 1e-9
+    assert abs(row["away_zone_xwoba"] - 0.55) < 1e-9
+    assert row["home_zone_prof_n"] == 1 and row["away_zone_prof_n"] == 1
+    # every declared channel landed as home_/away_ columns
+    for ch in overlap.PROFILE_CHANNELS:
+        assert f"home_{ch}" in out.columns and f"away_{ch}" in out.columns
+
+
+# ── E13.2b miss_distance as-of leak-safety (2026-only exploratory) ──────────────
+def test_miss_distance_asof_is_strictly_leak_clean():
+    from betting_ml.scripts.build_miss_distance_feature import _asof_prior_mean
+    # pitcher 5 whiffs: miss 2.0 on 6/01, miss 8.0 on 6/05. League same.
+    daily = pd.DataFrame([
+        dict(id=5, game_date=pd.Timestamp("2026-06-01"), n=1, s=2.0),
+        dict(id=5, game_date=pd.Timestamp("2026-06-05"), n=1, s=8.0),
+    ])
+    league = daily[["game_date", "n", "s"]].copy()
+    targets = pd.DataFrame([
+        dict(id=5, game_date=pd.Timestamp("2026-06-01")),  # no prior → pure league-edge prior
+        dict(id=5, game_date=pd.Timestamp("2026-06-03")),  # sees ONLY the 6/01 whiff (=2.0)
+        dict(id=5, game_date=pd.Timestamp("2026-06-09")),  # sees both (mean 5.0)
+    ])
+    out = _asof_prior_mean(daily, targets, league, "f").sort_values("game_date")
+    v = out.set_index("game_date")["f"]
+    # 6/01: zero prior whiffs ⇒ feature is fully the (fallback) prior, NOT 2.0 (no same-day leak)
+    assert not np.isclose(v[pd.Timestamp("2026-06-01")], 2.0)
+    # 6/03: shrinks the lone 2.0 whiff toward prior ⇒ between 2.0 and the prior, never above the
+    # later 8.0 it must not see
+    assert v[pd.Timestamp("2026-06-03")] < v[pd.Timestamp("2026-06-09")]
+    # 6/09: raw mean of the two prior whiffs is 5.0; EB-shrunk ⇒ pulled toward league but ordered
+    assert v[pd.Timestamp("2026-06-09")] > v[pd.Timestamp("2026-06-03")]
+
+
 # ── profiles (cold-start) ──────────────────────────────────────────────────────
 def _toy_league_raw():
     rows = []

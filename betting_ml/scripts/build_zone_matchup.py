@@ -224,9 +224,14 @@ def cmd_feature(args) -> None:
             keep = lineups["game_pk"].drop_duplicates().head(args.limit_games)
             lineups = lineups[lineups["game_pk"].isin(keep)]
             starters = starters[starters["game_pk"].isin(keep)]
-        feat = overlap.game_side_overlap(lineups, starters, bval, pfreq)
+        if args.rich:
+            feat = overlap.game_side_profile_features(lineups, starters, bval, pfreq)
+            cov_col = "home_zone_value"
+        else:
+            feat = overlap.game_side_overlap(lineups, starters, bval, pfreq)
+            cov_col = "home_zone_overlap"
         feat["season"] = season
-        print(f"  games with overlap: {feat['home_zone_overlap'].notna().sum()} / {len(feat)}")
+        print(f"  games with overlap: {feat[cov_col].notna().sum()} / {len(feat)}")
         all_games.append(feat)
     con.close()
 
@@ -234,6 +239,21 @@ def cmd_feature(args) -> None:
     outp = Path(args.out)
     outp.parent.mkdir(parents=True, exist_ok=True)
     out_df.to_parquet(outp, index=False)
+    if args.rich:
+        # E13.2b — the decomposed PROFILE channels (the richer form the E13.10 scalar collapsed).
+        chans = overlap.PROFILE_CHANNELS
+        print(f"\nwrote per-game zone-PROFILE features ({len(out_df)} games, "
+              f"{len(chans)} channels × 2 sides) → {outp}")
+        print("Harness wiring (operator) — test the NEW channels (zone_value≈the already-null scalar):")
+        new = [c for c in chans if c != "zone_value"]
+        print(f"  uv run python betting_ml/scripts/incremental_lift_eval.py --target perside_runs \\")
+        print(f"      --feature-parquet {outp} \\")
+        print(f"      --add-features {','.join('off_' + c for c in new)} --run-name e13_2b_zone_profile")
+        print(f"  uv run python betting_ml/scripts/incremental_lift_eval.py --target home_win \\")
+        print(f"      --feature-parquet {outp} \\")
+        print(f"      --add-features {','.join(f'home_{c},away_{c}' for c in new)} \\")
+        print(f"      --run-name e13_2b_zone_profile")
+        return
     print(f"\nwrote per-game zone-overlap feature ({len(out_df)} games) → {outp}")
     print("Harness wiring (operator):")
     print(f"  uv run python betting_ml/scripts/incremental_lift_eval.py --target perside_runs \\")
@@ -271,6 +291,9 @@ def main() -> None:
     f.add_argument("--window-seasons", type=int, default=3, help="prior seasons per profile window")
     f.add_argument("--out", required=True, help="output parquet (game_pk-keyed)")
     f.add_argument("--limit-games", type=int, default=0, help="smoke: only first N games/season")
+    f.add_argument("--rich", action="store_true",
+                   help="E13.2b: emit the DECOMPOSED profile channels (per-pitch-group value + "
+                        "whiff + xwoba + peak) instead of the single collapsed overlap scalar")
     f.set_defaults(func=cmd_feature)
 
     args = ap.parse_args()

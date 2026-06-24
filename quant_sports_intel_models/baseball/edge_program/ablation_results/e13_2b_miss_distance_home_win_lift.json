@@ -1,0 +1,65 @@
+{
+  "target": "home_win",
+  "metric": "nll",
+  "n_eval": 0,
+  "n_configs": 2,
+  "pbo": {
+    "pbo": 1.0,
+    "n_combos": 2,
+    "n_configs": 2,
+    "n_slices": 2,
+    "clears_live": false,
+    "threshold": 0.2
+  },
+  "candidates": {
+    "candidate": {
+      "extra_cols": [
+        "home_starter_miss_induced",
+        "away_starter_miss_induced",
+        "home_lineup_miss",
+        "away_lineup_miss"
+      ],
+      "candidate_eval_std": 0.0,
+      "candidate_eval_coverage": null,
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 0,
+          "base_metric": NaN,
+          "cand_metric": NaN,
+          "lift": NaN,
+          "lift_pct": NaN
+        }
+      },
+      "dsr": null,
+      "orthogonality": {
+        "home_starter_miss_induced": {
+          "max_abs_corr": 0.0,
+          "vs": null
+        },
+        "away_starter_miss_induced": {
+          "max_abs_corr": 0.0,
+          "vs": null
+        },
+        "home_lineup_miss": {
+          "max_abs_corr": 0.0,
+          "vs": null
+        },
+        "away_lineup_miss": {
+          "max_abs_corr": 0.0,
+          "vs": null
+        }
+      },
+      "degenerate": true,
+      "degenerate_reason": "candidate column is ~constant on the eval set (std=0.00e+00) \u2014 corrupt/missing/collapsed feature, NOT a signal null",
+      "gate": {
+        "lift_positive_all_and_noncold": false,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "not_degenerate": false,
+        "SHIP": false
+      },
+      "verdict": "INVALID (degenerate \u2014 re-check the feature build, NOT a null)"
+    }
+  }
+}
