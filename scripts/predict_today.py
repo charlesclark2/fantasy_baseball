@@ -75,13 +75,42 @@ from betting_ml.utils.ml_env import ml_schema  # noqa: E402
 
 _ML_SCHEMA = ml_schema()
 
-_CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'
+_CALIBRATOR_PATH = PROJECT_ROOT / 'betting_ml/models/home_win/calibrator.joblib'  # local fallback only
+_REGISTRY_PATH = PROJECT_ROOT / 'betting_ml' / 'models' / 'model_registry.yaml'
+
+
+def _calibrator_artifact_uri() -> str | None:
+    """S3 URI for the home_win calibrator, read from the registry (calibrator_artifact).
+
+    Production sources ALL serving models from S3, not packaged local files — the
+    calibrator follows the same path as the model artifacts so a re-fit takes effect
+    without a code rebuild and can't diverge from what's deployed. Returns None if the
+    registry value is missing or not an S3 URI (→ local fallback).
+    """
+    try:
+        entry = yaml.safe_load(_REGISTRY_PATH.read_text()).get('home_win', {})
+        uri = entry.get('calibrator_artifact')
+        return uri if isinstance(uri, str) and uri.startswith('s3://') else None
+    except Exception:
+        return None
 
 
 def _load_calibrator():
+    """Load the H2H temperature calibrator: S3 (production source of truth) → local
+    fallback → uncalibrated. Never blocks scoring (graceful degradation to consensus)."""
+    uri = _calibrator_artifact_uri()
+    if uri:
+        try:
+            from betting_ml.utils.artifact_store import load_artifact
+            cal = load_artifact(uri)
+            print(f'[calibrator] loaded from S3: {uri}')
+            return cal
+        except Exception as exc:
+            print(f'[WARN] calibrator S3 load failed ({uri}): {exc} — trying local fallback')
     if _CALIBRATOR_PATH.exists():
+        print(f'[WARN] using LOCAL calibrator (S3 not configured/available): {_CALIBRATOR_PATH.name}')
         return joblib.load(_CALIBRATOR_PATH)
-    print('[WARN] calibrator.joblib not found — using consensus_win_prob uncalibrated')
+    print('[WARN] calibrator not found (S3 or local) — using consensus_win_prob uncalibrated')
     return None
 
 

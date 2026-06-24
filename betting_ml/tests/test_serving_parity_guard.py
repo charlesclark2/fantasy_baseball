@@ -15,11 +15,16 @@ the invariants the fix depends on, with NO Snowflake / no model loading:
      clean served matrix.
   2. `resolve_serve_variant` routes the live morning run to the pre-lineup contract
      exactly as `predict_today` does, and fail-safes to the champion.
-  3. The pre-lineup contract is a SUBSET of the champion contract for every target
-     (a re-fit can't smuggle in a feature the morning tier can't serve).
-  4. The pre-lineup contracts actually DROP the lineup-gated families (the Class-A
-     premise) — so a future re-fit that re-adds a morning-NULL family trips here
-     instead of silently reintroducing the skew.
+  3. The pre-lineup contract carries ZERO lineup-composition-gated families for every
+     target — the absolute Class-A premise. (E13.11: the prior "pre ⊆ champion" check
+     was specific to Story 33.0's reduced-champion design; the E1.9 v6 contracts are
+     INDEPENDENTLY derived per tier — pre is NOT a subset of post — so subset-of-champion
+     is no longer the invariant. The morning-safety guarantee that DOES survive is "pre
+     serves no lineup-gated feature," which is stricter and checked here. The "servable
+     column" guarantee the old subset check provided is now enforced at FIT time by
+     finalize_v6_champion._load_contract, which asserts every contract column exists in
+     the feature store before fitting.)
+  4. Both tier contracts exist and are non-empty.
 """
 
 from __future__ import annotations
@@ -131,33 +136,27 @@ class TestResolveServeVariant:
 # ── 3 + 4. the 33.0 tier-split contract invariants ─────────────────────────────
 
 class TestPreLineupContractInvariants:
-    @pytest.mark.parametrize("target", _TARGETS)
-    def test_pre_lineup_is_subset_of_champion(self, target):
-        """A pre-lineup re-fit must not add a feature the champion (and thus the
-        feature store) doesn't carry — that would be an unservable/0.0-filled column."""
-        entry = _REGISTRY[target]
-        champ = set(_contract(entry["feature_columns_path"]))
-        pre = set(_contract(entry["pre_lineup_feature_columns_path"]))
-        extra = pre - champ
-        assert not extra, f"{target}: pre-lineup contract has non-champion features: {sorted(extra)}"
+    # lineup composition families that are unknown until a lineup is posted.
+    # (Starter-EB / bullpen-EB are pitcher/team gated, available pre-lineup, so
+    # they're intentionally NOT matched here.)
+    _GATED = r"lineup_avg|lineup_archetype|_vs_cluster|lineup_slot|xwoba_vs_(?:lhp|rhp)"
 
     @pytest.mark.parametrize("target", _TARGETS)
-    def test_pre_lineup_drops_lineup_gated_families(self, target):
-        """The Class-A premise: the pre-lineup contract must carry FAR FEWER
-        lineup-gated features than the champion (those are NULL before lineups post).
-        Locks the fix — a re-fit that re-introduces the heavy lineup families trips here.
+    def test_pre_lineup_carries_no_lineup_gated_features(self, target):
+        """The Class-A premise (the morning-skew guard): the pre-lineup contract must
+        carry ZERO lineup-composition-gated features — they are NULL before lineups post,
+        so any one of them would re-introduce the 30.3/33.0 serving skew. This is the
+        absolute invariant under the E1.9 v6 per-tier-independent contracts (where the
+        post champion legitimately CAN carry lineup-gated features, served post-lineup).
+        A future re-fit that re-adds a morning-NULL family trips here.
         """
         import re
-        # lineup composition families that are unknown until a lineup is posted.
-        # (Starter-EB / bullpen-EB are pitcher/team gated, available pre-lineup, so
-        # they're intentionally NOT matched here.)
-        gated = re.compile(r"lineup_avg|lineup_archetype|_vs_cluster|lineup_slot|xwoba_vs_(?:lhp|rhp)", re.I)
+        gated = re.compile(self._GATED, re.I)
         entry = _REGISTRY[target]
-        champ_gated = [c for c in _contract(entry["feature_columns_path"]) if gated.search(c)]
         pre_gated = [c for c in _contract(entry["pre_lineup_feature_columns_path"]) if gated.search(c)]
-        assert len(pre_gated) < len(champ_gated), (
-            f"{target}: pre-lineup carries {len(pre_gated)} lineup-gated features vs champion "
-            f"{len(champ_gated)} — the tier split must DROP them (else the morning skew returns)."
+        assert not pre_gated, (
+            f"{target}: pre-lineup contract carries lineup-gated features {pre_gated} — the tier "
+            f"split must serve NONE of them pre-lineup (else the morning skew returns)."
         )
 
     @pytest.mark.parametrize("target", _TARGETS)

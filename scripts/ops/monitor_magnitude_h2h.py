@@ -39,7 +39,7 @@ from betting_ml.utils.data_loader import get_snowflake_connection
 KILL_N_FULL = 150          # n at which the full CONFIRM/KILL verdict fires
 KILL_N_TRIPWIRE = 50       # n for the early win-rate tripwire
 CONFIRM_CI_LEVEL = 0.95    # two-tailed; lower-tail z at 95% CI = 1.645
-ATTRIBUTION_START = "2026-06-12"  # only bets placed on or after this date count; RESET on Story 30.4 home_win market-blind re-promotion (was 2026-06-11) — keep in lockstep with home_win.kill_criterion.attribution_start in model_registry.yaml
+ATTRIBUTION_START = "2026-06-23"  # only bets placed on or after this date count; RESET on E13.11 de-leaked v6 home_win champion swap (was 2026-06-12) — keep in lockstep with home_win.kill_criterion.attribution_start in model_registry.yaml
 
 
 # ---------------------------------------------------------------------------

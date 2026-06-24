@@ -1,0 +1,39 @@
+{
+  "feature_cols": [
+    "away_bp_eb_coverage_pct",
+    "away_bp_eb_uncertainty",
+    "away_lineup_bat_speed_vs_starter_velo",
+    "away_losses",
+    "away_wins",
+    "home_bp_eb_coverage_pct",
+    "home_bp_eb_uncertainty",
+    "home_pit_woba_against_14d",
+    "home_pit_woba_against_30d",
+    "home_pit_woba_against_std",
+    "home_starter_avg_ip_season",
+    "home_starter_proj_fip",
+    "park_run_factor_3yr",
+    "has_starter_platoon_data",
+    "is_new_venue"
+  ],
+  "_provenance": {
+    "story": "E13.11",
+    "derived": "2026-06-23",
+    "model_class": "ngboost_normal",
+    "tier": "post_lineup",
+    "registry_target": "total_runs",
+    "source_contract": "betting_ml/models/total_runs/feature_columns_ngboost_pruned_clustered_deleaked_2026.json",
+    "n_contract": 13,
+    "n_served": 15,
+    "method": "E1.9 v6 de-leaked champion finalized on full load_clean_matrix() (bullpen_v3 + Stuff+ prior-season), post-imputation served columns. Edge-agnostic integrity deploy (E13.11); v5 retained as rollback.",
+    "sidecar_only": false,
+    "smoke": false,
+    "refresh_cache": true,
+    "config": {
+      "n_estimators": 400,
+      "learning_rate": 0.01,
+      "minibatch_frac": 1.0,
+      "dist": "Normal"
+    }
+  }
+}
