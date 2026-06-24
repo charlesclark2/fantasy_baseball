@@ -278,6 +278,36 @@ picks up the new registry. Then on the next live run confirm:
 
 ---
 
+## Step 6b — Purge permanent caches (E9.28)  `[run immediately after Step 6 on every promotion]`
+
+Champion promotions leave stale **permanent** blobs in both stores — the `is_permanent=TRUE`
+`picks/game/%` rows in Railway PG and the `api-cache/permanent/picks/game/` objects in S3.
+Day-scoped invalidations (`/admin/cache/invalidate`) never touch these, so without this step
+users see the old model's picks on Final-game detail pages until the blob TTL expires.
+
+Call the admin endpoint once (requires admin auth):
+
+```bash
+curl -X POST https://<api-base>/admin/cache/invalidate-permanent \
+  -H "Authorization: Bearer <admin-token>"
+```
+
+Expected response:
+```json
+{
+  "status": "ok",
+  "s3_objects_deleted": <N>,
+  "pg_rows_deleted": <M>,
+  "message": "Permanent picks/game cache cleared: N S3 objects, M PG rows. ..."
+}
+```
+
+The call is **idempotent** — safe to re-run if uncertain. Stale blobs regen lazily on the
+next page load (no warm-up needed). Scope is targeted: only `picks/game/*` permanent entries
+are deleted; other permanent blobs (e.g. non-pick data) are untouched.
+
+---
+
 ## Rollback
 
 S3 + git both retain the prior state, so rollback is a pointer swap — no retrain:

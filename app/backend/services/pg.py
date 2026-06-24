@@ -202,6 +202,36 @@ def invalidate_game(game_pk: int, date_str: str) -> None:
     invalidate(f"picks/game/{game_pk}", date_str)
 
 
+def invalidate_permanent_picks() -> int:
+    """Deletes all is_permanent=TRUE entries whose cache_key matches picks/game/%.
+
+    Use after a champion promotion to clear stale Final-game blobs that
+    day-scoped invalidations never touch. Returns the row count deleted.
+    Idempotent — safe to re-run.
+    """
+    conn = _conn()
+    if conn is None:
+        return 0
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM api_cache WHERE cache_key LIKE 'picks/game/%' AND is_permanent = TRUE"
+            )
+            deleted = cur.rowcount
+        conn.commit()
+        logger.info("invalidate_permanent_picks: deleted %d PG rows", deleted)
+        return deleted
+    except Exception:
+        logger.warning("PG invalidate_permanent_picks failed")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return 0
+    finally:
+        _release(conn)
+
+
 def list_cache_by_prefix(prefix: str) -> list[dict]:
     """Returns all is_permanent payloads whose cache_key starts with `prefix`."""
     conn = _conn()
