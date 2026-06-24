@@ -1,0 +1,1660 @@
+{
+  "schema_version": "2.0",
+  "as_of_date": "2026-06-20",
+  "matchup": {
+    "batter_id": 670541,
+    "batter_name": "Yordan \u00c1lvarez",
+    "b_hand": "L",
+    "pitcher_id": 642547,
+    "pitcher_name": "Freddy Peralta",
+    "p_hand": "R"
+  },
+  "strike_zone": {
+    "sz_top": 3.392,
+    "sz_bot": 1.7119
+  },
+  "grid": {
+    "nx": 5,
+    "nz": 5,
+    "x_edges": [
+      -1.4,
+      -0.84,
+      -0.28,
+      0.28,
+      0.84,
+      1.4
+    ],
+    "z_norm_edges": [
+      -0.25,
+      0.05,
+      0.35,
+      0.65,
+      0.95,
+      1.25
+    ],
+    "orientation": "cells carry (ix, iz); iz=0 is bottom of zone, ix=0 is catcher-POV left",
+    "x_units": "feet (catcher POV)",
+    "z_units": "normalized strike-zone height (0=bottom, 1=top); z_ft via strike_zone bounds",
+    "called_zone": {
+      "x_half_ft": 0.83,
+      "z_norm": [
+        0.0,
+        1.0
+      ]
+    }
+  },
+  "pitch_groups": [
+    "fastball",
+    "breaking",
+    "offspeed",
+    "all"
+  ],
+  "overlap_scalar": 0.010428,
+  "overlap_units": "expected batter run value per pitch, weighted by pitcher usage (>0 favors batter)",
+  "is_cold_start": {
+    "batter": false,
+    "pitcher": false
+  },
+  "cells": [
+    {
+      "pitch_group": "fastball",
+      "ix": 0,
+      "iz": 0,
+      "x_ft": -1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0281,
+      "batter_whiff": 0.3723,
+      "batter_xwoba": 0.2806,
+      "pitcher_usage_freq": 0.00738,
+      "pitcher_loc": {
+        "x_ft": -1.2053,
+        "z_ft": 1.5275
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 1,
+      "iz": 0,
+      "x_ft": -0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0025,
+      "batter_whiff": 0.2657,
+      "batter_xwoba": 0.3908,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": -0.5567,
+        "z_ft": 1.4341
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 2,
+      "iz": 0,
+      "x_ft": 0.0,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0062,
+      "batter_whiff": 0.2285,
+      "batter_xwoba": 0.3849,
+      "pitcher_usage_freq": 0.00948,
+      "pitcher_loc": {
+        "x_ft": 0.0636,
+        "z_ft": 1.5515
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 3,
+      "iz": 0,
+      "x_ft": 0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0138,
+      "batter_whiff": 0.311,
+      "batter_xwoba": 0.291,
+      "pitcher_usage_freq": 0.00632,
+      "pitcher_loc": {
+        "x_ft": 0.5179,
+        "z_ft": 1.5397
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 4,
+      "iz": 0,
+      "x_ft": 1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0539,
+      "batter_whiff": 0.6732,
+      "batter_xwoba": 0.218,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 1.12,
+        "z_ft": 1.5439
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 0,
+      "iz": 1,
+      "x_ft": -1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0127,
+      "batter_whiff": 0.2383,
+      "batter_xwoba": 0.3214,
+      "pitcher_usage_freq": 0.01791,
+      "pitcher_loc": {
+        "x_ft": -1.1426,
+        "z_ft": 2.1177
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 1,
+      "iz": 1,
+      "x_ft": -0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0277,
+      "batter_whiff": 0.0826,
+      "batter_xwoba": 0.387,
+      "pitcher_usage_freq": 0.0137,
+      "pitcher_loc": {
+        "x_ft": -0.5302,
+        "z_ft": 2.0165
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 2,
+      "iz": 1,
+      "x_ft": 0.0,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0249,
+      "batter_whiff": 0.0798,
+      "batter_xwoba": 0.4442,
+      "pitcher_usage_freq": 0.01791,
+      "pitcher_loc": {
+        "x_ft": -0.0223,
+        "z_ft": 2.1268
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 3,
+      "iz": 1,
+      "x_ft": 0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0542,
+      "batter_whiff": 0.1337,
+      "batter_xwoba": 0.3469,
+      "pitcher_usage_freq": 0.00843,
+      "pitcher_loc": {
+        "x_ft": 0.5142,
+        "z_ft": 2.053
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 4,
+      "iz": 1,
+      "x_ft": 1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0407,
+      "batter_whiff": 0.4111,
+      "batter_xwoba": 0.2684,
+      "pitcher_usage_freq": 0.00316,
+      "pitcher_loc": {
+        "x_ft": 1.288,
+        "z_ft": 2.2308
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 0,
+      "iz": 2,
+      "x_ft": -1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0016,
+      "batter_whiff": 0.1038,
+      "batter_xwoba": 0.2344,
+      "pitcher_usage_freq": 0.01897,
+      "pitcher_loc": {
+        "x_ft": -1.1566,
+        "z_ft": 2.5698
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 1,
+      "iz": 2,
+      "x_ft": -0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.033,
+      "batter_whiff": 0.0406,
+      "batter_xwoba": 0.3457,
+      "pitcher_usage_freq": 0.0295,
+      "pitcher_loc": {
+        "x_ft": -0.5811,
+        "z_ft": 2.5548
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 2,
+      "iz": 2,
+      "x_ft": 0.0,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0128,
+      "batter_whiff": 0.0841,
+      "batter_xwoba": 0.4176,
+      "pitcher_usage_freq": 0.03056,
+      "pitcher_loc": {
+        "x_ft": -0.0503,
+        "z_ft": 2.5735
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 3,
+      "iz": 2,
+      "x_ft": 0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0401,
+      "batter_whiff": 0.1524,
+      "batter_xwoba": 0.3918,
+      "pitcher_usage_freq": 0.01475,
+      "pitcher_loc": {
+        "x_ft": 0.5186,
+        "z_ft": 2.5483
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 4,
+      "iz": 2,
+      "x_ft": 1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0284,
+      "batter_whiff": 0.2427,
+      "batter_xwoba": 0.3166,
+      "pitcher_usage_freq": 0.00738,
+      "pitcher_loc": {
+        "x_ft": 1.2351,
+        "z_ft": 2.5419
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 0,
+      "iz": 3,
+      "x_ft": -1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0056,
+      "batter_whiff": 0.0971,
+      "batter_xwoba": 0.2246,
+      "pitcher_usage_freq": 0.02002,
+      "pitcher_loc": {
+        "x_ft": -1.306,
+        "z_ft": 3.0794
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 1,
+      "iz": 3,
+      "x_ft": -0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0333,
+      "batter_whiff": 0.1019,
+      "batter_xwoba": 0.3243,
+      "pitcher_usage_freq": 0.04004,
+      "pitcher_loc": {
+        "x_ft": -0.59,
+        "z_ft": 3.0509
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 2,
+      "iz": 3,
+      "x_ft": 0.0,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0159,
+      "batter_whiff": 0.1455,
+      "batter_xwoba": 0.4312,
+      "pitcher_usage_freq": 0.03688,
+      "pitcher_loc": {
+        "x_ft": -0.0139,
+        "z_ft": 3.0428
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 3,
+      "iz": 3,
+      "x_ft": 0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0345,
+      "batter_whiff": 0.217,
+      "batter_xwoba": 0.3947,
+      "pitcher_usage_freq": 0.01686,
+      "pitcher_loc": {
+        "x_ft": 0.5106,
+        "z_ft": 3.0293
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 4,
+      "iz": 3,
+      "x_ft": 1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0263,
+      "batter_whiff": 0.3349,
+      "batter_xwoba": 0.3409,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": 1.13,
+        "z_ft": 2.9573
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 0,
+      "iz": 4,
+      "x_ft": -1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0677,
+      "batter_whiff": 0.2574,
+      "batter_xwoba": 0.2104,
+      "pitcher_usage_freq": 0.0843,
+      "pitcher_loc": {
+        "x_ft": -1.2919,
+        "z_ft": 3.9326
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 1,
+      "iz": 4,
+      "x_ft": -0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0023,
+      "batter_whiff": 0.3037,
+      "batter_xwoba": 0.2668,
+      "pitcher_usage_freq": 0.04847,
+      "pitcher_loc": {
+        "x_ft": -0.5434,
+        "z_ft": 3.7649
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 2,
+      "iz": 4,
+      "x_ft": 0.0,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0061,
+      "batter_whiff": 0.3043,
+      "batter_xwoba": 0.3707,
+      "pitcher_usage_freq": 0.06217,
+      "pitcher_loc": {
+        "x_ft": -0.0484,
+        "z_ft": 3.8033
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 3,
+      "iz": 4,
+      "x_ft": 0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0017,
+      "batter_whiff": 0.3218,
+      "batter_xwoba": 0.3842,
+      "pitcher_usage_freq": 0.02107,
+      "pitcher_loc": {
+        "x_ft": 0.4468,
+        "z_ft": 3.9464
+      }
+    },
+    {
+      "pitch_group": "fastball",
+      "ix": 4,
+      "iz": 4,
+      "x_ft": 1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0372,
+      "batter_whiff": 0.2761,
+      "batter_xwoba": 0.2857,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": 1.1049,
+        "z_ft": 3.9912
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 0,
+      "iz": 0,
+      "x_ft": -1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0354,
+      "batter_whiff": 0.3871,
+      "batter_xwoba": 0.4552,
+      "pitcher_usage_freq": 0.01686,
+      "pitcher_loc": {
+        "x_ft": -1.1581,
+        "z_ft": 1.0228
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 1,
+      "iz": 0,
+      "x_ft": -0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0125,
+      "batter_whiff": 0.3475,
+      "batter_xwoba": 0.4551,
+      "pitcher_usage_freq": 0.0295,
+      "pitcher_loc": {
+        "x_ft": -0.5256,
+        "z_ft": 1.1422
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 2,
+      "iz": 0,
+      "x_ft": 0.0,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.0104,
+      "batter_whiff": 0.4136,
+      "batter_xwoba": 0.3335,
+      "pitcher_usage_freq": 0.0274,
+      "pitcher_loc": {
+        "x_ft": 0.0329,
+        "z_ft": 0.5581
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 3,
+      "iz": 0,
+      "x_ft": 0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.0137,
+      "batter_whiff": 0.522,
+      "batter_xwoba": 0.2917,
+      "pitcher_usage_freq": 0.02845,
+      "pitcher_loc": {
+        "x_ft": 0.4726,
+        "z_ft": 0.8454
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 4,
+      "iz": 0,
+      "x_ft": 1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0143,
+      "batter_whiff": 0.7805,
+      "batter_xwoba": 0.2575,
+      "pitcher_usage_freq": 0.01581,
+      "pitcher_loc": {
+        "x_ft": 1.1297,
+        "z_ft": 0.6836
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 0,
+      "iz": 1,
+      "x_ft": -1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0351,
+      "batter_whiff": 0.1228,
+      "batter_xwoba": 0.3302,
+      "pitcher_usage_freq": 0.01475,
+      "pitcher_loc": {
+        "x_ft": -1.2671,
+        "z_ft": 2.0695
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 1,
+      "iz": 1,
+      "x_ft": -0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0248,
+      "batter_whiff": 0.1013,
+      "batter_xwoba": 0.3482,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": -0.5582,
+        "z_ft": 2.0765
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 2,
+      "iz": 1,
+      "x_ft": 0.0,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0158,
+      "batter_whiff": 0.1318,
+      "batter_xwoba": 0.4221,
+      "pitcher_usage_freq": 0.01264,
+      "pitcher_loc": {
+        "x_ft": 0.0124,
+        "z_ft": 2.0919
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 3,
+      "iz": 1,
+      "x_ft": 0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0385,
+      "batter_whiff": 0.2075,
+      "batter_xwoba": 0.3222,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": 0.645,
+        "z_ft": 2.0373
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 4,
+      "iz": 1,
+      "x_ft": 1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0068,
+      "batter_whiff": 0.4481,
+      "batter_xwoba": 0.2427,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": 1.1314,
+        "z_ft": 1.8319
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 0,
+      "iz": 2,
+      "x_ft": -1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0439,
+      "batter_whiff": 0.0899,
+      "batter_xwoba": 0.3473,
+      "pitcher_usage_freq": 0.01054,
+      "pitcher_loc": {
+        "x_ft": -1.4568,
+        "z_ft": 2.6353
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 1,
+      "iz": 2,
+      "x_ft": -0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.013,
+      "batter_whiff": 0.0555,
+      "batter_xwoba": 0.4239,
+      "pitcher_usage_freq": 0.01581,
+      "pitcher_loc": {
+        "x_ft": -0.6066,
+        "z_ft": 2.4786
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 2,
+      "iz": 2,
+      "x_ft": 0.0,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0093,
+      "batter_whiff": 0.0931,
+      "batter_xwoba": 0.3977,
+      "pitcher_usage_freq": 0.01686,
+      "pitcher_loc": {
+        "x_ft": -0.0651,
+        "z_ft": 2.4725
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 3,
+      "iz": 2,
+      "x_ft": 0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0313,
+      "batter_whiff": 0.1475,
+      "batter_xwoba": 0.3234,
+      "pitcher_usage_freq": 0.00316,
+      "pitcher_loc": {
+        "x_ft": 0.3969,
+        "z_ft": 2.5371
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 4,
+      "iz": 2,
+      "x_ft": 1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0038,
+      "batter_whiff": 0.3078,
+      "batter_xwoba": 0.2775,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": 0.9646,
+        "z_ft": 2.3072
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 0,
+      "iz": 3,
+      "x_ft": -1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0361,
+      "batter_whiff": 0.1096,
+      "batter_xwoba": 0.1609,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": -1.6686,
+        "z_ft": 3.0025
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 1,
+      "iz": 3,
+      "x_ft": -0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0441,
+      "batter_whiff": 0.1077,
+      "batter_xwoba": 0.3138,
+      "pitcher_usage_freq": 0.00316,
+      "pitcher_loc": {
+        "x_ft": -0.6886,
+        "z_ft": 2.9131
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 2,
+      "iz": 3,
+      "x_ft": 0.0,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0175,
+      "batter_whiff": 0.1114,
+      "batter_xwoba": 0.3669,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": -0.1903,
+        "z_ft": 2.9432
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 3,
+      "iz": 3,
+      "x_ft": 0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0415,
+      "batter_whiff": 0.163,
+      "batter_xwoba": 0.3702,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 0.56,
+        "z_ft": 3.056
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 4,
+      "iz": 3,
+      "x_ft": 1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0176,
+      "batter_whiff": 0.2136,
+      "batter_xwoba": 0.2689,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": 1.1401,
+        "z_ft": 2.8291
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 0,
+      "iz": 4,
+      "x_ft": -1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0808,
+      "batter_whiff": 0.4103,
+      "batter_xwoba": 0.2502,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": -1.6941,
+        "z_ft": 3.5986
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 1,
+      "iz": 4,
+      "x_ft": -0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0234,
+      "batter_whiff": 0.2474,
+      "batter_xwoba": 0.3403,
+      "pitcher_usage_freq": 0.00316,
+      "pitcher_loc": {
+        "x_ft": -0.5105,
+        "z_ft": 3.6627
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 2,
+      "iz": 4,
+      "x_ft": 0.0,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0058,
+      "batter_whiff": 0.2765,
+      "batter_xwoba": 0.2792,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 0.0,
+        "z_ft": 3.5601
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 3,
+      "iz": 4,
+      "x_ft": 0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0025,
+      "batter_whiff": 0.2297,
+      "batter_xwoba": 0.366,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 0.56,
+        "z_ft": 3.5601
+      }
+    },
+    {
+      "pitch_group": "breaking",
+      "ix": 4,
+      "iz": 4,
+      "x_ft": 1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0386,
+      "batter_whiff": 0.303,
+      "batter_xwoba": 0.3137,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 1.12,
+        "z_ft": 3.5601
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 0,
+      "iz": 0,
+      "x_ft": -1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0178,
+      "batter_whiff": 0.53,
+      "batter_xwoba": 0.334,
+      "pitcher_usage_freq": 0.03161,
+      "pitcher_loc": {
+        "x_ft": -1.2965,
+        "z_ft": 1.1144
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 1,
+      "iz": 0,
+      "x_ft": -0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.011,
+      "batter_whiff": 0.4902,
+      "batter_xwoba": 0.4064,
+      "pitcher_usage_freq": 0.02002,
+      "pitcher_loc": {
+        "x_ft": -0.5744,
+        "z_ft": 1.2541
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 2,
+      "iz": 0,
+      "x_ft": 0.0,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.0166,
+      "batter_whiff": 0.4831,
+      "batter_xwoba": 0.2998,
+      "pitcher_usage_freq": 0.03899,
+      "pitcher_loc": {
+        "x_ft": -0.0427,
+        "z_ft": 1.2867
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 3,
+      "iz": 0,
+      "x_ft": 0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0009,
+      "batter_whiff": 0.5708,
+      "batter_xwoba": 0.2815,
+      "pitcher_usage_freq": 0.01686,
+      "pitcher_loc": {
+        "x_ft": 0.4581,
+        "z_ft": 1.3128
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 4,
+      "iz": 0,
+      "x_ft": 1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0407,
+      "batter_whiff": 0.6437,
+      "batter_xwoba": 0.2716,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": 1.0907,
+        "z_ft": 1.4202
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 0,
+      "iz": 1,
+      "x_ft": -1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0127,
+      "batter_whiff": 0.3008,
+      "batter_xwoba": 0.2865,
+      "pitcher_usage_freq": 0.02107,
+      "pitcher_loc": {
+        "x_ft": -1.3459,
+        "z_ft": 2.0455
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 1,
+      "iz": 1,
+      "x_ft": -0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0285,
+      "batter_whiff": 0.2201,
+      "batter_xwoba": 0.3276,
+      "pitcher_usage_freq": 0.02213,
+      "pitcher_loc": {
+        "x_ft": -0.5448,
+        "z_ft": 2.0324
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 2,
+      "iz": 1,
+      "x_ft": 0.0,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0042,
+      "batter_whiff": 0.2129,
+      "batter_xwoba": 0.3835,
+      "pitcher_usage_freq": 0.0137,
+      "pitcher_loc": {
+        "x_ft": -0.0273,
+        "z_ft": 2.0609
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 3,
+      "iz": 1,
+      "x_ft": 0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0212,
+      "batter_whiff": 0.2201,
+      "batter_xwoba": 0.3645,
+      "pitcher_usage_freq": 0.00948,
+      "pitcher_loc": {
+        "x_ft": 0.4536,
+        "z_ft": 1.9901
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 4,
+      "iz": 1,
+      "x_ft": 1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0062,
+      "batter_whiff": 0.3889,
+      "batter_xwoba": 0.2264,
+      "pitcher_usage_freq": 0.00316,
+      "pitcher_loc": {
+        "x_ft": 0.9644,
+        "z_ft": 2.061
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 0,
+      "iz": 2,
+      "x_ft": -1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0023,
+      "batter_whiff": 0.25,
+      "batter_xwoba": 0.2927,
+      "pitcher_usage_freq": 0.01791,
+      "pitcher_loc": {
+        "x_ft": -1.2724,
+        "z_ft": 2.5657
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 1,
+      "iz": 2,
+      "x_ft": -0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0365,
+      "batter_whiff": 0.101,
+      "batter_xwoba": 0.4008,
+      "pitcher_usage_freq": 0.00948,
+      "pitcher_loc": {
+        "x_ft": -0.656,
+        "z_ft": 2.5544
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 2,
+      "iz": 2,
+      "x_ft": 0.0,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0035,
+      "batter_whiff": 0.1382,
+      "batter_xwoba": 0.3911,
+      "pitcher_usage_freq": 0.00843,
+      "pitcher_loc": {
+        "x_ft": -0.0132,
+        "z_ft": 2.5576
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 3,
+      "iz": 2,
+      "x_ft": 0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0086,
+      "batter_whiff": 0.1593,
+      "batter_xwoba": 0.3815,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": 0.7544,
+        "z_ft": 2.6049
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 4,
+      "iz": 2,
+      "x_ft": 1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0697,
+      "batter_whiff": 0.1538,
+      "batter_xwoba": 0.4746,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 1.12,
+        "z_ft": 2.552
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 0,
+      "iz": 3,
+      "x_ft": -1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0519,
+      "batter_whiff": 0.0968,
+      "batter_xwoba": 0.3463,
+      "pitcher_usage_freq": 0.01264,
+      "pitcher_loc": {
+        "x_ft": -1.6912,
+        "z_ft": 2.9779
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 1,
+      "iz": 3,
+      "x_ft": -0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0202,
+      "batter_whiff": 0.0985,
+      "batter_xwoba": 0.3261,
+      "pitcher_usage_freq": 0.00632,
+      "pitcher_loc": {
+        "x_ft": -0.5048,
+        "z_ft": 3.0479
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 2,
+      "iz": 3,
+      "x_ft": 0.0,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0274,
+      "batter_whiff": 0.1132,
+      "batter_xwoba": 0.334,
+      "pitcher_usage_freq": 0.00211,
+      "pitcher_loc": {
+        "x_ft": 0.1036,
+        "z_ft": 2.9196
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 3,
+      "iz": 3,
+      "x_ft": 0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0206,
+      "batter_whiff": 0.2,
+      "batter_xwoba": 0.378,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 0.56,
+        "z_ft": 3.056
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 4,
+      "iz": 3,
+      "x_ft": 1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0419,
+      "batter_whiff": 0.0,
+      "batter_xwoba": 0.2317,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 1.12,
+        "z_ft": 3.056
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 0,
+      "iz": 4,
+      "x_ft": -1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0825,
+      "batter_whiff": 0.15,
+      "batter_xwoba": 0.1848,
+      "pitcher_usage_freq": 0.00738,
+      "pitcher_loc": {
+        "x_ft": -2.0725,
+        "z_ft": 3.6749
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 1,
+      "iz": 4,
+      "x_ft": -0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0369,
+      "batter_whiff": 0.1333,
+      "batter_xwoba": 0.3073,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": -0.6422,
+        "z_ft": 3.3771
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 2,
+      "iz": 4,
+      "x_ft": 0.0,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0448,
+      "batter_whiff": 0.1351,
+      "batter_xwoba": 0.3532,
+      "pitcher_usage_freq": 0.00105,
+      "pitcher_loc": {
+        "x_ft": -0.2186,
+        "z_ft": 3.7898
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 3,
+      "iz": 4,
+      "x_ft": 0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0032,
+      "batter_whiff": 0.125,
+      "batter_xwoba": 0.229,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 0.56,
+        "z_ft": 3.5601
+      }
+    },
+    {
+      "pitch_group": "offspeed",
+      "ix": 4,
+      "iz": 4,
+      "x_ft": 1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.114,
+      "batter_whiff": 0.0,
+      "batter_xwoba": 0.711,
+      "pitcher_usage_freq": 0.0,
+      "pitcher_loc": {
+        "x_ft": 1.12,
+        "z_ft": 3.5601
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 0,
+      "iz": 0,
+      "x_ft": -1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0245,
+      "batter_whiff": 0.466,
+      "batter_xwoba": 0.3635,
+      "pitcher_usage_freq": 0.05585,
+      "pitcher_loc": {
+        "x_ft": -1.2427,
+        "z_ft": 1.1413
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 1,
+      "iz": 0,
+      "x_ft": -0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0029,
+      "batter_whiff": 0.3918,
+      "batter_xwoba": 0.4312,
+      "pitcher_usage_freq": 0.05479,
+      "pitcher_loc": {
+        "x_ft": -0.5464,
+        "z_ft": 1.2112
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 2,
+      "iz": 0,
+      "x_ft": 0.0,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.0115,
+      "batter_whiff": 0.4262,
+      "batter_xwoba": 0.3226,
+      "pitcher_usage_freq": 0.07587,
+      "pitcher_loc": {
+        "x_ft": -0.0021,
+        "z_ft": 1.0567
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 3,
+      "iz": 0,
+      "x_ft": 0.56,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": -0.0055,
+      "batter_whiff": 0.5121,
+      "batter_xwoba": 0.2883,
+      "pitcher_usage_freq": 0.05163,
+      "pitcher_loc": {
+        "x_ft": 0.4734,
+        "z_ft": 1.083
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 4,
+      "iz": 0,
+      "x_ft": 1.12,
+      "z_norm": -0.1,
+      "z_ft": 1.5439,
+      "batter_run_value": 0.0209,
+      "batter_whiff": 0.7463,
+      "batter_xwoba": 0.2611,
+      "pitcher_usage_freq": 0.02107,
+      "pitcher_loc": {
+        "x_ft": 1.1199,
+        "z_ft": 0.8677
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 0,
+      "iz": 1,
+      "x_ft": -1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0189,
+      "batter_whiff": 0.2311,
+      "batter_xwoba": 0.3101,
+      "pitcher_usage_freq": 0.05374,
+      "pitcher_loc": {
+        "x_ft": -1.2565,
+        "z_ft": 2.0762
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 1,
+      "iz": 1,
+      "x_ft": -0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0278,
+      "batter_whiff": 0.159,
+      "batter_xwoba": 0.35,
+      "pitcher_usage_freq": 0.0411,
+      "pitcher_loc": {
+        "x_ft": -0.5417,
+        "z_ft": 2.0328
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 2,
+      "iz": 1,
+      "x_ft": 0.0,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0069,
+      "batter_whiff": 0.1358,
+      "batter_xwoba": 0.4191,
+      "pitcher_usage_freq": 0.04426,
+      "pitcher_loc": {
+        "x_ft": -0.0139,
+        "z_ft": 2.0964
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 3,
+      "iz": 1,
+      "x_ft": 0.56,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": -0.0368,
+      "batter_whiff": 0.181,
+      "batter_xwoba": 0.3543,
+      "pitcher_usage_freq": 0.01897,
+      "pitcher_loc": {
+        "x_ft": 0.4912,
+        "z_ft": 2.0207
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 4,
+      "iz": 1,
+      "x_ft": 1.12,
+      "z_norm": 0.2,
+      "z_ft": 2.0479,
+      "batter_run_value": 0.0191,
+      "batter_whiff": 0.4069,
+      "batter_xwoba": 0.2467,
+      "pitcher_usage_freq": 0.00738,
+      "pitcher_loc": {
+        "x_ft": 1.1269,
+        "z_ft": 2.101
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 0,
+      "iz": 2,
+      "x_ft": -1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.01,
+      "batter_whiff": 0.1559,
+      "batter_xwoba": 0.2815,
+      "pitcher_usage_freq": 0.04742,
+      "pitcher_loc": {
+        "x_ft": -1.267,
+        "z_ft": 2.5828
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 1,
+      "iz": 2,
+      "x_ft": -0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0152,
+      "batter_whiff": 0.0554,
+      "batter_xwoba": 0.3778,
+      "pitcher_usage_freq": 0.05479,
+      "pitcher_loc": {
+        "x_ft": -0.6015,
+        "z_ft": 2.5328
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 2,
+      "iz": 2,
+      "x_ft": 0.0,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0037,
+      "batter_whiff": 0.095,
+      "batter_xwoba": 0.4076,
+      "pitcher_usage_freq": 0.05585,
+      "pitcher_loc": {
+        "x_ft": -0.0492,
+        "z_ft": 2.5406
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 3,
+      "iz": 2,
+      "x_ft": 0.56,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": -0.0369,
+      "batter_whiff": 0.152,
+      "batter_xwoba": 0.3798,
+      "pitcher_usage_freq": 0.01897,
+      "pitcher_loc": {
+        "x_ft": 0.5114,
+        "z_ft": 2.5496
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 4,
+      "iz": 2,
+      "x_ft": 1.12,
+      "z_norm": 0.5,
+      "z_ft": 2.552,
+      "batter_run_value": 0.0244,
+      "batter_whiff": 0.2508,
+      "batter_xwoba": 0.3117,
+      "pitcher_usage_freq": 0.00843,
+      "pitcher_loc": {
+        "x_ft": 1.2013,
+        "z_ft": 2.5126
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 0,
+      "iz": 3,
+      "x_ft": -1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0253,
+      "batter_whiff": 0.0987,
+      "batter_xwoba": 0.2563,
+      "pitcher_usage_freq": 0.03793,
+      "pitcher_loc": {
+        "x_ft": -1.4847,
+        "z_ft": 3.0349
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 1,
+      "iz": 3,
+      "x_ft": -0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0323,
+      "batter_whiff": 0.1018,
+      "batter_xwoba": 0.3238,
+      "pitcher_usage_freq": 0.04953,
+      "pitcher_loc": {
+        "x_ft": -0.5854,
+        "z_ft": 3.0417
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 2,
+      "iz": 3,
+      "x_ft": 0.0,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0166,
+      "batter_whiff": 0.1429,
+      "batter_xwoba": 0.4244,
+      "pitcher_usage_freq": 0.04004,
+      "pitcher_loc": {
+        "x_ft": -0.0123,
+        "z_ft": 3.0337
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 3,
+      "iz": 3,
+      "x_ft": 0.56,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": -0.0345,
+      "batter_whiff": 0.217,
+      "batter_xwoba": 0.3947,
+      "pitcher_usage_freq": 0.01686,
+      "pitcher_loc": {
+        "x_ft": 0.5106,
+        "z_ft": 3.0293
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 4,
+      "iz": 3,
+      "x_ft": 1.12,
+      "z_norm": 0.8,
+      "z_ft": 3.056,
+      "batter_run_value": 0.0249,
+      "batter_whiff": 0.3147,
+      "batter_xwoba": 0.3289,
+      "pitcher_usage_freq": 0.00632,
+      "pitcher_loc": {
+        "x_ft": 1.1317,
+        "z_ft": 2.9359
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 0,
+      "iz": 4,
+      "x_ft": -1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0696,
+      "batter_whiff": 0.2575,
+      "batter_xwoba": 0.2106,
+      "pitcher_usage_freq": 0.09694,
+      "pitcher_loc": {
+        "x_ft": -1.3731,
+        "z_ft": 3.8949
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 1,
+      "iz": 4,
+      "x_ft": -0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0,
+      "batter_whiff": 0.2969,
+      "batter_xwoba": 0.2721,
+      "pitcher_usage_freq": 0.05269,
+      "pitcher_loc": {
+        "x_ft": -0.5434,
+        "z_ft": 3.751
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 2,
+      "iz": 4,
+      "x_ft": 0.0,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": -0.0052,
+      "batter_whiff": 0.3015,
+      "batter_xwoba": 0.3704,
+      "pitcher_usage_freq": 0.06322,
+      "pitcher_loc": {
+        "x_ft": -0.0513,
+        "z_ft": 3.803
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 3,
+      "iz": 4,
+      "x_ft": 0.56,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0017,
+      "batter_whiff": 0.3218,
+      "batter_xwoba": 0.3842,
+      "pitcher_usage_freq": 0.02107,
+      "pitcher_loc": {
+        "x_ft": 0.4468,
+        "z_ft": 3.9464
+      }
+    },
+    {
+      "pitch_group": "all",
+      "ix": 4,
+      "iz": 4,
+      "x_ft": 1.12,
+      "z_norm": 1.1,
+      "z_ft": 3.5601,
+      "batter_run_value": 0.0372,
+      "batter_whiff": 0.2761,
+      "batter_xwoba": 0.2857,
+      "pitcher_usage_freq": 0.00527,
+      "pitcher_loc": {
+        "x_ft": 1.1049,
+        "z_ft": 3.9912
+      }
+    }
+  ]
+}

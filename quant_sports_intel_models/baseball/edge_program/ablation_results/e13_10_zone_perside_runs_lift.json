@@ -1,0 +1,74 @@
+{
+  "target": "perside_runs",
+  "metric": "crps",
+  "n_eval": 11428,
+  "n_configs": 2,
+  "pbo": {
+    "pbo": 0.588,
+    "n_combos": 1000,
+    "n_configs": 2,
+    "n_slices": 16,
+    "clears_live": false,
+    "threshold": 0.2
+  },
+  "candidates": {
+    "candidate": {
+      "extra_cols": [
+        "opp_zone_overlap"
+      ],
+      "candidate_eval_std": 0.001833103192759841,
+      "candidate_eval_coverage": 0.9039201960098004,
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 11428,
+          "base_metric": 1.7057634774836676,
+          "cand_metric": 1.70632939569027,
+          "lift": -0.000565918206602456,
+          "lift_pct": -0.0003317682750701728
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 9655,
+          "base_metric": 1.6865276831201603,
+          "cand_metric": 1.6872816289116213,
+          "lift": -0.0007539457914609304,
+          "lift_pct": -0.00044704027037735495
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1773,
+          "base_metric": 1.8105133898241432,
+          "cand_metric": 1.8100553901899055,
+          "lift": 0.00045799963423776013,
+          "lift_pct": 0.0002529667202749857
+        }
+      },
+      "dsr": {
+        "dsr": 0.2978785818406843,
+        "observed_sr": -0.004962769974797837,
+        "sr0": 0.0,
+        "n_trials": 1,
+        "n_obs": 11428,
+        "passes_live": false,
+        "threshold": 0.95
+      },
+      "orthogonality": {
+        "opp_zone_overlap": {
+          "max_abs_corr": 0.1584,
+          "vs": "opp_pit_k_pct_std"
+        }
+      },
+      "degenerate": false,
+      "degenerate_reason": null,
+      "gate": {
+        "lift_positive_all_and_noncold": false,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "not_degenerate": true,
+        "SHIP": false
+      },
+      "verdict": "NO-SHIP (record null)"
+    }
+  }
+}

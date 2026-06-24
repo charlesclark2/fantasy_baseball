@@ -1,0 +1,79 @@
+{
+  "target": "home_win",
+  "metric": "nll",
+  "n_eval": 4927,
+  "n_configs": 2,
+  "pbo": {
+    "pbo": 0.837,
+    "n_combos": 1000,
+    "n_configs": 2,
+    "n_slices": 16,
+    "clears_live": false,
+    "threshold": 0.2
+  },
+  "candidates": {
+    "candidate": {
+      "extra_cols": [
+        "home_zone_overlap",
+        "away_zone_overlap"
+      ],
+      "candidate_eval_std": 0.0018352688744412017,
+      "candidate_eval_coverage": 0.8962857722752182,
+      "lift": {
+        "all": {
+          "stratum": "all",
+          "n": 4927,
+          "base_metric": 0.6830509249413058,
+          "cand_metric": 0.6833322201850255,
+          "lift": -0.0002812952437196703,
+          "lift_pct": -0.0004118217741141948
+        },
+        "non_cold_start": {
+          "stratum": "non_cold_start",
+          "n": 3488,
+          "base_metric": 0.6819167747290368,
+          "cand_metric": 0.6829079323224071,
+          "lift": -0.0009911575933703176,
+          "lift_pct": -0.0014534876250318952
+        },
+        "cold_start": {
+          "stratum": "cold_start",
+          "n": 1439,
+          "base_metric": 0.6857999978672227,
+          "cand_metric": 0.6843606538645339,
+          "lift": 0.0014393440026887472,
+          "lift_pct": 0.0020987809961577424
+        }
+      },
+      "dsr": {
+        "dsr": 0.39696312638733644,
+        "observed_sr": -0.0037218033583219443,
+        "sr0": 0.0,
+        "n_trials": 1,
+        "n_obs": 4927,
+        "passes_live": false,
+        "threshold": 0.95
+      },
+      "orthogonality": {
+        "home_zone_overlap": {
+          "max_abs_corr": 0.3268,
+          "vs": "home_lineup_avg_xwoba_vs_cluster"
+        },
+        "away_zone_overlap": {
+          "max_abs_corr": 0.3436,
+          "vs": "away_lineup_avg_xwoba_vs_cluster"
+        }
+      },
+      "degenerate": false,
+      "degenerate_reason": null,
+      "gate": {
+        "lift_positive_all_and_noncold": false,
+        "pbo_clears_live": false,
+        "dsr_passes_live": false,
+        "not_degenerate": true,
+        "SHIP": false
+      },
+      "verdict": "NO-SHIP (record null)"
+    }
+  }
+}
