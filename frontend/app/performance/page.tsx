@@ -328,13 +328,13 @@ function StatTiles({ summary }: { summary: BetSummary }) {
 const TOOLTIP_BRIER =
   "Brier Score measures calibration — how close model probabilities are to actual outcomes. Lower is better. A perfect model = 0; random guessing ≈ 0.25."
 const TOOLTIP_CLV =
-  "Closing Line Value (CLV): positive means we bet at better odds than the market settled at — a sign of predictive edge over the market."
+  "Closing Line Value (CLV): the move between the price when the model predicted and the market's closing price, measured in the direction of the model's pick. Near zero means no systematic timing difference versus the market."
 const TOOLTIP_CLVPCT =
-  "% of bets where we beat the closing line. Above 50% indicates we're consistently finding value before the market corrects."
+  "% of picks whose side gained closing-line value (CLV > 0), measured in the model's pick direction. Around 50% means no consistent timing advantage over the market."
 const TOOLTIP_WINRATE =
-  "% of picks that won. Each row is one directional pick (either Over OR Under for totals, or home/away for H2H) — never both sides of the same game. Excludes pushes."
+  "% of the model's directional picks that won — the side the model favored (home or away for Moneyline, Over or Under for Totals), one pick per game. Excludes pushes."
 const TOOLTIP_TOTALS =
-  "Totals predictions include both Over and Under as separate picks, so counts are roughly 5–6× higher than H2H (which is one pick per game)."
+  "Totals and Moneyline are each scored as one pick per game — the side the model favored — so the two counts are similar."
 
 function MarketCard({ m }: { m: MarketMetrics }) {
   const isTotals = m.market_type !== "h2h"
