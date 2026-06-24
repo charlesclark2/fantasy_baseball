@@ -29,7 +29,7 @@ from read_parquet('{{ lakehouse_loc("stg_ref_players") }}**/*.parquet', union_by
 
 {% else %}
 
-{{ config(materialized='view') }}
+{{ config(materialized='table') }}
 
 select
     mlb_bam_id,
