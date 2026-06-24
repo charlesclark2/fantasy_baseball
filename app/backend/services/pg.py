@@ -77,7 +77,7 @@ def get_cache(cache_key: str, date_str: str) -> dict | None:
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                "SELECT payload FROM api_cache WHERE cache_key = %s AND is_permanent = TRUE LIMIT 1",
+                "SELECT payload FROM api_cache WHERE cache_key = %s AND is_permanent = TRUE ORDER BY updated_at DESC LIMIT 1",
                 (cache_key,),
             )
             row = cur.fetchone()

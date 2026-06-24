@@ -93,9 +93,16 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "game_day_only": False,
         "non_blocking": True,
     },
+    # INC-12 (2026-06-23): effective_date is the transaction EVENT date, not the ingest
+    # heartbeat — during quiet periods (no roster moves) it goes stale even when the
+    # script runs fine, causing false alerts or masking real outages.
+    # ingestion_ts is set on every DELETE+INSERT in the 7-day lookback, so it ticks
+    # every day the script fires regardless of transaction volume.  36h = one missed
+    # daily fire before alert (was 168h / 7 days, which let a silent outage hide for
+    # an entire week before triggering).
     "baseball_data.statsapi.player_transactions": {
-        "ts_col": "effective_date",  # DATE; no ingestion_ts column exists
-        "max_stale_hours": 168,      # 7 days — ingest backfills a 7-day window
+        "ts_col": "ingestion_ts",
+        "max_stale_hours": 36,
         "game_day_only": False,
     },
     "baseball_data.statsapi.monthly_schedule": {
