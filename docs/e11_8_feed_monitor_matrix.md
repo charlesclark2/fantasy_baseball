@@ -40,7 +40,7 @@ FAILED and triggers the Dagster+ email-on-failure alert configured on that senso
 | **Umpire scorecards (tendency)** | `statsapi.umpire_game_log` (umpscorecards source) | Daily | **WARN** | `check_data_freshness` (non_blocking, 96h) | |
 | **FanGraphs Stuff+** | `fangraphs.fg_stuff_plus_raw` | Weekly Sunday | **WARN** | `check_data_freshness` (blocking in script, 192h) | Note: blocking in script but op is WARN tier |
 | **FanGraphs hitting leaderboard** | `fangraphs.fg_hitting_leaderboard_raw` | Daily | **WARN** | `check_data_freshness` (non_blocking, 36h) | Fantasy asset only; not in betting model |
-| **Player transactions** | `statsapi.player_transactions` | Daily | **WARN** | `check_data_freshness` (blocking in script, 168h) | |
+| **Player transactions** | `statsapi.player_transactions` | Daily | **WARN** | `check_data_freshness` (non_blocking, **36h on `ingestion_ts`**) | INC-12 fix: was `effective_date`/168h — event-date monitor can't distinguish "quiet day" from "broken feed"; `ingestion_ts` ticks on every 7-day-lookback run even with zero new transactions |
 | **ActionNetwork public betting** | `actionnetwork.public_betting_raw` | Daily | **WARN** | `check_data_freshness` (blocking in script, 36h) | |
 | **Derivative odds (team_totals / alt_totals)** | `oddsapi.derivative_odds_raw` | 30 min (Railway cron) | **WARN** | `check_data_freshness` (non_blocking, 4h) | NEW E11.8; EVAL/CLV-only, not model input |
 | **Park factors** | `betting.eb_park_factors_raw` | Annual (season start) | **WARN** | `check_data_freshness` (non_blocking, 4320h / 180d) | NEW E11.8; annual update via fit_park_priors.py |
@@ -96,6 +96,27 @@ UI for all HARD-ALERT sensors (`odds_freshness_alert_sensor`,
 `pregame_alert_sensor`, `model_health_alert_sensor`). This means a tick that raises will
 send an email to the configured recipients. Without this policy, raising is still visible
 in the Dagster UI but does not send an email.
+
+---
+
+## Display-derived status coverage (INC-12 lesson)
+
+Some user-visible statuses are **not monitored at the source level** because they derive from
+a multi-hop chain (raw table → dbt mart → serving store). A source-table freshness check
+catches a feed outage but NOT a stale serving-store blob if the write step is skipped or the
+cache read returns a stale permanent row.
+
+| Display status | Chain | Risk | Coverage |
+|---------------|-------|------|----------|
+| `is_on_il` (player page) | `player_transactions` → dbt marts → `api_cache player/{id}` | Stale `is_permanent` blob survives date rollover and shadows the fresh daily write | INC-12 fix: `pg.get_cache` now uses `ORDER BY updated_at DESC` on the `is_permanent` path, so the most-recently-written permanent row always wins |
+| Player game log | `mart_starting_pitcher_game_log` → `api_cache player/{id}` | Same stale-blob issue | Same fix |
+| Team record / score | `stg_statsapi_games` → `api_cache picks/game/{pk}` | Non-permanent — date-scoped, refreshes daily | OK |
+| Model skill score | `daily_model_predictions` (rolling 30d) | Monitored by `model_health_alert_sensor` (HARD-ALERT) | OK |
+
+**Lesson**: any blob written `is_permanent=True` that reflects a **mutable current state**
+(IL status, team roster, player availability) needs the serving-store read path to always
+return the **latest** write, not an arbitrary heap-order row. The `ORDER BY updated_at DESC`
+fix closes this class of bugs for all permanent-blob reads.
 
 ---
 
