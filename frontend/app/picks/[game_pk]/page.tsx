@@ -1333,7 +1333,10 @@ export default function PickDetailPage() {
                         const ciLow = isAway ? 1 - pick.win_prob_ci_high! : pick.win_prob_ci_low!
                         const ciHigh = isAway ? 1 - pick.win_prob_ci_low! : pick.win_prob_ci_high!
                         const modelP = isAway ? 1 - (pick.model_prob ?? 0) : (pick.model_prob ?? 0)
-                        const mktP = isAway ? 1 - (pick.bovada_devig_prob ?? 0) : (pick.bovada_devig_prob ?? 0)
+                        const selBookH2H = bookOdds?.h2h.find(b => b.book_key === selectedBook)
+                        const selBookMktProbHome = selBookH2H?.market_bet_pct_home ?? pick.bovada_devig_prob
+                        const mktP = isAway ? 1 - (selBookMktProbHome ?? 0) : (selBookMktProbHome ?? 0)
+                        const mktBookLabel = BOOK_LABELS[selectedBook] ?? selectedBook
                         const teamLbl = isAway ? (pick.away_team ?? "Away") : (pick.home_team ?? "Home")
                         const ciLowPct = (ciLow * 100).toFixed(1)
                         const ciHighPct = (ciHigh * 100).toFixed(1)
@@ -1352,7 +1355,7 @@ export default function PickDetailPage() {
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-[280px] text-xs leading-relaxed">
-                                  This is a lean, not a prediction of certainty. The calibrated model spreads H2H probabilities across a narrow band (~43–57%) — single MLB games are near coin-flips. Green bar = 80% credible range. White line = model point estimate. Orange marker = Bovada implied probability. Gray center = even odds (50%).
+                                  This is a lean, not a prediction of certainty. The calibrated model spreads H2H probabilities across a narrow band (~43–57%) — single MLB games are near coin-flips. Green bar = 80% credible range. White line = model point estimate. Orange marker = {mktBookLabel} implied probability. Gray center = even odds (50%).
                                 </TooltipContent>
                               </Tooltip>
                               {/* Attributed range: "54% (51–57%) — STL · slight lean" */}
@@ -1363,6 +1366,28 @@ export default function PickDetailPage() {
                                 <span className="ml-1 text-gray-600 font-sans font-normal">· {leanLabel}</span>
                               </span>
                             </div>
+                            {/* Mini book selector — drives the orange market reference on the bar */}
+                            {bookOdds && bookOdds.h2h.some(b => b.market_bet_pct_home != null) && (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {BOOK_ORDER
+                                  .filter(key => bookOdds.h2h.find(b => b.book_key === key)?.market_bet_pct_home != null)
+                                  .map(key => (
+                                    <button
+                                      key={key}
+                                      onClick={() => setSelectedBook(key)}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors border ${
+                                        selectedBook === key
+                                          ? key === "pinnacle"
+                                            ? "bg-[#a78bfa]/15 text-[#a78bfa] border-[#a78bfa]/30"
+                                            : "bg-[#f59e0b]/15 text-[#f59e0b] border-[#f59e0b]/30"
+                                          : "bg-transparent text-gray-600 border-[#262626] hover:border-[#333] hover:text-gray-400"
+                                      }`}
+                                    >
+                                      {BOOK_LABELS[key] ?? key}
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
                             {/* Bar track — wrapped in Tooltip for hover/focus/tap legend */}
                             <Tooltip>
                               <TooltipTrigger asChild>
@@ -1400,7 +1425,7 @@ export default function PickDetailPage() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <span className="inline-block h-3 w-0.5 shrink-0 rounded-full bg-[#f59e0b]" />
-                                  <span className="text-gray-400">Bovada (market)</span>
+                                  <span className="text-gray-400">{mktBookLabel} (market)</span>
                                   <span className="ml-auto font-mono text-gray-300">{mktPct}%</span>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -1430,7 +1455,7 @@ export default function PickDetailPage() {
                                 <span className="inline-block h-1.5 w-3 bg-white rounded-full" /> Model {modelPct}%
                               </span>
                               <span className="text-xs text-gray-500 inline-flex items-center gap-1">
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> Bovada {mktPct}%
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#f59e0b]" /> {mktBookLabel} {mktPct}%
                               </span>
                               <span className="text-xs text-gray-600 italic ml-auto">lean, not a lock</span>
                             </div>
@@ -1465,20 +1490,52 @@ export default function PickDetailPage() {
                                 <span className="ml-1.5 text-gray-700">({(ciLow * 100).toFixed(0)}–{(ciHigh * 100).toFixed(0)}%)</span>
                               </span>
                             </div>
-                            <div className={`relative h-3 rounded-full overflow-hidden ${isTotals ? "bg-[#1a1a1a]" : "bg-[#1e1e1e]"}`}>
-                              {/* 50% reference line */}
-                              <div className="absolute top-0 bottom-0 w-px bg-[#333]" style={{ left: "50%" }} />
-                              {/* CI band */}
-                              <div
-                                className={`absolute top-0 bottom-0 rounded-sm ${isTotals ? "bg-[#4b5563]/20" : "bg-[#6366f1]/25"}`}
-                                style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
-                              />
-                              {/* Point estimate */}
-                              <div
-                                className={`absolute top-0 bottom-0 w-0.5 ${isTotals ? "bg-[#4b5563]" : "bg-[#818cf8]"}`}
-                                style={{ left: `${p * 100}%` }}
-                              />
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={`relative h-3 rounded-full overflow-hidden cursor-help ${isTotals ? "bg-[#1a1a1a]" : "bg-[#1e1e1e]"}`}
+                                  tabIndex={0}
+                                  role="img"
+                                  aria-label={`CLV confidence bar: P(CLV positive) ${(p * 100).toFixed(1)}%, 80% interval ${(ciLow * 100).toFixed(0)}–${(ciHigh * 100).toFixed(0)}%`}
+                                >
+                                  {/* 50% reference line */}
+                                  <div className="absolute top-0 bottom-0 w-px bg-[#333]" style={{ left: "50%" }} />
+                                  {/* CI band */}
+                                  <div
+                                    className={`absolute top-0 bottom-0 rounded-sm ${isTotals ? "bg-[#4b5563]/20" : "bg-[#6366f1]/25"}`}
+                                    style={{ left: `${ciLow * 100}%`, width: `${(ciHigh - ciLow) * 100}%` }}
+                                  />
+                                  {/* Point estimate */}
+                                  <div
+                                    className={`absolute top-0 bottom-0 w-0.5 ${isTotals ? "bg-[#4b5563]" : "bg-[#818cf8]"}`}
+                                    style={{ left: `${p * 100}%` }}
+                                  />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="min-w-[220px] max-w-[280px] p-3 text-xs space-y-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-block h-3 w-0.5 shrink-0 rounded-full ${isTotals ? "bg-[#4b5563]" : "bg-[#818cf8]"}`} />
+                                  <span className={`font-medium ${isTotals ? "text-gray-500" : "text-gray-300"}`}>P(CLV positive)</span>
+                                  <span className={`ml-auto font-mono ${isTotals ? "text-gray-600" : "text-[#818cf8]"}`}>{(p * 100).toFixed(1)}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-block h-1.5 w-3 shrink-0 rounded-sm ${isTotals ? "bg-[#4b5563]/30" : "bg-[#6366f1]/40"}`} />
+                                  <span className="text-gray-500">80% confidence interval</span>
+                                  <span className="ml-auto font-mono text-gray-600">{(ciLow * 100).toFixed(0)}–{(ciHigh * 100).toFixed(0)}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-block h-3 w-px shrink-0 rounded-full bg-[#444]" />
+                                  <span className="text-gray-600">50% baseline (no signal)</span>
+                                  <span className="ml-auto font-mono text-gray-700">50%</span>
+                                </div>
+                                <div className="border-t border-white/10 pt-1.5 mt-0.5">
+                                  {isTotals
+                                    ? <p className="text-gray-600 text-[10px] leading-snug">Totals CLV model v0 has no demonstrated signal (AUC 0.445) — all games cluster near 60%. Shown for transparency only.</p>
+                                    : <p className="text-gray-500 text-[10px] leading-snug">Higher P = sharper money has historically moved toward this side. Above 50% is bullish. Not a bet recommendation.</p>
+                                  }
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
                             {!isTotals && (
                               <div className="flex items-center gap-4 mt-1.5">
                                 <span className="text-xs text-gray-600 inline-flex items-center gap-1">
