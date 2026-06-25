@@ -72,10 +72,15 @@ def _dbt_daily_build_args() -> list[str]:
     # weekly build is the data-integrity checkpoint. NOTE: despite the op name
     # `dbt_daily_build`, most days execute a `run`, not a `build`. Add a midweek
     # build day here if a ~weekly test cadence proves too sparse.
+    #
+    # E11.1-W1d: mart_pitch_* are now views over S3 external tables (tag:w1_lakehouse).
+    # They are excluded from every Snowflake dbt build — the views are static and the
+    # external tables are refreshed by refresh_w1_external_tables_op before this step.
     today = date.today()
     target = ["--target", "baseball_betting_and_fantasy"]
+    exclude = ["--exclude", "tag:w1_lakehouse"]
     if today.weekday() == 6:  # Sunday: weekly full rebuild + full test suite
-        return ["build", "--full-refresh"] + target
+        return ["build", "--full-refresh"] + target + exclude
     # Story A2.15 (2026-06-15): the dbt TEST suite was the single biggest Snowflake +
     # Dagster cost driver — tests ran on every intraday/catchup tick via the scattered
     # `build` ops (now all converted to `run`). This op is the ONE place the test suite
@@ -85,8 +90,8 @@ def _dbt_daily_build_args() -> list[str]:
     # this block = Sunday-only/weekly). The whole-project build here covers the tests for
     # every model the daily/intraday `run` ops rebuild.
     if today.toordinal() % 3 == 0:
-        return ["build"] + target
-    return ["run"] + target
+        return ["build"] + target + exclude
+    return ["run"] + target + exclude
 
 
 # ── Daily ingestion ──────────────────────────────────────────────────────────
@@ -185,25 +190,27 @@ def ingest_oaa(context):
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def ingest_statcast_to_s3_op(context):
-    # E11.1-W1 parallel track: write today's Statcast directly to S3 Parquet
-    # (bypassing Snowflake). Runs after ingest_statcast so both pipelines don't
-    # hit Baseball Savant simultaneously. Soft-fail — Snowflake path is primary
-    # during the parallel validation window.
-    try:
-        _run_script(context, "ingest_statcast_to_s3.py")
-    except Exception as e:
-        context.log.warning(f"Statcast→S3 ingest failed (non-fatal, Snowflake path still live): {e}")
+    # E11.1-W1d HALT: mart_pitch_* are now served from S3 external tables; this
+    # ingest is on the critical path. Failure stops the daily job before the
+    # feature build reads stale pitch data.
+    _run_script(context, "ingest_statcast_to_s3.py")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def run_w1_lakehouse_op(context):
-    # E11.1-W1 parallel track: rebuild mart_pitch_* S3 Parquets from the fresh
-    # stg_batter_pitches data. Dead-end branch during the validation window —
-    # nothing downstream depends on these until Snowflake mart_pitch_* is decommissioned.
-    try:
-        _run_script(context, "run_w1_lakehouse.py")
-    except Exception as e:
-        context.log.warning(f"W1 lakehouse rebuild failed (non-fatal): {e}")
+    # E11.1-W1d HALT: rebuilds all 7 mart_pitch_* S3 Parquets. Now on the
+    # critical path — the Snowflake external tables (and the downstream feature
+    # build) depend on this write completing successfully.
+    _run_script(context, "run_w1_lakehouse.py")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def refresh_w1_external_tables_op(context):
+    # E11.1-W1d HALT: refresh Snowflake external table metadata so the feature
+    # build sees the parquets just written by run_w1_lakehouse_op.
+    # AUTO_REFRESH=FALSE on the external tables requires an explicit REFRESH call
+    # after each S3 write. Failure here would serve stale pitch features.
+    _run_script(context, "refresh_w1_external_tables.py")
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))

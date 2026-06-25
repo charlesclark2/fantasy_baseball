@@ -37,6 +37,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_sprint_speed,
     ingest_statcast,
     ingest_statcast_to_s3_op,
+    refresh_w1_external_tables_op,
     ingest_statsapi_schedule,
     ingest_transactions,
     ingest_umpire_scorecards,
@@ -65,7 +66,13 @@ def daily_ingestion_job():
     backstop if a rebuild silently fails (Story 30.13 Task 4 gate in predict_today)."""
     s4 = ingest_action_network()
     s5 = ingest_statcast(start=s4)
-    s6 = ingest_statsapi_schedule(start=s5)
+    # E11.1-W1d: S3 lakehouse build is now HALT/serving-critical — mart_pitch_* are
+    # served via Snowflake external tables backed by these parquets.  Must complete
+    # BEFORE dbt_daily_build so the feature build reads fresh pitch data.
+    s5b = ingest_statcast_to_s3_op(start=s5)
+    s5c = run_w1_lakehouse_op(start=s5b)
+    s5d = refresh_w1_external_tables_op(start=s5c)
+    s6 = ingest_statsapi_schedule(start=s5d)
     s7 = ingest_weather(start=s6)
     s8 = ingest_umpires_early(start=s7)
     s9 = ingest_fangraphs_stuff_plus(start=s8)
@@ -159,11 +166,4 @@ def daily_ingestion_job():
     s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
     s22 = compute_model_health(start=s21)
-    s23 = backfill_prediction_log(start=s22)
-    # E11.1-W1 parallel validation track: direct Savant→S3 ingest + lakehouse rebuild.
-    # Chained after backfill_prediction_log so the full critical prediction path
-    # (ingest → dbt → signals → SCD-2 → posteriors → predict → serve) is done before
-    # these run. soft-fail dead-end branches; nothing downstream depends on them during
-    # the parallel validation window.
-    s3_ingest = ingest_statcast_to_s3_op(start=s23)
-    run_w1_lakehouse_op(start=s3_ingest)
+    backfill_prediction_log(start=s22)
