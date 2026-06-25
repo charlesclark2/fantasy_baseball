@@ -171,7 +171,7 @@ export function ProbabilityBar({
   const ariaLabel = [
     teamLabel ? `Win probability for ${teamLabel}` : "Win probability bar",
     `Model: ${fmt(modelProb)}`,
-    `Market (Bovada): ${fmt(marketProb)}`,
+    `Market: ${fmt(marketProb)}`,
     hasCi ? `80% range: ${fmt(ciLow)} – ${fmt(ciHigh)}` : null,
   ].filter(Boolean).join(", ")
 
@@ -197,7 +197,7 @@ export function ProbabilityBar({
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-block h-3 w-0.5 shrink-0 rounded-full bg-gray-400" />
-            <span className="text-gray-400">Bovada (market)</span>
+            <span className="text-gray-400">Market</span>
             <span className="ml-auto font-mono text-gray-300">{fmt(marketProb)}</span>
           </div>
           {hasCi && (
